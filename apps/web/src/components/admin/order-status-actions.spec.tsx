@@ -147,7 +147,7 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     await flush();
     const d = confirmDialog()!;
     expect(d.textContent).toContain('TB-300');
-    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-red-600');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
     expect(d.querySelector('[data-confirm="cancel"]')?.textContent).toBe('Giữ đơn');
     answerConfirm(false);
     await flush();

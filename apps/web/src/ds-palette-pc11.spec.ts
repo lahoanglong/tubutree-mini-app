@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 const MIGRATED = [
   'app/admin/layout.tsx',
   'components/admin/ui.tsx',
+  'components/admin/confirm-dialog.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

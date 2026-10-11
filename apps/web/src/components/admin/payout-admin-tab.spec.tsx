@@ -58,7 +58,7 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
     const d = confirmDialog()!;
     expect(d.textContent).toMatch(/1\.500\.000/);
     expect(d.textContent).toMatch(/HOÀN LẠI/);
-    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-red-600');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
     answerConfirm(false);
     await flush();
     expect(api.calls).toHaveLength(0);
