@@ -1,5 +1,18 @@
 # PD-2 — Dọn logic trùng, endpoint/khoá/bảng chết (API) + luật đánh giá Q-30
 
+## Tổng hợp gói (4 mục)
+
+| Mục | Finding | Trạng thái | Chi tiết |
+| --- | --- | --- | --- |
+| 1 | C-040 gom helper trùng về `apps/api/src/common/` | XONG (5 nhóm, mỗi nhóm có test đặc tả xanh trên bản cũ trước khi gom; hành vi khác nhau giữ qua tham số hoặc hàm riêng) | Mục 1/4 |
+| 2 | C-108 bảng/cột chết, C-054 khoá config chết, C-099/Q-31 | XONG (9 bảng/cột đánh dấu `/// @deprecated`, 1 khoá chết nữa, không DROP, không migration) | Mục 2/4 |
+| 3 | C-098 gỡ endpoint không FE nào gọi | MỘT PHẦN theo luật "thiếu bằng chứng thì giữ": gỡ 5, giữ 21 kèm lý do | Mục 3/4 |
+| 4 | C-110 / Q-30 đánh giá | XONG (API + race spec Postgres thật + miniapp) | Mục 4/4 |
+
+Không có migration nào trong cả gói (`prisma migrate diff` trên schema trước/sau mục 2: `No difference detected.`; mục 4 giữ nguyên `@@unique([userId, productId])`).
+
+Các bảng theo yêu cầu nằm trong từng mục: bảng khác biệt hành vi của helper ở Mục 1 (a)-(e), bảng `/// @deprecated` ở Mục 2 (C-108), BẢNG BẰNG CHỨNG endpoint giữ/gỡ ở Mục 3, giả định ở cuối mỗi mục, danh sách "Việc cần chủ dự án" gộp ở cuối tài liệu.
+
 ## Mục 1/4 — C-040 gom helper trùng về `apps/api/src/common/`
 
 Hai lượt: lượt 1 làm mã đơn, chuẩn hoá SĐT, dayKey giờ VN; lượt 2 làm `maskName` x4 và `notifyAdminsOf` x3 (phần (b), (c) bên dưới).
@@ -133,7 +146,7 @@ Mọi mục xác minh lại bằng `git grep -w` trên HEAD (`apps packages scri
 
 ### Việc còn lại
 - Gom các bản `startOfDay` (game, game-quiz, game-economy, game-reminder) về `startOfVnDay` (xem mục 1).
-- Mục 3 (C-098, gỡ endpoint) làm ở lượt 3, xem mục 3/4 bên dưới. Mục 4 (C-110/Q-30, đánh giá) do lượt khác làm.
+- Mục 3 (C-098, gỡ endpoint) xem mục 3/4, mục 4 (C-110/Q-30, đánh giá) xem mục 4/4.
 - Format cả `schema.prisma` bằng `prisma format` trong một commit riêng.
 
 ### Việc cần chủ dự án
@@ -175,7 +188,7 @@ Cột "grep HEAD" và "grep cb92dc8" là `git grep` trong `apps/web/src apps/min
 | POST /admin/brands/:id/products | 0 (có GET, DELETE cùng path) | 0 | admin gọi tay được; không có bằng chứng ngược | GIỮ: điều kiện 4, chờ nối UI |
 | PATCH /admin/promotions/:id | 0 (chỉ DELETE) | 0 | như trên | GIỮ |
 | PATCH /admin/dealer-rewards/:id | 0 (chỉ DELETE) | 0 | như trên; ngưỡng BigInt đã có race spec `dealer-bigint-volume` | GIỮ |
-| DELETE /reviews/:id | 0 | 0 | 0 | GIỮ: xoá rồi tạo lại có thể thưởng Điểm Xanh lần nữa, phải quyết cùng luật Q-30 (mục 4, lượt khác) |
+| DELETE /reviews/:id | 0 | 0 | 0 | GIỮ: chủ đánh giá và admin còn dùng được; Q-30 đã chốt ở mục 4/4 (xoá hoàn điểm đã thưởng nên xoá rồi viết lại vẫn đúng một lần thưởng, có race spec), nhưng FE chưa có nút xoá nên vẫn chờ quyết định có nối UI hay không |
 | GET /admin/orders/:id/status-history | 1 (`admin-client.ts:323`) | 0 | 0 | GIỮ: đã có FE sau PROD (C-092) |
 | GET /faqs | 1 (`about-data.ts:50`) | 0 | 0 | GIỮ: đã có FE sau PROD |
 | POST /reviews/:id/visibility | 1 (`admin-client.ts:1000`) | 0 | 0 | GIỮ: đã có FE sau PROD |
@@ -204,5 +217,60 @@ Cột "grep HEAD" và "grep cb92dc8" là `git grep` trong `apps/web/src apps/min
 
 ### Việc còn lại / Việc cần chủ dự án
 - Với 3 endpoint admin giữ vì "nghi ngờ" (`POST /admin/brands/:id/products`, `PATCH /admin/promotions/:id`, `PATCH /admin/dealer-rewards/:id`) và 6 công cụ vận hành của A1-030: chọn nối nút vào web admin (C-091) hoặc xác nhận bỏ để gỡ tiếp.
-- `DELETE /reviews/:id`: quyết cùng mục 4 (Q-30). Nếu người dùng xoá được đánh giá của mình thì luật "thưởng chỉ lần đầu" phải tính theo sổ điểm chứ không theo sự tồn tại của dòng đánh giá.
+- `DELETE /reviews/:id`: luật Q-30 đã xử lý ở mục 4/4 (không cần tính theo sổ điểm vì lần xoá đã hoàn điểm, xem đó). Còn lại: có thêm nút "Xoá đánh giá" vào miniapp hay gỡ endpoint.
 - `GET /storefront/by-host` và `POST /payments/zalopay/create`: giữ cho tới khi quyết định tên miền riêng và ZaloPay.
+
+## Mục 4/4 — C-110 / Q-30 đánh giá: một đánh giá mỗi sản phẩm, mua lại thì sửa, thưởng lần đầu
+
+Trạng thái: XONG. Quyết định áp dụng là phương án khuyến nghị của Q-30 (phương án 1): giữ một đánh giá cho mỗi (người, sản phẩm), cho sửa khi mua lại, thưởng Điểm Xanh chỉ lần đầu. Phần "hiển thị đã mua N lần" của Q-30 không nằm trong đặc tả gói nên chưa làm (xem "Việc còn lại").
+
+| Việc | Commit |
+| --- | --- |
+| API: tạo khi đã có đánh giá thì SỬA, không thưởng; `can-review` trả `myReview`; spec đơn vị | 0a7d577a |
+| Race spec Postgres thật `test/integration-race/review-edit.race-spec.ts` | 3d652a14, 72b5957f |
+| Miniapp `reviews-section.tsx`: "Sửa đánh giá của bạn", form điền sẵn; spec | 251f77ba |
+
+### Hành vi sau khi sửa (`apps/api/src/modules/reviews/reviews.service.ts`)
+- `POST /products/:slug/reviews` (`create`): giữ nguyên luật điều kiện (sản phẩm tồn tại, phải có đơn `DELIVERED` chứa sản phẩm). Rồi vòng tối đa 3 lần: đọc đánh giá của CHÍNH người gọi cho sản phẩm; chưa có thì `createFirst` (tạo đánh giá + ghi `pointsTransaction` + cộng `pointsBalance` + tính lại sao + analytics `review_created`, tất cả trong một transaction như cũ); đã có thì `updateOwn` (thay sao, nội dung, ảnh, video, tính lại sao trung bình, analytics `review_updated` với `pointsEarned: 0`).
+- Sửa KHÔNG đụng `pointsEarned` (nên xoá sau đó hoàn đúng số điểm đã thưởng), `orderId`, `isVisible` (sửa không gỡ được lệnh ẩn của admin), `createdAt`. Thay thế toàn bộ như lúc tạo: bỏ trống nội dung/ảnh/video thì các trường đó bị xoá (form miniapp điền sẵn nên người dùng không mất dữ liệu ngoài ý muốn).
+- Quyền: chỉ chủ đánh giá sửa được, vì khoá đọc và khoá ghi đều là `(userId của người gọi, productId)`; người khác tạo cho cùng sản phẩm ra đánh giá riêng của họ. Không có endpoint sửa theo `id` nên không có đường sửa đánh giá người khác. Đã có đánh giá nhưng không còn đơn `DELIVERED` (vd đơn chuyển `RETURNED`) thì không sửa được, như luật điều kiện hiện hành.
+- Race: hai request tạo đồng thời cùng người + sản phẩm cùng thấy "chưa có" và cùng vào `createFirst`. Unique `(userId, productId)` cho một bên thắng; bên thua nhận `P2002` ở bước `review.create`, TRƯỚC bước ghi điểm và trong cùng transaction nên không ghi gì; sau đó đọc lại và chuyển sang `updateOwn`. Chiều ngược lại (đánh giá bị xoá đúng lúc đang sửa, `P2025`) đọc lại và tạo mới như lần đầu (hợp lệ vì lần xoá đã hoàn điểm). Quá 3 lần thua liên tiếp thì `ConflictException`. Trước đây bên thua nhận lỗi 400 "Bạn đã đánh giá sản phẩm này rồi".
+- Phản hồi `POST` trả đánh giá kèm `updated: boolean` để FE chọn câu báo đúng.
+- `GET /products/:slug/reviews/can-review`: đã có đánh giá thì `canReview: true`, `reason: null`, kèm `myReview { id, rating, comment, images, videoUrl }`; chưa mua vẫn `NOT_PURCHASED`. Lý do `ALREADY_REVIEWED` không còn được trả. Tương thích bản miniapp cũ: bản cũ chỉ ẩn nút khi `canReview === false`, nên bản cũ giờ thấy nút "Viết đánh giá" với form trống; gửi lên thì sửa đánh giá cũ (thay toàn bộ, ảnh/nhận xét cũ bị thay bằng nội dung form). Chấp nhận được vì người dùng chủ động bấm gửi.
+- Xoá đánh giá (`DELETE /reviews/:id`) giữ nguyên: hoàn đúng `pointsEarned` rồi xoá, mở lại unique. Xoá rồi viết lại: sổ điểm `[+10, -10, +10]`, số dư 10, tức đúng một lần thưởng, không farm được.
+
+### Miniapp (`apps/miniapp/src/components/reviews-section.tsx`, `services/shop-api.ts`)
+- Có `myReview` thì nút là "Sửa đánh giá của bạn", tiêu đề sheet "Sửa đánh giá", nút lưu "Lưu đánh giá", lời nhắn "Điểm Xanh chỉ được cộng ở lần đánh giá đầu tiên, sửa đánh giá không cộng thêm." (không hứa +5/+10/+15 khi sửa). Chưa có thì giữ nguyên chữ cũ.
+- Form điền sẵn sao, nhận xét, ảnh, video từ `myReview`. Nháp người dùng đã gõ vẫn được giữ khi đóng/mở sheet (như P1-2); lưu xong thì xoá nháp, lần mở sau điền theo đánh giá mới nhất từ BE. Sau mỗi lần gửi thành công làm mới cả `['reviews', slug]` và `['can-review', slug]`, nên viết xong lần đầu thì nút đổi ngay thành "Sửa đánh giá của bạn" (trước đây không làm mới nên vẫn hiện nút "Viết đánh giá").
+- Câu báo thành công theo `updated` của BE chứ không theo chế độ form: `true` thì "Đã cập nhật đánh giá của bạn", `false` thì giữ "Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh". Nhờ vậy đúng cả khi đánh giá được tạo từ thiết bị khác.
+- Giữ DS v2 của PC-10c3: chỉ dùng `Button`, `BottomSheet`, `Text` có sẵn; `ds-c076-pc10c3.spec.ts` (111 ca) vẫn xanh. Thuật ngữ theo Q-26 (Điểm Xanh), không thêm luồng xu.
+
+### Test thêm (đỏ -> xanh)
+- `reviews.service.spec.ts` (API): thay 2 ca cũ coi "đã có thì lỗi" (`đã đánh giá ... BadRequest`, `race P2002 ... BadRequest`) bằng ca mới; thêm 10 ca: sửa đúng dữ liệu và khoá `userId_productId`; không ghi `pointsTransaction`/`user.update`/`pointsEarned`; không có `isVisible` trong dữ liệu sửa; bỏ trống thì xoá trường; analytics `review_updated` cùng tx; mất đơn `DELIVERED` thì không sửa; chủ đánh giá theo `userId`; `P2025` rồi tạo mới; thua 3 lần thì `ConflictException`; `P2002` rồi sửa không thưởng lần hai; `can-review` đã có đánh giá trả `myReview`, mất đơn thì `NOT_PURCHASED`. ĐỎ: `Tests: 12 failed, 18 passed, 30 total` trước khi sửa service. XANH: `Tests: 30 passed, 30 total`.
+- `review-edit.race-spec.ts` (Postgres thật, 8 ca): (1) 2 request tạo đồng thời (rào chắn `barrierOnFirstCalls` ép cả hai cùng thấy "chưa có") => không lỗi, đúng 1 dòng `reviews`, đúng 1 `pointsTransaction` `REVIEW`, số dư bằng `pointsEarned`, `[updated=false, updated=true]`; (2) 8 request đồng thời => 1 đánh giá, 1 lần thưởng (+5), 7 request thành sửa; (3) mua lại: sửa sao/nội dung/ảnh/video, `pointsEarned`/`orderId` giữ nguyên, 1 giao dịch điểm, số dư 5, `Product` `{ratingAvg: 2, reviewCount: 1}`, xoá sau đó về 0; (4) sửa không bỏ ẩn đánh giá bị ẩn, `Product` `{0, 0}`; (5) người khác tạo ra đánh giá riêng, không đụng đánh giá của chủ; (6) không có đơn `DELIVERED` thì không tạo, đơn chuyển `RETURNED` thì không sửa; (7) `can-review`; (8) xoá rồi viết lại ra sổ điểm `[10, -10, 10]`. ĐỎ trên `reviews.service.ts` cũ (`git show HEAD~1`, đã khôi phục sau đó): `Tests: 6 failed, 1 passed, 7 total` (lúc đó chưa có ca 8). XANH: `Tests: 8 passed, 8 total`, chạy lặp 3 lần đều xanh.
+- `reviews-section.spec.tsx` (miniapp): sửa 1 ca cũ (`ALREADY_REVIEWED` không còn tồn tại, đổi sang `NOT_PURCHASED`) và thêm 7 ca (nút "Sửa đánh giá của bạn"; form điền sẵn + lời nhắn không cộng điểm; lưu gọi `createReview` đúng payload và báo "đã cập nhật"; đóng/mở giữ phần đang sửa; lần mở sau lưu lấy bản mới từ BE; tạo xong nút đổi thành "Sửa"; BE trả `updated=true` ở form viết mới). ĐỎ: `Tests  7 failed | 12 passed (19)`. XANH: `19 passed`.
+
+### Kiểm chứng
+- `npx jest src/modules/reviews src/modules/admin src/modules/game --maxWorkers=1`: `Test Suites: 18 passed`, `Tests: 407 passed`. `npx jest src/common/endpoint-inventory.spec.ts`: 20 passed.
+- Race spec Postgres thật (cổng 5582, `--runInBand`, từng file): review-edit (8), second-order-review-invite (5), admin-lookups (5), auth-merge-guest (10): xanh.
+- Miniapp: `npx vitest run src/components/reviews-section.spec.tsx src/ds-c076-pc10c3.spec.ts`: `130 passed`.
+- `tsc --noEmit` apps/api và apps/miniapp: exit 0; ESLint các file đã sửa: exit 0.
+- KHÔNG chạy Playwright/e2e: `apps/e2e` chỉ mock `can-review` với `NOT_PURCHASED` (còn hợp lệ) và `allowUnmocked` cho route này, không có ca nào dựa vào `ALREADY_REVIEWED`.
+
+### Migration
+Không có. `@@unique([userId, productId])` giữ nguyên (đúng nội dung Q-30), không đổi schema.
+
+### Giả định
+- Gọi tạo khi đã có đánh giá thay THẾ toàn bộ sao/nội dung/ảnh/video (cùng ngữ nghĩa với lúc tạo) thay vì chỉ cập nhật trường có gửi, vì form miniapp điền sẵn và gửi đủ.
+- Điều kiện sửa dùng đúng luật tạo (có đơn `DELIVERED` chứa sản phẩm), nên mua lại không cần đơn mới được giao, chỉ cần còn một đơn `DELIVERED`. `orderId` của đánh giá giữ đơn đầu tiên, không chuyển sang đơn mua lại (không đổi dữ liệu có sẵn).
+- Sửa không đổi `createdAt` nên đánh giá đã sửa giữ vị trí cũ trong danh sách; không có cột `updatedAt` và không thêm cột (không migration).
+- Đánh giá bị admin ẩn vẫn sửa được nhưng vẫn ẩn.
+
+### Việc còn lại
+- Hiển thị "đã mua N lần" (Q-30 phương án 1) và nhãn "đã chỉnh sửa": cần đếm đơn `DELIVERED` hoặc thêm cột `updatedAt` nên để lượt riêng.
+- Số dư điểm có thể âm khi xoá đánh giá đã thưởng mà người dùng đã tiêu hết điểm (hành vi cũ của `remove`, `increment: -pointsEarned` không kẹp 0). Ngoài phạm vi Q-30, ghi để quyết cùng PD-3 (gộp TubuXu vào Điểm Xanh).
+
+## Việc cần chủ dự án (gộp cả gói)
+- Mục 2: xoá vật lý 25 dòng khoá chết trong `system_configs` trên PROD (cần lệnh DELETE riêng có sao lưu); quyết `BetaFeedback` (làm màn admin đọc hay bỏ gửi góp ý); có DROP các bảng chết bằng migration riêng hay không.
+- Mục 3: nối UI hay gỡ tiếp 3 endpoint admin nghi ngờ và 6 công cụ vận hành; quyết tên miền riêng (`/storefront/by-host`) và ZaloPay (`/payments/zalopay/create`); có thêm nút "Xoá đánh giá" hay gỡ `DELETE /reviews/:id`.
+- Mục 4: chỉ cần xác nhận Q-30 phương án 1 như khuyến nghị (đã áp dụng); có làm "đã mua N lần" hay không.

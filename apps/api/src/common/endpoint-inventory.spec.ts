@@ -45,7 +45,7 @@ const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [
   ['POST /admin/brands/:id/products', 'admin gán SP vào nhãn, chưa có UI nhưng gọi tay được'],
   ['PATCH /admin/promotions/:id', 'admin sửa khuyến mãi nhãn, chưa có UI'],
   ['PATCH /admin/dealer-rewards/:id', 'admin sửa thưởng đại lý, chưa có UI (ngưỡng BigInt có race spec riêng)'],
-  ['DELETE /reviews/:id', 'đụng luật thưởng lần đầu của Q-30 (xoá rồi tạo lại), quyết cùng mục đánh giá'],
+  ['DELETE /reviews/:id', 'chưa có nút xoá đánh giá ở FE; xoá hoàn điểm đã thưởng nên xoá rồi viết lại vẫn đúng một lần thưởng (review-edit.race-spec, Q-30)'],
 ];
 
 function joinPath(...parts: string[]): string {
