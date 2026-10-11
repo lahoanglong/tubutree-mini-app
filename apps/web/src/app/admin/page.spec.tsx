@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
-import { flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
@@ -14,6 +14,18 @@ const mocks = vi.hoisted(() => ({
   createCoupon: vi.fn(),
   config: [] as unknown[],
   configFails: false,
+  brands: [] as unknown[],
+  brandProducts: [] as unknown[],
+  promotions: [] as unknown[],
+  rewards: [] as unknown[],
+  createBrand: vi.fn(),
+  updateBrand: vi.fn(),
+  verifyBrand: vi.fn(),
+  detachBrandProducts: vi.fn(),
+  createPromotion: vi.fn(),
+  deletePromotion: vi.fn(),
+  createDealerReward: vi.fn(),
+  deleteDealerReward: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -99,6 +111,18 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       return mocks.config;
     },
     listDealerTiers: async () => [{ id: 't1', name: 'Bạc', minOrderVolume: 0, creditLimit: 0, paymentTerms: null }],
+    listBrands: async () => mocks.brands,
+    listBrandProducts: async () => mocks.brandProducts,
+    listPromotions: async () => mocks.promotions,
+    listDealerRewards: async () => mocks.rewards,
+    createBrand: (...args: unknown[]) => mocks.createBrand(...args),
+    updateBrand: (...args: unknown[]) => mocks.updateBrand(...args),
+    verifyBrand: (...args: unknown[]) => mocks.verifyBrand(...args),
+    detachBrandProducts: (...args: unknown[]) => mocks.detachBrandProducts(...args),
+    createPromotion: (...args: unknown[]) => mocks.createPromotion(...args),
+    deletePromotion: (...args: unknown[]) => mocks.deletePromotion(...args),
+    createDealerReward: (...args: unknown[]) => mocks.createDealerReward(...args),
+    deleteDealerReward: (...args: unknown[]) => mocks.deleteDealerReward(...args),
   };
 });
 
@@ -120,6 +144,14 @@ beforeEach(() => {
   mocks.createCoupon.mockReset();
   mocks.config = [];
   mocks.configFails = false;
+  mocks.brands = [];
+  mocks.brandProducts = [];
+  mocks.promotions = [];
+  mocks.rewards = [];
+  for (const fn of [
+    mocks.createBrand, mocks.updateBrand, mocks.verifyBrand, mocks.detachBrandProducts,
+    mocks.createPromotion, mocks.deletePromotion, mocks.createDealerReward, mocks.deleteDealerReward,
+  ]) fn.mockReset();
   window.history.replaceState(null, '', '/admin');
 });
 afterEach(() => {
@@ -491,5 +523,231 @@ describe('admin/page — tab Voucher', () => {
     await flush();
     const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Mã đã tồn tại')!;
     expect(bad.className).toContain('text-danger-fg');
+  });
+});
+
+const btn = (root: ParentNode, label: RegExp | string) =>
+  [...root.querySelectorAll('button')].find((b) =>
+    typeof label === 'string' ? b.textContent === label : label.test(b.textContent ?? ''),
+  ) as HTMLButtonElement;
+const para = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll('p, span')].find((p) => p.textContent === text) as HTMLElement;
+
+describe('admin/page — tab Nhãn hàng', () => {
+  const BRAND = {
+    id: 'b1',
+    slug: 'dua-ben-tre',
+    name: 'Dừa Bến Tre',
+    tagline: 'Ngọt thanh',
+    logoUrl: null,
+    coverUrl: null,
+    story: null,
+    origin: 'Bến Tre',
+    certifications: [{ code: 'ORG', label: 'Hữu cơ', proofUrl: 'https://p.test/x', verified: true }],
+    isVerified: true,
+    isPublished: false,
+    followerCount: 5,
+  };
+  const openBrands = async () => {
+    window.history.replaceState(null, '', '/admin?tab=brands');
+    return mount();
+  };
+  const openRow = async (container: HTMLElement) => {
+    click(btn(container, 'Quản lý'));
+    await flush();
+  };
+
+  it('form tạo nhãn: ô nhập/nút cao 44px, khoá tới khi có tên, gửi đúng dữ liệu', async () => {
+    const { container } = await openBrands();
+    const create = btn(container, 'Tạo nhãn');
+    expect(create.disabled).toBe(true);
+    expect(create.className).toContain('bg-forest-600');
+    expect(create.className).toContain('min-h-[44px]');
+    const name = container.querySelector('input[placeholder^="Tên nhãn"]')!;
+    const tagline = container.querySelector('input[placeholder="Tagline"]')!;
+    for (const el of [name, tagline]) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+    }
+    typeInto(name, '  Dừa Bến Tre ');
+    expect(create.disabled).toBe(false);
+    mocks.createBrand.mockResolvedValueOnce({});
+    click(create);
+    await flush();
+    expect(mocks.createBrand).toHaveBeenCalledWith({ name: 'Dừa Bến Tre', tagline: undefined });
+  });
+
+  it('hàng nhãn: Chính hãng có biểu tượng thay dấu chữ và tông success, Nháp tông trung tính', async () => {
+    mocks.brands = [BRAND];
+    const { container } = await openBrands();
+    const verified = [...container.querySelectorAll('span')].find((e) => e.textContent?.includes('Chính hãng'))!;
+    expect(verified.querySelector('svg')).not.toBeNull();
+    expect(verified.textContent).not.toContain('✓');
+    expect(verified.className).toContain('bg-success-bg');
+    expect(verified.className).toContain('text-success-fg');
+    const draft = para(container, 'Nháp');
+    expect(draft.className).toContain('bg-stone-100');
+    expect(container.textContent).toContain('/dua-ben-tre · 5 theo dõi');
+    const manage = btn(container, 'Quản lý');
+    expect(manage.className).toContain('min-h-[44px]');
+    expect(manage.className).toContain('text-forest-700');
+  });
+
+  it('mở Quản lý: nút nghiệp vụ gọi đúng API, gán chủ nhãn khoá tới khi chọn người', async () => {
+    mocks.brands = [BRAND];
+    mocks.brandProducts = [{ id: 'p1', name: 'Dừa sáp', slug: 'dua-sap', thumbnail: null, brand: 'Dừa Bến Tre', isActive: true }];
+    const { container } = await openBrands();
+    await openRow(container);
+    expect(btn(container, 'Thu gọn')).toBeTruthy();
+
+    const publish = btn(container, 'Đăng (publish)');
+    expect(publish.className).toContain('min-h-[44px]');
+    mocks.updateBrand.mockResolvedValue({});
+    click(publish);
+    await flush();
+    expect(mocks.updateBrand).toHaveBeenCalledWith('b1', { isPublished: true });
+
+    const verify = btn(container, /Bỏ chính hãng/);
+    mocks.verifyBrand.mockResolvedValue({});
+    click(verify);
+    await flush();
+    expect(mocks.verifyBrand).toHaveBeenCalledWith('b1', false);
+
+    const link = btn(container, 'Gán SP theo tên nhãn');
+    expect(link.className).toContain('bg-forest-600');
+    expect(link.className).toContain('min-h-[44px]');
+
+    const assign = btn(container, 'Gán chủ nhãn');
+    expect(assign.disabled).toBe(true);
+    expect(assign.className).toContain('min-h-[44px]');
+    expect(assign.className).toContain('border-stone-450');
+
+    const detach = btn(container, 'Gỡ');
+    expect(detach.className).toContain('text-danger-fg');
+    expect(detach.className).toContain('min-h-[44px]');
+    mocks.detachBrandProducts.mockResolvedValue({});
+    click(detach);
+    await flush();
+    expect(mocks.detachBrandProducts).toHaveBeenCalledWith('b1', ['p1']);
+  });
+
+  it('nút Cấp chính hãng dùng biểu tượng, nhãn nút khi chưa xác minh vẫn đọc là "Cấp chính hãng"', async () => {
+    mocks.brands = [{ ...BRAND, isVerified: false }];
+    const { container } = await openBrands();
+    await openRow(container);
+    const grant = btn(container, /^Cấp\s+chính hãng$/);
+    expect(grant.querySelector('svg')).not.toBeNull();
+    expect(grant.textContent).not.toContain('✓');
+    mocks.verifyBrand.mockResolvedValue({});
+    click(grant);
+    await flush();
+    expect(mocks.verifyBrand).toHaveBeenCalledWith('b1', true);
+  });
+
+  it('khuyến mãi: thêm khoá tới khi có tiêu đề, xoá gọi đúng API, ô nhập cao 44px', async () => {
+    mocks.brands = [BRAND];
+    mocks.promotions = [{ id: 'pm1', title: 'MUA 2 TẶNG 1', subtitle: 'Hè', startAt: '', endAt: '', isActive: true }];
+    const { container } = await openBrands();
+    await openRow(container);
+    expect(container.textContent).toContain('MUA 2 TẶNG 1 · Hè');
+    const add = btn(container, 'Thêm KM');
+    expect(add.disabled).toBe(true);
+    expect(add.className).toContain('bg-forest-600');
+    const title = container.querySelector('input[placeholder^="Tiêu đề (MUA"]')!;
+    expect(title.className).toContain('min-h-[44px]');
+    for (const d of container.querySelectorAll('input[type="date"]')) expect(d.className).toContain('min-h-[44px]');
+    typeInto(title, 'Freeship');
+    expect(add.disabled).toBe(false);
+    mocks.createPromotion.mockResolvedValue({});
+    click(add);
+    await flush();
+    expect(mocks.createPromotion).toHaveBeenCalledWith('b1', expect.objectContaining({ title: 'Freeship', subtitle: undefined }));
+
+    const row = [...container.querySelectorAll('span')].find((e) => e.textContent === 'MUA 2 TẶNG 1 · Hè')!.parentElement!;
+    const del = btn(row, 'Xoá');
+    expect(del.className).toContain('text-danger-fg');
+    mocks.deletePromotion.mockResolvedValue({});
+    click(del);
+    await flush();
+    expect(mocks.deletePromotion).toHaveBeenCalledWith('pm1');
+  });
+
+  it('thông tin nhãn: lưu gửi đúng dữ liệu, thông báo thành công dùng biểu tượng + success, lỗi báo danger', async () => {
+    mocks.brands = [BRAND];
+    const { container } = await openBrands();
+    await openRow(container);
+    const panel = btn(container, 'Lưu thông tin').parentElement!.parentElement!;
+    expect(panel.className).toContain('bg-stone-50');
+    const tagline = panel.querySelector('input[placeholder="Tagline"]') as HTMLInputElement;
+    expect(tagline.className).toContain('min-h-[44px]');
+    typeInto(tagline, 'Ngọt đậm');
+    mocks.updateBrand.mockResolvedValueOnce({});
+    click(btn(container, 'Lưu thông tin'));
+    await flush();
+    expect(mocks.updateBrand).toHaveBeenCalledWith(
+      'b1',
+      expect.objectContaining({
+        tagline: 'Ngọt đậm',
+        certifications: [{ code: 'ORG', label: 'Hữu cơ', proofUrl: 'https://p.test/x', verified: true }],
+      }),
+    );
+    const ok = [...container.querySelectorAll('span')].find((e) => e.textContent?.startsWith('Đã lưu'))!;
+    expect(ok.className).toContain('text-success-fg');
+    expect(ok.querySelector('svg')).not.toBeNull();
+    expect(ok.textContent).not.toContain('✓');
+
+    mocks.updateBrand.mockRejectedValueOnce(new Error('Slug trùng'));
+    click(btn(container, 'Lưu thông tin'));
+    await flush();
+    expect(para(container, 'Slug trùng').className).toContain('text-danger-fg');
+  });
+
+  it('chứng nhận: dòng nhập cao 44px, Xoá/Thêm chứng nhận là nút chữ 44px', async () => {
+    mocks.brands = [BRAND];
+    const { container } = await openBrands();
+    await openRow(container);
+    const code = container.querySelector('input[placeholder="Mã (ORG)"]')!;
+    expect(code.className).toContain('min-h-[44px]');
+    const add = btn(container, '+ Thêm chứng nhận');
+    expect(add.className).toContain('text-forest-700');
+    expect(add.className).toContain('min-h-[44px]');
+    const checkbox = container.querySelector('input[type="checkbox"]')!;
+    expect(checkbox.className).toContain('accent-forest-600');
+    expect(checkbox.closest('label')!.className).toContain('min-h-[44px]');
+  });
+
+  it('chương trình đại lý: tiêu đề dùng biểu tượng thay emoji, thêm/xoá gọi đúng API', async () => {
+    mocks.rewards = [
+      { id: 'r1', brandId: null, type: 'TOUR', title: 'Tour Phú Quốc', description: null, threshold: 50_000_000, period: 'QUARTER', isActive: true },
+    ];
+    const { container } = await openBrands();
+    const heading = [...container.querySelectorAll('div')].find((d) => d.textContent === 'Chương trình đại lý (thưởng doanh số)')!;
+    expect(heading.querySelector('svg')).not.toBeNull();
+    expect(heading.className).toContain('font-display');
+    const section = heading.parentElement!;
+    expect(section.className).toContain('rounded-card');
+
+    const del = btn(section, 'Xoá');
+    expect(del.className).toContain('text-danger-fg');
+    mocks.deleteDealerReward.mockResolvedValue({});
+    click(del);
+    await flush();
+    expect(mocks.deleteDealerReward).toHaveBeenCalledWith('r1');
+
+    const add = btn(section, 'Thêm');
+    expect(add.disabled).toBe(true);
+    expect(add.className).toContain('bg-forest-600');
+    for (const el of section.querySelectorAll('input, select')) expect(el.className).toContain('min-h-[44px]');
+    typeInto(section.querySelector('input[placeholder^="Tiêu đề"]'), 'Tour Đà Lạt');
+    mocks.createDealerReward.mockResolvedValue({});
+    click(add);
+    await flush();
+    expect(mocks.createDealerReward).toHaveBeenCalledWith({
+      type: 'TOUR',
+      title: 'Tour Đà Lạt',
+      description: undefined,
+      threshold: 50_000_000,
+      period: 'QUARTER',
+    });
   });
 });

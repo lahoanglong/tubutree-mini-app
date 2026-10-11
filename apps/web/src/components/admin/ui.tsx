@@ -67,3 +67,8 @@ export const BTN_DANGER_OUTLINE = `${TOUCH_H} rounded-control border border-dang
 // Nút nhỏ trong bảng/thanh phân trang: chỉ cao 44px khi chạm trên điện thoại, máy tính giữ hàng bảng gọn.
 export const BTN_SMALL =
   'min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 sm:min-h-0';
+// Nút chữ trong hàng danh sách (Quản lý/Sửa/Xoá/Gỡ): chạm 44px trên điện thoại, về cỡ gọn từ `sm`. Cỡ chữ đặt ở chỗ dùng.
+const BTN_LINK_BASE = 'inline-flex min-h-[44px] items-center justify-center rounded-control px-2 underline disabled:opacity-50 sm:min-h-0 sm:px-1';
+export const BTN_LINK = `${BTN_LINK_BASE} text-forest-700 hover:text-forest-800`;
+export const BTN_LINK_DANGER = `${BTN_LINK_BASE} text-danger-fg hover:brightness-90`;
+export const BTN_LINK_MUTED = `${BTN_LINK_BASE} text-stone-600 hover:text-stone-900`;
