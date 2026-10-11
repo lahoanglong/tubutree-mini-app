@@ -15,6 +15,7 @@ import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible } from '../coupons/coupon-scope';
 import { decideTier } from './tier-policy';
+import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
@@ -74,9 +75,7 @@ export class LoyaltyService {
       return;
     }
 
-    const expireMonths = await this.config.get<number>('loyalty.point_expire_months', 12);
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + expireMonths);
+    const expiresAt = await this.pointsExpiresAt(new Date());
 
     try {
       await this.prisma.$transaction([
@@ -684,11 +683,7 @@ export class LoyaltyService {
    * và điểm đánh giá. Đọc cấu hình bằng kết nối pool riêng nên caller gọi NGOÀI transaction của mình.
    */
   async pointsExpiresAt(from: Date): Promise<Date> {
-    const raw = await this.config.get<number>('loyalty.point_expire_months', 12);
-    const months = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 12;
-    const d = new Date(from.getTime());
-    d.setMonth(d.getMonth() + months);
-    return d;
+    return pointsExpiryFrom(from, await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS));
   }
 
   /** Số dương từ SystemConfig; sai kiểu/≤0 (admin gõ nhầm) → mặc định an toàn + cảnh báo. */
