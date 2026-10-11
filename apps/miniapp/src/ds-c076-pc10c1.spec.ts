@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
  */
 const FILES = [
   'src/pages/wallet.tsx',
+  'src/pages/cashback.tsx',
 ];
 
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
