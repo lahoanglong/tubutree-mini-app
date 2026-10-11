@@ -100,7 +100,7 @@ export class OrdersService {
   }
 
   /** Chi tiết đơn cho màn khách (GET /orders/:code) — kèm ảnh/tồn kho từng dòng. Các luồng nội bộ
-   * (cancel/repurchase/requestReturn/track) vẫn dùng detail() thô, không tốn thêm truy vấn. */
+   * (cancel/repurchase/requestReturn) vẫn dùng detail() thô, không tốn thêm truy vấn. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
     const [view] = await this.attachItemMedia([order]);
