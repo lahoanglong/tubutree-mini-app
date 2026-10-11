@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Input, Page, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Wallet, Landmark, ChevronDown } from 'lucide-react';
+import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { Text } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
+import { PeriodNav } from '../components/period-nav';
 import { formatVnd } from '../utils/format';
 import {
   currentVnYearMonth,
@@ -34,10 +44,11 @@ export default function MyPayrollPage() {
   const role = useAuthStore((s) => s.user?.role);
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
-      <Page className="page">
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--neutral-600)' }}>Trang dành cho nhân viên.</Text>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title="Lương của tôi" />
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Text tone="secondary">Trang dành cho nhân viên.</Text>
+        </div>
       </Page>
     );
   }
@@ -123,117 +134,151 @@ function MyPayrollHub() {
   const m = payQ.data?.month;
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Wallet size={22} color="var(--leaf-700)" />
-          <Text.Title size="small">Lương của tôi</Text.Title>
-        </Box>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+      <PageHeader title="Lương của tôi" />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <PeriodNav
+          label={`Tháng ${ym.month}/${ym.year}`}
+          prevLabel="Tháng trước"
+          nextLabel="Tháng sau"
+          onPrev={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}
+          onNext={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}
+        />
 
-        {/* Chuyển tháng */}
-        <Box flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: '8px 12px' }}>
-          <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}>
-            <ChevronLeft size={18} />
-          </Button>
-          <Text size="small" bold>
-            Tháng {ym.month}/{ym.year}
-          </Text>
-          <Button size="small" variant="tertiary" onClick={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}>
-            <ChevronRight size={18} />
-          </Button>
-        </Box>
-
-        {payQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 12 }} />}
+        {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
         {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
         {m && (
-          <Box style={{ background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))', color: 'var(--neutral-0)', borderRadius: 14, padding: 16 }}>
-            <Text size="small" style={{ color: 'rgba(255,255,255,0.9)' }}>Thực nhận tháng {m.month}/{m.year}</Text>
-            <Text bold style={{ color: 'var(--neutral-0)', fontSize: 28, marginTop: 2 }}>{formatVnd(m.net)}</Text>
-            <Box flex style={{ gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
-              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Giờ công: {fmtH(m.totalMinutes)}</Text>
-              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</Text>
-              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Lương gộp: {formatVnd(m.gross)}</Text>
-              <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)' }}>Phạt: {formatVnd(m.totalFines)}</Text>
-            </Box>
-            <Box style={{ display: 'inline-block', marginTop: 8, padding: '2px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.2)' }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-0)' }}>{STATUS_LABEL[m.status]}</Text>
-            </Box>
+          <div
+            style={{
+              background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
+              borderRadius: 'var(--radius-card)',
+              padding: 16,
+            }}
+          >
+            <Text variant="body-sm" tone="inverse" as="div">
+              Thực nhận tháng {m.month}/{m.year}
+            </Text>
+            <Text variant="price-xl" tone="inverse" as="div" style={{ marginTop: 2 }}>
+              {formatVnd(m.net)}
+            </Text>
+            <div style={{ display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+              <Text variant="caption" tone="inverse">Giờ công: {fmtH(m.totalMinutes)}</Text>
+              <Text variant="caption" tone="inverse">Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</Text>
+              <Text variant="caption" tone="inverse">Lương gộp: {formatVnd(m.gross)}</Text>
+              <Text variant="caption" tone="inverse">Phạt: {formatVnd(m.totalFines)}</Text>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Badge tone="neutral">{STATUS_LABEL[m.status]}</Badge>
+            </div>
             {m.status === 'PAID' && m.proofImageUrl && (
-              <Box style={{ marginTop: 10 }}>
-                <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 4 }}>Ảnh xác nhận đã chuyển:</Text>
-                <img src={m.proofImageUrl} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 8 }} />
-              </Box>
+              <div style={{ marginTop: 10 }}>
+                <Text variant="caption" tone="inverse" as="div" style={{ marginBottom: 4 }}>
+                  Ảnh xác nhận đã chuyển:
+                </Text>
+                <img src={m.proofImageUrl} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 'var(--radius-media)' }} />
+              </div>
             )}
-          </Box>
+          </div>
         )}
 
-        <Button size="small" variant="secondary" prefixIcon={<Landmark size={15} />} onClick={openBank}>
+        <Button variant="secondary" icon={Landmark} onPress={openBank}>
           Thông tin nhận lương
         </Button>
 
         {/* Chi tiết theo TUẦN → xổ ngày → xổ phiên checkin/out */}
         {weeks.map((w, i) => (
-          <Box key={w.wk} style={{ background: 'var(--neutral-0)', borderRadius: 12, padding: 12 }}>
-            <Box flex justifyContent="space-between" alignItems="center" style={{ marginBottom: 4 }}>
-              <Text bold>Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(new Date(new Date(`${w.wk}T00:00:00Z`).getTime() + 6 * 86400000).toISOString().slice(0, 10))})</Text>
-              <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>{fmtH(w.minutes)} · {formatVnd(w.net)}</Text>
-            </Box>
+          <Card key={w.wk}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Text style={{ fontWeight: 700 }}>
+                Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(new Date(new Date(`${w.wk}T00:00:00Z`).getTime() + 6 * 86400000).toISOString().slice(0, 10))})
+              </Text>
+              <Text variant="body-sm" tone="brand" style={{ fontWeight: 700 }}>
+                {fmtH(w.minutes)} · {formatVnd(w.net)}
+              </Text>
+            </div>
             {w.days.map((d) => {
               const key = d.workDate.slice(0, 10);
               const sess = sessionsByDay[key] ?? [];
               const isOpen = openDay === key;
               return (
-                <Box key={d.id} style={{ borderTop: '1px solid var(--neutral-100)' }}>
-                  <Box
-                    flex
-                    justifyContent="space-between"
-                    alignItems="center"
-                    style={{ padding: '6px 0' }}
+                <div key={d.id} style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
+                  <div
+                    role="button"
+                    aria-expanded={isOpen}
+                    {...rowKeyboardProps()}
+                    className="tubu-press"
                     onClick={() => setOpenDay(isOpen ? null : key)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 8,
+                      minHeight: 44,
+                      padding: '6px 0',
+                      boxSizing: 'border-box',
+                      cursor: 'pointer',
+                    }}
                   >
-                    <Box flex alignItems="center" style={{ gap: 4 }}>
-                      <ChevronDown size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-                      <Text size="small">{dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}</Text>
-                    </Box>
-                    <Box style={{ textAlign: 'right' }}>
-                      <Text size="small" bold>{formatVnd(d.net)}</Text>
-                      {d.fines > 0 && <Text size="xSmall" style={{ color: 'var(--danger)' }}>−{formatVnd(d.fines)} phạt</Text>}
-                    </Box>
-                  </Box>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Icon
+                        icon={ChevronDown}
+                        size="sm"
+                        tone="muted"
+                        style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform var(--motion-enter)' }}
+                      />
+                      <Text variant="body-sm">{dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}</Text>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Text variant="body-sm" as="div" style={{ fontWeight: 700 }}>{formatVnd(d.net)}</Text>
+                      {d.fines > 0 && <Text variant="caption" tone="danger" as="div">−{formatVnd(d.fines)} phạt</Text>}
+                    </div>
+                  </div>
                   {isOpen && (
-                    <Box style={{ paddingLeft: 18, paddingBottom: 6 }}>
-                      {sess.length === 0 && <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Không có phiên chấm công.</Text>}
+                    <div style={{ paddingLeft: 24, paddingBottom: 6 }}>
+                      {sess.length === 0 && <Text variant="caption" tone="tertiary" as="div">Không có phiên chấm công.</Text>}
                       {sess.map((s) => (
-                        <Text key={s.id} size="xSmall" style={{ color: 'var(--neutral-500)', display: 'block' }}>
+                        <Text key={s.id} variant="caption" tone="secondary" as="div">
                           {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
                           {s.isLate ? ' · trễ' : ''}
                         </Text>
                       ))}
-                    </Box>
+                    </div>
                   )}
-                </Box>
+                </div>
               );
             })}
-          </Box>
+          </Card>
         ))}
         {payQ.data && payQ.data.days.length === 0 && (
-          <Text size="small" style={{ color: 'var(--neutral-500)' }}>Chưa có dữ liệu công tháng này.</Text>
+          <EmptyState art="box" heading="Chưa có dữ liệu công tháng này." variant="inline" />
         )}
-      </Box>
+      </div>
 
-      {/* Sheet bank */}
-      <Sheet visible={bankOpen} onClose={() => setBankOpen(false)} autoHeight>
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
-          <Text.Title size="small">Thông tin nhận lương</Text.Title>
-          <Input label="Mã ngân hàng (BIN Napas, VD 970407)" value={bin} onChange={(e) => setBin(e.target.value)} />
-          <Input label="Số tài khoản" value={accNo} onChange={(e) => setAccNo(e.target.value)} />
-          <Input label="Tên chủ tài khoản" value={accName} onChange={(e) => setAccName(e.target.value)} />
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
+      <BottomSheet
+        open={bankOpen}
+        onClose={() => setBankOpen(false)}
+        title="Thông tin nhận lương"
+        footer={
+          <Button fullWidth loading={bankM.isPending} onPress={() => bankM.mutate()}>
+            Lưu
+          </Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Field label="Mã ngân hàng (BIN Napas, VD 970407)">
+            <Input value={bin} onChange={(e) => setBin(e.target.value)} />
+          </Field>
+          <Field label="Số tài khoản">
+            <Input value={accNo} onChange={(e) => setAccNo(e.target.value)} />
+          </Field>
+          <Field label="Tên chủ tài khoản">
+            <Input value={accName} onChange={(e) => setAccName(e.target.value)} />
+          </Field>
+          <Text variant="caption" tone="tertiary" as="div">Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
           <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} />
-          <Button fullWidth loading={bankM.isPending} disabled={bankM.isPending} onClick={() => bankM.mutate()}>Lưu</Button>
-        </Box>
-      </Sheet>
+        </div>
+      </BottomSheet>
     </Page>
   );
 }
