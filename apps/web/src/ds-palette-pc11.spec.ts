@@ -37,7 +37,7 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
 // File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
 // Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.
 const PARTIAL: { file: string; end: string; tail?: string }[] = [
-  { file: 'app/admin/page.tsx', end: 'function OrderStatusBadge(', tail: 'function Table(' },
+  { file: 'app/admin/page.tsx', end: 'const RECYCLING_FILTERS', tail: 'function Table(' },
 ];
 
 function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {

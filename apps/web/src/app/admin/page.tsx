@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Banknote, Recycle, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -378,14 +379,14 @@ function DealerRow({ app: a }: { app: DealerApp }) {
 
 function OrderStatusBadge({ status }: { status: string }) {
   const label = ORDER_STATUS_LABELS[status] ?? status;
-  let color = 'bg-neutral-100 text-neutral-700';
-  if (status === 'PENDING_PAYMENT') color = 'bg-amber-100 text-amber-800';
-  else if (status === 'CONFIRMED') color = 'bg-blue-100 text-blue-800';
-  else if (status === 'PACKED') color = 'bg-indigo-100 text-indigo-800';
-  else if (status === 'SHIPPING') color = 'bg-purple-100 text-purple-800';
-  else if (status === 'DELIVERED') color = 'bg-green-100 text-green-800 font-semibold';
-  else if (status === 'CANCELLED') color = 'bg-red-100 text-red-800';
-  else if (status === 'RETURNED') color = 'bg-rose-100 text-rose-800';
+  let color = 'bg-stone-100 text-stone-700';
+  if (status === 'PENDING_PAYMENT') color = 'bg-warning-bg text-warning-fg';
+  else if (status === 'CONFIRMED') color = 'bg-info-bg text-info-fg';
+  else if (status === 'PACKED') color = 'bg-sage-100 text-sage-700';
+  else if (status === 'SHIPPING') color = 'bg-forest-100 text-forest-800';
+  else if (status === 'DELIVERED') color = 'bg-success-bg text-success-fg font-semibold';
+  else if (status === 'CANCELLED') color = 'bg-danger-bg text-danger-fg';
+  else if (status === 'RETURNED') color = 'bg-promo-bg text-promo-fg';
 
   return <span className={`inline-block rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
 }
@@ -410,8 +411,8 @@ function DashboardTab({
     queryFn: () => listPayouts('REQUESTED', 1, 1).then((r) => r.meta.total),
   });
 
-  if (q.isLoading) return <p className="text-sm text-neutral-500">Đang tải số liệu tổng quan…</p>;
-  if (q.isError || !q.data) return <p className="text-sm text-red-600">Không tải được số liệu tổng quan KPI.</p>;
+  if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải số liệu tổng quan…</p>;
+  if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được số liệu tổng quan KPI.</p>;
 
   const stats = q.data;
 
@@ -421,90 +422,94 @@ function DashboardTab({
         <button
           type="button"
           onClick={onOpenRecyclingQueue}
-          className="flex w-full items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-800 hover:bg-red-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-danger-fg bg-danger-bg px-4 py-3 text-left text-sm text-danger-fg hover:brightness-95"
         >
           <span>
-            ♻ <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
+            <Recycle aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{recyclingQ.data}</b> đơn thu gom tái chế cần xử lý (vận đơn Gomdon lỗi / hoàn / huỷ không được)
           </span>
-          <span className="font-semibold">Xử lý ngay →</span>
+          <span className="shrink-0 font-semibold">Xử lý ngay →</span>
         </button>
       )}
       {(pendingClaimsQ.data ?? 0) > 0 && (
         <button
           type="button"
           onClick={() => onSelectTab('dealerClaims')}
-          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-left text-sm text-warning-fg hover:brightness-95"
         >
           <span>
-            🏆 <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
+            <Trophy aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{pendingClaimsQ.data}</b> yêu cầu nhận thưởng đại lý đang chờ duyệt
           </span>
-          <span className="font-semibold">Xem →</span>
+          <span className="shrink-0 font-semibold">Xem →</span>
         </button>
       )}
       {(pendingPayoutsQ.data ?? 0) > 0 && (
         <button
           type="button"
           onClick={() => onSelectTab('payouts')}
-          className="flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 hover:bg-amber-100"
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-left text-sm text-warning-fg hover:brightness-95"
         >
           <span>
-            💸 <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
+            <Banknote aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
           </span>
-          <span className="font-semibold">Xem →</span>
+          <span className="shrink-0 font-semibold">Xem →</span>
         </button>
       )}
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Doanh thu */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Doanh thu bán hàng</div>
-          <div className="mt-2 text-2xl font-bold text-green-700">{formatVnd(stats.totalRevenue)}</div>
-          <div className="mt-1 text-xs text-neutral-500">Đơn đã xác nhận & hoàn tất</div>
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu bán hàng</div>
+          <div className="mt-2 text-2xl font-bold text-forest-700">{formatVnd(stats.totalRevenue)}</div>
+          <div className="mt-1 text-xs text-stone-500">Đơn đã xác nhận & hoàn tất</div>
         </div>
 
         {/* Đơn hàng */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Tổng đơn hàng</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalOrders}</div>
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Tổng đơn hàng</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalOrders}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">{stats.pendingOrders} chờ xử lý</span>
-            <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700">{stats.shippingOrders} đang giao</span>
-            <span className="rounded bg-green-50 px-1.5 py-0.5 font-medium text-green-700">{stats.deliveredOrders} đã giao</span>
+            <span className="rounded bg-warning-bg px-1.5 py-0.5 font-medium text-warning-fg">{stats.pendingOrders} chờ xử lý</span>
+            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} đang giao</span>
+            <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} đã giao</span>
             {stats.cancelledOrders > 0 && (
-              <span className="rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-700">{stats.cancelledOrders} đã hủy</span>
+              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã hủy</span>
             )}
           </div>
         </div>
 
         {/* Khách hàng & Đối tác */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Cộng đồng & Đối tác</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalUsers} <span className="text-xs font-normal text-neutral-500">người dùng</span></div>
-          <div className="mt-1 text-xs text-neutral-600">
-            Trong đó: <span className="font-semibold text-green-700">{stats.totalAffiliates}</span> đối tác CTV / Affiliate
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Cộng đồng & Đối tác</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalUsers} <span className="text-xs font-normal text-stone-500">người dùng</span></div>
+          <div className="mt-1 text-xs text-stone-600">
+            Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> đối tác CTV / Affiliate
           </div>
         </div>
 
         {/* Sản phẩm & Cây xanh */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Sản phẩm & Rừng Xanh</div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900">{stats.totalProducts} <span className="text-xs font-normal text-neutral-500">sản phẩm</span></div>
-          <div className="mt-1 text-xs font-medium text-green-700">
-            🌳 {stats.plantedTreesCount} cây thật góp PanNature
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Sản phẩm & Rừng Xanh</div>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalProducts} <span className="text-xs font-normal text-stone-500">sản phẩm</span></div>
+          <div className="mt-1 flex items-center gap-1 text-xs font-medium text-forest-700">
+            <TreePine aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            {stats.plantedTreesCount} cây thật góp PanNature
           </div>
         </div>
       </div>
 
       {/* Recent Orders Section */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+      <div className="rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-3">
           <div>
-            <h2 className="font-semibold text-neutral-900">Đơn hàng mới nhất</h2>
-            <p className="text-xs text-neutral-500">Theo dõi các đơn hàng phát sinh gần nhất trong hệ thống</p>
+            <h2 className="font-display font-semibold text-stone-900">Đơn hàng mới nhất</h2>
+            <p className="text-xs text-stone-500">Theo dõi các đơn hàng phát sinh gần nhất trong hệ thống</p>
           </div>
           <button
             onClick={() => onSelectTab('orders')}
-            className="rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+            className="min-h-[44px] rounded-control bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-200 sm:min-h-[36px]"
           >
             Quản lý tất cả đơn hàng →
           </button>
@@ -512,7 +517,7 @@ function DashboardTab({
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Mã đơn</th>
                 <th className="px-3 py-2 font-medium">Khách hàng</th>
@@ -525,24 +530,24 @@ function DashboardTab({
             <tbody>
               {stats.recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-xs text-neutral-400">Chưa có đơn hàng nào.</td>
+                  <td colSpan={6} className="py-6 text-center text-xs text-stone-500">Chưa có đơn hàng nào.</td>
                 </tr>
               ) : (
                 stats.recentOrders.map((o) => (
-                  <tr key={o.id} className="border-t border-neutral-100 hover:bg-neutral-50/50">
-                    <td className="px-3 py-2.5 font-semibold text-neutral-800">{o.code}</td>
+                  <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
+                    <td className="px-3 py-2.5 font-semibold text-stone-800">{o.code}</td>
                     <td className="px-3 py-2.5">
-                      <div className="font-medium text-neutral-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
-                      {o.user?.phone && <div className="text-xs text-neutral-400">{o.user.phone}</div>}
+                      <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
+                      {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-neutral-600">
+                    <td className="px-3 py-2.5 text-xs text-stone-600">
                       {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                     </td>
-                    <td className="px-3 py-2.5 font-semibold text-green-700">{formatVnd(o.total)}</td>
+                    <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(o.total)}</td>
                     <td className="px-3 py-2.5">
                       <OrderStatusBadge status={o.status} />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-neutral-400">
+                    <td className="px-3 py-2.5 text-xs text-stone-500">
                       {new Date(o.createdAt).toLocaleString('vi-VN')}
                     </td>
                   </tr>

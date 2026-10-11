@@ -125,6 +125,50 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
   });
 });
 
+describe('admin/page — tab Tổng quan', () => {
+  const BADGE: [string, string, string][] = [
+    ['Chờ thanh toán', 'bg-warning-bg', 'text-warning-fg'],
+    ['Đã xác nhận', 'bg-info-bg', 'text-info-fg'],
+    ['Đã đóng gói', 'bg-sage-100', 'text-sage-700'],
+    ['Đang vận chuyển', 'bg-forest-100', 'text-forest-800'],
+    ['Đã giao hàng', 'bg-success-bg', 'text-success-fg'],
+    ['Đã hủy', 'bg-danger-bg', 'text-danger-fg'],
+    ['Đã trả hàng', 'bg-promo-bg', 'text-promo-fg'],
+  ];
+
+  it('huy hiệu trạng thái đơn mỗi trạng thái một cặp nền/chữ cùng họ token, nhãn giữ nguyên', async () => {
+    const { container } = await mount();
+    const badges = [...container.querySelectorAll('tbody span.inline-block')];
+    expect(badges).toHaveLength(7);
+    badges.forEach((el, i) => {
+      const [label, bg, fg] = BADGE[i]!;
+      expect(el.textContent).toBe(label);
+      expect(el.className).toContain(bg);
+      expect(el.className).toContain(fg);
+    });
+  });
+
+  it('bảng đơn mới nhất cuộn ngang trong khung riêng; thẻ KPI dùng bo/bóng thẻ DS v2', async () => {
+    const { container } = await mount();
+    const table = container.querySelector('table')!;
+    expect(table.parentElement!.className).toContain('overflow-x-auto');
+    expect(container.querySelector('.rounded-card.shadow-card')).not.toBeNull();
+  });
+
+  it('biểu ngữ cần xử lý dùng biểu tượng lucide thay emoji, giữ số đếm và nhãn bấm', async () => {
+    mocks.recycling = 2;
+    mocks.claims = 3;
+    mocks.payouts = 4;
+    const { container } = await mount();
+    const banners = [...container.querySelectorAll('button')].filter((b) => /Xử lý ngay|Xem →/.test(b.textContent ?? ''));
+    expect(banners).toHaveLength(3);
+    for (const b of banners) expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(banners[0]!.textContent).toContain('2 đơn thu gom tái chế cần xử lý');
+    expect(banners[1]!.textContent).toContain('3 yêu cầu nhận thưởng đại lý đang chờ duyệt');
+    expect(banners[2]!.textContent).toContain('4 lệnh rút tiền');
+  });
+});
+
 describe('admin/page — tab Đại lý', () => {
   const openDealers = async () => {
     window.history.replaceState(null, '', '/admin?tab=dealers');
