@@ -1184,7 +1184,7 @@ Test đỏ trước khi sửa (`home-parts.spec.tsx`, thêm 2 ca):
 
 ```
 FAIL HomeExtras > PD-3: lời chào hiện tổng Điểm Xanh hai lô  (60 + 40)
-  Expected: 100 điểm Xanh   Received: Chào Lan 🌿 · 60 điểm Xanh
+  Expected element to have text content: 100 điểm Xanh   (trang chỉ in lô thường 60)
 FAIL HomeExtras > PD-3: khách chỉ có điểm quy đổi (lô thường 0) vẫn thấy đúng số
   Expected: 1.200 điểm Xanh   Received: Chào Lan 🌿 · 0 điểm Xanh
 Tests  2 failed | 21 passed (23)
