@@ -26,6 +26,11 @@ const mocks = vi.hoisted(() => ({
   deletePromotion: vi.fn(),
   createDealerReward: vi.fn(),
   deleteDealerReward: vi.fn(),
+  flashSales: [] as unknown[],
+  createFlashSale: vi.fn(),
+  updateFlashSale: vi.fn(),
+  addFlashSaleItem: vi.fn(),
+  deleteFlashSaleItem: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -123,6 +128,12 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     deletePromotion: (...args: unknown[]) => mocks.deletePromotion(...args),
     createDealerReward: (...args: unknown[]) => mocks.createDealerReward(...args),
     deleteDealerReward: (...args: unknown[]) => mocks.deleteDealerReward(...args),
+    listFlashSales: async () => mocks.flashSales,
+    lookupVariations: async () => [],
+    createFlashSale: (...args: unknown[]) => mocks.createFlashSale(...args),
+    updateFlashSale: (...args: unknown[]) => mocks.updateFlashSale(...args),
+    addFlashSaleItem: (...args: unknown[]) => mocks.addFlashSaleItem(...args),
+    deleteFlashSaleItem: (...args: unknown[]) => mocks.deleteFlashSaleItem(...args),
   };
 });
 
@@ -148,7 +159,9 @@ beforeEach(() => {
   mocks.brandProducts = [];
   mocks.promotions = [];
   mocks.rewards = [];
+  mocks.flashSales = [];
   for (const fn of [
+    mocks.createFlashSale, mocks.updateFlashSale, mocks.addFlashSaleItem, mocks.deleteFlashSaleItem,
     mocks.createBrand, mocks.updateBrand, mocks.verifyBrand, mocks.detachBrandProducts,
     mocks.createPromotion, mocks.deletePromotion, mocks.createDealerReward, mocks.deleteDealerReward,
   ]) fn.mockReset();
@@ -749,5 +762,100 @@ describe('admin/page — tab Nhãn hàng', () => {
       threshold: 50_000_000,
       period: 'QUARTER',
     });
+  });
+});
+
+describe('admin/page — tab Flash Sale', () => {
+  const SALE = {
+    id: 's1',
+    title: 'Flash Sale cuối tuần',
+    startAt: '2026-10-17T01:00:00.000Z',
+    endAt: '2026-10-18T16:00:00.000Z',
+    isActive: true,
+    items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
+  };
+  const openSales = async () => {
+    window.history.replaceState(null, '', '/admin?tab=flashSales');
+    return mount();
+  };
+
+  it('form tạo đợt: ô nhập/nút 44px, khoá tới khi đủ tên + 2 mốc giờ, gửi mốc giờ ISO; báo success/danger', async () => {
+    const { container } = await openSales();
+    const heading = container.querySelector('h3')!;
+    expect(heading.className).toContain('font-display');
+    const inputs = [...container.querySelectorAll('input')];
+    expect(inputs).toHaveLength(3);
+    for (const el of inputs) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+    }
+    const create = btn(container, 'Tạo đợt');
+    expect(create.className).toContain('bg-forest-600');
+    expect(create.disabled).toBe(true);
+    typeInto(inputs[0]!, 'Đợt mới');
+    typeInto(inputs[1]!, '2026-10-20T08:00');
+    expect(create.disabled).toBe(true);
+    typeInto(inputs[2]!, '2026-10-21T08:00');
+    expect(create.disabled).toBe(false);
+
+    mocks.createFlashSale.mockResolvedValueOnce({});
+    click(create);
+    await flush();
+    expect(mocks.createFlashSale).toHaveBeenCalledWith({
+      title: 'Đợt mới',
+      startAt: new Date('2026-10-20T08:00').toISOString(),
+      endAt: new Date('2026-10-21T08:00').toISOString(),
+    });
+    expect(para(container, 'Đã tạo đợt flash sale!').className).toContain('text-success-fg');
+
+    typeInto(inputs[0]!, 'Đợt hai');
+    typeInto(inputs[1]!, '2026-10-20T08:00');
+    typeInto(inputs[2]!, '2026-10-21T08:00');
+    mocks.createFlashSale.mockRejectedValueOnce(new Error('Trùng khung giờ'));
+    click(create);
+    await flush();
+    expect(para(container, 'Trùng khung giờ').className).toContain('text-danger-fg');
+  });
+
+  it('hàng đợt: huy hiệu bật/tắt theo tông success/trung tính, nút Tắt gọi đúng API, cao 44px', async () => {
+    mocks.flashSales = [SALE, { ...SALE, id: 's2', title: 'Đợt cũ', isActive: false, items: [] }];
+    const { container } = await openSales();
+    const on = para(container, 'Đang bật');
+    expect(on.className).toContain('bg-success-bg');
+    const off = para(container, 'Đang tắt');
+    expect(off.className).toContain('bg-stone-100');
+    const toggle = btn(container, 'Tắt');
+    expect(toggle.className).toContain('min-h-[44px]');
+    expect(toggle.className).toContain('border-stone-450');
+    mocks.updateFlashSale.mockResolvedValue({});
+    click(toggle);
+    await flush();
+    expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
+    expect(btn(container, 'Bật')).toBeTruthy();
+    expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
+  });
+
+  it('sản phẩm trong đợt: dòng ngắt chữ được, Xoá là nút chữ danger 44px, thêm SP khoá tới khi chọn biến thể', async () => {
+    mocks.flashSales = [SALE];
+    const { container } = await openSales();
+    expect(container.textContent).toContain('đã bán 3/20 · giới hạn 2/khách');
+    const del = btn(container, 'Xoá');
+    expect(del.className).toContain('text-danger-fg');
+    expect(del.className).toContain('min-h-[44px]');
+    mocks.deleteFlashSaleItem.mockResolvedValue({});
+    click(del);
+    await flush();
+    expect(mocks.deleteFlashSaleItem).toHaveBeenCalledWith('i1');
+
+    const add = btn(container, 'Thêm SP');
+    expect(add.disabled).toBe(true);
+    expect(add.className).toContain('bg-forest-600');
+    for (const ph of ['Giá flash', 'Quota', 'Giới hạn/khách']) {
+      const el = container.querySelector(`input[placeholder="${ph}"]`)!;
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('min-w-0');
+    }
+    const hint = para(container, 'Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.');
+    expect(hint.className).toContain('text-stone-500');
   });
 });

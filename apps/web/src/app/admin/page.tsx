@@ -1610,43 +1610,44 @@ function FlashSalesTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt flash sale' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Tạo đợt Flash Sale</h3>
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h3>
         <div className="flex flex-wrap items-end gap-2">
           <input
             placeholder="Tên đợt (vd Flash Sale cuối tuần)"
             value={f.title}
             onChange={(e) => setF({ ...f, title: e.target.value })}
-            className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${field} grow basis-full sm:basis-48`}
           />
           <input
             type="datetime-local"
             value={f.startAt}
             onChange={(e) => setF({ ...f, startAt: e.target.value })}
-            className="rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={field}
           />
           <input
             type="datetime-local"
             value={f.endAt}
             onChange={(e) => setF({ ...f, endAt: e.target.value })}
-            className="rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={field}
           />
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!f.title.trim() || !f.startAt || !f.endAt || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách flash sale.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách flash sale.</p>}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
         {q.data?.length === 0 && <Empty>Chưa có đợt flash sale nào. Tạo đợt đầu tiên ở trên.</Empty>}
       </div>
@@ -1690,37 +1691,36 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   });
 
   const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 font-medium">
+    <div className={CARD_CLASS}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {sale.title}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${sale.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {sale.isActive ? 'Đang bật' : 'Đang tắt'}
-            </span>
+            <ToneBadge tone={sale.isActive ? 'success' : 'neutral'}>{sale.isActive ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
           </div>
-          <div className="text-xs text-neutral-400">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
+          <div className="break-words text-xs text-stone-500">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
         </div>
-        <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+        <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_SECONDARY} shrink-0`}>
           {sale.isActive ? 'Tắt' : 'Bật'}
         </button>
       </div>
-      {rowErr && <p className="mt-1 text-sm text-red-600">{rowErr}</p>}
+      {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
 
-      <div className="mt-3 border-t border-neutral-100 pt-3">
-        <div className="mb-1 text-sm font-medium">Sản phẩm trong đợt ({sale.items.length})</div>
+      <div className="mt-3 border-t border-stone-200 pt-3">
+        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({sale.items.length})</div>
         <div className="space-y-1">
           {sale.items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between rounded border border-neutral-100 px-2 py-1 text-sm">
-              <span className="truncate">
+            <div key={it.id} className={LIST_ITEM_CLASS}>
+              <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
-              <button onClick={() => delItem.mutate(it.id)} className="ml-2 shrink-0 text-xs text-red-600">Xoá</button>
+              <button onClick={() => delItem.mutate(it.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
             </div>
           ))}
-          {sale.items.length === 0 && <p className="text-xs text-neutral-400">Chưa có sản phẩm nào trong đợt này.</p>}
+          {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
         <div className="mt-2 flex flex-wrap items-start gap-2">
@@ -1734,15 +1734,15 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             }}
             className="min-w-[14rem] flex-1"
           />
-          <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className="w-28 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className="w-32 rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <button onClick={() => addItem.mutate()} disabled={!item.variationId.trim() || addItem.isPending} className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300">
+          <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className={`${field} w-28`} />
+          <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className={`${field} w-24`} />
+          <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-32`} />
+          <button onClick={() => addItem.mutate()} disabled={!item.variationId.trim() || addItem.isPending} className={BTN_PRIMARY}>
             Thêm SP
           </button>
         </div>
-        <p className="mt-1 text-xs text-neutral-400">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
-        {itemErr && <p className="mt-1 text-sm text-red-600">{itemErr}</p>}
+        <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
+        {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
       </div>
     </div>
   );
