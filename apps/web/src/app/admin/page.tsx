@@ -1148,7 +1148,7 @@ function UsersTab() {
 }
 
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
-/** Tổng Điểm Xanh khách thấy; phần quy đổi từ xu (tiền trả trước, không hết hạn) ghi riêng để xử lý khiếu nại. */
+/** Tổng Điểm Xanh khách thấy; phần quy đổi từ xu cũ (tiền trả trước, không hết hạn) ghi riêng để xử lý khiếu nại. */
 function UserPointsCell({ user }: { user: { pointsBalance: number; pointsConvertedBalance?: number } }) {
   const pts = pointsSummary(user);
   return (
