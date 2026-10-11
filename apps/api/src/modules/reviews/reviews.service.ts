@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { loadPointExpiryTxns, lotRemaining, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -239,29 +240,40 @@ export class ReviewsService {
     await this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc hạn của dòng thưởng: cron hết hạn cũng khoá dòng này rồi mới trừ lô đã quá hạn.
       // Đọc hạn khi chưa có khoá thì lô chạm hạn đúng lúc cron đang trừ nó vẫn bị coi là còn hạn, và thu hồi ghi sau
-      // đó trừ thêm lần hai.
-      if (review.pointsEarned > 0) {
-        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${review.userId} FOR UPDATE`;
-      }
+      // đó trừ thêm lần hai. Số dư đọc cùng câu khoá để chặn thu hồi quá số dư.
+      const locked =
+        review.pointsEarned > 0
+          ? await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${review.userId} FOR UPDATE`
+          : [];
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn
       // bằng cách tạo review (+điểm) rồi xóa (unique(userId,productId) mở lại) rồi tạo lại.
       // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
       // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
       if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
+        // Thu hồi tối đa phần còn lại của lô đánh giá theo sổ lô và không quá số dư: điểm đã tiêu thì không đòi lại,
+        // số dư không bao giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi (delta 0 nếu không còn gì); điểm đã thưởng
+        // nằm ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
+        const remaining = lotRemaining(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
+        const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
+        const take = Math.min(review.pointsEarned, remaining ?? review.pointsEarned, balance);
         await tx.pointsTransaction.create({
           data: {
             userId: review.userId,
-            delta: -review.pointsEarned,
+            delta: take > 0 ? -take : 0,
             reason: `REVIEW_DELETE:${review.productId}`,
             refType: 'REVIEW',
             refId: id,
           },
         });
-        await tx.user.update({
-          where: { id: review.userId },
-          data: { pointsBalance: { increment: -review.pointsEarned } },
-        });
+        if (take > 0) {
+          // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
+          const dec = await tx.user.updateMany({
+            where: { id: review.userId, pointsBalance: { gte: take } },
+            data: { pointsBalance: { decrement: take } },
+          });
+          if (dec.count !== 1) throw new Error(`Xoá đánh giá ${id}: số dư đổi giữa chừng`);
+        }
       }
       await this.recomputeRating(review.productId, tx);
     });
