@@ -67,6 +67,11 @@ Xem bảng test ở phần trả về của lượt (lệnh + kết quả thật
 - Mã đơn giữ ngày UTC (xem trên) vì đổi sẽ đổi mã đang chạy; nếu chủ dự án muốn đổi sang giờ VN thì là quyết định riêng (mã in trên đơn/Pancake).
 - Hành vi xoá `game.service.dayKey`: không có nơi gọi trong `apps/api/src` (grep `this.dayKey` trong file: 0).
 
+### Kiểm chứng lượt 2 (maskName, notifyAdminsOf)
+- `npx jest src/common/mask-name.spec.ts` cùng 4 spec game/merchant (maskName): 5 suite, 155 test xanh. `npx jest src/common/notify-admins.spec.ts src/modules/dealer src/modules/users`: 10 suite, 205 test xanh.
+- `tsc --noEmit` (apps/api) exit 0; ESLint các file đã sửa exit 0.
+- Race spec Postgres thật (cổng 5582, `--runInBand`, từng file): dealer, dealer-claim-reopen, dealer-bigint-volume, dealer-credit-limit, dealer-bonus, account-deletion, game-spin-limit: xanh.
+
 ### Việc còn lại (mục 1)
 - Gom `startOfDay` (game, game-quiz, game-economy, game-reminder) về `startOfVnDay`; `ctv-milestones`, `brand.service`, `vouchers.service`, `dealer.service` còn tự tính `VN_OFFSET` (không phải dayKey nên không thuộc nhóm (e)).
 
@@ -110,7 +115,7 @@ Mọi mục xác minh lại bằng `git grep -w` trên HEAD (`apps packages scri
 | `AffiliateLink.conversions/revenue` | `conversions` đọc ở `affiliate.service.ts:207,221` (`totalConversions`) | không bao giờ tăng (A7-24) | KHÔNG đánh dấu (còn hiển thị, luôn 0); A7-24 còn mở |
 | `SystemConfigHistory` | có (audit) | có | KHÔNG (audit, chấp nhận được) |
 
-- Thêm chú thích sai cần sửa của A2-018: `Order.endCustomerKey` ghi "hash SĐT" nhưng code lưu SĐT dạng nội địa rõ (`toLocalPhone`); chỉ sửa chú thích (không hash, không đổi dữ liệu).
+- Chú thích sai của A2-018 cũng sửa luôn: `Order.endCustomerKey` ghi "hash SĐT" nhưng code lưu SĐT dạng nội địa rõ (`toLocalPhone`); chỉ sửa chú thích (không hash, không đổi dữ liệu).
 - `prisma validate`: hợp lệ. `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code` trên DB test đã migrate 123/123, trước VÀ sau khi sửa: `No difference detected.`
 - `prisma format`: schema HEAD vốn chưa theo định dạng chuẩn (căn cột Order/User/Subscription lệch + vị trí chú thích `@@unique` của Commission), nên chạy `format` làm đổi ~60 dòng không liên quan. Đã KHÔNG giữ kết quả format (khôi phục bản chỉ có chú thích) để diff gói chỉ gồm chú thích; việc format cả file để riêng.
 - Spec chốt `src/common/schema-deprecated.spec.ts` (10 test): danh sách `/// @deprecated` trong schema phải khớp bảng bằng chứng trong spec; model chỉ ghi chỉ được gọi `create`; cột có tên duy nhất không được dùng ngoài mẫu `dauEventBased: null`; không có SQL thô đụng các bảng chết. `zaloAccessToken`/`zaloRefreshToken` (trùng tên với tham số Zalo của chấm công) và `Order.commission` (tên quá chung) để `manual`, bằng chứng nằm ở bảng trên.
