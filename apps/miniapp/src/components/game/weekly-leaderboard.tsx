@@ -9,7 +9,7 @@ export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined })
     <GameCard title="Bảng xếp hạng tuần" icon={Trophy}>
       {board && board.length > 0 ? (
         <>
-          {/* Podium top 3 */}
+          {/* Podium top 3. Khoá theo vị trí ô: khoá theo hạng va với khoá ô trống (idx) khi chỉ có 2 người (hạng 2 đứng ở ô 0). */}
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
             {[board[1], board[0], board[2]].map((r, idx) => {
               if (!r) return <div key={idx} style={{ flex: 1 }} />;
@@ -17,7 +17,7 @@ export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined })
               const h = isFirst ? 64 : r.rank === 2 ? 48 : 40;
               const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : '🥉';
               return (
-                <div key={r.rank} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div key={idx} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
                   <div style={{ fontSize: isFirst ? 28 : 22, lineHeight: 1.2 }}>{medal}</div>
                   <Text
                     variant="label"

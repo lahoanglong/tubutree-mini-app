@@ -110,10 +110,18 @@ export const waterTree = (drops: number) =>
 /** Mua nước 💧: BE đã ngừng (410), giữ hàm cho đủ API. */
 export const buySeeds = (seeds: number) =>
   api.post<{ seeds: number; cost: number; totalSeeds: number }>('/game/seeds/buy', { seeds }).then((r) => r.data);
-/** Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn. */
-export const buyTree = () =>
+/**
+ * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
+ * Mỗi lượt góp là một lần trừ điểm thật, nên kèm Idempotency-Key: gửi lại cùng key (chạm đúp, thử lại sau lỗi mạng
+ * khi server đã xử lý xong) nhận lại đúng kết quả cũ thay vì trừ điểm lần nữa.
+ */
+export const buyTree = (idempotencyKey: string) =>
   api
-    .post<{ certificateCode: string; treeType: string; cost: number; pointsUsed: number; pointsUsedConverted: number }>('/game/tree/buy')
+    .post<{ certificateCode: string; treeType: string; cost: number; pointsUsed: number; pointsUsedConverted: number }>(
+      '/game/tree/buy',
+      undefined,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
     .then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);

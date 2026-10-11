@@ -382,3 +382,23 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
   });
 });
+
+describe('LoyaltyPage — cảnh báo React trùng key', () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API (mã giảm giá, 7 ô điểm danh, hạng, quà, lịch sử) không phát cảnh báo key', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.getCoupons.mockResolvedValue(
+      ['GIAM10', 'FREESHIP'].map((code) => ({ code, type: 'AMOUNT', value: 10_000, minOrder: null, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' })),
+    );
+    mocks.getPointsTransactions.mockResolvedValue(
+      [1, 2, 3].map((n) => ({ id: `tx${n}`, delta: 5, reason: 'DAILY_CHECKIN', refType: 'CHECKIN', expiresAt: null, createdAt: '2026-10-0' + n + 'T00:00:00.000Z' })),
+    );
+    try {
+      renderPage();
+      await screen.findByText('2 mã');
+      await screen.findByText('Giảm 20.000đ');
+      expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});

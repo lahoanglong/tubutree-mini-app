@@ -546,6 +546,37 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
     expect(keys).not.toContainEqual(['coins']);
   });
 
+  it('góp quỹ trồng cây: gửi Idempotency-Key theo hợp đồng BE (8–128 ký tự A-Za-z0-9_-) cho mỗi hộp xác nhận', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(1));
+    expect(mocks.api.buyTree).toHaveBeenCalledWith(expect.stringMatching(/^[A-Za-z0-9_-]{8,128}$/));
+  });
+
+  it('góp quỹ trồng cây lỗi mạng: hộp ở lại, thử lại gửi đúng key cũ; thành công thì đóng hộp, mở lại ra key mới', async () => {
+    mocks.api.buyTree.mockRejectedValueOnce(new Error('Network Error'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    const retry = screen.getByRole('button', { name: 'Xác nhận' });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+    const [first, second] = mocks.api.buyTree.mock.calls.map((c) => c[0]);
+    expect(second).toBe(first);
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })),
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận' })).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Góp quỹ trồng cây/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
+    await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(3));
+    expect(mocks.api.buyTree.mock.calls[2]![0]).not.toBe(first);
+  });
+
   it('chú thích dưới nút góp quỹ nói rõ điểm không hết hạn chỉ bị dùng khi điểm thường không đủ (PD-3, OQ-5)', async () => {
     renderPage();
     expect(
@@ -1106,6 +1137,49 @@ describe('GamePage — bảng xếp hạng', () => {
     expect(container.textContent).toContain('🌳9');
     expect(screen.getByText('#4 Tư')).toBeInTheDocument();
     expect(container.textContent).toContain('🔥5 · 🌳2');
+  });
+});
+
+describe('GamePage — cảnh báo React trùng key', () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API (kể cả bảng tuần chỉ có 2 người) không phát cảnh báo key', async () => {
+    mocks.features.seasonPass = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };
+    const plot = (n: number) => ({ id: `p${n}`, slot: n, isHome: false, treeType: 'Mận', speciesId: null, progress: 5, target: 20, treeStage: 1, treesPlanted: 0, treeHealth: 'HEALTHY' });
+    const a = mocks.api;
+    a.getLeaderboard.mockResolvedValue([
+      { rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 },
+      { rank: 2, nickname: 'Nhì', streak: 20, treesPlanted: 7 },
+    ]);
+    a.getSeasonLeaderboard.mockResolvedValue([1, 2, 3, 4, 5].map((rank) => ({ rank, nickname: `Bạn ${rank}`, drops: 1_000 - rank })));
+    a.getMissions.mockResolvedValue([1, 2, 3].map((n) => ({ code: `M${n}`, title: `Nhiệm vụ ${n}`, rewardPoints: 10, progress: 0, goal: 3, completed: false, claimed: false })));
+    a.getForest.mockResolvedValue({
+      count: 3,
+      plantedCount: 0,
+      trees: [1, 2, 3].map((n) => ({ certificateCode: `TUBU-${n}`, treeType: 'Sồi', status: 'PLEDGED', region: null, pledgedAt: '', plantedAt: null })),
+    });
+    a.getCollection.mockResolvedValue([1, 2].map((n) => ({ id: `c${n}`, name: `Loài ${n}`, rarity: 'COMMON', emoji: '🌳', region: null, owned: true, count: 1, story: null, ecoFact: null })));
+    a.getFriends.mockResolvedValue([1, 2].map((n) => ({ id: `f${n}`, nickname: `Bạn ${n}`, giftedToday: false })));
+    a.getGarden.mockResolvedValue({ plots: [HOME, plot(2), plot(3)], maxPlots: 5, nextUnlock: null });
+    a.getTodayQuiz.mockResolvedValue([{ id: 'q1', question: 'Cây nào hấp thụ CO2?', options: ['Đá', 'Cây', 'Gạch'], category: 'cay', difficulty: 1, waterReward: 20 }]);
+    a.fetchSeasonPass.mockResolvedValue({
+      active: true,
+      seasonTitle: 'Xuân',
+      xp: 150,
+      premiumEligible: true,
+      tiers: [0, 1, 2].map((tier) => ({ tier, xpRequired: 100 * (tier + 1), free: { type: 'SEEDS', amount: 10 }, premium: { type: 'SEEDS', amount: 20 }, unlocked: tier === 0, claimedFree: false, claimedPremium: false })),
+    });
+    try {
+      renderPage();
+      await screen.findByText('Nhiệm vụ 3');
+      await openTab('Vườn');
+      await screen.findByText('Lô 3 · Mận');
+      await openTab('Cộng đồng');
+      await screen.findByText('Nhì');
+      expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 

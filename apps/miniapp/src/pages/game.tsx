@@ -120,7 +120,7 @@ export default function GamePage() {
             waterPending={waterM.isPending}
             onWater={() => waterM.mutate()}
             buyPending={buyTreeM.isPending}
-            onBuy={() => buyTreeM.mutate()}
+            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
           />
 
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
