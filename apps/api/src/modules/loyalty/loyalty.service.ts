@@ -139,7 +139,9 @@ export class LoyaltyService {
           where: {
             userId: order.userId,
             refId: order.id,
-            reason: { in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`] },
+            reason: {
+              in: [`ORDER_REVERSED:${order.code}`, `ORDER_REFUND_POINTS:${order.code}`, `ORDER_REFUND_CONVERTED:${order.code}`],
+            },
           },
           select: { id: true },
         });
@@ -173,11 +175,15 @@ export class LoyaltyService {
             data: { pointsBalance: { decrement: order.pointsEarned } },
           });
         }
-        if (order.pointsUsed > 0) {
+        // PD-3 (spec 2.5): hoàn về ĐÚNG lô đã tiêu. Đơn trước PD-3 có pointsUsedConverted = 0 → như cũ.
+        const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
+        const usedStandard = order.pointsUsed - usedConverted;
+        if (usedStandard > 0) {
           await tx.pointsTransaction.create({
             data: {
               userId: order.userId,
-              delta: order.pointsUsed,
+              delta: usedStandard,
+              lot: 'STANDARD',
               reason: `ORDER_REFUND_POINTS:${order.code}`,
               refType: 'ORDER',
               refId: order.id,
@@ -185,7 +191,26 @@ export class LoyaltyService {
           });
           await tx.user.update({
             where: { id: order.userId },
-            data: { pointsBalance: { increment: order.pointsUsed } },
+            data: { pointsBalance: { increment: usedStandard } },
+          });
+        }
+        if (usedConverted > 0) {
+          // Lô quy đổi không hết hạn. Trùng khoá (points_transactions_converted_refund_unique) → P2002,
+          // bắt ở dưới như dòng STANDARD.
+          await tx.pointsTransaction.create({
+            data: {
+              userId: order.userId,
+              delta: usedConverted,
+              lot: 'CONVERTED',
+              reason: `ORDER_REFUND_CONVERTED:${order.code}`,
+              refType: 'ORDER',
+              refId: order.id,
+              expiresAt: null,
+            },
+          });
+          await tx.user.update({
+            where: { id: order.userId },
+            data: { pointsConvertedBalance: { increment: usedConverted } },
           });
         }
       });
@@ -445,9 +470,15 @@ export class LoyaltyService {
     since.setMonth(since.getMonth() - 12);
     const tierPoints = await this.tierPoints(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
+    const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
 
     return {
+      /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
+      /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
+      pointsConvertedBalance: user.pointsConvertedBalance,
+      /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       tierPoints,
       // Phần Điểm Xanh chưa đổi quà được vì đơn còn có thể bị trả hàng (xem lockedOrderPoints).
       lockedPoints: lock.locked,
@@ -455,7 +486,8 @@ export class LoyaltyService {
       lockedReturnPoints: lock.lockedReturn,
       /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở (null nếu không có). */
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
-      redeemablePoints: Math.max(0, user.pointsBalance - lock.locked),
+      redeemablePoints,
+      redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
       tier: current
         ? {
             id: current.id,
