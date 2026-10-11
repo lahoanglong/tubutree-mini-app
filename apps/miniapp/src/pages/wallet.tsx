@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
+import { Page, Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, ArrowRightLeft, Landmark, History, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, ChevronRight, Clock, Coins, Gift, History, Landmark, Leaf, ShoppingBag, Sprout, type LucideIcon } from 'lucide-react';
 import { getWallet, getWalletTransactions, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
@@ -10,10 +11,26 @@ import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { canWithdraw as canWithdrawRule, canConvertToXu, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints, formatXu } from '../utils/format';
-import { Button as DsButton } from '../components/ui/button';
-import { Skeleton } from '../components/ui/skeleton';
+import { Badge } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
+
+const CARD: CSSProperties = {
+  background: 'var(--color-bg-surface)',
+  borderRadius: 'var(--radius-card)',
+  boxShadow: 'var(--elevation-1)',
+};
+
+// Chú thích dưới thẻ: lùi 4px cho thẳng mép chữ trong thẻ (thẻ bo góc làm chữ nhìn như lệch trái).
+const CAPTION_BELOW: CSSProperties = { marginTop: 6, paddingLeft: 4 };
 
 export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
@@ -104,53 +121,53 @@ export default function WalletPage() {
     }
   };
 
+  const balance = w?.walletBalance ?? 0;
+
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={vi.profile.wallet} />
       {!authed || walletQ.isLoading ? (
-        <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
-          <Skeleton style={{ height: 140, borderRadius: 16 }} />
-          <Skeleton style={{ height: 110, borderRadius: 16 }} />
-          <Skeleton style={{ height: 90, borderRadius: 16 }} />
-        </Box>
+        <div style={{ padding: 16, gap: 12, display: 'flex', flexDirection: 'column' }}>
+          <Skeleton height={140} radius="var(--radius-card)" />
+          <Skeleton height={110} radius="var(--radius-card)" />
+          <Skeleton height={90} radius="var(--radius-card)" />
+        </div>
       ) : walletQ.isError ? (
-        <Box p={6}>
+        <div style={{ padding: 24 }}>
           <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
-        </Box>
+        </div>
       ) : w ? (
         <>
           {/* Ví Tubu (tiền thật) */}
-          <Box p={4} pb={2}>
-            <Box
-              p={5}
+          <div style={{ padding: '16px 16px 8px' }}>
+            <div
               style={{
-                background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
-                borderRadius: 'var(--radius-xl)',
-                color: 'var(--neutral-0)',
-                boxShadow: 'var(--shadow-md)',
+                padding: 20,
+                background: 'linear-gradient(135deg, var(--forest-600), var(--forest-700))',
+                borderRadius: 'var(--radius-card)',
+                boxShadow: 'var(--elevation-2)',
               }}
             >
-              <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <Text variant="body-sm" tone="inverse" as="div">
                 Ví Tubu (số dư khả dụng)
               </Text>
-              <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4 }}>
+              <Text
+                variant="price-xl"
+                tone="inverse"
+                as="div"
+                style={{ fontSize: 'var(--type-display-lg-size)', lineHeight: 'var(--type-display-lg-lh)', marginTop: 4 }}
+              >
                 {formatVnd(w.walletBalance)}
               </Text>
-              <Box flex style={{ gap: 8, marginTop: 16 }}>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.95)', color: 'var(--leaf-700)', fontSize: 13, padding: '0 8px' }}
-                  prefixIcon={<ArrowRightLeft size={15} strokeWidth={2} />}
-                  onClick={() => setConvertOpen(true)}
-                >
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <Button variant="secondary" icon={ArrowRightLeft} style={{ flex: 1, padding: '0 8px' }} onPress={() => setConvertOpen(true)}>
                   Đổi TubuXu
                 </Button>
                 <Button
                   variant="secondary"
-                  size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: 'var(--neutral-0)', fontSize: 13, padding: '0 8px' }}
-                  prefixIcon={<Landmark size={15} strokeWidth={2} />}
-                  onClick={() => {
+                  icon={Landmark}
+                  style={{ flex: 1, padding: '0 8px' }}
+                  onPress={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
                     // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
                     withdrawKey.current = newIdempotencyKey();
@@ -159,125 +176,126 @@ export default function WalletPage() {
                 >
                   Rút ngân hàng
                 </Button>
-              </Box>
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              </div>
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               Tiền thật từ hoa hồng &amp; hoàn tiền sàn ngoài — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
             </Text>
-          </Box>
+          </div>
 
           {/* TubuXu */}
-          <Box px={4} pb={2}>
-            <Box
-              p={4}
-              flex
+          <div style={{ padding: '0 16px 8px' }}>
+            <div
               style={{
+                padding: 16,
+                display: 'flex',
                 alignItems: 'center',
                 gap: 12,
                 background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
-                borderRadius: 'var(--radius-xl)',
-                color: 'var(--neutral-0)',
-                boxShadow: 'var(--shadow-sm)',
+                borderRadius: 'var(--radius-card)',
+                boxShadow: 'var(--elevation-1)',
               }}
             >
-              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Coins size={24} color="var(--neutral-0)" strokeWidth={2} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <IconBubble solid>
+                <Icon icon={Coins} size="lg" tone="inverse" />
+              </IconBubble>
+              <div style={{ flex: 1 }}>
+                <Text variant="body-sm" tone="inverse" as="div">
                   TubuXu (tiêu trong app)
                 </Text>
-                <Text bold style={{ fontSize: 24, color: 'var(--neutral-0)', lineHeight: '30px' }}>
+                <Text variant="price-xl" tone="inverse" as="div">
                   {formatXu(coins?.coinsBalance ?? w.coinsBalance)}
                 </Text>
-              </Box>
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              </div>
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               Dùng để mua hàng, mua nước 💧 và mua cây 🌳 trong app. Không rút được.
             </Text>
-          </Box>
+          </div>
 
           {/* Điểm Xanh (đổi giảm giá) */}
-          <Box px={4} pb={2}>
-            <Box
-              p={4}
-              flex
+          <div style={{ padding: '0 16px 8px' }}>
+            <div
+              role="button"
+              {...rowKeyboardProps()}
+              className="tubu-press"
               onClick={() => navigate('/loyalty')}
-              style={{
-                alignItems: 'center',
-                gap: 12,
-                background: 'var(--neutral-0)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-sm)',
-                cursor: 'pointer',
-              }}
+              style={{ ...CARD, padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}
             >
-              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Leaf size={22} color="var(--leaf-700)" strokeWidth={2} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+              <IconBubble>
+                <Icon icon={Leaf} size="md" tone="brand" />
+              </IconBubble>
+              <div style={{ flex: 1 }}>
+                <Text variant="body-sm" tone="tertiary" as="div">
                   Điểm Xanh (đổi giảm giá)
                 </Text>
-                <Text bold style={{ fontSize: 24, color: 'var(--neutral-900)', lineHeight: '30px' }}>
+                <Text variant="price-xl" as="div">
                   {formatPoints(loyalty?.pointsBalance ?? 0)}
                 </Text>
-              </Box>
+              </div>
               {loyalty?.tier && (
-                <Box px={2} py={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', flex: '0 0 auto' }}>
-                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>{loyalty.tier.name}</Text>
-                </Box>
+                <Badge tone="brand" style={{ flex: '0 0 auto' }}>
+                  {loyalty.tier.name}
+                </Badge>
               )}
-              <ChevronRight size={18} color="var(--neutral-300)" style={{ flex: '0 0 auto' }} />
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: '0 0 auto' }} />
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               Tích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau &amp; lên hạng thành viên.
             </Text>
-          </Box>
+          </div>
 
           {/* Giới thiệu bạn bè */}
           {coins && (
-            <Box px={4} pb={2}>
-              <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
-                <Box flex style={{ alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <Gift size={18} color="var(--leaf-700)" strokeWidth={1.9} />
-                  <Text bold>Mời bạn — cả hai nhận TubuXu</Text>
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            <div style={{ padding: '0 16px 8px' }}>
+              <div style={{ ...CARD, padding: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Icon icon={Gift} size="md" tone="brand" />
+                  <Text variant="body-lg" style={{ fontWeight: 600 }}>Mời bạn — cả hai nhận TubuXu</Text>
+                </div>
+                <Text variant="caption" tone="secondary" as="div">
                   Bạn bè vào app bằng mã của bạn và hoàn tiền đơn đầu tiên → cả hai cùng được thưởng xu.
                 </Text>
-                <Box flex style={{ gap: 16, marginTop: 12, marginBottom: 12 }}>
-                  <Box>
-                    <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{coins.referralSuccessCount}</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>bạn thành công</Text>
-                  </Box>
-                  <Box>
-                    <Text bold size="large" style={{ color: 'var(--clay-700)' }}>{formatXu(coins.referralEarned)}</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>đã nhận từ giới thiệu</Text>
-                  </Box>
-                </Box>
+                <div style={{ display: 'flex', gap: 16, marginTop: 12, marginBottom: 12 }}>
+                  <div>
+                    <Text variant="price-lg" tone="brand" as="div">{coins.referralSuccessCount}</Text>
+                    <Text variant="caption" tone="tertiary" as="div">bạn thành công</Text>
+                  </div>
+                  <div>
+                    <Text variant="price-lg" as="div" style={{ color: 'var(--color-promo-fg)' }}>{formatXu(coins.referralEarned)}</Text>
+                    <Text variant="caption" tone="tertiary" as="div">đã nhận từ giới thiệu</Text>
+                  </div>
+                </div>
                 {coins.nextMilestone && (
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 12 }}>
+                  <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 12 }}>
                     {vi.wallet.referralMilestoneProgress(
                       coins.nextMilestone.count - coins.referralSuccessCount,
                       formatXu(coins.nextMilestone.bonus),
                     )}
                   </Text>
                 )}
-                <Box flex style={{ alignItems: 'center', gap: 8 }}>
-                  <Box p={2} style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-                    <Text bold style={{ letterSpacing: 1.5, color: 'var(--neutral-900)' }}>{coins.referralCode}</Text>
-                  </Box>
-                  <Button size="small" style={{ background: 'var(--leaf-600)' }} onClick={() => void shareReferral()}>
-                    Chia sẻ
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 44,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--color-bg-subtle)',
+                      borderRadius: 'var(--radius-control)',
+                    }}
+                  >
+                    <Text variant="body-lg" style={{ fontWeight: 600, letterSpacing: 1.5 }}>{coins.referralCode}</Text>
+                  </div>
+                  <Button onPress={() => void shareReferral()}>Chia sẻ</Button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Nguồn tiền chờ */}
-          <Box mx={4} mb={3} flex style={{ gap: 10 }}>
+          <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
             <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
             {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
                 Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
@@ -289,115 +307,166 @@ export default function WalletPage() {
               hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
               onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
             />
-          </Box>
-          <Box mx={4} mb={3}>
+          </div>
+          <div style={{ margin: '0 16px 12px', display: 'flex' }}>
             {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
                 không phải đơn đang chờ sàn duyệt. */}
             <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
-          </Box>
+          </div>
 
-          <Box mx={4} mb={4} p={4} flex style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', gap: 8 }}>
-            <Coins size={18} color="var(--clay-700)" strokeWidth={1.9} style={{ flex: '0 0 auto', marginTop: 1 }} />
-            <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
+          <div
+            style={{
+              margin: '0 16px 16px',
+              padding: 16,
+              display: 'flex',
+              gap: 8,
+              background: 'var(--color-promo-bg)',
+              borderRadius: 'var(--radius-card)',
+            }}
+          >
+            <Icon icon={Coins} size="md" style={{ flex: '0 0 auto', color: 'var(--color-promo-fg)' }} />
+            <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
               Mẹo: đổi tiền Ví sang <b>TubuXu (×{multiplier})</b> để được thêm{' '}
               {Math.round((multiplier - 1) * 100)}% giá trị mua sắm — và <b>miễn phí</b>, thay vì rút về
               ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
             </Text>
-          </Box>
+          </div>
 
           <WalletHistory enabled={authed} />
         </>
       ) : null}
 
       {/* Sheet đổi Ví → TubuXu */}
-      <Sheet visible={convertOpen} onClose={() => { setConvertOpen(false); setConvertAmount(''); }} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large" style={{ marginBottom: 4 }}>Đổi Ví → TubuXu</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
-            Nhận thêm {Math.round((multiplier - 1) * 100)}% giá trị quy đổi — hoàn toàn miễn phí.
-          </Text>
+      <BottomSheet
+        open={convertOpen}
+        onClose={() => {
+          setConvertOpen(false);
+          setConvertAmount('');
+        }}
+        title="Đổi Ví → TubuXu"
+        description={`Nhận thêm ${Math.round((multiplier - 1) * 100)}% giá trị quy đổi — hoàn toàn miễn phí.`}
+        footer={
+          <Button fullWidth disabled={!canConvert || convertMut.isPending} onPress={() => convertMut.mutate()}>
+            {convertMut.isPending ? 'Đang đổi...' : 'Đổi ngay'}
+          </Button>
+        }
+      >
+        {balance <= 0 && (
+          <Notice icon={Sprout}>
+            Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
+          </Notice>
+        )}
 
-          {(w?.walletBalance ?? 0) <= 0 && (
-            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-                🌱 Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
-              </Text>
-            </Box>
-          )}
-
+        <Field label={`Số tiền muốn đổi (Khả dụng: ${formatVnd(balance)})`}>
           <Input
-            label={`Số tiền muốn đổi (Khả dụng: ${formatVnd(w?.walletBalance ?? 0)})`}
             type="number"
             placeholder="VD: 100.000"
             value={convertAmount}
-            disabled={(w?.walletBalance ?? 0) <= 0}
+            disabled={balance <= 0}
             onChange={(e) => setConvertAmount(e.target.value)}
           />
-          {convertNum > 0 && (
-            <Box mt={2} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)' }}>
-              <Text size="small" style={{ color: 'var(--clay-700)' }}>
-                Nhận ≈ <b>{formatXu(Math.floor(convertNum * multiplier))}</b>
-              </Text>
-            </Box>
-          )}
-          <Button
-            fullWidth
-            style={{ marginTop: 20, background: 'var(--leaf-600)' }}
-            disabled={!canConvert || convertMut.isPending}
-            onClick={() => convertMut.mutate()}
-          >
-            {convertMut.isPending ? 'Đang đổi...' : 'Đổi ngay'}
-          </Button>
-        </Box>
-      </Sheet>
+        </Field>
+        {convertNum > 0 && (
+          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-promo-bg)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)' }}>
+              Nhận ≈ <b>{formatXu(Math.floor(convertNum * multiplier))}</b>
+            </Text>
+          </div>
+        )}
+      </BottomSheet>
 
       {/* Sheet rút tiền */}
-      <Sheet visible={withdrawOpen} onClose={() => { setWithdrawOpen(false); setAmount(''); }} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large" style={{ marginBottom: 4 }}>Rút tiền về ngân hàng</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
-            Khả dụng: <b>{formatVnd(w?.walletBalance ?? 0)}</b> • Tối thiểu: <b>{formatVnd(min)}</b>
-          </Text>
+      <BottomSheet
+        open={withdrawOpen}
+        onClose={() => {
+          setWithdrawOpen(false);
+          setAmount('');
+        }}
+        title="Rút tiền về ngân hàng"
+        description={`Khả dụng: ${formatVnd(balance)} • Tối thiểu: ${formatVnd(min)}`}
+        footer={
+          <Button fullWidth disabled={!canWithdraw || withdrawMut.isPending} onPress={() => withdrawMut.mutate()}>
+            {withdrawMut.isPending ? 'Đang gửi...' : `Rút ${amountNum > 0 ? formatVnd(amountNum) : ''}`}
+          </Button>
+        }
+      >
+        {balance < min && (
+          <Notice icon={AlertTriangle}>
+            Số dư Ví Tubu của bạn ({formatVnd(balance)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
+          </Notice>
+        )}
 
-          {(w?.walletBalance ?? 0) < min && (
-            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-                ⚠️ Số dư Ví Tubu của bạn ({formatVnd(w?.walletBalance ?? 0)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
-              </Text>
-            </Box>
-          )}
-
-          <Box flex flexDirection="column" style={{ gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Số tiền rút">
             <Input
-              label="Số tiền rút"
               type="number"
               placeholder={`Tối thiểu ${formatVnd(min)}`}
               value={amount}
-              disabled={(w?.walletBalance ?? 0) < min}
+              disabled={balance < min}
               onChange={(e) => setAmount(e.target.value)}
             />
-            <Input label="Tên ngân hàng" placeholder="VD: Techcombank" value={bank.bankName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
-            <Input label="Số tài khoản" value={bank.accountNumber} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
-            <Input label="Chủ tài khoản" placeholder="Tên in trên thẻ" value={bank.accountName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
-          </Box>
-          {amountNum >= min && (
-            <Box mt={2} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)' }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
-              </Text>
-            </Box>
-          )}
-          <Button
-            fullWidth
-            style={{ marginTop: 20, background: 'var(--leaf-600)' }}
-            disabled={!canWithdraw || withdrawMut.isPending}
-            onClick={() => withdrawMut.mutate()}
-          >
-            {withdrawMut.isPending ? 'Đang gửi...' : `Rút ${amountNum > 0 ? formatVnd(amountNum) : ''}`}
-          </Button>
-        </Box>
-      </Sheet>
+          </Field>
+          <Field label="Tên ngân hàng">
+            <Input placeholder="VD: Techcombank" value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
+          </Field>
+          <Field label="Số tài khoản">
+            <Input value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
+          </Field>
+          <Field label="Chủ tài khoản">
+            <Input placeholder="Tên in trên thẻ" value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
+          </Field>
+        </div>
+        {amountNum >= min && (
+          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="caption" tone="secondary" as="div">
+              Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
+            </Text>
+          </div>
+        )}
+      </BottomSheet>
     </Page>
+  );
+}
+
+/** Ô tròn chứa biểu tượng ở đầu thẻ số dư; `solid` dùng trên nền thẻ màu (đất sét), mặc định trên thẻ trắng. */
+function IconBubble({ children, solid }: { children: ReactNode; solid?: boolean }) {
+  return (
+    <div
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: '50%',
+        background: solid ? 'var(--color-promo-solid-bg)' : 'var(--color-bg-subtle)',
+        display: 'grid',
+        placeItems: 'center',
+        flex: '0 0 auto',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Khung cảnh báo trong sheet — biểu tượng + chữ cùng màu khuyến mãi/đất sét, thay emoji ⚠️ 🌱 cũ. */
+function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: 12,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'flex-start',
+        background: 'var(--color-promo-bg)',
+        borderRadius: 'var(--radius-control)',
+        border: '1px solid var(--clay-100)',
+      }}
+    >
+      <Icon icon={icon} size="sm" style={{ flex: '0 0 auto', marginTop: 2, color: 'var(--color-promo-fg)' }} />
+      <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
+        {children}
+      </Text>
+    </div>
   );
 }
 
@@ -414,48 +483,47 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
   const rows = q.data?.pages.flatMap((p) => p.data) ?? [];
 
   return (
-    <Box mx={4} mb={6} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
-      <Box flex style={{ alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <History size={18} color="var(--leaf-700)" strokeWidth={1.9} />
-        <Text bold>Lịch sử Ví</Text>
-      </Box>
+    <div style={{ ...CARD, margin: '0 16px 24px', padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <Icon icon={History} size="md" tone="brand" />
+        <Text variant="body-lg" style={{ fontWeight: 600 }}>Lịch sử Ví</Text>
+      </div>
       {q.isLoading ? (
-        <Box flex flexDirection="column" style={{ gap: 8, marginTop: 8 }}>
-          <Skeleton style={{ height: 44, borderRadius: 8 }} />
-          <Skeleton style={{ height: 44, borderRadius: 8 }} />
-        </Box>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+          <Skeleton height={44} />
+          <Skeleton height={44} />
+        </div>
       ) : q.isError ? (
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : rows.length === 0 ? (
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
           Chưa có biến động nào trong Ví.
         </Text>
       ) : (
         <>
           {rows.map((t) => (
-            <Box
+            <div
               key={t.id}
-              flex
-              style={{ alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--neutral-100)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--color-border-subtle)' }}
             >
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text size="small" style={{ color: 'var(--neutral-900)' }}>{walletTxLabel(t.type)}</Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="body-sm" as="div">{walletTxLabel(t.type)}</Text>
+                <Text variant="caption" tone="tertiary" as="div">
                   {formatWalletTxTime(t.createdAt)}
                   {t.reason ? ` · ${t.reason}` : ''}
                 </Text>
-              </Box>
-              <Box style={{ textAlign: 'right', flex: '0 0 auto' }}>
-                <Text bold size="small" style={{ color: t.delta > 0 ? 'var(--leaf-700)' : 'var(--neutral-900)' }}>
+              </div>
+              <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                <Text variant="price-sm" tone={t.delta > 0 ? 'success' : 'primary'} as="div">
                   {t.delta > 0 ? '+' : '−'}
                   {formatVnd(Math.abs(t.delta))}
                 </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Số dư {formatVnd(t.balanceAfter)}</Text>
-              </Box>
-            </Box>
+                <Text variant="caption" tone="tertiary" as="div">Số dư {formatVnd(t.balanceAfter)}</Text>
+              </div>
+            </div>
           ))}
           {q.hasNextPage && (
-            <DsButton
+            <Button
               fullWidth
               variant="ghost"
               loading={q.isFetchingNextPage}
@@ -463,18 +531,18 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
               style={{ marginTop: 8 }}
             >
               Xem thêm
-            </DsButton>
+            </Button>
           )}
         </>
       )}
-    </Box>
+    </div>
   );
 }
 
 function SourceCard({
   label,
   value,
-  Icon,
+  Icon: SourceIcon,
   wide,
   hint,
   onClick,
@@ -488,27 +556,29 @@ function SourceCard({
   onClick?: () => void;
 }) {
   return (
-    <Box
-      p={3}
+    <div
       role={onClick ? 'button' : undefined}
+      {...(onClick ? rowKeyboardProps() : null)}
       className={onClick ? 'tubu-press' : undefined}
       onClick={onClick}
-      style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}
+      style={{ ...CARD, flex: 1, minWidth: 0, padding: 12 }}
     >
-      <Box style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-        <Icon size={17} color="var(--leaf-700)" strokeWidth={1.9} />
-      </Box>
-      <Text bold size={wide ? 'normal' : 'small'} style={{ color: 'var(--neutral-900)', marginTop: 4 }}>
+      <div
+        style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}
+      >
+        <Icon icon={SourceIcon} size="sm" tone="brand" />
+      </div>
+      <Text variant={wide ? 'price-md' : 'price-sm'} as="div" style={{ marginTop: 4 }}>
         {formatVnd(value)}
       </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+      <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>
       {hint && (
-        <Text size="xSmall" style={{ color: 'var(--primary-700)', marginTop: 4, fontWeight: 600 }}>
+        <Text variant="caption" tone="brand" as="div" style={{ marginTop: 4, fontWeight: 600 }}>
           {hint}
         </Text>
       )}
-    </Box>
+    </div>
   );
 }
