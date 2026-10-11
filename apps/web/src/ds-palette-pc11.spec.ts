@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 // không được quay lại palette v1/stock Tailwind, white/black thô, màu cứng hay emoji làm icon. Chuyển thêm
 // file nào thì THÊM vào đây TRƯỚC khi sửa (thấy đỏ), sửa xong thấy xanh, commit spec + file chung một lần.
 // Không kiểm cỡ chữ: admin tối ưu cho máy tính (Q-29) nên chữ 11px dày đặc của bảng được giữ nguyên.
+// Ngoại lệ có chủ ý, static-scan vẫn đếm nhưng không phải icon/màu giao diện: `merchant/theme-colors.ts` là dữ liệu
+// màu lưu ở Storefront.themeColor (không nằm trong MIGRATED); dấu ✓ trong <title> của generateMetadata brand (PARTIAL
+// bên dưới); placeholder 🌿 của Content Kit ghi bằng escape \u{1F33F} vì là chữ mẫu cho CTV, không phải icon.
 const MIGRATED = [
   'app/admin/layout.tsx',
   'app/merchant/layout.tsx',
