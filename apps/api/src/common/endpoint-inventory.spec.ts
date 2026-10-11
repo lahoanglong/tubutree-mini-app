@@ -26,6 +26,7 @@ import { StorefrontController } from '../modules/storefront/storefront.controlle
 const REMOVED = [
   'POST /me/redeem-points',
   'GET /feed/events/:id',
+  'GET /brand/owner/me/promotions',
 ] as const;
 
 const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [
@@ -92,6 +93,8 @@ describe('Sổ endpoint C-098', () => {
     expect(ROUTES.has('GET /orders')).toBe(true);
     expect(ROUTES.has('POST /orders/:code/cancel')).toBe(true);
     expect(ROUTES.has('GET /admin/orders/:id/status-history')).toBe(true);
+    expect(ROUTES.has('POST /brand/owner/me/promotions')).toBe(true);
+    expect(ROUTES.has('PATCH /brand/owner/me/promotions/:id')).toBe(true);
   });
 
   it.each(REMOVED)('%s đã gỡ, không còn handler', (route) => {
