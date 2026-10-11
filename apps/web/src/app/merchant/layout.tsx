@@ -6,6 +6,10 @@ import type { Metadata } from 'next';
  */
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
+/**
+ * Khung nền của cổng đối tác: thẻ/bảng trắng (stone-0) nằm trên nền stone-50 và chữ gốc stone-900, đặt tại đây để
+ * trang không phụ thuộc nền toàn cục của web khách (cùng cách khu quản trị làm ở app/admin/layout.tsx).
+ */
 export default function PrivateLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <div className="bg-stone-50 text-stone-900">{children}</div>;
 }

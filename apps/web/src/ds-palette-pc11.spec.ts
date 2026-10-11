@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 // Không kiểm cỡ chữ: admin tối ưu cho máy tính (Q-29) nên chữ 11px dày đặc của bảng được giữ nguyên.
 const MIGRATED = [
   'app/admin/layout.tsx',
+  'app/merchant/layout.tsx',
   'app/admin/page.tsx',
   'components/admin/ui.tsx',
   'components/admin/confirm-dialog.tsx',
@@ -61,6 +62,7 @@ const PARTIAL: { file: string; end: string; tail?: string }[] = [
   // `generateMetadata` ghép dấu ✓ vào chuỗi tiêu đề tab/OG của nhãn chính hãng: đó là chữ trong <title> (không
   // chèn được SVG), không phải icon trong giao diện, nên chỉ phần giao diện từ BrandPage trở xuống bị quét.
   { file: 'app/brand/[slug]/page.tsx', end: 'export async function generateMetadata', tail: 'export default async function BrandPage' },
+  { file: 'app/merchant/page.tsx', end: '// ── Tab 1: Cấu hình Gian hàng' },
 ];
 
 function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {

@@ -44,6 +44,8 @@ import {
 } from '@/lib/merchant-client';
 import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
+import { TOUCH_H } from '@/components/admin/ui';
+import { THEME_COLORS } from './theme-colors';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -56,15 +58,6 @@ const POPULAR_BANKS = [
   { bin: '970423', name: 'TPBank' },
   { bin: '970403', name: 'Sacombank' },
   { bin: '970441', name: 'VIB' },
-];
-
-const THEME_COLORS = [
-  { label: 'Xanh Lá Tự Nhiên', hex: '#16a34a' },
-  { label: 'Xanh Ngọc Lục Bảo', hex: '#0d9488' },
-  { label: 'Cam Đất Mộc Mạc', hex: '#ea580c' },
-  { label: 'Xanh Navy Hiện Đại', hex: '#1d4ed8' },
-  { label: 'Tím Oải Hương', hex: '#7c3aed' },
-  { label: 'Nâu Gỗ Trầm', hex: '#78350f' },
 ];
 
 type MerchantTab = 'store' | 'banking' | 'warehouse' | 'products' | 'orders';
@@ -97,8 +90,8 @@ export default function MerchantPage() {
   if (!initialized || status === 'loading') {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
-        <div className="flex items-center gap-2 text-sm font-medium text-neutral-500">
-          <RefreshCw className="h-4 w-4 animate-spin text-leaf-600" />
+        <div className="flex items-center gap-2 text-sm font-medium text-stone-500">
+          <RefreshCw className="h-4 w-4 animate-spin text-forest-600" aria-hidden="true" />
           <span>Đang kết nối trung tâm đối tác…</span>
         </div>
       </div>
@@ -108,16 +101,16 @@ export default function MerchantPage() {
   if (status !== 'authenticated') {
     return (
       <div className="mx-auto max-w-md px-4 py-20 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-700 shadow-sm">
-          <Store className="h-8 w-8" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-700 shadow-card">
+          <Store className="h-8 w-8" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 text-2xl font-bold text-neutral-900">Cổng Quản Trị Đối Tác</h2>
-        <p className="mt-2 text-sm text-neutral-600">
+        <h2 className="mt-4 font-display text-2xl font-semibold text-stone-900">Cổng Quản Trị Đối Tác</h2>
+        <p className="mt-2 text-sm text-stone-600">
           Vui lòng đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, kho hàng và đơn hàng.
         </p>
         <Link
           href="/dang-nhap"
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-primary-700"
+          className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-control bg-forest-600 px-6 py-2.5 text-sm font-semibold text-stone-0 shadow-card transition hover:bg-forest-700"
         >
           <span>Đăng nhập ngay</span>
         </Link>
@@ -131,11 +124,11 @@ export default function MerchantPage() {
   if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role)) {
     return (
       <div className="mx-auto max-w-md px-4 py-20 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-700 shadow-sm">
-          <Store className="h-8 w-8" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-700 shadow-card">
+          <Store className="h-8 w-8" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 text-2xl font-bold text-neutral-900">Kênh dành cho đối tác</h2>
-        <p className="mt-2 text-sm text-neutral-600">
+        <h2 className="mt-4 font-display text-2xl font-semibold text-stone-900">Kênh dành cho đối tác</h2>
+        <p className="mt-2 text-sm text-stone-600">
           Tài khoản của bạn chưa phải đại lý hoặc cộng tác viên. Đăng ký trong Mini App Tubu Tree
           để mở kênh bán hàng riêng.
         </p>
@@ -151,37 +144,37 @@ export default function MerchantPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
       {/* ── Top Header Bar ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-200/80 bg-white p-5 sm:p-6 shadow-sm">
-        <div className="space-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6">
+        <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">
+            <h1 className="break-words font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
               {store?.title ?? 'Cổng Quản Trị Gian Hàng Đối Tác'}
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full bg-leaf-100 px-2.5 py-0.5 text-xs font-semibold text-leaf-800">
-              <ShieldCheck className="h-3.5 w-3.5" />
+            <span className="inline-flex items-center gap-1 rounded-full bg-forest-100 px-2.5 py-0.5 text-xs font-semibold text-forest-800">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               {store?.type ?? 'MERCHANT'}
             </span>
             {store && (
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   store.isPublished
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
+                    ? 'bg-success-bg text-success-fg'
+                    : 'bg-warning-bg text-warning-fg'
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${store.isPublished ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${store.isPublished ? 'bg-success-fg' : 'bg-warning-fg'}`} aria-hidden="true" />
                 {store.isPublished ? 'Đang xuất bản' : 'Chưa xuất bản'}
               </span>
             )}
           </div>
           {store?.subdomain && (
-            <p className="flex items-center gap-1.5 text-xs text-neutral-500">
+            <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-stone-500">
               <span>Đường dẫn gian hàng riêng:</span>
               <a
                 href={`https://${store.subdomain}.tubutree.com`}
                 target="_blank"
                 rel="noreferrer"
-                className="font-semibold text-leaf-700 hover:underline"
+                className="break-all font-semibold text-forest-700 hover:underline"
               >
                 https://{store.subdomain}.tubutree.com
               </a>
@@ -194,11 +187,11 @@ export default function MerchantPage() {
             <Link
               href={`/s/${store.subdomain || store.slug}`}
               target="_blank"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-semibold text-neutral-700 shadow-sm transition hover:border-leaf-600 hover:bg-leaf-50 hover:text-leaf-800"
+              className={`inline-flex items-center gap-1.5 rounded-control border border-stone-450 bg-stone-0 px-4 py-2 text-xs font-semibold text-stone-700 transition hover:border-forest-600 hover:bg-forest-50 hover:text-forest-800 ${TOUCH_H}`}
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Xem gian hàng</span>
-              <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
             </Link>
           </div>
         )}
@@ -206,47 +199,47 @@ export default function MerchantPage() {
 
       {/* ── KPI Overview Metric Cards ── */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Sản phẩm riêng</span>
-            <Package className="h-4 w-4 text-leaf-700" />
+            <span className="text-xs font-medium text-stone-500">Sản phẩm riêng</span>
+            <Package className="h-4 w-4 text-forest-700" aria-hidden="true" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-neutral-900">{ownCount}</p>
-          <span className="text-[11px] text-neutral-400">Do đối tác tự tải lên</span>
+          <p className="mt-2 text-2xl font-bold text-stone-900">{ownCount}</p>
+          <span className="text-[11px] text-stone-500">Do đối tác tự tải lên</span>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Sản phẩm bán lại</span>
-            <Sparkles className="h-4 w-4 text-primary-600" />
+            <span className="text-xs font-medium text-stone-500">Sản phẩm bán lại</span>
+            <Sparkles className="h-4 w-4 text-honey-600" aria-hidden="true" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-neutral-900">{resellCount}</p>
-          <span className="text-[11px] text-neutral-400">Từ kho Tubu Tree</span>
+          <p className="mt-2 text-2xl font-bold text-stone-900">{resellCount}</p>
+          <span className="text-[11px] text-stone-500">Từ kho Tubu Tree</span>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Chờ đóng gói</span>
-            <ShoppingBag className="h-4 w-4 text-indigo-600" />
+            <span className="text-xs font-medium text-stone-500">Chờ đóng gói</span>
+            <ShoppingBag className="h-4 w-4 text-info-fg" aria-hidden="true" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-neutral-900">{pendingOrdersCount}</p>
-          <span className="text-[11px] text-neutral-400">Cần xuất kho ngay</span>
+          <p className="mt-2 text-2xl font-bold text-stone-900">{pendingOrdersCount}</p>
+          <span className="text-[11px] text-stone-500">Cần xuất kho ngay</span>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-sm">
+        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Trạng thái shop</span>
-            <Store className="h-4 w-4 text-emerald-600" />
+            <span className="text-xs font-medium text-stone-500">Trạng thái shop</span>
+            <Store className="h-4 w-4 text-success-fg" aria-hidden="true" />
           </div>
-          <p className="mt-2 text-sm font-bold text-neutral-900">
+          <p className="mt-2 text-sm font-bold text-stone-900">
             {store?.isPublished ? 'Hoạt động công khai' : 'Tạm khóa / Ẩn'}
           </p>
-          <span className="text-[11px] text-neutral-400">Mã: {store?.slug}</span>
+          <span className="text-[11px] text-stone-500">Mã: {store?.slug}</span>
         </div>
       </div>
 
       {/* ── Navigation Tabs ── */}
-      <div className="mt-6 flex gap-2 overflow-x-auto border-b border-neutral-200 pb-0.5 scrollbar-none">
+      <div className="mt-6 flex gap-2 overflow-x-auto border-b border-stone-200 pb-0.5 scrollbar-none">
         {[
           { k: 'store', label: 'Gian hàng & Subdomain', icon: Store },
           { k: 'banking', label: 'Tài khoản VietQR', icon: CreditCard },
@@ -260,13 +253,13 @@ export default function MerchantPage() {
             <button
               key={t.k}
               onClick={() => setTab(t.k as MerchantTab)}
-              className={`flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-all ${
+              className={`flex min-h-[44px] items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-all ${
                 isActive
-                  ? 'border-b-2 border-leaf-600 text-leaf-800'
-                  : 'text-neutral-500 hover:text-neutral-900'
+                  ? 'border-b-2 border-forest-600 text-forest-800'
+                  : 'text-stone-500 hover:text-stone-900'
               }`}
             >
-              <Icon className={`h-4 w-4 ${isActive ? 'text-leaf-600' : 'text-neutral-400'}`} />
+              <Icon className={`h-4 w-4 ${isActive ? 'text-forest-600' : 'text-stone-500'}`} aria-hidden="true" />
               <span>{t.label}</span>
             </button>
           );
@@ -275,10 +268,10 @@ export default function MerchantPage() {
 
       <div className="mt-6">
         {storeQ.isLoading && (
-          <div className="p-8 text-center text-sm text-neutral-500">Đang tải thông tin gian hàng…</div>
+          <div className="p-8 text-center text-sm text-stone-500">Đang tải thông tin gian hàng…</div>
         )}
         {storeQ.isError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-control border border-danger-fg bg-danger-bg p-4 text-sm text-danger-fg">
             {(storeQ.error as Error).message}
           </div>
         )}
