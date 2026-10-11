@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type * as ZmpUi from 'zmp-ui';
 import { hasPartnerLinkParams, ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
 
 const mocks = vi.hoisted(() => ({
@@ -8,9 +9,10 @@ const mocks = vi.hoisted(() => ({
   storage: {} as Record<string, string>,
   setStorage: vi.fn(),
   getMe: vi.fn(),
+  complete: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<typeof ZmpUi>()),
   useLocation: () => mocks.location,
   useSnackbar: () => ({ openSnackbar: vi.fn(), closeSnackbar: vi.fn() }),
 }));
@@ -21,7 +23,7 @@ vi.mock('zmp-sdk/apis', () => ({
     return {};
   },
 }));
-vi.mock('../services/account-api', () => ({ getMe: mocks.getMe, completeOnboarding: vi.fn() }));
+vi.mock('../services/account-api', () => ({ getMe: mocks.getMe, completeOnboarding: mocks.complete }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'authenticated' }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -96,5 +98,70 @@ describe('OnboardingGate (C-018)', () => {
     await waitFor(() => expect(mocks.getMe).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('Chào mừng đến Tubu Tree!')).toBeNull();
+  });
+});
+
+describe('OnboardingGate — các bước quiz (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.location = { pathname: '/', search: '' };
+    mocks.storage = {};
+    mocks.getMe.mockResolvedValue({ onboarded: false });
+    mocks.complete.mockResolvedValue({});
+  });
+
+  const next = () => fireEvent.click(screen.getByRole('button', { name: /^(Tiếp tục|Hoàn tất)$/ }));
+
+  it('là hộp thoại có tên, mỗi bước đúng một tiêu đề và không còn emoji làm icon', async () => {
+    renderGate();
+    expect(await screen.findByRole('dialog', { name: 'Chào mừng đến Tubu Tree' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu' }));
+    expect(screen.getByRole('heading', { name: 'Bạn quan tâm điều gì nhất?' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('"Tiếp tục" chỉ bấm được khi đã chọn; câu nhiều đáp án bật/tắt từng ý, câu một đáp án thay ý cũ', async () => {
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu' }));
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    const eco = screen.getByRole('checkbox', { name: 'Sống xanh, tái chế' });
+    fireEvent.click(eco);
+    expect(eco).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeEnabled();
+    fireEvent.click(eco);
+    expect(eco).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+    fireEvent.click(eco);
+    next();
+    expect(screen.getByRole('heading', { name: 'Làn da của bạn thế nào?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Dầu' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Khô' }));
+    expect(screen.getByRole('radio', { name: 'Dầu' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('radio', { name: 'Khô' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('"Quay lại" về câu trước và giữ đáp án; hoàn tất gửi đúng danh sách đáp án rồi hiện lời cảm ơn', async () => {
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chăm sóc da' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Nhạy cảm' }));
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
+    expect(screen.getByRole('radio', { name: 'Nhạy cảm' })).toHaveAttribute('aria-checked', 'true');
+    next();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Gia đình' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Em bé' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Giá tốt' }));
+    expect(screen.getByRole('button', { name: 'Hoàn tất' })).toBeEnabled();
+    next();
+    await waitFor(() => expect(mocks.complete).toHaveBeenCalledWith(['skincare', 'sensitive_skin', 'family', 'baby', 'price']));
+    expect(await screen.findByRole('heading', { name: 'Tuyệt vời!' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Khám phá ngay' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
