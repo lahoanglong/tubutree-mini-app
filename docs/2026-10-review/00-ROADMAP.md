@@ -174,3 +174,7 @@ Giả định đã nêu và chủ dự án không phản đối: dự án chưa 
 | PD-2 | Gỡ 4 route `/beta/*`, giữ bảng `BetaFeedback`; giữ nguyên 25 khoá cấu hình chết, 3 endpoint admin nghi ngờ, ZaloPay, `/storefront/by-host`, `DELETE /reviews/:id` |
 
 Việc của chủ dự án còn lại: trỏ DNS Cloudflare, báo số vCPU của VPS (`nproc`) để đặt `connection_limit`, quét QR UAT trên Zalo thật, nội dung FAQ/Academy, dọn worktree/container. Gói PE-1/PE-2 (chống bấm đôi góp quỹ cây, hạn của điểm hoàn khi huỷ đơn, gỡ `/beta/*`, nhãn CO₂, `busyRef` trang Vườn, cảnh báo `key` trùng) làm theo các quyết định trên.
+
+### Chốt OQ-15b (2026-10-11)
+
+Điểm hoàn khi huỷ đơn (`ORDER_REFUND_POINTS`) nhận hạn mới `now + loyalty.point_expire_months`, không kế thừa hạn của lô gốc. Chủ dự án chốt giữ như vậy. Lý do: mỗi vòng lặp cần tạo một đơn thật và huỷ, trần dùng điểm 20%/đơn giới hạn lợi ích. Nếu sau này thấy lạm dụng, làm gói riêng cho dòng hoàn kế thừa `min(hạn gốc, now + N tháng)` kèm review opus (phương án 2 trong `impl/PE-1a.md`, OQ-15b).
