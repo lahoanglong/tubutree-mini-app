@@ -1,13 +1,18 @@
 import { useState } from 'react';
-import { Box, Page, Text, Sheet, useSnackbar } from 'zmp-ui';
+import { Page, useSnackbar } from 'zmp-ui';
 import { Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { Badge } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { useAuthStore } from '../store/auth';
 import { addressLine } from '../utils/format';
@@ -48,54 +53,43 @@ export default function AddressesPage() {
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Sổ địa chỉ" />
 
       {authStatus === 'loading' || addrQ.isLoading ? (
-        <Box p={4} style={{ gap: 10 }} flex flexDirection="column">
-          <Skeleton style={{ height: 84, borderRadius: 12 }} />
-          <Skeleton style={{ height: 84, borderRadius: 12 }} />
-        </Box>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+          <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+        </div>
       ) : addrQ.isError ? (
         <ErrorState message={getErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
       ) : (
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {addrQ.data && addrQ.data.length === 0 && (
             <EmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
           )}
 
           {addrQ.data?.map((a) => (
-            <Box
+            <Card
               key={a.id}
-              p={3}
-              style={{
-                background: 'var(--neutral-0)',
-                borderRadius: 'var(--radius-lg)',
-                border: a.isDefault ? '1.5px solid var(--leaf-600)' : '1px solid var(--neutral-100)',
-              }}
+              variant="outline"
+              style={a.isDefault ? { border: '1.5px solid var(--color-action-primary-bg)' } : undefined}
             >
-              <Box flex alignItems="center" style={{ gap: 6 }}>
-                <Text size="small" bold>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Text variant="body-sm" style={{ fontWeight: 600 }}>
                   {a.recipient} · {a.phone}
                 </Text>
                 {a.isDefault && (
-                  <Text
-                    size="xSmall"
-                    style={{
-                      background: 'var(--leaf-50)',
-                      color: 'var(--leaf-700)',
-                      padding: '1px 8px',
-                      borderRadius: 'var(--radius-full)',
-                    }}
-                  >
+                  <Badge tone="brand" size="sm">
                     Mặc định
-                  </Text>
+                  </Badge>
                 )}
-              </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+              </div>
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                 {addressLine(a)}
               </Text>
 
-              <Box flex style={{ gap: 8, marginTop: 4, marginLeft: -8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4, marginLeft: -8 }}>
                 {!a.isDefault && (
                   <ActionLink
                     label="Đặt mặc định"
@@ -110,8 +104,8 @@ export default function AddressesPage() {
                   onClick={() => setConfirmDel(a)}
                   disabled={deleteMut.isPending}
                 />
-              </Box>
-            </Box>
+              </div>
+            </Card>
           ))}
 
           <Button
@@ -126,38 +120,34 @@ export default function AddressesPage() {
           >
             Thêm địa chỉ mới
           </Button>
-        </Box>
+        </div>
       )}
 
-      <Sheet visible={editing != null} onClose={() => setEditing(null)} autoHeight>
+      <BottomSheet
+        open={editing != null}
+        onClose={() => setEditing(null)}
+        title={editing === 'new' ? 'Thêm địa chỉ' : 'Sửa địa chỉ'}
+      >
         {editing != null && (
-          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Text bold size="large" style={{ marginBottom: 16 }}>
-              {editing === 'new' ? 'Thêm địa chỉ' : 'Sửa địa chỉ'}
-            </Text>
-            <AddressForm
-              initial={editing === 'new' ? null : editing}
-              onCancel={() => setEditing(null)}
-              onSaved={() => {
-                void qc.invalidateQueries({ queryKey: ['addresses'] });
-                setEditing(null);
-              }}
-            />
-          </Box>
+          <AddressForm
+            initial={editing === 'new' ? null : editing}
+            onCancel={() => setEditing(null)}
+            onSaved={() => {
+              void qc.invalidateQueries({ queryKey: ['addresses'] });
+              setEditing(null);
+            }}
+          />
         )}
-      </Sheet>
+      </BottomSheet>
 
       {/* Xác nhận xóa (tránh mất nhầm địa chỉ — thao tác không hoàn tác). */}
-      <Sheet visible={confirmDel != null} onClose={() => setConfirmDel(null)} autoHeight>
-        {confirmDel != null && (
-          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Text bold size="large">
-              Xóa địa chỉ này?
-            </Text>
-            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-              {addressLine(confirmDel)}
-            </Text>
-            <Box flex style={{ gap: 10, marginTop: 16 }}>
+      <BottomSheet
+        open={confirmDel != null}
+        onClose={() => setConfirmDel(null)}
+        title="Xóa địa chỉ này?"
+        footer={
+          confirmDel != null && (
+            <div style={{ display: 'flex', gap: 10 }}>
               <Button variant="secondary" fullWidth onPress={() => setConfirmDel(null)}>
                 Hủy
               </Button>
@@ -169,10 +159,16 @@ export default function AddressesPage() {
               >
                 Xóa
               </Button>
-            </Box>
-          </Box>
+            </div>
+          )
+        }
+      >
+        {confirmDel != null && (
+          <Text variant="body-sm" tone="secondary" as="div">
+            {addressLine(confirmDel)}
+          </Text>
         )}
-      </Sheet>
+      </BottomSheet>
     </Page>
   );
 }
@@ -203,7 +199,7 @@ function ActionLink({
         font: 'inherit',
         fontSize: 'var(--type-body-sm-size)',
         fontWeight: 600,
-        color: danger ? 'var(--danger)' : 'var(--primary-700)',
+        color: danger ? 'var(--color-text-danger)' : 'var(--color-text-brand)',
         opacity: disabled ? 0.5 : 1,
         cursor: disabled ? 'default' : 'pointer',
       }}

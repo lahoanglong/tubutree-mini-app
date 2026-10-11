@@ -1,18 +1,26 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getAddresses: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getAddresses: vi.fn(),
+  updateAddress: vi.fn(),
+  deleteAddress: vi.fn(),
+  openSnackbar: vi.fn(),
+  authStatus: 'authenticated' as string,
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div>{children}</div> : null),
-  useSnackbar: () => ({ openSnackbar: vi.fn(), closeSnackbar: vi.fn() }),
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/addresses', search: '', state: null }),
+  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', () => ({ getAddresses: mocks.getAddresses }));
 vi.mock('../services/account-api', () => ({ updateAddress: mocks.updateAddress, deleteAddress: mocks.deleteAddress }));
-vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../components/address-form', () => ({ AddressForm: () => <div>form</div> }));
 
@@ -53,5 +61,89 @@ describe('Sổ địa chỉ: nút hành động (C-078)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
     expect(await screen.findByText('Xóa địa chỉ này?')).toBeInTheDocument();
+  });
+});
+
+describe('Sổ địa chỉ: khung trang DS v2 (C-076, C-114)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getAddresses.mockResolvedValue([ADDR]);
+    mocks.updateAddress.mockResolvedValue({});
+    mocks.deleteAddress.mockResolvedValue({});
+  });
+
+  it('đúng một h1 "Sổ địa chỉ" ở mọi trạng thái: đang tải, có địa chỉ, trống, lỗi', async () => {
+    mocks.authStatus = 'loading';
+    const loading = renderPage();
+    expect(mocks.getAddresses).not.toHaveBeenCalled();
+    expect(loading.container.querySelectorAll('.tubu-skeleton').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sổ địa chỉ');
+    loading.unmount();
+
+    mocks.authStatus = 'authenticated';
+    const list = renderPage();
+    await screen.findByText(/Lan · 0900000000/);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    list.unmount();
+
+    mocks.getAddresses.mockResolvedValue([]);
+    const empty = renderPage();
+    await screen.findByText('Bạn chưa có địa chỉ giao hàng nào');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    empty.unmount();
+
+    mocks.getAddresses.mockRejectedValue(new Error('boom'));
+    renderPage();
+    await screen.findByRole('button', { name: 'Thử lại' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('lỗi tải: "Thử lại" gọi lại API', async () => {
+    mocks.getAddresses.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([ADDR]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Lan · 0900000000/)).toBeInTheDocument();
+  });
+
+  it('địa chỉ mặc định có nhãn "Mặc định" và không có nút "Đặt mặc định"', async () => {
+    mocks.getAddresses.mockResolvedValue([{ ...ADDR, isDefault: true }]);
+    renderPage();
+    await screen.findByText(/Lan · 0900000000/);
+    expect(screen.getByText('Mặc định')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đặt mặc định' })).toBeNull();
+  });
+
+  it('"Thêm địa chỉ mới" mở khung có tiêu đề h2 "Thêm địa chỉ"; "Sửa" mở khung "Sửa địa chỉ"', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm địa chỉ mới' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Thêm địa chỉ' })).toBeInTheDocument();
+    expect(screen.getByText('form')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Sửa địa chỉ' })).toBeInTheDocument();
+  });
+
+  it('xác nhận xoá: "Hủy" đóng khung và không gọi API', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
+    const dialogTitle = await screen.findByRole('heading', { level: 2, name: 'Xóa địa chỉ này?' });
+    expect(dialogTitle).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+    expect(screen.queryByText('Xóa địa chỉ này?')).toBeNull();
+    expect(mocks.deleteAddress).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận xoá: "Xóa" trong khung gọi deleteAddress đúng id, báo thành công và đóng khung', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
+    const title = await screen.findByRole('heading', { level: 2, name: 'Xóa địa chỉ này?' });
+    const sheet = title.closest('[data-testid="page"] > div') as HTMLElement;
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Xóa' }));
+    await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xóa địa chỉ.', type: 'success' }));
+    await waitFor(() => expect(screen.queryByText('Xóa địa chỉ này?')).toBeNull());
   });
 });

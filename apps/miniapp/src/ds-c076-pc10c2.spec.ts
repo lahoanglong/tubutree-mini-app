@@ -15,6 +15,7 @@ const FILES = [
   'src/pages/about.tsx',
   'src/pages/not-found.tsx',
   'src/pages/wishlist.tsx',
+  'src/pages/addresses.tsx',
 ];
 
 /** Khung trang và hook điều hướng/thông báo: được phép ở mọi trang. */
