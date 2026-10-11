@@ -31,7 +31,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Heading, Text } from '../components/ui/text';
-import { formatPoints } from '../utils/format';
+import { formatDate, formatPoints } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
 import { KIND_LABEL } from '../components/community/post-card';
@@ -441,7 +441,7 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
         </Text>
       )}
       <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-        {vi.community.eventEnds}: {new Date(event.endAt).toLocaleDateString('vi-VN')} ·
+        {vi.community.eventEnds}: {formatDate(event.endAt)} ·
         <Icon icon={Gift} size="sm" tone="muted" />
         {formatPoints(event.rewardPoints)}
       </Text>

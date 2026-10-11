@@ -38,7 +38,8 @@ vi.mock('../store/auth', () => ({
 import RefillPage from './refill';
 
 const CREATED_AT = '2026-03-15T09:00:00.000Z';
-const dm = (iso: string) => new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+// Ngày theo dd/MM/yyyy cố định (formatDate), không phụ thuộc ICU của máy chạy test.
+const CREATED_DATE = '15/03/2026';
 
 const SUMMARY = (over: Partial<RefillSummary> = {}): RefillSummary => ({
   perBottle: 10,
@@ -193,9 +194,9 @@ describe('RefillPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     );
     const first = renderPage();
     expect(await screen.findByText('Lịch sử đổi vỏ')).toBeInTheDocument();
-    expect(screen.getByText(`2 vỏ · ${dm(CREATED_AT)}`)).toBeInTheDocument();
-    expect(screen.getByText(`3 vỏ · ${dm(CREATED_AT)}`)).toBeInTheDocument();
-    expect(screen.getByText(`1 vỏ · ${dm(CREATED_AT)}`)).toBeInTheDocument();
+    expect(screen.getByText(`2 vỏ · ${CREATED_DATE}`)).toBeInTheDocument();
+    expect(screen.getByText(`3 vỏ · ${CREATED_DATE}`)).toBeInTheDocument();
+    expect(screen.getByText(`1 vỏ · ${CREATED_DATE}`)).toBeInTheDocument();
     expect(screen.getByText('Chờ duyệt')).toBeInTheDocument();
     expect(screen.getByText('+30💧')).toBeInTheDocument();
     expect(screen.getByText('Từ chối')).toBeInTheDocument();

@@ -37,7 +37,7 @@ import {
   type PricelistRow,
 } from '../services/dealer-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd } from '../utils/format';
+import { formatDate, formatVnd } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
@@ -724,7 +724,7 @@ function DealerOrders() {
                   </div>
                 </div>
                 <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                  {o.items?.length ?? 0} mặt hàng · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+                  {o.items?.length ?? 0} mặt hàng · {formatDate(o.createdAt)}
                 </Text>
                 {totalBackordered > 0 && (
                   <div style={{ marginTop: 4 }}>
@@ -861,7 +861,7 @@ function DealerCredit() {
               <div>
                 <Text variant="body-sm" as="div">{e.note ?? e.refType}</Text>
                 <Text variant="caption" tone="tertiary" as="div">
-                  {new Date(e.createdAt).toLocaleDateString('vi-VN')}
+                  {formatDate(e.createdAt)}
                 </Text>
               </div>
               <Text variant="body-sm" tone={e.delta > 0 ? 'danger' : 'brand'} style={{ fontWeight: 700 }}>

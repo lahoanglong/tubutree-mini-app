@@ -33,3 +33,27 @@ describe('không gọi toLocaleString trực tiếp ở pages / i18n', () => {
     expect(bad).toEqual([]);
   });
 });
+
+// toLocale*String('vi-VN') phụ thuộc ICU của webview: Node 24 / WebView mới in "15-10" thay vì "15/10", nên cùng một ngày
+// hiện hai dáng. Ngày đi qua formatDate/formatDateTime, số qua formatNumber (utils/format.ts là nơi duy nhất gọi toLocale*).
+describe('không gọi toLocale(Date|Time)String / toLocaleString trực tiếp ở bất kỳ đâu trong src', () => {
+  // Hai file thuộc phạm vi gói khác (đơn hàng, thanh toán) đang được sửa song song, đổi chồng sẽ xung đột khi gộp; xoá khỏi
+  // danh sách khi file đã dùng formatDate.
+  const OWNED_ELSEWHERE = new Set(['components/orders/order-card.tsx', 'components/checkout/voucher-sheet.tsx']);
+
+  it('chỉ utils/format.ts (formatNumber) được gọi toLocaleString; mọi chỗ khác dùng helper', () => {
+    const bad = files('')
+      .filter((s) => s.file !== 'utils/format.ts' && !OWNED_ELSEWHERE.has(s.file))
+      .filter((s) => /\.toLocale(Date|Time)?String\(/.test(s.text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')))
+      .map((s) => s.file);
+    expect(bad).toEqual([]);
+  });
+
+  it('danh sách ngoại lệ không chứa file đã sạch (để khỏi quên xoá)', () => {
+    const stillBad = files('')
+      .filter((s) => OWNED_ELSEWHERE.has(s.file))
+      .filter((s) => /\.toLocale(Date|Time)?String\(/.test(s.text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')))
+      .map((s) => s.file);
+    expect(stillBad.sort()).toEqual([...OWNED_ELSEWHERE].sort());
+  });
+});
