@@ -208,8 +208,8 @@ describe('GamePage — vườn và lối tắt', () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, ecoImpact: { ...PROFILE.ecoImpact, progress: 100, target: 100 } });
     renderPage();
     await screen.findByText('Sồi');
-    // một 🌳 ở thẻ vườn, một 🌳 ở ô "Cây thật đã trồng"
-    expect(screen.getAllByText('🌳')).toHaveLength(2);
+    // chỉ còn 🌳 ở thẻ vườn: ô "Cây thật đã trồng" dùng icon Lucide
+    expect(screen.getAllByText('🌳')).toHaveLength(1);
   });
 
   it('lối tắt: Bảng tin cộng đồng → /feed, Đổi vỏ chai → /refill', async () => {
@@ -223,7 +223,7 @@ describe('GamePage — vườn và lối tắt', () => {
   it('banner mùa chỉ hiện khi có mùa, kèm chủ đề/vùng và loài nổi bật', async () => {
     const view = renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText(/🍃 Mùa Xuân/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Mùa Xuân')).not.toBeInTheDocument();
     view.unmount();
 
     mocks.api.getSeason.mockResolvedValue({
@@ -239,7 +239,7 @@ describe('GamePage — vườn và lối tắt', () => {
       ],
     });
     renderPage();
-    expect(await screen.findByText('🍃 Mùa Xuân')).toBeInTheDocument();
+    expect(await screen.findByText('Mùa Xuân')).toBeInTheDocument();
     expect(screen.getByText('🌸 🌼')).toBeInTheDocument();
     expect(screen.getByText('Hoa đào · Hà Giang')).toBeInTheDocument();
     expect(screen.getByText('Loài nổi bật mùa này: Đào, Mai')).toBeInTheDocument();
@@ -299,15 +299,15 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     const view = renderPage();
     expect(await screen.findByText('Điểm danh chuỗi 2 ngày')).toBeInTheDocument();
     for (const d of [1, 2, 3, 4, 5, 6, 7]) expect(screen.getByText(`N${d}`)).toBeInTheDocument();
-    // Ô 💧 đã làm: 2 ngày + 1 ô "Giọt nước đã góp"; ô 🎁: ngày 3 và 7
-    expect(screen.getAllByText('💧')).toHaveLength(2 + 1);
+    // Ô 💧 đã làm: 2 ngày; ô 🎁: ngày 3 và 7
+    expect(screen.getAllByText('💧')).toHaveLength(2);
     expect(screen.getAllByText('🎁')).toHaveLength(2);
     view.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakDays: 7 });
     const full = renderPage();
     await screen.findByText('Điểm danh chuỗi 7 ngày');
-    expect(screen.getAllByText('💧')).toHaveLength(7 + 1);
+    expect(screen.getAllByText('💧')).toHaveLength(7);
     expect(screen.queryByText('🎁')).not.toBeInTheDocument();
     full.unmount();
 
@@ -315,7 +315,7 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     renderPage();
     await screen.findByText('Điểm danh chuỗi 10 ngày');
     // 10 % 7 = 3 ngày đã làm
-    expect(screen.getAllByText('💧')).toHaveLength(3 + 1);
+    expect(screen.getAllByText('💧')).toHaveLength(3);
   });
 });
 
@@ -537,9 +537,9 @@ describe('GamePage — lô đất', () => {
   it('chỉ liệt kê lô không phải lô nhà; chưa có lô thì có lời gợi ý', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     renderPage();
-    expect(await screen.findByText('🪴 Lô đất của bạn (1/3)')).toBeInTheDocument();
+    expect(await screen.findByText('Lô đất của bạn (1/3)')).toBeInTheDocument();
     expect(screen.getByText(/Mở thêm lô đất để trồng nhiều cây cùng lúc/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '🚿 Tưới' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tưới' })).not.toBeInTheDocument();
   });
 
   it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo/chết', async () => {
@@ -550,7 +550,7 @@ describe('GamePage — lô đất', () => {
     expect(screen.queryByText('Lô 1 · Sồi')).not.toBeInTheDocument();
     expect(container.textContent).toContain('5/20💧 · 🌳 1 · 🥀 héo');
     expect(container.textContent).toContain('20/20💧 · 🌳 0 · 🍂 chết');
-    const buttons = screen.getAllByRole('button', { name: '🚿 Tưới' });
+    const buttons = screen.getAllByRole('button', { name: 'Tưới' });
     expect(buttons).toHaveLength(2);
     fireEvent.click(buttons[1]!);
     await waitFor(() => expect(mocks.api.waterPlot).toHaveBeenCalledWith('pb', 20));
@@ -564,7 +564,7 @@ describe('GamePage — lô đất', () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
     renderPage();
     await screen.findByText('Lô 2 · Mận');
-    const [first, second] = screen.getAllByRole('button', { name: '🚿 Tưới' });
+    const [first, second] = screen.getAllByRole('button', { name: 'Tưới' });
     fireEvent.click(first!);
     await waitFor(() => expect(first).toBeDisabled());
     expect(second).toBeEnabled();
@@ -575,7 +575,7 @@ describe('GamePage — lô đất', () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A], maxPlots: 4, nextUnlock: NEXT });
     mocks.api.waterPlot.mockResolvedValue({ progress: 20, target: 20, harvested: true, treesPlanted: 1, revivedFromDead: false, reward: { coupon: 'LO-5' } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '🚿 Tưới' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới' }));
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
     expect(screen.getByText('LO-5')).toBeInTheDocument();
   });
@@ -585,8 +585,8 @@ describe('GamePage — lô đất', () => {
     mocks.api.unlockPlot.mockReturnValue(gate.promise);
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     const { invalidated } = renderPage();
-    const seeds = await screen.findByRole('button', { name: '🔓 Mở lô (1.200💧)' });
-    const xu = screen.getByRole('button', { name: '🔓 Mở lô (65.000 xu)' });
+    const seeds = await screen.findByRole('button', { name: 'Mở lô (1.200💧)' });
+    const xu = screen.getByRole('button', { name: 'Mở lô (65.000 xu)' });
     expect(seeds).toBeEnabled();
     expect(xu).toBeEnabled();
     fireEvent.click(xu);
@@ -606,7 +606,7 @@ describe('GamePage — lô đất', () => {
   it('mở lô bằng giọt nước gọi unlockPlot("SEEDS")', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: NEXT });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '🔓 Mở lô (1.200💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở lô (1.200💧)' }));
     await waitFor(() => expect(mocks.api.unlockPlot).toHaveBeenCalledWith('SEEDS'));
   });
 
@@ -696,7 +696,7 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
   it('mục tiêu cộng đồng chỉ hiện khi có mục tiêu đang chạy', async () => {
     const view = renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText('🌍 Mục tiêu cộng đồng')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mục tiêu cộng đồng')).not.toBeInTheDocument();
     view.unmount();
 
     mocks.api.getCommunity.mockResolvedValue({
@@ -705,9 +705,9 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
       pct: 25,
     });
     const { container } = renderPage();
-    expect(await screen.findByText('🌍 Mục tiêu cộng đồng')).toBeInTheDocument();
+    expect(await screen.findByText('Mục tiêu cộng đồng')).toBeInTheDocument();
     expect(screen.getByText('Rừng Tubu')).toBeInTheDocument();
-    expect(screen.getByText('📍 Hà Giang · mục tiêu 100 cây thật')).toBeInTheDocument();
+    expect(screen.getByText('Hà Giang · mục tiêu 100 cây thật')).toBeInTheDocument();
     expect(screen.getByText('1.250/5.000💧 (25%)')).toBeInTheDocument();
     expect(screen.getByText('Bạn đã góp 89💧')).toBeInTheDocument();
     expect(container.querySelector('[style*="width: 25%"]')).not.toBeNull();
@@ -719,7 +719,7 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
       { id: 'c2', name: 'Đào', rarity: 'COMMON', emoji: '🌸', region: null, owned: false, count: 0, story: null, ecoFact: null },
     ]);
     renderPage();
-    expect(await screen.findByText('📒 Sổ tay loài cây (1/2)')).toBeInTheDocument();
+    expect(await screen.findByText('Sổ tay loài cây (1/2)')).toBeInTheDocument();
     expect(screen.getByText('Lim xanh')).toBeInTheDocument();
     expect(screen.getByText('🌲')).toBeInTheDocument();
     expect(screen.getByText('×3')).toBeInTheDocument();
@@ -737,7 +737,7 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     ]);
     mocks.api.giftWater.mockReturnValue(gate.promise);
     renderPage();
-    expect(await screen.findByText('🌿 Lan')).toBeInTheDocument();
+    expect(await screen.findByText('Lan')).toBeInTheDocument();
     const gifts = screen.getAllByRole('button', { name: 'Tặng 💧' });
     expect(gifts).toHaveLength(2);
     const done = screen.getByRole('button', { name: 'Đã tặng hôm nay' });
@@ -759,12 +759,12 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
   it('không có bạn bè: ẩn khối tặng nước', async () => {
     renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText('🎁 Tặng nước cho bạn bè')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tặng nước cho bạn bè')).not.toBeInTheDocument();
   });
 
   it('tác động xanh: ước tính CO₂ = cây thật × 21kg, giọt nước đã góp; chưa có rừng thì hiện lời mời', async () => {
     const { container } = renderPage();
-    expect(await screen.findByText('🌍 Tác động xanh của bạn')).toBeInTheDocument();
+    expect(await screen.findByText('Tác động xanh của bạn')).toBeInTheDocument();
     expect(container.textContent).toContain('~63kg');
     expect(screen.getByText('Cây thật đã trồng')).toBeInTheDocument();
     expect(screen.getByText('Giọt nước đã góp')).toBeInTheDocument();
@@ -785,8 +785,8 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(await screen.findByText('TUBU-1')).toBeInTheDocument();
     expect(screen.getByText('TUBU-5')).toBeInTheDocument();
     expect(screen.queryByText('TUBU-6')).not.toBeInTheDocument();
-    expect(screen.getByText('✅ Đã trồng')).toBeInTheDocument();
-    expect(screen.getAllByText('🌱 Đã cam kết')).toHaveLength(4);
+    expect(screen.getByText('Đã trồng')).toBeInTheDocument();
+    expect(screen.getAllByText('Đã cam kết')).toHaveLength(4);
     expect(screen.getByText('…và 2 cây khác')).toBeInTheDocument();
     expect(container.textContent).toContain('góp 7 cây thật');
     expect(screen.queryByText(/Chăm cây ảo đến khi thu hoạch/)).not.toBeInTheDocument();

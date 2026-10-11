@@ -23,6 +23,14 @@ const GAME_FILES = [
   'src/components/game/checkin-streak.tsx',
   'src/components/game/use-game-actions.ts',
   'src/components/game/use-game-data.ts',
+  'src/components/game/garden-plots.tsx',
+  'src/components/game/season-banner.tsx',
+  'src/components/game/season-pass.tsx',
+  'src/components/game/community-goal.tsx',
+  'src/components/game/species-codex.tsx',
+  'src/components/game/friend-gifts.tsx',
+  'src/components/game/eco-impact.tsx',
+  'src/components/game/lucky-wheel-card.tsx',
 ];
 const FILES_PC10A = ['src/pages/loyalty.tsx', ...GAME_FILES];
 
@@ -35,6 +43,11 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/checkin-streak.tsx': ['💧', '🎁'],
   'src/components/game/tree-actions.tsx': ['💧'],
   'src/components/game/use-game-actions.ts': ['🧊', '💦', '🎁', '🌳', '🪴'],
+  'src/components/game/garden-plots.tsx': ['🌱', '🌿', '🌳', '🥀', '🍂'],
+  'src/components/game/community-goal.tsx': ['💧', '🌿'],
+  'src/components/game/species-codex.tsx': ['❔'],
+  'src/components/game/friend-gifts.tsx': ['💧', '🌿'],
+  'src/components/game/eco-impact.tsx': ['🌿'],
 };
 
 /** Trang chỉ được lấy khung/điều hướng/snackbar từ zmp-ui; Box/Text/Button... dùng components/ui. */

@@ -1,9 +1,13 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
 import type { Garden } from '../../services/game-api';
 import { formatDrops, formatNumber, formatXu } from '../../utils/format';
+import { Button } from '../ui/button';
+import { ProgressBar } from '../ui/progress-bar';
+import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
 // Lô đất / mở rộng vườn (§6.7) — nhiều cây song song
+// Giai đoạn cây (🌱🌿🌳) và tình trạng héo/chết (🥀🍂) là nội dung game, không phải icon chức năng.
 export function GardenPlots({
   garden,
   waterPlotPending,
@@ -21,71 +25,69 @@ export function GardenPlots({
   unlockVariables: 'SEEDS' | 'XU' | undefined;
   onUnlock: (currency: 'SEEDS' | 'XU') => void;
 }) {
+  const extraPlots = garden.plots.filter((p) => !p.isHome);
   return (
-    <GameCard title={`🪴 Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`}>
-      {garden.plots.filter((p) => !p.isHome).length === 0 && (
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+    <GameCard title={`Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`} icon={Sprout}>
+      {extraPlots.length === 0 && (
+        <Text variant="caption" tone="tertiary" as="div">
           Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho coupon, cây thật & loài sưu tập riêng.
         </Text>
       )}
-      {garden.plots
-        .filter((p) => !p.isHome)
-        .map((p) => {
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {extraPlots.map((p) => {
           const ppct = p.target > 0 ? Math.min(100, Math.round((p.progress / p.target) * 100)) : 0;
           const stageEmoji = ppct >= 100 ? '🌳' : ppct > 50 ? '🌿' : '🌱';
+          const watering = waterPlotPending && waterPlotVariables === p.id;
           return (
-            <Box key={p.id} p={2} mt={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-              <Box flex alignItems="center" justifyContent="space-between">
-                <Box flex alignItems="center" style={{ gap: 8 }}>
-                  <Text style={{ fontSize: 26, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</Text>
-                  <Box>
-                    <Text size="small" bold>Lô {p.slot} · {p.treeType}</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            <div key={p.id} style={{ padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span style={{ fontSize: 26, lineHeight: 1, filter: p.treeHealth === 'DEAD' ? 'grayscale(1)' : 'none' }}>{stageEmoji}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                      Lô {p.slot} · {p.treeType}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="div">
                       {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
                       {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
                     </Text>
-                  </Box>
-                </Box>
-                <Button
-                  size="small"
-                  variant="secondary"
-                  disabled={waterPlotPending && waterPlotVariables === p.id}
-                  loading={waterPlotPending && waterPlotVariables === p.id}
-                  onClick={() => p.id && onWaterPlot(p.id)}
-                >
-                  🚿 Tưới
+                  </div>
+                </div>
+                <Button variant="secondary" icon={ShowerHead} disabled={watering} loading={watering} onPress={() => p.id && onWaterPlot(p.id)}>
+                  Tưới
                 </Button>
-              </Box>
-              <Box style={{ background: 'var(--neutral-100)', borderRadius: 99, height: 6, marginTop: 6, overflow: 'hidden' }}>
-                <Box style={{ width: `${ppct}%`, height: 6, background: 'var(--leaf-600)', borderRadius: 99, transition: 'width var(--dur-slow) var(--ease-out)' }} />
-              </Box>
-            </Box>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <ProgressBar value={ppct} max={100} />
+              </div>
+            </div>
           );
         })}
+      </div>
       {garden.nextUnlock ? (
-        <Box flex style={{ gap: 8, marginTop: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
           <Button
-            style={{ flex: 1 }}
-            size="small"
+            fullWidth
+            icon={LockOpen}
             disabled={unlockPending}
             loading={unlockPending && unlockVariables === 'SEEDS'}
-            onClick={() => onUnlock('SEEDS')}
+            onPress={() => onUnlock('SEEDS')}
           >
-            🔓 Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
+            Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
           </Button>
           <Button
-            style={{ flex: 1 }}
-            size="small"
+            fullWidth
             variant="secondary"
+            icon={LockOpen}
             disabled={unlockPending}
             loading={unlockPending && unlockVariables === 'XU'}
-            onClick={() => onUnlock('XU')}
+            onPress={() => onUnlock('XU')}
           >
-            🔓 Mở lô ({formatXu(garden.nextUnlock.xuCost)})
+            Mở lô ({formatXu(garden.nextUnlock.xuCost)})
           </Button>
-        </Box>
+        </div>
       ) : (
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
           Bạn đã mở tối đa số lô đất 🌳
         </Text>
       )}

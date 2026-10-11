@@ -1,8 +1,11 @@
-import { Box, Text, Button } from 'zmp-ui';
+import { Gift, Sprout } from 'lucide-react';
 import type { Friend } from '../../services/game-api';
+import { Button } from '../ui/button';
+import { Icon } from '../ui/icon';
+import { Text } from '../ui/text';
 import { GameCard } from './game-card';
 
-// Tặng nước bạn bè (social)
+// Tặng nước bạn bè (social). 💧 trên nút và 🌿 ở lời nhắn là nội dung game.
 export function FriendGifts({
   friends,
   giftPending,
@@ -15,22 +18,32 @@ export function FriendGifts({
   onGift: (recipientId: string) => void;
 }) {
   return (
-    <GameCard title="🎁 Tặng nước cho bạn bè">
-      {friends.map((f) => (
-        <Box key={f.id} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-          <Text size="small">🌿 {f.nickname}</Text>
-          <Button
-            size="small"
-            variant="secondary"
-            disabled={f.giftedToday || (giftPending && giftVariables === f.id)}
-            loading={giftPending && giftVariables === f.id}
-            onClick={() => onGift(f.id)}
+    <GameCard title="Tặng nước cho bạn bè" icon={Gift}>
+      {friends.map((f) => {
+        const sending = giftPending && giftVariables === f.id;
+        return (
+          <div
+            key={f.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              padding: '6px 0',
+              borderBottom: '1px solid var(--color-border-subtle)',
+            }}
           >
-            {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
-          </Button>
-        </Box>
-      ))}
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8 }}>
+            <Text variant="body-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <Icon icon={Sprout} size="sm" tone="brand" />
+              {f.nickname}
+            </Text>
+            <Button variant="secondary" disabled={f.giftedToday || sending} loading={sending} onPress={() => onGift(f.id)}>
+              {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
+            </Button>
+          </div>
+        );
+      })}
+      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
         Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿
       </Text>
     </GameCard>
