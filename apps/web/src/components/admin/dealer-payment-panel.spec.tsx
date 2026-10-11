@@ -163,3 +163,30 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đơn TB-200 đã được ghi nhận thanh toán trước đó.');
   });
 });
+
+// C-097 (Q-29): nút xác nhận nhận tiền chạm được ở 390px, tông cảnh báo (thao tác không đảo ngược).
+describe('DealerPaymentPanel — DS v2', () => {
+  it('ô nhập và nút xác nhận cao 44px; ô nhập chịu xuống dòng; nút tông warning-fg', () => {
+    const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
+    const inputs = Array.from(container.querySelectorAll('input'));
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input.className).toContain('min-h-[44px]');
+      expect(input.className).toContain('basis-40');
+    }
+    const btn = byText(container, 'button', 'Xác nhận đã nhận chuyển khoản');
+    expect(btn?.className).toContain('min-h-[44px]');
+    expect(btn?.className).toContain('bg-warning-fg');
+  });
+
+  it('lỗi API tô danger-fg, thành công tô success-fg', async () => {
+    const api = mockFetch({ '/confirm-payment': { status: 400, body: { statusCode: 400, message: 'Không khớp sao kê.' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Xác nhận đã nhận chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.className).toContain('text-danger-fg');
+  });
+});

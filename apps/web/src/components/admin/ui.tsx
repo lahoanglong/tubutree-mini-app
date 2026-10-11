@@ -72,3 +72,8 @@ const BTN_LINK_BASE = 'inline-flex min-h-[44px] items-center justify-center roun
 export const BTN_LINK = `${BTN_LINK_BASE} text-forest-700 hover:text-forest-800`;
 export const BTN_LINK_DANGER = `${BTN_LINK_BASE} text-danger-fg hover:brightness-90`;
 export const BTN_LINK_MUTED = `${BTN_LINK_BASE} text-stone-600 hover:text-stone-900`;
+
+// Ô nhập/nút cỡ chữ `text-xs` của các khối xử lý tiền trong hàng đơn mở rộng (đã nhận tiền, công nợ, hoàn tiền).
+export const FIELD_XS = `${TOUCH_H} min-w-0 rounded-control border border-stone-450 bg-stone-0 px-2 py-1 text-xs text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500`;
+// Nút xác nhận tiền dùng tông cảnh báo (không phải xanh "thành công"): thao tác không đảo ngược được.
+export const BTN_WARNING = `${TOUCH_H} rounded-control bg-warning-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500`;

@@ -10,7 +10,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
-import { TOUCH_H } from './ui';
+import { BTN_WARNING, FIELD_XS, TOUCH_H } from './ui';
 
 export interface OrderStatusAction {
   status: string;
@@ -139,13 +139,13 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
               value={bankRef}
               onChange={(e) => setBankRef(e.target.value)}
               disabled={busy}
-              className="min-h-[44px] min-w-0 flex-1 rounded-control border border-stone-450 bg-stone-0 px-2 py-1 text-xs text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500 sm:min-h-[36px]"
+              className={`${FIELD_XS} grow basis-40`}
             />
             <button
               type="button"
               onClick={onConfirmPayment}
               disabled={busy}
-              className={`${TOUCH_H} rounded-control bg-warning-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500`}
+              className={BTN_WARNING}
             >
               Đã nhận tiền
             </button>
