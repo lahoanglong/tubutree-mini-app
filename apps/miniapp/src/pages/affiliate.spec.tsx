@@ -12,11 +12,12 @@ const mocks = vi.hoisted(() => ({
   registerAffiliate: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div data-testid="sheet">{children}</div> : null,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/affiliate', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => ({
@@ -52,6 +53,7 @@ vi.mock('../hooks/use-public-config', () => ({
 }));
 
 import AffiliatePage from './affiliate';
+import { getAffiliateDashboard, getCommissions, requestPayout } from '../services/affiliate-api';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -161,5 +163,154 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Lên đơn hộ khách/ }));
     expect(await screen.findByTestId('ctv-order-sheet')).toBeInTheDocument();
+  });
+});
+
+describe('Dashboard CTV — nút mở bảng 5 bậc báo trạng thái mở/đóng', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+  });
+
+  it('aria-expanded đổi theo lần chạm, vùng chạm cao 44px', async () => {
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(parseInt(toggle.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('Trang CTV — đúng một h1 ở mọi trạng thái (C-114)', () => {
+  const h1s = () => screen.queryAllByRole('heading', { level: 1 });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('đang tải', () => {
+    mocks.getAffiliateMe.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+  });
+
+  it('lỗi tải: có h1 và nút Thử lại gọi lại API', async () => {
+    mocks.getAffiliateMe.mockRejectedValueOnce(new Error('mạng lỗi'));
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.getAffiliateMe).toHaveBeenCalledTimes(2));
+  });
+
+  it('chưa là CTV (form đăng ký)', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: '', walletBalance: 0 });
+    renderPage();
+    await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+  });
+
+  it('dashboard CTV', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+  });
+});
+
+describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi giao diện', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 15_000, monthCommission: 125_000, pendingCommission: 30_000, withdrawableCommission: 200_000,
+      totalClicks: 4, totalConversions: 1, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    vi.mocked(getCommissions).mockResolvedValue([
+      { id: 'c1', amount: 25_000, orderTotal: 500_000, status: 'APPROVED', createdAt: '2026-10-01T03:00:00.000Z' },
+      { id: 'c2', amount: 9_000, orderTotal: 90_000, status: 'PENDING', createdAt: '2026-10-02T03:00:00.000Z' },
+      { id: 'c3', amount: 4_000, orderTotal: 40_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00.000Z' },
+      { id: 'c4', amount: 2_000, orderTotal: 20_000, status: 'PAID', createdAt: '2026-10-04T03:00:00.000Z' },
+      { id: 'c5', amount: 1_000, orderTotal: 10_000, status: 'REJECTED', createdAt: '2026-10-05T03:00:00.000Z' },
+    ] as Awaited<ReturnType<typeof getCommissions>>);
+  });
+
+  it('thẻ hoa hồng tháng, số đang chờ, số có thể rút và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
+    renderPage();
+    expect(await screen.findByText('125.000đ')).toBeInTheDocument();
+    expect(screen.getByText('15.000đ')).toBeInTheDocument();
+    expect(screen.getByText('30.000đ')).toBeInTheDocument();
+    expect(screen.getByText('200.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('+25.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Đơn 500.000đ ·', { exact: false })).toBeInTheDocument();
+    for (const label of ['Đang chờ · đơn chưa giao', 'Đang chờ · đang giữ', 'Đã trả', 'Từ chối']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.getAllByText('Có thể rút')).toHaveLength(2);
+  });
+});
+
+describe('Dashboard CTV — rút hoa hồng', () => {
+  /** zmp-ui Input vẽ nhãn là phần tử riêng (không htmlFor) nên tìm ô nhập đi kèm nhãn hiển thị. */
+  const inputNear = (labelText: string): HTMLInputElement => {
+    let node: HTMLElement | null = screen.getByText(labelText);
+    while (node && !node.querySelector('input')) node = node.parentElement;
+    const input = node?.querySelector('input');
+    if (!input) throw new Error('Không thấy ô nhập cạnh nhãn: ' + labelText);
+    return input;
+  };
+
+  /** Nút Rút khoá tới khi số dư về, nên chờ nó mở rồi mới bấm. */
+  const openWithdraw = async () => {
+    const btn = await screen.findByRole('button', { name: 'Rút hoa hồng' });
+    await waitFor(() => expect(btn).toBeEnabled());
+    fireEvent.click(btn);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 200_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã gửi yêu cầu rút.' } as Awaited<ReturnType<typeof requestPayout>>);
+  });
+
+  it('mở sheet: tiêu đề h2, mặc định chọn Ví Tubu và điền sẵn toàn bộ số có thể rút, gửi đúng lệnh rút về Ví', async () => {
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Rút hoa hồng' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ví Tubu/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Ngân hàng/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(inputNear('Số tiền')).toHaveValue(200000);
+    expect(screen.getByText('Tối đa 200.000đ')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Nhận 200.000đ vào Ví' }));
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+    expect(requestPayout).toHaveBeenCalledWith(200000, 'WALLET_BALANCE', undefined);
+  });
+
+  it('chọn Ngân hàng: khoá nút tới khi nhập đủ thông tin tài khoản, rồi gửi kèm thông tin ngân hàng', async () => {
+    renderPage();
+    await openWithdraw();
+    fireEvent.click(await screen.findByRole('button', { name: /Ngân hàng/ }));
+    expect(screen.getByRole('button', { name: /Ngân hàng/ })).toHaveAttribute('aria-pressed', 'true');
+    const submit = screen.getByRole('button', { name: 'Rút 200.000đ' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(inputNear('Tên ngân hàng'), { target: { value: 'Vietcombank' } });
+    fireEvent.change(inputNear('Số tài khoản'), { target: { value: '0123456789' } });
+    fireEvent.change(inputNear('Chủ tài khoản'), { target: { value: 'NGUYEN VAN A' } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+    expect(requestPayout).toHaveBeenCalledWith(200000, 'BANK', {
+      bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN A',
+    });
   });
 });

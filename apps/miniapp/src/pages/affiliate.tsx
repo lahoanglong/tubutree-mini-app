@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Box, Page, Text, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import type { ReactNode } from 'react';
+import { Input, Page, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getAffiliateMe,
@@ -23,10 +24,18 @@ import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
 import { formatVnd, formatVndShort, formatXu } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { Badge, type BadgeTone } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { Checkbox } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Heading, Text } from '../components/ui/text';
+import { ChoiceCard } from '../components/affiliate/choice-card';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import {
   milestoneStatusText,
@@ -35,21 +44,27 @@ import {
   revenueRuleText,
   tierRewardLabel,
 } from '../components/affiliate/milestone-copy';
-import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Trophy, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 
+const PAGE_TITLE = 'Cộng tác viên';
+
+const HERO_GRADIENT = 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))';
+const BLOCK_GAP = { margin: '0 16px 12px' } as const;
+const BOLD = { fontWeight: 600 } as const;
+
 // Thẻ tổng "Đang chờ" gộp cả PENDING lẫn LOCKED (BE aggregate status IN [PENDING, LOCKED]).
 // Nhãn của hai dòng đó PHẢI cùng tiền tố "Đang chờ" thì CTV mới cộng lại khớp được với thẻ —
 // trước đây một khoản tiền có ba tên gọi: "Chờ duyệt" (thẻ), "Chờ (đơn chưa giao)", "Đang giữ".
-const COMMISSION_META: Record<CommissionStatus, { label: string; color: string; bg: string }> = {
-  PENDING: { label: 'Đang chờ · đơn chưa giao', color: 'var(--clay-700)', bg: 'var(--clay-50)' },
-  LOCKED: { label: 'Đang chờ · đang giữ', color: 'var(--info)', bg: 'var(--info-bg)' },
-  APPROVED: { label: 'Có thể rút', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' },
-  PAID: { label: 'Đã trả', color: 'var(--neutral-600)', bg: 'var(--neutral-100)' },
-  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
+const COMMISSION_META: Record<CommissionStatus, { label: string; tone: BadgeTone }> = {
+  PENDING: { label: 'Đang chờ · đơn chưa giao', tone: 'promo' },
+  LOCKED: { label: 'Đang chờ · đang giữ', tone: 'info' },
+  APPROVED: { label: 'Có thể rút', tone: 'success' },
+  PAID: { label: 'Đã trả', tone: 'neutral' },
+  REJECTED: { label: 'Từ chối', tone: 'danger' },
 };
 
 export default function AffiliatePage() {
@@ -60,21 +75,21 @@ export default function AffiliatePage() {
 
   if (!authed || meQ.isLoading) {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={4} flex flexDirection="column" style={{ gap: 12 }}>
-          <Skeleton style={{ height: 120, borderRadius: 16 }} />
-          <Skeleton style={{ height: 80, borderRadius: 16 }} />
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={PAGE_TITLE} />
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton height={120} radius="var(--radius-card)" />
+          <Skeleton height={80} radius="var(--radius-card)" />
+        </div>
       </Page>
     );
   }
 
   if (meQ.isError) {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={6} style={{ textAlign: 'center' }}>
-          <Text style={{ color: 'var(--danger)' }}>{getErrorMessage(meQ.error)}</Text>
-        </Box>
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={PAGE_TITLE} />
+        <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       </Page>
     );
   }
@@ -110,66 +125,82 @@ function RegisterGate() {
   ];
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-      <Box p={4}>
-        <Box
-          p={5}
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={PAGE_TITLE} />
+      <div style={{ padding: 16 }}>
+        <div
           style={{
-            background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
-            borderRadius: 'var(--radius-xl)',
-            color: 'var(--neutral-0)',
+            padding: 20,
+            background: HERO_GRADIENT,
+            borderRadius: 'var(--radius-card)',
             textAlign: 'center',
-            boxShadow: '0 8px 24px rgba(224, 140, 28, 0.25)',
+            boxShadow: 'var(--elevation-2)',
           }}
         >
-          <Box style={{ marginBottom: 14 }}>
-            <Box style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', margin: '0 auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              <Handshake size={34} color="#fff" strokeWidth={2} />
-            </Box>
-          </Box>
-          <Text bold size="xLarge" style={{ color: 'var(--neutral-0)' }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--color-action-primary-bg-pressed)',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 14px',
+            }}
+          >
+            <Icon icon={Handshake} size="lg" tone="inverse" />
+          </div>
+          <Heading variant="title-md" as="h2" tone="inverse">
             Trở thành CTV Tubu
-          </Text>
-          <Text size="small" style={{ color: 'rgba(255,255,255,0.9)', marginTop: 6 }}>
+          </Heading>
+          <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 6 }}>
             Chia sẻ sản phẩm sống xanh bạn yêu thích — nhận hoa hồng cho mỗi đơn thành công.
           </Text>
-        </Box>
+        </div>
 
-        <Box mt={4} flex flexDirection="column" style={{ gap: 12 }}>
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {benefits.map((b, i) => (
-            <Box key={i} flex alignItems="center" style={{ gap: 12, padding: '8px 12px', background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
-              <Box style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <b.Icon size={20} color="var(--leaf-700)" strokeWidth={1.8} />
-              </Box>
-              <Text size="small" style={{ flex: 1, color: 'var(--neutral-700)' }}>
-                {b.text}
-              </Text>
-            </Box>
+            <Card key={i}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 'var(--radius-control)',
+                    background: 'var(--color-bg-subtle)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon icon={b.Icon} size="md" tone="brand" />
+                </div>
+                <Text variant="body-sm" tone="secondary" style={{ flex: 1 }}>
+                  {b.text}
+                </Text>
+              </div>
+            </Card>
           ))}
-        </Box>
+        </div>
 
         {/* Điều khoản hoa hồng/thuế: trước đây đăng ký một chạm, không có gì để viện dẫn khi
             hoa hồng bị thu hồi hoặc phải khấu trừ thuế. Phiên bản + thời điểm đồng ý được máy
             chủ lưu lại (User.metadata.affiliateTerms). */}
-        <Box
-          mt={4}
-          p={4}
-          style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}
-        >
-          <Text bold size="small">
+        <Card padding={16} style={{ marginTop: 16 }}>
+          <Text variant="body-sm" as="div" style={BOLD}>
             {vi.ctvTerms.heading}
           </Text>
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18, color: 'var(--neutral-700)' }}>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
             {vi.ctvTerms.items.map((item) => (
               <li key={item} style={{ marginBottom: 6 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-700)' }}>
+                <Text variant="caption" tone="secondary">
                   {item}
                 </Text>
               </li>
             ))}
           </ul>
           <Checkbox checked={agreed} onChange={() => setAgreed((v) => !v)} label={vi.ctvTerms.agree} />
-        </Box>
+        </Card>
 
         <Button
           fullWidth
@@ -181,11 +212,11 @@ function RegisterGate() {
           Đăng ký miễn phí ngay
         </Button>
         {!agreed && (
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 6, textAlign: 'center', display: 'block' }}>
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 6, textAlign: 'center' }}>
             {vi.ctvTerms.mustAgree}
           </Text>
         )}
-      </Box>
+      </div>
     </Page>
   );
 }
@@ -225,54 +256,43 @@ function Dashboard() {
   });
 
   const renderMilestone = (m: CtvMilestoneItem, month: string, confirmedRevenue: number) => (
-    <Box
+    <div
       key={`${month}:${m.id}`}
-      p={3}
       style={{
-        borderRadius: 'var(--radius-md)',
-        background: m.canClaim ? 'var(--leaf-50)' : 'var(--neutral-50)',
-        border: m.canClaim ? '1px solid var(--leaf-300)' : '1px solid var(--neutral-200)',
+        padding: 12,
+        borderRadius: 'var(--radius-control)',
+        background: m.canClaim ? 'var(--color-bg-subtle)' : 'var(--color-bg-canvas)',
+        border: m.canClaim ? '1px solid var(--color-action-secondary-border)' : '1px solid var(--color-border-subtle)',
       }}
     >
-      <Box flex alignItems="flex-start" justifyContent="space-between">
-        <Box style={{ flex: 1 }}>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text bold size="small">{m.title}</Text>
-            {m.claimed && (
-              <Box px={1.5} py={0.2} style={{ background: 'var(--neutral-200)', borderRadius: 'var(--radius-full)' }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)', fontSize: 10 }}>Đã nhận</Text>
-              </Box>
-            )}
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Text variant="body-sm" style={BOLD}>{m.title}</Text>
+            {m.claimed && <Badge size="sm">Đã nhận</Badge>}
+          </div>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
             {m.description}
           </Text>
-        </Box>
-        <Text bold size="small" style={{ color: 'var(--primary-700)', marginLeft: 8 }}>
+        </div>
+        <Text variant="body-sm" tone="brand" style={{ ...BOLD, marginLeft: 8 }}>
           +{formatXu(m.rewardXu)}
         </Text>
-      </Box>
+      </div>
 
       {/* Thanh tiến độ mốc (backend tính: chưa đạt tối đa 99%) */}
-      <Box mt={2}>
-        <Box style={{ height: 6, background: 'var(--neutral-200)', borderRadius: 99, overflow: 'hidden' }}>
-          <Box
-            style={{
-              width: `${m.progressPct}%`,
-              height: '100%',
-              background: m.claimed ? 'var(--neutral-400)' : m.achieved ? 'var(--leaf-600)' : 'var(--primary-600)',
-            }}
-          />
-        </Box>
-      </Box>
+      <div style={{ marginTop: 8 }}>
+        <ProgressBar value={m.progressPct} max={100} />
+      </div>
 
-      <Box mt={2} flex alignItems="center" justifyContent="space-between">
-        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Text variant="caption" tone="tertiary">
           {milestoneStatusText(m, confirmedRevenue)}
         </Text>
 
         <Button
           variant={m.canClaim ? 'primary' : 'secondary'}
+          icon={m.claimed ? Check : undefined}
           disabled={!m.canClaim}
           loading={
             claimMilestoneMut.isPending &&
@@ -281,10 +301,10 @@ function Dashboard() {
           }
           onPress={() => claimMilestoneMut.mutate({ id: m.id, month })}
         >
-          {m.claimed ? 'Đã nhận ✓' : m.canClaim ? 'Nhận thưởng' : 'Chưa đạt'}
+          {m.claimed ? 'Đã nhận' : m.canClaim ? 'Nhận thưởng' : 'Chưa đạt'}
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 
   const createLink = useMutation({
@@ -311,41 +331,51 @@ function Dashboard() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={PAGE_TITLE} />
 
       {/* Hoa hồng tháng nổi bật */}
-      <Box p={4}>
+      <div style={{ padding: 16 }}>
         {dashQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải — hiển thị nhầm "0đ" gây hiểu lầm CTV chưa có hoa hồng.
           <ErrorState message={getErrorMessage(dashQ.error)} onRetry={() => void dashQ.refetch()} />
         ) : (
-          <Box
-            p={5}
+          <div
             style={{
-              background: 'linear-gradient(135deg, var(--primary-600), var(--primary-700))',
-              borderRadius: 'var(--radius-xl)',
-              color: 'var(--neutral-0)',
-              boxShadow: 'var(--shadow-md)',
+              padding: 20,
+              background: HERO_GRADIENT,
+              borderRadius: 'var(--radius-card)',
+              boxShadow: 'var(--elevation-2)',
             }}
           >
-            <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.85 }}>
               Hoa hồng tháng này
             </Text>
-            <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4, fontFamily: 'var(--font-display)' }}>
+            <Text
+              variant="price-xl"
+              tone="inverse"
+              as="div"
+              style={{
+                fontSize: 'var(--type-display-lg-size)',
+                lineHeight: '40px',
+                marginTop: 4,
+                fontFamily: 'var(--font-display)',
+              }}
+            >
               {formatVnd(d?.monthCommission ?? 0)}
             </Text>
-            <Box flex style={{ gap: 16, marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
               <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
               <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
               <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
-      </Box>
+      </div>
 
       {/* Lối tắt "Lên đơn hộ" ngay dưới thẻ hoa hồng: việc CTV làm nhiều lần mỗi ngày, trước đây
           nằm sau thẻ bậc, thưởng mốc và nút rút nên phải cuộn qua ~3 màn mới thấy. */}
-      <Box mx={4} mb={3}>
+      <div style={BLOCK_GAP}>
         <Button
           fullWidth
           icon={Receipt}
@@ -356,153 +386,171 @@ function Dashboard() {
         >
           {vi.ctvOrder.entry}
         </Button>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
           {vi.ctvOrder.entryHint}
         </Text>
-      </Box>
+      </div>
 
       {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
       {d?.tier && (
-        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
-          <Box flex alignItems="center" justifyContent="space-between">
-            <Box flex alignItems="center" style={{ gap: 8 }}>
-              <Text style={{ fontSize: 28 }}>{d.tier.emoji}</Text>
-              <Box>
-                <Text bold>CTV {d.tier.name}</Text>
-                <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
+        <Card padding={16} style={BLOCK_GAP}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 'var(--type-display-md-size)', lineHeight: 1 }}>{d.tier.emoji}</Text>
+              <div>
+                <Text variant="body-md" as="div" style={BOLD}>CTV {d.tier.name}</Text>
+                <Text variant="caption" tone="brand" as="div">
                   Bậc theo doanh số đã chốt tháng này
                 </Text>
-              </Box>
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              </div>
+            </div>
+            <Text variant="caption" tone="tertiary">
               Đã chốt: {formatVnd(d.monthRevenue)}
             </Text>
-          </Box>
+          </div>
           {d.tier.nextName && d.tier.nextThreshold && (
-            <Box mt={3}>
-              <Box style={{ height: 8, background: 'var(--neutral-100)', borderRadius: 99, overflow: 'hidden' }}>
-                <Box
-                  style={{
-                    width: `${progressPct(d.monthRevenue, d.tier.nextThreshold)}%`,
-                    height: '100%',
-                    background: 'var(--primary-600)',
-                  }}
-                />
-              </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
+            <div style={{ marginTop: 12 }}>
+              <ProgressBar value={progressPct(d.monthRevenue, d.tier.nextThreshold)} max={100} />
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
                 Còn <b>{formatVnd(d.tier.toNext)}</b> doanh số đã chốt để lên bậc {d.tier.nextName}
               </Text>
-            </Box>
+            </div>
           )}
 
           {/* Toggle mở rộng danh sách 5 bậc CTV */}
-          <Box
-            mt={3}
-            pt={2}
-            style={{ borderTop: '1px solid var(--neutral-100)', cursor: 'pointer' }}
-            flex
-            alignItems="center"
-            justifyContent="space-between"
+          {/* ListRow của DS không nhận aria-expanded nên dùng <button> thật để trình đọc màn hình biết đang mở hay đóng. */}
+          <button
+            type="button"
+            className="tubu-press"
+            aria-expanded={showAllTiers}
             onClick={() => {
               haptic('light');
               setShowAllTiers(!showAllTiers);
             }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              width: '100%',
+              minHeight: 44,
+              boxSizing: 'border-box',
+              padding: '12px 0',
+              marginTop: 12,
+              background: 'none',
+              border: 'none',
+              borderTop: '1px solid var(--color-border-subtle)',
+              font: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
           >
-            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+            <Text variant="body-sm" style={{ fontWeight: 600 }}>
               Bảng 5 bậc CTV & thưởng mốc TubuXu
             </Text>
-            {showAllTiers ? <ChevronUp size={16} color="var(--primary-700)" /> : <ChevronDown size={16} color="var(--primary-700)" />}
-          </Box>
+            <Icon icon={showAllTiers ? ChevronUp : ChevronDown} size="sm" tone="brand" />
+          </button>
 
           {showAllTiers && ctvTiersQ.data && (
-            <Box mt={3} flex flexDirection="column" style={{ gap: 6 }}>
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {ctvTiersQ.data.allTiers.map((t) => {
                 const isCurrent = t.name === d.tier.name;
                 return (
-                  <Box
+                  <div
                     key={t.name}
-                    p={2}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
                     style={{
-                      borderRadius: 'var(--radius-md)',
-                      background: isCurrent ? 'var(--primary-50)' : 'var(--neutral-50)',
-                      border: isCurrent ? '1px solid var(--primary-300)' : '1px solid transparent',
+                      padding: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderRadius: 'var(--radius-control)',
+                      background: isCurrent ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-canvas)',
+                      border: isCurrent ? '1px solid var(--color-action-secondary-border)' : '1px solid transparent',
                     }}
                   >
-                    <Box flex alignItems="center" style={{ gap: 6 }}>
-                      <Text style={{ fontSize: 16 }}>{t.emoji}</Text>
-                      <Text size="xSmall" bold={isCurrent} style={{ color: isCurrent ? 'var(--primary-800)' : 'var(--neutral-800)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 'var(--type-body-lg-size)' }}>{t.emoji}</Text>
+                      <Text
+                        variant="caption"
+                        tone={isCurrent ? 'brand' : 'primary'}
+                        style={isCurrent ? BOLD : undefined}
+                      >
                         {t.name} {isCurrent ? '(Hiện tại)' : ''}
                       </Text>
-                    </Box>
-                    <Box style={{ textAlign: 'right' }}>
-                      <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Text variant="caption" tone="brand" as="div" style={BOLD}>
                         {tierRewardLabel(t)}
                       </Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontSize: 10 }}>
+                      <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
                         {t.min === 0 ? 'Mặc định' : `DS từ ${formatVnd(t.min)}`}
                       </Text>
-                    </Box>
-                  </Box>
+                    </div>
+                  </div>
                 );
               })}
-            </Box>
+            </div>
           )}
-        </Box>
+        </Card>
       )}
 
       {/* Thưởng mốc doanh số tháng — thưởng bằng TubuXu (tiêu trong app, không rút được) */}
       {milestonesQ.data && milestonesQ.data.milestones.length > 0 && (
-        <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
-          <Box flex alignItems="center" justifyContent="space-between" mb={2}>
-            <Box flex alignItems="center" style={{ gap: 8 }}>
-              <Box style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--primary-50)', display: 'grid', placeItems: 'center' }}>
-                <Trophy size={18} color="var(--primary-700)" />
-              </Box>
-              <Box>
-                <Text bold size="small">Thưởng Mốc Doanh Số Tháng</Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  {monthLabel(milestonesQ.data.monthKey)} · Đã chốt {formatVnd(milestonesQ.data.currentRevenue)}
-                </Text>
-              </Box>
-            </Box>
-          </Box>
+        <Card padding={16} style={BLOCK_GAP}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 'var(--radius-control)',
+                background: 'var(--color-action-secondary-bg)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <Icon icon={Trophy} size="md" tone="brand" />
+            </div>
+            <div>
+              <Text variant="body-sm" as="div" style={BOLD}>Thưởng Mốc Doanh Số Tháng</Text>
+              <Text variant="caption" tone="tertiary" as="div">
+                {monthLabel(milestonesQ.data.monthKey)} · Đã chốt {formatVnd(milestonesQ.data.currentRevenue)}
+              </Text>
+            </div>
+          </div>
 
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginBottom: 4 }}>
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginBottom: 4 }}>
             {revenueRuleText(milestonesQ.data.holdDays)}
           </Text>
           {milestonesQ.data.pendingRevenue > 0 && (
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginBottom: 8 }}>
+            <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 8 }}>
               Đang chờ chốt: <b>{formatVnd(milestonesQ.data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
             </Text>
           )}
 
           {milestonesQ.data.previousMonth && (
-            <Box mb={3}>
-              <Text size="xSmall" bold style={{ color: 'var(--leaf-700)', marginBottom: 6 }}>
+            <div style={{ marginBottom: 12 }}>
+              <Text variant="caption" tone="brand" as="div" style={{ ...BOLD, marginBottom: 6 }}>
                 Còn thưởng {monthLabel(milestonesQ.data.previousMonth.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(milestonesQ.data.monthKey)}
               </Text>
-              <Box flex flexDirection="column" style={{ gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {milestonesQ.data.previousMonth.milestones.map((m) =>
                   renderMilestone(m, milestonesQ.data!.previousMonth!.monthKey, milestonesQ.data!.previousMonth!.revenue),
                 )}
-              </Box>
-            </Box>
+              </div>
+            </div>
           )}
 
-          <Box flex flexDirection="column" style={{ gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {milestonesQ.data.milestones.map((m) =>
               renderMilestone(m, milestonesQ.data!.monthKey, milestonesQ.data!.currentRevenue),
             )}
-          </Box>
-        </Box>
+          </div>
+        </Card>
       )}
 
       {/* Rút tiền — luôn hiển thị nút Rút (CTV vẫn có thể rút khi dashboard lỗi transient).
           Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
-      <Box mx={4} mb={3} flex style={{ gap: 10 }}>
+      <div style={{ ...BLOCK_GAP, display: 'flex', gap: 10 }}>
         <KpiCard
           label="Đang chờ"
           hint="đơn chưa giao hoặc đang giữ"
@@ -513,8 +561,8 @@ function Dashboard() {
           value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
           highlight
         />
-      </Box>
-      <Box mx={4} mb={3}>
+      </div>
+      <div style={BLOCK_GAP}>
         <Button
           fullWidth
           variant="secondary"
@@ -525,40 +573,44 @@ function Dashboard() {
         >
           Rút hoa hồng
         </Button>
-      </Box>
+      </div>
 
-      <Box mx={4} mb={3}>
+      <div style={BLOCK_GAP}>
         <Button fullWidth variant="secondary" icon={Store} onPress={() => navigate('/storefront')}>
           Gian hàng của tôi
         </Button>
-      </Box>
+      </div>
 
-      <Box mx={4} mb={3}>
+      <div style={BLOCK_GAP}>
         <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
           {vi.academy.entry}
         </Button>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4, textAlign: 'center' }}>
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
           {vi.academy.entryHint}
         </Text>
-      </Box>
+      </div>
 
       {/* Mã giới thiệu + chia sẻ */}
       <Section title="Mã giới thiệu của bạn">
-        <Box
-          flex
-          alignItems="center"
-          justifyContent="space-between"
-          p={3}
-          style={{ background: 'var(--primary-50)', borderRadius: 'var(--radius-md)' }}
+        <div
+          style={{
+            padding: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            background: 'var(--color-action-secondary-bg)',
+            borderRadius: 'var(--radius-control)',
+          }}
         >
-          <Text bold size="large" style={{ color: 'var(--primary-700)', letterSpacing: 1 }}>
+          <Text variant="price-lg" tone="brand" style={{ letterSpacing: 1 }}>
             {referral}
           </Text>
           <Button onPress={shareReferral}>Chia sẻ</Button>
-        </Box>
+        </div>
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
-        <Text size="xSmall" bold style={{ marginTop: 12, marginBottom: 6 }}>
+        <Text variant="caption" as="div" style={{ ...BOLD, marginTop: 12, marginBottom: 6 }}>
           Caption gợi ý (chạm để sao chép)
         </Text>
         {[
@@ -566,8 +618,9 @@ function Dashboard() {
           `Sống xanh an lành cùng Tubu Tree 🌱 Nhập mã ${referral} khi mua để ủng hộ mình nha!`,
           `Đồ thiên nhiên, lành cho da & nhẹ với đất. Săn deal Tubu Tree với mã ${referral} 💚`,
         ].map((cap, i) => (
-          <Box
+          <button
             key={i}
+            type="button"
             className="tubu-press"
             onClick={() => {
               void copyText(cap).then((ok) =>
@@ -578,13 +631,24 @@ function Dashboard() {
                 ),
               );
             }}
-            p={2}
-            style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
+            style={{
+              display: 'block',
+              width: '100%',
+              minHeight: 44,
+              padding: 8,
+              marginBottom: 6,
+              border: 'none',
+              textAlign: 'left',
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              background: 'var(--color-bg-canvas)',
+              borderRadius: 'var(--radius-control)',
+            }}
           >
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
+            <Text variant="caption" tone="secondary">
               {cap}
             </Text>
-          </Box>
+          </button>
         ))}
       </Section>
 
@@ -592,43 +656,42 @@ function Dashboard() {
       <Section
         title="Link chia sẻ"
         action={
-          <Text
-            size="small"
-            bold
-            style={{ color: 'var(--primary-700)' }}
-            onClick={() => !createLink.isPending && createLink.mutate()}
+          <Button
+            variant="ghost"
+            loading={createLink.isPending}
+            onPress={() => !createLink.isPending && createLink.mutate()}
           >
             + Tạo link
-          </Text>
+          </Button>
         }
       >
         {linksQ.isError ? (
           // Phân biệt rõ "chưa có link" vs "lỗi tải" — tránh user tưởng rằng họ chưa tạo link.
-          <ErrorState message={getErrorMessage(linksQ.error)} onRetry={() => void linksQ.refetch()} />
+          <ErrorState variant="inline" message={getErrorMessage(linksQ.error)} onRetry={() => void linksQ.refetch()} />
         ) : linksQ.data && linksQ.data.length > 0 ? (
-          <Box flex flexDirection="column" style={{ gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {linksQ.data.map((l) => (
-              <Box
+              <div
                 key={l.id}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                p={2}
-                style={{ borderBottom: '1px solid var(--neutral-100)' }}
+                style={{
+                  padding: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid var(--color-border-subtle)',
+                }}
               >
-                <Box>
-                  <Text size="small" bold>
+                <div>
+                  <Text variant="body-sm" as="div" style={BOLD}>
                     {l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}
                   </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  <Text variant="caption" tone="tertiary" as="div">
                     {l.clicks} click · {l.conversions} đơn
                   </Text>
-                </Box>
-                <Text
-                  size="xSmall"
-                  bold
-                  style={{ color: 'var(--primary-700)' }}
-                  onClick={() => {
+                </div>
+                <Button
+                  variant="ghost"
+                  onPress={() => {
                     void copyText(`${WEB_BASE_URL}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
                       openSnackbar(
                         ok
@@ -639,14 +702,19 @@ function Dashboard() {
                   }}
                 >
                   Sao chép
-                </Text>
-              </Box>
+                </Button>
+              </div>
             ))}
-          </Box>
+          </div>
+        ) : linksQ.isLoading ? (
+          <SectionSkeleton />
         ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có link. Tạo link đầu tiên để bắt đầu chia sẻ.
-          </Text>
+          <EmptyState
+            variant="inline"
+            art="leaf"
+            heading="Chưa có link"
+            body="Tạo link đầu tiên để bắt đầu chia sẻ."
+          />
         )}
       </Section>
 
@@ -654,130 +722,140 @@ function Dashboard() {
       <Section title="Lịch sử hoa hồng">
         {commQ.isError ? (
           // Tránh hiển thị "Chưa có hoa hồng" khi thực tế là API lỗi — CTV sẽ mất niềm tin.
-          <ErrorState message={getErrorMessage(commQ.error)} onRetry={() => void commQ.refetch()} />
+          <ErrorState variant="inline" message={getErrorMessage(commQ.error)} onRetry={() => void commQ.refetch()} />
         ) : commQ.data && commQ.data.length > 0 ? (
-          <Box flex flexDirection="column" style={{ gap: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {commQ.data.slice(0, 30).map((c: Commission) => {
               const m = COMMISSION_META[c.status];
               return (
-                <Box
+                <div
                   key={c.id}
-                  flex
-                  alignItems="center"
-                  justifyContent="space-between"
-                  py={2}
-                  style={{ borderBottom: '1px solid var(--neutral-100)' }}
+                  style={{
+                    padding: '8px 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    borderBottom: '1px solid var(--color-border-subtle)',
+                  }}
                 >
-                  <Box>
-                    <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                  <div>
+                    <Text variant="body-sm" tone="brand" as="div" style={BOLD}>
                       +{formatVnd(c.amount)}
                     </Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    <Text variant="caption" tone="tertiary" as="div">
                       Đơn {formatVnd(c.orderTotal)} ·{' '}
                       {new Date(c.createdAt).toLocaleDateString('vi-VN')}
                     </Text>
-                  </Box>
-                  <Text
-                    size="xSmall"
-                    style={{
-                      color: m.color,
-                      background: m.bg,
-                      padding: '2px 8px',
-                      borderRadius: 'var(--radius-full)',
-                    }}
-                  >
-                    {m.label}
-                  </Text>
-                </Box>
+                  </div>
+                  <Badge tone={m.tone}>{m.label}</Badge>
+                </div>
               );
             })}
-          </Box>
+          </div>
+        ) : commQ.isLoading ? (
+          <SectionSkeleton />
         ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có hoa hồng. Chia sẻ link để nhận hoa hồng từ đơn của bạn bè.
-          </Text>
+          <EmptyState
+            variant="inline"
+            art="sprout"
+            heading="Chưa có hoa hồng"
+            body="Chia sẻ link để nhận hoa hồng từ đơn của bạn bè."
+          />
         )}
       </Section>
 
       {/* Hoa hồng theo gian hàng */}
       <Section title="Theo gian hàng">
         {sfQ.isError ? (
-          <ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+          <ErrorState variant="inline" message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} />
         ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
-          <Box flex flexDirection="column" style={{ gap: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {sfQ.data.storefronts.map((sf) => (
-              <Box
+              <div
                 key={sf.slug}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                py={2}
-                style={{ borderBottom: '1px solid var(--neutral-100)' }}
+                style={{
+                  padding: '8px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  borderBottom: '1px solid var(--color-border-subtle)',
+                }}
               >
-                <Box>
-                  <Text size="small" bold>
+                <div>
+                  <Text variant="body-sm" as="div" style={BOLD}>
                     {sf.title ?? sf.slug}
                   </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  <Text variant="caption" tone="tertiary" as="div">
                     {sf.orders} đơn · DS {formatVnd(sf.revenue)}
                   </Text>
-                </Box>
-                <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                </div>
+                <Text variant="body-sm" tone="brand" style={BOLD}>
                   +{formatVnd(sf.commission)}
                 </Text>
-              </Box>
+              </div>
             ))}
-          </Box>
+          </div>
         ) : sfQ.isLoading ? (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>Đang tải…</Text>
+          <SectionSkeleton />
         ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có đơn từ gian hàng nào. Chia sẻ link gian hàng để nhận hoa hồng.
-          </Text>
+          <EmptyState
+            variant="inline"
+            art="box"
+            heading="Chưa có đơn từ gian hàng nào"
+            body="Chia sẻ link gian hàng để nhận hoa hồng."
+          />
         )}
       </Section>
 
       {/* Hoa hồng theo sản phẩm */}
       <Section title="Theo sản phẩm">
         {pbQ.isError ? (
-          <ErrorState message={getErrorMessage(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+          <ErrorState variant="inline" message={getErrorMessage(pbQ.error)} onRetry={() => void pbQ.refetch()} />
         ) : pbQ.data && pbQ.data.length > 0 ? (
-          <Box flex flexDirection="column" style={{ gap: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {pbQ.data.slice(0, 10).map((p, i) => (
-              <Box
+              <div
                 key={i}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                py={2}
-                style={{ borderBottom: '1px solid var(--neutral-100)' }}
+                style={{
+                  padding: '8px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  borderBottom: '1px solid var(--color-border-subtle)',
+                }}
               >
-                <Box>
-                  <Text size="small" bold>
+                <div>
+                  <Text variant="body-sm" as="div" style={BOLD}>
                     {p.productName}
                   </Text>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                  <Text variant="caption" tone="tertiary" as="div">
                     {p.orders} đơn
                   </Text>
-                </Box>
-                <Text size="small" bold style={{ color: 'var(--leaf-700)' }}>
+                </div>
+                <Text variant="body-sm" tone="brand" style={BOLD}>
                   +{formatVnd(p.commission)}
                 </Text>
-              </Box>
+              </div>
             ))}
-          </Box>
+          </div>
         ) : pbQ.isLoading ? (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>Đang tải…</Text>
+          <SectionSkeleton />
         ) : (
-          <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-            Chưa có hoa hồng theo sản phẩm. Chia sẻ link sản phẩm để bắt đầu.
-          </Text>
+          <EmptyState
+            variant="inline"
+            art="basket"
+            heading="Chưa có hoa hồng theo sản phẩm"
+            body="Chia sẻ link sản phẩm để bắt đầu."
+          />
         )}
       </Section>
 
-      <Box style={{ height: 24 }} />
+      <div style={{ height: 24 }} />
 
-      <Sheet visible={withdrawing} onClose={() => setWithdrawing(false)} autoHeight>
+      <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Rút hoa hồng">
         {/* Mount khi mở để form lấy ĐÚNG max hiện tại (tránh kẹt amount="0" nếu data về sau lần mount đầu). */}
         {withdrawing && (
           <WithdrawForm
@@ -795,7 +873,7 @@ function Dashboard() {
             }}
           />
         )}
-      </Sheet>
+      </BottomSheet>
 
       <Sheet visible={ctvOrdering} onClose={() => setCtvOrdering(false)} autoHeight>
         {/* Mount khi mở để reset state form mỗi lần lên đơn mới. */}
@@ -850,25 +928,21 @@ function WithdrawForm({
     !mut.isPending;
 
   return (
-    <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-      <Text bold size="large" style={{ marginBottom: 16 }}>
-        Rút hoa hồng
-      </Text>
-
-      <Box flex style={{ gap: 8, marginBottom: 12 }}>
-        <MethodChip
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <ChoiceCard
           active={method === 'WALLET_BALANCE'}
           title="Ví Tubu"
           sub="Quy đổi 1:1, nhận ngay"
-          onClick={() => setMethod('WALLET_BALANCE')}
+          onPress={() => setMethod('WALLET_BALANCE')}
         />
-        <MethodChip
+        <ChoiceCard
           active={method === 'BANK'}
           title="Ngân hàng"
           sub={cfgLoaded ? `Tối thiểu ${formatVndShort(minBank)}` : 'Đang tải mốc tối thiểu…'}
-          onClick={() => setMethod('BANK')}
+          onPress={() => setMethod('BANK')}
         />
-      </Box>
+      </div>
 
       <Input
         label="Số tiền"
@@ -876,12 +950,12 @@ function WithdrawForm({
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
         {knownMax ? `Tối đa ${formatVnd(max)}` : 'Số dư sẽ được máy chủ xác thực khi gửi yêu cầu.'}
       </Text>
 
       {method === 'BANK' && (
-        <Box flex flexDirection="column" style={{ gap: 10, marginTop: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
           <Input
             label="Tên ngân hàng"
             value={bank.bankName}
@@ -897,7 +971,7 @@ function WithdrawForm({
             value={bank.accountName}
             onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
           />
-        </Box>
+        </div>
       )}
 
       <Button
@@ -911,53 +985,20 @@ function WithdrawForm({
           ? `Nhận ${formatVnd(amountNum)} vào Ví`
           : `Rút ${formatVnd(amountNum)}`}
       </Button>
-    </Box>
-  );
-}
-
-function MethodChip({
-  active,
-  title,
-  sub,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  sub: string;
-  onClick: () => void;
-}) {
-  return (
-    <Box
-      className="tubu-press"
-      onClick={onClick}
-      p={3}
-      style={{
-        flex: 1,
-        borderRadius: 'var(--radius-md)',
-        border: `1.5px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        background: active ? 'var(--primary-50)' : 'var(--neutral-0)',
-      }}
-    >
-      <Text size="small" bold style={{ color: active ? 'var(--primary-700)' : 'var(--neutral-900)' }}>
-        {title}
-      </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {sub}
-      </Text>
-    </Box>
+    </div>
   );
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <Box>
-      <Text bold style={{ color: 'var(--neutral-0)' }}>
+    <div>
+      <Text variant="body-md" tone="inverse" as="div" style={BOLD}>
         {value}
       </Text>
-      <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)' }}>
+      <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.8 }}>
         {label}
       </Text>
-    </Box>
+    </div>
   );
 }
 
@@ -973,27 +1014,28 @@ function KpiCard({
   hint?: string;
 }) {
   return (
-    <Box
-      p={3}
-      style={{
-        flex: 1,
-        background: highlight ? 'var(--leaf-50)' : 'var(--neutral-0)',
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-xs)',
-      }}
-    >
-      <Text bold style={{ color: highlight ? 'var(--leaf-700)' : 'var(--neutral-900)' }}>
+    <Card variant={highlight ? 'flat' : 'raised'} style={{ flex: 1 }}>
+      <Text variant="price-md" tone={highlight ? 'brand' : 'primary'} as="div">
         {value}
       </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+      <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>
       {hint && (
-        <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)' }}>
+        <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
           {hint}
         </Text>
       )}
-    </Box>
+    </Card>
+  );
+}
+
+function SectionSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Skeleton height={16} />
+      <Skeleton height={16} width="60%" />
+    </div>
   );
 }
 
@@ -1003,16 +1045,18 @@ function Section({
   children,
 }: {
   title: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Box flex alignItems="center" justifyContent="space-between" mb={3}>
-        <Text bold>{title}</Text>
+    <Card padding={16} style={BLOCK_GAP}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <Heading variant="title-sm" as="h2">
+          {title}
+        </Heading>
         {action}
-      </Box>
+      </div>
       {children}
-    </Box>
+    </Card>
   );
 }

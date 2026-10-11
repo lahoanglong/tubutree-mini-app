@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchContentKit: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div data-testid="sheet">{children}</div> : null,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -92,5 +92,103 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/product/tra-xanh?ref=ABC123');
+  });
+
+  it('tiêu đề sheet là h2 thật, có nút Đóng gọi onClose', async () => {
+    const onClose = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ContentKitSheet visible onClose={onClose} productSlug="tra-xanh" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('heading', { level: 2, name: 'Nội dung bán hàng' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await screen.findByRole('button', { name: /Chia sẻ Zalo/ });
+  });
+
+  it('hai nút chính có vùng chạm >= 44px (DS v2 Button)', async () => {
+    renderKit();
+    const share = await screen.findByRole('button', { name: /Chia sẻ Zalo/ });
+    const copyBtn = screen.getByRole('button', { name: /Sao chép link/ });
+    expect(parseFloat(share.style.minHeight)).toBeGreaterThanOrEqual(44);
+    expect(parseFloat(copyBtn.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it('bài mẫu, điểm bán hàng, hỏi đáp và video: hiện đủ, mỗi mục là một khối có tiêu đề h3', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: ['https://cdn.example/a.jpg'], usps: ['Lá trà sạch', 'Không phẩm màu'],
+      faqs: [{ q: 'Dùng thế nào?', a: 'Pha nước 80 độ.' }],
+      videoUrls: ['https://video.example/v1'],
+      captions: ['Trà xanh ngon lắm https://app.tubutree.com/product/tra-xanh?ref=ABC123'],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    renderKit();
+    await screen.findByRole('button', { name: /Chia sẻ Zalo/ });
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Bài mẫu (chạm để sao chép)',
+      'Điểm bán hàng',
+      'Câu hỏi thường gặp',
+      'Video tham khảo',
+    ]);
+    expect(screen.getByText('Lá trà sạch')).toBeInTheDocument();
+    expect(screen.getByText('Không phẩm màu')).toBeInTheDocument();
+    expect(screen.getByText('Dùng thế nào?')).toBeInTheDocument();
+    expect(screen.getByText('Pha nước 80 độ.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Trà xanh' })).toHaveAttribute('src', 'https://cdn.example/a.jpg');
+  });
+
+  it('chạm bài mẫu hoặc video: nút thật cao >= 44px, chép đúng nội dung và báo đã sao chép', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: ['https://video.example/v1'],
+      captions: ['Trà xanh ngon lắm https://app.tubutree.com/product/tra-xanh?ref=ABC123'],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    renderKit();
+    const caption = await screen.findByRole('button', { name: /Trà xanh ngon lắm/ });
+    expect(parseFloat(caption.style.minHeight)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(caption);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenLastCalledWith(
+      'Trà xanh ngon lắm https://app.tubutree.com/product/tra-xanh?ref=ABC123',
+    );
+    expect(mocks.openSnackbar).toHaveBeenLastCalledWith({ text: 'Đã sao chép', type: 'success' });
+
+    const video = screen.getByRole('button', { name: 'https://video.example/v1' });
+    expect(parseFloat(video.style.minHeight)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(video);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
+    expect(mocks.copyText).toHaveBeenLastCalledWith('https://video.example/v1');
+  });
+
+  it('chưa có nội dung mẫu nào: hiện câu báo rỗng', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [], captions: [],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    renderKit();
+    expect(await screen.findByText('Sản phẩm này chưa có nội dung mẫu.')).toBeInTheDocument();
+  });
+
+  it('tải lỗi: hiện thông báo lỗi và nút Thử lại gọi lại API', async () => {
+    mocks.fetchContentKit.mockRejectedValueOnce(new Error('mạng lỗi'));
+    renderKit();
+    const retry = await screen.findByRole('button', { name: /Thử lại/ });
+    expect(mocks.fetchContentKit).toHaveBeenCalledTimes(1);
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [], captions: [],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.fetchContentKit).toHaveBeenCalledTimes(2));
+  });
+
+  it('copy thất bại: báo lỗi hướng dẫn chép tay, không báo đã sao chép', async () => {
+    mocks.copyText.mockResolvedValue(false);
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Sao chép link/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error' });
   });
 });

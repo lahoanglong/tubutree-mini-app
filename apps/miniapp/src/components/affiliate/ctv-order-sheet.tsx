@@ -1,9 +1,18 @@
 import { useState } from 'react';
-import { Box, Text, Input, useSnackbar, useNavigate } from 'zmp-ui';
+import type { CSSProperties, ReactNode } from 'react';
+import { Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Plus, Minus, UserPlus } from 'lucide-react';
+import { Trash2, Plus, Minus, UserPlus, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
+import { EmptyState, ErrorState } from '../ui/empty-state';
+import { Icon } from '../ui/icon';
+import { IconButton } from '../ui/icon-button';
+import { KeyValueRow } from '../ui/key-value-row';
+import { ListRow } from '../ui/list-row';
+import { Skeleton } from '../ui/skeleton';
+import { Heading, Text } from '../ui/text';
+import { ChoiceCard } from './choice-card';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '../geo-picker';
 import {
   loadRecentCustomers,
@@ -175,16 +184,17 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
     mut.mutate();
   };
 
+  // Sheet ZaUI đã tự đệm safe-area đáy (xem ui/bottom-sheet.tsx) nên chỉ đệm 16px, không cộng thêm.
   if (result) {
     return (
-      <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-        <Text bold size="large" style={{ marginBottom: 12 }}>
+      <div style={{ padding: 16 }}>
+        <Heading variant="title-md" as="h2" style={{ marginBottom: 12 }}>
           {t.successTitle}
-        </Text>
-        <Box p={4} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-lg)' }}>
-          <Row label={t.orderCode} value={result.code} />
-          <Row label={t.orderTotal} value={formatVnd(result.total)} strong />
-        </Box>
+        </Heading>
+        <div style={{ padding: 16, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)' }}>
+          <KeyValueRow label={t.orderCode} value={result.code} />
+          <KeyValueRow label={t.orderTotal} value={formatVnd(result.total)} emphasis tone="success" />
+        </div>
         {/* Đơn chuyển khoản: CTV cần QR/số tài khoản để gửi khách. Trước đây màn này chỉ báo
             "đã tạo đơn" rồi hết — không QR, không nút mở đơn — nên đơn nằm chờ thanh toán tới
             khi bị huỷ, CTV mất cả đơn lẫn hoa hồng. */}
@@ -200,7 +210,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
             {t.openPayment}
           </Button>
         )}
-        <Box flex style={{ gap: 8, marginTop: payment === 'BANK_TRANSFER' ? 8 : 20 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: payment === 'BANK_TRANSFER' ? 8 : 20 }}>
           <Button
             variant="secondary"
             onPress={() => {
@@ -222,23 +232,21 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           >
             {t.viewOrder}
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))', maxHeight: '82vh', overflowY: 'auto' }}>
-      <Text bold size="large" style={{ marginBottom: 12 }}>
+    <div style={{ padding: 16, maxHeight: '82vh', overflowY: 'auto' }}>
+      <Heading variant="title-md" as="h2" style={{ marginBottom: 12 }}>
         {t.title}
-      </Text>
+      </Heading>
 
       {/* Khách gần đây: chạm một lần điền sẵn tên, SĐT và địa chỉ (thay cho ~5 lần nhập tay). */}
       {recents.length > 0 && (
-        <Box style={{ marginBottom: 12 }}>
-          <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginBottom: 2 }}>
-            {t.recentHeading}
-          </Text>
+        <div style={{ marginBottom: 12 }}>
+          <GroupLabel style={{ marginBottom: 2 }}>{t.recentHeading}</GroupLabel>
           <div className="scroll-x" style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
             <Chip variant="choice" icon={UserPlus} onPress={clearCustomer}>
               {t.newCustomer}
@@ -253,14 +261,12 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
               </Chip>
             ))}
           </div>
-        </Box>
+        </div>
       )}
 
       {/* Người nhận */}
-      <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginBottom: 6 }}>
-        {t.recipientHeading}
-      </Text>
-      <Box flex flexDirection="column" style={{ gap: 10 }}>
+      <GroupLabel>{t.recipientHeading}</GroupLabel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <FieldInput label={t.recipient} value={recipient} onChange={setRecipient} error={showErrors && !recipientOk ? t.requiredField : undefined} />
         <FieldInput
           label={t.phone}
@@ -275,70 +281,62 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           errorWard={showErrors && !geo.wardCode ? t.requiredField : undefined}
         />
         <FieldInput label={t.street} value={street} onChange={setStreet} error={showErrors && !streetOk ? t.requiredField : undefined} />
-      </Box>
+      </div>
 
       {/* Sản phẩm */}
-      <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginTop: 16, marginBottom: 6 }}>
-        {t.products}
-      </Text>
+      <GroupLabel style={{ marginTop: 16 }}>{t.products}</GroupLabel>
       {lines.map((l) => (
-        <Box
+        <div
           key={l.variationId}
-          flex
-          alignItems="center"
-          style={{ gap: 8, padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 0',
+            borderBottom: '1px solid var(--color-border-subtle)',
+          }}
         >
-          <Box style={{ flex: 1, overflow: 'hidden' }}>
-            <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Text variant="body-sm" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {l.productName}
             </Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+            <Text variant="caption" tone="tertiary" as="div">
               {l.variationName} · {formatVnd(l.unitPrice)}
             </Text>
-          </Box>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Stepper icon={<Minus size={14} />} label="Giảm số lượng" onClick={() => setQty(l.variationId, -1)} />
-            <Text size="small" bold style={{ minWidth: 20, textAlign: 'center' }}>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Stepper icon={Minus} label="Giảm số lượng" onClick={() => setQty(l.variationId, -1)} />
+            <Text variant="body-sm" style={{ fontWeight: 600, minWidth: 20, textAlign: 'center' }}>
               {l.quantity}
             </Text>
-            <Stepper icon={<Plus size={14} />} label="Tăng số lượng" onClick={() => setQty(l.variationId, 1)} />
-          </Box>
-          <Box
-            role="button"
-            aria-label={t.removeItem}
-            className="tubu-press"
-            onClick={() => removeLine(l.variationId)}
-            style={{
-              width: 44,
-              height: 44,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flex: '0 0 auto',
-            }}
-          >
-            <Trash2 size={16} color="var(--neutral-400)" />
-          </Box>
-        </Box>
+            <Stepper icon={Plus} label="Tăng số lượng" onClick={() => setQty(l.variationId, 1)} />
+          </div>
+          <IconButton
+            icon={Trash2}
+            label={t.removeItem}
+            size="sm"
+            onPress={() => removeLine(l.variationId)}
+            style={{ width: 44, height: 44, flex: '0 0 auto' }}
+          />
+        </div>
       ))}
-      {showErrors && !itemsOk && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 4 }}>
-          ⚠ {t.emptyItems}
-        </Text>
-      )}
+      {showErrors && !itemsOk && <InlineError style={{ marginTop: 4 }}>{t.emptyItems}</InlineError>}
 
       <ProductVariationPicker onAdd={addLine} />
 
       {/* Thanh toán */}
-      <Text size="xSmall" bold style={{ color: 'var(--neutral-500)', marginTop: 16, marginBottom: 6 }}>
-        {t.paymentHeading}
-      </Text>
-      <Box flex style={{ gap: 8 }}>
-        <PayChip active={payment === 'COD'} title={t.cod} sub={t.codHint} onClick={() => setPayment('COD')} />
-        <PayChip active={payment === 'BANK_TRANSFER'} title={t.bankTransfer} sub={t.bankHint} onClick={() => setPayment('BANK_TRANSFER')} />
-      </Box>
+      <GroupLabel style={{ marginTop: 16 }}>{t.paymentHeading}</GroupLabel>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <ChoiceCard active={payment === 'COD'} title={t.cod} sub={t.codHint} onPress={() => setPayment('COD')} />
+        <ChoiceCard
+          active={payment === 'BANK_TRANSFER'}
+          title={t.bankTransfer}
+          sub={t.bankHint}
+          onPress={() => setPayment('BANK_TRANSFER')}
+        />
+      </div>
 
-      <Box mt={3}>
+      <div style={{ marginTop: 12 }}>
         <Input.TextArea
           label={t.note}
           placeholder={t.notePlaceholder}
@@ -346,22 +344,22 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           onChange={(e) => setNote(e.target.value)}
           rows={2}
         />
-      </Box>
+      </div>
 
       {/* Tạm tính + submit */}
-      <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 16 }}>
-        <Box>
-          <Text size="small" style={{ color: 'var(--neutral-500)' }}>
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          <Text variant="body-sm" tone="tertiary" as="div">
             {t.goodsSubtotal}
           </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+          <Text variant="caption" tone="tertiary" as="div">
             {t.shipNote}
           </Text>
-        </Box>
-        <Text bold size="large" style={{ color: 'var(--primary-700)' }}>
+        </div>
+        <Text variant="price-lg" tone="brand">
           {formatVnd(goods)}
         </Text>
-      </Box>
+      </div>
       <Button
         fullWidth
         loading={mut.isPending}
@@ -371,7 +369,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       >
         {t.submit}
       </Button>
-    </Box>
+    </div>
   );
 }
 
@@ -401,67 +399,51 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
   if (slug) {
     const p = detailQ.data;
     return (
-      <Box mt={2} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)' }}>
-        <Box flex alignItems="center" justifyContent="space-between" mb={2}>
-          <Text size="small" bold>
+      <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-control)' }}>
+        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text variant="body-sm" style={{ fontWeight: 600 }}>
             {p?.name ?? t.chooseVariation}
           </Text>
-          <Box
-            role="button"
-            aria-label={vi.common.close}
-            className="tubu-press"
-            onClick={reset}
-            style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer' }}
-          >
-            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-              {vi.common.close}
-            </Text>
-          </Box>
-        </Box>
+          <Button variant="ghost" onPress={reset}>
+            {vi.common.close}
+          </Button>
+        </div>
         {detailQ.isLoading ? (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            {vi.common.loading}
-          </Text>
+          <Skeleton height={16} width="50%" />
         ) : detailQ.isError ? (
-          <Text
-            size="xSmall"
-            onClick={() => void detailQ.refetch()}
-            style={{ color: 'var(--danger)', cursor: 'pointer' }}
-          >
-            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
-          </Text>
+          <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => void detailQ.refetch()} />
         ) : (
           (p?.variations ?? []).map((v) => {
             const out = v.stock <= 0;
             return (
-              <Box
+              <ListRow
                 key={v.id}
-                className={out ? undefined : 'tubu-press'}
-                onClick={() => {
-                  if (out) return;
-                  onAdd(v, p!.name);
-                  reset();
-                }}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                style={{ padding: '8px 0', minHeight: 44, opacity: out ? 0.5 : 1, cursor: out ? 'not-allowed' : 'pointer' }}
-              >
-                <Text size="small">{v.name}</Text>
-                <Text size="xSmall" bold style={{ color: out ? 'var(--neutral-400)' : 'var(--primary-700)' }}>
-                  {out ? t.outOfStock : formatVnd(v.salePrice ?? v.retailPrice)}
-                </Text>
-              </Box>
+                title={v.name}
+                trailing={
+                  <Text variant="caption" tone={out ? 'tertiary' : 'brand'} style={{ fontWeight: 600 }}>
+                    {out ? t.outOfStock : formatVnd(v.salePrice ?? v.retailPrice)}
+                  </Text>
+                }
+                onPress={
+                  out
+                    ? undefined
+                    : () => {
+                        onAdd(v, p!.name);
+                        reset();
+                      }
+                }
+                style={{ opacity: out ? 0.5 : 1 }}
+              />
             );
           })
         )}
-      </Box>
+      </div>
     );
   }
 
   const results: ProductSuggestion[] = suggestQ.data ?? [];
   return (
-    <Box mt={2}>
+    <div style={{ marginTop: 8 }}>
       <Input.Search
         placeholder={t.searchProduct}
         value={q}
@@ -469,49 +451,36 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
         clearable
       />
       {dq.trim().length >= 1 && (
-        <Box mt={1}>
+        <div style={{ marginTop: 4 }}>
           {suggestQ.isError ? (
-            <Text
-              size="xSmall"
-              onClick={() => void suggestQ.refetch()}
-              style={{ color: 'var(--danger)', padding: '6px 0', cursor: 'pointer' }}
-            >
-              ⚠ {vi.errors.loadFailed} · {vi.common.retry}
-            </Text>
+            <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => void suggestQ.refetch()} />
           ) : (
             <>
               {results.map((p) => (
-                <Box
+                <ListRow
                   key={p.slug}
-                  className="tubu-press"
-                  onClick={() => setSlug(p.slug)}
-                  flex
-                  alignItems="center"
-                  style={{ gap: 8, padding: '6px 0', minHeight: 44, cursor: 'pointer' }}
-                >
-                  {p.thumbnail && (
-                    <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
-                  )}
-                  <Box style={{ flex: 1, overflow: 'hidden' }}>
-                    <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name}
-                    </Text>
-                    <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
+                  icon={
+                    p.thumbnail ? (
+                      <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 'var(--radius-media)', objectFit: 'cover', flex: '0 0 auto' }} />
+                    ) : undefined
+                  }
+                  title={p.name}
+                  subtitle={
+                    <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
                       {formatVnd(p.basePrice)}
                     </Text>
-                  </Box>
-                </Box>
+                  }
+                  onPress={() => setSlug(p.slug)}
+                />
               ))}
               {results.length === 0 && !suggestQ.isFetching && (
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', padding: '6px 0' }}>
-                  {t.noProductsFound}
-                </Text>
+                <EmptyState variant="inline" art="search" heading={t.noProductsFound} />
               )}
             </>
           )}
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -527,84 +496,40 @@ function FieldInput({
   error?: string;
 }) {
   return (
-    <Box>
+    <div>
       <Input label={label} value={value} onChange={(e) => onChange(e.target.value)} status={error ? 'error' : undefined} />
-      {error && (
-        <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
-          ⚠ {error}
-        </Text>
-      )}
-    </Box>
+      {error && <InlineError style={{ marginTop: 2 }}>{error}</InlineError>}
+    </div>
   );
 }
 
-function Stepper({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function GroupLabel({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <Box
-      role="button"
-      aria-label={label}
-      className="tubu-press"
-      onClick={onClick}
-      flex
-      alignItems="center"
-      justifyContent="center"
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: '50%',
-        border: '1px solid var(--neutral-200)',
-        color: 'var(--primary-700)',
-        cursor: 'pointer',
-      }}
-    >
-      {icon}
-    </Box>
+    <Text variant="caption" tone="tertiary" as="div" style={{ fontWeight: 600, marginBottom: 6, ...style }}>
+      {children}
+    </Text>
   );
 }
 
-function PayChip({
-  active,
-  title,
-  sub,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  sub: string;
-  onClick: () => void;
-}) {
+function InlineError({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <Box
-      className="tubu-press"
-      onClick={onClick}
-      p={3}
-      style={{
-        flex: 1,
-        borderRadius: 'var(--radius-md)',
-        border: `1.5px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        background: active ? 'var(--primary-50)' : 'var(--neutral-0)',
-        cursor: 'pointer',
-      }}
-    >
-      <Text size="small" bold style={{ color: active ? 'var(--primary-700)' : 'var(--neutral-900)' }}>
-        {title}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, ...style }}>
+      <Icon icon={TriangleAlert} size="sm" tone="danger" />
+      <Text variant="caption" tone="danger">
+        {children}
       </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-        {sub}
-      </Text>
-    </Box>
+    </div>
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Stepper({ icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
   return (
-    <Box flex alignItems="center" justifyContent="space-between" py={1}>
-      <Text size="small" style={{ color: 'var(--neutral-500)' }}>
-        {label}
-      </Text>
-      <Text size={strong ? 'large' : 'small'} bold style={{ color: strong ? 'var(--leaf-700)' : 'var(--neutral-900)' }}>
-        {value}
-      </Text>
-    </Box>
+    <IconButton
+      icon={icon}
+      label={label}
+      size="sm"
+      onPress={onClick}
+      style={{ width: 44, height: 44, border: '1px solid var(--color-border-subtle)' }}
+    />
   );
 }

@@ -61,7 +61,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc TubuXu', () 
     await expect(page.getByText(/bonus/i)).toHaveCount(0);
   });
 
-  test('Nhận thưởng mốc tháng này → POST đúng mốc + tháng, nút chuyển "Đã nhận ✓"', async ({ page, api }) => {
+  test('Nhận thưởng mốc tháng này → POST đúng mốc + tháng, nút chuyển "Đã nhận"', async ({ page, api }) => {
     mockCtv(api);
     await page.goto('/affiliate');
 
@@ -81,7 +81,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc TubuXu', () 
     expect(call.body).toEqual({ month: '2026-09' });
 
     await expect(page.getByText('Chúc mừng bạn đã nhận 50.000 TubuXu', { exact: false })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('button', { name: 'Đã nhận ✓' })).toBeDisabled({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: 'Đã nhận', exact: true })).toBeDisabled({ timeout: 5_000 });
     await expect(page.getByText('Đã cộng vào TubuXu')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
     expect(api.callsTo('POST', '/affiliate/milestones/:id/claim')).toHaveLength(1);
