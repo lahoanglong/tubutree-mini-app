@@ -49,6 +49,9 @@ import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
 import { SeasonBanner } from '../components/game/season-banner';
 import { TreeHealthAlert } from '../components/game/tree-health-alert';
+import { CheckInStreak } from '../components/game/checkin-streak';
+import { StreakRepair } from '../components/game/streak-repair';
+import { TreeActions } from '../components/game/tree-actions';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
@@ -309,125 +312,39 @@ export default function GamePage() {
       {season && <SeasonBanner season={season} />}
 
       {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Box flex alignItems="center" justifyContent="space-between" mb={2}>
-          <Text size="small" bold>
-            🔥 Điểm danh chuỗi {profile?.streakDays ?? 0} ngày
-          </Text>
-          <Button
-            size="small"
-            disabled={checkedInToday || checkInM.isPending}
-            loading={checkInM.isPending}
-            onClick={() => checkInM.mutate()}
-            style={{ background: 'var(--leaf-600)' }}
-          >
-            {checkedInToday ? '✅ Đã điểm danh' : 'Điểm danh'}
-          </Button>
-        </Box>
-        <Box flex style={{ gap: 6 }}>
-          {Array.from({ length: 7 }, (_, i) => {
-            const day = i + 1;
-            const done = (profile?.streakDays ?? 0) % 7 === 0 && (profile?.streakDays ?? 0) > 0 ? true : day <= ((profile?.streakDays ?? 0) % 7);
-            const bonus = day === 3 || day === 7;
-            return (
-              <Box key={i} style={{ flex: 1, textAlign: 'center' }}>
-                <Box
-                  style={{
-                    height: 32,
-                    borderRadius: 'var(--radius-md)',
-                    background: done ? 'var(--leaf-600)' : 'var(--neutral-100)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: done ? 'var(--neutral-0)' : 'var(--neutral-400)',
-                    fontSize: 13,
-                  }}
-                >
-                  {done ? '💧' : bonus ? '🎁' : day}
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                  N{day}
-                </Text>
-              </Box>
-            );
-          })}
-        </Box>
-
-        {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
-        <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 12 }}>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-              🧊 Vé giữ lửa: <b>{profile?.streakFreezes ?? 0}</b>
-            </Text>
-            <Button
-              size="small"
-              variant="tertiary"
-              disabled={freezeM.isPending}
-              loading={freezeM.isPending}
-              onClick={() => freezeM.mutate()}
-              style={{ color: 'var(--leaf-700)' }}
-            >
-              Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
-            </Button>
-          </Box>
-          <Button
-            size="small"
-            variant="secondary"
-            disabled={dewCollectedToday || dewM.isPending}
-            loading={dewM.isPending}
-            onClick={() => dewM.mutate()}
-          >
-            {dewCollectedToday ? '💦 Đã hứng sương' : '💦 Hứng giọt sương'}
-          </Button>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-          Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.
-        </Text>
-      </Box>
+      <CheckInStreak
+        streakDays={profile?.streakDays}
+        streakFreezes={profile?.streakFreezes}
+        streakFreezeCost={profile?.streakFreezeCost}
+        checkedInToday={checkedInToday}
+        dewCollectedToday={dewCollectedToday}
+        onCheckIn={() => checkInM.mutate()}
+        checkInPending={checkInM.isPending}
+        onBuyFreeze={() => freezeM.mutate()}
+        freezePending={freezeM.isPending}
+        onCollectDew={() => dewM.mutate()}
+        dewPending={dewM.isPending}
+      />
 
       {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
       {profile?.streakRepairable && (
-        <Box
-          mx={3}
-          mt={2}
-          p={3}
-          style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--clay-500)' }}
-        >
-          <Text size="small" bold style={{ color: 'var(--clay-700)' }}>
-            {vi.game.streakRepair.title(profile.brokenStreakDays ?? 0)}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2 }}>
-            {vi.game.streakRepair.body}
-          </Text>
-          <Button
-            fullWidth
-            size="small"
-            loading={repairM.isPending}
-            disabled={repairM.isPending}
-            onClick={() => repairM.mutate()}
-            style={{ marginTop: 10, background: 'var(--clay-500)' }}
-          >
-            {vi.game.streakRepair.cta(profile.streakRepairCost ?? 0)}
-          </Button>
-        </Box>
+        <StreakRepair
+          brokenStreakDays={profile.brokenStreakDays}
+          cost={profile.streakRepairCost}
+          pending={repairM.isPending}
+          onRepair={() => repairM.mutate()}
+        />
       )}
 
       <TreeHealthAlert health={profile?.treeHealth} />
 
-      <Box p={3}>
-        <Button fullWidth disabled={waterM.isPending} loading={waterM.isPending} variant="secondary" onClick={() => waterM.mutate()}>
-          🚿 Tưới cây (20💧)
-        </Button>
-        <Box flex style={{ gap: 8, marginTop: 8 }}>
-          <Button style={{ flex: 1 }} size="small" disabled={buyTreeM.isPending} loading={buyTreeM.isPending} onClick={() => buyTreeM.mutate()}>
-            🌳 Mua cây thật
-            {profile?.treeXuPrice != null && ` (${formatXu(profile.treeXuPrice)})`}
-          </Button>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, textAlign: 'center' }}>
-          Mua bằng TubuXu — đổi từ Ví trong mục Ví của tôi.
-        </Text>
-      </Box>
+      <TreeActions
+        treeXuPrice={profile?.treeXuPrice}
+        waterPending={waterM.isPending}
+        onWater={() => waterM.mutate()}
+        buyPending={buyTreeM.isPending}
+        onBuy={() => buyTreeM.mutate()}
+      />
 
       {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
       {garden && (
