@@ -280,3 +280,151 @@ $ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
 - `ProgressBar` thêm tông `success`/`muted` để phân biệt nhiệm vụ đã đạt/đã nhận.
 - `static-scan.mjs` đếm hex trong `utils/storefront-theme.ts` (bảng dữ liệu bắt buộc là `#rrggbb` do API). Nếu muốn tổng hex toàn app về 0 thì cần danh sách ngoại lệ theo đường dẫn cho các bảng dữ liệu kiểu này (`brand-theme`/`brands.ts` ở mục 4/4 có thể gặp cùng vấn đề).
 - Chạy e2e `features.miniapp.spec.ts` (luồng "Gian hàng Cộng tác viên") và `design-system-pilot.miniapp.spec.ts` sau khi merge: DOM trang builder đổi (PageHeader h1, `Card`, `BottomSheet`, `Button`), locator `getByText('Cửa hàng Xanh của Affiliate 1').first()` đã đọc tĩnh và vẫn khớp (tên gian hàng còn hiện ở `h2`), nhưng CHƯA chạy Playwright (quy định máy). Cũng kiểm bằng mắt trên máy thật: hàng sản phẩm (tên + 3 nút icon 44px) ở màn 320-360px, thanh `StickyActionBar` không che nút "Thêm sản phẩm" cuối trang.
+
+## Mục 4/4 — C-079 (liên kết Hành trình nguyên liệu và nhãn) + `brand-story`, `brand-owner`, `brand-view`, `utils/brands.ts` (C-076) — XONG
+
+Bốn commit (mỗi trang một commit, guard spec + spec riêng đi cùng trang):
+
+| Commit | Nội dung |
+|---|---|
+| 87981e4 | C-079: `utils/brand-origins.ts` (mới) + `brandBrowsePath` + `css/brand-theme.css` (mới) + `utils/brands.ts` + liên kết tên nhãn ở `product-detail.tsx` + 2 ✓ -> `Icon` + spec |
+| 222e716 | `pages/brand-story.tsx` + `brand-story.spec.tsx` + bảng màu bản đồ trong `brand-theme.css` + dòng guard |
+| e8ccd92 | `pages/brand-owner.tsx` + `brand-owner.spec.tsx` + dòng guard |
+| ac246b4 | `pages/brand-view.tsx` + `brand-view.spec.tsx` (mới) + dòng guard |
+
+### C-079 — nguyên nhân và cách sửa
+
+- API `GET /products?brand=` so khớp CHÍNH XÁC cột `products.brand` (`catalog.service.ts:156-161`: `where.brand = brandList[0]`, nhiều nhãn cách nhau dấu phẩy). Tham số là TÊN nhãn đúng như catalog, không phải slug, không phân biệt gì khác.
+- Dữ liệu seed/migration (`prisma/seed.ts`, `20260616000000_demo_catalog_multibrand`) có 8 nhãn: `BH.Nong`, `Cobote`, `Fuwa3e`, `Hector`, `Le Plateau Coffee`, `Pơ Lang`, `Sokfram`, `Visante`. `brand-story.tsx` cũ truyền "Le Plateau" và "Sokfarm" nên 2/8 nút ra danh sách rỗng (6/8 khớp chỉ vì tên hiển thị tình cờ trùng tên catalog).
+- Sửa: dữ liệu 8 nhãn tách sang `utils/brand-origins.ts`, mỗi nhãn có `catalogBrand` (tên catalog) tách khỏi `brand` (tên hiển thị); `brandBrowsePath(catalogBrand)` dựng `/browse?brand=<tên mã hoá>` (cắt khoảng trắng, rỗng thì `/browse`). Nút "Khám phá sản phẩm" và tên nhãn ở trang chi tiết sản phẩm đều đi qua hàm này. PDP dùng `p.brand` của chính sản phẩm nên đúng tên catalog theo cấu tạo.
+- KHÔNG sửa API, KHÔNG đổi chữ hiển thị.
+
+Lệnh kiểm chứng thay cho `curl` (API không chạy trong lượt này; truy vấn chỉ-đọc vào DB test cục bộ `tubutree_it`, cùng phép so khớp mà API dùng):
+
+```
+$ docker exec tubu_it_main psql -U tubu -d tubutree_it -At -c "select brand, count(*) from products where brand=... "
+Le Plateau | 0          <- tên cũ ở brand-story
+Le Plateau Coffee | 5    <- tên mới
+Sokfarm | 0
+Sokfram | 5
+```
+
+### Số đo trước -> sau (`scripts/uiux/static-scan.mjs`: legacy / hex / emoji; ESLint trong `apps/miniapp`)
+
+| File | legacy | hex | emoji | ESLint |
+|---|---|---|---|---|
+| `pages/brand-story.tsx` | 15 -> 0 | 102 -> 0 | 11 -> 1 | 13 lỗi (1 `no-restricted-imports` + 12 `no-raw-color`) -> 0 lỗi, 0 cảnh báo |
+| `pages/brand-owner.tsx` | 19 -> 0 | 0 -> 0 | 1 -> 0 | 0 -> 0 |
+| `pages/brand-view.tsx` | 0 -> 0 | 0 -> 0 | 7 -> 3 | 0 -> 0 |
+| `utils/brands.ts` | 1 -> 0 | 17 -> 0 | 0 -> 0 | 0 -> 0 |
+| `pages/product-detail.tsx` (chỉ vùng nhãn + emoji) | 0 -> 0 | 0 -> 0 | 3 -> 1 | 0 -> 0 |
+| `css/brand-theme.css` (mới, nơi DUY NHẤT giữ hex nhãn/bản đồ) | - | 0 (dòng khai báo token không tính) | 0 | - |
+| `utils/brand-origins.ts` (mới) | 0 | 0 | 8 | 0 |
+
+Emoji còn lại là NỘI DUNG, giữ có chủ ý: `🌿` trong câu giới thiệu của `brand-story` ("khám phá xuất xứ 🌿"); `💚` snackbar theo dõi nhãn và `🌿`/`💚` trong 2 caption mẫu để CTV sao chép (`brand-view`); `🛒` snackbar mở nhóm mua chung (`product-detail`); 8 emoji đặc trưng từng nhãn (🍍 🍯 🥑 🌊 🍄 ☕ 🥥 🌴) là dữ liệu nội dung của ô nhãn và ghim bản đồ trong `brand-origins.ts`. Ký tự chức năng `✓`, `↗`, `+`, `📍`, `🌿` làm huy hiệu/avatar đã thay bằng `Icon` Lucide.
+
+### Đã làm
+
+`css/brand-theme.css` (mới) + `utils/brands.ts` + `utils/brand-origins.ts`:
+- `--color-brand-<id>` (11 nhãn, chấm/chip), `--color-brand-<id>-from/-to` (8 nhãn, hai đầu gradient ô nhãn), `--color-brandmap-*` (khung, LED, thang gỗ nâu 100..900, cờ, sao, tiêu đề). Hex chỉ nằm ở file này; `.tsx/.ts` chỉ tham chiếu `var(--...)`.
+- `brandAccent(brand)` trả `var(--color-brand-<id>)`; nhãn lạ trả `var(--color-action-primary-bg)` (cùng giá trị forest-600 với `--primary-600` cũ). Có chuẩn hoá NFC để "Pơ Lang" gõ dạng tổ hợp vẫn khớp. `brands.ts` tự `import '../css/brand-theme.css'` để mọi nơi gọi (`product-tile`, `product-card`, PDP) có token mà không phụ thuộc trang nào nạp CSS (không đụng `app.tsx`).
+
+`pages/brand-story.tsx` (trang, một h1):
+- `PageHeader` "Hành trình nguyên liệu" (`vi.home.brandStoryTitle`); ZaUI `Box`/`Text`/`Button`/`Sheet` -> `div` + `Text`/`Heading`/`Button`/`BottomSheet`/`Icon` của DS; từ zmp-ui còn `Page`, `useNavigate`.
+- 8 ô nhãn và 8 ghim bản đồ trước là `Box onClick` (không bàn phím, không vai trò) -> `<button>` thật; ô cao >= 135px, ghim `minWidth/minHeight 44`; ghim giữ `aria-label="<nhãn> — <tỉnh>"`. Tiêu đề nhóm -> `Heading` h2 (số 8 lấy từ `BRAND_ORIGINS.length`, chữ in ra không đổi).
+- Sheet chi tiết -> `BottomSheet` (tiêu đề h2 = tên nhãn, nút Đóng 44px, không tự cộng safe-area): khối gradient chỉ còn emoji + "📍 tỉnh · nguyên liệu" (đổi `📍` sang `Icon` MapPin), tên nhãn nằm ở tiêu đề sheet.
+- Bản đồ SVG: 258 dòng giữ NGUYÊN hình học; chỉ đổi 16 màu hex thành `var(--color-brandmap-*)` / `--color-text-inverse` và thêm `role="img"`. Kiểm chứng: dựng cả bản cũ lẫn mới, thay `var()` bằng giá trị trong `brand-theme.css` rồi so `outerHTML` -> trùng từng ký tự (ngoài `role="img"`). Nền khung `--neutral-200` -> `--stone-200` (cùng giá trị), bóng -> `--elevation-1/2`, `--radius-xl/-lg/-full` -> `--radius-sheet/-card/-pill`.
+- KHÔNG đổi: `haptic('light')` khi chọn, nội dung 8 câu chuyện, vị trí ghim, nút "Khám phá sản phẩm {tên hiển thị}" đóng sheet rồi mới điều hướng.
+
+`pages/brand-owner.tsx` (trang, một h1 ở cả 4 nhánh: tải, 404, lỗi, trình sửa):
+- `OwnerShell` = `Page` + `PageHeader` "Quản lý nhãn hàng" (khớp nhãn menu `profile.tsx`); từ zmp-ui còn `Page`, `Input`, `useSnackbar`, `useNavigate`. Tên nhãn -> `Heading` h2, trạng thái "Chính hãng"/"Chưa xác minh" và "Đang hiển thị"/"Nháp (admin duyệt)" -> `Badge` (bỏ dấu "·" ngăn cách), "N theo dõi" -> `Text`.
+- Hai khối -> `Card`; tiêu đề khối -> `Heading` h2; 3 ô có nhãn (Tagline, Nguồn gốc, Câu chuyện) -> `Field` (nhãn gắn vào ô bằng `<label htmlFor>`, trước đây `label` của ZaUI không gắn: tên truy cập rỗng); 3 ô chỉ có placeholder thêm `aria-label` cùng chữ; ô ngày giữ `minHeight 44`, viền/bo góc đổi sang token; "+ Thêm khuyến mãi" -> `Button icon={Plus}` nhãn "Thêm khuyến mãi"; sheet xoá khuyến mãi -> `BottomSheet` (tiêu đề h2 "Xoá khuyến mãi này?").
+- KHÔNG đổi: `queryKey`, `promoIso`, quy tắc `dateRangeInvalid`, payload thêm/sửa/xoá (ô mã trống khi sửa -> `couponCode: ''` để gỡ mã), "Xem trang nhãn" (nháp -> cảnh báo, đã đăng -> `/brand/:slug`), tab Doanh thu.
+
+`pages/brand-view.tsx` (trang):
+- Nhánh đang tải/lỗi trước không có h1 và không có lối quay lại -> `PageHeader` "Nhãn hàng"; nhánh đã tải: h1 là tên nhãn (do `StorePageShell`). Bỏ ZaUI `Box` (còn `Page`, `useParams`, `useNavigate`, `useSnackbar`).
+- `✓ Chính hãng`, `✓ Đang theo dõi`/`+ Theo dõi`, `↗ Chia sẻ`, `🌿` ở huy hiệu chứng nhận và avatar mặc định -> `Icon` Check/Plus/Share2/Leaf (nhãn nút: "Theo dõi", "Đang theo dõi", "Chia sẻ").
+- Chip mã khuyến mãi: `Box role=button` cao 36px -> `<button>` cao >= 44px (giữ `aria-label="Sao chép mã ..."`); banner share-to-earn: `Box onClick` -> `<button>` (bàn phím, min 44px).
+- KHÔNG đổi: mọi `queryKey`/lời gọi API, thông báo theo dõi, chép mã (`Đã chép mã X — dán ở bước thanh toán` / `Mã giảm giá: X`), chuyển `/dealer`, `/product/:slug`, tham số `ShareSheet` (kể cả 2 caption có emoji).
+
+`pages/product-detail.tsx` (CHỈ vùng nhãn và emoji): chấm màu + tên nhãn thành `<button>` cao 44px (kèm icon `ChevronRight`) gọi `navigate(brandBrowsePath(p.brand))`; `✓` ở chip chứng nhận và ở danh sách "Cam kết Tubu" -> `Icon` Check. Không đổi chỗ nào khác trong file.
+
+### Test (đỏ -> xanh)
+
+- `utils/brands.spec.ts` (mới, 38 ca): `brandBrowsePath` (mã hoá, rỗng, cắt khoảng trắng); `BRAND_ORIGINS` có 8 nhãn, MỖI `catalogBrand` có thật trong `apps/api/prisma/seed.ts` (chống lệch tên với catalog, nguyên nhân gốc C-079); URL giải mã về đúng tên; mỗi nhãn có màu `var(--color-brand-*)`; `brand-theme.css` khai báo đủ `--color-brand-<id>`, `-from`, `-to`. Đỏ vì chưa có module -> xanh.
+- `pages/brand-story.spec.tsx` (mới, 15 ca). 9 ca C-079 (8 nhãn + 1 ca gộp "hai nhãn từng rỗng"): chạy trên mã `brand-story.tsx` cũ cho 3 ca ĐỎ đúng 2 nhãn hỏng (Le Plateau -> kỳ vọng `Le%20Plateau%20Coffee`, Sokfarm -> `Sokfram`) và ca gộp; 6 nhãn còn lại xanh -> sau sửa xanh cả 9. 6 ca cấu trúc (một h1, 8 ô lưới là nút >= 44px, 8 ghim >= 44px, sheet có h2/tỉnh/nguyên liệu/câu chuyện/nút Đóng, bản đồ `role=img`, "Khám phá" đóng sheet) trên mã cũ 5 ĐỎ -> xanh sau di cư.
+- `pages/product-detail-brand.spec.tsx` (mới, 3 ca): tên nhãn là nút gọi `navigate('/browse?brand=Le%20Plateau%20Coffee')`, cao >= 44px, không còn `✓`: 3 ĐỎ -> xanh.
+- `pages/brand-owner.spec.tsx` (9 -> 20 ca): 2 ca cũ đổi tên nút "+ Thêm khuyến mãi" -> "Thêm khuyến mãi"; 9 ca mới ĐỎ trên mã cũ (một h1 ở 4 trạng thái, tên nhãn h2, huy hiệu không `✓`, nhãn chưa xác minh/nháp, `getByLabelText('Tagline')`, sheet xoá có h2, khoá nút thêm khi ngày sai) -> xanh; 3 ca khoá hành vi xanh ở cả hai (Xem trang nhãn đã đăng/nháp, xác nhận xoá gọi `deleteOwnedPromotion('p1')`).
+- `pages/brand-view.spec.tsx` (mới, 16 ca): 10 ca khoá hành vi XANH trên mã cũ (nội dung các khối, follow/unfollow theo slug, chép mã + chép lỗi, bấm sản phẩm, `/dealer`, banner share-to-earn, Chia sẻ); 6 ca ĐỎ trên mã cũ (một h1 khi tải và khi lỗi, không còn `✓ ↗`, huy hiệu chứng nhận không emoji, chip mã >= 44px, banner là `<button>`) -> xanh.
+- `ds-c076-pc10b.spec.ts` (55 -> 79 ca): thêm `brand-story.tsx` (4 ĐỎ: alias, màu thô, ZaUI, PageHeader), `brand-owner.tsx` (4 ĐỎ: alias, `✓`, ZaUI, PageHeader), `brand-view.tsx` (3 ĐỎ: `✓`, ZaUI, PageHeader), `utils/brands.ts` + `utils/brand-origins.ts` (vào `FILES_PC10B`, đã sạch từ commit C-079 nên xanh ngay), `product-detail.tsx` vào danh sách `FILES_GLYPH_ONLY` (chỉ kiểm `✓`). Nới `ZAUI_ALLOWED` thêm `useParams` (hook runtime, `brand-view.tsx` cần).
+- Cũng đổi `typeof import('zmp-ui')` -> `Record<string, unknown>` ở `brand-owner.spec.tsx`.
+
+### Lệnh kiểm chứng (output thật)
+
+```
+$ cd apps/miniapp && npx vitest run src/pages/brand-story.spec.tsx src/pages/brand-owner.spec.tsx src/pages/brand-view.spec.tsx \
+    src/pages/product-detail.spec.tsx src/pages/product-detail-brand.spec.tsx src/pages/storefront-view src/utils src/ds-c076-pc10b.spec.ts \
+    src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/i18n src/css src/components/ui src/components/home \
+    src/components/product-card src/pages/format-guard.spec.ts
+ Test Files  67 passed (67)
+      Tests  700 passed (700)
+$ npx eslint <11 file .tsx/.ts của mục này + 4 spec>      -> exit 0, không lỗi, không cảnh báo
+$ npx tsc --noEmit                                         -> exit 0, không output
+$ node scripts/check-undefined-css-vars.mjs
+OK — every var(--x) reference is defined.
+$ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
+0 0 0 apps/miniapp/src/css/brand-theme.css
+0 0 0 apps/miniapp/src/pages/brand-owner.tsx
+0 0 1 apps/miniapp/src/pages/brand-story.tsx
+0 0 3 apps/miniapp/src/pages/brand-view.tsx
+0 0 1 apps/miniapp/src/pages/product-detail.tsx
+0 0 8 apps/miniapp/src/utils/brand-origins.ts
+0 0 0 apps/miniapp/src/utils/brands.ts
+```
+
+### File ngoài nhóm bị sửa (tối thiểu)
+
+`utils/brand-origins.ts` (mới, dữ liệu 8 nhãn tách khỏi `brand-story.tsx` để test và trang dùng chung) và `css/brand-theme.css` (mới, nơi hợp lệ giữ hex nhãn theo quyết định thiết kế của gói). Không sửa API, `i18n/vi.ts`, `app.tsx`, `components/ui/**`.
+
+### Giả định
+
+1. Liên kết "đúng" là TÊN catalog, không phải slug: API lọc theo tên chính xác. Slug của nhãn seed (`bhnong`, `le-plateau-coffee`, `p-lang`, `sokfram`...) tồn tại nhưng mọi nhãn seed đều `isPublished=false`, nên `/brand/:slug` trả 404 (`brand.service.ts:85`). Vì vậy tên nhãn ở PDP dẫn tới `/browse?brand=<tên>` (luôn có kết quả), KHÔNG dẫn tới `/brand/:slug` như đề xuất gốc của A1-027.
+2. Tên hiển thị "Le Plateau" và "Sokfarm" giữ nguyên (nội dung thương hiệu, không thuộc phạm vi sửa lỗi liên kết). Catalog ghi "Sokfram" (cả `DEMO_SCRIPT.md`), `brand-story` ghi "Sokfarm": cần chủ dự án xác nhận chính tả đúng rồi đổi MỘT chỗ (`brand-origins.ts`) hoặc ở dữ liệu catalog.
+3. Tiêu đề trang `brand-story` là "Hành trình nguyên liệu" (thẻ trên Home dẫn tới đây); menu hồ sơ gọi cùng trang là "Câu chuyện thương hiệu". Dùng hằng `vi.home.brandStoryTitle` để không sinh chữ mới.
+4. Hai đầu gradient ô nhãn và chữ trắng giữ như cũ nên một số ô sáng (Fuwa3e vàng, Pơ Lang cam) có tương phản chữ trắng thấp; đổi màu là quyết định thiết kế, chưa làm.
+5. Nhãn ghim bản đồ giữ cỡ chữ 9,5px và chữ nhỏ trong SVG (7-9px) vì là phần minh hoạ bản đồ; sàn 12px của A4-038 chưa áp dụng (sẽ làm ghim chồng lên nhau).
+6. `BottomSheet` ở `brand-story` giữ lại hành vi cũ: khi đóng, nội dung biến mất ngay (trước đây cũng `selected && (...)`), không giữ nội dung suốt 200ms animation.
+7. Chip "Chính hãng" ở `brand-view` giữ pill đặc nền chính (đã có ghi chú sẵn), chỉ thay ký tự `✓` bằng `Icon`.
+8. `brand-owner`: nhãn ô đổi từ nhãn nổi của ZaUI sang nhãn nằm trên ô (`Field`), cùng cách `storefront-builder` đã làm.
+
+### Việc còn lại / phát hiện ngoài phạm vi
+
+- Trang `/brand/:slug` vẫn "mồ côi" với khách: PDP và Hành trình không biết slug (API sản phẩm chỉ trả `brand` dạng chuỗi và `brandId`) và nhãn seed chưa publish. Cần API trả `brandSlug` khi nhãn đã publish (xem đề xuất), rồi PDP/Hành trình mới thêm lối sang trang nhãn.
+- `i18n/vi.ts:61` "Khám phá 6 vùng đất làm nên sản phẩm Tubu" nhưng có 8 nhãn ở 7 tỉnh/thành (Lâm Đồng có hai nhãn): ngoài nhóm file, chưa sửa.
+- `pages/product-detail.tsx` còn `Box`/`Text` ZaUI và `role="button"` rải rác ngoài vùng nhãn (nút chia sẻ, tim...): ngoài phạm vi, chưa động.
+
+### Đề xuất cho điều phối viên
+
+- API (gói khác): `GET /products/:slug` (hoặc `GET /brands`) trả thêm `brandSlug` chỉ khi `Brand.isPublished`; và quyết định có publish các nhãn seed không. Khi có, PDP đổi `brandBrowsePath(p.brand)` sang `/brand/${brandSlug}` nếu có, Hành trình thêm nút "Xem trang nhãn".
+- Sửa `i18n/vi.ts:61` thành số đúng ("8 thương hiệu" hoặc "7 vùng đất").
+- Nếu muốn `brand-theme.css` nạp một lần ở gốc: thêm `import './css/brand-theme.css'` vào `app.tsx` rồi bỏ dòng import trong `utils/brands.ts` (hiện để `brandAccent` tự đủ token ở mọi nơi gọi).
+- Xoá khối alias legacy: sau gói này `--dealer-*` không còn ai dùng (xem mục 2/4).
+- Chạy kiểm bằng mắt trên máy thật (Playwright CHƯA chạy, quy định máy): `/brand-story` ở 360-390px (ô lưới, ghim chồng nhau, sheet chi tiết, bản đồ), `/brand/:slug` (thanh dưới `StickyActionBar` có 2 nút), `/brand-owner` (ô nhập trong `Field`). Locator e2e `features.miniapp.spec.ts` (`getByText('Tubu Official').first()`) đã đọc tĩnh và vẫn khớp (tên nhãn là h2).
+
+## Tổng kết gói PC-10b (mọi mục 1-4/4)
+
+| File | legacy trước -> sau | hex trước -> sau | ESLint trước -> sau |
+|---|---|---|---|
+| `pages/affiliate.tsx` | 125 -> 0 | 1 -> 0 | 4 -> 0 |
+| `components/affiliate/ctv-order-sheet.tsx` | 37 -> 0 | 0 -> 0 | 0 -> 0 |
+| `pages/dealer.tsx` | 125 -> 0 | 0 -> 0 | 10 -> 0 |
+| `pages/storefront-builder.tsx` | 88 -> 0 | 8 -> 0 | 1 -> 0 |
+| `components/storefront-context-bar.tsx` | 4 -> 0 | 0 -> 0 | 0 -> 0 |
+| `components/share-sheet.tsx` | 3 -> 0 | 0 -> 0 | 0 -> 0 |
+| `components/content-kit-sheet.tsx` | 10 -> 0 | 0 -> 0 | 0 -> 0 |
+| `pages/brand-story.tsx` | 15 -> 0 | 102 -> 0 | 13 -> 0 |
+| `pages/brand-owner.tsx` | 19 -> 0 | 0 -> 0 | 0 -> 0 |
+| `pages/brand-view.tsx` | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| `utils/brands.ts` | 1 -> 0 | 17 -> 0 | 0 -> 0 |
+
+`ds-c076-pc10b.spec.ts` giữ 79 ca khoá không quay lại alias legacy, màu thô, ký tự chữ làm icon, ZaUI `Box/Text/Button` và thiếu `PageHeader` cho mọi file/trang của gói. Hex còn lại có chủ ý và nằm đúng một chỗ: `css/dealer-theme.css`, `css/brand-theme.css` (màu nhận diện), `utils/storefront-theme.ts` (bảng màu gửi API, bắt buộc `#rrggbb`).
