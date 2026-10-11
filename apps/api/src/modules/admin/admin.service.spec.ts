@@ -236,6 +236,9 @@ type Order = {
   // khỏi `order` như bản test cũ (orderRow riêng có status hardcode), vì admin.service.ts đọc
   // `order` thật trong tx rồi mới flip, nên 2 giá trị này luôn bằng nhau tại thời điểm gọi.
   status?: string;
+  /** Điểm Xanh đơn đã tiêu (tổng) và phần lô quy đổi trong đó; mặc định 0. */
+  pointsUsed?: number;
+  pointsUsedConverted?: number;
   items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null; backorderedQty?: number }>;
 };
 type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
@@ -261,7 +264,12 @@ function makeReturnPrisma(opts: {
   };
   // Đơn thường luôn backorderedQty=0 (OrderReversalService đọc field này để chỉ hoàn đúng phần
   // đã giữ) — fixture cũ không khai báo field mới này, chuẩn hoá 1 chỗ thay vì sửa từng literal.
-  const order: Order = { ...rawOrder, items: rawOrder.items.map((i) => ({ backorderedQty: 0, ...i })) };
+  const order: Order = {
+    pointsUsed: 0,
+    pointsUsedConverted: 0,
+    ...rawOrder,
+    items: rawOrder.items.map((i) => ({ backorderedQty: 0, ...i })),
+  };
   const returnUpdateMany = jest.fn().mockResolvedValue({ count: opts.returnUpdateManyCount ?? 1 });
   // reviewReturn giờ dùng order.updateMany (guard status=DELIVERED) + tx.order.findUniqueOrThrow.
   // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.
@@ -468,8 +476,61 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
       expect(arg.data).not.toHaveProperty('coinsBalance');
     }
     // Mẫu RETURN_APPROVED nói "Tiền đã hoàn vào Ví Tubu" — sai với đơn XU (điểm vào Điểm Xanh, không vào Ví).
+    // Khách phải được báo ĐÃ HOÀN BAO NHIÊU Điểm Xanh (spec 6.2), không phải mẫu trung tính "không hoàn gì".
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_POINTS', { order_code: 'TUBU1', points: '121' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', expect.anything());
+  });
+
+  // Review B1 (minor): báo khách đúng thứ thật sự được cộng.
+  it.each([
+    ['COD', 'UNPAID'],
+    ['WALLET', 'PAID'],
+  ] as const)('đơn %s tổng 0đ, không dùng điểm: guard hoàn tiền thắng nhưng KHÔNG có đồng nào vào Ví → mẫu NO_REFUND', async (paymentMethod, paymentStatus) => {
+    const { prisma, userUpdate } = makeReturnPrisma({
+      order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 0, paymentMethod, paymentStatus, items: [{ variationId: 'v1', quantity: 1 }] },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ data: { walletBalance: expect.anything() } }));
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+  });
+
+  it('đơn COD 0đ trả hết bằng 80 điểm quy đổi → báo "đã hoàn 80 Điểm Xanh" (không nói tiền vào Ví)', async () => {
+    const { prisma, pointsInsert } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 0, paymentMethod: 'COD', paymentStatus: 'UNPAID',
+        pointsUsed: 80, pointsUsedConverted: 80, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(pointsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ delta: 80, lot: 'CONVERTED', reason: 'ORDER_REFUND_CONVERTED:TUBU1' })] }),
+    );
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_POINTS', { order_code: 'TUBU1', points: '80' });
+  });
+
+  it('đơn WALLET 500.000đ tiêu 150 điểm (120 quy đổi + 30 thường) → báo Ví VÀ tổng 150 Điểm Xanh', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 500000, paymentMethod: 'WALLET', paymentStatus: 'PAID',
+        pointsUsed: 150, pointsUsedConverted: 120, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_WALLET_POINTS', { order_code: 'TUBU1', points: '150' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+  });
+
+  it('đơn WALLET chỉ tiêu điểm thường (30) → vẫn báo Ví kèm 30 Điểm Xanh', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 200000, paymentMethod: 'WALLET', paymentStatus: 'PAID',
+        pointsUsed: 30, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_WALLET_POINTS', { order_code: 'TUBU1', points: '30' });
   });
 
   it('hoàn tiền flip paymentStatus PAID→REFUNDED (nhất quán cancel, không để RETURNED còn PAID)', async () => {

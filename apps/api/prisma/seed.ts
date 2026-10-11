@@ -681,6 +681,10 @@ const NOTIFICATION_TEMPLATES = [
   // thật dù đã DELIVERED, hoặc đã được hoàn bởi một đường khác trước đó) — KHÔNG được nói "đã hoàn
   // tiền" trong trường hợp này. createOnly: thêm sau lần seed đầu, không ghi đè nếu admin đã sửa.
   { id: 'nt-return-ok-no-refund', code: 'RETURN_APPROVED_NO_REFUND', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.', createOnly: true },
+  // PD-3: đơn XU cũ và phần điểm quy đổi hoàn bằng Điểm Xanh (không vào Ví); {{points}} là tổng điểm khách nhận lại.
+  // Cùng mã/nội dung với migration 20261012140000_pd3_review_b1_return_templates.
+  { id: 'nt-return-ok-points', code: 'RETURN_APPROVED_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Đã hoàn {{points}} Điểm Xanh vào tài khoản của bạn 🌿', createOnly: true },
+  { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿 Đổi sang TubuXu để nhận thêm 20% nhé!' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
