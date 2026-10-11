@@ -1924,12 +1924,13 @@ function QuickReplyTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo mẫu tin nhanh' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Thêm mẫu tin nhanh</h3>
-        <p className="mb-2 text-xs text-neutral-400">
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm mẫu tin nhanh</h3>
+        <p className="mb-2 text-xs text-stone-500">
           Dùng để auto-reply khi khách nhắn vào Zalo OA — so khớp từ khoá (cách nhau bằng dấu phẩy),
           hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
         </p>
@@ -1939,13 +1940,13 @@ function QuickReplyTab() {
               placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-56`}
             />
             <input
               placeholder="Tên nội bộ"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-56 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-56`}
             />
           </div>
           <input
@@ -1953,18 +1954,19 @@ function QuickReplyTab() {
             value={form.keywords}
             onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             disabled={form.isGreeting}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
           <textarea
             placeholder="Nội dung tin trả lời"
             value={form.content}
             onChange={(e) => setForm({ ...form, content: e.target.value })}
             rows={3}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={INPUT_CLASS}
           />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
             <input
               type="checkbox"
+              className="h-4 w-4 accent-forest-600"
               checked={form.isGreeting}
               onChange={(e) => setForm({ ...form, isGreeting: e.target.checked })}
             />
@@ -1973,16 +1975,16 @@ function QuickReplyTab() {
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.title.trim() || !form.content.trim() || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang thêm…' : 'Thêm mẫu tin'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-2">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách mẫu tin nhanh.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu tin nhanh.</p>}
         {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
         {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
       </div>
@@ -2024,60 +2026,59 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
       }),
     onSuccess: () => { setOpen(false); refresh(); },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
+    <div className={CARD_CLASS}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {item.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{item.category}</span>}
-            {item.isGreeting && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Lời chào</span>}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${item.isActive ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {item.isActive ? 'Đang bật' : 'Đang tắt'}
-            </span>
+            {item.category && <ToneBadge tone="neutral">{item.category}</ToneBadge>}
+            {item.isGreeting && <ToneBadge tone="warning">Lời chào</ToneBadge>}
+            <ToneBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
           </div>
-          <div className="mt-1 font-medium">{item.title}</div>
+          <div className="mt-1 break-words font-medium text-stone-900">{item.title}</div>
           {item.keywords.length > 0 && (
-            <div className="mt-0.5 text-xs text-neutral-400">Từ khoá: {item.keywords.join(', ')}</div>
+            <div className="mt-0.5 break-words text-xs text-stone-500">Từ khoá: {item.keywords.join(', ')}</div>
           )}
-          <div className="mt-0.5 whitespace-pre-line text-sm text-neutral-600">{item.content}</div>
+          <div className="mt-0.5 whitespace-pre-line break-words text-sm text-stone-600">{item.content}</div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className="text-xs text-neutral-500 underline">
+          <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-sm`}>{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {item.isActive ? 'Tắt' : 'Bật'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
         </div>
       </div>
-      {rowErr && <p className="mt-1 text-xs text-red-600">{rowErr}</p>}
+      {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
 
       {open && (
-        <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
-            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="w-56 rounded border border-neutral-200 px-2 py-1 text-sm" />
+            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
           </div>
           <input
             placeholder="Từ khoá, cách nhau bằng dấu phẩy"
             value={f.keywords}
             onChange={(e) => setF({ ...f, keywords: e.target.value })}
             disabled={f.isGreeting}
-            className="w-full rounded border border-neutral-200 px-2 py-1 text-sm disabled:bg-neutral-50 disabled:text-neutral-400"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
-          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
-            <input type="checkbox" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
+          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
+          <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
+            <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
             Dùng làm lời chào tự động
           </label>
           <button
             onClick={() => save.mutate()}
             disabled={!f.title.trim() || !f.content.trim() || save.isPending}
-            className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-sm text-red-600">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>

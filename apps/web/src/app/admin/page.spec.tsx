@@ -35,6 +35,10 @@ const mocks = vi.hoisted(() => ({
   createFaq: vi.fn(),
   updateFaq: vi.fn(),
   deleteFaq: vi.fn(),
+  quickReplies: [] as unknown[],
+  createQuickReply: vi.fn(),
+  updateQuickReply: vi.fn(),
+  deleteQuickReply: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -142,6 +146,10 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     createFaq: (...args: unknown[]) => mocks.createFaq(...args),
     updateFaq: (...args: unknown[]) => mocks.updateFaq(...args),
     deleteFaq: (...args: unknown[]) => mocks.deleteFaq(...args),
+    listQuickReplies: async () => mocks.quickReplies,
+    createQuickReply: (...args: unknown[]) => mocks.createQuickReply(...args),
+    updateQuickReply: (...args: unknown[]) => mocks.updateQuickReply(...args),
+    deleteQuickReply: (...args: unknown[]) => mocks.deleteQuickReply(...args),
   };
 });
 
@@ -169,7 +177,9 @@ beforeEach(() => {
   mocks.rewards = [];
   mocks.flashSales = [];
   mocks.faqs = [];
+  mocks.quickReplies = [];
   for (const fn of [
+    mocks.createQuickReply, mocks.updateQuickReply, mocks.deleteQuickReply,
     mocks.createFaq, mocks.updateFaq, mocks.deleteFaq,
     mocks.createFlashSale, mocks.updateFlashSale, mocks.addFlashSaleItem, mocks.deleteFlashSaleItem,
     mocks.createBrand, mocks.updateBrand, mocks.verifyBrand, mocks.detachBrandProducts,
@@ -950,5 +960,107 @@ describe('admin/page — tab Câu hỏi thường gặp', () => {
     await flush();
     expect(mocks.updateFaq).toHaveBeenCalledWith('f1', { category: 'Vận chuyển', question: 'Ship mấy ngày?', answer: '2-3 ngày', sortOrder: 2 });
     expect(para(container, 'Lỗi lưu').className).toContain('text-danger-fg');
+  });
+});
+
+describe('admin/page — tab CSKH mẫu tin nhanh', () => {
+  const QR = {
+    id: 'q1',
+    category: 'Vận chuyển',
+    keywords: ['ship', 'phí vận chuyển'],
+    title: 'Hỏi phí ship',
+    content: 'Phí ship 25k',
+    isGreeting: true,
+    isActive: false,
+  };
+  const openQuick = async () => {
+    window.history.replaceState(null, '', '/admin?tab=quickReplies');
+    return mount();
+  };
+
+  it('form thêm: ô nhập/nút 44px, từ khoá khoá khi bật lời chào, công tắc cao 44px, gửi đúng dữ liệu', async () => {
+    const { container } = await openQuick();
+    expect(container.querySelector('h3')!.className).toContain('font-display');
+    const hint = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Dùng để auto-reply'))!;
+    expect(hint.className).toContain('text-stone-500');
+    const inputs = [...container.querySelectorAll('input:not([type="checkbox"])')];
+    expect(inputs).toHaveLength(3);
+    for (const el of inputs) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+    }
+    const add = btn(container, 'Thêm mẫu tin');
+    expect(add.className).toContain('bg-forest-600');
+    expect(add.disabled).toBe(true);
+    const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox.className).toContain('accent-forest-600');
+    expect(checkbox.closest('label')!.className).toContain('min-h-[44px]');
+
+    typeInto(container.querySelector('input[placeholder="Tên nội bộ"]'), 'Phí ship');
+    typeInto(container.querySelector('textarea'), 'Phí ship 25k');
+    expect(add.disabled).toBe(false);
+    typeInto(container.querySelector('input[placeholder^="Từ khoá kích hoạt"]'), 'ship, , phí vận chuyển');
+    mocks.createQuickReply.mockResolvedValueOnce({});
+    click(add);
+    await flush();
+    expect(mocks.createQuickReply).toHaveBeenCalledWith({
+      category: undefined,
+      keywords: ['ship', 'phí vận chuyển'],
+      title: 'Phí ship',
+      content: 'Phí ship 25k',
+      isGreeting: false,
+    });
+    expect(para(container, 'Đã thêm mẫu tin nhanh!').className).toContain('text-success-fg');
+
+    click(checkbox);
+    expect((container.querySelector('input[placeholder^="Từ khoá kích hoạt"]') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('hàng mẫu tin: chip nhóm/Lời chào/trạng thái theo tông, nút chữ 44px gọi đúng API', async () => {
+    mocks.quickReplies = [QR];
+    const { container } = await openQuick();
+    expect(para(container, 'Vận chuyển').className).toContain('bg-stone-100');
+    expect(para(container, 'Lời chào').className).toContain('bg-warning-bg');
+    expect(para(container, 'Đang tắt').className).toContain('bg-stone-100');
+    expect(container.textContent).toContain('Từ khoá: ship, phí vận chuyển');
+
+    const edit = btn(container, 'Sửa');
+    const on = btn(container, 'Bật');
+    const del = btn(container, 'Xoá');
+    for (const b of [edit, on, del]) expect(b.className).toContain('min-h-[44px]');
+    expect(on.className).toContain('text-stone-600');
+    expect(del.className).toContain('text-danger-fg');
+
+    mocks.updateQuickReply.mockResolvedValue({});
+    click(on);
+    await flush();
+    expect(mocks.updateQuickReply).toHaveBeenCalledWith('q1', { isActive: true });
+    mocks.deleteQuickReply.mockResolvedValue({});
+    click(del);
+    await flush();
+    expect(mocks.deleteQuickReply).toHaveBeenCalledWith('q1');
+  });
+
+  it('form sửa: ô nhập 44px, từ khoá khoá khi là lời chào, Lưu gửi đúng dữ liệu, lỗi báo danger', async () => {
+    mocks.quickReplies = [QR];
+    const { container } = await openQuick();
+    click(btn(container, 'Sửa'));
+    const kw = container.querySelector('input[placeholder="Từ khoá, cách nhau bằng dấu phẩy"]') as HTMLInputElement;
+    expect(kw.disabled).toBe(true);
+    expect(kw.className).toContain('min-h-[44px]');
+    expect(container.querySelector('textarea')!.className).toContain('border-stone-450');
+    const save = btn(container, 'Lưu');
+    expect(save.className).toContain('bg-forest-600');
+    mocks.updateQuickReply.mockRejectedValueOnce(new Error('Trùng từ khoá'));
+    click(save);
+    await flush();
+    expect(mocks.updateQuickReply).toHaveBeenCalledWith('q1', {
+      category: 'Vận chuyển',
+      keywords: ['ship', 'phí vận chuyển'],
+      title: 'Hỏi phí ship',
+      content: 'Phí ship 25k',
+      isGreeting: true,
+    });
+    expect(para(container, 'Trùng từ khoá').className).toContain('text-danger-fg');
   });
 });
