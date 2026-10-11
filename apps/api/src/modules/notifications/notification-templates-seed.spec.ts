@@ -81,6 +81,10 @@ describe('seed mẫu thông báo', () => {
     expect(used.filter((c) => !byCode.has(c))).toEqual([]);
   });
 
+  it('PD-3 Q-26: không mẫu tin nào nhắc TubuXu hay đổi sang xu (tính năng đã gộp vào Điểm Xanh, đổi Ví → xu trả 410)', () => {
+    expect(templates.filter((t) => /tubu ?xu|(?<![\p{L}_])xu(?![\p{L}_])/iu.test(t.bodyTemplate)).map((t) => t.code)).toEqual([]);
+  });
+
   it('id và code không trùng nhau (upsert theo id, code là unique ở DB)', () => {
     expect(new Set(templates.map((t) => t.id)).size).toBe(templates.length);
     expect(byCode.size).toBe(templates.length);
@@ -117,6 +121,9 @@ describe('seed mẫu thông báo', () => {
       'REVIEW_REQUEST',
       'RETURN_APPROVED_POINTS',
       'RETURN_APPROVED_WALLET_POINTS',
+      // PD-3 Q-26: hai mẫu từng nhắc TubuXu; prod chỉ đổi được qua migration UPDATE có điều kiện.
+      'CASHBACK_PAID',
+      'COMMUNITY_BEST_ANSWER',
     ];
 
     /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
