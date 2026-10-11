@@ -209,8 +209,8 @@ describe('pointsUseLabel / pointsEarnLabel (C-080)', () => {
     expect(pointsUseLabel(48, '480đ')).toBe('Dùng 48 điểm — giảm 480đ');
   });
 
-  it('điểm sẽ tích có dấu nghìn: "+1.250 điểm Xanh khi giao thành công"', () => {
-    expect(pointsEarnLabel(1250)).toBe('+1.250 điểm Xanh khi giao thành công');
-    expect(pointsEarnLabel(35)).toBe('+35 điểm Xanh khi giao thành công');
+  it('điểm sẽ tích có dấu nghìn: "Nhận +1.250 Điểm Xanh khi giao thành công"', () => {
+    expect(pointsEarnLabel(1250)).toBe('Nhận +1.250 Điểm Xanh khi giao thành công');
+    expect(pointsEarnLabel(35)).toBe('Nhận +35 Điểm Xanh khi giao thành công');
   });
 });

@@ -162,19 +162,19 @@ describe('HomeExtras', () => {
     expect(screen.queryByText(/Khám phá vườn/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tìm sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
-    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('60 điểm Xanh');
+    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('60 Điểm Xanh');
   });
 
   it('PD-3: lời chào hiện tổng Điểm Xanh hai lô, khớp hub Cá nhân và trang Điểm Xanh', () => {
     mocks.user = { fullName: 'Lan', pointsBalance: 60, pointsConvertedBalance: 40 };
     wrap(<HomeExtras />);
-    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('100 điểm Xanh');
+    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('100 Điểm Xanh');
   });
 
-  it('PD-3: khách chỉ có điểm quy đổi (lô thường 0) vẫn thấy đúng số, không "0 điểm Xanh"', () => {
+  it('PD-3: khách chỉ có điểm quy đổi (lô thường 0) vẫn thấy đúng số, không "0 Điểm Xanh"', () => {
     mocks.user = { fullName: 'Lan', pointsBalance: 0, pointsConvertedBalance: 1200 };
     wrap(<HomeExtras />);
-    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('1.200 điểm Xanh');
+    expect(screen.getByText(/Chào Lan/)).toHaveTextContent('1.200 Điểm Xanh');
   });
 
   it('khách chưa đăng nhập → hero không có lời chào', () => {

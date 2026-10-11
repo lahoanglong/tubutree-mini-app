@@ -56,9 +56,9 @@ export function pointsUseLabel(points: number, discount: string): string {
   return `Dùng ${formatPoints(points)} — giảm ${discount}`;
 }
 
-/** "+1.250 điểm Xanh khi giao thành công". */
+/** "Nhận +1.250 Điểm Xanh khi giao thành công". */
 export function pointsEarnLabel(points: number): string {
-  return `+${groupThousands(points)} điểm Xanh khi giao thành công`;
+  return `Nhận +${groupThousands(points)} Điểm Xanh khi giao thành công`;
 }
 
 /**

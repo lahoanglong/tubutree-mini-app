@@ -164,7 +164,7 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
     const review = await screen.findByText(/Đánh giá sản phẩm này/);
     expect(review.querySelector('svg')).not.toBeNull();
     expect(review.className).toContain('tubu-hit-44');
-    const points = screen.getByText(/\+120 điểm Xanh khi giao thành công/);
+    const points = screen.getByText(/Nhận \+120 Điểm Xanh khi giao thành công/);
     expect(points.querySelector('svg')).not.toBeNull();
     expect(EMOJI.test(container.textContent ?? '')).toBe(false);
   });

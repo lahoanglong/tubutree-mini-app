@@ -35,6 +35,10 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
     ).toEqual([]);
   });
 
+  it('"Điểm Xanh" luôn viết hoa chữ đầu, không còn "điểm Xanh" (Q-26)', () => {
+    expect(offenders(/điểm Xanh/)).toEqual([]);
+  });
+
   it('ô nhập mã ở giỏ/thanh toán nói "mã giảm giá"', () => {
     expect(vi.cart.couponPlaceholder).toBe('Nhập mã giảm giá');
   });

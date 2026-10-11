@@ -314,7 +314,7 @@ export default function OrderDetailPage() {
         <KeyValueRow label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
         {o.discount > 0 && <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} tone="success" />}
         {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
-            khách tiêu điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
+            khách tiêu Điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
         {o.pointsUsed > 0 && (
           <KeyValueRow label={vi.orders.pointsUsed} value={formatPoints(o.pointsUsed)} />
         )}
