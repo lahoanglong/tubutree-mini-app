@@ -62,7 +62,7 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
   // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 trong hộp chúc mừng là nội dung trình bày; kết quả thật do backend trả về.
-  'src/components/wheel.tsx': ['🌿', '🎁', '💧', '🪴', '🏷', '💚', '🍀', '🎉'],
+  'src/components/wheel.tsx': ['🌿', '🎁', '💧', '⭐', '🪴', '🏷', '💚', '🍀', '🎉'],
   // Badge hạng cộng đồng: emoji theo hạng 1..4 là nội dung của hạng.
   'src/components/community/rank-badge.tsx': ['🌱', '🌿', '🌳', '🏆'],
 };
@@ -84,7 +84,9 @@ const LEGACY = new RegExp(
 );
 const HEX = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?!\w)/g;
 const RGB = /\brgba?\(\s*\d/g;
-const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
+// Giữ hai dải cũ (có ✓ ✗ không thuộc Extended_Pictographic) và thêm Extended_Pictographic + khối 2B00 để bắt ⭐ ⬆ ⬇ ↩;
+// không bắt mũi tên chữ → dùng làm dấu câu trong lời văn.
+const EMOJI = /[\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu;
 
 const MINIAPP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (file: string) => readFileSync(MINIAPP_ROOT + file, 'utf8');
@@ -138,6 +140,10 @@ describe('PC-10a — bộ so khớp tự kiểm', () => {
   });
   it('nhận ra emoji chức năng (✓ 🔒 💡) lẫn emoji nội dung', () => {
     expect(emojiIn('a ✓ b 🔒 c 💡 d 🌱 e 🎉')).toEqual(['✓', '🔒', '💡', '🌱', '🎉']);
+  });
+  it('nhận ra emoji ngoài hai dải cũ (⭐ ⬆ ↩) nhưng không bắt mũi tên chữ → và dấu · ×', () => {
+    expect(emojiIn('a ⭐ b ⬆ c ↩')).toEqual(['⭐', '⬆', '↩']);
+    expect(emojiIn('Hôm nay → mai · ×2')).toEqual([]);
   });
 });
 
