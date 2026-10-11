@@ -4,13 +4,15 @@
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f prisma/manual/pd3_xu_to_points_rollback.sql
 --
 -- Chỉ dùng khi ĐỦ hai điều kiện (spec PD-3 mục 3.5, 10):
---   1. Lô quy đổi chưa bị đổi ngoài ba kiểu "chỉ trừ bớt" (khối bên dưới tự kiểm và dừng nếu sai):
+--   1. Lô quy đổi chỉ bị TRỪ bớt, chưa bị cộng thêm (khối bên dưới tự kiểm a và b, dừng nếu sai):
 --        a. không đơn nào tiêu điểm quy đổi: SELECT count(*) FROM orders WHERE "pointsUsedConverted" > 0 = 0;
 --        b. không dòng CỘNG nào vào lô CONVERTED ngoài dòng quy đổi gốc (refType XU_MIGRATION, refId = userId).
 --           Dòng cộng khác = gộp phiên khách (dòng quy đổi của khách sang user khác, refId ≠ userId), hoàn
 --           đơn xu cũ (ORDER_REFUND_XU), hoàn đơn đã tiêu điểm quy đổi, thưởng mới ghi vào lô quy đổi. Hoàn
 --           tác theo bảng chụp không biết trả xu cho chủ mới của dòng đó và để điểm thừa kẹt trong
---           pointsConvertedBalance (code cũ không đọc cột này) nên khách mất giá trị trả trước;
+--           pointsConvertedBalance (code cũ không đọc cột này) nên khách mất giá trị trả trước.
+--           Liệt kê: SELECT "userId", "refType", "refId", "reason", "delta" FROM points_transactions
+--                     WHERE "lot" = 'CONVERTED' AND "delta" > 0 AND NOT ("refType" = 'XU_MIGRATION' AND "refId" = "userId");
 --        c. dòng TRỪ lô quy đổi không qua đơn (góp quỹ trồng cây, thu hồi thưởng giới thiệu) thì được phép:
 --           trả LEAST(coinsBefore, số điểm còn lại × 1000).
 --   2. Đã dựng lại image API trước PD-3 (code cũ không biết lô; KHÔNG chạy migrate deploy của bản cũ).
