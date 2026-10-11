@@ -232,7 +232,12 @@ model User {
   tierGraceUntil    DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
   referralCode      String          @unique
   referredById      String?
+  // Điểm Xanh lô STANDARD (có hạn, trần loyalty.max_redeem_pct). == SUM(points_transactions.delta) lot STANDARD.
   pointsBalance     Int             @default(0)
+  // PD-3 (Q-03a): Điểm Xanh lô CONVERTED, quy từ xu (tiền trả trước): không hết hạn, không trần, không
+  // ra tiền. Cột riêng để mọi guard `gte pointsBalance` cũ (vòng quay, đổi voucher...) không chạm tới.
+  // == SUM(delta) lot CONVERTED; CHECK users_points_converted_nonneg (>= 0) chỉ có trong migration SQL.
+  pointsConvertedBalance Int        @default(0)
   walletBalance     Int             @default(0)
   coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
   cashbackPending   Int             @default(0)
@@ -831,6 +836,9 @@ model Order {
   total              Int
   pointsEarned       Int              @default(0)
   pointsUsed         Int              @default(0)
+  // Phần của pointsUsed lấy từ lô CONVERTED (PD-3); phần STANDARD = pointsUsed − pointsUsedConverted.
+  // Cần để hoàn điểm khi huỷ/trả về đúng lô.
+  pointsUsedConverted Int             @default(0)
   paymentMethod      PaymentMethod
   paymentStatus      PaymentStatus
   paymentTxnId       String?
@@ -930,6 +938,13 @@ model OrderItem {
 // 4.4 Loyalty & Voucher
 // ============================================================
 
+// PD-3: lô của một dòng sổ Điểm Xanh. STANDARD = điểm thưởng thường (users.pointsBalance);
+// CONVERTED = điểm quy từ xu (users.pointsConvertedBalance), luôn expiresAt NULL.
+enum PointsLot {
+  STANDARD
+  CONVERTED
+}
+
 model PointsTransaction {
   id        String    @id @default(cuid())
   userId    String
@@ -939,6 +954,8 @@ model PointsTransaction {
   refType   String?
   refId     String?
   expiresAt DateTime?
+  // CHECK points_transactions_converted_no_expiry (lot <> CONVERTED OR expiresAt IS NULL) chỉ có trong SQL.
+  lot       PointsLot @default(STANDARD)
   createdAt DateTime  @default(now())
 
   @@index([userId])
@@ -951,6 +968,10 @@ model PointsTransaction {
   //    (refId = ngày VN 'YYYY-MM-DD') → tối đa 1 dòng điểm danh/user/ngày.
   //  - "points_transactions_pos_ref_key" ON ("refId") WHERE refType='POS'
   //    (refId = PosPointCredit.id) → 1 lần tích POS chỉ sinh đúng 1 dòng điểm.
+  // PD-3 (20261012100000_pd3_points_lot_schema): *_xu_migration_key (refId) WHERE refType='XU_MIGRATION',
+  // *_referral_unique (reason) WHERE refType='REFERRAL', *_community_reason_key (reason) WHERE
+  // refType='COMMUNITY', *_quest_unique (userId, reason) WHERE refType='QUEST',
+  // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
   @@map("points_transactions")
 }
 
@@ -1225,6 +1246,7 @@ model CtvMilestoneClaim {
   milestoneId String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
   monthKey    String // 'YYYY-MM' theo giờ VN
   rewardXu    Int
+  rewardPoints Int     @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
   revenue     BigInt // doanh số đã chốt tại lúc nhận (đối soát)
   createdAt   DateTime @default(now())
 
@@ -1912,6 +1934,8 @@ model CommunityEvent {
   startAt      DateTime
   endAt        DateTime
   rewardXu     Int      @default(0)
+  // PD-3: thưởng bằng Điểm Xanh; migration A quy dòng cũ ceil(rewardXu/1000).
+  rewardPoints Int      @default(0)
   status       String   @default("OPEN") // OPEN | CLOSED
   winnerUserId String?
   createdAt    DateTime @default(now())
