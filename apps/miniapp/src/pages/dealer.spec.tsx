@@ -213,6 +213,32 @@ describe('DealerPage — đúng một h1 ở mọi trạng thái (C-114)', () =>
   });
 });
 
+describe('DealerPage — icon giữ màu ink B2B của kênh đại lý', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getPricelist.mockResolvedValue([row({ stock: 9 })]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+  });
+
+  it('hồ sơ đang chờ duyệt: đồng hồ cát màu ink, không phải xanh thương hiệu', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'PENDING' });
+    renderPage();
+    await screen.findByText('Hồ sơ đang được duyệt');
+    const icon = document.querySelector<SVGElement>('svg.lucide-hourglass')!;
+    expect(icon.style.stroke).toBe('var(--color-dealer-ink)');
+  });
+
+  it('mẫu đơn: icon bảng ghi chú màu ink như chữ cạnh nó', async () => {
+    mocks.getDealerMe.mockResolvedValue(APPROVED_ME);
+    mocks.getTemplates.mockResolvedValue([{ id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] }]);
+    renderPage();
+    await screen.findByRole('button', { name: /Đơn tháng/ });
+    const icon = document.querySelector<SVGElement>('svg.lucide-clipboard-list')!;
+    expect(icon.style.stroke).toBe('var(--color-dealer-ink)');
+  });
+});
+
 describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
   beforeEach(() => {
     vi.clearAllMocks();

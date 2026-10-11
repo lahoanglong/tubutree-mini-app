@@ -198,7 +198,7 @@ function DealerPending() {
   return (
     <DealerShell title="Hồ sơ đại lý">
       <div style={{ textAlign: 'center', padding: '64px 24px' }}>
-        <Icon icon={Hourglass} size="lg" tone="brand" style={{ width: 48, height: 48 }} />
+        <Icon icon={Hourglass} size="lg" style={{ width: 48, height: 48, stroke: INK }} />
         <Heading variant="title-md" as="h2" style={{ marginTop: 12 }}>
           Hồ sơ đang được duyệt
         </Heading>
@@ -456,7 +456,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
                 onClick={() => loadTemplate(t.items)}
                 style={{ ...TEMPLATE_PILL_BUTTON, gap: 6, padding: '0 4px 0 12px' }}
               >
-                <Icon icon={ClipboardList} size="sm" tone="brand" style={{ flexShrink: 0 }} />
+                <Icon icon={ClipboardList} size="sm" style={{ flexShrink: 0, stroke: INK }} />
                 <Text variant="caption" style={{ color: INK, fontWeight: 600 }}>
                   {t.name} ({t.items.length})
                 </Text>
