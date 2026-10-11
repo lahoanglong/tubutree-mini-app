@@ -1,41 +1,10 @@
 import { useState } from 'react';
-import { Page, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getGameProfile,
-  checkIn,
-  collectDew,
-  buyStreakFreeze,
-  repairStreak,
-  spin,
-  getTodayQuiz,
-  answerQuiz,
-  waterTree,
-  buyTree,
-  getLeaderboard,
-  getMissions,
-  claimMission,
-  getForest,
-  getCommunity,
-  getCollection,
-  getSeason,
-  getSeasonLeaderboard,
-  getFriends,
-  giftWater,
-  getGarden,
-  unlockPlot,
-  waterPlot,
-  fetchSeasonPass,
-  claimSeasonPass,
-  type HarvestSpecies,
-} from '../services/game-api';
+import { Page, useNavigate } from 'zmp-ui';
+import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
-import { haptic } from '../utils/haptic';
 import { getErrorMessage } from '../services/api';
-import { vi } from '../i18n/vi';
 import { MessagesSquare, Recycle } from 'lucide-react';
-import { formatDrops, formatNumber, formatXu } from '../utils/format';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
@@ -56,31 +25,18 @@ import { MissionsCard } from '../components/game/missions-card';
 import { SeasonLeaderboard } from '../components/game/season-leaderboard';
 import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
+import { useGameData } from '../components/game/use-game-data';
+import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
 
 export default function GamePage() {
   const status = useAuthStore((s) => s.status);
   const login = useAuthStore((s) => s.login);
-  const { openSnackbar } = useSnackbar();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const authed = status === 'authenticated';
 
-  const { data: profile, isLoading, isError, error: profileError, refetch } = useQuery({
-    queryKey: ['game', 'profile'],
-    queryFn: getGameProfile,
-    enabled: authed,
-  });
-  const { data: quiz } = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
-  const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
-  const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
-  const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
-  const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed });
-  const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed });
-  const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason });
-  const { data: seasonBoard } = useQuery({ queryKey: ['game', 'seasonBoard'], queryFn: getSeasonLeaderboard });
-  const { data: friends } = useQuery({ queryKey: ['game', 'friends'], queryFn: getFriends, enabled: authed });
-  const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
-  const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed });
+  const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
+    useGameData(authed);
+  const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
   const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set());
@@ -92,155 +48,16 @@ export default function GamePage() {
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['game'] });
-    void queryClient.invalidateQueries({ queryKey: ['me'] });
-    // Điểm Xanh/xu vừa đổi → màn Thanh toán đọc số dư từ ['loyalty']/['coins'], phải làm mới
-    // cùng lúc, nếu không khách vừa tiêu xong sang checkout vẫn thấy số cũ.
-    void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
-    void queryClient.invalidateQueries({ queryKey: ['coins'] });
-  };
-
-  const checkInM = useMutation({
-    mutationFn: checkIn,
-    onSuccess: (r) => {
-      const parts = [`+${formatDrops(r.seedsEarned)}`];
-      if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
-      if (r.bonusNote) parts.push(r.bonusNote);
-      openSnackbar({ text: parts.join(' · '), type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const dewM = useMutation({
-    mutationFn: collectDew,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const freezeM = useMutation({
-    mutationFn: buyStreakFreeze,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const repairM = useMutation({
-    mutationFn: repairStreak,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      haptic('medium');
-      openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const giftM = useMutation({
-    mutationFn: (recipientId: string) => giftWater(recipientId),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, type: 'success' });
-      refresh();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const handleSpin = async () => {
-    try {
-      const r = await spin();
-      refresh();
-      return r;
-    } catch (e) {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      throw e;
-    }
-  };
-  const waterM = useMutation({
-    mutationFn: () => waterTree(20),
-    onSuccess: (r) => {
-      if (r.harvested) {
-        setHarvestCoupon(r.reward?.coupon ?? null);
-        setHarvestCert(r.reward?.certificate ?? null);
-        setHarvestSpecies(r.reward?.species ?? null);
+  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
+    useGameActions({
+      onHarvest: (reward: HarvestReward | undefined) => {
+        setHarvestCoupon(reward?.coupon ?? null);
+        setHarvestCert(reward?.certificate ?? null);
+        setHarvestSpecies(reward?.species ?? null);
         setHarvested(true); // mở modal celebration
-      } else {
-        openSnackbar({ text: `Đã tưới · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
-      }
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const buyTreeM = useMutation({
-    mutationFn: buyTree,
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã mua 1 cây thật 🌳 (−${formatXu(r.cost)}) · mã ${r.certificateCode}`, type: 'success' });
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const onPlotHarvest = (r: { harvested: boolean; progress: number; target: number; reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies } }) => {
-    if (r.harvested) {
-      setHarvestCoupon(r.reward?.coupon ?? null);
-      setHarvestCert(r.reward?.certificate ?? null);
-      setHarvestSpecies(r.reward?.species ?? null);
-      setHarvested(true);
-    } else {
-      openSnackbar({ text: `Đã tưới lô · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
-    }
-    refresh();
-    void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
-  };
-  const unlockM = useMutation({
-    mutationFn: (currency: 'SEEDS' | 'XU') => unlockPlot(currency),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
-      refresh();
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const waterPlotM = useMutation({
-    mutationFn: (plotId: string) => waterPlot(plotId, 20),
-    onSuccess: onPlotHarvest,
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const claimPassM = useMutation({
-    mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
-    onSuccess: () => {
-      haptic('medium');
-      openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
-      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const claimMissionM = useMutation({
-    mutationFn: (code: string) => claimMission(code),
-    onSuccess: (r) => {
-      haptic('medium');
-      openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
-      void queryClient.invalidateQueries({ queryKey: ['me'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const answerM = useMutation({
-    mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
-    onSuccess: (r, vars) => {
-      // Hiện reveal "Bạn có biết…"; chỉ sang câu kế khi user bấm "Câu tiếp theo".
-      setReveal({ ...r, quizId: vars.id, choice: vars.choice });
-      void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['me'] });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+      },
+      onAnswered: (r, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
+    });
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
