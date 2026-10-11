@@ -133,10 +133,76 @@ Mọi mục xác minh lại bằng `git grep -w` trên HEAD (`apps packages scri
 
 ### Việc còn lại
 - Gom các bản `startOfDay` (game, game-quiz, game-economy, game-reminder) về `startOfVnDay` (xem mục 1).
-- Mục 3 (C-098, gỡ endpoint) và mục 4 (C-110/Q-30, đánh giá) do lượt khác làm.
+- Mục 3 (C-098, gỡ endpoint) làm ở lượt 3, xem mục 3/4 bên dưới. Mục 4 (C-110/Q-30, đánh giá) do lượt khác làm.
 - Format cả `schema.prisma` bằng `prisma format` trong một commit riêng.
 
 ### Việc cần chủ dự án
 - Xoá vật lý 25 dòng khoá chết trong bảng `system_configs` trên PROD (24 khoá của PC-8 + `cashback.merchant_tubu_share`): dòng còn nguyên, chỉ hiện "Không dùng". Cần lệnh DELETE riêng, có sao lưu, do chủ dự án chạy hoặc cho phép.
 - `BetaFeedback`: góp ý của khách beta đang ghi vào DB nhưng không ai xem được. Chọn: làm màn admin đọc, hoặc bỏ tính năng gửi góp ý ở trang beta.
 - Bảng chết `CohortRepeatSnapshot`, `FunnelDailySnapshot` và các cột đã đánh dấu: có muốn DROP bằng migration riêng sau khi chắc không còn client cũ nào chạm (cột `dauEventBased` còn được khai báo kiểu ở web admin, `zaloAccessToken/zaloRefreshToken` còn được `account-deletion.service` gán null).
+
+## Mục 3/4 — C-098 gỡ endpoint không FE nào gọi
+
+Trạng thái: MỘT PHẦN, theo đúng luật "thiếu bằng chứng hoặc nghi ngờ thì giữ". Gỡ 5 endpoint (4 module), giữ 21 endpoint không có lời gọi FE kèm lý do. Danh sách gốc A1-042 (19 endpoint, dựng ở commit 080bc75) đã cũ: 3 endpoint từ đó đã có FE ở HEAD, và quét lại tìm thêm 2 endpoint mới không ai gọi.
+
+### Cách dựng lại danh sách
+- Quét AST (TypeScript compiler API) mọi `@Controller` trong `apps/api/src`: 362 route (đã gồm prefix `/api` bỏ đi). Quét AST mọi chuỗi/mẫu chuỗi bắt đầu bằng `/` trong `apps/web/src` và `apps/miniapp/src` (bỏ spec), suy ra phương thức từ `api.get|post|...` và `apiFetch(..., { method })`, bỏ phần `?query` nối bằng biến. Khớp route với lời gọi theo phương thức và từng đoạn path.
+- Chạy trên 5 nguồn FE và lấy HỢP: HEAD của worktree, commit PROD `cb92dc8`, đầu nhánh `hardening/2026-10` (đã có PC-12), `hz8/PD-1`, `hz9/PD-3` (để không gỡ nhầm endpoint mà FE đang được nối ở gói khác). Kết quả: 26 route không có lời gọi ở bất kỳ nguồn nào.
+- Hai lỗi của lần quét đầu đã sửa: (1) mẫu `...${qs ? ... : ''}` làm lọt 2 endpoint có FE (`GET /admin/loyalty/pos-credits` ở `admin-client.ts:914`, `GET /admin/cashback/transactions` ở `admin-client.ts:771`); (2) lời gọi có biến nền `${BASE}/x` khớp nhầm mọi route có đoạn cuối là tham số, nên với mẫu này chỉ coi là khớp khi đoạn tĩnh trùng đúng.
+- Cùng đợt: `GET /admin/customer-refunds` và `POST /admin/customer-refunds/:id/mark-paid` KHÔNG có FE ở HEAD của worktree (base 0fe7c050) nhưng CÓ ở đầu `hardening/2026-10` (`customer-refunds-tab.tsx`, `admin-client.ts:893`, gói PC-12) nên không phải ứng viên.
+
+### BẢNG BẰNG CHỨNG
+Cột "grep HEAD" và "grep cb92dc8" là `git grep` trong `apps/web/src apps/miniapp/src` (bỏ spec). Cột "ngoài" gộp (2) callback/webhook/cron của bên ngoài và (3) e2e/loadtest/script/ops/.github/packages (`git grep` ở HEAD).
+
+| Endpoint | grep HEAD | grep cb92dc8 | Ngoài (callback/cron/script/e2e) | Quyết định |
+| --- | --- | --- | --- | --- |
+| POST /me/redeem-points | 0 | 0 | JWT khách, không phải callback; 0 ở e2e/scripts/ops. Chỉ còn trong `design_handoff` và snapshot `docs/2026-09-08-feature-map.md` | GỠ (1bffb2a5). Chỉ tính số tiền xem trước; đổi điểm thật là `/me/loyalty/rewards/:id/redeem` và `pointsToUse` ở checkout, khoá `loyalty.vnd_per_point_redeem` vẫn do `pricing.service` đọc |
+| GET /feed/events/:id | 0 (miniapp chỉ gọi `/events`, `/events/:id/posts`, `close`, `winner`) | 0 (FE bỏ `getEvent` từ 69c7fb8a, 2026-07-04) | JWT khách; 0 | GỠ (7063c14e), kèm `getEvent` của service và spec của nó |
+| GET /brand/owner/me/promotions | 0 (chỉ POST/PATCH/DELETE, `brand-owner-api.ts:32-36`) | 0 | JWT chủ nhãn; 0 | GỠ (d00fe547). Màn chủ nhãn đọc `promotions` từ `GET /brand/owner/me` (`getOwnedBrand` có `include: promotions`); `listPromotions` giữ vì admin còn dùng |
+| POST /orders/:code/issue-invoice | 0 (chỉ route admin `/admin/orders/:id/issue-invoice`, `admin-client.ts:304`) | 0 | JWT khách; 0 | GỠ (f5af33af). Checkout đã đặt `invoiceStatus = REQUESTED` (`checkout.service.ts:266`), admin ghi nhận đã xuất qua route admin có UI |
+| POST /orders/:code/track | 0 | 0 | JWT khách; 0 | GỠ (f5af33af). Chỉ trả lại trường đã có trong `GET /orders/:code` (`detailView` trả cả đơn), không gọi Pancake |
+| GET /auth/me | 0 | 0 | `scripts/loadtest/scenarios.cjs:69`, `page-weight.cjs:40` | GIỮ: loadtest gọi |
+| GET /health | 0 | 0 | healthcheck hạ tầng | GIỮ |
+| POST /webhooks/pancake, /webhooks/gomdon, /webhooks/gomdon/:token, /webhooks/zalo-oa, /webhooks/zalopay, /webhooks/cashback/:provider, /webhooks/accesstrade | 0 | 0 | callback của Pancake, Gomdon, Zalo OA, ZaloPay, AccessTrade (`@Public`, ký) | GIỮ (điều kiện 2) |
+| GET /storefront/by-host | 0 | 0 | 0 trong repo, nhưng audit A5-53 đề xuất middleware web tra tên miền riêng bằng route này | GIỮ: nghi ngờ, tính năng tên miền riêng chưa kiểm chứng |
+| POST /payments/zalopay/create | 0 | 0 | ZaloPay đang ẩn; `docs/ZALOPAY-SETUP.md` còn bước go-live dùng route này | GIỮ: đường tiền, có runbook |
+| GET /admin/attendance/live | 0 | 0 | A1-030 ghi "chỉ làm được bằng gọi API tay"; đề xuất của A1-030 là thêm nút, không phải gỡ | GIỮ: công cụ vận hành |
+| POST /admin/attendance/manual-checkout | 0 | 0 | như trên | GIỮ |
+| POST /admin/payroll/:staffId/recompute | 0 | 0 | như trên; chú thích code mô tả dùng khi đơn giá nhập sai | GIỮ |
+| POST /admin/pancake/sync | 0 | 0 | như trên; chú thích code ghi đây là đường sửa tồn kho DUY NHẤT trong app | GIỮ |
+| POST /admin/products/recompute-sold | 0 | 0 | như trên (cron 03:00 vẫn chạy, đây là nút chạy ngay) | GIỮ |
+| GET /admin/dealer-prices/history | 0 | 0 | như trên; sổ lịch sử giá vẫn được ghi, đây là đường đọc duy nhất | GIỮ |
+| POST /admin/brands/:id/products | 0 (có GET, DELETE cùng path) | 0 | admin gọi tay được; không có bằng chứng ngược | GIỮ: điều kiện 4, chờ nối UI |
+| PATCH /admin/promotions/:id | 0 (chỉ DELETE) | 0 | như trên | GIỮ |
+| PATCH /admin/dealer-rewards/:id | 0 (chỉ DELETE) | 0 | như trên; ngưỡng BigInt đã có race spec `dealer-bigint-volume` | GIỮ |
+| DELETE /reviews/:id | 0 | 0 | 0 | GIỮ: xoá rồi tạo lại có thể thưởng Điểm Xanh lần nữa, phải quyết cùng luật Q-30 (mục 4, lượt khác) |
+| GET /admin/orders/:id/status-history | 1 (`admin-client.ts:323`) | 0 | 0 | GIỮ: đã có FE sau PROD (C-092) |
+| GET /faqs | 1 (`about-data.ts:50`) | 0 | 0 | GIỮ: đã có FE sau PROD |
+| POST /reviews/:id/visibility | 1 (`admin-client.ts:1000`) | 0 | 0 | GIỮ: đã có FE sau PROD |
+| GET /admin/customer-refunds, POST /admin/customer-refunds/:id/mark-paid | 0 | 0 | FE có ở `hardening/2026-10` (PC-12) | GIỮ: FE đang được merge |
+
+Hai lời gọi `/admin/faqs`, `/admin/loyalty/pos-credits`, `/admin/cashback/transactions`, `/storefront/public-list` có FE ở cả HEAD và cb92dc8 (hoặc dùng biến nền/query nối), không phải ứng viên.
+
+### Test chốt
+`apps/api/src/common/endpoint-inventory.spec.ts`: dựng bảng route từ metadata Nest của 14 controller (`PATH_METADATA`, `METHOD_METADATA`), có hai bảng. `REMOVED` (5 route phải không còn) và `KEPT_WITHOUT_FE` (14 route cố ý giữ, mỗi dòng ghi lý do). ĐỎ trước khi gỡ từng nhóm (mỗi lần thêm một nhóm vào `REMOVED` thì spec fail đúng route đó, vd `Tests: 1 failed, 16 passed` cho feed; `2 failed, 18 passed` cho orders), XANH sau khi gỡ. Mỗi module một commit gồm spec + code:
+- 1bffb2a5 loyalty (kèm tạo spec và bỏ `SystemConfigService` thừa ở constructor)
+- 7063c14e feed (controller + `getEvent` + 2 test của `getEvent`)
+- d00fe547 brand (controller + `listOwnedPromotions`)
+- f5af33af orders (2 handler + `issueInvoice` + `track` của service); sau đó 1 commit chú thích
+
+### Kiểm chứng
+- `npx jest src/common src/modules/loyalty src/modules/feed src/modules/brand src/modules/orders src/modules/admin --maxWorkers=1`: `Test Suites: 47 passed`, `Tests: 1104 passed`.
+- `tsc --noEmit` (apps/api): exit 0; ESLint các file đã sửa: exit 0.
+- Race spec Postgres thật (cổng 5582, `--runInBand`, từng file): loyalty (5), brand-owner-sales (4), dealer-bigint-volume (3), feed-like-count (4), admin-invoice (4), order-cancel (2), cod-return-refund (3): xanh.
+- Còn lại trong `apps/api/src` (không spec) khớp `redeem-points|issue-invoice|:code/track|feed/events/:id|owner/me/promotions`: chỉ route admin `orders/:id/issue-invoice` và POST/PATCH/DELETE của `owner/me/promotions` (còn FE gọi).
+
+### Giả định
+- Endpoint admin không có UI được coi là "có thể gọi tay bằng token admin" (A1-030 viết đúng như vậy), nên giữ cho tới khi chủ dự án xác nhận. Gỡ sau là một dòng chuyển từ `KEPT_WITHOUT_FE` sang `REMOVED` kèm code, không cần thiết kế lại.
+- Không có DB, migration hay cấu hình nào đổi. Không có khoá config nào thành khoá chết do gỡ (`loyalty.vnd_per_point_redeem` còn do `pricing.service` đọc).
+- Không sửa `docs/2026-09-08-feature-map.md` (ảnh chụp theo ngày 2026-09-08, vẫn liệt kê các route này) và `design_handoff/specs` (spec gốc).
+- Chưa có bằng chứng về bản miniapp cũ hơn `cb92dc8` còn chạy trên Zalo. Bốn endpoint của khách (redeem-points, feed events/:id, issue-invoice, track) chưa từng có lời gọi FE trong lịch sử hoặc đã bỏ từ 2026-07-04 (`git log -S`), nên rủi ro client cũ gọi là rất thấp.
+
+### Việc còn lại / Việc cần chủ dự án
+- Với 3 endpoint admin giữ vì "nghi ngờ" (`POST /admin/brands/:id/products`, `PATCH /admin/promotions/:id`, `PATCH /admin/dealer-rewards/:id`) và 6 công cụ vận hành của A1-030: chọn nối nút vào web admin (C-091) hoặc xác nhận bỏ để gỡ tiếp.
+- `DELETE /reviews/:id`: quyết cùng mục 4 (Q-30). Nếu người dùng xoá được đánh giá của mình thì luật "thưởng chỉ lần đầu" phải tính theo sổ điểm chứ không theo sự tồn tại của dòng đánh giá.
+- `GET /storefront/by-host` và `POST /payments/zalopay/create`: giữ cho tới khi quyết định tên miền riêng và ZaloPay.
