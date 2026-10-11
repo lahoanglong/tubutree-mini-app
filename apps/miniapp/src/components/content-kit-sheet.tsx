@@ -1,4 +1,4 @@
-import { Box, Sheet, Text, Button, useSnackbar } from 'zmp-ui';
+import { useSnackbar } from 'zmp-ui';
 import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
@@ -6,6 +6,9 @@ import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { BottomSheet } from './ui/bottom-sheet';
+import { Button } from './ui/button';
+import { Heading, Text } from './ui/text';
 import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
@@ -65,17 +68,13 @@ export function ContentKitSheet({
     data && (data.captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
   return (
-    <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))', maxHeight: '80vh', overflowY: 'auto' }}>
-        <Text bold size="large" style={{ marginBottom: 12 }}>
-          {vi.contentKit.sheetTitle}
-        </Text>
-
+    <BottomSheet open={visible} onClose={onClose} title={vi.contentKit.sheetTitle}>
+      <div style={{ maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {q.isLoading && (
-          <Box flex flexDirection="column" style={{ gap: 8 }}>
-            <Skeleton style={{ height: 60, borderRadius: 12 }} />
-            <Skeleton style={{ height: 60, borderRadius: 12 }} />
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Skeleton height={60} radius="var(--radius-card)" />
+            <Skeleton height={60} radius="var(--radius-card)" />
+          </div>
         )}
 
         {q.isError && <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />}
@@ -83,48 +82,44 @@ export function ContentKitSheet({
         {data && (
           <>
             {data.images.length > 0 && (
-              <Box flex style={{ gap: 8, overflowX: 'auto', marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 12 }}>
                 {data.images.map((src, i) => (
                   <img
                     key={i}
                     src={src}
                     alt={data.productName}
-                    style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', objectFit: 'cover', flexShrink: 0 }}
+                    style={{ width: 72, height: 72, borderRadius: 'var(--radius-media)', objectFit: 'cover', flexShrink: 0 }}
                   />
                 ))}
-              </Box>
+              </div>
             )}
 
-            <Button
-              fullWidth
-              style={{ background: 'var(--primary-600)', marginBottom: 8 }}
-              onClick={() => {
-                haptic('light');
-                void shareWithFallback(
-                  {
-                    title: data.productName,
-                    description: data.captions[0] ?? data.productName,
-                    thumbnail: data.images[0],
-                    path: data.shareLink,
-                  },
-                  shareFallbackText(data.captions[0], link),
-                );
-              }}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Share2 size={16} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              <Button
+                fullWidth
+                icon={Share2}
+                onPress={() => {
+                  haptic('light');
+                  void shareWithFallback(
+                    {
+                      title: data.productName,
+                      description: data.captions[0] ?? data.productName,
+                      thumbnail: data.images[0],
+                      path: data.shareLink,
+                    },
+                    shareFallbackText(data.captions[0], link),
+                  );
+                }}
+              >
                 {vi.contentKit.shareZalo}
-              </span>
-            </Button>
-            <Button fullWidth variant="secondary" style={{ marginBottom: 12 }} onClick={() => copy(link)}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Copy size={16} />
+              </Button>
+              <Button fullWidth variant="secondary" icon={Copy} onPress={() => copy(link)}>
                 {vi.contentKit.copyLink}
-              </span>
-            </Button>
+              </Button>
+            </div>
 
             {!hasContent && (
-              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+              <Text variant="body-sm" tone="tertiary" as="div">
                 {vi.contentKit.empty}
               </Text>
             )}
@@ -132,42 +127,32 @@ export function ContentKitSheet({
             {data.captions.length > 0 && (
               <Section title={vi.contentKit.captionsHeading}>
                 {data.captions.map((c, i) => (
-                  <Box
-                    key={i}
-                    className="tubu-press"
-                    onClick={() => copy(c)}
-                    p={2}
-                    style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
-                  >
-                    <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                      {c}
-                    </Text>
-                  </Box>
+                  <CopyRow key={i} onPress={() => void copy(c)}>
+                    <Text variant="caption" tone="secondary">{c}</Text>
+                  </CopyRow>
                 ))}
               </Section>
             )}
 
             {data.usps.length > 0 && (
               <Section title={vi.contentKit.uspsHeading}>
-                {data.usps.map((u, i) => (
-                  <Text key={i} size="small" style={{ marginBottom: 4 }}>
-                    • {u}
-                  </Text>
-                ))}
+                <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {data.usps.map((u, i) => (
+                    <li key={i}>
+                      <Text variant="body-sm">{u}</Text>
+                    </li>
+                  ))}
+                </ul>
               </Section>
             )}
 
             {data.faqs.length > 0 && (
               <Section title={vi.contentKit.faqHeading}>
                 {data.faqs.map((f, i) => (
-                  <Box key={i} style={{ marginBottom: 8 }}>
-                    <Text size="small" bold>
-                      {f.q}
-                    </Text>
-                    <Text size="small" style={{ color: 'var(--neutral-600)' }}>
-                      {f.a}
-                    </Text>
-                  </Box>
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{f.q}</Text>
+                    <Text variant="body-sm" tone="secondary" as="div">{f.a}</Text>
+                  </div>
                 ))}
               </Section>
             )}
@@ -175,34 +160,50 @@ export function ContentKitSheet({
             {data.videoUrls.length > 0 && (
               <Section title={vi.contentKit.videosHeading}>
                 {data.videoUrls.map((url, i) => (
-                  <Box
-                    key={i}
-                    className="tubu-press"
-                    onClick={() => copy(url)}
-                    p={2}
-                    style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}
-                  >
-                    <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>
-                      {url}
-                    </Text>
-                  </Box>
+                  <CopyRow key={i} onPress={() => void copy(url)}>
+                    <Text variant="caption" tone="brand" style={{ wordBreak: 'break-all' }}>{url}</Text>
+                  </CopyRow>
                 ))}
               </Section>
             )}
           </>
         )}
-      </Box>
-    </Sheet>
+      </div>
+    </BottomSheet>
+  );
+}
+
+/** Hàng chạm-để-sao-chép: `<button>` thật để có Tab/Enter và vùng chạm >= 44px. */
+function CopyRow({ onPress, children }: { onPress: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      className="tubu-press"
+      onClick={onPress}
+      style={{
+        display: 'block',
+        width: '100%',
+        minHeight: 44,
+        boxSizing: 'border-box',
+        marginBottom: 6,
+        padding: '8px 12px',
+        textAlign: 'left',
+        border: 'none',
+        cursor: 'pointer',
+        background: 'var(--color-bg-subtle)',
+        borderRadius: 'var(--radius-control)',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Box style={{ marginTop: 4, marginBottom: 12 }}>
-      <Text size="xSmall" bold style={{ marginBottom: 6 }}>
-        {title}
-      </Text>
+    <section style={{ marginTop: 4, marginBottom: 12 }}>
+      <Heading variant="title-sm" style={{ marginBottom: 6 }}>{title}</Heading>
       {children}
-    </Box>
+    </section>
   );
 }
