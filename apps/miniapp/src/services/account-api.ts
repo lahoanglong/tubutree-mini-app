@@ -1,18 +1,18 @@
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
-import { formatNumber, formatPoints } from '../utils/format';
+import { formatNumber } from '../utils/format';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
-  /** Điểm Xanh lô thường (có hạn, trần % khi dùng ở thanh toán). Tổng khách thấy: xem `pointsSummary`. */
+  /** Điểm Xanh lô thường (có hạn, trần % khi dùng ở thanh toán). Tổng khách thấy: xem `pointsSummary` (utils/points-lots). */
   pointsBalance: number;
   /**
    * Điểm Xanh lô quy đổi từ xu cũ: không hết hạn, dùng ở thanh toán tới 100% giá trị hàng, không đổi quà,
    * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
    */
   pointsConvertedBalance?: number;
-  /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary`). */
+  /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
   /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
   redeemableTotal?: number;
@@ -240,25 +240,6 @@ export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
-}
-
-/**
- * Điểm Xanh khách thấy: MỘT con số = lô thường + lô quy đổi. Hai lô chỉ tách ra khi cần nói rõ phần nào
- * không hết hạn / dùng được ở đâu. Số âm hoặc rác → 0 để không bao giờ hiện "NaN điểm".
- */
-export function pointsSummary(
-  ov: Pick<LoyaltyOverview, 'pointsBalance' | 'pointsConvertedBalance'>,
-): { standard: number; converted: number; total: number } {
-  const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
-  const standard = clamp(ov.pointsBalance);
-  const converted = clamp(ov.pointsConvertedBalance);
-  return { standard, converted, total: standard + converted };
-}
-
-/** "trong đó 1.250 điểm không hết hạn" — null khi khách không có điểm quy đổi. */
-export function convertedPointsNote(converted: number | null | undefined): string | null {
-  const n = Number(converted ?? 0);
-  return n > 0 ? `trong đó ${formatPoints(n)} không hết hạn` : null;
 }
 
 /** dd/mm/yyyy theo giờ Việt Nam (UTC+7) — cùng quy ước với thông báo lỗi của backend. */

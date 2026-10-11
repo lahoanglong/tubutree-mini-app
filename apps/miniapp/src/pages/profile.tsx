@@ -18,9 +18,10 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand } from '../services/brand-owner-api';
 import { getDealerMe } from '../services/dealer-api';
-import { formatVnd, formatPoints, formatXu } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 
 interface MenuItem {
@@ -165,6 +166,8 @@ export default function ProfilePage() {
   }
 
   const tierName = loyaltyQ.data?.tier?.name ?? 'Mầm Xanh';
+  // Điểm Xanh = tổng hai lô; chưa tải xong overview thì lấy từ hồ sơ đăng nhập (cũng có đủ hai lô).
+  const pointsTotal = pointsSummary(loyaltyQ.data ?? user).total;
 
   const copyReferral = () => {
     haptic('light');
@@ -268,7 +271,7 @@ export default function ProfilePage() {
       <div style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: -20 }}>
         <Stat
           label="Điểm Xanh"
-          value={formatPoints(loyaltyQ.data?.pointsBalance ?? user.pointsBalance)}
+          value={formatPoints(pointsTotal)}
           onClick={() => navigate('/loyalty')}
         />
         <Stat
@@ -277,14 +280,10 @@ export default function ProfilePage() {
           onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
         />
         <Stat
-          label="TubuXu"
-          value={walletQ.data ? formatXu(walletQ.data.coinsBalance) : '—'}
-          onClick={() => navigate('/wallet', { state: { from: '/profile' } })}
-        />
-        <Stat
           label="Mã giảm giá"
           value={couponsQ.data ? `${couponsQ.data.length} mã` : '—'}
           onClick={() => navigate('/loyalty')}
+          wide
         />
       </div>
 
@@ -385,7 +384,7 @@ function UnreadCount({ count }: { count: number }) {
   );
 }
 
-function Stat({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+function Stat({ label, value, onClick, wide }: { label: string; value: string; onClick?: () => void; wide?: boolean }) {
   return (
     <div
       role="button"
@@ -401,6 +400,8 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
         borderRadius: 'var(--radius-card)',
         textAlign: 'center',
         boxShadow: 'var(--elevation-1)',
+        // Ba ô trên lưới 2 cột: ô lẻ chiếm cả hàng thay vì để trống một nửa.
+        gridColumn: wide ? '1 / -1' : undefined,
       }}
     >
       <Heading variant="title-sm" as="div" tone="brand">
