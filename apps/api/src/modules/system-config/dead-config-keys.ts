@@ -44,6 +44,7 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'eco.real_tree_partner': 'Chưa có luồng trồng cây thật đọc khoá này.',
   'eco.real_tree_cost_each': 'Chưa có luồng trồng cây thật đọc khoá này.',
   'eco.real_tree_monthly_budget': 'Chưa có luồng trồng cây thật đọc khoá này.',
+  'beta.features': 'Chương trình Beta Tester đã gỡ cùng 4 route /beta/* (Q-19); không còn nơi nào đọc danh sách tính năng beta.',
   'rbac.admin_phones': 'Quyền admin cấp ở bảng role_grants (tab Nhân sự), không đọc khoá này.',
 };
 

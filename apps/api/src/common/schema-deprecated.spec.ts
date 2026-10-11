@@ -17,7 +17,8 @@ const SCHEMA_PATH = join(__dirname, '../../prisma/schema.prisma');
 const DEPRECATED: Record<string, { delegate?: string; writes?: string[]; word?: string; allowed?: RegExp; manual?: string }> = {
   CohortRepeatSnapshot: { delegate: 'cohortRepeatSnapshot', writes: [] },
   FunnelDailySnapshot: { delegate: 'funnelDailySnapshot', writes: [] },
-  BetaFeedback: { delegate: 'betaFeedback', writes: ['create'] },
+  BetaTester: { delegate: 'betaTester', writes: [] },
+  BetaFeedback: { delegate: 'betaFeedback', writes: [] },
   AffiliateClick: { delegate: 'affiliateClick', writes: ['create'] },
   'AffiliateClick.convertedOrderId': { word: 'convertedOrderId' },
   'RetentionDailySnapshot.dauEventBased': { word: 'dauEventBased', allowed: /dauEventBased:\s*null/ },
@@ -80,7 +81,7 @@ describe('schema.prisma /// @deprecated (C-108)', () => {
   });
 
   it('bảng chết không còn bị gọi bằng SQL thô', () => {
-    for (const table of ['cohort_repeat_snapshot', 'funnel_daily_snapshot', 'beta_feedbacks', 'affiliate_clicks']) {
+    for (const table of ['cohort_repeat_snapshot', 'funnel_daily_snapshot', 'beta_feedbacks', 'beta_testers', 'affiliate_clicks']) {
       expect(source).not.toContain(table);
     }
   });

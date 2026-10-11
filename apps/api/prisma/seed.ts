@@ -157,7 +157,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.max_open_per_user', value: 3, category: 'groupbuy', description: 'Trần số nhóm mua chung OPEN cùng lúc/user — chống spam mở nhóm (P0-2)' },
   { key: 'refill.seeds_per_bottle', value: 50, category: 'refill', description: '💧 thưởng cho mỗi vỏ chai đổi' },
   { key: 'refill.monthly_cap_bottles', value: 20, category: 'refill', description: 'Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)' },
-  { key: 'beta.features', value: [], category: 'beta', description: 'Danh sách tính năng beta hiển thị cho người tham gia (mảng {key,title,desc})' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },

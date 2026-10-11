@@ -901,6 +901,8 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(screen.getByText('…và 2 cây khác')).toBeInTheDocument();
     expect(container.textContent).toContain('Bạn đã góp 7 cây vào quỹ trồng cây của Tubu');
     expect(screen.queryByText(/Chăm cây ảo đến khi thu hoạch/)).not.toBeInTheDocument();
+    // Nhánh có cây góp quỹ nhưng chưa cây nào được trồng thật: thẻ không quy đổi khí thải cho cây của khách.
+    expect(container.textContent).not.toMatch(/CO₂|CO2|hấp thụ|\bkg\b/i);
   });
 });
 
