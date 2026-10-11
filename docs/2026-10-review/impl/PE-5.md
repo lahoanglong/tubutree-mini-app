@@ -67,10 +67,11 @@ Không sửa: cấu hình trong khoảng (0, 1) (ví dụ 0.5) cho 0 tháng, t�
 Không có dòng sổ nào bị sửa; chỉ nghĩa của replay đổi cho các dòng thu hồi cũ (đơn, thưởng giới thiệu; đánh giá do PE-3). Với user có dòng thu hồi ghép được với lô gốc:
 
 1. Lô gốc có hạn chưa tới hạn: từ lần cron đầu sau deploy lô gốc không còn bị trừ lại. Đúng và có lợi cho khách.
-2. Lô cũ hơn mà bản cũ coi là đã bị dòng thu hồi ăn: nay replay coi nó còn nguyên. Nếu lô cũ đó có hạn thì tới hạn nó hết hạn đủ phần còn lại (đúng, vì phần thu hồi đã thuộc về lô gốc); bản cũ cho lô này hết hạn ít hơn nhưng lô gốc hết hạn thừa.
+2. Lô cũ hơn mà bản cũ coi là đã bị dòng thu hồi ăn: nay replay coi nó còn nguyên. Nếu lô cũ đó có hạn thì tới hạn nó hết hạn đủ phần còn lại (đúng, vì phần thu hồi đã thuộc về lô gốc); bản cũ cho lô này hết hạn ít hơn nhưng lô gốc hết hạn thừa. Nếu hạn lô cũ đã qua trước deploy thì xem mục 4: khách bị trừ ngay.
 3. Đã mất hai lần trước deploy (`POINTS_EXPIRED` đã ghi): không tự hoàn. Replay mới thấy lô gốc đã bị dòng thu hồi ăn hết nên dòng `POINTS_EXPIRED` cũ không còn lô hết hạn nào để ăn, phần dư đi FIFO vào lô cũ; tổng vẫn bằng `pointsBalance` và cron không trừ thêm (ghim bằng hai ca unit "sổ đã ghi trước PE-5"). Muốn hoàn phải bù tay.
+4. Bị trừ sớm, không báo trước: lô cũ có hạn đã qua trước deploy, hết hạn trước lô gốc, dòng thu hồi ghi trước hạn đó (bản cũ để thu hồi ăn lô cũ nên cron cũ chỉ trừ phần còn lại của lô cũ, có khi không ghi `POINTS_EXPIRED` nào). Replay mới coi phần đó hết hạn từ hạn lô cũ, nên ngay lượt cron 1 giờ sáng đầu tiên sau deploy khách bị trừ phần chênh, sớm hơn lịch cũ (bản cũ chỉ trừ khi lô gốc hết hạn) và không có nhắc `POINTS_EXPIRING` vì nhắc chỉ xét hạn trong tương lai. Số dư cuối cùng vẫn đúng và bằng bản cũ: khi lô gốc cũng tới hạn, hai bản cho cùng `expiredNow`. Đã chạy `computePointExpiry` bản `a7415605` so với bản mới trên sổ ví dụ (lô cũ +30 hạn 2026-01-01, đơn giao +20 hạn 2026-05-01, thu hồi -20 ngày 2025-06-01, `POINTS_EXPIRED` -10 ngày 2026-01-02): tại 2026-03-01 bản cũ 0, bản mới 20; tại 2026-05-02 cả hai 20 (ghim bằng ca unit "lô cũ có hạn đã qua, hết hạn trước lô đơn"). Khuyến nghị trước deploy: lấy danh sách user từ SQL (4), chạy `computePointExpiry` bản cũ và bản mới cho từng người để biết ai bị trừ ngay và bao nhiêu, rồi quyết có báo khách hay không (SQL (4) là danh sách ứng viên, không tính số điểm).
 
-Chạy trên DB có dữ liệu trước deploy (chỉ ghi vào TEMP VIEW của phiên, không đụng bảng thật). Ba số theo thứ tự: chặn trên; replay có thể đổi; ứng viên đã mất hai lần (thu hồi xảy ra trước hạn lô gốc, lô gốc đã qua hạn, có `POINTS_EXPIRED` từ lúc đó).
+Chạy trên DB có dữ liệu trước deploy (chỉ ghi vào TEMP VIEW của phiên, không đụng bảng thật). Bốn số theo thứ tự: chặn trên; replay có thể đổi; ứng viên đã mất hai lần (thu hồi xảy ra trước hạn lô gốc, lô gốc đã qua hạn, có `POINTS_EXPIRED` từ lúc đó); ứng viên bị trừ sớm ngay sau deploy (mục 4 ở trên).
 
 ```sql
 CREATE TEMP VIEW pe5_pairs AS
@@ -119,9 +120,20 @@ SELECT count(DISTINCT p."userId") AS users_maybe_double_charged
    AND p."originExpiresAt" <= now()
    AND EXISTS (SELECT 1 FROM "points_transactions" x
                 WHERE x."userId" = p."userId" AND x."reason" = 'POINTS_EXPIRED' AND x."createdAt" >= p."originExpiresAt");
+
+-- (4) ứng viên bị trừ sớm ngay lượt cron đầu sau deploy: lô có hạn đã qua, cũ hơn lô gốc, dòng thu hồi ghi trước hạn đó,
+--     còn lô gốc chưa tới hạn (hoặc không hạn). Tập con của (2).
+SELECT count(DISTINCT p."userId") AS users_deducted_early
+  FROM pe5_pairs p
+  JOIN "points_transactions" e
+    ON e."userId" = p."userId" AND e."lot" = 'STANDARD' AND e."delta" > 0
+   AND e."expiresAt" IS NOT NULL AND e."expiresAt" <= now()
+   AND e."createdAt" < p."originAt"
+   AND p."reversalAt" < e."expiresAt"
+ WHERE p."originExpiresAt" IS NULL OR p."originExpiresAt" > now();
 ```
 
-Đã chạy trên DB throwaway của gói (sau các lượt chạy race): cú pháp đúng, ba số trả về, và (3) gắn cờ đúng người của lượt chạy đỏ (sổ: lô cũ 30, `ORDER_DELIVERED` +20, `ORDER_REVERSED` -20, `POINTS_EXPIRED` -20) mà không gắn cờ người của lượt xanh (cùng sổ, không có `POINTS_EXPIRED`). Chưa chạy trên DB có dữ liệu thật hay bản thử VPS. (3) bỏ sót ca thu hồi sau khi lô gốc đã hết hạn (đó là rủi ro 2, loại khác), và không tính được số điểm cần bù; số đó phải đo bằng cách chạy `computePointExpiry` bản cũ so với bản mới cho từng user. Đánh giá (`REVIEW_DELETE`) không nằm trong SQL vì PE-3 đã xử lý.
+Đã chạy trên DB throwaway của gói (sau các lượt chạy race): cú pháp đúng, bốn số trả về, và (3) gắn cờ đúng người của lượt chạy đỏ (sổ: lô cũ 30, `ORDER_DELIVERED` +20, `ORDER_REVERSED` -20, `POINTS_EXPIRED` -20) mà không gắn cờ người của lượt xanh (cùng sổ, không có `POINTS_EXPIRED`). (4) đã chạy trên năm sổ dựng tay (hai ca bị trừ sớm: một có `POINTS_EXPIRED`, một thu hồi ăn hết lô cũ nên không có; ba ca đối chứng: lô gốc cũng đã hết hạn, thu hồi sau hạn lô cũ, lô cũ không hạn): gắn cờ đúng hai người đầu, và `computePointExpiry` bản cũ so bản mới tại `now()` cho 0 so 20 ở hai người đó, bằng nhau ở ba người kia. Chưa chạy trên DB có dữ liệu thật hay bản thử VPS. (3) bỏ sót ca thu hồi sau khi lô gốc đã hết hạn (đó là rủi ro 2, loại khác), và không tính được số điểm cần bù; số đó phải đo bằng cách chạy `computePointExpiry` bản cũ so với bản mới cho từng user. Đánh giá (`REVIEW_DELETE`) không nằm trong SQL vì PE-3 đã xử lý.
 
 ## Lệnh kiểm và kết quả thật
 

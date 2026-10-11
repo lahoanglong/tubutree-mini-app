@@ -604,6 +604,21 @@ describe('computePointExpiry (pure FIFO helper)', () => {
         expect(computePointExpiry(ledger, NOW, WINDOW).expiredNow).toBe(0);
         expect(computePointExpiry(ledger, new Date('2027-02-01'), WINDOW).expiredNow).toBe(10); // 30 + 20 - 20 - 20 = 10 còn lại ở lô cũ
       });
+
+      it('lô cũ có hạn đã qua, hết hạn trước lô đơn, thu hồi ghi trước hạn lô cũ: bản cũ để thu hồi ăn lô cũ nên phần chênh chỉ hết hạn cùng lô đơn; replay mới coi nó hết hạn từ hạn lô cũ, tức là bị trừ ngay', () => {
+        const ledger = [
+          tx('a', 30, '2025-01-01', '2026-01-01'),
+          delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'),
+          reversed('v', -20, '2025-06-01', 'o1'),
+          tx('e', -10, '2026-01-02', null, 'POINTS_EXPIRED'), // cron cũ chỉ thấy 10 điểm còn trong lô cũ (30 trừ 20 do thu hồi ăn nhầm)
+        ];
+        const before = new Date('2026-03-01'); // lô cũ đã hết hạn, lô đơn chưa
+        const after = new Date('2026-05-02'); // cả hai đã hết hạn
+        // Bản cũ: 0 tại `before` (lô cũ còn 0, lô đơn còn 20 chưa tới hạn) rồi 20 tại `after`.
+        expect(computePointExpiry(ledger, before, WINDOW).expiredNow).toBe(20);
+        expect(computePointExpiry(ledger, after, WINDOW).expiredNow).toBe(20);
+        // Số dư sổ là 30 + 20 - 20 - 10 = 20: hạn lô cũ đã qua nên toàn bộ số dư còn lại là điểm hết hạn.
+      });
     });
 
     describe('bất biến cũ: không có dòng đảo ngược thì kết quả y hệt replay FIFO + POINTS_EXPIRED', () => {
