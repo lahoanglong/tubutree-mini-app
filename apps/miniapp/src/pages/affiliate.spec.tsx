@@ -12,11 +12,12 @@ const mocks = vi.hoisted(() => ({
   registerAffiliate: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div data-testid="sheet">{children}</div> : null,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/affiliate', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => ({
@@ -161,5 +162,43 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Lên đơn hộ khách/ }));
     expect(await screen.findByTestId('ctv-order-sheet')).toBeInTheDocument();
+  });
+});
+
+describe('Trang CTV — đúng một h1 ở mọi trạng thái (C-114)', () => {
+  const h1s = () => screen.queryAllByRole('heading', { level: 1 });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('đang tải', () => {
+    mocks.getAffiliateMe.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+  });
+
+  it('lỗi tải: có h1 và nút Thử lại gọi lại API', async () => {
+    mocks.getAffiliateMe.mockRejectedValueOnce(new Error('mạng lỗi'));
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    const retry = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+    fireEvent.click(retry);
+    await waitFor(() => expect(mocks.getAffiliateMe).toHaveBeenCalledTimes(2));
+  });
+
+  it('chưa là CTV (form đăng ký)', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: '', walletBalance: 0 });
+    renderPage();
+    await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
+  });
+
+  it('dashboard CTV', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+    renderPage();
+    await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
+    expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
   });
 });
