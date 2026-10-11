@@ -20,6 +20,7 @@ const FILES = [
   'src/pages/my-payroll.tsx',
   'src/pages/staff.tsx',
   'src/pages/admin.tsx',
+  'src/components/period-nav.tsx',
 ];
 
 /**
