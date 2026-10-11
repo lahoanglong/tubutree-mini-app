@@ -50,6 +50,38 @@ function balancedArgs(source: string, open: number): string {
   throw new Error('không cân được ngoặc của lời gọi ghi sổ điểm');
 }
 
+/**
+ * Bỏ comment khỏi đoạn mã; `blankStrings` thì bỏ cả nội dung chuỗi và template (giữ cặp nháy), để chữ `expiresAt` nằm trong
+ * `reason` hay ghi chú không được tính là trường dữ liệu.
+ */
+function scrub(source: string, blankStrings: boolean): string {
+  let out = '';
+  let quote: string | null = null;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i]!;
+    if (quote) {
+      if (c === '\\') {
+        if (!blankStrings) out += c + (source[i + 1] ?? '');
+        i++;
+      } else if (c === quote) {
+        quote = null;
+        out += c;
+      } else if (!blankStrings) out += c;
+    } else if (c === "'" || c === '"' || c === '`') {
+      quote = c;
+      out += c;
+    } else if (c === '/' && source[i + 1] === '/') {
+      const end = source.indexOf('\n', i);
+      i = end === -1 ? source.length : end - 1;
+    } else if (c === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? source.length : end + 1;
+      out += ' ';
+    } else out += c;
+  }
+  return out;
+}
+
 /** Mọi lời gọi ghi sổ điểm trong `source` (bỏ comment, bỏ phần khai báo hàm applyPointsDelta). */
 function findLedgerWrites(source: string, file = 'x.ts'): Site[] {
   const sites: Site[] = [];
@@ -69,7 +101,8 @@ function findLedgerWrites(source: string, file = 'x.ts'): Site[] {
   return sites;
 }
 
-const HAS_EXPIRY = /\bexpiresAt\b/;
+/** `expiresAt: null` / `undefined` chỉ có tên trường mà không đặt hạn nên không được coi là có hạn. */
+const HAS_EXPIRY = /\bexpiresAt\b(?!\s*:\s*(?:null|undefined)\b)/;
 const CONVERTED_LOT = /\blot:\s*'CONVERTED'/;
 const NON_POSITIVE_DELTA = /\bdelta:\s*(?:-|0\b)/;
 
@@ -88,7 +121,8 @@ const EXCEPTIONS: { file: string; argsInclude: string; why: string }[] = [
 ];
 
 function violation(site: Site): boolean {
-  if (HAS_EXPIRY.test(site.args) || CONVERTED_LOT.test(site.args) || NON_POSITIVE_DELTA.test(site.args)) return false;
+  const code = scrub(site.args, true);
+  if (HAS_EXPIRY.test(code) || CONVERTED_LOT.test(scrub(site.args, false)) || NON_POSITIVE_DELTA.test(code)) return false;
   return !EXCEPTIONS.some((e) => site.file === e.file && site.args.includes(e.argsInclude));
 }
 
@@ -130,6 +164,25 @@ describe('mọi dòng điểm dương lô STANDARD đều có hạn hoặc là n
   });
 });
 
+/** SQL thô tăng pointsBalance mà không ghi dòng sổ có hạn làm vỡ bất biến balance == SUM(delta) và lách chốt chặn trên. */
+const RAW_BALANCE_INCREMENT = /"pointsBalance"\s*=\s*(?:\w+\.)?"pointsBalance"\s*\+/;
+
+describe('không tăng pointsBalance bằng SQL thô (lách sổ điểm)', () => {
+  it('không có UPDATE thô nào tăng "pointsBalance" trong mã nguồn', () => {
+    const files = listSourceFiles(SRC_ROOT)
+      .filter((f) => RAW_BALANCE_INCREMENT.test(readFileSync(f, 'utf8')))
+      .map((f) => f.slice(SRC_ROOT.length + 1).split(sep).join('/'));
+    expect(files).toEqual([]);
+  });
+
+  it('bộ quét bắt đúng các dạng viết thông thường', () => {
+    expect(RAW_BALANCE_INCREMENT.test('UPDATE "users" SET "pointsBalance" = "pointsBalance" + 5 WHERE "id" = x')).toBe(true);
+    expect(RAW_BALANCE_INCREMENT.test('UPDATE "users" u SET "pointsBalance"="pointsBalance"+${n}')).toBe(true);
+    expect(RAW_BALANCE_INCREMENT.test('SET "pointsBalance" = u."pointsBalance" + 1')).toBe(true);
+    expect(RAW_BALANCE_INCREMENT.test('SELECT "pointsBalance", "pointsConvertedBalance" FROM "users" FOR UPDATE')).toBe(false);
+  });
+});
+
 describe('bộ quét bắt đúng (test của chính chốt chặn)', () => {
   const bad = (src: string) => findLedgerWrites(src).filter(violation);
 
@@ -138,6 +191,23 @@ describe('bộ quét bắt đúng (test của chính chốt chặn)', () => {
     expect(bad("await db.pointsTransaction.create({ data: { userId, delta, reason, refType: 'GAME' } });")).toHaveLength(1);
     expect(bad("await tx.pointsTransaction.createMany({ data: [{ userId, delta: pts, reason }], skipDuplicates: true });")).toHaveLength(1);
     expect(bad("await applyPointsDelta(tx, { userId, delta: points, lot: 'STANDARD', reason, refType: 'X' });")).toHaveLength(1);
+  });
+
+  it('bắt expiresAt chỉ có tên mà không đặt hạn: null, undefined, trong chuỗi hay comment', () => {
+    expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'X', expiresAt: null } })")).toHaveLength(1);
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, reason: "X", expiresAt : undefined } })')).toHaveLength(1);
+    expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'chưa có expiresAt' } })")).toHaveLength(1);
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, reason: `R:${a}:expiresAt` } })')).toHaveLength(1);
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, // TODO expiresAt\n reason } })')).toHaveLength(1);
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, /* expiresAt */ reason } })')).toHaveLength(1);
+    expect(bad("applyPointsDelta(tx, { userId, delta: p, lot: 'STANDARD', reason, expiresAt: null })")).toHaveLength(1);
+  });
+
+  it('cho qua expiresAt có giá trị: biến, biểu thức, tính từ helper', () => {
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, expiresAt: await this.loyalty.pointsExpiresAt(now) } })')).toHaveLength(0);
+    expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, expiresAt: input.expiresAt ?? exp } })')).toHaveLength(0);
+    expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'x', expiresAt: nullable ? null : date } })")).toHaveLength(0);
+    expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'x', expiresAt: nulled } })")).toHaveLength(0);
   });
 
   it('cho qua: có expiresAt, lô CONVERTED, delta âm hoặc 0', () => {
