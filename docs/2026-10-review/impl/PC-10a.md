@@ -137,3 +137,85 @@ $ node scripts/check-undefined-css-vars.mjs  -> OK — every var(--x) reference 
 
 1. Bước sau của gói (điều hướng nội bộ + di cư DS v2) nên mở bằng việc thêm `pages/game.tsx` và `components/game/**` vào `FILES_PC10A`, chạy ĐỎ, rồi di cư từng file; test `game-behavior.spec.tsx` truy vấn chữ emoji (🚿 Tưới cây (20💧), 💦 Hứng giọt sương, ✅ Đã điểm danh...) nên khi đổi emoji chức năng sang `Icon` cần cập nhật các tên nút trong spec cùng commit (đây là thay đổi trình bày có chủ đích, không phải đổi hành vi).
 2. Phần gốc e2e (`apps/e2e`) chọn trang Vườn theo chữ; DOM không đổi nên không cần sửa ở bước này.
+
+## Mục 3/4 — C-082 bước 2 + C-076: di cư `pages/game.tsx` và `components/game/**` sang DS v2, tab nội bộ, bố cục hai màn đầu
+
+Trạng thái: XONG phần game. CHƯA làm (lượt khác, mục 4/4): `components/wheel.tsx` (vòng quay vẫn legacy 13) và `components/community/rank-badge.tsx` (legacy 1).
+
+### Số đo trước → sau
+
+| Chỉ số | Trước (sau mục 2/4) | Sau |
+|---|---|---|
+| static-scan `pages/game.tsx` legacy / hex / emoji | 5 / 0 / 7 | 0 / 0 / 1 (💧 trong gợi ý "nhận 💧 tưới vườn") |
+| static-scan `components/game/**` legacy / hex / emoji | 152 / 0 / 83 | 0 / 0 / 54 (26 file, mọi file legacy 0, hex 0) |
+| ESLint `pages/game.tsx` + `components/game` + spec | exit 0 | exit 0, không cảnh báo |
+| import ZaUI trong `components/game/**` | `Box, Text, Button` (22 file) | chỉ `useSnackbar` (hộp thu hoạch) |
+| `pages/game.tsx` số dòng | 416 | 237 (truy vấn và lệnh ghi chuyển vào `use-game-data.ts` 37 dòng + `use-game-actions.ts` 207 dòng) |
+| `<h1>` | 0 | 1 (`PageHeader` "Vườn Xanh", cả khi đang tải / chưa đăng nhập / lỗi hồ sơ) |
+
+Emoji còn lại đều là NỘI DUNG game (giai đoạn cây 🌱🌿🌳, đơn vị giọt nước 💧, chuỗi ngày 🔥, huy chương, phần thưởng 🎁, nhãn phân loại quiz, tình trạng héo/chết 🥀🍂 trong dòng tiến độ, lời chúc trong thông báo/snackbar). Danh sách cho phép theo từng file nằm ở `ALLOWED_EMOJI` của `ds-c076-pc10a.spec.ts`; emoji làm icon chức năng đã đổi sang Lucide qua `Icon`: icon trên nút (tưới, mở lô, điểm danh, hứng sương), tiêu đề khối, trạng thái cây, chứng nhận rừng, ô thống kê tác động xanh, dòng lối tắt.
+
+### Điều hướng nội bộ và bố cục (C-082)
+
+- Ba tab `SegmentedTabs` (dính đầu trang): **Hôm nay** / **Vườn** / **Cộng đồng**, mở sẵn Hôm nay.
+  - Hôm nay: cảnh báo cây héo/chết → hồi sinh chuỗi (chỉ trong cửa sổ hồi sinh) → **Tưới cây** + Mua cây thật → **Điểm danh** + 7 ô ngày + vé giữ lửa + hứng sương → **Nhiệm vụ** → Quiz → Vòng quay → lối tắt Đổi vỏ chai.
+  - Vườn: lô đất, sổ tay loài cây, tác động xanh + rừng của tôi, mục tiêu cộng đồng cây thật.
+  - Cộng đồng: banner mùa, Chặng Mùa, tặng nước bạn bè, bảng xếp hạng tuần, top góp nước mùa, lối tắt Bảng tin.
+- Thẻ vườn (nhỏ lại, ~160px) nằm trên thanh tab nên luôn thấy; tưới cây là nút chính (primary, 48px). Thứ tự DOM tưới → điểm danh → nhiệm vụ → quiz được khoá bằng test; vị trí theo pixel ở 390x844 CHƯA đo (xem "Việc còn lại").
+- Khối của tab không chọn vẫn được dựng nhưng ẩn (`hidden` + `display:none`): vòng quay không bị dựng lại khi đổi tab (test đếm mount/unmount), đáp án quiz và hộp thu hoạch (dựng ở cấp trang) không mất.
+- Hai lượt điểm danh (Q-09/Q-11): trang này chỉ có điểm danh giọt nước (điểm danh Điểm Xanh ở trang Hạng thành viên, đã nói rõ trong thẻ đó). Không có cách gộp UI an toàn mà không đổi luồng nên KHÔNG gộp; giữ một nút "Điểm danh" và thêm dòng "Nhận giọt nước tưới cây mỗi ngày" dưới tiêu đề để nhãn khác hẳn nút "Điểm danh +N" bên Điểm Xanh. Không đổi API.
+- Hộp chúc mừng thu hoạch: lớp phủ `rgba(0,0,0,0.5)` tự dựng → `BottomSheet` của DS (luôn dựng, điều khiển bằng `open`; đóng bằng nút, vùng mờ hoặc vuốt như trước).
+- Thẻ: `Card` + `Heading h2` + `Icon`; thanh tiến độ dùng `ProgressBar` (riêng thẻ vườn dùng bản tự vẽ nền tối vì ProgressBar chỉ có tông sáng, kèm `role="progressbar"`); nút dùng `Button` của DS (≥44px), danh sách lối tắt dùng `ListRow` (Tab + Enter/Space).
+
+### Giữ nguyên (đã chứng minh bằng test)
+
+Mọi lời gọi API, khoá làm mới cache, biểu thức `disabled`/`loading` của từng nút (kể cả `disabled` đi kèm `loading` nên spinner vẫn không hiện khi đang gửi, đúng như cũ), số hiển thị, thông điệp snackbar, thuật ngữ Q-26 (không thêm "TubuXu" mới; dòng "Mua bằng TubuXu" cũ giữ nguyên chờ PD-3), không có mua giọt nước bằng xu (Q-02). Season Pass và chữ "cây thật" di cư nguyên trạng.
+
+### Test (đỏ → xanh)
+
+- `ds-c076-pc10a.spec.ts`: thêm 26 file game vào `FILES_PC10A` trước khi sửa: 64 test ĐỎ (legacy, màu thô, ZaUI, emoji); sau di cư 123/123 xanh. Thêm kiểm "không import ZaUI ngoài `useSnackbar`/khung trang" cho `components/game/**`. Commit theo 4 nhóm file, mỗi nhóm thêm file vào guard rồi mới di cư.
+- `pages/game-layout.spec.tsx` (MỚI, 12 test): chạy trên bản `game.tsx` cũ → 11 ĐỎ / 1 xanh (nhóm bị thiếu: một h1 ở 4 trạng thái, ba tab, ẩn/hiện khối, thứ tự tưới → điểm danh → nhiệm vụ → quiz, h2 mỗi khối, một nút Điểm danh, giới hạn 400 dòng); bản mới 12/12 xanh.
+- `pages/game-behavior.spec.tsx` (71 test): vẫn 71/71 xanh. Sửa có chủ ý: tên nút bỏ emoji chức năng ("Tưới cây (20💧)", "Đã điểm danh", "Hứng giọt sương", "Mở lô (...)", "Tưới"), tiêu đề khối bỏ emoji, ô "Giọt nước đã góp" không còn 💧 nên số ô 💧 giảm 1, và helper `openTab` cho truy vấn role vào tab Vườn / Cộng đồng (khối ẩn không vào cây accessibility). Không đổi bất kỳ khẳng định nào về API/disable/số liệu.
+- Vòng đầu trước khi di cư: tách hook `use-game-data`/`use-game-actions` là refactor thuần, 71 test vẫn xanh (commit `8720c05`).
+
+### Lệnh kiểm chứng (output thật)
+
+```
+$ npx eslint src/pages/game.tsx src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx src/components/game src/ds-c076-pc10a.spec.ts
+exit 0, không output
+$ npx tsc --noEmit
+exit 0, không output
+$ node scripts/uiux/static-scan.mjs ... (legacy hex emoji file)
+0 0 1 apps/miniapp/src/pages/game.tsx
+0 0 3 apps/miniapp/src/components/game/checkin-streak.tsx   (26 file components/game: legacy 0, hex 0)
+$ node scripts/check-undefined-css-vars.mjs
+OK — every var(--x) reference is defined.
+$ npx vitest run src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx src/pages/game-numbers.spec.tsx src/ds-c076-pc10a.spec.ts \
+    src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/ds-legacy-alias-contrast.spec.ts src/components/ui/button-guard.spec.ts \
+    src/components/ui/hit-target-guard.spec.tsx src/i18n/terminology.spec.ts src/pages/format-guard.spec.ts \
+    src/pages/loyalty-behavior.spec.tsx src/pages/loyalty-layout.spec.tsx src/pages/loyalty.spec.ts
+ Test Files  14 passed (14)
+      Tests  347 passed (347)
+```
+
+### Giả định
+
+1. Tên trang "Vườn Xanh" (đúng nhãn tab dưới cùng trong `nav-config.ts`), không dùng "Vườn Cây" như tên nội bộ trong báo cáo.
+2. Mua cây thật chuyển từ nút chính nhỏ sang nút phụ (secondary) và tưới cây thành nút chính: chỉ là thứ bậc trình bày, không đổi điều kiện hay handler.
+3. Hứng giọt sương, vé giữ lửa và Mua cây thật đều là nút `secondary` 48px (DS không có biến thể nhỏ); dòng vé giữ lửa gồm biểu tượng + số vé bên trái, nút Mua bên phải.
+4. Màu tông xanh của chữ nhấn (`leaf-700`) → tone `brand` (forest-600) theo ngữ nghĩa DS, không giữ nguyên giá trị sage-700; màu độ hiếm giữ đúng giá trị alias cũ (`honey-600` / `sage-600` / `stone-500`).
+5. Khối ở tab khác được dựng sẵn (ẩn) thay vì chỉ dựng khi mở tab, để không mất trạng thái vòng quay; đổi lại DOM nặng bằng trang cũ (không nặng hơn).
+
+### Việc còn lại / ghi chú
+
+- CHƯA kiểm bằng mắt (không chạy dev server/Playwright theo quy định máy): chiều cao thẻ vườn + thanh tab + hai nút tưới/mua + thẻ điểm danh có vừa màn đầu 390x844 hay không; thanh tab `position: sticky; top: 0` trong `Page` của ZaUI (nếu `Page` không phải khung cuộn thì sticky vẫn đúng theo viewport, nhưng cần xem trên máy thật có bị header Zalo che không); tương phản chữ trắng trên bục xếp hạng `forest-500`; đáp án quiz dài xuống dòng trong lưới 2 cột. Ghi "unverified" cho mọi phần hình ảnh.
+- `wheel.tsx` (legacy 13 và emoji) và `rank-badge.tsx` (legacy 1) chưa di cư, còn trong `LuckyWheelCard`; thuộc mục 4/4.
+- Đã ghi ở mục 2/4 và giữ nguyên: nút ở trang Vườn không có `busyRef` đồng bộ như `loyalty.tsx` (hai cú chạm trong cùng một khung hình vẫn gọi API hai lần, nút khoá ngay ở khung sau). Chưa thêm vì đụng nhánh tiền/giọt nước, cần quyết định của điều phối viên và review opus.
+
+### Đề xuất cho điều phối viên
+
+1. `packages/eslint-config/index.js` loại `**/game/**` và `**/tier/**` khỏi `tubu-ds/no-raw-color` + `icon-button-aria-label` ("minh hoạ dùng màu tuỳ ý"). `components/game/**` giờ đã sạch hex/rgb, nên có thể bỏ riêng `**/game/**` để lint bảo vệ thay cho guard spec (tôi không sửa vì ngoài nhóm file).
+2. PD-1 (ẩn Season Pass): chỉ cần xoá khối `{seasonPass?.active && ...}` trong tab Cộng đồng của `game.tsx`, gỡ `useGameData.seasonPass`, `useGameActions.claimPassM`, `components/game/season-pass.tsx` và `describe('GamePage — Chặng Mùa')` trong `game-behavior.spec.tsx`; đồng thời bỏ `season-pass.tsx` khỏi `GAME_FILES` của guard.
+3. PD-1/PD-3 (đổi chữ "cây thật", gộp TubuXu vào Điểm Xanh): các chuỗi nằm ở `tree-actions.tsx` ("Mua cây thật", "Mua bằng TubuXu ..."), `eco-impact.tsx`, `community-goal.tsx`, `harvest-celebration.tsx`, `use-game-actions.ts` (snackbar "Đã mua 1 cây thật"); test đặc tả truy vấn đúng các chuỗi này nên đổi chữ phải đổi test cùng commit.
+4. `apps/e2e` không có kịch bản nào chạm trang `/game`, nên không cần sửa e2e cho mục này.
+5. Nếu chủ dự án muốn gộp trình bày hai điểm danh, cách an toàn duy nhất là một dòng lối tắt `ListRow` trong thẻ điểm danh trỏ sang `/loyalty` ("Điểm danh nhận Điểm Xanh"), không gộp nút/API; chưa làm vì ngoài quyết định Q-09/Q-11.
