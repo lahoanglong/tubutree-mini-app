@@ -1347,7 +1347,7 @@ Xác minh: test ĐỎ trước khi sửa, `pd3-migration-a-rerun.race-spec.ts` (
 Tests: 1 failed, 2 passed, 3 total
 ```
 
-Sửa `20261012100000_pd3_points_lot_schema/migration.sql`: `CREATE TYPE` và hai `ADD CONSTRAINT` nằm trong khối `DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL; END $$`; bốn `ADD COLUMN` thêm `IF NOT EXISTS`. Các index đã có `IF NOT EXISTS` từ trước, `UPDATE community_events` đã idempotent. Không đổi tên/kiểu/giá trị nào, nên `migrate diff` vẫn không lệch. Test xanh sau sửa:
+Sửa `20261012100000_pd3_points_lot_schema/migration.sql`: `CREATE TYPE` và hai `ADD CONSTRAINT` nằm trong khối `DO $$ ... EXCEPTION WHEN duplicate_object THEN NULL; END $$`; năm `ADD COLUMN` thêm `IF NOT EXISTS`. Các index đã có `IF NOT EXISTS` từ trước, `UPDATE community_events` đã idempotent. Không đổi tên/kiểu/giá trị nào, nên `migrate diff` vẫn không lệch. Test xanh sau sửa:
 
 ```
 ✓ splitSqlStatements tách được file A có khối DO $$ ... $$
@@ -1366,7 +1366,7 @@ $ npx prisma migrate deploy (file repo)                                         
 $ npx prisma migrate diff ... --exit-code                                        -> No difference detected.
 ```
 
-Tức là A lỗi giữa chừng thì không để lại kiểu/cột/index nào (Prisma chạy cả file trong một transaction); phục hồi giống B: sửa nguyên nhân, `prisma migrate resolve --rolled-back 20261012100000_pd3_points_lot_schema`, rồi `migrate deploy` lại. Ghi chú này cũng nằm trong đầu file migration A. Thêm: `migrate deploy` trên DB trống `pd3_d1_empty` (126 migration cùng chuỗi PD-3) `All migrations have been successfully applied`, `migrate diff --exit-code` `No difference detected`, `check-partial-indexes: mong đợi 20, có trong DB 20`. Hai DB nháp đã `DROP`.
+Tức là A lỗi giữa chừng thì không để lại kiểu/cột/index nào (Prisma chạy cả file trong một transaction); phục hồi giống B: sửa nguyên nhân, `prisma migrate resolve --rolled-back 20261012100000_pd3_points_lot_schema`, rồi `migrate deploy` lại. Ghi chú này cũng nằm trong đầu file migration A. Thêm: `migrate deploy` trên DB trống `pd3_d1_empty` (132 migration, gồm cả chuỗi PD-3) `All migrations have been successfully applied`, `migrate diff --exit-code` `No difference detected`, `check-partial-indexes: mong đợi 20, có trong DB 20`. Hai DB nháp đã `DROP`.
 
 Sửa tại chỗ migration đã áp làm đổi checksum, nhưng PD-3 chưa gộp/deploy ở đâu, và `migrate deploy` trên `tubutree_it` (đã áp bản cũ) vẫn báo `No pending migrations to apply` (cùng cách C1/C2 đã sửa migration B và `20261012160000`).
 
