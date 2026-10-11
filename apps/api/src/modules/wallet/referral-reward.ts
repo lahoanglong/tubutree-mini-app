@@ -28,8 +28,8 @@ export const REFERRAL_DEBT_REF_TYPE = 'REFERRAL_DEBT';
  * REFERRAL_MILESTONE:<referrerId>:<count>#<n>. Thu hồi đời n: REFERRAL_MILESTONE_REVOKE:<referrerId>:<count>#<n>.
  * Reason duy nhất theo đời nên cùng partial unique index chặn cấp/thu hồi trùng khi chạy song song.
  */
-const MILESTONE_PREFIX = 'REFERRAL_MILESTONE:';
-const MILESTONE_REVOKE_PREFIX = 'REFERRAL_MILESTONE_REVOKE:';
+export const MILESTONE_PREFIX = 'REFERRAL_MILESTONE:';
+export const MILESTONE_REVOKE_PREFIX = 'REFERRAL_MILESTONE_REVOKE:';
 
 type Db = Prisma.TransactionClient;
 

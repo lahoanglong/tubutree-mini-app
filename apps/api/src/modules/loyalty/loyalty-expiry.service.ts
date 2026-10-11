@@ -6,7 +6,12 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
-import { REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX } from '../wallet/referral-reward';
+import {
+  MILESTONE_PREFIX,
+  MILESTONE_REVOKE_PREFIX,
+  REFERRAL_ORDER2_PREFIX,
+  REFERRAL_ORDER2_REVOKE_PREFIX,
+} from '../wallet/referral-reward';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -91,14 +96,7 @@ const REFERRAL_ORDER2_RULE: ReversalRule = {
       : null,
 };
 
-/**
- * Mốc thưởng thêm của người mời: thưởng REFERRAL_MILESTONE:<người mời>:<mốc>[#<đời>] (đời 0 không có hậu tố), thu hồi
- * REFERRAL_MILESTONE_REVOKE:<người mời>:<mốc>#<đời> (luôn có hậu tố). Cùng một mốc có thể đạt lại ở đời sau nên khoá
- * gồm cả đời; thu hồi đời n chỉ ăn lô của đời n. Tiền tố khớp referral-reward.ts (MILESTONE_PREFIX, MILESTONE_REVOKE_PREFIX).
- */
-const MILESTONE_PREFIX = 'REFERRAL_MILESTONE:';
-const MILESTONE_REVOKE_PREFIX = 'REFERRAL_MILESTONE_REVOKE:';
-
+/** Đời 0 không có hậu tố `#<đời>` ở dòng thưởng nhưng dòng thu hồi luôn có, nên cả hai quy về `<mốc>#<đời>`. */
 function milestoneKey(rest: string): string | null {
   const [mark, generation, ...extra] = rest.split('#');
   const gen = generation === undefined || generation === '' ? 0 : Number(generation);
@@ -106,6 +104,11 @@ function milestoneKey(rest: string): string | null {
   return `REFERRAL_MILESTONE:${mark}#${gen}`;
 }
 
+/**
+ * Mốc thưởng thêm của người mời: thưởng REFERRAL_MILESTONE:<người mời>:<mốc>[#<đời>] (đời 0 không có hậu tố), thu hồi
+ * REFERRAL_MILESTONE_REVOKE:<người mời>:<mốc>#<đời> (luôn có hậu tố). Cùng một mốc có thể đạt lại ở đời sau nên khoá
+ * gồm cả đời; thu hồi đời n chỉ ăn lô của đời n. Tiền tố import từ referral-reward.ts để hai phía không lệch nhau.
+ */
 const REFERRAL_MILESTONE_RULE: ReversalRule = {
   lotKey: (t) => (t.refType === 'REFERRAL' && startsWith(t.reason, MILESTONE_PREFIX) ? milestoneKey(t.reason.slice(MILESTONE_PREFIX.length)) : null),
   reversedLotKey: (t) =>
