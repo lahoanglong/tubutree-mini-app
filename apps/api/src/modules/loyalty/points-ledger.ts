@@ -74,11 +74,11 @@ export async function applyPointsDelta(tx: Prisma.TransactionClient, input: Poin
   }
 
   const amount = -delta;
-  const res = await tx.user.updateMany(
+  const guarded: Prisma.UserUpdateManyArgs =
     lot === 'CONVERTED'
       ? { where: { id: userId, pointsConvertedBalance: { gte: amount } }, data: { pointsConvertedBalance: { decrement: amount } } }
-      : { where: { id: userId, pointsBalance: { gte: amount } }, data: { pointsBalance: { decrement: amount } } },
-  );
+      : { where: { id: userId, pointsBalance: { gte: amount } }, data: { pointsBalance: { decrement: amount } } };
+  const res = await tx.user.updateMany(guarded);
   if (res.count === 0) return { applied: false, entryId: null };
   const entry = await tx.pointsTransaction.create({ data, select: { id: true } });
   return { applied: true, entryId: entry.id };
