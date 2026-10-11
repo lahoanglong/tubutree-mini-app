@@ -107,6 +107,19 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
     await expect(svc.set(key, -1, 'admin')).rejects.toThrow(BadRequestException);
   });
 
+  // Review B1 (minor): 2.5 nằm trong biên nhưng RewardPointsService.grant / cột INTEGER không nhận số lẻ, nên thưởng
+  // âm thầm không bao giờ được cấp (500 bị nuốt ở thưởng giới thiệu, quỹ cây báo "chưa khả dụng").
+  it.each([...Object.keys(POINTS_NUMBER_KEYS), 'game.spin_buy_cost_points'])(
+    '%s: số lẻ bị từ chối lúc ghi (Điểm Xanh là số nguyên), số nguyên cùng khoảng vẫn nhận',
+    async (key) => {
+      const { svc, upsert } = configService();
+      await expect(svc.set(key, 2.5, 'admin')).rejects.toThrow(BadRequestException);
+      await expect(svc.set(key, 2.5, 'admin')).rejects.toThrow(/số nguyên/);
+      expect(upsert).not.toHaveBeenCalled();
+      await expect(svc.set(key, 2, 'admin')).resolves.toBeUndefined();
+    },
+  );
+
   it("(f) set('referral.referrer_reward_points', 5000) → 400, không ghi", async () => {
     const { svc, upsert } = configService();
     await expect(svc.set('referral.referrer_reward_points', 5000, 'admin')).rejects.toThrow(BadRequestException);

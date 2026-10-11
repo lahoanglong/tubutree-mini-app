@@ -56,7 +56,7 @@ export class SystemConfigService {
    * Cố ý liệt kê TỪNG KHOÁ chứ không suy theo hậu tố: `subscribe.discount_pct` là phân số
    * (0.12) còn `groupbuy.discount_pct` là phần trăm nguyên (15) — cùng hậu tố, khác đơn vị.
    */
-  private static readonly RANGES: Record<string, { min: number; max: number; note: string }> = {
+  private static readonly RANGES: Record<string, { min: number; max: number; note: string; integer?: true }> = {
     'loyalty.max_redeem_pct': { min: 0, max: 1, note: 'phân số (0.2 = 20%)' },
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
@@ -82,13 +82,14 @@ export class SystemConfigService {
     // 0 ngày = coi mọi khách từng mua là "đã bỏ đi" và cấp mã cho tất cả.
     'voucher.winback_days': { min: 1, max: 365, note: 'số ngày' },
     // PD-3: khoá tính bằng Điểm Xanh (1 điểm = 1.000đ). Khoá xu cũ cùng nghĩa có giá trị 200–100.000; gõ/chép
-    // nhầm giá trị xu vào đây là thưởng gấp 1.000 lần, nên biên chặn ngay lúc ghi.
-    'referral.referrer_reward_points': { min: 0, max: 100, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu' },
-    'community.post_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu' },
-    'community.answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu' },
-    'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu' },
-    'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu' },
-    'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay' },
+    // nhầm giá trị xu vào đây là thưởng gấp 1.000 lần, nên biên chặn ngay lúc ghi. `integer`: điểm là số nguyên
+    // (cột INTEGER; RewardPointsService.grant ném 500 với số lẻ nên thưởng 2.5 sẽ không bao giờ được cấp).
+    'referral.referrer_reward_points': { min: 0, max: 100, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    'community.post_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    'community.answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
+    'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
+    'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
     // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
     'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
@@ -144,6 +145,9 @@ export class SystemConfigService {
     if (!rule) return;
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       throw new BadRequestException(`"${key}" phải là số — ${rule.note}.`);
+    }
+    if (rule.integer && !Number.isInteger(value)) {
+      throw new BadRequestException(`"${key}" phải là số nguyên — ${rule.note}. Giá trị vừa nhập: ${value}.`);
     }
     if (value < rule.min || value > rule.max) {
       throw new BadRequestException(
