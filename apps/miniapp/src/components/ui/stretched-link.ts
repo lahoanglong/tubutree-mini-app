@@ -16,9 +16,11 @@ export const STRETCHED_LINK_RESET: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** Vùng chạm 44px cho nút phủ khi chữ của nó thấp hơn 44px, mà không làm hàng chứa nó cao thêm: hộp nút cao 44px,
- * lề âm hai đầu trả lại phần thừa cho bố cục (hộp trong suốt nằm trong đệm/khoảng cách quanh nó). */
+/** Vùng chạm 44px cho nút phủ khi chữ của nó thấp hơn 44px, mà không làm bố cục cao thêm: đệm dọc làm hộp nút
+ * cao đủ 44px, lề âm cùng cỡ trả lại phần đệm cho dòng quanh nó (hộp trong suốt nằm trong khoảng trống bên cạnh).
+ * `textHeight` = chiều cao một dòng chữ của nút; chữ nhiều dòng chỉ cao thêm nên vẫn đúng. Cần lề dọc riêng thì
+ * bọc nút trong một div có lề, đừng ghi đè `margin` ở đây. */
 export function stretchedLinkHit44(textHeight: number): CSSProperties {
-  const overflow = Math.max(0, 44 - textHeight);
-  return { minHeight: 44, margin: `${-overflow / 2}px 0` };
+  const pad = Math.max(0, Math.ceil((44 - textHeight) / 2));
+  return { boxSizing: 'border-box', minHeight: 44, padding: `${pad}px 0`, margin: `${-pad}px 0` };
 }

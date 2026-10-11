@@ -51,7 +51,7 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
           aria-label={`Đơn ${o.code}`}
           aria-describedby={summaryId}
           onClick={onOpen}
-          style={{ ...STRETCHED_LINK_RESET, ...stretchedLinkHit44(22) }}
+          style={{ ...STRETCHED_LINK_RESET, ...stretchedLinkHit44(16) }}
         >
           <Text variant="label" style={{ letterSpacing: 0.4 }}>
             {o.code}

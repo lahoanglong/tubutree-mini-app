@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { CheckCircle2, Hash, Heart, HelpCircle, Leaf, Lightbulb, MessageCircle, Sprout } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -8,6 +9,7 @@ import { vi } from '../../i18n/vi';
 import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
 import { rowKeyboardProps } from '../ui/row-keyboard';
+import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET, stretchedLinkHit44 } from '../ui/stretched-link';
 import { Text } from '../ui/text';
 import { RankBadge } from './rank-badge';
 
@@ -32,17 +34,22 @@ export const KIND_ICON: Partial<Record<FeedItem['kind'], LucideIcon>> = {
 const CLAMP = (lines: number) =>
   ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) as const;
 
+/**
+ * Thẻ bài đăng. Vỏ KHÔNG tương tác: nút mở bài là nút thật bọc tiêu đề (bài không tiêu đề thì bọc nội dung),
+ * `::after` của nó phủ cả thẻ (cùng cách ProductTile/OrderCard) nên chạm đâu trên thẻ cũng mở bài. Thẻ sản phẩm
+ * gắn kèm và hashtag là anh em của nó, nổi lên bằng z-index. Trước đây vỏ là `role="button"` chứa các nút này
+ * nên trình đọc màn hình không tới được chúng (axe nested-interactive, 4 thẻ ở /feed).
+ */
 export default function PostCard({ post, onClick }: { post: FeedItem; onClick: () => void }) {
   const navigate = useNavigate();
   const label = KIND_LABEL[post.kind];
   const KindIcon = KIND_ICON[post.kind];
+  const bodyId = useId();
   return (
     <div
-      role="button"
-      {...rowKeyboardProps()}
-      onClick={onClick}
+      data-testid="post-card"
       className="tubu-press"
-      style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)', cursor: 'pointer' }}
+      style={{ position: 'relative', isolation: 'isolate', padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {post.avatar ? (
@@ -84,20 +91,54 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
           {label}
         </Text>
       )}
-      {post.title && <Text variant="body-lg" as="div" style={{ marginTop: 2, fontWeight: 600 }}>{post.title}</Text>}
-      <Text variant="body-sm" as="div" style={{ marginTop: 4, ...CLAMP(3) }}>{post.body}</Text>
+      {post.title ? (
+        <>
+          <div style={{ marginTop: 2 }}>
+            <button
+              type="button"
+              className={STRETCHED_LINK_CLASS}
+              data-flat=""
+              aria-describedby={bodyId}
+              onClick={onClick}
+              style={{ ...STRETCHED_LINK_RESET, ...stretchedLinkHit44(24), display: 'block', width: '100%' }}
+            >
+              <Text variant="body-lg" as="span" style={{ display: 'block', fontWeight: 600 }}>
+                {post.title}
+              </Text>
+            </button>
+          </div>
+          <div id={bodyId} style={{ marginTop: 4 }}>
+            <Text variant="body-sm" as="div" style={CLAMP(3)}>{post.body}</Text>
+          </div>
+        </>
+      ) : (
+        <div style={{ marginTop: 4 }}>
+          <button
+            type="button"
+            className={STRETCHED_LINK_CLASS}
+            data-flat=""
+            onClick={onClick}
+            style={{ ...STRETCHED_LINK_RESET, ...stretchedLinkHit44(22), display: 'block', width: '100%' }}
+          >
+            <Text variant="body-sm" as="span" style={CLAMP(3)}>
+              {post.body}
+            </Text>
+          </button>
+        </div>
+      )}
       {post.images[0] && (
         <img src={post.images[0]} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
       )}
       {post.productTags.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, overflowX: 'auto' }}>
+        // Cả hàng nổi trên lớp phủ (không riêng từng thẻ) để vuốt ngang bắt đầu ở khoảng trống giữa hai thẻ vẫn cuộn được hàng.
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 8, marginTop: 8, overflowX: 'auto' }}>
           {post.productTags.map((p) => (
             <div
               key={p.slug}
               role="button"
               {...rowKeyboardProps()}
               className="tubu-press"
-              onClick={(e) => { e.stopPropagation(); navigate(`/product/${p.slug}`); }}
+              onClick={() => navigate(`/product/${p.slug}`)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -123,8 +164,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
       {post.tags.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           {post.tags.map((t) => (
-            // Chip chỉ truyền onPress không có sự kiện nên không tự chặn nổi bọt; span ngoài chặn để thẻ cha không mở bài.
-            <span key={t.slug} style={{ display: 'inline-flex' }} onClick={(e) => e.stopPropagation()}>
+            <span key={t.slug} style={{ position: 'relative', zIndex: 1, display: 'inline-flex' }}>
               <Chip
                 size="sm"
                 icon={Hash}

@@ -114,7 +114,7 @@ describe('FeedPage — hành vi giữ nguyên khi chuyển DS v2', () => {
       unanswered: undefined,
       tag: undefined,
     });
-    fireEvent.click(screen.getByText('Lan Anh'));
+    fireEvent.click(screen.getByRole('button', { name: 'Nội dung p1' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/feed/p1');
   });
 
