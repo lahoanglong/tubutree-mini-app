@@ -179,6 +179,67 @@ describe('PD-3 T16 (b) + (f): khoá *_points có biên giá trị; seed nằm tr
   });
 });
 
+/**
+ * PF-3 mục 3: loyalty.point_expire_months quyết định hạn của MỌI điểm thưởng mới. Không có biên thì admin đặt được 0
+ * (điểm hết hạn ngay lúc cộng), số âm (hạn trong quá khứ) hay số khổng lồ (hạn không bao giờ tới); trước biên này mọi
+ * nguồn cộng điểm phải tự rơi về 12 tháng khi gặp giá trị hỏng (points-expiry-date.ts).
+ */
+describe('PF-3: loyalty.point_expire_months có biên 1–120 tháng, số nguyên', () => {
+  const KEY = 'loyalty.point_expire_months';
+
+  it.each([1, 6, 12, 24, 120])('nhận %i tháng', async (months) => {
+    const { svc, upsert } = configService();
+    await expect(svc.set(KEY, months, 'admin')).resolves.toBeUndefined();
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, -1, -12, 121, 1000, 12_000])('từ chối %i tháng (ngoài 1–120), không ghi', async (months) => {
+    const { svc, upsert } = configService();
+    await expect(svc.set(KEY, months, 'admin')).rejects.toThrow(BadRequestException);
+    await expect(svc.set(KEY, months, 'admin')).rejects.toThrow(/1–120/);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([0.5, 1.5, 12.9])('từ chối số lẻ %p (hạn tính theo tháng nguyên)', async (months) => {
+    const { svc, upsert } = configService();
+    await expect(svc.set(KEY, months, 'admin')).rejects.toThrow(/số nguyên/);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, '12', true, [12]])('từ chối giá trị không phải số: %p', async (bad) => {
+    const { svc, upsert } = configService();
+    await expect(svc.set(KEY, bad as never, 'admin')).rejects.toThrow(BadRequestException);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('thông báo lỗi tiếng Việt nêu tên khoá, khoảng hợp lệ, đơn vị tháng và giá trị vừa nhập', async () => {
+    const { svc } = configService();
+    await expect(svc.set(KEY, 0, 'admin')).rejects.toThrow(/loyalty\.point_expire_months.*1–120.*tháng.*0/);
+  });
+
+  it('giá trị seed nằm trong biên (seed không tự vi phạm biên mình đặt)', async () => {
+    const seeded = seededConfigs().find((r) => r.key === KEY);
+    expect(seeded).toBeDefined();
+    expect(Number.isInteger(seeded!.value)).toBe(true);
+    const { svc } = configService();
+    await expect(svc.set(KEY, seeded!.value as number, 'admin')).resolves.toBeUndefined();
+  });
+
+  it('không migration nào gieo giá trị cho khoá này (chỉ seed.ts)', () => {
+    const migrations = join(__dirname, '../../../prisma/migrations');
+    const offenders = readdirSync(migrations)
+      .map((dir) => join(migrations, dir, 'migration.sql'))
+      .filter((file) => {
+        try {
+          return readFileSync(file, 'utf-8').includes(KEY);
+        } catch {
+          return false;
+        }
+      });
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('PD-3 T16 (c) (d) (e): chặn lúc chạy', () => {
   function rewardsWith(config: Record<string, unknown> = {}) {
     const createManyAndReturn = jest.fn().mockResolvedValue([{ id: 'p' }]);
