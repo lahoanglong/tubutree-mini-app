@@ -21,7 +21,14 @@ vi.mock('../services/shop-api', () => ({
   canReviewProduct: mocks.canReview,
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.auth.status, login: mocks.login }) }));
-vi.mock('./image-upload', () => ({ MultiImageUpload: () => null, VideoUpload: () => null }));
+vi.mock('./image-upload', () => ({
+  MultiImageUpload: ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) => (
+    <button type="button" onClick={() => onChange([...value, 'https://i/moi.jpg'])}>
+      Thêm ảnh ({value.length})
+    </button>
+  ),
+  VideoUpload: () => null,
+}));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { ReviewsSection, Stars } from './reviews-section';
@@ -123,6 +130,40 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
     await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', { rating: 4, comment: 'Dùng êm', images: undefined, videoUrl: undefined }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh', type: 'success' }));
+  });
+
+  it('đóng form giữa chừng (chạm nút Đóng) rồi mở lại: sao, nhận xét và ảnh đã up vẫn còn', async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    let group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(within(group).getByRole('radio', { name: '3 sao' }));
+    fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Giao hơi chậm' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Viết đánh giá' }));
+    group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    expect(within(group).getByRole('radio', { name: '3 sao' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Giao hơi chậm');
+    expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeInTheDocument();
+  });
+
+  it('gửi thành công xong thì xoá nháp: mở lại là form trống, 5 sao mặc định', async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(within(group).getByRole('radio', { name: '2 sao' }));
+    fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Tạm được' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Viết đánh giá' }));
+    const again = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    expect(within(again).getByRole('radio', { name: '5 sao' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('');
   });
 
   it('các nút chọn sao trong form có vùng chạm tối thiểu 44x44', async () => {

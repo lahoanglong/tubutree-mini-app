@@ -41,9 +41,21 @@ export function Stars({ value, size = 14 }: { value: number; size?: number }) {
   );
 }
 
+interface ReviewDraft {
+  rating: number;
+  comment: string;
+  images: string[];
+  video: string;
+}
+
+const EMPTY_DRAFT: ReviewDraft = { rating: 5, comment: '', images: [], video: '' };
+
 export function ReviewsSection({ slug }: { slug: string }) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
+  // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống
+  // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2).
+  const [draft, setDraft] = useState<ReviewDraft>(EMPTY_DRAFT);
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
@@ -229,19 +241,34 @@ export function ReviewsSection({ slug }: { slug: string }) {
       )}
 
       <BottomSheet open={writing} onClose={() => setWriting(false)} title="Đánh giá sản phẩm">
-        <WriteReview slug={slug} onDone={() => setWriting(false)} />
+        <WriteReview
+          slug={slug}
+          draft={draft}
+          onDraftChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          onDone={() => {
+            setDraft(EMPTY_DRAFT);
+            setWriting(false);
+          }}
+        />
       </BottomSheet>
     </section>
   );
 }
 
-function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
+function WriteReview({
+  slug,
+  draft,
+  onDraftChange,
+  onDone,
+}: {
+  slug: string;
+  draft: ReviewDraft;
+  onDraftChange: (patch: Partial<ReviewDraft>) => void;
+  onDone: () => void;
+}) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-  const [images, setImages] = useState<string[]>([]);
-  const [video, setVideo] = useState('');
+  const { rating, comment, images, video } = draft;
 
   const submit = useMutation({
     mutationFn: () =>
@@ -275,7 +302,7 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
             className="tubu-press"
             onClick={() => {
               haptic('light');
-              setRating(i);
+              onDraftChange({ rating: i });
             }}
             style={{
               minWidth: 44,
@@ -295,11 +322,11 @@ function WriteReview({ slug, onDone }: { slug: string; onDone: () => void }) {
       <Input.TextArea
         placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)..."
         value={comment}
-        onChange={(e) => setComment(e.target.value)}
+        onChange={(e) => onDraftChange({ comment: e.target.value })}
         rows={4}
       />
-      <MultiImageUpload value={images} onChange={setImages} max={5} />
-      <VideoUpload value={video} onChange={setVideo} />
+      <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} max={5} />
+      <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} />
       <Text
         variant="caption"
         tone={bonus ? 'success' : 'tertiary'}
