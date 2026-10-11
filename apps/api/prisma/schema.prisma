@@ -257,6 +257,7 @@ model User {
   orders                 Order[]
   pointsTransactions     PointsTransaction[]
   coinTransactions       CoinTransaction[]
+  xuPointsConversion     XuPointsConversion?
   walletTransactions     WalletTransaction[]
   affiliateLinks        AffiliateLink[]
   commissions            Commission[]
@@ -973,6 +974,24 @@ model PointsTransaction {
   // refType='COMMUNITY', *_quest_unique (userId, reason) WHERE refType='QUEST',
   // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
   @@map("points_transactions")
+}
+
+// PD-3 Q-03a: ảnh chụp lần quy đổi xu → Điểm Xanh (migration 20261012110000_pd3_xu_to_points), một dòng
+// mỗi user có xu lúc quy đổi. PK userId là một trong các lớp chặn quy đổi hai lần; SQL hoàn tác
+// prisma/manual/pd3_xu_to_points_rollback.sql đọc bảng này. CHECK roundingVnd 0..999 chỉ có trong SQL.
+model XuPointsConversion {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id])
+  coinsBefore     Int
+  pointsBefore    Int
+  convertedBefore Int
+  pointsGranted   Int
+  roundingVnd     Int // pointsGranted*1000 − coinsBefore
+  pointsTxId      String
+  coinTxId        String
+  convertedAt     DateTime @default(now())
+
+  @@map("xu_points_conversions")
 }
 
 /// Điểm danh hằng ngày nhận Điểm Xanh ở trang Hạng thành viên (loyalty.service.ts dailyCheckIn).
