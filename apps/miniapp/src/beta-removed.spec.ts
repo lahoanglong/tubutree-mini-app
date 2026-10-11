@@ -3,8 +3,8 @@ import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 /**
- * Q-19 (C-118): chương trình Beta Tester không có tác dụng và góp ý không ai đọc, nên trang /beta bị xoá khỏi miniapp.
- * API `/beta/*` ở backend vẫn còn (gói PD-2 xử lý endpoint) nhưng miniapp không còn client, route hay lối vào nào.
+ * Q-19 (C-118): chương trình Beta Tester không có tác dụng và góp ý không ai đọc, nên trang /beta bị xoá khỏi miniapp
+ * và 4 route `/beta/*` của API cũng đã gỡ (PD-2). Miniapp không được có lại client, route hay lối vào nào.
  */
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

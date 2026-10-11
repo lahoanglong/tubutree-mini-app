@@ -26,7 +26,6 @@ import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
 import { FaqModule } from './modules/faq/faq.module';
 import { GroupBuyModule } from './modules/groupbuy/groupbuy.module';
 import { RefillModule } from './modules/refill/refill.module';
-import { BetaModule } from './modules/beta/beta.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
@@ -83,7 +82,6 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     AiAdvisorModule,
     GroupBuyModule,
     RefillModule,
-    BetaModule,
     ReviewsModule,
     WishlistModule,
     VouchersModule,

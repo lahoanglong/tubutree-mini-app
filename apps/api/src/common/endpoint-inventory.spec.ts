@@ -29,6 +29,10 @@ const REMOVED = [
   'GET /brand/owner/me/promotions',
   'POST /orders/:code/issue-invoice',
   'POST /orders/:code/track',
+  'GET /beta/me',
+  'POST /beta/join',
+  'POST /beta/leave',
+  'POST /beta/feedback',
 ] as const;
 
 const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [

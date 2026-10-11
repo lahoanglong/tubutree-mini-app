@@ -1730,6 +1730,7 @@ model BottleReturn {
 }
 
 // Beta Tester (§6.14.11) — chương trình trải nghiệm sớm + kênh góp ý.
+/// @deprecated Không còn code nào đọc hay ghi: 4 route /beta/* đã gỡ (Q-19). Có dữ liệu khách từ trước nên KHÔNG DROP.
 model BetaTester {
   id       String     @id @default(cuid())
   userId   String     @unique
@@ -1745,8 +1746,8 @@ enum BetaStatus {
   LEFT
 }
 
-/// @deprecated Chỉ ghi, không đọc (C-108): beta.service ghi góp ý của khách beta nhưng không API hay màn admin nào đọc lại.
-/// Có dữ liệu khách nên KHÔNG DROP; cần chủ dự án quyết: làm màn admin đọc, hoặc bỏ tính năng.
+/// @deprecated Không còn code nào đọc hay ghi: 4 route /beta/* đã gỡ (Q-19) vì chương trình Beta Tester không có tác dụng.
+/// Có dữ liệu khách từ trước nên KHÔNG DROP; dọn bằng migration riêng khi cần.
 model BetaFeedback {
   id        String   @id @default(cuid())
   userId    String
