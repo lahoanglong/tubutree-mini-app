@@ -7,9 +7,13 @@ import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { applyPointsDelta } from '../loyalty/points-ledger';
 import { toLocalPhone } from '../../common/phone';
 
 type OrderWithItems = Order & { items: OrderItem[] };
+
+/** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
+const XU_PER_POINT = 1000;
 
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
@@ -85,7 +89,7 @@ export class OrderReversalService {
     // BANK_TRANSFER, không bao giờ COD, nên nhánh COD dưới đây không ảnh hưởng gì tới nó. Phương
     // thức lạ (ngoài danh sách hoàn tự động) chỉ còn ảnh chụp để dựa vào.
     let paidBeforeReversal = !isRefundableChannel && order.paymentStatus === 'PAID';
-    // true khi lần đảo NÀY thực sự chuyển tiền vào ví/xu khách — caller (vd admin.reviewReturn) dùng
+    // true khi lần đảo NÀY thực sự hoàn vào Ví (hoặc Điểm Xanh với đơn XU cũ) của khách — caller (vd admin.reviewReturn) dùng
     // để quyết định có được báo khách "đã hoàn tiền" hay không (A6-06 phần thông báo): không được
     // báo đã hoàn tiền nếu guard dưới đây thua (không có gì thực sự được chi).
     let moneyRefunded = false;
@@ -101,32 +105,24 @@ export class OrderReversalService {
       });
       paidBeforeReversal = refunded.count === 1;
       moneyRefunded = refunded.count === 1;
-      if (refunded.count === 1 && order.placedForCustomer) {
+      if (refunded.count === 1 && order.paymentMethod === 'XU') {
+        // Đơn XU tạo trước PD-3. Xu không ra tiền (Q-03a) nên không hoàn Ví, kể cả nhánh lên hộ (lên hộ
+        // chưa từng nhận XU, place-order-for-customer.dto.ts).
+        if (order.placedForCustomer) {
+          this.logger.error(`Đơn lên hộ ${order.code} trả bằng XU (không được phép): hoàn Điểm Xanh cho chủ đơn, kiểm tra tay.`);
+        }
+        await this.refundLegacyXuAsPoints(tx, order);
+        moneyRefunded = true;
+      } else if (refunded.count === 1 && order.placedForCustomer) {
         // Đơn CTV lên hộ: người trả tiền là khách cuối, không phải CTV (C-001). Caller báo "đã hoàn
         // vào Ví" cho order.userId, nên chỉ để true khi chính người đó là ví vừa được cộng.
         const creditedUserId = await this.refundEndCustomer(tx, order);
         moneyRefunded = creditedUserId === order.userId;
       } else if (refunded.count === 1) {
-        if (order.paymentMethod === 'XU') {
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { coinsBalance: { increment: order.total } },
-          });
-          await tx.coinTransaction.create({
-            data: {
-              userId: order.userId,
-              delta: order.total,
-              reason: `ORDER_REFUND:${order.code}`,
-              refType: 'ORDER',
-              refId: order.id,
-            },
-          });
-        } else {
-          // WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/COD đều hoàn về Ví — COD không có "kênh gốc" nào
-          // khác để hoàn lại (khách trả tiền mặt, không có tài khoản/ví điện tử gốc lưu ở đây); Ví
-          // Tubu là đích hoàn nhất quán duy nhất, giống mọi kênh khác trong nhánh này.
-          await this.refundToWallet(tx, order.userId, order);
-        }
+        // WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/COD đều hoàn về Ví — COD không có "kênh gốc" nào
+        // khác để hoàn lại (khách trả tiền mặt, không có tài khoản/ví điện tử gốc lưu ở đây); Ví
+        // Tubu là đích hoàn nhất quán duy nhất, giống mọi kênh khác trong nhánh này.
+        await this.refundToWallet(tx, order.userId, order);
       }
     }
 
@@ -189,16 +185,38 @@ export class OrderReversalService {
 
     // Thưởng giới thiệu chỉ cấp từ đơn đã giao (đơn lẻ, không phải lên hộ), nên chỉ đơn trả hàng
     // (ảnh chụp trước lần lật = DELIVERED) mới có thể là đơn đã dùng để thưởng. Thu hồi trong cùng tx
-    // để lần trả hàng và việc trừ xu người mời commit/rollback cùng nhau.
+    // để lần trả hàng và việc trừ điểm người mời commit/rollback cùng nhau.
     if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
       const revoked = await revokeReferralRewardForOrder(tx, order);
       if (revoked?.shortfall) {
         this.logger.warn(
-          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} xu, thiếu ${revoked.shortfall} xu (đã ghi REFERRAL_DEBT).`,
+          `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
     }
     return { moneyRefunded };
+  }
+
+  /**
+   * PD-3 (spec 6.2): hoàn đơn XU cũ bằng ceil(total/1000) Điểm Xanh lô CONVERTED (không hết hạn).
+   * Guard một lần là PAID→REFUNDED của caller; khoá `points_transactions_converted_refund_unique`
+   * là lớp hai (dòng đã có → không cộng, không làm hỏng tx).
+   */
+  private async refundLegacyXuAsPoints(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
+    const points = Math.ceil(order.total / XU_PER_POINT);
+    if (points <= 0) return;
+    const res = await applyPointsDelta(tx, {
+      userId: order.userId,
+      delta: points,
+      lot: 'CONVERTED',
+      reason: `ORDER_REFUND_XU:${order.code}`,
+      refType: 'ORDER',
+      refId: order.id,
+      skipDuplicates: true,
+    });
+    if (!res.applied) {
+      this.logger.warn(`Đơn XU ${order.code} đã có dòng ORDER_REFUND_XU, bỏ qua hoàn lần 2.`);
+    }
   }
 
   private async refundToWallet(tx: Prisma.TransactionClient, userId: string, order: OrderWithItems): Promise<void> {

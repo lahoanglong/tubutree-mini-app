@@ -28,7 +28,8 @@ type MockTx = {
   order: { updateMany: jest.Mock };
   user: { update: jest.Mock };
   coinTransaction: { create: jest.Mock; findMany: jest.Mock };
-  pointsTransaction: { findMany: jest.Mock };
+  pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
+  orderCustomerRefund: { create: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
@@ -59,7 +60,12 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
     // Không có thưởng giới thiệu nào gắn với đơn → nhánh thu hồi không làm gì.
     coinTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     // PD-3: thưởng giới thiệu sau gộp nằm ở sổ điểm; thu hồi đọc cả hai sổ.
-    pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+    pointsTransaction: {
+      findMany: jest.fn().mockResolvedValue([]),
+      // PD-3: hoàn đơn XU cũ ghi lô CONVERTED bằng INSERT ... ON CONFLICT DO NOTHING (points-ledger.ts).
+      createManyAndReturn: jest.fn().mockResolvedValue([{ id: 'ptx' }]),
+    },
+    orderCustomerRefund: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     orderItem: { update: jest.fn().mockResolvedValue({}) },
@@ -136,18 +142,51 @@ describe('OrderReversalService', () => {
     expect(flashSale.restore).toHaveBeenCalledTimes(1);
   });
 
-  it('hoàn XU (coinsBalance) thay vì walletBalance khi thanh toán bằng XU', async () => {
+  // PD-3 (spec 6.2, OQ-8): đơn XU cũ huỷ/trả sau gộp → hoàn ceil(total/1000) Điểm Xanh lô quy đổi.
+  // Không cộng xu (users_coins_frozen), không về Ví (xu không ra tiền, Q-03a).
+  it.each([
+    [150000, 150],
+    [150001, 151],
+    [999, 1],
+  ])('đơn XU cũ %iđ → +%i điểm lô CONVERTED (ORDER_REFUND_XU), không cộng xu, không hoàn Ví', async (total, points) => {
+    const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID', total });
+    const tx = makeTx(order);
+    (applyWalletDelta as jest.Mock).mockClear();
+    const result = await service.reverseFinancials(tx as never, order);
+
+    expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith({
+      data: [
+        {
+          userId: 'u1', delta: points, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1',
+          refType: 'ORDER', refId: 'o1', expiresAt: null,
+        },
+      ],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+    expect(tx.user.update).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: points } } });
+    expect(tx.coinTransaction.create).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+    expect(result).toEqual({ moneyRefunded: true });
+  });
+
+  it('đơn XU cũ: dòng ORDER_REFUND_XU đã có (khoá converted_refund_unique) → không cộng lần 2', async () => {
     const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID' });
     const tx = makeTx(order);
+    tx.pointsTransaction.createManyAndReturn.mockResolvedValue([]);
     await service.reverseFinancials(tx as never, order);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
 
-    expect(tx.user.update).toHaveBeenCalledWith({
-      where: { id: 'u1' },
-      data: { coinsBalance: { increment: 150000 } },
-    });
-    expect(tx.coinTransaction.create).toHaveBeenCalledWith({
-      data: { userId: 'u1', delta: 150000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER', refId: 'o1' },
-    });
+  it('đơn XU cũ gắn cờ lên hộ (không thể có, lên hộ không nhận XU) → vẫn hoàn điểm cho chủ đơn, KHÔNG hoàn tiền mặt/Ví khách cuối', async () => {
+    const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'PAID', placedForCustomer: true, referrerUserId: 'ctv1' });
+    const tx = makeTx(order);
+    (applyWalletDelta as jest.Mock).mockClear();
+    await service.reverseFinancials(tx as never, order);
+    expect(tx.orderCustomerRefund.create).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150 } } });
   });
 
   it('KHÔNG hoàn tiền khi paymentStatus không còn PAID (race đã thua)', async () => {
@@ -225,14 +264,15 @@ describe('OrderReversalService', () => {
     expect(tx.user.update).toHaveBeenCalledTimes(1);
   });
 
-  it('ảnh chụp UNPAID nhưng DB đã PAID (XU) → hoàn xu + sổ cái xu đúng 1 lần, không hoàn ví', async () => {
+  it('ảnh chụp UNPAID nhưng DB đã PAID (XU cũ) → hoàn điểm lô quy đổi đúng 1 lần, không hoàn ví, không cộng xu', async () => {
     const order = makeOrder({ paymentMethod: 'XU', paymentStatus: 'UNPAID' });
     const tx = makeTx(order, 'PAID');
     await service.reverseFinancials(tx as never, order);
     await service.reverseFinancials(tx as never, order);
     expect(tx.user.update).toHaveBeenCalledTimes(1);
-    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { coinsBalance: { increment: 150000 } } });
-    expect(tx.coinTransaction.create).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsConvertedBalance: { increment: 150 } } });
+    expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledTimes(1);
+    expect(tx.coinTransaction.create).not.toHaveBeenCalled();
   });
 
   it('ảnh chụp PAID nhưng DB đã REFUNDED (đường đảo khác thắng trước) → KHÔNG hoàn', async () => {
