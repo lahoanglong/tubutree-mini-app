@@ -3,8 +3,38 @@
  *
  * Thiếu `metadataBase` thì ảnh openGraph khai bằng đường dẫn tương đối không dựng được URL tuyệt
  * đối (Next cảnh báo mỗi lần build, và link chia sẻ mất ảnh).
+ *
+ * Mặc định app.tubutree.com (Q-20): host đang phục vụ web trên PROD; middleware coi `shop` là
+ * subdomain gian hàng CTV nên shop.tubutree.com không dùng được làm gốc.
  */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://shop.tubutree.com').replace(/\/+$/, '');
+// `||` chứ không `??`: ARG/ENV của Dockerfile biến build không truyền arg thành chuỗi rỗng, mà `new URL('')` ném lỗi.
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://app.tubutree.com').replace(/\/+$/, '');
 
 /** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. */
 export const PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
+
+/**
+ * Cổng nội bộ có giao diện riêng — chân trang bán hàng (hotline khách) không hiển thị ở đây.
+ * Không có /brand: /brand/[slug] là trang nhãn hàng công khai cho khách, vẫn cần lối liên hệ.
+ */
+export const PORTAL_PATHS = ['/admin', '/merchant'];
+
+export function isPortalPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'mail'];
+
+/**
+ * Subdomain gian hàng CTV của một host, hoặc null khi là host gốc/hệ thống. Khớp quy tắc ở
+ * middleware.ts, nơi `/` trên host này bị rewrite sang /s/{subdomain} (nên ?q= ở trang chủ không tới được).
+ */
+export function tenantSubdomainOf(host: string | null | undefined): string | null {
+  const hostname = (host ?? '').split(':')[0]!.toLowerCase();
+  const parts = hostname.split('.');
+  let sub: string | null = null;
+  if (hostname.endsWith('.localhost') && parts.length === 2) sub = parts[0]!;
+  else if (parts.length >= 3 && !hostname.endsWith('.localhost')) sub = parts[0]!;
+  return sub && !SYSTEM_SUBDOMAINS.includes(sub) ? sub : null;
+}

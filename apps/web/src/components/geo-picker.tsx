@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getProvinces, getCommunes } from '@/lib/geo-client';
+import { ui } from '@/lib/guest-ui';
 
 /** Giá trị địa giới: tên hiển thị + mã Pancake (gửi khi đặt đơn). Mirror miniapp geo-picker. */
 export interface GeoValue {
@@ -40,13 +41,15 @@ export function GeoPicker({
     <>
       <div>
         <select
+          aria-label="Tỉnh/thành"
+          aria-invalid={errorProvince ? true : undefined}
           value={value.provinceCode}
           onChange={(e) => {
             const code = e.target.value;
             const name = provincesQ.data?.find((p) => p.code === code)?.name ?? '';
             onChange({ province: name, provinceCode: code, ward: '', wardCode: '' });
           }}
-          className={`w-full rounded border px-3 py-2 text-sm ${errorProvince ? 'border-red-400' : 'border-neutral-200'}`}
+          className={errorProvince ? ui.fieldError : ui.field}
         >
           <option value="">{provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành'}</option>
           {(provincesQ.data ?? []).map((p) => (
@@ -55,11 +58,13 @@ export function GeoPicker({
             </option>
           ))}
         </select>
-        {errorProvince && <p className="mt-0.5 text-xs text-red-600">⚠ {errorProvince}</p>}
+        {errorProvince && <p className="mt-0.5 text-xs text-danger-fg">⚠ {errorProvince}</p>}
       </div>
 
       <div>
         <select
+          aria-label="Phường/xã"
+          aria-invalid={errorWard ? true : undefined}
           value={value.wardCode}
           disabled={!value.provinceCode}
           onChange={(e) => {
@@ -67,9 +72,7 @@ export function GeoPicker({
             const name = communesQ.data?.find((c) => c.code === code)?.name ?? '';
             onChange({ ...value, ward: name, wardCode: code });
           }}
-          className={`w-full rounded border px-3 py-2 text-sm disabled:bg-neutral-100 ${
-            errorWard ? 'border-red-400' : 'border-neutral-200'
-          }`}
+          className={errorWard ? ui.fieldError : ui.field}
         >
           <option value="">
             {!value.provinceCode ? 'Chọn tỉnh/thành trước' : communesQ.isLoading ? 'Đang tải…' : 'Chọn phường/xã'}
@@ -80,7 +83,7 @@ export function GeoPicker({
             </option>
           ))}
         </select>
-        {errorWard && <p className="mt-0.5 text-xs text-red-600">⚠ {errorWard}</p>}
+        {errorWard && <p className="mt-0.5 text-xs text-danger-fg">⚠ {errorWard}</p>}
       </div>
     </>
   );

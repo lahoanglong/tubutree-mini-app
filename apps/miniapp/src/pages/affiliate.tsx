@@ -39,6 +39,7 @@ import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, G
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
+import { WEB_BASE_URL } from '../utils/web-base-url';
 
 // Thẻ tổng "Đang chờ" gộp cả PENDING lẫn LOCKED (BE aggregate status IN [PENDING, LOCKED]).
 // Nhãn của hai dòng đó PHẢI cùng tiền tố "Đang chờ" thì CTV mới cộng lại khớp được với thẻ —
@@ -302,11 +303,10 @@ function Dashboard() {
   const shareWithFallback = useShareWithFallback();
   const shareReferral = () => {
     haptic('light');
-    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
     const description = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
     void shareWithFallback(
       { title: 'Tubu Tree — Sống xanh An Lành', description, path: `/?ref=${referral}` },
-      `${description} ${base}/?ref=${referral}`,
+      `${description} ${WEB_BASE_URL}/?ref=${referral}`,
     );
   };
 
@@ -629,8 +629,7 @@ function Dashboard() {
                   bold
                   style={{ color: 'var(--primary-700)' }}
                   onClick={() => {
-                    const base = (import.meta.env.VITE_WEB_BASE_URL as string | undefined) ?? 'https://shop.tubutree.com';
-                    void copyText(`${base}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
+                    void copyText(`${WEB_BASE_URL}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
                       openSnackbar(
                         ok
                           ? { text: 'Đã sao chép link', type: 'success' }

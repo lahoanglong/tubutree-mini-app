@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
@@ -20,8 +20,11 @@ import {
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer } from '@/lib/checkout-points';
+import { orderDetailHref } from '@/lib/order-view';
+import { ui } from '@/lib/guest-ui';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { BankTransferPanel } from './bank-transfer-panel';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
@@ -29,6 +32,10 @@ const VN_PHONE = /^(0|\+84)\d{9}$/;
 // chỉ 3 field text còn lại (mirror miniapp address-section.tsx).
 const EMPTY = { recipient: '', phone: '', street: '' };
 type Form = typeof EMPTY;
+
+const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
+const optionClass = (selected: boolean) =>
+  `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
 export default function CheckoutPage() {
   const { status } = useAuth();
@@ -70,6 +77,9 @@ export default function CheckoutPage() {
   const [hasRecyclingPickup, setHasRecyclingPickup] = useState(false);
   const [recyclingNote, setRecyclingNote] = useState('');
 
+  // Mã giảm giá đổi trên giỏ nên báo giá đang hiện đã cũ cho tới khi tính lại xong: khoá nút đặt hàng
+  // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
+  const couponChanging = useIsMutating({ mutationKey: COUPON_MUTATION_KEY }) > 0;
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints],
     queryFn: () =>
@@ -81,6 +91,8 @@ export default function CheckoutPage() {
     // loyalty.max_redeem_pct nên gửi toàn bộ số dùng được là an toàn.
     if (quoteQ.data && !usePoints) setPointsOffer(checkoutPointsOffer(quoteQ.data));
   }, [quoteQ.data, usePoints]);
+
+  const quoteStale = couponChanging || quoteQ.isFetching;
 
   const place = useMutation({
     mutationFn: () =>
@@ -106,7 +118,7 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-20 text-center">
-          <p className="text-neutral-400">Đang tải…</p>
+          <p className="text-stone-600">Đang tải…</p>
         </div>
       </Shell>
     );
@@ -116,8 +128,8 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-20 text-center">
-          <p className="text-neutral-600">Vui lòng đăng nhập để thanh toán.</p>
-          <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
+          <p className="text-stone-700">Vui lòng đăng nhập để thanh toán.</p>
+          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
             Đăng nhập với Zalo
           </Link>
         </div>
@@ -129,30 +141,32 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-16 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 shadow-sm ring-8 ring-leaf-50/50">
-            <CheckCircle2 className="h-9 w-9 text-leaf-600" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
+            <CheckCircle2 className="h-9 w-9" aria-hidden="true" />
           </div>
-          <h2 className="mt-5 text-2xl font-bold text-neutral-900">Đặt hàng thành công!</h2>
-          <p className="mt-2 text-neutral-600">
-            Mã đơn <span className="font-semibold text-leaf-700">{placed.code}</span> · {formatVnd(placed.total)}
+          <h2 className="mt-5 font-display text-2xl font-semibold text-stone-900">Đặt hàng thành công!</h2>
+          <p className="mt-2 text-stone-700">
+            Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
           </p>
           {placed.hasRecyclingPickup && (
             <div className="mx-auto mt-3 max-w-md text-left">
               <RecyclingStatus order={placed} />
             </div>
           )}
-          <div className="mt-6 flex justify-center gap-3">
-            <Link href="/tai-khoan" className="rounded-md bg-primary-600 px-5 py-2.5 font-medium text-white">
-              Xem đơn của tôi
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
+              Xem chi tiết đơn
             </Link>
-            <Link href="/" className="rounded-md border border-neutral-200 px-5 py-2.5">
+            <Link href="/tai-khoan" className={ui.btnSecondary}>
+              Đơn của tôi
+            </Link>
+            <Link href="/" className={ui.btnSecondary}>
               Tiếp tục mua sắm
             </Link>
           </div>
         </div>
-        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN phải hiện QR/STK/nội dung CK NGAY TẠI ĐÂY — chưa có
-            trang chi tiết đơn trên web (`/tai-khoan` chỉ là danh sách), nên đây là nơi DUY NHẤT
-            khách có thể thấy lại thông tin thanh toán nếu không lưu/chụp màn hình. */}
+        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
+            nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
           <BankTransferPanel order={placed} />
         </div>
@@ -161,18 +175,22 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  const quote = quoteQ.data;
+  // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
+  // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
+  const quote = quoteQ.isError ? undefined : quoteQ.data;
 
   return (
     <Shell>
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-4 md:col-span-2">
-          <section className="rounded-lg border border-neutral-100 bg-white p-4">
-            <h2 className="font-semibold">Địa chỉ giao hàng</h2>
+          <section className={`p-4 ${ui.card}`}>
+            <h2 className={ui.sectionTitle}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
-              <p className="mt-2 text-sm text-red-600">
+              <p className={`mt-2 ${ui.error}`}>
                 Không tải được danh sách địa chỉ.{' '}
-                <button onClick={() => void addrQ.refetch()} className="font-medium underline">Thử lại</button>
+                <button type="button" onClick={() => void addrQ.refetch()} className={ui.btnText}>
+                  Thử lại
+                </button>
               </p>
             )}
             <AddressPicker
@@ -186,15 +204,21 @@ export default function CheckoutPage() {
             />
           </section>
 
-          <section className="rounded-lg border border-neutral-100 bg-white p-4">
-            <h2 className="font-semibold">Phương thức thanh toán</h2>
+          <section className={`p-4 ${ui.card}`}>
+            <h2 className={ui.sectionTitle}>Phương thức thanh toán</h2>
             <div className="mt-2 space-y-2">
               {[
                 { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
                 { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
               ].map((p) => (
-                <label key={p.k} className="flex cursor-pointer items-center gap-3 rounded-md border border-neutral-200 p-3 text-sm">
-                  <input type="radio" name="pay" checked={payment === p.k} onChange={() => setPayment(p.k)} />
+                <label key={p.k} className={optionClass(payment === p.k)}>
+                  <input
+                    type="radio"
+                    name="pay"
+                    checked={payment === p.k}
+                    onChange={() => setPayment(p.k)}
+                    className="h-4 w-4 accent-forest-600"
+                  />
                   {p.label}
                 </label>
               ))}
@@ -213,62 +237,81 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <div className="h-fit rounded-lg border border-neutral-100 bg-white p-4">
-          <h2 className="font-semibold">Đơn hàng</h2>
-          <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
+        <div className={`h-fit p-4 ${ui.card}`}>
+          <h2 className={ui.sectionTitle}>Đơn hàng</h2>
+          {/* Vùng cuộn phải focus được bằng bàn phím (axe scrollable-region-focusable). */}
+          <div
+            role="region"
+            aria-label="Sản phẩm trong đơn"
+            tabIndex={0}
+            className="mt-2 max-h-40 space-y-1 overflow-auto text-sm"
+          >
             {cart?.items.map((it) => (
-              <div key={it.id} className="flex justify-between">
-                <span className="text-neutral-600">{it.productName} ×{it.quantity}</span>
-                <span>{formatVnd(it.total)}</span>
+              <div key={it.id} className="flex justify-between gap-2">
+                <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
+                <span className="text-stone-900">{formatVnd(it.total)}</span>
               </div>
             ))}
           </div>
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
-          {(quote?.discount ?? 0) > 0 && <Row label="Giảm giá" value={`-${formatVnd(quote!.discount)}`} green />}
+          {(quote?.discount ?? 0) > 0 && (
+            <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+          )}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
+          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} disabled={place.isPending} />}
           {usablePoints > 0 && (
-            <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-leaf-200 bg-leaf-50 p-2 text-sm">
-              <input type="checkbox" checked={usePoints} onChange={(e) => setUsePoints(e.target.checked)} />
-              <span className="text-leaf-700">
+            <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={usePoints}
+                onChange={(e) => setUsePoints(e.target.checked)}
+                className="h-4 w-4 accent-forest-600"
+              />
+              <span className="text-forest-800">
                 Dùng {usablePoints} Điểm Xanh
               </span>
             </label>
           )}
-          {pointsOffer.lockNote && <p className="mt-1 text-xs text-neutral-500">{pointsOffer.lockNote}</p>}
-          <div className="mt-3 flex justify-between border-t pt-3 font-bold">
+          {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
+          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span className="text-clay-700">{quote ? formatVnd(quote.total) : '…'}</span>
+            <span>{quote ? formatVnd(quote.total) : '…'}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
-            <p className="mt-1 text-xs text-leaf-700">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
+            <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
           )}
           {quoteQ.isError && (
-            <p className="mt-2 text-sm text-red-600">
+            <p className={`mt-2 ${ui.error}`}>
               Không tính được phí ship/tổng tiền.{' '}
-              <button onClick={() => void quoteQ.refetch()} className="font-medium underline">Thử lại</button>
+              <button type="button" onClick={() => void quoteQ.refetch()} className={ui.btnText}>
+                Thử lại
+              </button>
             </p>
           )}
           {cartQ.isError && (
-            <p className="mt-2 text-sm text-red-600">
+            <p className={`mt-2 ${ui.error}`}>
               Không tải được giỏ hàng.{' '}
-              <button onClick={() => void cartQ.refetch()} className="font-medium underline">Thử lại</button>
+              <button type="button" onClick={() => void cartQ.refetch()} className={ui.btnText}>
+                Thử lại
+              </button>
             </p>
           )}
 
           <button
+            type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || place.isPending}
-            className="mt-4 w-full rounded-md bg-primary-600 px-6 py-3 font-medium text-white hover:bg-primary-700 disabled:bg-neutral-300"
+            disabled={!addressId || !quote || quoteStale || place.isPending}
+            className={`${ui.btnPrimary} mt-4 w-full`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
           {place.isError && (
-            <p className="mt-2 text-sm text-red-600">
+            <p role="alert" className={`mt-2 ${ui.error}`}>
               {place.error instanceof Error ? place.error.message : 'Đặt hàng thất bại.'}
             </p>
           )}
@@ -280,8 +323,8 @@ export default function CheckoutPage() {
 
 function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
   return (
-    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-leaf-700' : ''}`}>
-      <span className={green ? '' : 'text-neutral-600'}>{label}</span>
+    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-success-fg' : 'text-stone-900'}`}>
+      <span className={green ? '' : 'text-stone-600'}>{label}</span>
       <span>{value}</span>
     </div>
   );
@@ -337,60 +380,100 @@ function AddressPicker({
   return (
     <div className="mt-2 space-y-2">
       {addresses.map((a) => (
-        <label
-          key={a.id}
-          className={`flex cursor-pointer gap-3 rounded-md border p-3 text-sm ${
-            selectedId === a.id ? 'border-primary-600 bg-primary-50' : 'border-neutral-200'
-          }`}
-        >
-          <input type="radio" name="addr" checked={selectedId === a.id} onChange={() => onSelect(a.id)} className="mt-1" />
+        <label key={a.id} className={`${optionClass(selectedId === a.id)} items-start`}>
+          <input
+            type="radio"
+            name="addr"
+            checked={selectedId === a.id}
+            onChange={() => onSelect(a.id)}
+            className="mt-1 h-4 w-4 accent-forest-600"
+          />
           <span>
-            <span className="font-medium">{a.recipient} · {a.phone}</span>
+            <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
             <br />
-            <span className="text-neutral-600">{a.street}, {a.ward}, {a.district}, {a.province}</span>
+            <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
           </span>
         </label>
       ))}
 
       {adding ? (
-        <div className="space-y-2 rounded-md border border-neutral-200 p-3">
-          <input
-            placeholder={LABEL.recipient}
+        <div className="space-y-2 rounded-control border border-stone-300 p-3">
+          <TextField
+            label={LABEL.recipient}
+            autoComplete="name"
             value={form.recipient}
-            onChange={(e) => setForm((f) => ({ ...f, recipient: e.target.value }))}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            onChange={(v) => setForm((f) => ({ ...f, recipient: v }))}
           />
-          <input
-            placeholder={LABEL.phone}
+          <TextField
+            label={LABEL.phone}
+            autoComplete="tel"
+            inputMode="tel"
             value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
           />
           <GeoPicker value={geo} onChange={setGeo} />
-          <input
-            placeholder={LABEL.street}
+          <TextField
+            label={LABEL.street}
+            autoComplete="street-address"
             value={form.street}
-            onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            onChange={(v) => setForm((f) => ({ ...f, street: v }))}
           />
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && (
+            <p role="alert" className="text-xs text-danger-fg">
+              {err}
+            </p>
+          )}
           <div className="flex gap-2">
-            <button onClick={() => setAdding(false)} className="rounded border border-neutral-200 px-4 py-2 text-sm">Hủy</button>
+            <button type="button" onClick={() => setAdding(false)} className={ui.btnSecondary}>
+              Hủy
+            </button>
             <button
+              type="button"
               onClick={() => create.mutate()}
               disabled={!valid || create.isPending}
-              className="flex-1 rounded bg-primary-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+              className={`${ui.btnPrimary} flex-1`}
             >
               Lưu địa chỉ
             </button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} className="text-sm font-semibold text-primary-700">
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
+        >
           + Thêm địa chỉ mới
         </button>
       )}
     </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  inputMode?: 'tel';
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-stone-700">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        className={`${ui.field} mt-1`}
+      />
+    </label>
   );
 }
 
@@ -403,8 +486,10 @@ const LABEL: Record<keyof Form, string> = {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/gio-hang" className="text-sm text-primary-600">← Về giỏ hàng</Link>
-      <h1 className="mt-3 text-xl font-bold">Thanh toán</h1>
+      <Link href="/gio-hang" className={ui.backLink}>
+        ← Về giỏ hàng
+      </Link>
+      <h1 className={`mt-1 ${ui.pageTitle}`}>Thanh toán</h1>
       <div className="mt-4">{children}</div>
     </main>
   );

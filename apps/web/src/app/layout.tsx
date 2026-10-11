@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from './providers';
 import SiteHeader from '@/components/site-header';
+import SiteFooter from '@/components/site-footer';
+import HideOnPortals from '@/components/hide-on-portals';
 import { ReferralCapture } from '@/components/storefront-tracker';
 import { SITE_URL } from '@/lib/site';
 
@@ -16,12 +18,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
-      <body className="font-ui">
+      <body className="flex min-h-screen flex-col font-ui">
         <Providers>
           {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}
           <ReferralCapture />
           <SiteHeader />
-          {children}
+          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. */}
+          <div className="flex-1">{children}</div>
+          <HideOnPortals>
+            <SiteFooter />
+          </HideOnPortals>
         </Providers>
       </body>
     </html>

@@ -1,0 +1,42 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_SUPPORT, getPublicSupport } from './api';
+
+function res(status: number, body: unknown = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// Hotline/email ở footer lấy từ GET /config/public (admin đổi được), nhưng footer không bao giờ
+// được trống hay làm sập trang chủ khi API hỏng — luôn rơi về thông tin liên hệ mặc định.
+describe('getPublicSupport', () => {
+  it('mặc định là hotline 0899 149 229 và tubutree@gmail.com', () => {
+    expect(DEFAULT_SUPPORT).toEqual({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
+  });
+
+  it('lấy hotline và email admin đã cấu hình', async () => {
+    const f = vi.fn().mockResolvedValue(res(200, { support: { hotline: '1900 1234', email: 'cskh@tubutree.com' } }));
+    vi.stubGlobal('fetch', f);
+    await expect(getPublicSupport()).resolves.toEqual({ hotline: '1900 1234', email: 'cskh@tubutree.com' });
+    expect(String(f.mock.calls[0]![0])).toMatch(/\/config\/public$/);
+  });
+
+  it('một trường admin để trống (API trả null) thì chỉ trường đó rơi về mặc định', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { hotline: null, email: 'cskh@tubutree.com' } })));
+    await expect(getPublicSupport()).resolves.toEqual({ hotline: DEFAULT_SUPPORT.hotline, email: 'cskh@tubutree.com' });
+  });
+
+  it('API lỗi 5xx hoặc trả thiếu support thì dùng mặc định', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(503)));
+    await expect(getPublicSupport()).resolves.toEqual(DEFAULT_SUPPORT);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, {})));
+    await expect(getPublicSupport()).resolves.toEqual(DEFAULT_SUPPORT);
+  });
+
+  it('mất kết nối thì dùng mặc định, không ném lỗi', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(getPublicSupport()).resolves.toEqual(DEFAULT_SUPPORT);
+  });
+});

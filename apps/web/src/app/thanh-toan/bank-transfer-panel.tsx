@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
+import { ui } from '@/lib/guest-ui';
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
@@ -17,7 +18,7 @@ import { CopyButton } from '@/components/copy-button';
  * export thêm một component thường sẽ FAIL tsc (kiểm tra kiểu sinh ra trong .next/types/app cho
  * từng trang).
  */
-export function BankTransferPanel({ order }: { order: OrderDTO }) {
+export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?: () => void }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', order.code],
@@ -27,6 +28,13 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' ? false : 4000),
   });
   const [checking, setChecking] = useState(false);
+
+  // Trang chứa khung này (chi tiết đơn) cần tải lại trạng thái đơn khi tiền về, nếu không thì
+  // khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn là "Chờ thanh toán".
+  const paid = data?.paymentStatus === 'PAID';
+  useEffect(() => {
+    if (paid) onPaid?.();
+  }, [paid, onPaid]);
 
   if (!isBankTransfer) return null;
 
@@ -41,17 +49,17 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
 
   if (isLoading) {
     return (
-      <section className="mt-4 rounded-lg border border-neutral-100 bg-white p-6 text-center">
-        <p className="text-sm text-neutral-400">Đang tải thông tin chuyển khoản…</p>
+      <section className={`mt-4 p-6 text-center ${ui.card}`}>
+        <p className="text-sm text-stone-600">Đang tải thông tin chuyển khoản…</p>
       </section>
     );
   }
 
   if (isError || !data) {
     return (
-      <section className="mt-4 rounded-lg border border-neutral-100 bg-white p-6 text-center">
-        <p className="text-sm text-red-600">Không tải được thông tin thanh toán.</p>
-        <button onClick={() => void refetch()} className="mt-2 text-sm font-medium text-primary-600 underline">
+      <section className={`mt-4 p-6 text-center ${ui.card}`}>
+        <p className={ui.error}>Không tải được thông tin thanh toán.</p>
+        <button type="button" onClick={() => void refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
           Thử lại
         </button>
       </section>
@@ -60,18 +68,18 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
 
   if (data.paymentStatus === 'PAID') {
     return (
-      <section role="status" className="mt-4 rounded-lg border border-leaf-200 bg-leaf-50 p-6 text-center">
-        <CheckCircle2 className="mx-auto h-9 w-9 text-leaf-600" />
-        <p className="mt-2 font-semibold text-leaf-800">Đã nhận thanh toán!</p>
-        <p className="text-sm text-leaf-700">Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn.</p>
+      <section role="status" className="mt-4 rounded-card border border-forest-200 bg-forest-50 p-6 text-center">
+        <CheckCircle2 className="mx-auto h-9 w-9 text-success-fg" aria-hidden="true" />
+        <p className="mt-2 font-semibold text-forest-800">Đã nhận thanh toán!</p>
+        <p className="text-sm text-forest-700">Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn.</p>
       </section>
     );
   }
 
   return (
-    <section className="mt-4 rounded-lg border border-neutral-100 bg-white p-4">
-      <h2 className="text-center font-semibold">Quét QR để chuyển khoản</h2>
-      <p className="mt-1 text-center text-xs text-neutral-500">
+    <section className={`mt-4 p-4 ${ui.card}`}>
+      <h2 className={`text-center ${ui.sectionTitle}`}>Quét QR để chuyển khoản</h2>
+      <p className="mt-1 text-center text-xs text-stone-600">
         Mở app ngân hàng / ví bất kỳ để quét mã bên dưới
       </p>
 
@@ -80,43 +88,44 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
         <img
           src={data.qrImageUrl}
           alt="VietQR"
-          className="h-56 w-56 rounded-lg border border-neutral-100 object-contain"
+          className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain"
         />
-        <p className="text-xl font-bold text-clay-700">{formatVnd(data.amount)}</p>
+        <p className="text-xl font-bold text-stone-900">{formatVnd(data.amount)}</p>
       </div>
 
       <div className="mt-3 space-y-1 text-sm">
         <PanelRow label="Ngân hàng" value={data.bank.name} />
         <div className="flex items-center justify-between py-1">
-          <span className="text-neutral-600">Số tài khoản</span>
-          <span className="flex items-center gap-2 font-mono font-semibold">
+          <span className="text-stone-600">Số tài khoản</span>
+          <span className="flex items-center gap-2 font-mono font-semibold text-stone-900">
             {data.bank.accountNo}
             <CopyButton text={data.bank.accountNo} label="Sao chép" />
           </span>
         </div>
         <PanelRow label="Chủ tài khoản" value={data.bank.accountName} />
         <div className="flex items-center justify-between py-1">
-          <span className="text-neutral-600">Nội dung CK</span>
-          <span className="flex items-center gap-2 font-semibold text-leaf-700">
+          <span className="text-stone-600">Nội dung CK</span>
+          <span className="flex items-center gap-2 font-semibold text-forest-700">
             {data.memo}
             <CopyButton text={data.memo} label="Sao chép" />
           </span>
         </div>
       </div>
 
-      <p className="mt-2 text-center text-xs text-red-600">
+      <p className="mt-2 text-center text-xs text-danger-fg">
         Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
       </p>
 
-      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-neutral-500">
-        <Clock className="h-3.5 w-3.5" />
+      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-stone-600">
+        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
         <span>Đang chờ thanh toán… tự cập nhật khi nhận được tiền</span>
       </div>
 
       <button
+        type="button"
         onClick={() => void handleCheck()}
         disabled={checking || isFetching}
-        className="mt-4 w-full rounded-md bg-primary-600 px-6 py-2.5 font-medium text-white disabled:bg-neutral-300"
+        className={`${ui.btnPrimary} mt-4 w-full`}
       >
         {checking || isFetching ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản, kiểm tra lại'}
       </button>
@@ -127,8 +136,8 @@ export function BankTransferPanel({ order }: { order: OrderDTO }) {
 function PanelRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between py-1">
-      <span className="text-neutral-600">{label}</span>
-      <span className="font-medium">{value}</span>
+      <span className="text-stone-600">{label}</span>
+      <span className="font-medium text-stone-900">{value}</span>
     </div>
   );
 }

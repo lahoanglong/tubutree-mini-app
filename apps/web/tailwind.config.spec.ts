@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { tailwindPreset } from '@tubutree/design-tokens';
 import config from './tailwind.config';
 
 type Shades = Record<string, string>;
@@ -89,6 +90,49 @@ describe('web tailwind.config', () => {
       expect(contrast('#FFFFFF', g(600))).toBeGreaterThanOrEqual(4.5);
       expect(luminance(g(700))).toBeLessThan(luminance(g(600)));
       expect(contrast('#FFFFFF', g(700))).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+  // C-097: các cặp màu DS v2 mà web khách (trang chủ, header, footer, thẻ sản phẩm) dùng cho chữ.
+  describe('DS v2 pairs used by web khách reach WCAG AA (4.5:1)', () => {
+    const channel = (hex: string, at: number) => {
+      const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (hex: string) => 0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+    const contrast = (a: string, b: string) => {
+      const [la, lb] = [luminance(a), luminance(b)];
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    const v2 = (tailwindPreset.theme?.extend as { colors: Record<string, Record<string, string>> }).colors;
+    const c = (family: string, shade: number) => {
+      const hex = v2[family]?.[shade];
+      if (!hex) throw new Error(`missing ${family}-${shade}`);
+      return hex;
+    };
+    const promoSolid = (colors.promo as Shades).solid as string;
+
+    const pairs: [string, string, string][] = [
+      ['nút chính: chữ trắng trên forest-600', c('stone', 0), c('forest', 600)],
+      ['nút chính khi hover: chữ trắng trên forest-700', c('stone', 0), c('forest', 700)],
+      ['nút nền trắng trong hero: chữ forest-700', c('forest', 700), c('stone', 0)],
+      ['chữ liên kết forest-700 trên nền trắng', c('forest', 700), c('stone', 0)],
+      ['chữ liên kết forest-800 (hover) trên nền trắng', c('forest', 800), c('stone', 0)],
+      ['hero: đoạn mô tả forest-100 trên forest-800', c('forest', 100), c('forest', 800)],
+      ['hero: tiêu đề nhấn forest-200 trên forest-800', c('forest', 200), c('forest', 800)],
+      ['chữ phụ stone-600 trên nền trắng', c('stone', 600), c('stone', 0)],
+      ['chữ phụ stone-600 trên canvas stone-50', c('stone', 600), c('stone', 50)],
+      ['giá gạch ngang stone-500 trên nền trắng', c('stone', 500), c('stone', 0)],
+      ['chip lọc stone-700 trên nền trắng', c('stone', 700), c('stone', 0)],
+      ['chip lọc stone-700 khi hover trên stone-50', c('stone', 700), c('stone', 50)],
+      ['nhãn khuyến mãi: chữ trắng trên promo-solid', c('stone', 0), promoSolid],
+      ['nhãn thương hiệu forest-800 trên nền trắng 90%', c('forest', 800), c('stone', 0)],
+      ['chữ cái đầu tài khoản forest-800 trên forest-100', c('forest', 800), c('forest', 100)],
+      ['biểu tượng cam kết sage-700 trên sage-50', c('sage', 700), c('sage', 50)],
+      ['biểu tượng cam kết forest-700 trên forest-50', c('forest', 700), c('forest', 50)],
+      ['chữ chính stone-900 trên canvas', c('stone', 900), c('stone', 50)],
+    ];
+    it.each(pairs)('%s', (_label, fg, bg) => {
+      expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
   });
 });
