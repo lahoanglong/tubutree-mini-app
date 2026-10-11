@@ -41,6 +41,13 @@ const mocks = vi.hoisted(() => ({
   deleteQuickReply: vi.fn(),
   kit: null as unknown,
   saveContentKit: vi.fn(),
+  courses: [] as unknown[],
+  createAcademyCourse: vi.fn(),
+  updateAcademyCourse: vi.fn(),
+  deleteAcademyCourse: vi.fn(),
+  addAcademyLesson: vi.fn(),
+  updateAcademyLesson: vi.fn(),
+  deleteAcademyLesson: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -155,6 +162,13 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     searchAdminProducts: async () => [{ id: 'p1', name: 'Dừa sáp', brand: 'Bến Tre', isActive: true, variations: [] }],
     getContentKit: async () => mocks.kit,
     saveContentKit: (...args: unknown[]) => mocks.saveContentKit(...args),
+    listAcademyCourses: async () => mocks.courses,
+    createAcademyCourse: (...args: unknown[]) => mocks.createAcademyCourse(...args),
+    updateAcademyCourse: (...args: unknown[]) => mocks.updateAcademyCourse(...args),
+    deleteAcademyCourse: (...args: unknown[]) => mocks.deleteAcademyCourse(...args),
+    addAcademyLesson: (...args: unknown[]) => mocks.addAcademyLesson(...args),
+    updateAcademyLesson: (...args: unknown[]) => mocks.updateAcademyLesson(...args),
+    deleteAcademyLesson: (...args: unknown[]) => mocks.deleteAcademyLesson(...args),
   };
 });
 
@@ -184,7 +198,10 @@ beforeEach(() => {
   mocks.faqs = [];
   mocks.quickReplies = [];
   mocks.kit = null;
+  mocks.courses = [];
   for (const fn of [
+    mocks.createAcademyCourse, mocks.updateAcademyCourse, mocks.deleteAcademyCourse,
+    mocks.addAcademyLesson, mocks.updateAcademyLesson, mocks.deleteAcademyLesson,
     mocks.saveContentKit,
     mocks.createQuickReply, mocks.updateQuickReply, mocks.deleteQuickReply,
     mocks.createFaq, mocks.updateFaq, mocks.deleteFaq,
@@ -1145,5 +1162,164 @@ describe('admin/page — tab Content Kit CTV', () => {
     click(save);
     await flush();
     expect(para(container, 'Quá dài').className).toContain('text-danger-fg');
+  });
+});
+
+describe('admin/page — tab Academy', () => {
+  const COURSE = {
+    id: 'c1',
+    title: 'Bán hàng 101',
+    description: 'Khoá nhập môn',
+    coverUrl: null,
+    sortOrder: 1,
+    isPublished: false,
+    lessons: [
+      { id: 'l1', courseId: 'c1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://v.test/1', body: null, sortOrder: 1 },
+    ],
+  };
+  const openAcademy = async () => {
+    window.history.replaceState(null, '', '/admin?tab=academy');
+    return mount();
+  };
+  const openCourse = async (container: HTMLElement) => {
+    click(btn(container, 'Quản lý'));
+    await flush();
+  };
+
+  it('form tạo khoá: tiêu đề font-display, ô nhập/nút 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu', async () => {
+    const { container } = await openAcademy();
+    expect(container.querySelector('h3')!.className).toContain('font-display');
+    const inputs = [...container.querySelectorAll('input')];
+    expect(inputs).toHaveLength(3);
+    for (const el of inputs) {
+      expect(el.className).toContain('min-h-[44px]');
+      expect(el.className).toContain('border-stone-450');
+    }
+    const create = btn(container, 'Tạo khoá học');
+    expect(create.className).toContain('bg-forest-600');
+    expect(create.disabled).toBe(true);
+    typeInto(container.querySelector('input[placeholder="Tiêu đề khoá học"]'), ' Khoá mới ');
+    expect(create.disabled).toBe(false);
+    mocks.createAcademyCourse.mockResolvedValueOnce({});
+    click(create);
+    await flush();
+    expect(mocks.createAcademyCourse).toHaveBeenCalledWith({ title: 'Khoá mới', description: undefined, coverUrl: undefined, sortOrder: 0 });
+    expect(para(container, 'Đã tạo khoá học!').className).toContain('text-success-fg');
+
+    typeInto(container.querySelector('input[placeholder="Tiêu đề khoá học"]'), 'Lỗi');
+    mocks.createAcademyCourse.mockRejectedValueOnce(new Error('Trùng tên khoá'));
+    click(create);
+    await flush();
+    expect(para(container, 'Trùng tên khoá').className).toContain('text-danger-fg');
+  });
+
+  it('hàng khoá học: huy hiệu Đã đăng/Nháp theo tông, nút Quản lý 44px, Đăng/Xoá khoá gọi đúng API', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    expect(para(container, 'Nháp').className).toContain('bg-stone-100');
+    expect(container.textContent).toContain('1 bài học · thứ tự 1');
+    const manage = btn(container, 'Quản lý');
+    expect(manage.className).toContain('min-h-[44px]');
+    expect(manage.className).toContain('text-forest-700');
+    await openCourse(container);
+    expect(btn(container, 'Thu gọn')).toBeTruthy();
+
+    const publish = btn(container, 'Đăng (publish)');
+    expect(publish.className).toContain('border-stone-450');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(publish);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', { isPublished: true });
+
+    const del = btn(container, 'Xoá khoá học');
+    expect(del.className).toContain('border-danger-fg');
+    expect(del.className).toContain('text-danger-fg');
+    expect(del.className).toContain('min-h-[44px]');
+    mocks.deleteAcademyCourse.mockResolvedValue({ ok: true });
+    click(del);
+    await flush();
+    expect(mocks.deleteAcademyCourse).toHaveBeenCalledWith('c1');
+  });
+
+  it('thông tin khoá: khung stone-50, lưu gửi đúng dữ liệu, thông báo đã lưu có biểu tượng + success', async () => {
+    mocks.courses = [{ ...COURSE, isPublished: true }];
+    const { container } = await openAcademy();
+    expect(para(container, 'Đã đăng').className).toContain('bg-success-bg');
+    await openCourse(container);
+    const save = btn(container, 'Lưu thông tin');
+    expect(save.className).toContain('bg-forest-600');
+    expect(save.parentElement!.className).toContain('bg-stone-50');
+    typeInto(save.parentElement!.querySelector('input[placeholder="Cover URL"]'), 'https://c.test/x.png');
+    mocks.updateAcademyCourse.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyCourse).toHaveBeenCalledWith('c1', {
+      title: 'Bán hàng 101',
+      description: 'Khoá nhập môn',
+      coverUrl: 'https://c.test/x.png',
+      sortOrder: 1,
+    });
+    const ok = [...container.querySelectorAll('span')].find((e) => e.textContent?.startsWith('Đã lưu'))!;
+    expect(ok.className).toContain('text-success-fg');
+    expect(ok.querySelector('svg')).not.toBeNull();
+    expect(ok.textContent).not.toContain('✓');
+  });
+
+  it('thêm bài học: ô nhập 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu theo loại nội dung', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    const add = btn(container, 'Thêm bài học');
+    expect(add.disabled).toBe(true);
+    expect(add.className).toContain('bg-forest-600');
+    const title = container.querySelector('input[placeholder="Tiêu đề bài học"]')!;
+    expect(title.className).toContain('min-h-[44px]');
+    typeInto(title, 'Bài 2');
+    typeInto(container.querySelector('textarea[placeholder="Nội dung bài viết"]'), ' Nội dung ');
+    expect(add.disabled).toBe(false);
+    mocks.addAcademyLesson.mockResolvedValue({});
+    click(add);
+    await flush();
+    expect(mocks.addAcademyLesson).toHaveBeenCalledWith('c1', {
+      title: 'Bài 2',
+      contentType: 'ARTICLE',
+      videoUrl: undefined,
+      body: 'Nội dung',
+      sortOrder: 0,
+    });
+  });
+
+  it('dòng bài học: nút chữ 44px, Xoá/Sửa gọi đúng API, form sửa ô nhập 44px', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    expect(container.textContent).toContain('[Video] Giới thiệu · thứ tự 1');
+    const edit = btn(container, 'Sửa');
+    const del = btn(container, 'Xoá');
+    expect(edit.className).toContain('min-h-[44px]');
+    expect(edit.className).toContain('text-forest-700');
+    expect(del.className).toContain('text-danger-fg');
+
+    click(edit);
+    const url = container.querySelector('input[placeholder="Video URL"][value="https://v.test/1"]') as HTMLInputElement;
+    expect(url.className).toContain('min-h-[44px]');
+    const save = btn(container, 'Lưu');
+    expect(save.className).toContain('bg-forest-600');
+    typeInto(container.querySelector('input[placeholder="Tiêu đề"][value="Giới thiệu"]'), 'Giới thiệu mới');
+    mocks.updateAcademyLesson.mockResolvedValue({});
+    click(save);
+    await flush();
+    expect(mocks.updateAcademyLesson).toHaveBeenCalledWith('l1', {
+      title: 'Giới thiệu mới',
+      contentType: 'VIDEO',
+      videoUrl: 'https://v.test/1',
+      body: undefined,
+      sortOrder: 1,
+    });
+
+    mocks.deleteAcademyLesson.mockResolvedValue({ ok: true });
+    click(btn(container, 'Xoá'));
+    await flush();
+    expect(mocks.deleteAcademyLesson).toHaveBeenCalledWith('l1');
   });
 });

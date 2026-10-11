@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 // Không kiểm cỡ chữ: admin tối ưu cho máy tính (Q-29) nên chữ 11px dày đặc của bảng được giữ nguyên.
 const MIGRATED = [
   'app/admin/layout.tsx',
+  'app/admin/page.tsx',
   'components/admin/ui.tsx',
   'components/admin/confirm-dialog.tsx',
   'components/admin/page-nav.tsx',
@@ -36,9 +37,7 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
 
 // File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
 // Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.
-const PARTIAL: { file: string; end: string; tail?: string }[] = [
-  { file: 'app/admin/page.tsx', end: 'function AcademyTab(', tail: 'function Table(' },
-];
+const PARTIAL: { file: string; end: string; tail?: string }[] = [];
 
 function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {
   const src = read(file);

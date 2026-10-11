@@ -2257,53 +2257,54 @@ function AcademyTab() {
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo khoá học' }),
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-neutral-100 bg-white p-4">
-        <h3 className="mb-2 text-sm font-semibold">Tạo khoá học mới</h3>
+      <div className={CARD_CLASS}>
+        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo khoá học mới</h3>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <input
               placeholder="Tiêu đề khoá học"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} grow basis-full sm:basis-48`}
             />
             <input
               type="number"
               placeholder="Thứ tự"
               value={form.sortOrder}
               onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className="w-28 rounded border border-neutral-200 px-3 py-2 text-sm"
+              className={`${field} w-28`}
             />
           </div>
           <input
             placeholder="Cover URL"
             value={form.coverUrl}
             onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={`${INPUT_CLASS} ${TOUCH_H}`}
           />
           <textarea
             placeholder="Mô tả"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full rounded border border-neutral-200 px-3 py-2 text-sm"
+            className={INPUT_CLASS}
           />
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.title.trim() || create.isPending}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
+            className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo khoá học'}
           </button>
         </div>
-        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</p>}
+        {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-red-600">Không tải được danh sách khoá học.</p>}
+        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách khoá học.</p>}
         {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
         {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
       </div>
@@ -2365,68 +2366,68 @@ function CourseRow({ course }: { course: AdminCourse }) {
       refresh();
     },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
+  const input = `${INPUT_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded-lg border border-neutral-100 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 font-medium">
+    <div className={CARD_CLASS}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {course.title}
-            <span className={`rounded-full px-2 py-0.5 text-xs text-white ${course.isPublished ? 'bg-green-600' : 'bg-neutral-400'}`}>
-              {course.isPublished ? 'Đã đăng' : 'Nháp'}
-            </span>
+            <ToneBadge tone={course.isPublished ? 'success' : 'neutral'}>{course.isPublished ? 'Đã đăng' : 'Nháp'}</ToneBadge>
           </div>
-          <div className="text-xs text-neutral-400">{course.lessons.length} bài học · thứ tự {course.sortOrder}</div>
+          <div className="text-xs text-stone-500">{course.lessons.length} bài học · thứ tự {course.sortOrder}</div>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="text-sm text-green-700 underline">{open ? 'Thu gọn' : 'Quản lý'}</button>
+        <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>
 
       {open && (
-        <div className="mt-3 space-y-4 border-t border-neutral-100 pt-3">
+        <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
+            <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
               {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
             </button>
-            <button onClick={() => del.mutate()} disabled={del.isPending} className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600">
+            <button onClick={() => del.mutate()} disabled={del.isPending} className={BTN_DANGER_OUTLINE}>
               Xoá khoá học
             </button>
           </div>
-          {rowErr && <p className="text-xs text-red-600">{rowErr}</p>}
+          {rowErr && <p className="text-xs text-danger-fg">{rowErr}</p>}
 
-          <div className="rounded-lg border border-neutral-100 bg-neutral-50/50 p-3">
-            <div className="mb-2 text-sm font-medium">Thông tin khoá học</div>
+          <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
+            <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin khoá học</div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="rounded border border-neutral-200 px-2 py-1 text-sm" />
-              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className="rounded border border-neutral-200 px-2 py-1 text-sm sm:col-span-2" />
+              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
+              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
+              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={`${input} sm:col-span-2`} />
             </div>
-            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-sm" />
-            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="mt-2 rounded bg-green-600 px-4 py-1.5 text-sm text-white disabled:bg-neutral-300">
+            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={`mt-2 ${INPUT_CLASS}`} />
+            <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
-            {save.isSuccess && <span className="ml-2 text-sm text-green-700">Đã lưu ✓</span>}
-            {save.isError && <span className="ml-2 text-sm text-red-600">{(save.error as Error).message}</span>}
+            {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
+            {save.isError && <span className="ml-2 text-sm text-danger-fg">{(save.error as Error).message}</span>}
           </div>
 
           <div>
-            <div className="mb-1 text-sm font-medium">Bài học ({course.lessons.length})</div>
+            <div className="mb-1 text-sm font-medium text-stone-900">Bài học ({course.lessons.length})</div>
             <div className="space-y-1">
               {course.lessons.map((l) => <LessonRow key={l.id} lesson={l} />)}
-              {course.lessons.length === 0 && <p className="text-xs text-neutral-400">Chưa có bài học nào.</p>}
+              {course.lessons.length === 0 && <p className="text-xs text-stone-500">Chưa có bài học nào.</p>}
             </div>
 
-            <div className="mt-2 space-y-2 rounded border border-neutral-100 p-2">
+            <div className="mt-2 space-y-2 rounded-control border border-stone-200 p-2">
               <div className="flex flex-wrap gap-2">
                 <input
                   placeholder="Tiêu đề bài học"
                   value={lesson.title}
                   onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
-                  className="flex-1 rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={`${field} grow basis-full sm:basis-40`}
                 />
                 <select
                   value={lesson.contentType}
                   onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
-                  className="rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={field}
                 >
                   <option value="ARTICLE">Bài viết</option>
                   <option value="VIDEO">Video</option>
@@ -2436,7 +2437,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   placeholder="Thứ tự"
                   value={lesson.sortOrder}
                   onChange={(e) => setLesson({ ...lesson, sortOrder: Number(e.target.value) })}
-                  className="w-24 rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={`${field} w-24`}
                 />
               </div>
               {lesson.contentType === 'VIDEO' ? (
@@ -2444,7 +2445,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   placeholder="Video URL"
                   value={lesson.videoUrl}
                   onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
-                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={input}
                 />
               ) : (
                 <textarea
@@ -2452,17 +2453,17 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   value={lesson.body}
                   onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
                   rows={3}
-                  className="w-full rounded border border-neutral-200 px-2 py-1 text-sm"
+                  className={INPUT_CLASS}
                 />
               )}
               <button
                 onClick={() => addLesson.mutate()}
                 disabled={!lesson.title.trim() || addLesson.isPending}
-                className="rounded bg-green-600 px-3 py-1.5 text-sm text-white disabled:bg-neutral-300"
+                className={BTN_PRIMARY}
               >
                 Thêm bài học
               </button>
-              {addLesson.isError && <p className="text-xs text-red-600">{(addLesson.error as Error).message}</p>}
+              {addLesson.isError && <p className="text-xs text-danger-fg">{(addLesson.error as Error).message}</p>}
             </div>
           </div>
         </div>
@@ -2497,42 +2498,43 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
       }),
     onSuccess: () => { setOpen(false); refresh(); },
   });
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className="rounded border border-neutral-100 px-2 py-1 text-sm">
-      <div className="flex items-center justify-between">
-        <span className="truncate">
+    <div className="rounded-control border border-stone-200 px-2 py-1 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 break-words">
           [{lesson.contentType === 'VIDEO' ? 'Video' : 'Bài viết'}] {lesson.title} · thứ tự {lesson.sortOrder}
         </span>
-        <div className="flex shrink-0 gap-2">
-          <button onClick={() => setOpen((o) => !o)} className="text-xs text-green-700 underline">{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className="text-xs text-red-600 underline">Xoá</button>
+        <div className="flex shrink-0 gap-1">
+          <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-xs`}>{open ? 'Đóng' : 'Sửa'}</button>
+          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
         </div>
       </div>
-      {del.isError && <p className="mt-1 text-xs text-red-600">{(del.error as Error).message}</p>}
+      {del.isError && <p className="mt-1 text-xs text-danger-fg">{(del.error as Error).message}</p>}
       {open && (
-        <div className="mt-2 space-y-2 border-t border-neutral-100 pt-2">
+        <div className="mt-2 space-y-2 border-t border-stone-200 pt-2">
           <div className="flex flex-wrap gap-2">
-            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="flex-1 rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-40`} />
             <select
               value={f.contentType}
               onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
-              className="rounded border border-neutral-200 px-2 py-1"
+              className={field}
             >
               <option value="ARTICLE">Bài viết</option>
               <option value="VIDEO">Video</option>
             </select>
-            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className="w-24 rounded border border-neutral-200 px-2 py-1" />
+            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-24`} />
           </div>
           {f.contentType === 'VIDEO' ? (
-            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className="w-full rounded border border-neutral-200 px-2 py-1" />
+            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
           ) : (
-            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className="w-full rounded border border-neutral-200 px-2 py-1" />
+            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
           )}
-          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className="rounded bg-green-600 px-3 py-1 text-white disabled:bg-neutral-300">
+          <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-xs text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
     </div>
