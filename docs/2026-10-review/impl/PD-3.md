@@ -967,7 +967,7 @@ apps/api: npx tsc --noEmit -p tsconfig.json     exit 0
 apps/e2e: npx tsc --noEmit -p tsconfig.json     exit 0
 apps/miniapp: npx tsc --noEmit                  exit 0
 apps/web: npx tsc --noEmit                      exit 0
-apps/api: npx eslint <21 file .ts đổi từ 1550be1f>   exit 0 (apps/e2e không có ESLint)
+apps/api: npx eslint <15 file .ts đổi từ 1550be1f>   exit 0 (apps/e2e không có ESLint)
 apps/api: prisma migrate deploy (tubu_it_pd3)   No pending migrations to apply (132 migration)
 apps/api: prisma migrate diff --from-url ... --to-schema-datamodel prisma/schema.prisma --exit-code   No difference detected. (exit 0)
 apps/api: npx tsx prisma/check-partial-indexes.ts   Partial unique index: mong đợi 20, có trong DB 20.
