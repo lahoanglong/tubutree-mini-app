@@ -12,6 +12,7 @@ import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
+import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 
 interface SpinPrize {
   id: string;
@@ -367,21 +368,31 @@ export class GameService {
    * lại nên lô quy đổi không thể đổi ra thứ đáng hơn số điểm đã bỏ.
    * Lô STANDARD chỉ tiêu phần DÙNG ĐƯỢC (số dư − lockedOrderPoints, cùng luật checkout/đổi voucher): điểm đơn
    * vừa giao còn trong hạn đổi/trả mà bị tiêu ở đây thì trả đơn sẽ đẩy số dư thường xuống âm.
+   *
+   * Idempotency-Key (tuỳ chọn, chống bấm đôi): có key thì mã chứng nhận suy ra tất định từ (user, key), nên
+   * gọi lại cùng key trả đúng kết quả lượt đầu và không trừ thêm. Việc "đã có chưa" được kiểm trong
+   * transaction SAU khi khoá dòng user: hai request song song cùng key xếp hàng ở khoá đó, request sau thấy
+   * cây request trước đã commit. Không key: mỗi lần một mã ngẫu nhiên như cũ.
    */
-  async buyTree(userId: string) {
+  async buyTree(userId: string, idempotencyKey?: string) {
     if (!this.loyalty) throw new Error('GameService.buyTree cần LoyaltyService để đọc điểm đang khoá');
     const loyalty = this.loyalty;
+    const key = parseTreeBuyKey(idempotencyKey);
     const price = await this.config.get<number>('game.tree_points_price', 50);
     if (!Number.isSafeInteger(price) || price <= 0) {
       throw new BadRequestException('Tính năng góp quỹ trồng cây chưa khả dụng.');
     }
-    const certificateCode = `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const certificateCode = key ? treeCertificateCodeFor(userId, key) : `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const reason = `GAME_BUY_TREE:${certificateCode}`;
     const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
-    const usedConverted = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
         SELECT "pointsBalance", "pointsConvertedBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      if (key) {
+        const replay = await this.replayTreeBuy(tx, userId, certificateCode);
+        if (replay) return replay;
+      }
       const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
       const std = Math.min(price, Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked));
       const conv = price - std;
@@ -396,15 +407,28 @@ export class GameService {
         if (!r.applied) throw new BadRequestException(notEnough);
       }
       await tx.plantedTree.create({ data: { userId, treeType: DEFAULT_TREE_TYPE, certificateCode } });
-      return conv;
+      return { certificateCode, treeType: DEFAULT_TREE_TYPE, cost: price, pointsUsed: price, pointsUsedConverted: conv };
     });
-    return {
-      certificateCode,
-      treeType: DEFAULT_TREE_TYPE,
-      cost: price,
-      pointsUsed: price,
-      pointsUsedConverted: usedConverted,
-    };
+  }
+
+  /**
+   * Lượt góp đã ghi với mã suy ra từ Idempotency-Key, dựng lại từ sổ điểm (giá/phần quy đổi LÚC ĐÓ, không
+   * phải giá cấu hình hôm nay). Gọi trong tx đã khoá dòng user. Mã thuộc user KHÁC (va chạm hash hoặc cố ý
+   * mài key) thì từ chối chứ không bao giờ trả dữ liệu của họ; tra sổ điểm luôn kèm userId.
+   */
+  private async replayTreeBuy(tx: Prisma.TransactionClient, userId: string, certificateCode: string) {
+    const existing = await tx.plantedTree.findUnique({ where: { certificateCode }, select: { userId: true, treeType: true } });
+    if (!existing) return null;
+    if (existing.userId !== userId) {
+      throw new BadRequestException('Idempotency-Key này không dùng được, hãy tạo khoá khác.');
+    }
+    const spent = await tx.pointsTransaction.findMany({
+      where: { userId, reason: `GAME_BUY_TREE:${certificateCode}` },
+      select: { delta: true, lot: true },
+    });
+    const pointsUsed = spent.reduce((sum, e) => sum - e.delta, 0);
+    const pointsUsedConverted = spent.filter((e) => e.lot === 'CONVERTED').reduce((sum, e) => sum - e.delta, 0);
+    return { certificateCode, treeType: existing.treeType, cost: pointsUsed, pointsUsed, pointsUsedConverted };
   }
 
   /** Danh sách cây tôi đã góp vào quỹ trồng cây + mã ghi nhận (§6.7.7). */
