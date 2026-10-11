@@ -1060,13 +1060,6 @@ export class CommunityFeedService {
     });
   }
 
-  /** Chi tiết 1 sự kiện. */
-  async getEvent(id: string) {
-    const event = await this.prisma.communityEvent.findUnique({ where: { id } });
-    if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
-    return event;
-  }
-
   /** Bài tham gia sự kiện — lọc FeedPost PUBLISHED có meta.eventId khớp. */
   /**
    * Bài dự thi của một sự kiện, có phân trang.

@@ -25,6 +25,7 @@ import { StorefrontController } from '../modules/storefront/storefront.controlle
  */
 const REMOVED = [
   'POST /me/redeem-points',
+  'GET /feed/events/:id',
 ] as const;
 
 const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [
