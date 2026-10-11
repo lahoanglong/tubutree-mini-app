@@ -66,6 +66,8 @@ export function VoucherSheet({
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending;
+  // Spinner của "Áp dụng" chỉ quay khi chính mã tay đang được áp; mã bấm từ danh sách thì khoá nút này.
+  const applyingCustom = applyMut.isPending && applyMut.variables === customCode.trim().toUpperCase();
 
   const formatCouponDesc = (coupon: CouponDTO) => {
     if (coupon.type === 'PERCENT') {
@@ -122,7 +124,11 @@ export function VoucherSheet({
                 }}
               />
             </div>
-            <Button disabled={!customCode.trim() || removeMut.isPending} loading={applyMut.isPending} onPress={handleApplyCustom}>
+            <Button
+              disabled={!customCode.trim() || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
+              loading={applyingCustom}
+              onPress={handleApplyCustom}
+            >
               Áp dụng
             </Button>
           </div>

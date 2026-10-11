@@ -139,6 +139,30 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(screen.getAllByRole('button', { name: 'Dùng mã' })[1]).toBeDisabled();
   });
 
+  it('áp dụng mã trong danh sách: nút "Áp dụng" của ô nhập tay bị khoá, không quay spinner', async () => {
+    mocks.getCoupons.mockResolvedValue([COUPONS[0]]);
+    mocks.applyCoupon.mockReturnValue(new Promise(() => {}));
+    renderSheet();
+    fireEvent.change(await screen.findByLabelText('Nhập mã giảm giá khác'), { target: { value: 'abc' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Dùng mã' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dùng mã' })).toHaveAttribute('aria-busy', 'true'));
+    const manual = screen.getByRole('button', { name: 'Áp dụng' });
+    expect(manual).toBeDisabled();
+    expect(manual).not.toHaveAttribute('aria-busy');
+  });
+
+  it('áp dụng mã nhập tay: nút "Áp dụng" quay spinner, nút "Dùng mã" trong danh sách bị khoá', async () => {
+    mocks.getCoupons.mockResolvedValue([COUPONS[0]]);
+    mocks.applyCoupon.mockReturnValue(new Promise(() => {}));
+    renderSheet();
+    await screen.findByRole('button', { name: 'Dùng mã' });
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Áp dụng' })).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', { name: 'Dùng mã' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dùng mã' })).not.toHaveAttribute('aria-busy');
+  });
+
   it('không có mã nào → trạng thái trống hướng dẫn nhập tay', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderSheet();
