@@ -221,6 +221,7 @@ export class UsersService {
     tierId: string | null;
     referralCode: string;
     pointsBalance: number;
+    pointsConvertedBalance: number;
     walletBalance: number;
     cashbackPending: number;
     metadata?: unknown;
@@ -240,6 +241,9 @@ export class UsersService {
       tierName: user.tier?.name ?? null,
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
+      // Lô quy đổi từ xu cũ (không hết hạn); pointsTotal là con số "Điểm Xanh" khách thấy.
+      pointsConvertedBalance: user.pointsConvertedBalance,
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       walletBalance: user.walletBalance,
       cashbackPending: user.cashbackPending,
       onboarded: Boolean(meta?.onboardedAt),

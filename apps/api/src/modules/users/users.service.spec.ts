@@ -6,7 +6,7 @@ import type { NotificationsService } from '../notifications/notifications.servic
 function prismaWithUpdate(updateSpy: jest.Mock, updateManySpy: jest.Mock = jest.fn().mockResolvedValue({ count: 1 })) {
   return { user: { update: updateSpy, updateMany: updateManySpy } } as unknown as PrismaService;
 }
-const fakeUser = { id: 'u1', zaloId: null, phone: null, email: null, fullName: 'A', dob: null, avatarUrl: null, role: 'CUSTOMER', tierId: null, referralCode: 'R', pointsBalance: 0, walletBalance: 0, cashbackPending: 0, metadata: null, tier: null };
+const fakeUser = { id: 'u1', zaloId: null, phone: null, email: null, fullName: 'A', dob: null, avatarUrl: null, role: 'CUSTOMER', tierId: null, referralCode: 'R', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0, cashbackPending: 0, metadata: null, tier: null };
 
 describe('UsersService.updateMe', () => {
   it('ép dob "YYYY-MM-DD" về Date trước khi ghi Prisma (qua updateMany có khoá dob:null, không phải update)', async () => {
@@ -334,5 +334,22 @@ describe('UsersService.requestAccountDeletion — báo admin (đặc tả notify
     user.findMany.mockRejectedValue(new Error('db down'));
     await expect(svc.requestAccountDeletion('u1')).resolves.toMatchObject({ alreadyRequested: false });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+  });
+});
+
+describe('UsersService.getMe: Điểm Xanh hai lô (review C1)', () => {
+  // AuthUser và /loyalty/me đã trả cả hai lô; /me chỉ trả lô thường thì client đọc điểm từ đây sẽ thiếu phần
+  // điểm quy đổi (tiền trả trước, không hết hạn).
+  it('trả pointsBalance, pointsConvertedBalance và pointsTotal = tổng hai lô', async () => {
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({ ...fakeUser, pointsBalance: 30, pointsConvertedBalance: 124 });
+    const svc = new UsersService({ user: { findUniqueOrThrow } } as unknown as PrismaService);
+    const me = await svc.getMe('u1');
+    expect(me).toMatchObject({ pointsBalance: 30, pointsConvertedBalance: 124, pointsTotal: 154 });
+  });
+
+  it('chỉ có điểm quy đổi vẫn có pointsTotal > 0', async () => {
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({ ...fakeUser, pointsBalance: 0, pointsConvertedBalance: 1250 });
+    const svc = new UsersService({ user: { findUniqueOrThrow } } as unknown as PrismaService);
+    expect((await svc.getMe('u1')).pointsTotal).toBe(1250);
   });
 });
