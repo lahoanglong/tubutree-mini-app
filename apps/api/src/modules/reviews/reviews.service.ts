@@ -236,11 +236,21 @@ export class ReviewsService {
     if (review.userId !== userId && role !== 'ADMIN') {
       throw new ForbiddenException('Không có quyền xóa đánh giá này.');
     }
+    // Điểm thưởng đã quá hạn thì cron hết hạn đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm ở đây là trừ hai lần
+    // và có thể kéo số dư âm. Tra ngoài tx; dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
+    const credit =
+      review.pointsEarned > 0
+        ? await this.prisma.pointsTransaction.findFirst({
+            where: { userId: review.userId, refType: 'REVIEW', refId: id, delta: { gt: 0 } },
+            select: { expiresAt: true },
+          })
+        : null;
+    const rewardExpired = credit?.expiresAt != null && credit.expiresAt.getTime() <= Date.now();
     await this.prisma.$transaction(async (tx) => {
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn
       // bằng cách tạo review (+điểm) rồi xóa (unique(userId,productId) mở lại) rồi tạo lại.
-      if (review.pointsEarned > 0) {
+      if (review.pointsEarned > 0 && !rewardExpired) {
         await tx.pointsTransaction.create({
           data: {
             userId: review.userId,

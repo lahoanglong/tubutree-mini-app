@@ -34,7 +34,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({ id: 'old', rating: 3 }),
       aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 }, _count: 2 }),
     },
-    pointsTransaction: { create: jest.fn() },
+    pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
     user: { update: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -405,6 +405,76 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
     const p = prisma as unknown as { pointsTransaction: { create: jest.Mock }; user: { update: jest.Mock } };
     expect(p.pointsTransaction.create).not.toHaveBeenCalled();
     expect(p.user.update).not.toHaveBeenCalled();
+  });
+
+  // PE-3: điểm đánh giá nay có hạn. Điểm đã hết hạn thì cron đã (hoặc sẽ) trừ; thu hồi thêm khi xoá là trừ hai lần
+  // và có thể kéo số dư âm (xác nhận trên Postgres thật: còn 30 điểm khác → 25; không còn điểm nào → -5).
+  describe('xoá đánh giá khi điểm thưởng đã hết hạn (PE-3)', () => {
+    const now = new Date('2026-10-11T03:00:00.000Z');
+    const removeWith = async (credit: { expiresAt: Date | null } | null, pointsEarned = 10) => {
+      const prisma = makePrisma({
+        review: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'r1', userId: 'u1', productId: 'p1', pointsEarned }),
+          delete: jest.fn(),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 }, _count: 0 }),
+        },
+        pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(credit) },
+      });
+      const out = await new ReviewsService(prisma, analytics, loyalty).remove('u1', 'USER', 'r1');
+      return { prisma: prisma as unknown as { review: { delete: jest.Mock }; pointsTransaction: { create: jest.Mock; findFirst: jest.Mock }; user: { update: jest.Mock }; product: { update: jest.Mock } }, out };
+    };
+
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+      jest.setSystemTime(now);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it('điểm thưởng đã quá hạn → vẫn xoá đánh giá và tính lại sao, nhưng KHÔNG thu hồi điểm lần nữa', async () => {
+      const { prisma, out } = await removeWith({ expiresAt: new Date(now.getTime() - 1) });
+      expect(out).toEqual({ ok: true });
+      expect(prisma.review.delete).toHaveBeenCalledWith({ where: { id: 'r1' } });
+      expect(prisma.product.update).toHaveBeenCalled();
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('đúng lúc hết hạn (expiresAt = bây giờ) cũng coi là đã hết hạn, khớp cron (expiresAt <= now)', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime()) });
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('điểm thưởng còn hạn → thu hồi như cũ', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data).toMatchObject({ delta: -10, reason: 'REVIEW_DELETE:p1', refType: 'REVIEW', refId: 'r1' });
+      expect(prisma.user.update.mock.calls[0][0].data.pointsBalance).toEqual({ increment: -10 });
+    });
+
+    it('dòng thưởng cũ không hạn (trước PE-3, expiresAt NULL) → thu hồi như cũ', async () => {
+      const { prisma } = await removeWith({ expiresAt: null });
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
+    });
+
+    it('không tìm thấy dòng thưởng gốc → thu hồi như cũ (không đoán là đã hết hạn)', async () => {
+      const { prisma } = await removeWith(null);
+      expect(prisma.pointsTransaction.create.mock.calls[0][0].data.delta).toBe(-10);
+    });
+
+    it('tra dòng thưởng gốc theo đúng người, đúng đánh giá, chỉ dòng cộng; ngoài transaction', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() + 1) });
+      expect(prisma.pointsTransaction.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'u1', refType: 'REVIEW', refId: 'r1', delta: { gt: 0 } },
+        select: { expiresAt: true },
+      });
+      const tx = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
+      expect(prisma.pointsTransaction.findFirst.mock.invocationCallOrder[0]!).toBeLessThan(tx.mock.invocationCallOrder[0]!);
+    });
+
+    it('đánh giá chưa từng được thưởng (pointsEarned=0) → không tra sổ điểm', async () => {
+      const { prisma } = await removeWith({ expiresAt: new Date(now.getTime() - 1) }, 0);
+      expect(prisma.pointsTransaction.findFirst).not.toHaveBeenCalled();
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
   });
 
   it('không phải chủ review + không phải ADMIN → Forbidden, không xóa', async () => {

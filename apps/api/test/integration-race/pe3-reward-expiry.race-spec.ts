@@ -86,12 +86,12 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
     });
     const user = await createUser(prisma);
     touched.push(user.id);
-    await createOrder(prisma, {
+    const order = await createOrder(prisma, {
       userId: user.id,
       status: 'DELIVERED',
       items: { create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
     });
-    return { user, product: p };
+    return { user, product: p, order };
   }
 
   /** Lô thưởng cũ không hạn (điểm trước PE-3): dòng sổ cộng số dư, khớp sổ. */
@@ -234,6 +234,75 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
       expect(wins).toHaveLength(5);
       expect(wins.every((w) => w.expiresAt instanceof Date)).toBe(true);
       expect(await balance(user.id)).toBe(100 + 5 * (SPIN_WIN - SPIN_COST));
+    });
+  });
+
+  describe('xoá đánh giá khi điểm thưởng đã hết hạn: không trừ hai lần', () => {
+    const reviewDeleteRows = (userId: string) => prisma.pointsTransaction.findMany({ where: { userId, reason: { startsWith: 'REVIEW_DELETE:' } } });
+
+    it.each([[30], [0]])('cron đã trừ điểm đánh giá rồi mới xoá (còn %i điểm khác): xoá không trừ lần hai, số dư không âm', async (other) => {
+      const { user, product } = await player();
+      if (other > 0) await legacyUnlimited(user.id, other);
+      const review = await reviews.create(user.id, product.slug, { rating: 5 });
+      await ageLedger(user.id, 13);
+      await expiry.expirePoints();
+      expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
+      expect(await balance(user.id)).toBe(other);
+
+      await reviews.remove(user.id, 'USER', review.id);
+
+      expect(await prisma.review.count({ where: { id: review.id } })).toBe(0);
+      expect(await reviewDeleteRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(other);
+      await expiry.expirePoints();
+      expect(await balance(user.id)).toBe(other);
+    });
+
+    it('quá hạn nhưng cron chưa chạy rồi xoá: không thu hồi; cron đêm đó trừ đúng 5 một lần', async () => {
+      const { user, product } = await player();
+      await legacyUnlimited(user.id, 30);
+      const review = await reviews.create(user.id, product.slug, { rating: 5 });
+      await ageLedger(user.id, 13);
+
+      await reviews.remove(user.id, 'ADMIN', review.id);
+      expect(await reviewDeleteRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(30 + REVIEW_POINTS);
+
+      await expiry.expirePoints();
+      await expiry.expirePoints();
+      expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
+      expect(await balance(user.id)).toBe(30);
+    });
+
+    it('điểm còn hạn: xoá vẫn thu hồi đúng số điểm đã thưởng (chống tạo → xoá → tạo lại để farm điểm)', async () => {
+      const { user, product } = await player();
+      await legacyUnlimited(user.id, 30);
+      const review = await reviews.create(user.id, product.slug, { rating: 5 });
+      await ageLedger(user.id, 11); // còn 1 tháng
+
+      await reviews.remove(user.id, 'USER', review.id);
+
+      const rows = await reviewDeleteRows(user.id);
+      expect(rows.map((r) => [r.delta, r.lot])).toEqual([[-REVIEW_POINTS, 'STANDARD']]);
+      expect(await balance(user.id)).toBe(30);
+    });
+
+    it('dòng thưởng đánh giá cũ không hạn (trước PE-3): xoá vẫn thu hồi như cũ', async () => {
+      const { user, product, order } = await player();
+      const review = await prisma.review.create({
+        data: { userId: user.id, productId: product.id, orderId: order.id, rating: 5, comment: 'cũ', images: [], pointsEarned: REVIEW_POINTS },
+      });
+      await prisma.$transaction([
+        prisma.pointsTransaction.create({
+          data: { userId: user.id, delta: REVIEW_POINTS, lot: 'STANDARD', reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: review.id, expiresAt: null },
+        }),
+        prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { increment: REVIEW_POINTS } } }),
+      ]);
+
+      await reviews.remove(user.id, 'USER', review.id);
+
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
+      expect(await balance(user.id)).toBe(0);
     });
   });
 
