@@ -506,6 +506,21 @@ describe('GamePage — tưới cây, thu hoạch, mua cây thật', () => {
     await waitFor(() => expect(screen.queryByText('Thu hoạch thành công!')).not.toBeInTheDocument());
   });
 
+  it('ô mã giảm giá là nút bàn phím được: Enter và Space chép mã như chạm', async () => {
+    mocks.api.waterTree.mockResolvedValue({ progress: 50, target: 50, harvested: true, treesPlanted: 4, reward: { coupon: 'GIAM10' } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
+    const box = (await screen.findByText('GIAM10')).closest<HTMLElement>('[role="button"]')!;
+    expect(box).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(box, { key: ' ' });
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
+    expect(mocks.copyText).toHaveBeenLastCalledWith('GIAM10');
+    fireEvent.keyDown(box, { key: 'a' });
+    expect(mocks.copyText).toHaveBeenCalledTimes(2);
+  });
+
   it('mua cây thật: nút kèm giá xu, gọi API 1 lần, báo mã chứng nhận, làm mới rừng + ví', async () => {
     const { invalidated } = renderPage();
     const btn = await screen.findByRole('button', { name: /Mua cây thật \(65\.000 xu\)/ });

@@ -5,6 +5,7 @@ import { copyText } from '../../utils/clipboard';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
+import { rowKeyboardProps } from '../ui/row-keyboard';
 import { Text } from '../ui/text';
 import { rarityColor, rarityLabel } from './game-utils';
 
@@ -52,7 +53,7 @@ export function HarvestCelebration({
         {coupon && (
           <div
             role="button"
-            tabIndex={0}
+            {...rowKeyboardProps()}
             className="tubu-press"
             onClick={() => {
               void copyText(coupon).then((ok) =>
