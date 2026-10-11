@@ -41,6 +41,8 @@ export default function WalletPage() {
   // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
   // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
   const authed = useAuthStore((s) => s.status === 'authenticated');
+  // CTV chỉ hưởng hoa hồng; API không bao giờ thưởng Điểm Xanh giới thiệu cho role này.
+  const isAffiliate = useAuthStore((s) => s.user?.role === 'AFFILIATE');
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   // Thống kê giới thiệu là phần phụ: lỗi chỉ làm ẩn khối mời bạn, không chặn cả màn Ví.
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
@@ -201,7 +203,7 @@ export default function WalletPage() {
           </div>
 
           {/* Giới thiệu bạn bè */}
-          {referral && (
+          {referral && !isAffiliate && (
             <div style={{ padding: '0 16px 8px' }}>
               <div style={{ ...CARD, padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -209,7 +211,7 @@ export default function WalletPage() {
                   <Text variant="body-lg" style={{ fontWeight: 600 }}>Mời bạn — nhận Điểm Xanh</Text>
                 </div>
                 <Text variant="caption" tone="secondary" as="div">
-                  Bạn bè vào app bằng mã của bạn và có đơn hàng thứ hai giao thành công → bạn nhận Điểm Xanh thưởng.
+                  {vi.wallet.referralPromise(referral.minOrderAmount ?? 200_000, referral.windowDays ?? 30)}
                 </Text>
                 <div style={{ display: 'flex', gap: 16, marginTop: 12, marginBottom: 12 }}>
                   <div>

@@ -851,7 +851,7 @@ export default function CheckoutPage() {
           )}
 
           {quote.data && quote.data.pointsDiscount > 0 && (
-            <KeyValueRow label="Giảm giá điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
+            <KeyValueRow label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
           )}
 
           <KeyValueRow
@@ -880,7 +880,7 @@ export default function CheckoutPage() {
             <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
               <Sprout size={13} color="var(--color-text-success)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                Tích lũy {pointsEarnLabel(quote.data!.pointsEarned)}
+                {pointsEarnLabel(quote.data!.pointsEarned)}
               </Text>
             </Box>
           )}

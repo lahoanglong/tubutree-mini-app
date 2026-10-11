@@ -112,7 +112,7 @@ describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-1
     renderPage();
     const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
     expect(btn).toBeDisabled();
-    expect(screen.getByText('Tick đồng ý điều khoản để đăng ký')).toBeInTheDocument();
+    expect(screen.getByText('Chọn ô đồng ý điều khoản để đăng ký')).toBeInTheDocument();
     fireEvent.click(btn);
     expect(mocks.registerAffiliate).not.toHaveBeenCalled();
   });
@@ -122,7 +122,7 @@ describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-1
     const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
     fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
     expect(btn).toBeEnabled();
-    expect(screen.queryByText('Tick đồng ý điều khoản để đăng ký')).toBeNull();
+    expect(screen.queryByText('Chọn ô đồng ý điều khoản để đăng ký')).toBeNull();
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1));
     expect(mocks.registerAffiliate).toHaveBeenCalledWith('2026-10');

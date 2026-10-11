@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   withdraw: vi.fn(),
   shareLink: vi.fn(),
   features: { cashback: false },
+  role: 'CUSTOMER' as string,
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -40,8 +41,12 @@ vi.mock('../utils/features', () => ({
   },
 }));
 vi.mock('../store/auth', () => {
-  const state = { status: 'authenticated' };
-  return { useAuthStore: (sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state) };
+  return {
+    useAuthStore: (sel?: (s: { status: string; user: { role: string } }) => unknown) => {
+      const state = { status: 'authenticated', user: { role: mocks.role } };
+      return sel ? sel(state) : state;
+    },
+  };
 });
 vi.mock('../utils/idempotency', () => {
   let n = 0;
@@ -108,6 +113,7 @@ function inputOf(label: string | RegExp): HTMLInputElement {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.features.cashback = false;
+  mocks.role = 'CUSTOMER';
 });
 
 describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2)', () => {
@@ -339,6 +345,31 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
     const arg = mocks.shareLink.mock.calls[0]![0] as { description: string };
     expect(arg.description).toContain('TUBU1234');
     expect(arg.description).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
+  });
+
+  it('khách thường thấy đủ điều kiện thưởng: đơn thứ hai từ minOrderAmount trong windowDays', async () => {
+    stubLoaded();
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 30, minOrderAmount: 200_000 });
+    renderPage();
+    const promise = await screen.findByText(/có đơn thứ hai từ 200\.000đ giao thành công trong 30 ngày kể từ đơn đầu/);
+    expect(promise.textContent).toMatch(/Điểm Xanh/);
+  });
+
+  it('điều kiện lấy theo số API trả, không ghi cứng', async () => {
+    stubLoaded();
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 45, minOrderAmount: 300_000 });
+    renderPage();
+    expect(await screen.findByText(/từ 300\.000đ giao thành công trong 45 ngày/)).toBeInTheDocument();
+  });
+
+  it('CTV (AFFILIATE) không thấy lời hứa thưởng Điểm Xanh vì không bao giờ được thưởng', async () => {
+    mocks.role = 'AFFILIATE';
+    stubLoaded();
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 30, minOrderAmount: 200_000 });
+    renderPage();
+    await screen.findByText('Ví Tubu (số dư khả dụng)');
+    expect(screen.queryByText('Mời bạn — nhận Điểm Xanh')).toBeNull();
+    expect(screen.queryByText(/có đơn thứ hai/)).toBeNull();
   });
 
   it('chưa tải được thống kê giới thiệu: ví vẫn hiện, chỉ ẩn khối mời bạn', async () => {

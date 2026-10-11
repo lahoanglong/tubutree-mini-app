@@ -67,10 +67,11 @@ export class GameService {
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
     // Giá các món — FE trước đây chép cứng (80💧 đóng băng chuỗi, giá góp quỹ trồng cây): admin đổi
     // config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
-    const [streakFreezeCost, treePointsPrice, tankCapacity] = await Promise.all([
+    const [streakFreezeCost, treePointsPrice, tankCapacity, spinCostPoints] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
       this.config.get<number>('game.tree_points_price', 50),
       this.config.get<number>('game.tank_capacity', 500),
+      this.config.get<number>('game.spin_buy_cost_points', 10),
     ]);
     const streakRepairable =
       !!profile.brokenStreakAt &&
@@ -86,6 +87,7 @@ export class GameService {
       streakFreezeCost,
       treePointsPrice,
       tankCapacity,
+      spinCostPoints,
     };
   }
 

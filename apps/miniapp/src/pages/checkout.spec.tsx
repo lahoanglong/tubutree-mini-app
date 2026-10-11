@@ -315,7 +315,7 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
   it('điểm sẽ tích ≥ 1.000 có dấu nghìn ở thanh tóm tắt', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...BIG_QUOTE, pointsEarned: 1250 });
     renderPage();
-    expect(await screen.findByText('+1.250 điểm Xanh khi giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận +1.250 Điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 });
 
@@ -381,7 +381,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
   it('điểm sẽ tích hiện cho mọi cách thanh toán: không còn ngoại lệ "TubuXu không tích điểm"', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...BIG_QUOTE, pointsEarned: 520 });
     renderPage();
-    expect(await screen.findByText('+520 điểm Xanh khi giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận +520 Điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 
   describe('đơn 0đ (điểm phủ hết hàng + freeship)', () => {

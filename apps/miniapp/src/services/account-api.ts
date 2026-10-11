@@ -95,6 +95,9 @@ export interface ReferralOverview {
   earnedPoints: number;
   milestones: ReferralMilestone[];
   nextMilestone: ReferralMilestone | null;
+  /** Optional: API cũ chưa trả. */
+  windowDays?: number;
+  minOrderAmount?: number;
 }
 
 export interface BankInfo {

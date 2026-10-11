@@ -660,6 +660,15 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('getProfile trả spinCostPoints theo game.spin_buy_cost_points (mặc định 10)', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());
+    const custom = (await new GameService(prisma, makeConfig({ 'game.spin_buy_cost_points': 20 }), analytics).getProfile('u1')) as Record<string, unknown>;
+    expect(custom.spinCostPoints).toBe(20);
+    const def = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as Record<string, unknown>;
+    expect(def.spinCostPoints).toBe(10);
+  });
+
   it('PD-3: getProfile trả treePointsPrice, bỏ xuPerSeed/treeXuPrice', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile());

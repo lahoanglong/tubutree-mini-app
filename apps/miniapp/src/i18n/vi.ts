@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { formatDrops, formatNumber, formatPoints } from '../utils/format';
+import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
   common: {
@@ -31,14 +31,14 @@ export const vi = {
 
   auth: {
     loginCta: 'Tiếp tục với Zalo',
-    loginHint: 'Đăng nhập để tích điểm Xanh & đặt hàng',
+    loginHint: 'Đăng nhập để tích Điểm Xanh & đặt hàng',
     greetingFallback: 'bạn',
   },
 
   home: {
     tagline: 'Sống xanh An Lành',
     greeting: (name: string) => `Chào ${name} 🌿`,
-    pointsChip: (n: number) => `${formatNumber(n)} điểm Xanh`,
+    pointsChip: (n: number) => `${formatNumber(n)} Điểm Xanh`,
     searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
     forYou: 'Dành cho bạn',
@@ -215,7 +215,7 @@ export const vi = {
     summary: 'Tóm tắt đơn hàng',
     shippingFee: 'Phí vận chuyển',
     total: 'Tổng cộng',
-    pointsEarn: (n: number) => `+${formatNumber(n)} điểm Xanh khi giao thành công`,
+    pointsEarn: (n: number) => `Nhận +${formatNumber(n)} Điểm Xanh khi giao thành công`,
     placeOrder: 'Đặt hàng',
     placeOrderWith: (total: string) => `Đặt hàng · ${total}`,
     placing: 'Đang gửi đơn...',
@@ -232,7 +232,7 @@ export const vi = {
     total: 'Tổng thanh toán',
     pointsLabel: 'Điểm Xanh sẽ nhận',
     pointsValue: (n: number) => `+${formatNumber(n)} điểm`,
-    pointsComing: (n: number) => `${formatNumber(n)} điểm Xanh sẽ về tay khi đơn giao thành công`,
+    pointsComing: (n: number) => `${formatNumber(n)} Điểm Xanh sẽ về tay khi đơn giao thành công`,
     etaLabel: 'Giao dự kiến',
     nextTitle: 'Tiếp theo',
     steps: [
@@ -455,6 +455,8 @@ export const vi = {
   },
 
   wallet: {
+    referralPromise: (minOrder: number, windowDays: number) =>
+      `Bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${formatVnd(minOrder)} giao thành công trong ${windowDays} ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.`,
     referralMilestoneProgress: (remaining: number, bonusFormatted: string) =>
       `Mời thêm ${remaining} bạn để nhận ${bonusFormatted}`,
   },
@@ -551,7 +553,7 @@ export const vi = {
       'Hoa hồng là thu nhập của bạn: bạn tự kê khai và nộp thuế theo quy định. Khi pháp luật yêu cầu, Tubu Tree có thể khấu trừ thuế trước khi chi trả.',
     ],
     agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
-    mustAgree: 'Tick đồng ý điều khoản để đăng ký',
+    mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
   },
 
   dealerOrder: {

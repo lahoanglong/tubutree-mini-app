@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
-import { openOAChat, hasOA } from '../services/zmp-bridge';
+import { openOAChat, hasOA, callPhone } from '../services/zmp-bridge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -18,7 +18,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
-import { FALLBACK_FAQ, fetchFaqs, fetchSupportContact } from './about-data';
+import { DEFAULT_SUPPORT, FALLBACK_FAQ, fetchFaqs, fetchSupportContact } from './about-data';
 
 const ALL_CATS = 'Tất cả';
 
@@ -40,6 +40,28 @@ type PolicyKey = keyof typeof POLICIES;
 
 const FAQ_SKELETON_ROWS = 4;
 
+function HotlineButton({ phone }: { phone: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Hotline ${phone}, chạm để gọi`}
+      onClick={() => void callPhone(phone)}
+      style={{
+        minHeight: 44,
+        padding: '0 0 0 12px',
+        border: 'none',
+        background: 'none',
+        font: 'inherit',
+        fontWeight: 600,
+        color: 'var(--color-text-brand)',
+        cursor: 'pointer',
+      }}
+    >
+      {phone}
+    </button>
+  );
+}
+
 export default function AboutPage() {
   const { openSnackbar } = useSnackbar();
   const { logout } = useAuthStore();
@@ -51,7 +73,7 @@ export default function AboutPage() {
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : FALLBACK_FAQ;
   const faqCats = [ALL_CATS, ...new Set(faq.map((f) => f.cat))];
-  const support = supportQ.data;
+  const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
   const supportRows = [
     { label: 'Hotline', value: support?.hotline },
@@ -195,7 +217,7 @@ export default function AboutPage() {
             <KeyValueRow
               key={r.label}
               label={r.label}
-              value={r.value}
+              value={r.label === 'Hotline' ? <HotlineButton phone={r.value} /> : r.value}
               style={{
                 padding: '10px 0',
                 borderBottom: i < supportRows.length - 1 ? '1px solid var(--color-border-subtle)' : 'none',

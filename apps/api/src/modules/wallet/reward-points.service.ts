@@ -145,17 +145,27 @@ export class RewardPointsService {
     return parseMilestones(await this.config.get<unknown>('referral.milestones_points', []));
   }
 
+  /** Điều kiện đơn thứ hai; một nguồn cho cả thưởng và lời hứa hiển thị ở /me/referral. */
+  private async referralOrderRules(): Promise<{ windowDays: number; minOrderAmount: number }> {
+    const [windowDays, minOrderAmount] = await Promise.all([
+      this.config.get<number>('referral.window_days', 30),
+      this.config.get<number>('referral.min_order_amount', 200000),
+    ]);
+    return { windowDays, minOrderAmount };
+  }
+
   /**
    * Thống kê giới thiệu cho khách (GET /me/referral): số bạn thành công còn hiệu lực, Điểm Xanh đã
    * nhận từ giới thiệu (thưởng xu cũ quy ra ceil(xu/1000)), mốc và mốc kế tiếp.
    */
   async getReferralOverview(userId: string) {
-    const [user, pointsAgg, coinAgg, successCount, milestones] = await Promise.all([
+    const [user, pointsAgg, coinAgg, successCount, milestones, rules] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { referralCode: true } }),
       this.prisma.pointsTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
       this.prisma.coinTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
       countReferralSuccesses(this.prisma, userId),
       this.referralMilestones(),
+      this.referralOrderRules(),
     ]);
     return {
       referralCode: user.referralCode,
@@ -163,6 +173,8 @@ export class RewardPointsService {
       earnedPoints: (pointsAgg._sum.delta ?? 0) + legacyXuToPoints(coinAgg._sum.delta ?? 0),
       milestones,
       nextMilestone: milestones.find((m) => m.count > successCount) ?? null,
+      windowDays: rules.windowDays,
+      minOrderAmount: rules.minOrderAmount,
     };
   }
 
@@ -182,10 +194,9 @@ export class RewardPointsService {
     const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true } });
     if (!referrer || referrer.role === 'AFFILIATE') return false;
 
-    const [reward, windowDays, minOrder] = await Promise.all([
+    const [reward, { windowDays, minOrderAmount: minOrder }] = await Promise.all([
       this.config.get<number>('referral.referrer_reward_points', 5),
-      this.config.get<number>('referral.window_days', 30),
-      this.config.get<number>('referral.min_order_amount', 200000),
+      this.referralOrderRules(),
     ]);
     if (!(reward > 0)) return false;
 
