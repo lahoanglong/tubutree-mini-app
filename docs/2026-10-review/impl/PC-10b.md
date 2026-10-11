@@ -170,3 +170,113 @@ $ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
 - Xoá ba biến `--dealer-ink/-soft/-bg` và ghi chú "Ngoại lệ duy nhất: --dealer-*" trong `css/tokens.css` (khối LEGACY): không còn tham chiếu nào, và `ds-legacy-vars-4b.spec.ts`/`ds-c076-pc10b.spec.ts` vẫn giữ regex `var\(--dealer-` để chặn quay lại.
 - `SegmentedTabs`/`Button` chưa có biến thể màu theo theme trang; nếu muốn tab và nút chính của dealer đậm màu navy đồng bộ, cần prop `accent` hoặc đọc biến `--color-action-primary-bg` do trang ghi đè ở `Page` (thay vì `style` từng nút).
 - Chạy e2e `dealer-rewards.miniapp.spec.ts` sau khi merge: DOM đã đổi (PageHeader h1, `SegmentedTabs`, `Badge`, `Button` thay `Box`); locator `getByText('Báo cáo', { exact: true })`, `getByRole('button', { name: 'Yêu cầu nhận thưởng' })`, bộ lọc `div` của `rewardRow` đã đọc tĩnh và vẫn khớp, nhưng CHƯA chạy Playwright (quy định máy).
+
+## Mục 3/4 — `storefront-builder.tsx`, `storefront-context-bar.tsx`, `content-kit-sheet.tsx`, `share-sheet.tsx` (C-076) — XONG
+
+Bốn commit, mỗi file một commit, guard spec + spec riêng đi cùng file:
+
+| Commit | Nội dung |
+|---|---|
+| 6744285 | `components/storefront-context-bar.tsx` + `storefront-context-bar.spec.tsx` (mới) + dòng trong guard |
+| eb3e40e | `components/share-sheet.tsx` + `share-sheet.spec.tsx` + dòng trong guard |
+| ce4153e | `components/content-kit-sheet.tsx` + `content-kit-sheet.spec.tsx` + dòng trong guard |
+| b24cfd1 | `pages/storefront-builder.tsx` + `storefront-builder.spec.tsx` (mới) + `utils/storefront-theme.ts` (+ spec, mới) + dòng trong guard (cả `FILES_PC10B` lẫn `PAGES_WITH_PAGE_HEADER`) |
+
+### Số đo trước -> sau (`scripts/uiux/static-scan.mjs`: legacy / hex / emoji; ESLint trong `apps/miniapp`)
+
+| File | legacy | hex | emoji | ESLint |
+|---|---|---|---|---|
+| `pages/storefront-builder.tsx` | 88 -> 0 | 8 -> 0 | 2 -> 1 | 1 lỗi `no-restricted-imports` (Button ZaUI) -> 0 lỗi, 0 cảnh báo |
+| `components/storefront-context-bar.tsx` | 4 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| `components/content-kit-sheet.tsx` | 10 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| `components/share-sheet.tsx` | 3 -> 0 | 0 -> 0 | 3 -> 3 | 0 -> 0 |
+| `utils/storefront-theme.ts` (mới) | - | 5 (dữ liệu API, xem dưới) | 0 | 0 |
+
+Emoji còn lại là NỘI DUNG, giữ có chủ ý: `🎉` trong snackbar nhận thưởng nhiệm vụ (`storefront-builder.tsx`); `🌿 💚 🌱` trong 3 caption mẫu để CTV sao chép đăng mạng xã hội (`share-sheet.tsx`). Ký tự chức năng `✓` (nhiệm vụ đã nhận) đã thay bằng `Icon` Check.
+
+Cột hex của `utils/storefront-theme.ts` = 5 là CÓ CHỦ Ý: đó là bảng màu chủ đạo gian hàng gửi lên API (`themeColor`, DTO `PATCH /storefront/me` chỉ nhận `#rrggbb`, `storefront.controller.ts:21`; trang web công khai dùng nguyên chuỗi để tô gian hàng) nên không thể là `var(--token)`. Trước đây 5 hex này (cùng `'#16a34a'` mặc định) rải trong `.tsx` cùng `#000`/`#fff`/`rgba(0,0,0,.2)` của viền ô màu; nay hex chỉ còn ở một bảng dữ liệu, viền ô màu dùng token. File này không thuộc `FILES_PC10B` nên guard spec không quét nó; `static-scan.mjs` vẫn đếm 5.
+
+### Đã làm
+
+`components/storefront-context-bar.tsx`: `Box`/`Text` ZaUI -> `div` + `Text`/`Icon` DS; nền `--color-bg-surface`, bóng `--elevation-1`. "Về Tubu Tree" trước là `Text onClick` (không phải nút, không bàn phím, cao ~15px) -> `Button variant="ghost"` (cao 44px, Tab/Enter). Thanh vì thế cao 44px thay vì ~30px: chấp nhận để đạt vùng chạm.
+
+`components/share-sheet.tsx`: `Sheet` ZaUI + `Box p={4}` + `calc(16px + var(--safe-bottom))` tự cộng -> `BottomSheet` (tiêu đề h2 `vi.storefront.shareTitle`, nút đóng 44px, KHÔNG cộng safe-area thêm lần nữa, A4-020). Caption gợi ý trước là `Box onClick` -> `<button>` thật cao >= 44px, nền `--color-bg-subtle`, `--radius-control`. Hai nút chính giữ nguyên (đã là DS `Button`), bỏ `marginBottom` rải rác bằng khối flex `gap: 8`. `useShareWithFallback` KHÔNG đổi.
+
+`components/content-kit-sheet.tsx`: bỏ `Box`/`Sheet`/`Text`/`Button` ZaUI. `BottomSheet` (tiêu đề h2) + khối cuộn `maxHeight: 70vh` (giữ hành vi cuộn cũ 80vh, chừa chỗ cho tiêu đề). Hai nút `Button` ZaUI (nền `--primary-600` ép tay, icon trong `<span>`) -> `Button` DS có `icon`/`onPress` (bỏ ép màu, DS đã dùng `--color-action-primary-bg`). Bài mẫu và video trước là `Box onClick` -> `CopyRow` = `<button>` thật >= 44px. Mỗi mục có tiêu đề `h3` (`Section`), điểm bán hàng thành `ul/li` thay cho ký tự `•`. Ảnh `--radius-md` -> `--radius-media`. Loading/error giữ `Skeleton`/`ErrorState`.
+
+`pages/storefront-builder.tsx` (4 nhánh render: đang tải / 404 chưa có gian hàng / lỗi tải / Builder): cả bốn qua `BuilderShell` = `Page` nền `--color-bg-canvas` + `PageHeader` "Gian hàng của tôi" (đúng một h1, C-114); bỏ `className="page"` vì `PageHeader` tự đệm safe-top. Từ zmp-ui còn `Page`, `Input`, `useSnackbar`, `useNavigate`.
+- Tên gian hàng -> `Heading` h2, trạng thái Đăng/Nháp -> `Badge` (success/neutral, chữ giữ nguyên); hai nút "Sửa hồ sơ"/"Cấu hình" xếp một hàng riêng dưới tiêu đề (cùng cao 44px, mỗi nút `flex: 1`) thay vì ép chung hàng với tên.
+- Thẻ hồ sơ (ảnh bìa + avatar + lời nhắn): vẫn `role="button"` + `aria-label`, thêm Tab/Enter/Space qua `rowKeyboardProps`; gradient ảnh bìa mặc định `--leaf-100 -> --primary-100` -> `--sage-100 -> --forest-100`.
+- Bộ sưu tập/Thống kê/Hành trình -> `Card`; hàng sản phẩm: giá `PriceTag size="sm"`, đổi tên/xoá bộ sưu tập, ghim/ẩn/xoá sản phẩm trước là `Box role="button"` 15-16px (có chỗ min 36px) -> `RowIconButton` cục bộ 44x44 (có `aria-label`, cho chỉnh tông icon: xoá đỏ, ghim/hiện xanh khi bật; `IconButton` DS chưa có `tone`). "Thêm lý do giới thiệu" (trước là `Text onClick`) -> `<button>` 44px; "Nội dung" -> `Button variant="ghost"`; hai điều khiển này nằm hàng thứ hai của mỗi sản phẩm để hàng đầu còn chỗ cho tên + 3 nút icon 44px ở màn 360px.
+- Thanh đáy cố định tự dựng -> `StickyActionBar` ("Xem trước" secondary + "Lưu & Đăng" primary, safe-area một lần); đệm đáy trang `96px` -> `calc(100px + var(--safe-bottom))`.
+- 7 `Sheet` ZaUI -> `BottomSheet` (mẫu/chọn sản phẩm/đổi tên/xoá bộ sưu tập/cấu hình/hồ sơ/lý do giới thiệu/xoá sản phẩm): có tiêu đề h2, nút đóng 44px, bỏ mọi `calc(.. + var(--safe-bottom))` tự cộng. Nút xoá trong sheet xác nhận -> `Button variant="danger"`.
+- Nút `loading` + `disabled` cùng lúc (spinner không bao giờ hiện với ZaUI, A4-007) -> chỉ `loading`; DS `Button` tự chặn bấm lại khi đang chạy. Riêng nhận thưởng nhiệm vụ: nút đang nhận `loading`, các nút nhận khác `disabled` (giữ đúng ý "đang nhận một thưởng thì không nhận thưởng khác").
+- Ô chọn màu thương hiệu trước là `Box onClick` 32px không nhãn/không vai trò (màu chọn chỉ nhìn viền #000) -> `ThemeSwatch` = `<button aria-pressed aria-label="Xanh dương"...>` vùng chạm 44px, hình tròn 32px; bảng màu chuyển sang `utils/storefront-theme.ts`.
+- Ô chọn mẫu theo danh mục: `Box role="button"` -> `<button aria-label="Dùng mẫu ..." >` min 44px, logic `busy` giữ nguyên.
+- Form cấu hình: "Tên gian hàng"/"Subdomain riêng" dùng `Field` (nhãn gắn vào ô nhập); 7 ô chỉ có placeholder được thêm `aria-label` cùng chữ (không thêm nhãn hiển thị mới).
+- Loading/empty/error: ô chọn sản phẩm thêm `Skeleton` khi tải và `EmptyState` khi không có kết quả (trước là vùng trống); lỗi giữ `ErrorState` (nay `variant="inline"` trong sheet). Thanh nhiệm vụ -> `ProgressBar` (giữ guard chia cho 0).
+- KHÔNG đổi: mọi `queryKey`/lời gọi API và payload (`createStorefront`, `applyStorefrontTemplate(categoryId)`, `createCollection({title})` đã cắt khoảng trắng, `updateCollection(id,{title})`, `updateItem` cho ghim/ẩn/ghi chú, `removeItem(id)`, `deleteCollection(id)`, `addItem(collectionId,{productId})`, `publishStorefront(true)`, `updateStorefront` của hồ sơ và cấu hình, `claimQuest(code)`), điều kiện bật/tắt nút, thứ tự các khối, số hiển thị (giá ưu tiên giá khuyến mãi, thống kê 30 ngày, tiến độ n/m, tổng xu), chuyển tới `/s/:slug` khi xem trước gian hàng đã đăng, cảnh báo khi còn nháp.
+
+### Test (đỏ -> xanh)
+
+- `ds-c076-pc10b.spec.ts` (46 -> 55 ca): thêm từng file TRƯỚC khi di cư. `storefront-context-bar`: 2 ca ĐỎ (alias, ZaUI) -> XANH. `share-sheet`: 2 ĐỎ -> XANH. `content-kit-sheet`: 2 ĐỎ -> XANH. `storefront-builder`: 5 ĐỎ (alias, màu thô, ký tự `✓`, ZaUI, PageHeader/h1) -> XANH.
+- `components/storefront-context-bar.spec.tsx` (mới, 4 ca): không ở trong gian hàng thì không vẽ; nhãn ngữ cảnh + nút; bấm xoá ngữ cảnh rồi `navigate('/')`; nút >= 44px. Trên code cũ 3 ca ĐỎ (không có `role=button`) -> XANH.
+- `components/share-sheet.spec.tsx` (5 -> 10 ca): 3 ca ĐỎ trên code cũ (tiêu đề h2 + nút Đóng, caption là nút >= 44px chép đúng nội dung kèm liên kết có mã, 3 caption mặc định là nút) -> XANH; 2 ca khoá hành vi (Sao chép link có `?ref=`, copy thất bại báo lỗi) XANH ở cả hai.
+- `components/content-kit-sheet.spec.tsx` (4 -> 11 ca): 4 ca ĐỎ trên code cũ (h2 + nút Đóng, hai nút chính >= 44px, bốn khối có `h3`, bài mẫu/video là nút >= 44px chép đúng nội dung) -> XANH; 3 ca khoá hành vi (báo rỗng, Thử lại gọi lại API, copy thất bại) XANH ở cả hai.
+- `pages/storefront-builder.spec.tsx` (mới, 35 ca). Chạy trên code cũ trước khi di cư: 11 ca ĐỎ, đúng các hành vi mới (đúng một h1 ở 4 trạng thái, tên gian hàng h2, ô chọn mẫu là nút 44px, 5 nút icon >= 44px, ô chọn sản phẩm có trạng thái rỗng, ba ca ô màu `aria-pressed`/44px/màu đã lưu, nhiệm vụ đã nhận không còn `✓`) -> sau di cư XANH. 21 ca khoá hành vi XANH ở cả code cũ lẫn mới, chứng minh không đổi: chọn mẫu/bỏ qua mẫu, ghim/ẩn/xoá (xoá phải xác nhận), đổi tên/xoá bộ sưu tập (Hủy không gọi API), tạo bộ sưu tập cắt khoảng trắng, thêm sản phẩm `addItem`, ghi chú đã cắt, đăng/xem trước (nháp báo cảnh báo, đã đăng `navigate('/s/shop-aff-1')`), lưu hồ sơ, payload cấu hình mặc định (`themeColor '#16a34a'`, trường rỗng -> `undefined`), thống kê, nhận thưởng + snackbar. Thêm sau di cư 3 ca mới XANH: tên truy cập của 9 ô nhập cấu hình, nút đăng báo bận và không đăng hai lần, nhận thưởng đang chạy khoá nút khác.
+- `utils/storefront-theme.spec.ts` (mới, 3 ca): mọi màu `#rrggbb`, không trùng mã/nhãn, mặc định `#16a34a` khớp API. Đỏ vì chưa có module -> xanh.
+- Cũng đổi `typeof import('zmp-ui')` -> `Record<string, unknown>` ở `share-sheet.spec.tsx` và `content-kit-sheet.spec.tsx` (cảnh báo có sẵn `consistent-type-imports`).
+
+### Lệnh kiểm chứng (output thật)
+
+```
+$ cd apps/miniapp && npx vitest run src/pages/storefront-builder.spec.tsx src/components/storefront-context-bar.spec.tsx \
+    src/components/share-sheet.spec.tsx src/components/content-kit-sheet.spec.tsx src/utils/storefront-theme.spec.ts \
+    src/ds-c076-pc10b.spec.ts src/ds-legacy-vars-4a.spec.ts src/ds-legacy-vars-4b.spec.ts src/components/ui \
+    src/i18n/terminology.spec.ts src/pages/format-guard.spec.ts src/css src/pages/affiliate.spec.tsx \
+    src/pages/dealer.spec.tsx src/pages/cart.spec.tsx src/pages/product-detail.spec.tsx src/pages/brand-owner.spec.tsx
+ Test Files  48 passed (48)
+      Tests  479 passed (479)
+$ npx eslint src/pages/storefront-builder.tsx src/pages/storefront-builder.spec.tsx src/components/storefront-context-bar.tsx \
+    src/components/storefront-context-bar.spec.tsx src/components/share-sheet.tsx src/components/share-sheet.spec.tsx \
+    src/components/content-kit-sheet.tsx src/components/content-kit-sheet.spec.tsx src/utils/storefront-theme.ts \
+    src/utils/storefront-theme.spec.ts src/ds-c076-pc10b.spec.ts      -> exit 0, không lỗi, không cảnh báo
+$ npx tsc --noEmit                                  -> exit 0, không output
+$ node scripts/check-undefined-css-vars.mjs
+OK — every var(--x) reference is defined.
+$ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
+0 0 0 apps/miniapp/src/components/content-kit-sheet.tsx
+0 0 3 apps/miniapp/src/components/share-sheet.tsx
+0 0 0 apps/miniapp/src/components/storefront-context-bar.tsx
+0 0 1 apps/miniapp/src/pages/storefront-builder.tsx
+0 5 0 apps/miniapp/src/utils/storefront-theme.ts
+```
+
+### File ngoài nhóm bị sửa (tối thiểu)
+
+`apps/miniapp/src/utils/storefront-theme.ts` + `.spec.ts` (mới): bảng màu chủ đạo gian hàng. Không nằm trong danh sách file của gói nhưng là file MỚI nhỏ, cần để `storefront-builder.tsx` đạt hex = 0 mà vẫn gửi đúng `#rrggbb` lên API. Không sửa file nào khác ngoài nhóm.
+
+### Giả định
+
+1. Tiêu đề trang là "Gian hàng của tôi" (`vi.storefront.title`, khớp nút trong dashboard CTV); ở nhánh 404 `EmptyState` giữ `heading` cũ cùng chữ nên trang hiện hai dòng cùng chữ (h1 + tiêu đề trạng thái rỗng), không đổi nội dung `EmptyState` để khỏi sửa chữ.
+2. Sheet dựng bằng `BottomSheet` có `unmountOnClose`, nên hai nội dung trước đây dựng sẵn khi chưa mở nay chỉ dựng khi mở: (a) `GET /categories` của ô chọn mẫu chạy khi mở sheet (cùng endpoint, cùng tham số; trước đây chạy ngay khi vào trang 404); (b) form cấu hình đọc lại `sf` mới mỗi lần mở, không còn giữ giá trị cũ sau khi lưu (trước đây đây là một lỗi ngầm: mở lại sau khi lưu vẫn thấy dữ liệu trước lúc lưu).
+3. Nút nhận thưởng nhiệm vụ: "cấm nhận hai thưởng cùng lúc" được giữ bằng `disabled` cho các nút còn lại, nút đang chạy dùng `loading` (hiện spinner, DS chặn bấm lại).
+4. Thanh tiến độ nhiệm vụ dùng `ProgressBar` DS (6px, một tông) nên mất khác biệt màu "đạt" (xanh đậm) và "chưa đạt" (xanh nhạt); trạng thái vẫn thể hiện qua `Badge` "Đã nhận", nút nhận thưởng và icon Check.
+5. Màu "Hoa hồng" (`--leaf-700`) -> `tone="brand"`; chữ phụ `--neutral-400` -> `tertiary`, `--neutral-500/600` -> `tertiary/secondary`; nền `--neutral-0/-50` -> `--color-bg-surface/-canvas`, `--leaf-50` -> `--color-bg-subtle`; thẻ trước không có bóng nay có `--elevation-1` (mặc định của `Card`).
+6. Giá sản phẩm trong gian hàng dùng `PriceTag size="sm"` (màu giá `--color-text-price`) thay cho chữ forest; chuỗi vẫn là `formatVnd(...)`.
+7. Nhãn nút "+ Thêm sản phẩm", "+ Tạo bộ sưu tập", "+ Thêm" -> icon `Plus` + nhãn không có dấu `+` (nút trong DS có prop `icon`); tên truy cập đổi theo.
+8. Chuỗi "TubuXu" cũ còn trong `storefront-builder.tsx` ("Hành trình gian hàng" nhận TubuXu, snackbar `+N TubuXu 🎉`): không thêm chữ mới, để PD-3 gộp vào Điểm Xanh. Chuỗi "Hủy" (`vi.common.cancel`) và "Huỷ" (cứng trong file) không đồng nhất sẵn có; giữ nguyên từng chỗ, không gộp.
+9. Thống kê và Hành trình vẫn `return null` khi đang tải/lỗi (không thêm `Skeleton`/`ErrorState`) vì là khối phụ và trước đây cũng ẩn.
+
+### Việc còn lại / phát hiện ngoài phạm vi
+
+- `vi.storefront.backToTubu` = `'⤺ Về Tubu Tree'` còn ký tự mũi tên làm icon (ở `i18n/vi.ts`, ngoài nhóm file): nên bỏ ký tự và để `storefront-context-bar.tsx` thêm `Icon`.
+- `components/ui/empty-state.tsx` còn `Button`/`Text` ZaUI và `ErrorState` dùng `ZmpButton` (không có `onPress` khoá bấm lại).
+- Nhãn "Hủy"/"Huỷ" không đồng nhất trong `i18n` và trong file này (xem Giả định 8).
+
+### Đề xuất cho điều phối viên
+
+- `IconButton` thêm prop `tone` (`default | muted | brand | danger`): hiện hai trang CTV phải tự viết nút icon 44px chỉ để giữ icon xoá màu đỏ và icon ghim/hiện màu xanh (`RowIconButton` trong `storefront-builder.tsx`, `Stepper` trong `ctv-order-sheet.tsx`). Khi có, thay `RowIconButton` bằng `IconButton`.
+- `ProgressBar` thêm tông `success`/`muted` để phân biệt nhiệm vụ đã đạt/đã nhận.
+- `static-scan.mjs` đếm hex trong `utils/storefront-theme.ts` (bảng dữ liệu bắt buộc là `#rrggbb` do API). Nếu muốn tổng hex toàn app về 0 thì cần danh sách ngoại lệ theo đường dẫn cho các bảng dữ liệu kiểu này (`brand-theme`/`brands.ts` ở mục 4/4 có thể gặp cùng vấn đề).
+- Chạy e2e `features.miniapp.spec.ts` (luồng "Gian hàng Cộng tác viên") và `design-system-pilot.miniapp.spec.ts` sau khi merge: DOM trang builder đổi (PageHeader h1, `Card`, `BottomSheet`, `Button`), locator `getByText('Cửa hàng Xanh của Affiliate 1').first()` đã đọc tĩnh và vẫn khớp (tên gian hàng còn hiện ở `h2`), nhưng CHƯA chạy Playwright (quy định máy). Cũng kiểm bằng mắt trên máy thật: hàng sản phẩm (tên + 3 nút icon 44px) ở màn 320-360px, thanh `StickyActionBar` không che nút "Thêm sản phẩm" cuối trang.
