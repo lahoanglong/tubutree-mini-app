@@ -148,7 +148,7 @@ $ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
 
 ### File ngoài nhóm bị sửa (tối thiểu)
 
-`scripts/check-undefined-css-vars.mjs`: danh sách file định nghĩa token từ 3 file cố định thành `design-tokens/tokens.css` + mọi `apps/miniapp/src/css/*.css`. Lý do: `--color-dealer-*` khai báo ở `css/dealer-theme.css` nên `pnpm lint:vars` báo 5 tham chiếu "not defined"; làm theo thư mục để `brand-theme.css` (mục 3/4) và các file theme sau không phải sửa lại script. Chỉ thêm nguồn định nghĩa, không nới quy tắc kiểm.
+`scripts/check-undefined-css-vars.mjs`: thêm `css/dealer-theme.css` (và sau đó `css/brand-theme.css`) vào danh sách file định nghĩa token vì `--color-dealer-*` khai báo ở đó nên `pnpm lint:vars` báo 5 tham chiếu "not defined". Bản đầu của mục này nạp MỌI `*.css` trong `css/` (nới guard); review lượt 1 chỉ ra, đã đưa về danh sách tường minh 5 file (xem mục "Review lượt 1").
 
 ### Giả định
 
@@ -428,3 +428,43 @@ $ node scripts/uiux/static-scan.mjs && (cột: legacy hex emoji file)
 | `utils/brands.ts` | 1 -> 0 | 17 -> 0 | 0 -> 0 |
 
 `ds-c076-pc10b.spec.ts` giữ 79 ca khoá không quay lại alias legacy, màu thô, ký tự chữ làm icon, ZaUI `Box/Text/Button` và thiếu `PageHeader` cho mọi file/trang của gói. Hex còn lại có chủ ý và nằm đúng một chỗ: `css/dealer-theme.css`, `css/brand-theme.css` (màu nhận diện), `utils/storefront-theme.ts` (bảng màu gửi API, bắt buộc `#rrggbb`).
+
+## Review lượt 1 (reviewer độc lập, 8 finding) — sửa theo review
+
+Commit sửa (mới -> cũ): `2327d5d` test khoá hành vi, `236c99a` icon dealer, `d742005` aria-expanded affiliate, `2f642ad` nhãn PDP, `b89b6a1` script lint:vars.
+
+| # | Mức | Finding | Kết quả |
+|---|---|---|---|
+| 1 | major | `scripts/check-undefined-css-vars.mjs` nạp mọi `*.css` trong `css/` làm nơi định nghĩa, nới guard CI dùng chung | ĐÚNG, đã sửa (`b89b6a1`). Test ĐỎ trước: `src/css/check-undefined-css-vars.spec.ts` dựng cây giả có `css/stray.css` khai báo `--stray-only`, script cũ thoát 0 (không báo) thay vì 1. Sửa: `DEFINITION_FILES` là danh sách tường minh `design-tokens/tokens.css`, `css/tokens.css`, `css/zaui-bridge.css`, `css/dealer-theme.css`, `css/brand-theme.css`; diff so với gốc chỉ còn thêm đúng 2 dòng theme. XANH 3 ca; `node scripts/check-undefined-css-vars.mjs` trên cây thật thoát 0. Thêm file theme mới sau này phải thêm tên vào danh sách có chủ ý. |
+| 2 | minor | `apps/e2e/tests/affiliate-ctv.miniapp.spec.ts` ngoài nhóm file; `utils/storefront-theme.ts`, `utils/brand-origins.ts` là file mới ngoài danh sách | GHI NGOẠI LỆ, không đổi. Spec e2e: chỉ đổi locator nút "Đã nhận ✓" thành "Đã nhận" (exact) vì icon `Check` thay ký tự `✓`; CHƯA chạy Playwright (quy định máy, 1 job nặng một lúc), điều phối viên chạy `affiliate-ctv.miniapp.spec.ts` ở lượt job nặng. Hai file `utils/*` mới là bảng dữ liệu tách khỏi trang để có nơi duy nhất cho hex/dữ liệu và để test được; không sửa file có sẵn nào ngoài nhóm. Locator e2e `getByText('Bảng 5 bậc CTV & thưởng mốc TubuXu').click()` vẫn khớp sau sửa #5 (chữ nằm trong `<button>`, click nổi bọt). |
+| 3 | minor | C-079 mới sửa một phần: nút tên nhãn ở PDP chỉ có tên nhãn làm accessible name; chưa chạy curl catalog; trang `/brand/:slug` vẫn mồ côi | ĐÃ SỬA phần rẻ (`2f642ad`): nút có `aria-label="Xem sản phẩm nhãn <tên>"` qua `brandBrowseLabel()` (`utils/brands.ts`). Test ĐỎ -> XANH: 2 ca `brandBrowseLabel` trong `brands.spec.ts` + 2 ca PDP (`product-detail-brand.spec.tsx` tìm nút theo tên mới). KIỂM CHỨNG catalog (thay curl, vì không chạy dev server): đọc `catalog.service.ts` `listWhere`: `where.brand = brandList[0]` (so khớp bằng, một nhãn) hoặc `{ in: [...] }` (nhiều nhãn, tách dấu phẩy); và chạy SELECT chỉ-đọc trên DB local test `tubutree_it` (container `tubu_it_main`, cổng 5550) đúng điều kiện công khai `isActive AND approvalStatus='APPROVED'`: `Le Plateau Coffee` = 5, `Le Plateau` = 0, `Sokfram` = 5, `Sokfarm` = 0. Chưa gọi HTTP thật `/api/products?brand=...` (unverified ở tầng HTTP). KHÔNG sửa: trang `/brand/:slug` vẫn mồ côi, vì API sản phẩm chưa trả `brandSlug` và nhãn seed chưa publish; đề xuất ticket bên dưới. |
+| 4 | minor | `ProgressBar` DS chỉ một màu, mất phân biệt màu theo trạng thái ở mốc thưởng CTV, thưởng đại lý, nhiệm vụ gian hàng | CHẤP NHẬN, không sửa. Trạng thái vẫn có chữ, `Badge` và nút; sửa cần `components/ui/progress-bar.tsx` (ngoài nhóm). Đề xuất cho điều phối viên: thêm `tone` cho `ProgressBar`. |
+| 5 | minor | Nút bật/tắt "Bảng 5 bậc CTV" là `ListRow` thiếu `aria-expanded` | ĐÃ SỬA (`d742005`): `ListRow` không nhận aria nên đổi sang `<button type="button" aria-expanded>` cao >= 44px, nội dung và hành vi (haptic, bật/tắt `showAllTiers`) giữ nguyên. Test ĐỎ -> XANH: `affiliate.spec.tsx` ca "aria-expanded đổi theo lần chạm, vùng chạm cao 44px". |
+| 6 | minor | Sheet "Đặt nhanh" của dealer bỏ nút "Đóng" cạnh "Thêm vào đơn"; icon `ClipboardList`, `Hourglass` đổi từ ink B2B sang xanh brand | MỘT PHẦN. Màu icon ĐÃ SỬA (`236c99a`): hai icon trở lại ink B2B qua `style={{ stroke: INK }}` (Icon DS không có tone ink; style `stroke` thắng thuộc tính `stroke` của lucide). Test ĐỎ -> XANH: 2 ca "icon giữ màu ink B2B" trong `dealer.spec.tsx`. Nút "Đóng": KHÔNG khôi phục, có chủ ý: `BottomSheet` DS đã có nút X (accessible name "Đóng", 44px), chạm nền và vuốt xuống; thêm nút "Đóng" thứ hai sẽ tạo hai nút trùng tên trong cùng sheet. Không ảnh hưởng tiền, công nợ, API. |
+| 7 | minor | `BottomSheet` (`unmountOnClose`) làm form cấu hình gian hàng, `ShareSheet`, `ContentKitSheet` mount lại mỗi lần mở, form chưa lưu bị reset | ĐÚNG, ghi nhận là THAY ĐỔI HÀNH VI CÓ CHỦ ĐÍCH: mọi sheet đã di cư sang DS dùng `BottomSheet`, nội dung gỡ khi đóng. Chỉ `MerchantConfigSheet` có state cục bộ (form khởi tạo từ `sf`), nên đóng rồi mở lại thì form về dữ liệu đã lưu thay vì giữ chữ gõ dở; trước đây form luôn mount nên có thể hiện giá trị cũ khi `sf` đổi sau lần lưu. `ShareSheet` và `ContentKitSheet` không có state cục bộ ngoài `useQuery` (`enabled: visible`, có cache) nên không đổi gì người dùng thấy. Đã khoá bằng test `storefront-builder.spec.tsx` "cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu" (`2327d5d`; xanh ngay vì là test khoá hành vi, không đổi code). Cần xác nhận với chủ dự án nếu muốn giữ chữ gõ dở. |
+| 8 | minor | Guard "mỗi trang có h1" chỉ kiểm có import `PageHeader`, thiếu ca render các nhánh loading/error cho dealer, storefront-builder, brand-owner | KHÔNG CẦN SỬA phần lớn: các ca render đã có từ các mục 2-4/4. `dealer.spec.tsx` (describe "đúng một h1 ở mọi trạng thái": đang tải, lỗi tải, form đăng ký x2, chờ duyệt, đã duyệt), `storefront-builder.spec.tsx` (đang tải, 404, lỗi tải, có gian hàng), `brand-owner.spec.tsx` (đang tải, 404, lỗi tải, chỉnh sửa), `brand-view.spec.tsx`, `brand-story.spec.tsx`. Chỉnh nhỏ: ca "lỗi tải" của `brand-owner` trước chỉ đếm h1 SAU khi bấm Thử lại; nay đếm h1 ngay ở trạng thái lỗi rồi mới bấm (`2327d5d`). Guard tĩnh `ds-c076-pc10b.spec.ts` giữ nguyên vai trò chặn quay lại h1 viết tay/thiếu `PageHeader`. |
+
+### Lệnh kiểm chứng sau sửa (output thật)
+
+```
+$ cd apps/miniapp && npx vitest run <25 file spec của gói: affiliate, dealer, storefront-builder, brand-story, brand-owner, brand-view,
+    product-detail(+brand), components/affiliate, content-kit-sheet, share-sheet, storefront-context-bar, utils/brands, utils/storefront-theme,
+    src/css, ds-c076-pc10b, ds-legacy-vars-4a/4b, button-guard, format-guard>
+ Test Files  25 passed (25)
+      Tests  410 passed (410)
+$ npx tsc --noEmit                                   -> exit 0, không output
+$ npx eslint <mọi file nguồn của gói + 2 spec mới>   -> exit 0, không lỗi, không cảnh báo
+$ node scripts/check-undefined-css-vars.mjs
+OK — every var(--x) reference is defined.
+$ static-scan (legacy hex emoji file): mọi file của gói legacy=0, hex=0; emoji còn lại là nội dung (affiliate 4, share-sheet 3, brand-view 3, brand-story 1, product-detail 1, storefront-builder 1)
+```
+
+Chưa chạy: Playwright (`affiliate-ctv.miniapp.spec.ts`, `features.miniapp.spec.ts`), curl HTTP thật tới catalog.
+
+### Đề xuất cho điều phối viên (bổ sung sau review)
+
+- Ticket API: trả `brandSlug` (và chỉ khi nhãn đã publish) trong `GET /products/:slug` để PDP dẫn tới trang `/brand/:slug` thay vì `/browse?brand=`; hiện trang nhãn vẫn mồ côi (A1-027).
+- `components/ui/progress-bar.tsx`: thêm `tone` (success/warning/neutral) để mốc thưởng CTV, thưởng đại lý, nhiệm vụ gian hàng phân biệt trạng thái bằng màu như trước.
+- `components/ui/list-row.tsx`: cho nhận `aria-expanded`/`aria-*` để dòng "Bảng 5 bậc CTV" quay lại dùng `ListRow`.
+- `components/ui/icon.tsx`: thêm tone `ink` hoặc cho phép `color` tuỳ chỉnh để dealer không phải dùng `style.stroke`.
+- Brand/dealer: nếu thêm file theme css mới, thêm tên file vào `DEFINITION_FILES` trong `scripts/check-undefined-css-vars.mjs` kèm một ca trong `src/css/check-undefined-css-vars.spec.ts`.
