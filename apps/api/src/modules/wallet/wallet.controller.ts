@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { WalletService } from './wallet.service';
 import { CoinsService } from './coins.service';
+import { RewardPointsService } from './reward-points.service';
 
 class BankInfoDto {
   @IsString() @IsNotEmpty() bankName!: string;
@@ -26,6 +27,7 @@ export class WalletController {
   constructor(
     private readonly wallet: WalletService,
     private readonly coins: CoinsService,
+    private readonly rewards: RewardPointsService,
   ) {}
 
   @Get('me/wallet')
@@ -60,5 +62,11 @@ export class WalletController {
   @Get('me/coins')
   coinsOverview(@CurrentUser('sub') userId: string) {
     return this.coins.getOverview(userId);
+  }
+
+  /** Thống kê giới thiệu bằng Điểm Xanh (thay phần giới thiệu của GET /me/coins, PD-3 mục 5). */
+  @Get('me/referral')
+  referralOverview(@CurrentUser('sub') userId: string) {
+    return this.rewards.getReferralOverview(userId);
   }
 }
