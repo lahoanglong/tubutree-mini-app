@@ -29,7 +29,14 @@ export interface PointExpiryResult {
   expiringSoon: { amount: number; earliestExpiresAt: Date | null };
 }
 
-/** `reason` của dòng cron trừ điểm hết hạn (xem LoyaltyExpiryService.expireUser). */
+/**
+ * `reason` của dòng cron trừ điểm hết hạn (xem LoyaltyExpiryService.expireUser).
+ *
+ * computePointExpiry replay dòng này vào các lô có `expiresAt <= createdAt` của nó, nên `createdAt` PHẢI
+ * không sớm hơn `now` mà cron dùng để chọn lô hết hạn. Điều đó đúng nhờ `@default(now())`: client Prisma gán
+ * giờ máy ứng dụng lúc INSERT (không phải lúc mở transaction), luôn sau `now` của lượt chạy. Đặt createdAt
+ * sớm hơn thì lô vừa hết hạn không bị dòng này ăn, phần trừ rơi vào lô khác và đêm sau cron trừ lần hai.
+ */
 const EXPIRY_REASON = 'POINTS_EXPIRED';
 
 interface ExpiryLot {
@@ -223,8 +230,9 @@ export class LoyaltyExpiryService {
         data: { pointsBalance: { decrement: expiredNow } },
       });
       if (res.count === 0) return { expiredNow, applied: false };
+      // Không đặt createdAt tay: xem EXPIRY_REASON.
       await tx.pointsTransaction.create({
-        data: { userId, delta: -expiredNow, reason: 'POINTS_EXPIRED', refType: 'EXPIRE', lot: 'STANDARD' },
+        data: { userId, delta: -expiredNow, reason: EXPIRY_REASON, refType: 'EXPIRE', lot: 'STANDARD' },
       });
       return { expiredNow, applied: true };
     });

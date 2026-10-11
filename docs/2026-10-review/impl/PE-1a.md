@@ -68,6 +68,6 @@ Chạy trong `apps/api` của worktree, PATH node 22. Postgres throwaway `tubu_i
 - Request cùng key chờ khoá dòng user thì giữ một kết nối pool trong lúc chờ lượt thắng (vài chục ms). Bấm đôi chỉ thêm 1 kết nối; khi tải bùng nổ phải đặt `connection_limit` theo số vCPU (đang chờ số `nproc`), nếu không có thể gặp P2028.
 - Không có key thì bấm đôi vẫn thành hai lượt (đúng yêu cầu "hành vi như cũ"); bảo vệ chỉ có khi FE gửi key.
 - Dòng hoàn cũ `expiresAt NULL` giữ nguyên (không backfill).
-- Thứ tự replay của cron dựa trên `createdAt` (mặc định DB là thời điểm bắt đầu transaction), không đổi so với trước.
+- Thứ tự replay của cron dựa trên `createdAt`, không đổi so với trước. `createdAt` do client Prisma gán bằng giờ máy ứng dụng lúc INSERT (không phải lúc bắt đầu transaction; đã đo trên Postgres thật: transaction mở 12:26:26.311, INSERT 12:26:27.766, `createdAt` 12:26:27.767), nên luôn không sớm hơn `now` mà cron chụp lúc bắt đầu. Quy tắc "POINTS_EXPIRED chỉ ăn lô có `expiresAt <= createdAt`" dựa vào điều này; đã ghi chú cạnh `EXPIRY_REASON` và có test giữ.
 - Điểm game/review không hạn (danh sách ở trên) là quyết định nghiệp vụ còn mở.
 - Gói đụng điểm (tiền trả trước) nên cần review opus hai lượt; hai chỗ nên nhìn kỹ: thứ tự "khoá dòng user rồi tra mã" trong `buyTree`, và quy tắc replay `POINTS_EXPIRED` trong `computePointExpiry`.

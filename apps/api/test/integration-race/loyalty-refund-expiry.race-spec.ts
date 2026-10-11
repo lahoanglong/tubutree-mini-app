@@ -136,6 +136,20 @@ describe('điểm hoàn khi huỷ đơn có hạn (real Postgres)', () => {
     expect(await balance(user.id)).toBe(60);
   });
 
+  it('dòng POINTS_EXPIRED có createdAt không sớm hơn lúc cron bắt đầu (replay dựa vào đó để biết lô nào đã hết hạn)', async () => {
+    const { user, order } = await userWithSpentOrder(40);
+    await loyalty.reverseOrderPoints(order.id);
+    const row = await refundRow(order.id);
+    const cronStart = new Date();
+    await prisma.pointsTransaction.update({ where: { id: row.id }, data: { expiresAt: new Date(cronStart.getTime() - 1) } });
+
+    await expiry.expirePoints();
+
+    const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
+    expect(expired).toHaveLength(1);
+    expect(expired[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(cronStart.getTime());
+  });
+
   it('điểm hoàn đã bị tiêu một phần trước hạn: cron chỉ trừ phần còn lại của lô hoàn (FIFO), không trừ điểm còn hạn khác', async () => {
     // Seed 100 (còn hạn dài), đã tiêu 40 → hoàn 40 (có hạn, sau đó lùi về quá khứ). Dòng tiêu sau đó ăn lô CŨ NHẤT
     // (seed) nên lô hoàn còn nguyên 40 và là phần duy nhất bị trừ khi hết hạn.

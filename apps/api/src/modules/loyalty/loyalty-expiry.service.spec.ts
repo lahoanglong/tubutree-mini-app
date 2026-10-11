@@ -315,6 +315,18 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     });
   });
 
+  it('dòng POINTS_EXPIRED không tự đặt createdAt: mặc định lúc INSERT luôn sau `now` của lượt cron, replay dựa vào đó', async () => {
+    const { svc, txCreate } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+
+    expect(txCreate).toHaveBeenCalledTimes(1);
+    expect(txCreate.mock.calls[0][0].data).not.toHaveProperty('createdAt');
+  });
+
   it('balance-guard count=0 (số dư < expiredNow) → KHÔNG tạo txn (bỏ qua, không âm)', async () => {
     const { svc, txUpdateMany, txCreate } = setup({
       candidates: [{ userId: 'u1' }],
