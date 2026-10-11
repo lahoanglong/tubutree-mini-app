@@ -178,7 +178,7 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
 
     await expect(page.getByText('Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.')).toBeVisible({ timeout: 5_000 });
     // invalidate ['my-returns'] → GET /orders/me/returns trả yêu cầu vừa tạo → thay nút bằng trạng thái.
-    await expect(page.getByText('⏳ Yêu cầu đổi/trả đang xử lý (trong 24h)')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Yêu cầu đổi/trả đang xử lý (trong 24h)')).toBeVisible({ timeout: 5_000 });
     await expect(openBtn).toHaveCount(0);
     expect(api.callsTo('POST', '/orders/:code/return-request')).toHaveLength(1);
   });
