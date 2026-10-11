@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
-import { CustomerRefundsTab } from './customer-refunds-tab';
+import { CustomerRefundsPendingBadge, CustomerRefundsTab } from './customer-refunds-tab';
 import { byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCustomerRefund } from '@/lib/admin-client';
 
@@ -607,6 +607,48 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(card.textContent).toContain('Đã ghi nhận');
     release();
     await flush();
+  });
+
+  it('huy hiệu số khoản chờ: lấy meta.total bằng một lần gọi limit=1, tự giảm sau khi ghi xong; lỗi tải thì không hiện gì', async () => {
+    let paid = false;
+    const urls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        urls.push(url);
+        if (url.includes('/mark-paid')) {
+          paid = true;
+          return json({ id: 'r1', status: 'COMPLETED' });
+        }
+        const limit = Number(new URL(url, 'http://x').searchParams.get('limit'));
+        const rows = paid ? [] : [refund()];
+        return json({ data: rows.slice(0, limit), meta: { page: 1, limit, total: rows.length } });
+      }),
+    );
+    const { container } = mount(
+      <>
+        <span id="badge-slot">
+          <CustomerRefundsPendingBadge />
+        </span>
+        <CustomerRefundsTab />
+      </>,
+    );
+    await flush();
+    const badge = () => container.querySelector('[data-refunds-pending]');
+    expect(badge()?.textContent).toContain('1');
+    expect(urls.some((u) => u.includes('status=PENDING') && u.includes('limit=1'))).toBe(true);
+    const d = await openDialog(container);
+    click(accept(d));
+    await flush();
+    expect(badge()).toBeNull();
+  });
+
+  it('huy hiệu: lỗi tải số đếm thì ẩn, không ném lỗi ra thanh tab', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ statusCode: 500, message: 'x' }, 500)));
+    const { container } = mount(<CustomerRefundsPendingBadge />);
+    await flush();
+    expect(container.querySelector('[data-refunds-pending]')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 
   it('an toàn: id đi qua encodeURIComponent, body không chứa SĐT/tên, không log console, tên chứa HTML hiện như chữ', async () => {

@@ -82,6 +82,7 @@ import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { CashbackTab } from '@/components/admin/cashback-tab';
+import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
@@ -122,6 +123,7 @@ type Tab =
   | 'dealers'
   | 'dealerClaims'
   | 'payouts'
+  | 'customerRefunds'
   | 'orders'
   | 'returns'
   | 'users'
@@ -144,6 +146,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'dealers', label: 'Đại lý' },
   { k: 'dealerClaims', label: 'Thưởng đại lý' },
   { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
+  { k: 'customerRefunds', label: 'Hoàn tiền khách' },
   { k: 'orders', label: 'Đơn hàng' },
   { k: 'returns', label: 'Đổi / Trả' },
   { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
@@ -246,6 +249,7 @@ export default function AdminPage() {
             }`}
           >
             {t.label}
+            {t.k === 'customerRefunds' && <CustomerRefundsPendingBadge />}
           </button>
         ))}
       </div>
@@ -254,6 +258,7 @@ export default function AdminPage() {
         {tab === 'dealers' && <DealersTab />}
         {tab === 'dealerClaims' && <DealerClaimsTab />}
         {tab === 'payouts' && <PayoutAdminTab />}
+        {tab === 'customerRefunds' && <CustomerRefundsTab />}
         {tab === 'orders' && <OrdersTab recycling={ordersRecycling} onRecyclingChange={onRecyclingFilterChange} />}
         {tab === 'returns' && <ReturnsTab />}
         {tab === 'cashback' && <CashbackTab />}

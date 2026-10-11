@@ -29,6 +29,28 @@ const VIEW_LABEL: Record<CustomerRefundView, string> = {
 const fmtDate = (iso: string) => new Date(iso).toLocaleString('vi-VN');
 
 /**
+ * Số khoản đang chờ chuyển khoản cạnh nhãn tab: một lần gọi limit=1 lấy meta.total (không thêm endpoint). Lỗi tải thì
+ * không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid làm mới cả hai.
+ */
+export function CustomerRefundsPendingBadge() {
+  const q = useQuery({
+    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'PENDING', 'count'],
+    queryFn: () => listCustomerRefunds('PENDING', 1, 1).then((r) => r.meta.total),
+  });
+  const n = q.data ?? 0;
+  if (n <= 0) return null;
+  return (
+    <span
+      data-refunds-pending
+      className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-warning-bg px-1.5 text-[11px] font-semibold leading-5 text-warning-fg"
+    >
+      {n > 99 ? '99+' : n}
+      <span className="sr-only"> khoản chờ chuyển khoản</span>
+    </span>
+  );
+}
+
+/**
  * Hàng đợi hoàn tiền thủ công cho khách cuối của đơn CTV lên hộ (PA-1 / Q-01). Khi đơn bị huỷ/trả mà khách không
  * có tài khoản dùng được, tiền không vào ví nào: BE ghi một dòng MANUAL_TRANSFER PENDING = Tubu đang nợ khách, admin
  * chuyển khoản tay theo SĐT rồi xác nhận để sổ khớp. Màn này chỉ ghi nhận việc đã chuyển, không chuyển tiền thật.

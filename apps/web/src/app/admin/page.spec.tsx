@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   recycling: 0,
   claims: 0,
   payouts: 0,
+  refundsPending: 0,
   orders: [] as unknown[],
   setUserRole: vi.fn(),
   createCoupon: vi.fn(),
@@ -81,6 +82,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     countRecyclingAttention: async () => mocks.recycling,
     listDealerRewardClaims: async () => ({ data: [], meta: { total: mocks.claims, page: 1, limit: 1 } }),
     listPayouts: async () => ({ data: [], meta: { total: mocks.payouts, page: 1, limit: 1 } }),
+    listCustomerRefunds: async () => ({ data: [], meta: { total: mocks.refundsPending, page: 1, limit: 1 } }),
     listOrders: async () => ({
       data: mocks.orders,
       meta: { total: 60, page: 1, limit: 20 },
@@ -185,6 +187,7 @@ beforeEach(() => {
   mocks.recycling = 0;
   mocks.claims = 0;
   mocks.payouts = 0;
+  mocks.refundsPending = 0;
   mocks.orders = [];
   mocks.setUserRole.mockReset();
   mocks.createCoupon.mockReset();
@@ -241,10 +244,46 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const bar = tabs[0]!.parentElement!;
     expect(bar.className).toContain('overflow-x-auto');
     const all = [...bar.querySelectorAll('button')];
-    expect(all).toHaveLength(21);
+    expect(all).toHaveLength(22);
     for (const b of all) expect(b.className).toContain('min-h-[44px]');
     expect(tabs[0]!.className).toContain('border-forest-600');
     expect(all[1]!.className).not.toContain('border-forest-600');
+  });
+
+  it('tab Hoàn tiền khách (Q-01) có trong thanh tab, bấm vào mở màn hoàn tiền và ghi tab lên URL', async () => {
+    const { container } = await mount();
+    const tab = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Hoàn tiền khách'))!;
+    expect(tab).toBeDefined();
+    click(tab);
+    await flush();
+    expect(window.location.search).toBe('?tab=customerRefunds');
+    expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ chuyển khoản');
+  });
+
+  it('mở thẳng /admin?tab=customerRefunds vào đúng tab Hoàn tiền khách', async () => {
+    window.history.replaceState(null, '', '/admin?tab=customerRefunds');
+    const { container } = await mount();
+    expect(container.textContent).toContain('Chờ chuyển khoản');
+    expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ chuyển khoản');
+  });
+
+  it('huy hiệu số khoản chờ chuyển khoản cạnh nhãn tab, tông cảnh báo; 0 khoản thì không hiện huy hiệu', async () => {
+    mocks.refundsPending = 3;
+    const withBadge = await mount();
+    const tab = [...withBadge.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Hoàn tiền khách'))!;
+    const badge = tab.querySelector('span[data-refunds-pending]')!;
+    expect(badge.textContent).toContain('3');
+    expect(badge.textContent).toContain('khoản chờ chuyển khoản');
+    expect(badge.className).toContain('bg-warning-bg');
+    expect(badge.className).toContain('text-warning-fg');
+    withBadge.unmount();
+    mounted = mounted.filter((m) => m !== withBadge);
+
+    mocks.refundsPending = 0;
+    const none = await mount();
+    const tab0 = [...none.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Hoàn tiền khách'))!;
+    expect(tab0.querySelector('span[data-refunds-pending]')).toBeNull();
+    expect(tab0.textContent).toBe('Hoàn tiền khách');
   });
 
   it('liên kết Màn thu ngân vẫn trỏ /admin/pos và cao 44px ở điện thoại', async () => {
