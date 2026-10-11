@@ -30,12 +30,12 @@ export const FALLBACK_FAQ: FaqItem[] = [
   {
     cat: 'Điểm & Vườn',
     q: 'Điểm Xanh là gì và dùng thế nào?',
-    a: '10.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh. 1 Điểm Xanh đổi 1.000đ khi thanh toán, tối đa 20% giá trị đơn. Điểm có hạn 12 tháng.',
+    a: '10.000đ chi tiêu trên đơn đã giao = 1 Điểm Xanh. 1 Điểm Xanh đổi 1.000đ khi thanh toán, tối đa 20% giá trị đơn. Điểm có hạn 12 tháng. Điểm quy đổi từ xu cũ thì không hết hạn và trừ được tới 100% giá trị hàng khi thanh toán, nhưng không dùng để đổi voucher.',
   },
   {
     cat: 'Mua sắm',
     q: 'Tôi thanh toán bằng cách nào?',
-    a: 'Bạn có thể thanh toán khi nhận hàng (COD), chuyển khoản ngân hàng, trả bằng Ví Tubu hoặc TubuXu.',
+    a: 'Bạn có thể thanh toán khi nhận hàng (COD), chuyển khoản ngân hàng, trả bằng Ví Tubu. Dùng Điểm Xanh để giảm giá ngay ở bước thanh toán.',
   },
   {
     cat: 'Đổi trả',
