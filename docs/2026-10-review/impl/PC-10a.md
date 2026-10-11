@@ -147,9 +147,9 @@ Trạng thái: XONG phần game. CHƯA làm (lượt khác, mục 4/4): `compone
 | Chỉ số | Trước (sau mục 2/4) | Sau |
 |---|---|---|
 | static-scan `pages/game.tsx` legacy / hex / emoji | 5 / 0 / 7 | 0 / 0 / 1 (💧 trong gợi ý "nhận 💧 tưới vườn") |
-| static-scan `components/game/**` legacy / hex / emoji | 152 / 0 / 83 | 0 / 0 / 54 (26 file, mọi file legacy 0, hex 0) |
+| static-scan `components/game/**` legacy / hex / emoji | 152 / 0 / 83 | 0 / 0 / 54 (25 file, mọi file legacy 0, hex 0) |
 | ESLint `pages/game.tsx` + `components/game` + spec | exit 0 | exit 0, không cảnh báo |
-| import ZaUI trong `components/game/**` | `Box, Text, Button` (22 file) | chỉ `useSnackbar` (hộp thu hoạch) |
+| import ZaUI trong `components/game/**` | `Box, Text, Button` ở phần lớn file | chỉ `useSnackbar` (hộp thu hoạch) |
 | `pages/game.tsx` số dòng | 416 | 237 (truy vấn và lệnh ghi chuyển vào `use-game-data.ts` 37 dòng + `use-game-actions.ts` 207 dòng) |
 | `<h1>` | 0 | 1 (`PageHeader` "Vườn Xanh", cả khi đang tải / chưa đăng nhập / lỗi hồ sơ) |
 
@@ -173,7 +173,7 @@ Mọi lời gọi API, khoá làm mới cache, biểu thức `disabled`/`loading
 
 ### Test (đỏ → xanh)
 
-- `ds-c076-pc10a.spec.ts`: thêm 26 file game vào `FILES_PC10A` trước khi sửa: 64 test ĐỎ (legacy, màu thô, ZaUI, emoji); sau di cư 123/123 xanh. Thêm kiểm "không import ZaUI ngoài `useSnackbar`/khung trang" cho `components/game/**`. Commit theo 4 nhóm file, mỗi nhóm thêm file vào guard rồi mới di cư.
+- `ds-c076-pc10a.spec.ts`: thêm 25 file game (`game.tsx` + 24 file `components/game`) vào `FILES_PC10A` trước khi sửa: 64 test ĐỎ (legacy, màu thô, ZaUI, emoji); sau di cư 123/123 xanh (thêm `game-tabs.tsx` ở nhóm cuối, tổng 26 file game). Thêm kiểm "không import ZaUI ngoài `useSnackbar`/khung trang" cho `components/game/**`. Commit theo 4 nhóm file, mỗi nhóm thêm file vào guard rồi mới di cư.
 - `pages/game-layout.spec.tsx` (MỚI, 12 test): chạy trên bản `game.tsx` cũ → 11 ĐỎ / 1 xanh (nhóm bị thiếu: một h1 ở 4 trạng thái, ba tab, ẩn/hiện khối, thứ tự tưới → điểm danh → nhiệm vụ → quiz, h2 mỗi khối, một nút Điểm danh, giới hạn 400 dòng); bản mới 12/12 xanh.
 - `pages/game-behavior.spec.tsx` (71 test): vẫn 71/71 xanh. Sửa có chủ ý: tên nút bỏ emoji chức năng ("Tưới cây (20💧)", "Đã điểm danh", "Hứng giọt sương", "Mở lô (...)", "Tưới"), tiêu đề khối bỏ emoji, ô "Giọt nước đã góp" không còn 💧 nên số ô 💧 giảm 1, và helper `openTab` cho truy vấn role vào tab Vườn / Cộng đồng (khối ẩn không vào cây accessibility). Không đổi bất kỳ khẳng định nào về API/disable/số liệu.
 - Vòng đầu trước khi di cư: tách hook `use-game-data`/`use-game-actions` là refactor thuần, 71 test vẫn xanh (commit `8720c05`).
@@ -187,7 +187,7 @@ $ npx tsc --noEmit
 exit 0, không output
 $ node scripts/uiux/static-scan.mjs ... (legacy hex emoji file)
 0 0 1 apps/miniapp/src/pages/game.tsx
-0 0 3 apps/miniapp/src/components/game/checkin-streak.tsx   (26 file components/game: legacy 0, hex 0)
+0 0 3 apps/miniapp/src/components/game/checkin-streak.tsx   (25 file components/game: legacy 0, hex 0)
 $ node scripts/check-undefined-css-vars.mjs
 OK — every var(--x) reference is defined.
 $ npx vitest run src/pages/game-layout.spec.tsx src/pages/game-behavior.spec.tsx src/pages/game-numbers.spec.tsx src/ds-c076-pc10a.spec.ts \
