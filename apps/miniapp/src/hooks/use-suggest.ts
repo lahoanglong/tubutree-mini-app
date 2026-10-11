@@ -7,7 +7,8 @@ import { useDebounced } from '../utils/use-debounced';
 export const SUGGEST_DEBOUNCE_MS = 250;
 export const SUGGEST_MIN_CHARS = 2;
 
-const longEnough = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHARS;
+/** Từ khoá đủ dài để gọi /search/suggest: API gấp dấu rồi trả [] cho dưới 2 ký tự, nên "đ" hay " a " chưa tính. */
+export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHARS;
 
 /**
  * Gợi ý SP khi gõ (spec 5b.2): debounce 250ms, từ 2 ký tự; lỗi → im lặng (chỉ là gợi ý).
@@ -22,7 +23,7 @@ const longEnough = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHARS;
  */
 export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean } {
   const term = useDebounced(draft.trim(), SUGGEST_DEBOUNCE_MS);
-  const enabled = longEnough(term) && longEnough(draft);
+  const enabled = isSuggestable(term) && isSuggestable(draft);
   const q = useQuery({
     queryKey: ['search-suggest', term],
     queryFn: () => suggestProducts(term),

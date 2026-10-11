@@ -30,6 +30,7 @@ import {
 } from '../../services/shop-api';
 import { createCtvOrder, type CtvOrderResult } from '../../services/affiliate-api';
 import { getErrorMessage } from '../../services/api';
+import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -379,10 +380,14 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
   const [slug, setSlug] = useState<string | null>(null);
   const dq = useDebounced(q, 300);
 
+  // Cổng xét cả từ khoá đang gõ (chưa debounce): xoá bớt xuống dưới 2 ký tự thì ẩn gợi ý ngay.
+  const canSuggest = isSuggestable(q) && isSuggestable(dq);
+  const tooShort = q.trim() !== '' && !isSuggestable(q);
+
   const suggestQ = useQuery({
     queryKey: ['ctv-suggest', dq],
     queryFn: () => suggestProducts(dq),
-    enabled: dq.trim().length >= 1 && !slug,
+    enabled: canSuggest && !slug,
   });
   const detailQ = useQuery({
     queryKey: ['product', slug],
@@ -450,7 +455,12 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
         onChange={(e) => setQ(e.target.value)}
         clearable
       />
-      {dq.trim().length >= 1 && (
+      {tooShort && (
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
+          {vi.common.suggestMinChars}
+        </Text>
+      )}
+      {canSuggest && (
         <div style={{ marginTop: 4 }}>
           {suggestQ.isError ? (
             <ErrorState variant="inline" message={vi.errors.loadFailed} onRetry={() => void suggestQ.refetch()} />

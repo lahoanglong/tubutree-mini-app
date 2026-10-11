@@ -2,6 +2,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProductSuggestion } from '../../services/shop-api';
+import { vi as strings } from '../../i18n/vi';
+import { SUGGEST_MIN_CHARS } from '../../hooks/use-suggest';
 
 const mocks = vi.hoisted(() => ({ suggestProducts: vi.fn(), haptic: vi.fn() }));
 
@@ -73,6 +75,51 @@ describe('ProductPicker — hành vi giữ nguyên khi chuyển DS v2', () => {
     renderPicker();
     search('zzz');
     expect(await screen.findByText('Không tìm thấy sản phẩm phù hợp')).toBeInTheDocument();
+  });
+});
+
+// /search/suggest trả [] cho từ khoá chưa đủ 2 ký tự (sau khi gấp dấu): gọi từ 1 ký tự chỉ cho ra "Không tìm thấy" sai.
+describe('ProductPicker — chỉ gợi ý từ 2 ký tự', () => {
+  const HINT = 'Nhập ít nhất 2 ký tự';
+
+  it('1 ký tự → không gọi API, báo "Nhập ít nhất 2 ký tự" thay cho "Không tìm thấy"', async () => {
+    renderPicker();
+    search('n');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.suggestProducts).not.toHaveBeenCalled();
+    expect(screen.queryByText('Không tìm thấy sản phẩm phù hợp')).toBeNull();
+  });
+
+  it('ký tự có dấu gấp về 1 ký tự ("đ" → "d") và khoảng trắng thừa cũng chưa đủ', async () => {
+    renderPicker();
+    search('đ');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    search('  a  ');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.suggestProducts).not.toHaveBeenCalled();
+  });
+
+  it('gõ tới 2 ký tự → gọi API, gợi ý hiện, câu báo biến mất; xoá về 1 ký tự → gợi ý ẩn ngay', async () => {
+    renderPicker();
+    search('n');
+    search('nư');
+    expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
+    expect(mocks.suggestProducts).toHaveBeenCalledWith('nư');
+    expect(screen.queryByText(HINT)).toBeNull();
+    search('n');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    expect(screen.queryByText('Nước rửa chén sinh học')).toBeNull();
+  });
+
+  it('câu báo nói đúng ngưỡng của hook gợi ý', () => {
+    expect(strings.common.suggestMinChars).toBe(`Nhập ít nhất ${SUGGEST_MIN_CHARS} ký tự`);
+  });
+
+  it('ô trống → không có câu báo nào', () => {
+    renderPicker();
+    expect(screen.queryByText(HINT)).toBeNull();
   });
 });
 
