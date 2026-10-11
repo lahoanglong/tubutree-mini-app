@@ -2,8 +2,9 @@
 // Repo-root script — CI guardrail mirroring audit's own C2 method (comm -13 defs used).
 //
 // Quét apps/miniapp/src/**/*.{css,ts,tsx} tìm mọi tham chiếu var(--x), đối chiếu với các
-// token được định nghĩa trong 3 file nguồn: design-tokens gốc, tokens.css riêng của miniapp,
-// và cầu nối theme ZaUI (zaui-bridge.css). Không tự sửa gì — chỉ báo cáo file:line.
+// token được định nghĩa trong 5 file nguồn: design-tokens gốc, tokens.css riêng của miniapp,
+// cầu nối theme ZaUI (zaui-bridge.css) và hai file theme riêng của trang (dealer-theme.css,
+// brand-theme.css). Không tự sửa gì — chỉ báo cáo file:line.
 //
 // Bỏ qua có chủ đích (không phải lỗ hổng):
 //  - File test (*.spec.* / *.test.*): chứa chuỗi regex/fixture như `var(--color-` chứ không
@@ -11,7 +12,7 @@
 //  - Mảnh template literal `var(--type-${variant}-size)`: tên biến chỉ có ở runtime, không kiểm
 //    tĩnh được (các biến --type-*-size/lh/weight thật đều định nghĩa trong design-tokens).
 //  - `--zaui-safe-area-*`: biến runtime do zmp-ui tự đặt (vd --zaui-safe-area-inset-bottom), không
-//    nằm trong 3 file định nghĩa. CHỈ cho qua đúng họ này — trước đây cho qua mọi `--zaui-*` nên tên
+//    nằm trong các file định nghĩa. CHỈ cho qua đúng họ này — trước đây cho qua mọi `--zaui-*` nên tên
 //    biến theme ZaUI gõ sai (vd --zaui-light-buton-...) cũng lọt. Biến --zaui-light-* hợp lệ đã được
 //    định nghĩa trong zaui-bridge.css nên vẫn qua như thường.
 // Khi trích định nghĩa, comment CSS bị bỏ trước — nếu không, một câu chú thích kiểu
@@ -19,15 +20,14 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const CSS_DIR = 'apps/miniapp/src/css';
-
-// Token riêng của từng trang (css/dealer-theme.css, ...) cũng là nơi định nghĩa hợp lệ: mọi *.css trong
-// css/ được nạp, để thêm file theme mới không phải sửa lại script này.
+// Danh sách tường minh, không quét thư mục: một file css bất kỳ khai báo biến không được làm im lỗi
+// "chưa định nghĩa". Token riêng của trang (dealer-theme.css, brand-theme.css) phải được thêm vào đây có chủ ý.
 const DEFINITION_FILES = [
   'packages/design-tokens/src/tokens.css',
-  ...readdirSync(CSS_DIR)
-    .filter((f) => f.endsWith('.css'))
-    .map((f) => join(CSS_DIR, f)),
+  'apps/miniapp/src/css/tokens.css',
+  'apps/miniapp/src/css/zaui-bridge.css',
+  'apps/miniapp/src/css/dealer-theme.css',
+  'apps/miniapp/src/css/brand-theme.css',
 ];
 
 const RUNTIME_PREFIXES = ['zaui-safe-area-'];
