@@ -27,7 +27,9 @@ export class QuoteDto {
  * cron nào hết hạn đơn PENDING_PAYMENT), nên lặp đặt đơn VNPAY là cách rẻ tiền khóa chết tồn
  * kho (P1-2, docs/2026-09-08-review-progress.md). Chỉ nới danh sách này khi đã nối cổng thật.
  */
-const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET', 'XU', 'ZALOPAY'] as const;
+// PD-3 (Q-03): XU bỏ khỏi danh sách (TubuXu gộp vào Điểm Xanh, tiêu qua pointsToUse). Enum vẫn giữ XU
+// cho đơn cũ.
+const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET', 'ZALOPAY'] as const;
 
 export class PlaceOrderDto {
   @IsString() addressId!: string;

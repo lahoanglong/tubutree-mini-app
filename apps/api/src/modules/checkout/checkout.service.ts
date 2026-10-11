@@ -10,8 +10,6 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
-import { CoinsService } from '../wallet/coins.service';
-import { SystemConfigService } from '../system-config/system-config.service';
 import { ComboService } from '../storefront/combo.service';
 import { FlashSaleService, FLASH_OVER_LIMIT_MSG } from '../flash-sale/flash-sale.service';
 import { PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
@@ -20,6 +18,7 @@ import { assertVariationsSellable, productDiscontinuedError } from '../cart/sell
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { applyPointsDelta } from '../loyalty/points-ledger';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -51,8 +50,6 @@ export class CheckoutService {
     private readonly pancakeOrder: PancakeOrderService,
     private readonly gomdonOrder: GomdonOrderService,
     private readonly affiliate: AffiliateService,
-    private readonly coins: CoinsService,
-    private readonly config: SystemConfigService,
     private readonly combo: ComboService,
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
@@ -105,14 +102,18 @@ export class CheckoutService {
       comboDiscount: computed.comboDiscount,
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
+      pointsUsedConverted: computed.pointsUsedConverted,
       pointsDiscount: computed.pointsDiscount,
       shippingFee: computed.shippingFee,
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
+      pointsConvertedBalance: user.pointsConvertedBalance,
       // Trần điểm FE được phép đề nghị: số dư − điểm đơn còn có thể bị đảo (cùng luật đổi quà).
       // placeOrder kẹp theo đúng số này + guard trong tx, nên UI không bao giờ hứa số điểm bị từ chối.
       redeemablePoints: computed.redeemablePoints,
+      // Lô quy đổi không bị khoá (không có điểm đơn nào trong lô) và không bị trần 20%.
+      redeemableConvertedPoints: user.pointsConvertedBalance,
       lockedPoints: computed.lockedPoints,
       items: cart.items,
     };
@@ -153,6 +154,12 @@ export class CheckoutService {
       if (existing) return this.replayIdempotentOrder(existing, userId, dto);
     }
 
+    // PD-3 (Q-03): TubuXu đã gộp vào Điểm Xanh. DTO đã từ chối XU; chặn thêm ở đây cho mọi lối gọi
+    // service trực tiếp, vì không còn đường trừ xu nào và đơn XU mới sẽ là đơn PAID không ai trả tiền.
+    if ((dto.paymentMethod as string) === 'XU') {
+      throw new BadRequestException('Phương thức thanh toán này đã ngừng. Vui lòng chọn phương thức khác.');
+    }
+
     // Thu gom tái chế chỉ nhận khi tính năng đang bật (Gomdon đã cấu hình + admin bật công tắc) —
     // FE cũ/tự gửi hasRecyclingPickup=true khi tính năng tắt không được hứa thu gom mà không ai đi thu.
     if (dto.hasRecyclingPickup === true && !(await this.gomdonOrder.isRecyclingEnabled())) {
@@ -182,28 +189,23 @@ export class CheckoutService {
     );
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
 
-    if (dto.paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
+    // PD-3 (spec 2.3): đơn 0đ (Điểm Xanh/mã giảm giá phủ hết hàng, freeship) không có gì để thu.
+    // BANK_TRANSFER/ZALOPAY sẽ treo PENDING_PAYMENT rồi bị cron huỷ; WALLET sẽ thành PAID không trừ gì.
+    // Ép COD (CONFIRMED, không thu tiền) cho mọi phương thức.
+    const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
+    if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');
     }
-    if (dto.paymentMethod === 'XU' && user.coinsBalance < computed.total) {
-      throw new BadRequestException('Số dư TubuXu không đủ.');
-    }
     const codMax = 5_000_000;
-    if (dto.paymentMethod === 'COD' && computed.total > codMax) {
+    if (paymentMethod === 'COD' && computed.total > codMax) {
       throw new BadRequestException('Đơn vượt hạn mức COD, vui lòng chọn phương thức khác.');
     }
 
-    // WALLET và XU đều thanh toán ngay (đơn CONFIRMED + PAID); 1 xu = 1đ.
-    const paid = dto.paymentMethod === 'WALLET' || dto.paymentMethod === 'XU';
-    const status = dto.paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
-    // Đơn trả bằng TubuXu KHÔNG sinh điểm Xanh mới (mặc định): xu là tín dụng tiêu-trong-app
-    // (đã thưởng ×1.2 khi đổi từ Ví) — cộng thêm điểm trên đơn tự-fund = vòng khuếch đại giá trị.
-    // Lật bằng config loyalty.earn_points_on_xu=true nếu muốn xu cũng tích điểm.
-    // So sánh === true: config là cột Json, giá trị lỗi kiểu chuỗi "false"/"0" vẫn truthy →
-    // chỉ đúng boolean true mới cho đơn XU tích điểm (mặc định/khác → không tích).
-    const earnPointsOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
-    const pointsEarned =
-      dto.paymentMethod === 'XU' && !earnPointsOnXu ? 0 : computed.pointsEarned;
+    // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
+    const paid = paymentMethod === 'WALLET';
+    const status = paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
+    // Phần trả bằng Điểm Xanh (cả lô quy đổi) đã bị trừ khỏi goodsAfterAll nên không sinh điểm mới.
+    const pointsEarned = computed.pointsEarned;
     const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
     const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
 
@@ -252,7 +254,8 @@ export class CheckoutService {
             total: computed.total,
             pointsEarned,
             pointsUsed: computed.pointsUsed,
-            paymentMethod: dto.paymentMethod,
+            pointsUsedConverted: computed.pointsUsedConverted,
+            paymentMethod,
             paymentStatus: paid ? 'PAID' : 'UNPAID',
             shippingAddress: this.addressSnapshot(address),
             referrerUserId,
@@ -285,26 +288,30 @@ export class CheckoutService {
           },
         });
 
+        const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
         if (computed.pointsUsed > 0) {
+          // Khoá dòng user (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/
+          // redeemReward đều ghi CHÍNH dòng này) và trước khi trừ bất kỳ lô nào.
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+        }
+        if (usedStandard > 0) {
           // Trừ điểm ATOMIC (gte) — chống TOCTOU khi đặt nhiều đơn đồng thời tiêu cùng điểm.
           // CHỈ tiêu điểm DÙNG ĐƯỢC — cùng luật LoyaltyService.redeemReward (lockedOrderPoints): điểm
           // đơn vừa giao còn trong hạn đổi/trả / đang có yêu cầu đổi-trả thì chưa tiêu được, không thì
-          // nhận điểm đơn A → tiêu vào đơn B → trả đơn A là giữ giảm giá miễn phí. Khoá dòng user
-          // (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/redeemReward
-          // đều ghi CHÍNH dòng này) rồi đưa thẳng vào guard `pointsBalance >= dùng + khoá`.
-          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+          // nhận điểm đơn A → tiêu vào đơn B → trả đơn A là giữ giảm giá miễn phí. Guard
+          // `pointsBalance >= dùng + khoá` tính trên phần khoá đọc dưới khoá dòng.
           const lock = await this.loyalty.lockedOrderPoints(userId, new Date(), tx);
           const dec = await tx.user.updateMany({
-            where: { id: userId, pointsBalance: { gte: computed.pointsUsed + lock.locked } },
-            data: { pointsBalance: { decrement: computed.pointsUsed } },
+            where: { id: userId, pointsBalance: { gte: usedStandard + lock.locked } },
+            data: { pointsBalance: { decrement: usedStandard } },
           });
           if (dec.count === 0) {
             const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
             const balance = cur?.pointsBalance ?? 0;
-            if (lock.locked > 0 && balance >= computed.pointsUsed) {
+            if (lock.locked > 0 && balance >= usedStandard) {
               const usable = Math.max(0, balance - lock.locked);
               throw new BadRequestException(
-                `Đơn này dùng ${computed.pointsUsed} Điểm Xanh nhưng hiện bạn chỉ dùng được ${usable}/${balance} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
+                `Đơn này dùng ${usedStandard} Điểm Xanh nhưng hiện bạn chỉ dùng được ${usable}/${balance} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
               );
             }
             throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${balance} điểm).`);
@@ -312,14 +319,31 @@ export class CheckoutService {
           await tx.pointsTransaction.create({
             data: {
               userId,
-              delta: -computed.pointsUsed,
+              delta: -usedStandard,
+              lot: 'STANDARD',
               reason: `ORDER_REDEEM:${code}`,
               refType: 'ORDER',
               refId: created.id,
             },
           });
         }
-        if (dto.paymentMethod === 'WALLET' && computed.total > 0) {
+        if (computed.pointsUsedConverted > 0) {
+          // Lô quy đổi (spec 2.3): guard gte trên pointsConvertedBalance; thiếu → rollback cả đơn.
+          const conv = await applyPointsDelta(tx, {
+            userId,
+            delta: -computed.pointsUsedConverted,
+            lot: 'CONVERTED',
+            reason: `ORDER_REDEEM_CONVERTED:${code}`,
+            refType: 'ORDER',
+            refId: created.id,
+          });
+          if (!conv.applied) {
+            throw new BadRequestException(
+              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${computed.pointsUsedConverted} điểm). Vui lòng tải lại trang thanh toán.`,
+            );
+          }
+        }
+        if (paymentMethod === 'WALLET' && computed.total > 0) {
           // Trừ ví dưới khoá dòng user — chống overdraft khi 2 đơn WALLET chạy đồng thời; không đủ
           // → throw, rollback toàn bộ đơn/stock/điểm.
           await applyWalletDelta(tx, {
@@ -331,10 +355,6 @@ export class CheckoutService {
             reason: `Thanh toán đơn ${code}`,
             insufficientMessage: 'Số dư Ví Tubu không đủ.',
           });
-        } else if (dto.paymentMethod === 'XU') {
-          // Trả đơn bằng TubuXu (1 xu = 1đ): trừ xu ATOMIC trong CÙNG tx — không đủ → throw
-          // rollback toàn bộ đơn/stock/điểm. Ghi CoinTransaction(-total, ORDER_PAY:<code>).
-          await this.coins.spendCoins(userId, computed.total, `ORDER_PAY:${code}`, 'ORDER', created.id, tx);
         }
         // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
         // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt
@@ -366,9 +386,10 @@ export class CheckoutService {
             discount: computed.discount + computed.comboDiscount + computed.pointsDiscount + computed.tierDiscount,
             shippingFee: computed.shippingFee,
             itemCount: cart.items.length,
-            paymentMethod: dto.paymentMethod,
+            paymentMethod,
             couponCode: computed.couponApplied ? cart.couponCode : null,
             pointsUsed: computed.pointsUsed,
+            pointsUsedConverted: computed.pointsUsedConverted,
             orderSource,
           },
         });
@@ -377,7 +398,7 @@ export class CheckoutService {
             eventName: 'order_paid',
             userId,
             platform,
-            props: { orderId: created.id, method: dto.paymentMethod, amount: computed.total, secsFromPlaced: 0 },
+            props: { orderId: created.id, method: paymentMethod, amount: computed.total, secsFromPlaced: 0 },
           });
         }
         if (referrerUserId) await this.affiliate.createCommissionForOrder(created.id, tx);
@@ -483,6 +504,7 @@ export class CheckoutService {
       id: string;
       userId: string;
       paymentMethod: string;
+      total?: number;
       shippingAddress: Prisma.JsonValue;
       hasRecyclingPickup?: boolean;
     },
@@ -492,7 +514,10 @@ export class CheckoutService {
     if (existing.userId !== userId) {
       throw new BadRequestException('Idempotency-Key không hợp lệ.');
     }
-    const paymentChanged = existing.paymentMethod !== dto.paymentMethod;
+    // Đơn 0đ đã bị ép COD (placeOrderInner): khách gửi lại đúng phương thức đã chọn lúc đầu vẫn là
+    // cùng một yêu cầu.
+    const forcedCod = existing.paymentMethod === 'COD' && existing.total === 0;
+    const paymentChanged = existing.paymentMethod !== dto.paymentMethod && !forcedCod;
     // Bật/tắt thu gom tái chế giữa 2 lần gửi cùng key cũng là "yêu cầu khác" — không trả đơn cũ.
     const recyclingChanged = Boolean(existing.hasRecyclingPickup) !== (dto.hasRecyclingPickup === true);
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
@@ -536,7 +561,7 @@ export class CheckoutService {
     // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):
     //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
     //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
-    //   3) Điểm Xanh — trên phần còn lại sau coupon.
+    //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
     const nonFlash = cart.items.filter((l) => !l.isFlash);
     const flashSubtotal = cart.items
       .filter((l) => l.isFlash)
@@ -602,9 +627,11 @@ export class CheckoutService {
     const lockedPoints =
       user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
     const redeemablePoints = Math.max(0, user.pointsBalance - lockedPoints);
-    const redemption = await this.pricing.resolvePointsRedemption(
+    // PD-3: STANDARD (trần max_redeem_pct) trước, phần còn lại từ lô quy đổi (không trần), spec 2.3.
+    const redemption = await this.pricing.resolvePointsRedemptionByLot(
       pointsToUse ?? 0,
       redeemablePoints,
+      user.pointsConvertedBalance,
       redeemBase,
     );
     const goodsAfterAll = Math.max(0, redeemBase - redemption.discount);
@@ -630,6 +657,7 @@ export class CheckoutService {
         comboPerLine: combo.perLine,
         tierDiscount,
         pointsUsed: redemption.pointsUsed,
+        pointsUsedConverted: redemption.pointsUsedConverted,
         pointsDiscount: redemption.discount,
         redeemablePoints,
         lockedPoints,
