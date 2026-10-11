@@ -11,7 +11,7 @@ import { GUARDS_METADATA, METHOD_METADATA, MODULE_METADATA, PATH_METADATA } from
 export type Ctor = new (...args: never[]) => unknown;
 type ModuleRef = Ctor | { module: Ctor; controllers?: Ctor[]; imports?: unknown[] } | Promise<unknown>;
 
-/** Mọi controller đạt được từ `root` qua `imports` (kể cả dynamic module). Module async (`forRootAsync` trả Promise) bị bỏ qua. */
+/** Mọi controller đạt được từ `root` qua `imports` (kể cả dynamic module). Module khai báo bằng Promise (`import()` động) không đọc được nên bị bỏ qua. */
 export function collectControllers(root: Ctor): Ctor[] {
   const seen = new Set<Ctor>();
   const controllers = new Set<Ctor>();
