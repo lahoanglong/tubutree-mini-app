@@ -13,6 +13,7 @@ const FILES = [
   'src/pages/settings.tsx',
   'src/pages/edit-profile.tsx',
   'src/pages/about.tsx',
+  'src/pages/not-found.tsx',
 ];
 
 /** Khung trang và hook điều hướng/thông báo: được phép ở mọi trang. */
