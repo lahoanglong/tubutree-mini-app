@@ -115,7 +115,8 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     expect(after.pointsConvertedBalance).toBe(300);
     expect(await refundRows(order.id)).toEqual([
       { reason: `ORDER_REFUND_CONVERTED:${order.code}`, lot: 'CONVERTED', delta: 120, expiresAt: null },
-      { reason: `ORDER_REFUND_POINTS:${order.code}`, lot: 'STANDARD', delta: 30, expiresAt: null },
+      // OQ-15: điểm thường hoàn có hạn; lô quy đổi (tiền trả trước) không bao giờ có hạn.
+      { reason: `ORDER_REFUND_POINTS:${order.code}`, lot: 'STANDARD', delta: 30, expiresAt: expect.any(Date) },
     ]);
   });
 

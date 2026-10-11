@@ -323,6 +323,70 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
     expect(update.mock.calls.map((c) => c[0].data)).toEqual([{ pointsBalance: { increment: 30 } }]);
   });
 
+  /**
+   * OQ-15: điểm hoàn là điểm thường như mọi điểm thưởng khác, phải có hạn theo loyalty.point_expire_months.
+   * Trước đây dòng hoàn ghi expiresAt NULL nên điểm khách đã tiêu rồi được hoàn sẽ sống vĩnh viễn.
+   */
+  describe('hạn của điểm hoàn (OQ-15)', () => {
+    const NOW = new Date('2026-10-11T03:00:00.000Z');
+    const configWith = (months: unknown) =>
+      ({ get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.point_expire_months' ? (months as T) : (fb as T)) }) as unknown as SystemConfigService;
+
+    beforeEach(() => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+      jest.setSystemTime(NOW);
+    });
+    afterEach(() => jest.useRealTimers());
+
+    const order = { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 40, pointsUsedConverted: 0 };
+
+    it('ORDER_REFUND_POINTS có expiresAt = bây giờ + 12 tháng (mặc định loyalty.point_expire_months)', async () => {
+      const { prisma, create } = makePrisma(order);
+      await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0][0].data).toMatchObject({
+        reason: 'ORDER_REFUND_POINTS:C1',
+        lot: 'STANDARD',
+        delta: 40,
+        expiresAt: new Date('2027-10-11T03:00:00.000Z'),
+      });
+    });
+
+    it('đọc loyalty.point_expire_months từ cấu hình (6 tháng)', async () => {
+      const { prisma, create } = makePrisma(order);
+      await new LoyaltyService(prisma, configWith(6)).reverseOrderPoints('o1');
+      expect(create.mock.calls[0][0].data.expiresAt).toEqual(new Date('2027-04-11T03:00:00.000Z'));
+    });
+
+    it.each([[0], [-3], ['abc'], [null], [Number.NaN]])('cấu hình hỏng (%p) → quay về 12 tháng, vẫn có hạn', async (bad) => {
+      const { prisma, create } = makePrisma(order);
+      await new LoyaltyService(prisma, configWith(bad)).reverseOrderPoints('o1');
+      expect(create.mock.calls[0][0].data.expiresAt).toEqual(new Date('2027-10-11T03:00:00.000Z'));
+    });
+
+    it('đơn đã giao: dòng ORDER_REVERSED (trừ) không mang hạn, chỉ dòng hoàn điểm đã tiêu mang hạn', async () => {
+      const txFindFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'credited' });
+      const create = jest.fn().mockResolvedValue({ id: 'ptx' });
+      const tx = { pointsTransaction: { findFirst: txFindFirst, create }, user: { update: jest.fn() } };
+      const prisma = {
+        order: { findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, pointsEarned: 50 }) },
+        $transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
+      } as unknown as PrismaService;
+      await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+      const rows = create.mock.calls.map((c) => c[0].data);
+      expect(rows.map((r) => [r.reason, r.delta, r.expiresAt ?? null])).toEqual([
+        ['ORDER_REVERSED:C1', -50, null],
+        ['ORDER_REFUND_POINTS:C1', 40, new Date('2027-10-11T03:00:00.000Z')],
+      ]);
+    });
+
+    it('đã hoàn rồi (idempotent) → không ghi dòng nào, kể cả dòng có hạn', async () => {
+      const { prisma, create } = makePrisma(order, { id: 'rev-1' });
+      await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
+
   it('đơn chỉ tiêu lô CONVERTED → không ghi gì (đã hoàn trong tx huỷ), không cộng lô nào', async () => {
     const { prisma, create, update } = makePrisma({
       id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 0, pointsUsed: 50, pointsUsedConverted: 50,
