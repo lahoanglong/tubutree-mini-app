@@ -19,7 +19,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, zeroTotalNote } from '@/lib/checkout-points';
 import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
@@ -68,7 +68,11 @@ export default function CheckoutPage() {
   // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
-  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null }>({ usable: 0, lockNote: null });
+  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null; convertedNote: string | null }>({
+    usable: 0,
+    lockNote: null,
+    convertedNote: null,
+  });
   const usablePoints = pointsOffer.usable;
   // Thu gom vật liệu tái chế: CHỈ hiện khi BE xác nhận tính năng đang chạy (Gomdon đã cấu hình + admin
   // bật). Chưa tải xong / lỗi / API cũ không có field → coi như tắt: không hứa thu gom khi không ai đi thu.
@@ -93,13 +97,18 @@ export default function CheckoutPage() {
   }, [quoteQ.data, usePoints]);
 
   const quoteStale = couponChanging || quoteQ.isFetching;
+  // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
+  // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
+  const quote = quoteQ.isError ? undefined : quoteQ.data;
+  // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
+  const zeroNote = quote ? zeroTotalNote(quote) : null;
 
   const place = useMutation({
     mutationFn: () =>
       placeOrder(
         {
           addressId: addressId!,
-          paymentMethod: payment,
+          paymentMethod: zeroNote ? 'COD' : payment,
           pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
           referralCode: sfCtx.referralCode ?? undefined,
@@ -175,9 +184,6 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
-  // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
-  const quote = quoteQ.isError ? undefined : quoteQ.data;
 
   return (
     <Shell>
@@ -206,23 +212,27 @@ export default function CheckoutPage() {
 
           <section className={`p-4 ${ui.card}`}>
             <h2 className={ui.sectionTitle}>Phương thức thanh toán</h2>
-            <div className="mt-2 space-y-2">
-              {[
-                { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
-                { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
-              ].map((p) => (
-                <label key={p.k} className={optionClass(payment === p.k)}>
-                  <input
-                    type="radio"
-                    name="pay"
-                    checked={payment === p.k}
-                    onChange={() => setPayment(p.k)}
-                    className="h-4 w-4 accent-forest-600"
-                  />
-                  {p.label}
-                </label>
-              ))}
-            </div>
+            {zeroNote ? (
+              <p className="mt-2 text-sm text-forest-800">{zeroNote}</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {[
+                  { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
+                  { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+                ].map((p) => (
+                  <label key={p.k} className={optionClass(payment === p.k)}>
+                    <input
+                      type="radio"
+                      name="pay"
+                      checked={payment === p.k}
+                      onChange={() => setPayment(p.k)}
+                      className="h-4 w-4 accent-forest-600"
+                    />
+                    {p.label}
+                  </label>
+                ))}
+              </div>
+            )}
           </section>
 
           {recyclingEnabled && (
@@ -231,7 +241,7 @@ export default function CheckoutPage() {
               onSelectedChange={setHasRecyclingPickup}
               note={recyclingNote}
               onNoteChange={setRecyclingNote}
-              paymentMethod={payment}
+              paymentMethod={zeroNote ? 'COD' : payment}
               disabled={place.isPending}
             />
           )}
@@ -271,10 +281,11 @@ export default function CheckoutPage() {
                 className="h-4 w-4 accent-forest-600"
               />
               <span className="text-forest-800">
-                Dùng {usablePoints} Điểm Xanh
+                Dùng {usablePoints.toLocaleString('vi-VN')} Điểm Xanh
               </span>
             </label>
           )}
+          {pointsOffer.convertedNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.convertedNote}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
             <span>Tổng cộng</span>

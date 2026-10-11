@@ -16,6 +16,8 @@ export interface WebUser {
   avatarUrl: string | null;
   role: string;
   pointsBalance: number;
+  /** Lô Điểm Xanh quy đổi từ xu cũ (không hết hạn). Phiên cũ chưa có field → coi là 0. */
+  pointsConvertedBalance?: number;
   walletBalance: number;
   referralCode: string;
 }
