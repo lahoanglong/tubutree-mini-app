@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const FILES_PC10C3 = [
   'src/components/reviews-section.tsx',
   'src/components/onboarding.tsx',
+  'src/components/product-card.tsx',
 ];
 
 const LEGACY = new RegExp(
