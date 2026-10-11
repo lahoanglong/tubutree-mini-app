@@ -54,5 +54,13 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 
 // Viền stone-450 đủ 3:1 trên nền trắng/canvas (WCAG 1.4.11), như ô nhập của web khách (lib/guest-ui.ts). Không tắt
 // outline: vòng lấy nét chung của globals.css (:focus-visible) là dấu hiệu bàn phím duy nhất.
-export const INPUT_CLASS =
-  'w-full rounded-control border border-stone-450 bg-stone-0 px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500';
+// FIELD_CLASS không có chiều rộng để ô nhập đứng cạnh nhau trong hàng flex; INPUT_CLASS là bản chiếm cả hàng.
+export const FIELD_CLASS =
+  'min-w-0 rounded-control border border-stone-450 bg-stone-0 px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500';
+export const INPUT_CLASS = `w-full ${FIELD_CLASS}`;
+
+// Admin tối ưu cho máy tính (Q-29) nhưng nút/ô nhập phải đủ 44px khi chạm trên điện thoại; từ `sm` trở lên về cỡ gọn.
+export const TOUCH_H = 'min-h-[44px] sm:min-h-[36px]';
+export const BTN_PRIMARY = `${TOUCH_H} rounded-control bg-forest-600 px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`;
+export const BTN_SECONDARY = `${TOUCH_H} rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50`;
+export const BTN_DANGER_OUTLINE = `${TOUCH_H} rounded-control border border-danger-fg px-3.5 py-1.5 text-sm font-medium text-danger-fg hover:bg-danger-bg disabled:opacity-50`;

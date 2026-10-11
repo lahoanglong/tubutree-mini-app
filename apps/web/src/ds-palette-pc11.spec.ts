@@ -34,20 +34,40 @@ const RAW_COLOR = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\b(?:rgba?|hsla?)\(/g;
 // Cùng dải ký tự với scripts/uiux/static-scan.mjs (cột emoji).
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿]/gu;
 
-describe.each(MIGRATED)('admin DS v2 — %s', (file) => {
+// File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
+// Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.
+const PARTIAL: { file: string; end: string; tail?: string }[] = [
+  { file: 'app/admin/page.tsx', end: 'function DealersTab(', tail: 'function Table(' },
+];
+
+function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {
+  const src = read(file);
+  const cut = src.indexOf(end);
+  if (cut < 0) throw new Error(`không thấy dấu cắt "${end}" trong ${file}`);
+  if (!tail) return src.slice(0, cut);
+  const tailAt = src.indexOf(tail);
+  if (tailAt < 0) throw new Error(`không thấy phần đuôi "${tail}" trong ${file}`);
+  return src.slice(0, cut) + src.slice(tailAt);
+}
+
+function guard(getText: () => string) {
   it('không còn lớp palette v1/stock (primary/leaf/clay/sun/neutral/green/red/amber/blue...)', () => {
-    expect(read(file).match(LEGACY_PALETTE) ?? []).toEqual([]);
+    expect(getText().match(LEGACY_PALETTE) ?? []).toEqual([]);
   });
 
   it('không dùng white/black thô của Tailwind — dùng stone-0/stone-900', () => {
-    expect(read(file).match(RAW_WHITE_BLACK) ?? []).toEqual([]);
+    expect(getText().match(RAW_WHITE_BLACK) ?? []).toEqual([]);
   });
 
   it('không có màu cứng (hex/rgb/hsl) — màu đi qua token', () => {
-    expect(read(file).match(RAW_COLOR) ?? []).toEqual([]);
+    expect(getText().match(RAW_COLOR) ?? []).toEqual([]);
   });
 
   it('không dùng emoji/ký hiệu làm icon — dùng lucide-react', () => {
-    expect(read(file).match(EMOJI) ?? []).toEqual([]);
+    expect(getText().match(EMOJI) ?? []).toEqual([]);
   });
-});
+}
+
+describe.each(MIGRATED)('admin DS v2 — %s', (file) => guard(() => read(file)));
+
+describe.each(PARTIAL)('admin DS v2 (phần đã chuyển) — $file', (p) => guard(() => partialText(p)));

@@ -208,7 +208,7 @@ export default function AdminPage() {
     return (
       <Center>
         Cần đăng nhập quản trị.{' '}
-        <Link href="/dang-nhap" className="font-semibold text-green-700 underline">Đăng nhập</Link>
+        <Link href="/dang-nhap" className="inline-flex min-h-[44px] items-center font-semibold text-forest-700 underline">Đăng nhập</Link>
       </Center>
     );
   if (user?.role !== 'ADMIN')
@@ -217,18 +217,18 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">Quản trị Tubu Tree</h1>
-        <Link href="/admin/pos" className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+        <h1 className="font-display text-xl font-semibold text-stone-900">Quản trị Tubu Tree</h1>
+        <Link href="/admin/pos" className="inline-flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
           Màn thu ngân (tích điểm tại quầy)
         </Link>
       </div>
-      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-neutral-100">
+      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-stone-200">
         {TABS.map((t) => (
           <button
             key={t.k}
             onClick={() => setTab(t.k)}
-            className={`whitespace-nowrap px-3 py-2 text-sm font-medium ${
-              tab === t.k ? 'border-b-2 border-green-600 text-green-700' : 'text-neutral-500'
+            className={`min-h-[44px] whitespace-nowrap px-3 py-2 text-sm font-medium sm:min-h-0 ${
+              tab === t.k ? 'border-b-2 border-forest-600 text-forest-700' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
             {t.label}
@@ -2508,9 +2508,9 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
 
 function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-100 bg-white">
+    <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0">
       <table className="w-full text-left text-sm">
-        <thead className="bg-neutral-50 text-xs text-neutral-500">
+        <thead className="bg-stone-50 text-xs text-stone-500">
           <tr>{head.map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="px-3">{children}</tbody>
@@ -2519,8 +2519,8 @@ function Table({ head, children }: { head: string[]; children: React.ReactNode }
   );
 }
 function Center({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-neutral-600">{children}</main>;
+  return <main className="mx-auto max-w-3xl px-4 py-20 text-center text-stone-600">{children}</main>;
 }
 function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-neutral-100 bg-white p-6 text-center text-sm text-neutral-500">{children}</p>;
+  return <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">{children}</p>;
 }
