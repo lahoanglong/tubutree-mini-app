@@ -3,11 +3,11 @@ import type { Tone } from '@/lib/recycling';
 
 /** Màu theo tông — cùng bảng màu badge trạng thái đơn trong web admin (OrderStatusBadge). */
 export const TONE_CLASS: Record<Tone, string> = {
-  neutral: 'bg-neutral-100 text-neutral-700',
-  info: 'bg-blue-100 text-blue-800',
-  success: 'bg-green-100 text-green-800',
-  warning: 'bg-amber-100 text-amber-800',
-  danger: 'bg-red-100 text-red-800',
+  neutral: 'bg-stone-100 text-stone-700',
+  info: 'bg-info-bg text-info-fg',
+  success: 'bg-success-bg text-success-fg',
+  warning: 'bg-warning-bg text-warning-fg',
+  danger: 'bg-danger-bg text-danger-fg',
 };
 
 export function ToneBadge({ tone, children, title }: { tone: Tone; children: ReactNode; title?: string }) {
@@ -18,11 +18,12 @@ export function ToneBadge({ tone, children, title }: { tone: Tone; children: Rea
   );
 }
 
+// Màu trạng thái là biến CSS nên không có hậu tố độ trong suốt: viền dùng thẳng màu chữ của tông.
 const NOTICE_CLASS: Record<'info' | 'warning' | 'danger' | 'success', string> = {
-  info: 'border-blue-200 bg-blue-50 text-blue-900',
-  warning: 'border-amber-200 bg-amber-50 text-amber-900',
-  danger: 'border-red-200 bg-red-50 text-red-800',
-  success: 'border-green-200 bg-green-50 text-green-800',
+  info: 'border-info-fg bg-info-bg text-info-fg',
+  warning: 'border-warning-fg bg-warning-bg text-warning-fg',
+  danger: 'border-danger-fg bg-danger-bg text-danger-fg',
+  success: 'border-success-fg bg-success-bg text-success-fg',
 };
 
 export function Notice({
@@ -35,7 +36,7 @@ export function Notice({
   role?: 'alert' | 'status';
 }) {
   return (
-    <div role={role} className={`rounded border px-3 py-2 text-xs leading-relaxed ${NOTICE_CLASS[tone]}`}>
+    <div role={role} className={`break-words rounded-control border px-3 py-2 text-xs leading-relaxed ${NOTICE_CLASS[tone]}`}>
       {children}
     </div>
   );
@@ -44,12 +45,14 @@ export function Notice({
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block text-xs">
-      <span className="font-medium text-neutral-700">{label}</span>
+      <span className="font-medium text-stone-700">{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && <span className="mt-0.5 block text-[11px] text-neutral-500">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-[11px] text-stone-500">{hint}</span>}
     </label>
   );
 }
 
+// Viền stone-450 đủ 3:1 trên nền trắng/canvas (WCAG 1.4.11), như ô nhập của web khách (lib/guest-ui.ts). Không tắt
+// outline: vòng lấy nét chung của globals.css (:focus-visible) là dấu hiệu bàn phím duy nhất.
 export const INPUT_CLASS =
-  'w-full rounded border border-neutral-200 px-2.5 py-1.5 text-sm focus:border-green-600 focus:outline-none disabled:bg-neutral-50';
+  'w-full rounded-control border border-stone-450 bg-stone-0 px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500';

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 // Không kiểm cỡ chữ: admin tối ưu cho máy tính (Q-29) nên chữ 11px dày đặc của bảng được giữ nguyên.
 const MIGRATED = [
   'app/admin/layout.tsx',
+  'components/admin/ui.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
