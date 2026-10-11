@@ -171,4 +171,23 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
     const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
     expect(expired.map((r) => [r.delta, r.lot])).toEqual([[-30, 'STANDARD']]);
   });
+
+  it('T7: nhiều lượt hết hạn chạy ĐỒNG THỜI cho một user (nhiều instance, chạy tay lúc cron) chỉ trừ một lần', async () => {
+    const now = Date.now();
+    const at = (days: number) => new Date(now + days * DAY);
+    const user = await newUser();
+    await ledgerRow(user.id, 30, 'STANDARD', at(-90), at(-1)); // hết hạn, còn nguyên → trừ 30 đúng một lần
+    await ledgerRow(user.id, 100, 'STANDARD', at(-5), at(300)); // chưa hết hạn, đủ số dư để lượt thừa trừ tiếp
+    await ledgerRow(user.id, 50, 'CONVERTED', at(-5));
+
+    const expireUser = (expiry as unknown as { expireUser: (id: string, at: Date) => Promise<number> }).expireUser.bind(expiry);
+    const results = await Promise.all(Array.from({ length: 6 }, () => expireUser(user.id, new Date())));
+
+    expect(results.reduce((a, b) => a + b, 0)).toBe(30);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.pointsBalance).toBe(100);
+    expect(after.pointsConvertedBalance).toBe(50);
+    const expired = await prisma.pointsTransaction.findMany({ where: { userId: user.id, reason: 'POINTS_EXPIRED' } });
+    expect(expired.map((r) => [r.delta, r.lot])).toEqual([[-30, 'STANDARD']]);
+  });
 });

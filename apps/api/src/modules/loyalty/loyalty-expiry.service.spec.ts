@@ -143,16 +143,28 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     candidates: { userId: string }[];
     userTxns: PointExpiryTxn[];
     updateCount: number;
+    /** Sổ user đọc lại SAU khi khoá dòng user (mặc định = userTxns, tức không ai chen vào giữa). */
+    txnsAfterLock?: PointExpiryTxn[];
   }) {
     const findMany = jest
       .fn()
       .mockResolvedValueOnce(opts.candidates) // ứng viên (distinct userId)
-      .mockResolvedValueOnce(opts.userTxns); // toàn bộ txn của user đó
+      .mockResolvedValueOnce(opts.userTxns); // toàn bộ txn của user đó (đọc nhanh, chưa khoá)
+    const order: string[] = [];
+    const txQueryRaw = jest.fn(async () => {
+      order.push('lock');
+      return [];
+    });
+    const txFindMany = jest.fn(async () => {
+      order.push('reload');
+      return opts.txnsAfterLock ?? opts.userTxns;
+    });
     const txUpdateMany = jest.fn().mockResolvedValue({ count: opts.updateCount });
     const txCreate = jest.fn().mockResolvedValue({});
     const txObj = {
+      $queryRaw: txQueryRaw,
       user: { updateMany: txUpdateMany },
-      pointsTransaction: { create: txCreate },
+      pointsTransaction: { findMany: txFindMany, create: txCreate },
     };
     const $transaction = jest.fn(async (cb: (t: typeof txObj) => Promise<unknown>) => cb(txObj));
     const prisma = {
@@ -161,7 +173,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     } as unknown as PrismaService;
     const notifications = { notify: jest.fn() } as unknown as NotificationsService;
     const svc = new LoyaltyExpiryService(prisma, config, notifications);
-    return { svc, findMany, txUpdateMany, txCreate, $transaction };
+    return { svc, findMany, txUpdateMany, txCreate, txFindMany, txQueryRaw, order, $transaction };
   }
 
   it('user có expiredNow>0 → decrement có guard gte + tạo POINTS_EXPIRED txn (cặp atomic)', async () => {
@@ -213,6 +225,22 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     expect(findMany.mock.calls[1][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
     expect(txUpdateMany.mock.calls[0][0].data).toEqual({ pointsBalance: { decrement: 100 } });
     expect(txCreate.mock.calls[0][0].data).toMatchObject({ lot: 'STANDARD' });
+  });
+
+  it('khoá dòng user rồi đọc lại sổ trong transaction; lượt kia đã trừ trước (sổ có POINTS_EXPIRED) → không trừ lần hai', async () => {
+    const expiredLot = tx('a', 100, '2025-01-01', '2026-01-01');
+    const { svc, txUpdateMany, txCreate, txFindMany, order } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [expiredLot], // đọc nhanh: thấy 100 đã hết hạn
+      txnsAfterLock: [expiredLot, tx('b', -100, '2026-02-01', null)], // sau khi khoá: bên kia đã trừ xong
+      updateCount: 1,
+    });
+    await svc.expirePoints();
+
+    expect(order).toEqual(['lock', 'reload']);
+    expect(txFindMany.mock.calls[0]).toEqual([expect.objectContaining({ where: { userId: 'u1', lot: 'STANDARD' } })]);
+    expect(txUpdateMany).not.toHaveBeenCalled();
+    expect(txCreate).not.toHaveBeenCalled();
   });
 
   it('expiredNow=0 → không mở transaction', async () => {

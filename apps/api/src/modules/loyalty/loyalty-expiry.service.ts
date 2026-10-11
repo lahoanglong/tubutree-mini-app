@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -107,8 +108,11 @@ export class LoyaltyExpiryService {
    * thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông "còn nguyên" và cron trừ quá tay; ngược
    * lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
    */
-  private loadTxns(userId: string): Promise<PointExpiryTxn[]> {
-    return this.prisma.pointsTransaction.findMany({
+  private loadTxns(
+    userId: string,
+    db: Pick<Prisma.TransactionClient, 'pointsTransaction'> = this.prisma,
+  ): Promise<PointExpiryTxn[]> {
+    return db.pointsTransaction.findMany({
       where: { userId, lot: 'STANDARD' },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true, delta: true, expiresAt: true, createdAt: true },
@@ -172,33 +176,43 @@ export class LoyaltyExpiryService {
     }
   }
 
-  /** Trừ điểm hết hạn cho 1 user (cặp atomic: decrement có guard + tạo txn âm). Trả về số điểm đã trừ. */
+  /**
+   * Trừ điểm hết hạn cho 1 user (cặp atomic: decrement có guard + tạo txn âm). Trả về số điểm đã trừ.
+   *
+   * Tính expiredNow lần đầu KHÔNG khoá để bỏ nhanh phần lớn ứng viên (lô hết hạn đã xử lý ở các đêm trước
+   * vẫn là ứng viên mãi mãi). Khi thật sự phải trừ thì khoá dòng user rồi tính lại trong transaction: hai
+   * lượt chạy đồng thời (nhiều instance, chạy tay lúc cron) cùng thấy expiredNow trước khi bên kia commit
+   * sẽ cùng trừ, guard gte chỉ chặn số dư âm chứ không chặn trừ đôi, và khách mất điểm chưa hết hạn.
+   */
   private async expireUser(userId: string, now: Date): Promise<number> {
-    const txns = await this.loadTxns(userId);
-    const { expiredNow } = computePointExpiry(txns, now, 0);
-    if (expiredNow <= 0) return 0;
+    const { expiredNow: preview } = computePointExpiry(await this.loadTxns(userId), now, 0);
+    if (preview <= 0) return 0;
 
-    const applied = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const { expiredNow } = computePointExpiry(await this.loadTxns(userId, tx), now, 0);
+      if (expiredNow <= 0) return { expiredNow: 0, applied: true };
+
       // Guard gte: chỉ trừ khi số dư đủ → pointsBalance KHÔNG bao giờ âm. Nếu count=0
       // (bất biến vỡ: balance < expiredNow) → KHÔNG tạo txn âm, giữ ledger nhất quán.
       const res = await tx.user.updateMany({
         where: { id: userId, pointsBalance: { gte: expiredNow } },
         data: { pointsBalance: { decrement: expiredNow } },
       });
-      if (res.count === 0) return false;
+      if (res.count === 0) return { expiredNow, applied: false };
       await tx.pointsTransaction.create({
         data: { userId, delta: -expiredNow, reason: 'POINTS_EXPIRED', refType: 'EXPIRE', lot: 'STANDARD' },
       });
-      return true;
+      return { expiredNow, applied: true };
     });
 
-    if (!applied) {
+    if (!result.applied) {
       this.logger.warn(
-        `expirePoints bỏ qua user=${userId}: số dư < expiredNow=${expiredNow} (guard gte)`,
+        `expirePoints bỏ qua user=${userId}: số dư < expiredNow=${result.expiredNow} (guard gte)`,
       );
       return 0;
     }
-    return expiredNow;
+    return result.expiredNow;
   }
 
   /**
