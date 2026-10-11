@@ -58,7 +58,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // Cashback
   { key: 'cashback.merchant_user_share', value: 0.7, category: 'cashback', description: 'User nhận 70% commission' },
-  { key: 'cashback.merchant_tubu_share', value: 0.3, category: 'cashback', description: 'Tubu giữ 30%' },
   { key: 'cashback.hold_days', value: 30, category: 'cashback', description: 'Hold sau khi AT confirm' },
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
