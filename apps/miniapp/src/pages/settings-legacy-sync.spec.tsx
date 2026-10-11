@@ -12,7 +12,7 @@ vi.mock('zmp-sdk/apis', () => ({
   setStorage: mocks.setStorage,
 }));
 vi.mock('./settings-notify-prefs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./settings-notify-prefs')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   fetchNotifyPrefs: mocks.fetchNotifyPrefs,
   saveNotifyPrefs: mocks.saveNotifyPrefs,
 }));

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   removeCartItem: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/cart', search: '', state: null }),
