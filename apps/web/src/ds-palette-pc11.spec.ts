@@ -13,6 +13,10 @@ const MIGRATED = [
   'components/admin/page-nav.tsx',
   'components/admin/search-picker.tsx',
   'components/admin/dealer-tier-select.tsx',
+  'components/admin/config-item.tsx',
+  'components/admin/invoice-filter-chips.tsx',
+  'components/admin/evidence-images.tsx',
+  'components/admin/ns1-card.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');

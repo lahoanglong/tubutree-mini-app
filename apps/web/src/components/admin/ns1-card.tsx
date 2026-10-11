@@ -38,10 +38,10 @@ const formatPct = (p: number) => `${Number(p.toFixed(1)).toLocaleString('vi-VN')
 export function Ns1Card({ rows }: { rows: RetentionDailyRow[] }) {
   const s = summarizeNs1(rows);
   return (
-    <div className="mb-3 rounded-lg border border-green-200 bg-green-50 p-3">
-      <div className="text-xs font-medium text-green-800">Khách có đơn thứ 2 trong 30 ngày (NS-1)</div>
-      <div className="text-2xl font-semibold text-green-900">{s.pct === null ? '—' : formatPct(s.pct)}</div>
-      <p className="mt-0.5 text-xs text-neutral-600">
+    <div className="mb-3 rounded-card border border-forest-200 bg-forest-50 p-3">
+      <div className="text-xs font-medium text-forest-800">Khách có đơn thứ 2 trong 30 ngày (NS-1)</div>
+      <div className="text-2xl font-semibold text-forest-900">{s.pct === null ? '—' : formatPct(s.pct)}</div>
+      <p className="mt-0.5 text-xs text-stone-600">
         {s.pct === null
           ? 'Chưa có cohort nào đủ 30 ngày để tính. Số liệu tự cập nhật mỗi đêm.'
           : `${s.repeat}/${s.cohort} khách mới, gộp cohort của ${s.days} ngày (mỗi khách đã đủ 30 ngày theo dõi).${

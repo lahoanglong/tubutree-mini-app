@@ -33,10 +33,10 @@ export function InvoiceFilterChips({
             onClick={() => onChange(f.k)}
             className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
               active
-                ? 'bg-green-600 text-white'
+                ? 'bg-forest-600 text-stone-0'
                 : f.k === 'pending' && (count ?? 0) > 0
-                  ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
-                  : 'bg-neutral-100 text-neutral-700'
+                  ? 'bg-warning-bg text-warning-fg ring-1 ring-warning-fg'
+                  : 'bg-stone-100 text-stone-700'
             }`}
           >
             {f.label}
