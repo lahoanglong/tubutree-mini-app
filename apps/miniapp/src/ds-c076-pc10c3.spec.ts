@@ -27,6 +27,7 @@ const FILES_PC10C3 = [
   'src/components/checkout/referral-code-box.tsx',
   'src/components/checkout/address-section.tsx',
   'src/components/avatar-crop-modal.tsx',
+  'src/components/image-upload.tsx',
 ];
 
 const LEGACY = new RegExp(
