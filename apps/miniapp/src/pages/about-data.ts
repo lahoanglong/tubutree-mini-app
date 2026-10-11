@@ -51,11 +51,14 @@ export async function fetchFaqs(): Promise<FaqItem[]> {
   return rows.map((r) => ({ q: r.question, a: r.answer, cat: r.category?.trim() || DEFAULT_CAT }));
 }
 
+/** Chuỗi rỗng/toàn khoảng trắng hoặc sai kiểu = chưa có giá trị: trang ẩn dòng đó thay vì hiện nhãn trống. */
+const cleanText = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
 export async function fetchSupportContact(): Promise<SupportContact> {
-  const cfg = (await getPublicConfig()) as { support?: Partial<SupportContact> };
+  const cfg = (await getPublicConfig()) as { support?: Partial<Record<keyof SupportContact, unknown>> };
   return {
-    hotline: cfg.support?.hotline ?? null,
-    email: cfg.support?.email ?? null,
-    zaloOaName: cfg.support?.zaloOaName ?? null,
+    hotline: cleanText(cfg.support?.hotline),
+    email: cleanText(cfg.support?.email),
+    zaloOaName: cleanText(cfg.support?.zaloOaName),
   };
 }
