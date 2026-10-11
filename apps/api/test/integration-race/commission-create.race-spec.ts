@@ -5,6 +5,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
@@ -27,6 +28,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
       providers: [
         SystemConfigService,
         CoinsService,
+        RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },

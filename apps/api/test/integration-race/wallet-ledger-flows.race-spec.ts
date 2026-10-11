@@ -17,6 +17,7 @@ import { PancakeOrderService } from '../../src/modules/integrations/pancake/panc
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 import { ComboService } from '../../src/modules/storefront/combo.service';
@@ -64,6 +65,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
         CheckoutService,
         AffiliateService,
         CoinsService,
+        RewardPointsService,
         WalletService,
         CashbackService,
         OrderReversalService,

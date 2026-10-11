@@ -6,6 +6,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CTV_NOTIFICATION } from '../../src/modules/affiliate/ctv-notification-codes';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
@@ -36,6 +37,7 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
       providers: [
         SystemConfigService,
         CoinsService,
+        RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,
         NotificationsService,

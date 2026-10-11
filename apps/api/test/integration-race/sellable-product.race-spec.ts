@@ -16,6 +16,7 @@ import { WalletLedgerService } from '../../src/modules/wallet/wallet-ledger.serv
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { ComboService } from '../../src/modules/storefront/combo.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
@@ -59,6 +60,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
         CheckoutService,
         AffiliateService,
         CoinsService,
+        RewardPointsService,
         DealerService,
         SubscriptionsService,
         WalletLedgerService,

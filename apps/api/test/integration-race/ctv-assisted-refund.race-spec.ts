@@ -7,6 +7,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
@@ -44,6 +45,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
         SystemConfigService,
         LoyaltyService,
         CoinsService,
+        RewardPointsService,
         AnalyticsEventsService,
         AffiliateService,
         OrderReversalService,

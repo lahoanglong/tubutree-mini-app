@@ -6,12 +6,13 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CTV_MONTHLY_MILESTONES } from '../../src/modules/affiliate/ctv-milestones';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { createOrder, createUser, summarize, warmPool } from './helpers';
 
-/** AffiliateService.claimMilestone trên Postgres thật — CoinsService thật, chỉ stub Pricing/Pancake (không dùng). */
+/** AffiliateService.claimMilestone trên Postgres thật — RewardPointsService thật, chỉ stub Pricing/Pancake (không dùng). */
 describe('AffiliateService.claimMilestone race (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -23,6 +24,7 @@ describe('AffiliateService.claimMilestone race (real Postgres)', () => {
       providers: [
         SystemConfigService,
         CoinsService,
+        RewardPointsService,
         // Real class (Task 10) — AffiliateService giờ đòi analytics là tham số BẮT BUỘC.
         // AnalyticsModule là @Global() nên app thật luôn wiring được; ở đây khai module không
         // import nó (chỉ PrismaModule) nên phải khai trực tiếp, giống CoinsService/AffiliateService.
@@ -44,7 +46,7 @@ describe('AffiliateService.claimMilestone race (real Postgres)', () => {
     await moduleRef?.close();
   });
 
-  it('(d) 5 concurrent claims of the first milestone -> 1 claim row, coins +once == SUM(coin deltas), wallet unchanged', async () => {
+  it('(d) 5 concurrent claims of the first milestone -> 1 claim row, Điểm Xanh STANDARD +once == SUM(points deltas), no coins, wallet unchanged', async () => {
     const milestone = CTV_MONTHLY_MILESTONES[0]!;
     const ctv = await createUser(prisma, { role: 'AFFILIATE', walletBalance: 12_345, coinsBalance: 0 });
     const buyer = await createUser(prisma);
@@ -75,16 +77,23 @@ describe('AffiliateService.claimMilestone race (real Postgres)', () => {
     const s = summarize(results);
 
     const claims = await prisma.ctvMilestoneClaim.findMany({ where: { userId: ctv.id } });
-    const coinAgg = await prisma.coinTransaction.aggregate({ where: { userId: ctv.id }, _sum: { delta: true }, _count: true });
+    const pointsAgg = await prisma.pointsTransaction.aggregate({
+      where: { userId: ctv.id, lot: 'STANDARD' },
+      _sum: { delta: true },
+      _count: true,
+    });
+    const coinCount = await prisma.coinTransaction.count({ where: { userId: ctv.id } });
     const after = await prisma.user.findUniqueOrThrow({ where: { id: ctv.id } });
+    const row = await prisma.pointsTransaction.findFirstOrThrow({ where: { userId: ctv.id } });
 
     // eslint-disable-next-line no-console
     console.log(
-      '[d] fulfilled=%d rejected=%d coins=%d sumDelta=%d wallet=%d errors=%j',
+      '[d] fulfilled=%d rejected=%d points=%d sumDelta=%d coins=%d wallet=%d errors=%j',
       s.fulfilled.length,
       s.rejected.length,
+      after.pointsBalance,
+      pointsAgg._sum.delta ?? 0,
       after.coinsBalance,
-      coinAgg._sum.delta ?? 0,
       after.walletBalance,
       [...new Set(s.errors)],
     );
@@ -94,9 +103,17 @@ describe('AffiliateService.claimMilestone race (real Postgres)', () => {
     for (const r of s.rejected) expect(r.reason).toBeInstanceOf(BadRequestException);
     expect(claims).toHaveLength(1);
     expect(claims[0]!.milestoneId).toBe(milestone.id);
-    expect(coinAgg._count).toBe(1);
-    expect(after.coinsBalance).toBe(milestone.rewardXu);
-    expect(after.coinsBalance).toBe(coinAgg._sum.delta ?? 0);
+    expect(claims[0]!.rewardPoints).toBe(milestone.rewardPoints);
+    expect(claims[0]!.rewardXu).toBe(0);
+    expect(pointsAgg._count).toBe(1);
+    expect(after.pointsBalance).toBe(milestone.rewardPoints);
+    expect(after.pointsBalance).toBe(pointsAgg._sum.delta ?? 0);
+    // Thưởng mới là lô STANDARD có hạn (OQ-1), refType AFFILIATE_MILESTONE, refId = claim.id.
+    expect(row).toMatchObject({ refType: 'AFFILIATE_MILESTONE', refId: claims[0]!.id, lot: 'STANDARD' });
+    expect(row.expiresAt).not.toBeNull();
+    expect(after.pointsConvertedBalance).toBe(0);
+    expect(coinCount).toBe(0);
+    expect(after.coinsBalance).toBe(0);
     expect(after.walletBalance).toBe(12_345);
   });
 });

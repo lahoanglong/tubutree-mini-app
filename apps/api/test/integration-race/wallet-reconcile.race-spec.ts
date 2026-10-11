@@ -8,6 +8,7 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { CoinsService } from '../../src/modules/wallet/coins.service';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 import { findWalletLedgerDrift } from '../../src/modules/wallet/wallet-reconcile';
@@ -35,6 +36,7 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
         AnalyticsEventsService,
         AffiliateService,
         CoinsService,
+        RewardPointsService,
         WalletService,
         CashbackService,
         { provide: PricingService, useValue: {} },
