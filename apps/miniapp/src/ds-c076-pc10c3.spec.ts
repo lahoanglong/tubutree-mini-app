@@ -26,6 +26,7 @@ const FILES_PC10C3 = [
   'src/components/geo-picker.tsx',
   'src/components/checkout/referral-code-box.tsx',
   'src/components/checkout/address-section.tsx',
+  'src/components/avatar-crop-modal.tsx',
 ];
 
 const LEGACY = new RegExp(
@@ -47,10 +48,11 @@ const RAW_COLOR = /(?<![&\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4}
 const EMOJI = /[\u{1F000}-\u{1FAFF}☀-➿⭐⭕]/u;
 
 /**
- * Từ zmp-ui chỉ còn lấy hook, Input/Select (chưa có bản DS: Select cho chọn địa giới) và Avatar;
- * layout/nút/sheet/chữ dùng components/ui.
+ * Từ zmp-ui chỉ còn lấy hook, Input/Select (chưa có bản DS: Select cho chọn địa giới), Avatar và
+ * Sheet nền tối của cắt ảnh đại diện (BottomSheet DS nền sáng sẽ đổi thiết kế); layout/nút/chữ
+ * dùng components/ui.
  */
-const ZAUI_ALLOWED = new Set(['Page', 'Avatar', 'Input', 'Select', 'useNavigate', 'useLocation', 'useSnackbar']);
+const ZAUI_ALLOWED = new Set(['Page', 'Avatar', 'Input', 'Select', 'Sheet', 'useNavigate', 'useLocation', 'useSnackbar']);
 
 const MINIAPP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const read = (file: string) => readFileSync(MINIAPP_ROOT + file, 'utf8');
