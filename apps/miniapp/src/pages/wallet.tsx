@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { canWithdraw as canWithdrawRule, canConvertToXu, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints, formatXu } from '../utils/format';
+import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -179,7 +180,7 @@ export default function WalletPage() {
               </div>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              Tiền thật từ hoa hồng &amp; hoàn tiền sàn ngoài — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
+              Tiền thật từ hoa hồng{CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
             </Text>
           </div>
 
@@ -308,11 +309,14 @@ export default function WalletPage() {
               onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
             />
           </div>
-          <div style={{ margin: '0 16px 12px', display: 'flex' }}>
-            {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
-                không phải đơn đang chờ sàn duyệt. */}
-            <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
-          </div>
+          {/* Khoản đã duyệt còn chờ về Ví là tiền của khách nên vẫn hiện dù lối vào Hoàn tiền sàn ngoài đã ẩn. */}
+          {(CASHBACK_ENABLED || w.cashbackPending > 0) && (
+            <div style={{ margin: '0 16px 12px', display: 'flex' }}>
+              {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
+                  không phải đơn đang chờ sàn duyệt. */}
+              <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
+            </div>
+          )}
 
           <div
             style={{
@@ -353,7 +357,7 @@ export default function WalletPage() {
       >
         {balance <= 0 && (
           <Notice icon={Sprout}>
-            Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
+            Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV{CASHBACK_ENABLED ? ' hoặc Hoàn tiền sàn ngoài' : ''} để đổi sang TubuXu (×{multiplier})!
           </Notice>
         )}
 

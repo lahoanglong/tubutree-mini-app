@@ -34,6 +34,22 @@ describe('Hub Cá nhân gọn lại (C-086, Q-15)', () => {
   it('không còn trùng đích trong menu', () => {
     expect(new Set(targets).size).toBe(targets.length);
   });
+  it('mọi nhãn trong hub không nhắc "sàn ngoài"', () => {
+    const labels = MENU.flatMap((s) => s.items.map((i) => `${i.label} ${i.hint ?? ''}`));
+    expect(labels.filter((l) => /sàn ngoài|cashback/i.test(l))).toEqual([]);
+  });
+  it('bật cờ CASHBACK_ENABLED: mục quay lại nhóm "Hợp tác", giữa CTV và đại lý', async () => {
+    vi.resetModules();
+    vi.doMock('../utils/features', () => ({ CASHBACK_ENABLED: true }));
+    try {
+      const { MENU: enabled } = await import('./profile');
+      const coop = enabled.find((s) => s.group === 'Hợp tác');
+      expect(coop?.items.map((i) => i.to)).toEqual(['/affiliate', '/cashback', '/dealer']);
+    } finally {
+      vi.doUnmock('../utils/features');
+      vi.resetModules();
+    }
+  });
 });
 
 describe('Lối vào Cộng đồng nói về hàng đang bán (C-073)', () => {
