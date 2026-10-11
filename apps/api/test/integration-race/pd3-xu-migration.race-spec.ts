@@ -76,7 +76,7 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
   beforeAll(async () => {
     await exec(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
     await exec(`CREATE SCHEMA ${SCHEMA}`);
-    for (const t of ['users', 'points_transactions', 'coin_transactions']) {
+    for (const t of ['users', 'points_transactions', 'coin_transactions', 'system_configs']) {
       await exec(`CREATE TABLE ${SCHEMA}.${t} (LIKE public.${t} INCLUDING ALL)`);
     }
     // Schema nháp dựng trạng thái TRƯỚC migration C (deploy thật: B chạy trước C): LIKE ... INCLUDING ALL
@@ -196,6 +196,34 @@ describe('PD-3 migration B quy đổi xu → Điểm Xanh (real Postgres)', () =
     expect(snap!.roundingVnd).toBe(300);
     expect(await counts()).toEqual({ snapshots: 8, points_rows: 8, coin_rows: 8, converted_total: 136 });
     expect(await invariants()).toEqual({ converted_drift: 0, standard_drift: 0, coin_drift: 0 });
+  });
+
+  it('review C2: tỉ giá loyalty.vnd_per_point_redeem khác 1.000 (hoặc không phải số) → RAISE trước khi ghi gì; đúng 1.000 hoặc không có dòng → chạy được', async () => {
+    const before = await counts();
+    const setRate = (json: string) =>
+      exec(`INSERT INTO ${SCHEMA}.system_configs ("key", "value", "category", "updatedAt")
+            VALUES ('loyalty.vnd_per_point_redeem', '${json}'::jsonb, 'loyalty', now())
+            ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value"`);
+    await seedUser('urate', 5000);
+
+    for (const bad of ['500', '2000', '"1000"', 'null']) {
+      await setRate(bad);
+      await expect(runB()).rejects.toThrow(/loyalty\.vnd_per_point_redeem/);
+      expect(await counts()).toEqual(before);
+      expect(await user('urate')).toMatchObject({ coinsBalance: 5000, pointsConvertedBalance: 0 });
+    }
+
+    await setRate('1000');
+    await runB();
+    expect(await user('urate')).toMatchObject({ coinsBalance: 0, pointsConvertedBalance: 5 });
+
+    // Dọn để các ca sau thấy đúng trạng thái cũ (không có dòng cấu hình, không có user urate).
+    await exec(`DELETE FROM ${SCHEMA}.system_configs WHERE "key" = 'loyalty.vnd_per_point_redeem'`);
+    await exec(`DELETE FROM ${SCHEMA}.xu_points_conversions WHERE "userId" = 'urate'`);
+    await exec(`DELETE FROM ${SCHEMA}.points_transactions WHERE "userId" = 'urate'`);
+    await exec(`DELETE FROM ${SCHEMA}.coin_transactions WHERE "userId" = 'urate'`);
+    await exec(`DELETE FROM ${SCHEMA}.users WHERE "id" = 'urate'`);
+    expect(await counts()).toEqual(before);
   });
 
   it('CHECK DB: dòng CONVERTED có hạn và số dư quy đổi âm bị từ chối', async () => {

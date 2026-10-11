@@ -4,8 +4,9 @@
 -- Lớp chặn chạy lại: PK bảng chụp theo userId, id dòng sổ cố định theo userId, partial unique
 -- *_xu_migration_key theo refId = userId, và chỉ cộng số dư cho user vừa chụp ở CHÍNH lần chạy này.
 --
--- Dừng (RAISE) nếu có user coinsBalance âm hoặc lệch SUM(coin_transactions.delta): quy đổi sai tiền trả
--- trước không sửa ngược êm được. Đo trước bằng truy vấn ở docs/2026-10-review/impl/PD-3-SPEC.md mục 3.3 (b).
+-- Dừng (RAISE) nếu loyalty.vnd_per_point_redeem có dòng mà khác đúng 1.000 (1.000:1 chỉ giữ giá trị khi
+-- 1 điểm = 1.000đ; RANGES chỉ chặn ghi từ nay, không chặn giá trị đã nằm sẵn trong DB), nếu có user
+-- coinsBalance âm hoặc lệch SUM(coin_transactions.delta): quy đổi sai tiền trả trước không sửa ngược êm được. Đo trước bằng truy vấn ở docs/2026-10-review/impl/PD-3-SPEC.md mục 3.3 (b).
 -- Sau khi đối soát: prisma migrate resolve --rolled-back 20261012110000_pd3_xu_to_points rồi migrate deploy lại.
 -- Hoàn tác (chỉ khi chưa có đơn tiêu điểm quy đổi): prisma/manual/pd3_xu_to_points_rollback.sql.
 
@@ -30,11 +31,19 @@ DECLARE
   drift_users  INTEGER;
   new_ids      TEXT[];
   leftover     INTEGER;
+  rate_cfg     JSONB;
 BEGIN
   -- Chặn mọi ghi users/coin_transactions trong lúc chụp và chuyển (container API cũ đã dừng trước
   -- migrate deploy; đây là lớp thứ hai).
   LOCK TABLE "users" IN SHARE ROW EXCLUSIVE MODE;
   LOCK TABLE "coin_transactions" IN SHARE ROW EXCLUSIVE MODE;
+
+  -- Không có dòng = mặc định 1.000 của code (pricing.service.ts), hợp lệ. Có dòng mà không phải số 1000
+  -- (kể cả chuỗi "1000" hay null) thì dừng để người đối soát quyết, không tự đoán.
+  SELECT "value" INTO rate_cfg FROM "system_configs" WHERE "key" = 'loyalty.vnd_per_point_redeem';
+  IF FOUND AND (CASE WHEN jsonb_typeof(rate_cfg) = 'number' THEN (rate_cfg #>> '{}')::numeric <> 1000 ELSE true END) THEN
+    RAISE EXCEPTION 'PD-3: loyalty.vnd_per_point_redeem = % (phải là số 1000); quy đổi 1.000 xu = 1 điểm chỉ giữ giá trị khi 1 điểm = 1.000đ. Đối soát tay rồi prisma migrate resolve --rolled-back', rate_cfg;
+  END IF;
 
   SELECT count(*) INTO neg_users FROM "users" WHERE "coinsBalance" < 0;
   IF neg_users > 0 THEN
