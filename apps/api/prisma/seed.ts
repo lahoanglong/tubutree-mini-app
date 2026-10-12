@@ -8,6 +8,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
 import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
+import { assertSeedAllowed } from '../src/modules/system-config/seed-guard';
 import {
   COMMUNITY_CATEGORIES,
   communityCategoryUpsertArgs,
@@ -766,6 +767,7 @@ const CASHBACK_MERCHANTS = [
 ];
 
 async function main() {
+  assertSeedAllowed(process.env);
   console.log('🌱 Seeding SystemConfig...');
   for (const cfg of SYSTEM_CONFIGS) {
     // Key createOnly (admin sở hữu giá trị) chỉ tạo khi chưa có — xem config-seed.ts.
