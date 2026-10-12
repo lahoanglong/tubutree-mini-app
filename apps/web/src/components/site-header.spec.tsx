@@ -45,6 +45,12 @@ describe('SiteHeader', () => {
     expect(out).toContain('aria-label="Tìm kiếm"');
   });
 
+  // PC-7: khung chứa ô tìm kiếm mang data-site-search để CSS ẩn nó ngay từ khung hình đầu trên host gian hàng CTV
+  // (html[data-tenant-host]), thay vì chờ effect gỡ ô sau hydrate làm ô nháy lên rồi biến mất.
+  it('ô tìm kiếm nằm trong khung data-site-search để ẩn được trước khi vẽ trên host gian hàng', () => {
+    expect(render()).toMatch(/<div [^>]*data-site-search[^>]*>\s*<form[^>]*role="search"/);
+  });
+
   it('nhãn thương hiệu dùng Fraunces (font-display)', () => {
     expect(render()).toMatch(/font-display[^>]*>Tubu Tree</);
   });

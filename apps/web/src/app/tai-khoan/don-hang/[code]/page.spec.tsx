@@ -155,6 +155,11 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).toContain('Đã dùng 500 Điểm Xanh (đã tính trong giảm giá)');
   });
 
+  it('ngày đặt đơn theo giờ Việt Nam, dáng HH:mm dd/MM/yyyy', async () => {
+    const { container } = await mount();
+    expect(container.textContent).toContain('Đặt lúc 10:00 01/10/2026');
+  });
+
   it('đủ truy cập: một h1, không nhảy cấp, mọi điều khiển có tên và vùng chạm 44px', async () => {
     const { container } = await mount();
     expect(headingProblems(container)).toEqual([]);
@@ -202,6 +207,42 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(n).toBeGreaterThanOrEqual(2);
     expect(container.textContent).toContain('Đã xác nhận');
     expect(container.textContent).not.toContain('Chờ thanh toán');
+  });
+
+  // PC-7: tiền về thì trang tải lại đơn, đơn hết "chờ thanh toán" và khung QR bị gỡ cùng lúc, nên lời "Đã nhận thanh toán"
+  // vừa hiện đã biến mất. Khách phải thấy xác nhận cho tới khi rời trang.
+  it('tiền về: khung "Đã nhận thanh toán" ở lại sau khi trang tải lại đơn, không bị gỡ cùng khung QR', async () => {
+    mocks.qr.paymentStatus = 'PAID';
+    let n = 0;
+    mocks.order = () => (++n === 1 ? ORDER : { ...ORDER, status: 'CONFIRMED', paymentStatus: 'PAID' });
+    const { container } = await mount();
+    await flush(12);
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(container.textContent).toContain('Đã xác nhận');
+    expect(container.textContent).toContain('Đã nhận thanh toán!');
+    expect(container.textContent).toContain('Đơn TB-9 đã được xác nhận');
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
+    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
+  });
+
+  it('khách bấm kiểm tra lại, tiền đã về: khung xác nhận hiện rồi ở lại, đơn thành "Đã xác nhận"', async () => {
+    let n = 0;
+    mocks.order = () => (++n === 1 ? ORDER : { ...ORDER, status: 'CONFIRMED', paymentStatus: 'PAID' });
+    const { container } = await mount();
+    expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Đã nhận thanh toán');
+
+    mocks.qr.paymentStatus = 'PAID';
+    const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;
+    await act(async () => {
+      check.click();
+    });
+    await flush(12);
+    expect(container.textContent).toContain('Đã nhận thanh toán!');
+    expect(container.textContent).toContain('Đã xác nhận');
+    await flush(12);
+    expect(container.textContent).toContain('Đã nhận thanh toán!');
   });
 
   it('đơn không tồn tại hoặc của người khác (404): báo không tìm thấy, vẫn có h1 và đường về danh sách', async () => {

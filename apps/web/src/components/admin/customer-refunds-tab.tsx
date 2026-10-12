@@ -17,6 +17,7 @@ import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
 import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, Notice, ToneBadge, chipClass } from './ui';
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
+import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
 
@@ -27,7 +28,7 @@ const VIEW_LABEL: Record<CustomerRefundView, string> = {
   WALLET: 'Đã hoàn vào ví',
 };
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+const fmtDate = formatDateTime;
 
 /**
  * Số khoản đang chờ chuyển khoản cạnh nhãn tab: một lần gọi limit=1 lấy meta.total (không thêm endpoint). Lỗi tải thì

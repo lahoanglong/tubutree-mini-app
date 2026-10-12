@@ -275,6 +275,20 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
     expect(link('TB-3')!.textContent).toBe('Xem chi tiết');
   });
 
+  // PC-9: ngày đơn là dd/MM/yyyy có đệm số 0 theo giờ Việt Nam, không phải "1/10/2026" của toLocaleDateString.
+  it('/tai-khoan: ngày đặt của mỗi đơn dạng dd/MM/yyyy có đệm số 0', async () => {
+    shop.orders = [
+      { code: 'TB-1', status: 'DELIVERED', subtotal: 1, discount: 0, shippingFee: 0, total: 150000, paymentMethod: 'COD', createdAt: '2026-10-01T00:00:00Z', items: [] },
+      { code: 'TB-2', status: 'DELIVERED', subtotal: 1, discount: 0, shippingFee: 0, total: 99000, paymentMethod: 'COD', createdAt: '2026-09-02T18:00:00Z', items: [] },
+    ];
+    const { container } = mount(<AccountPage />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('0 sản phẩm · 01/10/2026');
+    expect(text).toContain('0 sản phẩm · 03/09/2026');
+    expect(text).not.toMatch(/(?<!\d)[1-9]\/\d{1,2}\/2026/);
+  });
+
   it('/thanh-toan sau khi đặt đơn: nút chính dẫn tới chi tiết đơn vừa đặt', async () => {
     const { container } = mount(<CheckoutPage />);
     await flush();

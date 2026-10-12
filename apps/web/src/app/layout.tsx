@@ -5,7 +5,7 @@ import SiteHeader from '@/components/site-header';
 import SiteFooter from '@/components/site-footer';
 import HideOnPortals from '@/components/hide-on-portals';
 import { ReferralCapture } from '@/components/storefront-tracker';
-import { SITE_URL } from '@/lib/site';
+import { SITE_URL, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
   // metadataBase để ảnh openGraph khai bằng đường dẫn tương đối dựng được URL tuyệt đối (thiếu
@@ -17,7 +17,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    // suppressHydrationWarning: script ở <head> thêm data-tenant-host lên <html> trước khi React hydrate.
+    <html lang="vi" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: tenantHostBootScript() }} />
+      </head>
       <body className="flex min-h-screen flex-col font-ui">
         <Providers>
           {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}

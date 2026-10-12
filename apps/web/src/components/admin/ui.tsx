@@ -42,6 +42,18 @@ export function Notice({
   );
 }
 
+/**
+ * Khung cuộn ngang bọc bảng. Bảng không có nút/ô nhập trong hàng thì khung không có gì focus được, bàn phím không
+ * cuộn tới cột bị che (axe `scrollable-region-focusable`): tự nhận tab, kèm tên vùng cho trình đọc màn hình.
+ */
+export function ScrollRegion({ label, className = '', children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div role="region" tabIndex={0} aria-label={label} className={`overflow-x-auto ${className}`.trim()}>
+      {children}
+    </div>
+  );
+}
+
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block text-xs">
@@ -68,7 +80,8 @@ export const BTN_DANGER_OUTLINE = `${TOUCH_H} rounded-control border border-dang
 export const BTN_SMALL =
   'min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-3 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40 sm:min-h-0';
 // Nút chữ trong hàng danh sách (Quản lý/Sửa/Xoá/Gỡ): chạm 44px trên điện thoại, về cỡ gọn từ `sm`. Cỡ chữ đặt ở chỗ dùng.
-const BTN_LINK_BASE = 'inline-flex min-h-[44px] items-center justify-center rounded-control px-2 underline disabled:opacity-50 sm:min-h-0 sm:px-1';
+// `sm:min-h-6` (24px) chứ không `sm:min-h-0`: các nút này hay xếp dọc cách nhau 4px, dưới 24px thì không đạt WCAG 2.5.8.
+const BTN_LINK_BASE = 'inline-flex min-h-[44px] items-center justify-center rounded-control px-2 underline disabled:opacity-50 sm:min-h-6 sm:px-1';
 export const BTN_LINK = `${BTN_LINK_BASE} text-forest-700 hover:text-forest-800`;
 export const BTN_LINK_DANGER = `${BTN_LINK_BASE} text-danger-fg hover:brightness-90`;
 export const BTN_LINK_MUTED = `${BTN_LINK_BASE} text-stone-600 hover:text-stone-900`;

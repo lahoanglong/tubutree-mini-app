@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -88,5 +89,32 @@ describe('tenantSubdomainOf', () => {
     for (const h of ['tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com', 'localhost:3000', 'localhost', '', null, undefined]) {
       expect(tenantSubdomainOf(h), String(h)).toBeNull();
     }
+  });
+});
+
+// PC-7: trang dựng sẵn (ISR) có HTML giống nhau cho mọi host nên ô tìm kiếm luôn có trong HTML đầu tiên; ẩn nó bằng
+// effect sau hydrate thì host gian hàng CTV thấy ô hiện lên rồi biến mất. Script nhỏ ở <head> đánh dấu host gian
+// hàng trước khi vẽ để CSS ẩn ô ngay từ khung hình đầu. Quy tắc nhận host phải đúng như tenantSubdomainOf/middleware.
+describe('tenantHostBootScript', () => {
+  const HOSTS = [
+    'ctv-an.tubutree.com', 'ctv-an.tubutree.com:3000', 'CTV-AN.Tubutree.Com', 'ctv-an.localhost:3112', 'a.b.tubutree.com',
+    'tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com',
+    'app.localhost:3112', 'localhost:3112', 'localhost', '',
+  ];
+  const run = (script: string, host: string) => {
+    const attrs: string[] = [];
+    vm.runInNewContext(script, { location: { host }, document: { documentElement: { setAttribute: (k: string) => attrs.push(k) } } });
+    return attrs;
+  };
+
+  it.each(HOSTS)('host %j: đặt data-tenant-host đúng khi và chỉ khi tenantSubdomainOf nhận ra gian hàng', async (host) => {
+    const { tenantHostBootScript, tenantSubdomainOf } = await loadSite();
+    const attrs = run(tenantHostBootScript(), host);
+    expect(attrs.includes('data-tenant-host')).toBe(tenantSubdomainOf(host) !== null);
+  });
+
+  it('không ném lỗi khi môi trường thiếu location (script chạy trước mọi thứ, không được làm hỏng trang)', async () => {
+    const { tenantHostBootScript } = await loadSite();
+    expect(() => vm.runInNewContext(tenantHostBootScript(), {})).not.toThrow();
   });
 });

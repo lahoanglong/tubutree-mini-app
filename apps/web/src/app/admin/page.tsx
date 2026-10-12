@@ -108,6 +108,7 @@ import {
   BTN_SMALL,
   FIELD_CLASS,
   INPUT_CLASS,
+  ScrollRegion,
   TOUCH_H,
   ToneBadge,
 } from '@/components/admin/ui';
@@ -118,6 +119,7 @@ import {
   ORDER_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
 } from '@/lib/export-csv';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 type Tab =
   | 'dashboard'
@@ -300,7 +302,12 @@ function DealersTab() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`${FIELD_CLASS} ${TOUCH_H}`}>
+        <select
+          aria-label="Lọc hồ sơ đại lý theo trạng thái"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
+        >
           {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>{s || 'Tất cả'}</option>
           ))}
@@ -533,7 +540,7 @@ function DashboardTab({
           </button>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
+        <ScrollRegion label="Đơn hàng gần đây" className="mt-3">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
@@ -566,14 +573,14 @@ function DashboardTab({
                       <OrderStatusBadge status={o.status} />
                     </td>
                     <td className="px-3 py-2.5 text-xs text-stone-500">
-                      {new Date(o.createdAt).toLocaleString('vi-VN')}
+                      {formatDateTime(o.createdAt)}
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </div>
     </div>
   );
@@ -653,6 +660,7 @@ function OrdersTab({
 
         <div className="flex flex-wrap items-center gap-2">
           <select
+            aria-label="Lọc đơn theo trạng thái"
             value={status}
             onChange={(e) => handleStatusChange(e.target.value)}
             className={`${FIELD_CLASS} ${TOUCH_H}`}
@@ -739,7 +747,7 @@ function OrdersTab({
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
 
       {q.data && (
-        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion label="Danh sách đơn hàng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
@@ -795,7 +803,7 @@ function OrdersTab({
                           <OrderStatusBadge status={o.status} />
                         </td>
                         <td className="px-3 py-3 text-xs text-stone-500">
-                          {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+                          {formatDate(o.createdAt)}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <button
@@ -881,7 +889,7 @@ function OrdersTab({
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       {/* Pagination Bar */}
@@ -933,6 +941,7 @@ function ReturnsTab() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <select
+          aria-label="Lọc yêu cầu đổi/trả theo trạng thái"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className={`${FIELD_CLASS} ${TOUCH_H}`}
@@ -1020,7 +1029,7 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
           </div>
         </div>
         <span className="text-xs text-stone-500">
-          {new Date(r.createdAt).toLocaleString('vi-VN')}
+          {formatDateTime(r.createdAt)}
         </span>
       </div>
 
@@ -1063,7 +1072,7 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
         <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-500">
           {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-stone-700">{r.adminNote}</span></div>}
           {r.reviewedAt && (
-            <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>
+            <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>
           )}
         </div>
       )}
@@ -1101,7 +1110,7 @@ function UsersTab() {
         <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
       ) : (
         <>
-          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']}>
+          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']} label="Danh sách người dùng">
             {q.data?.data.map((u) => (
               <tr key={u.id} className="border-t border-stone-100">
                 <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
@@ -1110,7 +1119,7 @@ function UsersTab() {
                 <td className="px-3 py-2">
                   <UserPointsCell user={u} />
                 </td>
-                <td className="px-3 py-2 text-stone-500">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+                <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
               </tr>
             ))}
           </Table>
@@ -1202,6 +1211,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setPhone(e.target.value)}
         />
         <select
+          aria-label="Vai trò cần cấp"
           className={`${FIELD_CLASS} ${TOUCH_H}`}
           value={role}
           onChange={(e) => setRole(e.target.value as UserRole)}
@@ -1301,7 +1311,7 @@ function CouponsTab() {
     <div className="max-w-md space-y-2">
       <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className={field} />
       <div className="flex gap-2">
-        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
+        <select aria-label="Loại voucher" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           <option value="PERCENT">% giảm</option>
           <option value="AMOUNT">Giảm tiền</option>
           <option value="FREESHIP">Freeship</option>
@@ -1320,8 +1330,8 @@ function CouponsTab() {
         Bỏ trống = không giới hạn. Mã % nên đặt &quot;Giảm tối đa&quot; để đơn lớn không bị giảm quá tay.
       </p>
       <div className="flex gap-2">
-        <input type="date" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
-        <input type="date" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+        <input type="date" aria-label="Voucher bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+        <input type="date" aria-label="Voucher hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
@@ -1483,8 +1493,8 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             <div className="mt-2 flex flex-wrap gap-2">
               <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
               <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
-              <input type="date" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
-              <input type="date" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
+              <input type="date" aria-label="Khuyến mãi bắt đầu từ ngày" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
+              <input type="date" aria-label="Khuyến mãi kết thúc ngày" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
               <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className={BTN_PRIMARY}>Thêm KM</button>
             </div>
             {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{(addPromo.error as Error).message}</p>}
@@ -1594,12 +1604,12 @@ function DealerRewardsSection() {
         {del.isError && <p className="text-xs text-danger-fg">{(del.error as Error).message}</p>}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={field}>
+        <select aria-label="Loại phần thưởng" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={field}>
           <option value="TOUR">Tour</option>
           <option value="GIFT">Quà</option>
           <option value="OTHER">Khác</option>
         </select>
-        <select value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className={field}>
+        <select aria-label="Kỳ tính doanh số" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className={field}>
           <option value="QUARTER">Theo quý</option>
           <option value="YEAR">Theo năm</option>
         </select>
@@ -1646,12 +1656,14 @@ function FlashSalesTab() {
           />
           <input
             type="datetime-local"
+            aria-label="Flash Sale bắt đầu lúc"
             value={f.startAt}
             onChange={(e) => setF({ ...f, startAt: e.target.value })}
             className={field}
           />
           <input
             type="datetime-local"
+            aria-label="Flash Sale kết thúc lúc"
             value={f.endAt}
             onChange={(e) => setF({ ...f, endAt: e.target.value })}
             className={field}
@@ -1711,7 +1723,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setItemErr(e instanceof Error ? e.message : 'Lỗi thêm sản phẩm'),
   });
 
-  const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+  const fmt = formatDateTime;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
@@ -2445,6 +2457,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                   className={`${field} grow basis-full sm:basis-40`}
                 />
                 <select
+                  aria-label="Loại bài học"
                   value={lesson.contentType}
                   onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
                   className={field}
@@ -2537,6 +2550,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           <div className="flex flex-wrap gap-2">
             <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-40`} />
             <select
+              aria-label="Loại bài học"
               value={f.contentType}
               onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
               className={field}
@@ -2561,16 +2575,16 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
   );
 }
 
-function Table({ head, children }: { head: string[]; children: React.ReactNode }) {
+function Table({ head, label, children }: { head: string[]; label: string; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0">
+    <ScrollRegion label={label} className="rounded-card border border-stone-200 bg-stone-0">
       <table className="w-full text-left text-sm">
         <thead className="bg-stone-50 text-xs text-stone-500">
           <tr>{head.map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="px-3">{children}</tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }
 function Center({ children }: { children: React.ReactNode }) {

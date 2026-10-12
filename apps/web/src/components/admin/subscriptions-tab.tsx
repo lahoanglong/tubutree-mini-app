@@ -6,6 +6,7 @@ import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
 import { Notice, ToneBadge, chipClass } from './ui';
+import { formatDate } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
 const STATUS_CHIPS: { k: SubscriptionStatus | ''; label: string }[] = [
@@ -68,7 +69,7 @@ function SubscriptionRow({ sub: s }: { sub: AdminSubscription }) {
         <ToneBadge tone={STATUS_TONE[s.status] ?? 'neutral'}>{subscriptionStatusLabel(s.status)}</ToneBadge>
         <span className="text-xs text-stone-500">{intervalLabel(s.intervalWeeks)}</span>
         {s.status === 'ACTIVE' && (
-          <span className="ml-auto text-xs text-stone-500">Giao kế tiếp: {new Date(s.nextRunAt).toLocaleDateString('vi-VN')}</span>
+          <span className="ml-auto text-xs text-stone-500">Giao kế tiếp: {formatDate(s.nextRunAt)}</span>
         )}
       </div>
       <div className="mt-1 font-medium">

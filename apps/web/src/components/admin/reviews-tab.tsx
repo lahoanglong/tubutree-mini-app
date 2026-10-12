@@ -14,6 +14,7 @@ import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
 import { BTN_LINK, Notice, ToneBadge, chipClass } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
 const VISIBILITY_CHIPS: { k: ReviewVisibilityFilter | ''; label: string }[] = [
@@ -144,7 +145,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
         <ReviewStars rating={r.rating} />
         <ToneBadge tone={r.isVisible ? 'success' : 'neutral'}>{r.isVisible ? 'Đang hiện' : 'Đã ẩn'}</ToneBadge>
         {r.isVerified && <ToneBadge tone="info">Đã mua hàng</ToneBadge>}
-        <span className="ml-auto text-xs text-stone-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</span>
+        <span className="ml-auto text-xs text-stone-500">{formatDateTime(r.createdAt)}</span>
       </div>
       <div className="mt-1 font-medium">{r.product.name}</div>
       <div className="text-xs text-stone-500">

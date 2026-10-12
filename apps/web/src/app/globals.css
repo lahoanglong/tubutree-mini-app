@@ -36,3 +36,9 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-border-strong);
 }
+
+/* Host gian hàng CTV: `/` bị rewrite sang /s/{subdomain} và bỏ ?q=, nên ô tìm kiếm không dùng được ở đó.
+   <html data-tenant-host> do script ở <head> (tenantHostBootScript) đặt trước khi vẽ, để ô không hiện lên rồi biến mất. */
+html[data-tenant-host] [data-site-search] {
+  display: none;
+}

@@ -42,7 +42,7 @@ const page = (data: AdminCustomerRefund[], total = data.length, p = 1) => ({ dat
 const LIST = (data: AdminCustomerRefund[], total = data.length) => ({
   '/admin/customer-refunds': { body: page(data, total) },
 });
-const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+// Giờ Việt Nam (UTC+7), dáng HH:mm dd/MM/yyyy của lib/format-date.
 
 // Q-01 (PA-1): khoản hoàn MANUAL_TRANSFER PENDING là tiền Tubu đang nợ khách cuối không có tài khoản. Màn này
 // chỉ đọc sổ (admin chuyển khoản tay ngoài hệ thống), nên phải hiển thị đủ để admin chuyển đúng người, đúng số tiền.
@@ -73,7 +73,7 @@ describe('CustomerRefundsTab — danh sách', () => {
     expect(text).toContain('1.250.000đ');
     expect(text).toContain('Đơn bị huỷ');
     expect(text).toContain('Chuyển khoản thủ công');
-    expect(text).toContain(fmt('2026-10-01T03:00:00.000Z'));
+    expect(text).toContain('10:00 01/10/2026');
     expect(container.querySelector('[data-refund-status="PENDING"]')?.textContent).toContain('Chờ chuyển khoản');
     const copy = container.querySelector('button[aria-label*="0912345678"]');
     expect(copy).not.toBeNull();
@@ -134,7 +134,7 @@ describe('CustomerRefundsTab — danh sách', () => {
     await flush();
     const text = container.textContent ?? '';
     expect(container.querySelector('[data-refund-status="COMPLETED"]')?.textContent).toContain('Đã chuyển khoản');
-    expect(text).toContain(fmt('2026-10-02T08:30:00.000Z'));
+    expect(text).toContain('15:30 02/10/2026');
     expect(text).toContain('FT26275123456');
     expect(text).toContain('Chuyển qua VCB lúc 15h');
     expect(text).toContain('admin_cuid_1');

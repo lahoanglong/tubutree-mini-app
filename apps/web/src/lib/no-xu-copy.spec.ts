@@ -15,8 +15,10 @@ function walk(dir: string): string[] {
   });
 }
 const SRC = join(process.cwd(), 'src');
+// test-utils/fixtures chứa dòng API chụp nguyên văn (mô tả khoá cấu hình cũ còn chữ "Xu"), không phải chữ hiển thị do web viết.
+const FIXTURES = join(SRC, 'test-utils', 'fixtures') + sep;
 const sources = walk(SRC)
-  .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.spec\./.test(f))
+  .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.spec\./.test(f) && !f.startsWith(FIXTURES))
   .map((f) => ({ file: relative(SRC, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }));
 
 // "XU" viết hoa là tên giá trị enum PaymentMethod của API (đơn cũ), không phải chữ hiển thị.

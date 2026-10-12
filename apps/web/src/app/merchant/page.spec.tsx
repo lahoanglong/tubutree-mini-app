@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MerchantPage from './page';
 import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'DEALER' } as { role: string } | null, status: 'authenticated', initialized: true },
@@ -119,7 +120,7 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
     expect(link.getAttribute('href')).toBe('/dang-nhap');
     expect(link.className).toContain('min-h-[44px]');
     expect(link.className).toContain('bg-forest-600');
-    expect(root.querySelector('h2')!.className).toContain('font-display');
+    expect(root.querySelector('h1')!.className).toContain('font-display');
   });
 
   it('tài khoản không phải đối tác: chỉ hiện lời giải thích, không có thanh tab', async () => {
@@ -460,5 +461,45 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
     const alert = root.querySelector('[role="alert"]')!;
     expect(alert.textContent).toContain('Đơn đã bị huỷ');
     expect(alert.className).toContain('bg-danger-bg');
+  });
+});
+
+// PF-4 (axe label, select-name, scrollable-region-focusable, page-has-heading-one, landmark-one-main).
+describe('cổng đối tác — truy cập', () => {
+  it.each([
+    ['Gian hàng & Subdomain'],
+    ['Tài khoản VietQR'],
+    ['Kho Hàng & Giao Nhận'],
+    ['Quản Lý Sản Phẩm'],
+    ['Đơn Hàng Thuộc Kho'],
+  ])('tab %s: mọi ô nhập và select có nhãn gắn đúng (label for/id), bảng có khung cuộn focus được', async (tabLabel) => {
+    const root = await mount();
+    await openTab(tabLabel);
+    expect(unlabeledFields(root)).toEqual([]);
+    expect(scrollRegionProblems(root)).toEqual([]);
+  });
+
+  it('form thêm sản phẩm mở ra cũng có nhãn cho mọi ô', async () => {
+    const root = await mount();
+    await openTab('Quản Lý Sản Phẩm');
+    const open = Array.from(root.querySelectorAll('button')).find((b) => /Thêm sản phẩm|Đăng sản phẩm/.test(b.textContent ?? ''));
+    expect(open, 'nút mở form thêm sản phẩm').toBeDefined();
+    click(open!);
+    await flush();
+    expect(root.querySelector('textarea')).not.toBeNull();
+    expect(unlabeledFields(root)).toEqual([]);
+  });
+
+  it('chưa đăng nhập và không phải đối tác: trang có đúng một h1 nằm trong <main>', async () => {
+    mocks.auth = { user: null, status: 'unauthenticated', initialized: true };
+    const anon = await mount();
+    expect(headingProblems(anon)).toEqual([]);
+    expect(anon.querySelector('main h1')).not.toBeNull();
+    ui!.unmount();
+
+    mocks.auth = { user: { role: 'CUSTOMER' }, status: 'authenticated', initialized: true };
+    const customer = await mount();
+    expect(headingProblems(customer)).toEqual([]);
+    expect(customer.querySelector('main h1')?.textContent).toBe('Kênh dành cho đối tác');
   });
 });

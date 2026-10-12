@@ -19,6 +19,7 @@ import {
 } from '@/lib/recycling';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { formatDateTime } from '@/lib/format-date';
 
 /** Badge ở dòng danh sách đơn: có thu gom / cần xử lý thu gom. */
 export function RecyclingBadge({ order }: { order: AdminOrder }) {
@@ -33,7 +34,7 @@ export function RecyclingBadge({ order }: { order: AdminOrder }) {
 }
 
 function fmtTime(iso: string | null | undefined): string | null {
-  return iso ? new Date(iso).toLocaleString('vi-VN') : null;
+  return iso ? formatDateTime(iso) : null;
 }
 
 /**

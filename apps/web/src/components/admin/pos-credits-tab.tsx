@@ -9,7 +9,8 @@ import { vnDayKey } from '@/lib/loyalty-pos';
 import { personLabel } from '@/lib/admin-pickers';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
-import { BTN_XS_SECONDARY, INPUT_CLASS, TOUCH_H } from './ui';
+import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
 export function summarizePosCredits(rows: AdminPosCredit[]) {
@@ -85,7 +86,7 @@ export function PosCreditsTab() {
             <b>{formatVnd(sum.orderTotal)}</b>
             {sum.count >= 200 && ' · chỉ hiển thị 200 dòng mới nhất, lọc hẹp hơn để xem đủ'}
           </p>
-          <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0">
+          <ScrollRegion label="Sổ tích điểm tại quầy" className="rounded-card border border-stone-200 bg-stone-0">
             <table className="w-full text-left text-sm">
               <thead className="bg-stone-50 text-xs text-stone-500">
                 <tr>
@@ -107,7 +108,7 @@ export function PosCreditsTab() {
                 ) : (
                   q.data.map((r) => (
                     <tr key={r.id} className="border-t border-stone-200 align-top">
-                      <td className="px-3 py-2 text-xs text-stone-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
+                      <td className="px-3 py-2 text-xs text-stone-500">{formatDateTime(r.createdAt)}</td>
                       <td className="px-3 py-2">
                         <div className="font-mono text-xs font-semibold">{r.receiptId}</div>
                         {r.note && <div className="text-[11px] text-stone-500">{r.note}</div>}
@@ -137,7 +138,7 @@ export function PosCreditsTab() {
                 )}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </>
       )}
     </div>
