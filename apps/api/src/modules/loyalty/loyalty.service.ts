@@ -136,9 +136,17 @@ export class LoyaltyService {
    *
    * Điểm đơn thu hồi tối đa phần lô ORDER_DELIVERED chưa mất theo sổ lô (lotRecoverable) và không quá số dư: lô đã hết
    * hạn và cron đã trừ thì phần đó không trừ lần hai (admin đặt loyalty.point_expire_months ngắn hơn cửa sổ trả hàng),
-   * và số dư không bao giờ âm. Chi tiêu của khách KHÔNG làm lô đơn "đã tiêu" (lotRecoverable giải thích vì sao): số dư
-   * trong cửa sổ đổi trả luôn đủ để thu hồi nhờ lockedOrderPoints, số dư chỉ là lưới an toàn cuối. Dòng ORDER_REVERSED
-   * luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của lockedOrderPoints.
+   * và số dư không bao giờ âm. Chi tiêu của khách KHÔNG làm lô đơn "đã tiêu" (lotRecoverable giải thích vì sao).
+   *
+   * Số dư chỉ là lưới an toàn cuối, không phải bảo đảm "luôn đủ để thu hồi". Bốn đường khách tiêu Điểm Xanh thường
+   * (checkout, redeemReward, góp quỹ cây, vòng quay) đều chỉ tiêu phần số dư vượt lockedOrderPoints, nên khách không
+   * tiêu được điểm đơn còn trong cửa sổ đổi/trả. Các đường KHÔNG phải chi tiêu thì không bị chặn bởi lockedOrderPoints
+   * và có thể kéo số dư xuống dưới phần cần thu hồi: cron hết hạn, thu hồi điểm đánh giá, thu hồi thưởng giới thiệu
+   * của người mời. Khi đó thu hồi lấy ít hơn pointsEarned thay vì làm số dư âm; khách không giữ giá trị nào từ phần
+   * thiếu vì phần đó bị một khoản thu hồi khác lấy đi, không phải bị tiêu.
+   *
+   * Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của
+   * lockedOrderPoints.
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });

@@ -193,9 +193,12 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
  * refType/refId): caller không có căn cứ để thu hẹp số điểm thu hồi.
  *
  * Cố ý KHÔNG trừ điểm đã bị tiêu theo FIFO. Replay FIFO gán chi tiêu cho lô cũ nhất, mà lô đơn/đánh giá thường là lô cũ
- * nhất khi khách tiêu điểm từ lô khác (thưởng game, điểm danh) bằng đúng phần số dư vượt lockedOrderPoints. Coi phần đó
- * là "đã tiêu từ lô đơn" thì khách giữ trọn điểm của đơn bị trả dù số dư vẫn đủ để thu hồi. Caller chặn thêm bằng số dư
- * hiện có (lưới an toàn cuối), nên không bao giờ thu hồi quá những gì khách còn.
+ * nhất khi khách tiêu điểm từ lô khác (thưởng game, điểm danh): mọi đường khách tiêu Điểm Xanh thường (checkout, đổi
+ * voucher, góp quỹ cây, vòng quay) chỉ tiêu phần số dư vượt lockedOrderPoints, tức không bao giờ tiêu điểm đơn còn trong
+ * cửa sổ đổi/trả. Coi phần FIFO đó là "đã tiêu từ lô đơn" thì khách giữ trọn điểm của đơn bị trả dù phần điểm đơn vẫn
+ * còn nằm trong số dư. Caller chặn thêm bằng số dư hiện có: đó là lưới an toàn cuối, không phải bảo đảm đủ điểm, vì các
+ * đường không phải chi tiêu (cron hết hạn, thu hồi đánh giá, thu hồi thưởng giới thiệu) không bị lockedOrderPoints chặn
+ * và có thể làm số dư thấp hơn; khi đó thu hồi ít đi thay vì làm số dư âm.
  */
 export function lotRecoverable(txns: PointExpiryTxn[], key: string): number | null {
   const matching = replayLots(txns).filter((l) => l.key === key);
