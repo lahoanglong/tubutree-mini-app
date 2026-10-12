@@ -122,6 +122,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
   });
 
   it('đủ điều kiện: chọn sao, gõ nhận xét, gửi → createReview đúng payload, báo thành công và đóng form', async () => {
+    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 5 });
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
     const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
@@ -130,7 +131,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: '  Dùng êm  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
     await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', { rating: 4, comment: 'Dùng êm', images: undefined, videoUrl: undefined }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh', type: 'success' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 5 Điểm Xanh', type: 'success' }));
   });
 
   it('đóng form giữa chừng (chạm nút Đóng) rồi mở lại: sao, nhận xét và ảnh đã up vẫn còn', async () => {
@@ -266,14 +267,41 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
 
   it('chưa có đánh giá, tạo xong thì nút đổi thành "Sửa đánh giá của bạn" (làm mới can-review)', async () => {
     mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
-    mocks.createReview.mockResolvedValue({ updated: false });
+    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 10 });
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
     await screen.findByRole('radiogroup', { name: 'Số sao' });
     mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh', type: 'success' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 10 Điểm Xanh', type: 'success' }));
     expect(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeInTheDocument();
+  });
+
+  // PF-3: thưởng đánh giá chỉ một lần cho mỗi (khách, sản phẩm); xoá rồi tạo lại khi khách còn giữ phần thưởng cũ
+  // thì BE tạo bản ghi mới với pointsEarned = 0 và updated = false.
+  it.each([
+    ['pointsEarned = 0 (đã nhận thưởng trước đó)', { updated: false, pointsEarned: 0 }],
+    ['không có pointsEarned', { updated: false }],
+  ])('tạo mới mà không được cộng điểm (%s) → báo trung tính, không nhắc Điểm Xanh', async (_n, response) => {
+    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    mocks.createReview.mockResolvedValue(response);
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi đánh giá của bạn', type: 'success' }));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Điểm Xanh') }));
+  });
+
+  it('BE trả updated=true kèm pointsEarned của lần thưởng cũ → vẫn báo "đã cập nhật", không nhắc điểm', async () => {
+    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    mocks.createReview.mockResolvedValue({ updated: true, pointsEarned: 10 });
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật đánh giá của bạn', type: 'success' }));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Điểm Xanh') }));
   });
 
   it('BE trả updated=true dù form đang ở chế độ viết mới (đánh giá được tạo từ thiết bị khác) → báo "đã cập nhật"', async () => {
