@@ -6,6 +6,7 @@ import { Text } from '../ui/text';
 import { IconButton } from '../ui/icon-button';
 import { ListRow } from '../ui/list-row';
 import { suggestProducts, type ProductSuggestion } from '../../services/shop-api';
+import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -25,10 +26,14 @@ export function ProductPicker({
   const [maxWarning, setMaxWarning] = useState(false);
   const dq = useDebounced(q, 300);
 
+  // Cổng xét cả từ khoá đang gõ (chưa debounce): xoá bớt xuống dưới 2 ký tự thì ẩn gợi ý ngay.
+  const canSuggest = isSuggestable(q) && isSuggestable(dq);
+  const tooShort = q.trim() !== '' && !isSuggestable(q);
+
   const suggestQ = useQuery({
     queryKey: ['suggest', dq],
     queryFn: () => suggestProducts(dq),
-    enabled: dq.trim().length >= 1,
+    enabled: canSuggest,
   });
 
   const results = (suggestQ.data ?? []).filter((p) => !value.some((v) => v.slug === p.slug));
@@ -101,7 +106,13 @@ export function ProductPicker({
         </Text>
       )}
 
-      {dq.trim().length >= 1 && (
+      {tooShort && (
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
+          {vi.common.suggestMinChars}
+        </Text>
+      )}
+
+      {canSuggest && (
         <div style={{ marginTop: 8 }}>
           {results.map((p) => (
             <ListRow

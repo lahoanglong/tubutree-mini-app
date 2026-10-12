@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { canWithdraw as canWithdrawRule, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints } from '../utils/format';
+import { uniqueById } from '../utils/unique-by-id';
 import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
@@ -400,7 +401,7 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
     enabled,
   });
-  const rows = q.data?.pages.flatMap((p) => p.data) ?? [];
+  const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
 
   return (
     <div style={{ ...CARD, margin: '0 16px 24px', padding: 16 }}>

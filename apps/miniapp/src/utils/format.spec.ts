@@ -78,9 +78,11 @@ describe('formatVndShort — số tiền rút gọn trong câu chữ', () => {
     expect(formatVndShort(50_500)).toBe('50.500đ');
   });
 
-  it('null/0 → "0đ"', () => {
-    expect(formatVndShort(null)).toBe('0đ');
+  it('0 → "0đ"; giá thiếu (null/undefined/NaN) → "—", không giả làm "0đ"', () => {
     expect(formatVndShort(0)).toBe('0đ');
+    expect(formatVndShort(null)).toBe('—');
+    expect(formatVndShort(undefined)).toBe('—');
+    expect(formatVndShort(Number('x'))).toBe('—');
   });
 });
 
@@ -128,9 +130,36 @@ describe('formatVnd — cùng đường định dạng với formatNumber', () =
     expect(formatVnd(289_000)).toBe('289.000đ');
   });
 
-  it('rác → "0đ" (không in "NaNđ")', () => {
-    expect(formatVnd(Number('x'))).toBe('0đ');
-    expect(formatVnd(null as unknown as number)).toBe('0đ');
+  it('nhận cả chuỗi số (Decimal serialize qua API)', () => {
+    expect(formatVnd('65000')).toBe('65.000đ');
+    expect(formatVnd('65000.00')).toBe('65.000đ');
+  });
+
+  it('số âm giữ dấu', () => {
+    expect(formatVnd(-5_000)).toBe('-5.000đ');
+  });
+});
+
+// Giá thiếu (API không trả, chuỗi rỗng, phép tính ra NaN) không được hiện như một mức giá thật: "0đ" nghĩa là MIỄN PHÍ.
+describe('formatVnd — giá thiếu hiện "—", giá 0 hợp lệ vẫn là "0đ"', () => {
+  it('0 và "0" là giá hợp lệ → "0đ"', () => {
+    expect(formatVnd(0)).toBe('0đ');
+    expect(formatVnd('0')).toBe('0đ');
+    expect(formatVnd(-0)).toBe('0đ');
+  });
+
+  it('null / undefined / chuỗi rỗng hoặc toàn khoảng trắng → "—"', () => {
+    expect(formatVnd(null)).toBe('—');
+    expect(formatVnd(undefined)).toBe('—');
+    expect(formatVnd('')).toBe('—');
+    expect(formatVnd('   ')).toBe('—');
+  });
+
+  it('NaN / vô cực / chuỗi không phải số → "—" (không in "NaNđ", không giả làm "0đ")', () => {
+    expect(formatVnd(Number('x'))).toBe('—');
+    expect(formatVnd(Infinity)).toBe('—');
+    expect(formatVnd(-Infinity)).toBe('—');
+    expect(formatVnd('abc')).toBe('—');
   });
 });
 

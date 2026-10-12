@@ -15,16 +15,9 @@ import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Heading, Text } from '../components/ui/text';
+import { formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
-
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-  } catch {
-    return '';
-  }
-}
 
 export default function RefillPage() {
   const navigate = useNavigate();
@@ -143,7 +136,7 @@ export default function RefillPage() {
                       borderBottom: '1px solid var(--color-border-subtle)',
                     }}
                   >
-                    <Text variant="body-sm" tone="secondary">{h.quantity} vỏ · {fmtDate(h.createdAt)}</Text>
+                    <Text variant="body-sm" tone="secondary">{h.quantity} vỏ · {formatDate(h.createdAt)}</Text>
                     <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
                   </div>
                 );

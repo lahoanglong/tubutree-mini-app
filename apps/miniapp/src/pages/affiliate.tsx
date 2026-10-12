@@ -22,7 +22,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
-import { formatPoints, formatVnd, formatVndShort } from '../utils/format';
+import { formatDate, formatPoints, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -744,7 +744,7 @@ function Dashboard() {
                     </Text>
                     <Text variant="caption" tone="tertiary" as="div">
                       Đơn {formatVnd(c.orderTotal)} ·{' '}
-                      {new Date(c.createdAt).toLocaleDateString('vi-VN')}
+                      {formatDate(c.createdAt)}
                     </Text>
                   </div>
                   <Badge tone={m.tone}>{m.label}</Badge>

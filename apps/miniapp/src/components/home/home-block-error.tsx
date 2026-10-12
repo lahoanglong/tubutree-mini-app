@@ -10,7 +10,7 @@ export interface HomeBlockErrorProps {
   error?: unknown;
   /** Thường là `query.refetch` — trả Promise thì Button tự khoá bấm lại tới khi xong. */
   onRetry: () => unknown;
-  /** Đang tải lại sau lỗi: query lỗi vẫn `isLoading=false` nên phải truyền riêng `isFetching`. */
+  /** Đang tải lại sau lỗi (`BlockQuery.isFetching` từ `useBlockQuery`, vốn giữ khối lỗi ở lại suốt lúc tải lại). */
   retrying?: boolean;
   /** Khối cùng hàng có nút "Xem tất cả" 44px (HomeSection có `seeAllTo`) → hàng tiêu đề cao 44px; không thì bằng khung chờ: không min-height, cách 8px. */
   seeAllRow?: boolean;

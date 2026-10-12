@@ -6,6 +6,7 @@ import { fetchReviews, createReview, canReviewProduct, type MyReview } from '../
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
+import { formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -207,7 +208,7 @@ export function ReviewsSection({ slug }: { slug: string }) {
                     <Stars value={r.rating} size={11} />
                   </div>
                   <Text variant="caption" tone="tertiary">
-                    {new Date(r.createdAt).toLocaleDateString('vi-VN')}
+                    {formatDate(r.createdAt)}
                   </Text>
                 </div>
                 {r.comment && (

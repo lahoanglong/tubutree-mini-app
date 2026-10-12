@@ -22,13 +22,8 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Heading, Text } from '../components/ui/text';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
-import { formatPoints } from '../utils/format';
+import { formatDate, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
-
-/** "10/07/2026" — đủ dùng cho hạn sự kiện, không cần giờ phút. */
-function formatEventDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 /** Sự kiện đã qua endAt → không nhận bài dự thi nữa. */
 function isEventEnded(event: Pick<CommunityEvent, 'endAt'>): boolean {
@@ -52,7 +47,7 @@ function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefi
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
       <Text variant="caption" tone="tertiary">
-        {vi.community.eventEnds}: {formatEventDate(event.endAt)}
+        {vi.community.eventEnds}: {formatDate(event.endAt)}
       </Text>
       {event.rewardPoints > 0 && (
         <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>

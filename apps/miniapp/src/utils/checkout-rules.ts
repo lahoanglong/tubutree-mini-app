@@ -1,4 +1,4 @@
-import { formatPoints, formatVnd } from './format';
+import { formatNumber, formatPoints, formatVnd } from './format';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
 export interface InvoiceInfo {
@@ -49,7 +49,7 @@ export function zeroTotalNote(q: { total: number; pointsDiscount: number }): str
     : 'Đơn không còn số tiền cần thanh toán.';
 }
 
-const groupThousands = (n: number) => n.toLocaleString('vi-VN');
+const groupThousands = (n: number) => formatNumber(n);
 
 /** "Dùng 1.250 điểm — giảm 12.500đ" (số điểm có dấu nghìn như mọi màn khác). */
 export function pointsUseLabel(points: number, discount: string): string {

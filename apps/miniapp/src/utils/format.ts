@@ -6,12 +6,24 @@
  */
 export function formatNumber(n: number | null | undefined): string {
   const v = Number(n ?? 0);
-  return (Number.isFinite(v) ? v : 0).toLocaleString('vi-VN');
+  // `+ 0` đổi -0 thành 0 (toLocaleString in "-0").
+  return ((Number.isFinite(v) ? v : 0) + 0).toLocaleString('vi-VN');
 }
 
-/** Định dạng VND: 289000 → "289.000đ". */
-export function formatVnd(amount: number): string {
-  return `${formatNumber(amount)}đ`;
+/** Chữ hiện thay cho giá/số tiền không có: "0đ" nghĩa là miễn phí, không được dùng để che giá thiếu. */
+export const MISSING_AMOUNT = '—';
+
+/** Số tiền hợp lệ, hoặc null khi thiếu (null/undefined/chuỗi rỗng/NaN/vô cực/chuỗi không phải số). */
+function toAmount(v: number | string | null | undefined): number | null {
+  if (v == null || (typeof v === 'string' && v.trim() === '')) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Định dạng VND: 289000 → "289.000đ". 0 là giá hợp lệ ("0đ"); giá thiếu → "—", KHÔNG phải "0đ". */
+export function formatVnd(amount: number | string | null | undefined): string {
+  const v = toAmount(amount);
+  return v === null ? MISSING_AMOUNT : `${formatNumber(v)}đ`;
 }
 
 /** Giọt nước 💧 của Vườn Xanh: 1250 → "1.250💧". */
@@ -92,8 +104,9 @@ export function formatPoints(n: number | null | undefined): string {
  * Số lẻ không tròn nghìn thì trả về dạng đầy đủ để không nói sai con số.
  */
 export function formatVndShort(amount: number | null | undefined): string {
-  const v = Number(amount ?? 0);
-  if (!Number.isFinite(v) || v <= 0) return '0đ';
+  const v = toAmount(amount);
+  if (v === null) return MISSING_AMOUNT;
+  if (v <= 0) return '0đ';
   const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
   if (v >= 1_000_000 && v % 100_000 === 0) return `${trim(v / 1_000_000)}tr`;
   if (v >= 1_000 && v % 1_000 === 0) return `${Math.round(v / 1_000)}k`;

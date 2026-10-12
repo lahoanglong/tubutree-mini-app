@@ -12,7 +12,7 @@ import { getAddresses } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { formatVnd } from '../utils/format';
+import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Badge, type BadgeTone } from './ui/badge';
@@ -215,7 +215,7 @@ function SubscriptionCard({
       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 10 }}>
         {s.status === 'ACTIVE'
           ? s.nextRunAt
-            ? vi.subscriptions.nextRun(new Date(s.nextRunAt).toLocaleDateString('vi-VN'))
+            ? vi.subscriptions.nextRun(formatDate(s.nextRunAt))
             : vi.subscriptions.scheduling
           : vi.subscriptions.pausedLine}
       </Text>

@@ -25,6 +25,7 @@ import { useSearchState } from '../hooks/use-search-state';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../utils/recent-searches';
+import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
   CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseRoot, toCatalogQuery, type FilterDraft,
@@ -82,7 +83,7 @@ export default function BrowsePage() {
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
   });
   const firstPage = products.data?.pages[0];
-  const list = products.data?.pages.flatMap((pg) => pg.data) ?? [];
+  const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
 
   // `search_performed` (quy tắc ở utils/search-tracking): mỗi khoá tìm ghi một lần. Trang Browse bị gỡ khi mở
   // PDP và mount lại khi Back với trang 1 còn trong cache — đó KHÔNG phải lượt tìm mới. Mở mới bằng PUSH
@@ -111,6 +112,11 @@ export default function BrowsePage() {
   const stopEditing = () => {
     setEditing(false);
     inputRef.current?.blur();
+  };
+  // Xong việc với ô tìm mà không gửi gì (chạm chip, "Hủy"): trả ô về `q` đang lọc, không để ô trống/dở dang trong khi lưới vẫn là kết quả của `q`.
+  const leaveSearchField = () => {
+    stopEditing();
+    setDraft(state.q);
   };
   const commit = (term: string) => {
     const t = term.trim();
@@ -165,10 +171,7 @@ export default function BrowsePage() {
         {editing ? (
           <Button
             variant="ghost"
-            onPress={() => {
-              stopEditing();
-              setDraft(state.q);
-            }}
+            onPress={leaveSearchField}
             style={{ minWidth: 0, padding: '0 8px' }}
           >
             {vi.common.cancel}
@@ -208,7 +211,7 @@ export default function BrowsePage() {
             value={state.sort}
             onChange={(sort) => {
               // Chip chỉ hiện khi KHÔNG có gợi ý (ô trống, chưa có lịch sử): chạm chip là xong việc với ô tìm, không để "Hủy" kẹt thay giỏ.
-              stopEditing();
+              leaveSearchField();
               update({ sort });
             }}
           />
@@ -219,7 +222,10 @@ export default function BrowsePage() {
             filterCount={activeFilterCount(state)}
             filtersIgnored={firstPage?.filtersIgnored ?? false}
             onOpenFilters={() => setFiltersOpen(true)}
-            onPatch={update}
+            onPatch={(patch) => {
+              leaveSearchField();
+              update(patch);
+            }}
           />
           <div style={{ padding: '0 16px 24px' }}>
             {products.isLoading ? (

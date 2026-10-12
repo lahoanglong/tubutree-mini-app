@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { saveRecentCustomer, loadRecentCustomers } from './recent-customers';
@@ -252,5 +252,38 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
     fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
     await waitFor(() => expect(mocks.suggestProducts).toHaveBeenCalledTimes(2));
+  });
+});
+
+// /search/suggest trả [] cho từ khoá chưa đủ 2 ký tự (sau khi gấp dấu): gọi từ 1 ký tự chỉ cho ra "Không tìm thấy" sai.
+describe('CtvOrderSheet — ô tìm sản phẩm chỉ gợi ý từ 2 ký tự', () => {
+  const HINT = 'Nhập ít nhất 2 ký tự';
+  const searchBox = () => screen.getByPlaceholderText('Tìm sản phẩm để thêm…');
+  const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.suggestProducts.mockResolvedValue([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]);
+  });
+
+  it('1 ký tự → không gọi API, báo "Nhập ít nhất 2 ký tự" thay cho "Không tìm thấy"', async () => {
+    renderSheet();
+    fireEvent.change(searchBox(), { target: { value: 'n' } });
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    await wait(450);
+    expect(mocks.suggestProducts).not.toHaveBeenCalled();
+    expect(screen.queryByText('Không tìm thấy sản phẩm phù hợp')).toBeNull();
+  });
+
+  it('gõ tới 2 ký tự → gọi API, câu báo biến mất; xoá về 1 ký tự → gợi ý ẩn ngay', async () => {
+    renderSheet();
+    fireEvent.change(searchBox(), { target: { value: 'nư' } });
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(mocks.suggestProducts).toHaveBeenCalledWith('nư');
+    expect(screen.queryByText(HINT)).toBeNull();
+    fireEvent.change(searchBox(), { target: { value: 'n' } });
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+    expect(screen.queryByText('Nước rửa chén')).toBeNull();
   });
 });

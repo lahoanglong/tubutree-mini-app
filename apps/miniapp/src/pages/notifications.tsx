@@ -19,7 +19,7 @@ import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
-import { formatDateTime } from '../utils/format';
+import { formatDate, formatDateTime } from '../utils/format';
 import { Button as DsButton } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
@@ -133,7 +133,7 @@ function relativeTime(iso: string): string {
   if (hr < 24) return `${hr} giờ trước`;
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day} ngày trước`;
-  return new Date(iso).toLocaleDateString('vi-VN');
+  return formatDate(iso);
 }
 
 export default function NotificationsPage() {

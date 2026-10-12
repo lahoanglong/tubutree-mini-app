@@ -224,6 +224,99 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull();
   });
 
+  describe('tải lại nền khi đang lỗi (React Query v5 đưa query lỗi về pending): khối không chớp khung chờ', () => {
+    const deferred = () => {
+      let resolve: (v: unknown) => void = () => {};
+      const promise = new Promise((r) => { resolve = r; });
+      return { promise, resolve };
+    };
+
+    it('"Bán chạy" đang lỗi rồi tải lại: giữ khối lỗi (nút báo đang tải), KHÔNG đổi sang khung chờ; xong mới hiện SP', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      const second = deferred();
+      let call = 0;
+      mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+        if (params.sort !== 'best_seller') return PAGE([card('f2', 'Chỉ nổi bật')]);
+        call += 1;
+        if (call === 1) throw new Error('boom');
+        await second.promise;
+        return PAGE([card('bs', 'Bán chạy nhất')]);
+      });
+      const { qc } = renderHome();
+      await waitFor(() => expect(qc.getQueryState(['products', 'home-best-seller'])?.status).toBe('error'));
+      await screen.findByRole('button', { name: 'Thử lại Bán chạy' });
+
+      let refetching: Promise<unknown> = Promise.resolve();
+      act(() => {
+        refetching = qc.refetchQueries({ queryKey: ['products', 'home-best-seller'] });
+      });
+      await waitFor(() => expect(call).toBe(2));
+      const best = screen.getByRole('region', { name: 'Bán chạy' });
+      expect(within(best).queryByTestId('catalog-grid-skeleton')).toBeNull();
+      expect(within(best).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+      expect(within(best).getByRole('button', { name: 'Thử lại Bán chạy' })).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        second.resolve(null);
+        await refetching;
+      });
+      await waitFor(() => expect(within(screen.getByRole('region', { name: 'Bán chạy' })).getByText('Bán chạy nhất')).toBeInTheDocument());
+    });
+
+    it('"Dành cho bạn" thử lại sau lỗi: "Tubu chọn cho bạn" đang hiện SP không bị đẩy về khung chờ', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+      const second = deferred();
+      mocks.fetchForYou.mockRejectedValueOnce(new Error('boom')).mockImplementationOnce(async () => {
+        await second.promise;
+        return [card('f1', 'Trùng gợi ý')];
+      });
+      const { qc } = renderHome();
+      await waitFor(() => expect(qc.getQueryState(['for-you'])?.status).toBe('error'));
+      const featured = await screen.findByRole('region', { name: 'Tubu chọn cho bạn' });
+      expect(await within(featured).findByText('Chỉ nổi bật')).toBeInTheDocument();
+
+      let refetching: Promise<unknown> = Promise.resolve();
+      act(() => {
+        refetching = qc.refetchQueries({ queryKey: ['for-you'] });
+      });
+      await waitFor(() => expect(mocks.fetchForYou).toHaveBeenCalledTimes(2));
+      const during = screen.getByRole('region', { name: 'Tubu chọn cho bạn' });
+      expect(within(during).queryByTestId('catalog-grid-skeleton')).toBeNull();
+      expect(within(during).getByText('Chỉ nổi bật')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Dành cho bạn' })).getByRole('button', { name: 'Thử lại Dành cho bạn' })).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        second.resolve(null);
+        await refetching;
+      });
+      await waitFor(() => expect(within(screen.getByRole('region', { name: 'Dành cho bạn' })).getByText('Trùng gợi ý')).toBeInTheDocument());
+    });
+
+    it('kệ "Mua lại" đang lỗi rồi tải lại: khối lỗi ở lại (nút báo đang tải), không nhường chỗ cho kệ/khung chờ', async () => {
+      const second = deferred();
+      mocks.fetchPurchasedItems.mockRejectedValueOnce(new Error('boom')).mockImplementationOnce(async () => {
+        await second.promise;
+        return { items: [], nextCursor: null };
+      });
+      const { qc } = renderHome();
+      await waitFor(() => expect(qc.getQueryState(['purchased-items', 10])?.status).toBe('error'));
+      await screen.findByRole('button', { name: 'Thử lại Mua lại' });
+
+      let refetching: Promise<unknown> = Promise.resolve();
+      act(() => {
+        refetching = qc.refetchQueries({ queryKey: ['purchased-items', 10] });
+      });
+      await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole('button', { name: 'Thử lại Mua lại' })).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        second.resolve(null);
+        await refetching;
+      });
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull());
+    });
+  });
+
   it('khung chờ mỗi khối có đúng 6 ô (bằng giới hạn thật) khi đang tải', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
     mocks.fetchProducts.mockReturnValue(new Promise(() => {}));
