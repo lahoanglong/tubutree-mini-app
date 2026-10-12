@@ -42,15 +42,16 @@ function scanUnnamedControls(source: string): Usage[] {
   for (let m = re.exec(text); m; m = re.exec(text)) {
     const tag = openingTag(text, m.index + m[0].length);
     if (!tag) continue;
+    const name = m[1]!;
     const line = text.slice(0, m.index).split('\n').length;
     // Chuỗi trong props có thể chứa "id=" ("... id=..."): chỉ xét phần ngoài chuỗi và ngoài {}.
     const top = tag.props.replace(/"[^"]*"|'[^']*'/g, '""').replace(/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/g, '{}');
-    const named = !tag.selfClosing || NAME_PROPS.test(' ' + top.replace(/=\{\}/g, '=X'));
-    if (named) { out.push({ tag: m[1], line, verdict: 'named' }); continue; }
-    if (/\{\.\.\./.test(tag.props)) { out.push({ tag: m[1], line, verdict: 'spread' }); continue; }
-    if (NOOP_ONCHANGE.test(' ' + tag.props)) { out.push({ tag: m[1], line, verdict: 'ok' }); continue; }
+    const named = !tag.selfClosing || NAME_PROPS.test(' ' + top);
+    if (named) { out.push({ tag: name, line, verdict: 'named' }); continue; }
+    if (/\{\.\.\./.test(tag.props)) { out.push({ tag: name, line, verdict: 'spread' }); continue; }
+    if (NOOP_ONCHANGE.test(' ' + tag.props)) { out.push({ tag: name, line, verdict: 'ok' }); continue; }
     const before = text.slice(Math.max(0, m.index - 400), m.index);
-    out.push({ tag: m[1], line, verdict: /<Field\b[^>]*>\s*$/.test(before) ? 'in-field' : 'bad' });
+    out.push({ tag: name, line, verdict: /<Field\b[^>]*>\s*$/.test(before) ? 'in-field' : 'bad' });
   }
   return out;
 }

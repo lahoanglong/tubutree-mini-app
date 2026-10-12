@@ -191,8 +191,8 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
 // đã cho; ý "phụ" được giữ bằng cỡ chữ xSmall không đậm dưới tiêu đề trạng thái.
 const TOKENS = readFileSync(join(process.cwd(), '../../packages/design-tokens/src/tokens.css'), 'utf8');
 function resolveToken(ref: string): string {
-  const name = ref.match(/^var\((--[\w-]+)\)$/)![1];
-  const value = TOKENS.match(new RegExp(`${name}:\\s*([^;]+);`))![1].trim();
+  const name = ref.match(/^var\((--[\w-]+)\)$/)![1]!;
+  const value = TOKENS.match(new RegExp(`${name}:\\s*([^;]+);`))![1]!.trim();
   return value.startsWith('var(') ? resolveToken(value) : value;
 }
 function luminance(hex: string): number {
