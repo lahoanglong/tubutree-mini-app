@@ -218,7 +218,9 @@ export default function OrderDetailPage() {
 
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>
-        <Text size="xSmall" style={{ color: color.fg, opacity: 0.8 }}>
+        {/* Không dùng opacity để làm dòng phụ: nó kéo cặp màu trạng thái xuống dưới 4,5:1 (chờ thanh toán 3,84).
+            Thứ bậc đã có từ cỡ xSmall dưới tiêu đề đậm. */}
+        <Text size="xSmall" style={{ color: color.fg }}>
           {formatDateTime(o.createdAt)}
         </Text>
         <Text.Title size="small" style={{ color: color.fg }}>
