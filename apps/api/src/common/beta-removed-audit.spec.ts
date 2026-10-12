@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
 
 /**
  * Trang /beta của miniapp bị xoá (PD-1) và 4 route /beta/* của API bị gỡ (PE-2), nên bộ script audit/uiux
@@ -21,11 +22,11 @@ const UIUX_DIR = join(REPO, 'scripts/uiux');
  */
 const SKIPPED_DIRS = new Set(['node_modules', 'results', '.probe', 'generated']);
 
-function walk(dir: string, out: string[] = []): string[] {
+function walk(dir: string, out: string[] = [], skipped: ReadonlySet<string> = SKIPPED_DIRS): string[] {
   for (const name of readdirSync(dir)) {
-    if (SKIPPED_DIRS.has(name)) continue;
+    if (skipped.has(name)) continue;
     const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
+    if (statSync(p).isDirectory()) walk(p, out, skipped);
     else out.push(p);
   }
   return out;
@@ -113,9 +114,52 @@ describe('bộ quét beta bắt đúng các dạng viết (test của chính spe
 });
 
 describe('thư mục sinh ra bị bỏ qua khi quét (PF-3)', () => {
-  it('walk bỏ results, .probe, generated, node_modules ở mọi cấp', () => {
-    const scanned = files.map(rel);
-    expect(scanned.filter((f) => /(^|\/)(results|\.probe|generated|node_modules)(\/|$)/.test(f))).toEqual([]);
+  // Quét thư mục thật không chứng minh được gì: results/.probe không có trên bản checkout sạch nên danh sách file rỗng các
+  // thư mục đó dù walk có bỏ qua hay không. Dựng thư mục tạm có đủ các thư mục sinh ra, file nào cũng nhắc /beta.
+  let root: string;
+  const put = (name: string) => {
+    mkdirSync(join(root, dirname(name)), { recursive: true });
+    writeFileSync(join(root, name), "await page.goto('/beta');\n");
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), 'beta-audit-walk-'));
+    for (const name of [
+      'keep.mjs',
+      'nested/deep/keep.json',
+      'results/run.json',
+      '.probe/shot.txt',
+      'generated/endpoints.ts',
+      'node_modules/pkg/index.js',
+      'nested/results/run.json',
+      'nested/deep/.probe/log.txt',
+      'nested/generated/api.ts',
+      'nested/node_modules/pkg/index.js',
+    ]) {
+      put(name);
+    }
+  });
+
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  const scanned = (skipped?: ReadonlySet<string>) =>
+    walk(root, [], skipped)
+      .map((f) => relative(root, f))
+      .sort();
+
+  it('walk bỏ results, .probe, generated, node_modules ở mọi cấp và vẫn đọc file nguồn', () => {
+    expect(scanned()).toEqual(['keep.mjs', 'nested/deep/keep.json']);
+  });
+
+  it('SKIPPED_DIRS đúng là bốn thư mục đó (bỏ bớt một tên thì walk quét lại thư mục sinh ra)', () => {
+    expect([...SKIPPED_DIRS].sort()).toEqual(['.probe', 'generated', 'node_modules', 'results']);
+    expect(scanned(new Set(['node_modules', '.probe', 'generated'])).some((f) => f.startsWith('results/'))).toBe(true);
+    expect(scanned(new Set()).length).toBe(10);
+  });
+
+  it('file trong thư mục sinh ra có nhắc /beta thì không bị tính là vi phạm của script', () => {
+    const offenders = walk(root).filter((f) => /['"`]\/beta(?![\w-])/.test(readFileSync(f, 'utf-8')));
+    expect(offenders.map((f) => relative(root, f)).sort()).toEqual(['keep.mjs', 'nested/deep/keep.json']);
   });
 });
 
