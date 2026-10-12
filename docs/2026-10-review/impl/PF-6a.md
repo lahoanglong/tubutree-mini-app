@@ -2,7 +2,7 @@
 
 Nhánh `hz18/PF-6a`, base `63cfb5d6`. Chỉ đụng `apps/api` (loyalty, game, checkout, system-config, hai race spec mới và hai dòng mock ở hai race spec cũ) và file này. Không sửa `apps/miniapp`, `apps/web`, `packages/**`, `schema.prisma`, migration. Không push, không deploy, không ghi DB dùng chung (Postgres throwaway cổng 5801, container `pf6a-pg`, `--tmpfs`, đã xoá khi xong).
 
-Commit: `81b0d1e4` (mục 1), `9140b455` (mục 1b, thêm ngoài danh sách, xem dưới), `60c23064` (mục 2), và commit báo cáo này.
+Commit: `81b0d1e4` (mục 1), `9140b455` (mục 1b, thêm ngoài danh sách, xem dưới), `60c23064` (mục 2), và commit báo cáo; sau review độc lập thêm `2fbbb0f1` và `16a0df8a` (xem mục "Sau review" ở cuối).
 
 ## Mục 1: lockedOrderPoints đọc cấu hình trong transaction
 
@@ -39,7 +39,7 @@ Sửa hai lớp, dùng chung `spinPrizeProblem` (file mới `system-config/spin-
 
 Test: unit `spin-prizes.spec.ts` (hàm kiểm, luật ghi, bảng seed), unit `spin` trong `game.service.spec.ts` (giải âm là giải đầu và trọng số lớn nhất với `Math.random = 0` không bao giờ được chọn, chỉ có dòng phí quay, chỉ còn giải hỏng thì không mở tx, log một lần, cấu hình hợp lệ không đổi phân phối), race spec `pf6-spin-prize-guard.race-spec.ts` trên Postgres thật (ghi bảng âm bị từ chối và DB không đổi kể cả lịch sử cấu hình, bảng âm ghi thẳng vào DB thì ba lượt quay song song chỉ trừ phí, bảng chỉ có giải hỏng, giải dương vẫn cộng điểm có hạn). Phép đỏ: đảo bản vá mã nguồn rồi chạy lại, 3/5 ca đỏ (ghi được bảng âm; giải âm trừ hết số dư nên lượt quay sau bị từ chối vì thiếu điểm; chỉ có giải hỏng thì quay vẫn chạy thay vì báo "chưa cấu hình"), xanh 5/5 sau sửa.
 
-## Lệnh kiểm và kết quả thật (cây cuối cùng, trong `apps/api`)
+## Lệnh kiểm và kết quả thật (trước review; kết quả sau review ở mục "Sau review")
 
 - `npx tsc --noEmit -p tsconfig.json`: exit 0.
 - `git diff --name-only 63cfb5d6 HEAD -- . | ... | xargs npx eslint --max-warnings=0` (13 file `.ts` đã sửa, gồm race spec): exit 0. ESLint `tubu-ds` thuộc `apps/miniapp`, gói này không sửa file nào ở đó.
@@ -58,5 +58,43 @@ Test: unit `spin-prizes.spec.ts` (hàm kiểm, luật ghi, bảng seed), unit `s
 - `windowDays` truyền vào `lockedOrderPoints` không được kiểm lại bên trong; caller phải lấy từ `returnWindowDays()` (đã ép số hữu hạn ≥ 0, mặc định 7). Caller ngoài tx nên để trống.
 - Giá trị cửa sổ trong tx có thể cũ tới 60 giây so với lần admin vừa đổi cấu hình (như mọi lần đọc qua cache), không khác trước đây.
 - `creditPoints` nhánh âm còn đó. Sau hai lớp chặn, đường tới nó chỉ còn là sửa tay bảng `missions` trong DB. Nếu điều phối viên muốn, bước tiếp là xoá nhánh và ném lỗi khi `delta < 0`; chưa làm vì `claimMission` còn cho `delta = 0` (nhiệm vụ chỉ thưởng coupon) đi qua nhánh cộng và ghi một dòng sổ delta 0 không có `expiresAt` (hành vi có từ trước, `points-expiry-guard` xếp vào nhóm delta ≤ 0), nên đổi đó cần quyết định riêng.
-- Giải POINTS của vòng quay chưa có trần trên (khác các khoá điểm trong `RANGES`, chặn nhầm đơn vị xu). Luật mới chỉ chặn âm, không nguyên, không hữu hạn. Thêm trần là quyết định giá trị, chưa làm.
+- Giải POINTS của vòng quay chưa có trần nghiệp vụ (khác các khoá điểm trong `RANGES`, chặn nhầm đơn vị xu). Luật chỉ chặn âm, không nguyên, không hữu hạn và (sau review) vượt cột Int. Thêm trần là quyết định giá trị, chưa làm; xem "Sau review".
 - Ngoài nhóm file, chưa sửa: `apps/api/src/modules/admin/admin-config-rules.ts` không có luật cho `game.spin_prizes` (không cần vì chặn nằm ở `SystemConfigService.set`), và `docs/2026-10-review/impl/PF-5a.md` mục "Rủi ro" còn ghi hai nợ này; sau gói này cả hai đã đóng.
+
+## Sau review
+
+Review độc lập đưa ba finding mức minor, không có blocker hay major. Mỗi finding đã đối chiếu với mã và với Postgres thật trước khi sửa.
+
+### Finding 1: giải POINTS không có trần trên (spin-prizes.ts)
+
+Xác minh: đúng, `spinPrizeProblem` nhận POINTS value 1e9 (nằm dưới trần Int) và mỗi lượt trúng cộng 1e9 Điểm Xanh. Không sửa phần này, ghi nợ cho chủ dự án. Lý do không tự chọn một con số: (1) trần là quyết định giá trị, các khoá điểm khác trong `RANGES` mỗi khoá một trần (seasonpass 100, mốc giới thiệu 500, phí quay 1000) nên không có hằng số nào hiển nhiên dùng lại; (2) bộ lọc lúc đọc của `GameService.spin` bỏ lặng lẽ giải vượt trần, nên chọn trần thấp hơn giải mà admin đang chạy thật sẽ làm giải đó biến mất khỏi vòng quay mà không có lỗi nào ở chỗ ghi. Khi có con số: thêm `p.value <= MAX` vào nhánh POINTS của `spinPrizeProblem` và hai test (giá trị sát trần qua, trần + 1 bị chặn), việc nhỏ.
+
+Phần kỹ thuật của cùng finding đã làm ở finding 2: value của mọi loại giải, kể cả POINTS, không được vượt 2147483647 (cột Int).
+
+### Finding 2: giải SEEDS/COUPON/NONE có value lẻ (spin-prizes.ts)
+
+Xác minh: đúng một phần. Mô tả cơ chế của review ("Prisma báo lỗi, khách nhận 500") không đúng với số lẻ. Thử trên Postgres thật: `gameSpin.create` với `prizeValue` 2.5, 20000.5, 0.5 đều thành công và Prisma cắt phần lẻ (lưu 2, 20000, 0); spin giải SEEDS 2.5 chạy xong, trả về `value: 2.5` cho khách, cộng 2 giọt vào `totalSeeds`; giải COUPON 20000.5 tạo Mã giảm giá 20000. Không có 500, không mất điểm; lỗi thật là lệch giữa số hiển thị và số nhận.
+
+Lỗi 500 thật nằm ở value vượt cột Int, mà review cũng nhắc (COUPON 1e12 qua luật): giải COUPON hoặc SEEDS value 3e9 làm `coupon.create` / `gameProfile.update` ném `Unable to fit integer value into an INT4`, tx rollback (số dư giữ nguyên) nhưng mọi lượt quay trúng giải đó đều lỗi 500, và bảng chỉ có giải đó thì `spin` không trả "Vòng quay chưa cấu hình." mà lỗi Prisma.
+
+Sửa (`2fbbb0f1`): `spinPrizeProblem` yêu cầu value mọi loại là số nguyên trong [0, 2147483647] (POINTS vẫn từ 1), một hằng `INT4_MAX` và hàm `isDbInt`. Dùng chung cho luật ghi cấu hình và bộ lọc lúc quay, nên bảng đã lưu có giải lẻ hoặc vượt Int bị bỏ khỏi vòng quay với log một lần cho mỗi giải. Giải lẻ đang chạy thật trong cấu hình sẽ biến mất khỏi vòng quay, đúng ý (trước đó khách nhận phần đã cắt lẻ so với số hiển thị).
+
+Test: unit `spin-prizes.spec.ts` (7 ca đỏ trước sửa: lẻ cho SEEDS/COUPON/NONE, vượt Int cho cả bốn loại; thêm ca biên 2^31-1 hợp lệ và weight lẻ vẫn hợp lệ), unit `spin()` (ba giải hỏng không bao giờ được chọn với `Math.random = 0`, 3 ca đỏ), race spec `pf6-spin-prize-guard` trên Postgres thật (5 ca đỏ trước sửa: giải COUPON/SEEDS vượt Int làm quay lỗi Prisma, giải SEEDS lẻ được chọn, bảng chỉ có giải vượt Int ném lỗi Prisma thay vì "chưa cấu hình", ghi bảng lẻ/vượt Int qua `set` được; xanh sau sửa).
+
+### Finding 3: quy tắc windowDays chỉ nằm ở comment (loyalty.service.ts)
+
+Xác minh: đúng. Đã grep cả repo: đúng bốn caller trong tx (`redeemReward`, `placeOrderInner`, `spin`, `buyTree`) truyền `windowDays`, ba caller ngoài tx không truyền; nhưng chữ ký cũ cho phép `lockedOrderPoints(userId, now, tx)` biên dịch.
+
+Sửa (`16a0df8a`): chọn gate bằng kiểu thay vì assert lúc chạy. Hai overload: `(userId, now)` cho caller ngoài tx và `(userId, now, db, windowDays: number)` cho caller trong tx; truyền `db` mà thiếu hoặc để `undefined` là lỗi `tsc`. Không thêm assert lúc chạy vì `this.prisma` và `tx` cùng thoả kiểu `Pick<TransactionClient, '$queryRaw'>` nên so sánh `db !== this.prisma` chỉ đúng khi LoyaltyService được tạo cùng instance với caller (khó đảm bảo trong test mock), trong khi overload không phụ thuộc điều đó. Hành vi chạy không đổi.
+
+Gate lập tức bắt thêm một chỗ: `CheckoutService.placeOrderInner` có `windowDays` kiểu `number | undefined`. Đổi thành `number | null` và nhánh trừ điểm trong tx chạy khi `windowDays !== null`, tương đương `usedStandard > 0` như trước (cả hai chỉ khác null/dương cùng lúc). Test checkout PF-6a đã có (đọc trước `$transaction`, không đọc khi chỉ tiêu lô quy đổi) vẫn xanh.
+
+Test: hai dòng `@ts-expect-error` trong `loyalty-locked-window.spec.ts`. Kiểm bằng script `typecheck` (`tsc --noEmit`, tsconfig của api gồm cả file spec trong `src`). Đỏ trước khi thêm overload (`TS2578: Unused '@ts-expect-error' directive`, 2 lỗi), xanh sau. Giới hạn: jest không kiểm các dòng này (chạy qua hàm không gọi), gate nằm ở `tsc`; ba test cũ của `lockedOrderPoints` đổi từ `undefined` sang truyền `prisma` tường minh để theo overload.
+
+### Lệnh kiểm sau review (cây cuối cùng, trong `apps/api`)
+
+- `npx tsc --noEmit -p tsconfig.json`: exit 0.
+- ESLint `--max-warnings=0` trên 13 file `.ts` đã sửa của gói (`git diff --name-only 63cfb5d6 HEAD`): exit 0.
+- `npx jest src/modules/loyalty src/modules/game src/modules/checkout src/modules/system-config`: 32 suite, 795 test xanh (trước review 783).
+- `DATABASE_URL=postgresql://tubu:tubu@localhost:5801/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand pf5-spin pd3- pf3- game- loyalty pe3- pe5- sellable-product wallet-ledger-flows pf6- system-config`: exit 0, 24 suite, 239 test xanh (trước review 234).
+- Không chạy Playwright, capture/axe, full suite. Postgres throwaway `pf6a-pg` cổng 5801 đã xoá khi xong.
