@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
 import {
   MAX_SUBSCRIPTION_QUANTITY,
@@ -32,8 +33,8 @@ export class SubscriptionsController {
   constructor(private readonly subs: SubscriptionsService) {}
 
   @Get()
-  list(@CurrentUser('sub') userId: string, @Query('take') take?: string, @Query('cursor') cursor?: string) {
-    return this.subs.list(userId, { take: clampTake(take, 100, 200), cursor: cursor || undefined });
+  list(@CurrentUser('sub') userId: string, @Query() query: CursorPageQuery) {
+    return this.subs.list(userId, { take: clampTake(query.take, 100, 200), cursor: query.cursor });
   }
 
   @Post()
