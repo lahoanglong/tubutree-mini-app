@@ -67,7 +67,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(
-      'Trà xanh ngon lắm, mua đi https://app.tubutree.com/product/tra-xanh?ref=ABC123',
+      'Trà xanh ngon lắm, mua đi https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123',
     );
   });
 
@@ -80,7 +80,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/product/tra-xanh?ref=ABC123');
+    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123');
   });
 
   it('nút Sao chép liên kết cũng chép liên kết tuyệt đối khi API trả đường dẫn tương đối', async () => {
@@ -91,7 +91,51 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/product/tra-xanh?ref=ABC123');
+    // Đường dẫn tương đối (app.miniapp_base_url trống) đi tới domain WEB, nơi trang sản phẩm là /san-pham/<slug>
+    // (route /product/<slug> của web chỉ là redirect 307 cho link đã chia sẻ trước đây).
+    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123');
+  });
+
+  it('nút Chia sẻ Zalo giữ `path` là đường dẫn trong Mini App (/product/<slug>), không phải đường web', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [], captions: [],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/product/tra-xanh?ref=ABC123' }));
+  });
+
+  it('{link} trong bài mẫu do API chèn là đường dẫn tương đối: bài mẫu hiện và chép với link web tuyệt đối, giữ mã ref', async () => {
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [],
+      captions: ['Mua ngay /product/tra-xanh?ref=ABC123 nhé', 'Bài không có link'],
+      shareLink: '/product/tra-xanh?ref=ABC123',
+    });
+    renderKit();
+    const caption = await screen.findByRole('button', { name: /Mua ngay/ });
+    expect(caption).toHaveTextContent('Mua ngay https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123 nhé');
+    fireEvent.click(caption);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('Mua ngay https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123 nhé');
+    fireEvent.click(screen.getByRole('button', { name: 'Bài không có link' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenLastCalledWith('Bài không có link'));
+  });
+
+  it('API trả URL tuyệt đối (app.miniapp_base_url trỏ Mini App): giữ nguyên /product/<slug> của Mini App, không đổi sang đường web', async () => {
+    const miniappLink = 'https://zalo.me/s/123/product/tra-xanh?ref=ABC123';
+    mocks.fetchContentKit.mockResolvedValue({
+      productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [],
+      captions: [`Mua ngay ${miniappLink}`],
+      shareLink: miniappLink,
+    });
+    renderKit();
+    fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(miniappLink));
+    fireEvent.click(await screen.findByRole('button', { name: /Mua ngay/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenLastCalledWith(`Mua ngay ${miniappLink}`));
   });
 
   it('tiêu đề sheet là h2 thật, có nút Đóng gọi onClose', async () => {
