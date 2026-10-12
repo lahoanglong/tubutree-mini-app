@@ -1,21 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PayrollService } from './payroll.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { AdjustDto, FinalizeDto, MarkPaidDto, SetRateDto } from './payroll.dto';
+import { RecomputePayrollQuery, YearMonthQuery } from '../dto/staff-query.dto';
+import { parseYearMonth } from '../date-range';
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function parseYearMonth(year: string, month: string): { y: number; m: number } {
-  const y = Number(year);
-  const m = Number(month);
-  if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
-    throw new BadRequestException('Thiếu hoặc sai year/month.');
-  }
-  return { y, m };
-}
 
 @ApiTags('admin-payroll')
 @Roles('ADMIN')
@@ -27,15 +20,15 @@ export class AdminPayrollController {
   ) {}
 
   @Get('payroll')
-  month(@Query('year') year: string, @Query('month') month: string) {
-    const { y, m } = parseYearMonth(year, month);
+  month(@Query() query: YearMonthQuery) {
+    const { y, m } = parseYearMonth(query.year, query.month);
     return this.payroll.adminMonth(y, m);
   }
 
   /** Chi tiết 1 NV trong tháng: giờ theo ngày + lịch sử phiên (để QL rà & sửa trước khi duyệt). */
   @Get('payroll/:staffId/detail')
-  async detail(@Param('staffId') staffId: string, @Query('year') year: string, @Query('month') month: string) {
-    const { y, m } = parseYearMonth(year, month);
+  async detail(@Param('staffId') staffId: string, @Query() query: YearMonthQuery) {
+    const { y, m } = parseYearMonth(query.year, query.month);
     const base = await this.payroll.getMyPayroll(staffId, y, m);
     // Biên tháng theo giờ VN quy đổi sang UTC — attendance.history() lọc theo checkinAt (mốc
     // thời gian thật), khác với workDate (@db.Date, đã là date-key VN) dùng cho payroll ngày/tháng.
@@ -57,14 +50,9 @@ export class AdminPayrollController {
    * giá không được âm thầm tính lại công đã làm xong (xem PayrollService.recomputeDay).
    */
   @Post('payroll/:staffId/recompute')
-  recompute(
-    @Param('staffId') staffId: string,
-    @Query('year') year: string,
-    @Query('month') month: string,
-    @Query('reprice') reprice?: string,
-  ) {
-    const { y, m } = parseYearMonth(year, month);
-    return this.payroll.recomputeStaffMonth(staffId, y, m, { reprice: reprice === '1' || reprice === 'true' });
+  recompute(@Param('staffId') staffId: string, @Query() query: RecomputePayrollQuery) {
+    const { y, m } = parseYearMonth(query.year, query.month);
+    return this.payroll.recomputeStaffMonth(staffId, y, m, { reprice: query.reprice === '1' || query.reprice === 'true' });
   }
 
   /** Mở lại tháng đã chốt/đã trả để sửa — trước đây FINALIZED là ngõ cụt, không có đường về. */
@@ -72,10 +60,9 @@ export class AdminPayrollController {
   reopen(
     @CurrentUser('sub') adminId: string,
     @Param('staffId') staffId: string,
-    @Query('year') year: string,
-    @Query('month') month: string,
+    @Query() query: YearMonthQuery,
   ) {
-    const { y, m } = parseYearMonth(year, month);
+    const { y, m } = parseYearMonth(query.year, query.month);
     return this.payroll.reopen(staffId, y, m, adminId);
   }
 
