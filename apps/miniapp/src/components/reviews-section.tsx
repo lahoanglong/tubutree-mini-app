@@ -268,9 +268,6 @@ export function ReviewsSection({ slug }: { slug: string }) {
   );
 }
 
-// POST /products/:slug/reviews trả nguyên dòng Review (kể cả pointsEarned) kèm `updated`; kiểu của shop-api chưa khai báo cột này.
-type CreatedReview = Awaited<ReturnType<typeof createReview>> & { pointsEarned?: number };
-
 function WriteReview({
   slug,
   draft,
@@ -296,7 +293,7 @@ function WriteReview({
         images: images.length > 0 ? images : undefined,
         videoUrl: video.trim() || undefined,
       }),
-    onSuccess: (res: CreatedReview) => {
+    onSuccess: (res) => {
       haptic('medium');
       // Theo BE chứ không theo chế độ form: đánh giá có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho mỗi
       // (khách, sản phẩm) nên tạo lại sau khi xoá có thể ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.

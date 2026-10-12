@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi, beforeEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 
@@ -6,6 +6,7 @@ import { api } from './api';
 import {
   addToCart,
   catalogParams,
+  createReview,
   fetchActiveOrderCount,
   fetchCatalog,
   fetchCategories,
@@ -120,5 +121,25 @@ describe('shop-api — buy-flow 4b', () => {
     get.mockResolvedValue({ data: [{ id: 'cat-a', parentId: null, name: 'A', slug: 'a', image: null, sortOrder: 1, productCount: 3 }] });
     await expect(fetchCategories()).resolves.toHaveLength(1);
     expect(get).toHaveBeenCalledWith('/categories');
+  });
+});
+
+// PF-6b: POST /products/:slug/reviews trả `{ ...dòng Review, updated }`; pointsEarned là cột của dòng Review nên có thể là 0.
+describe('shop-api — createReview', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('kiểu trả về khai pointsEarned và updated, khớp response thật (kiểm bằng tsc, không cần ép kiểu ở nơi gọi)', () => {
+    type Created = Awaited<ReturnType<typeof createReview>>;
+    expectTypeOf<Created['pointsEarned']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Created['updated']>().toEqualTypeOf<boolean | undefined>();
+  });
+
+  it('gửi POST tới /products/:slug/reviews và trả nguyên dữ liệu, pointsEarned = 0 không bị đổi thành thiếu', async () => {
+    const data = { id: 'r1', rating: 4, comment: null, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', pointsEarned: 0, updated: false };
+    post.mockResolvedValue({ data });
+    const r = await createReview('nuoc-rua-chen', { rating: 4 });
+    expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4 });
+    expect(r.pointsEarned).toBe(0);
+    expect(r.updated).toBe(false);
   });
 });
