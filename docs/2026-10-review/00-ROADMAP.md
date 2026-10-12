@@ -194,3 +194,7 @@ Gói PE-3 cho điểm thưởng vòng quay (`GAME_SPIN_WIN`), nhiệm vụ (`MIS
 - Đợt F đã sửa các bug còn lại có thể sửa bằng mã; danh sách và kết quả kiểm ở `99-release-readiness.md` mục 5c.
 - Hành vi mới cần chủ dự án biết (mặc định coi là duyệt, phản đối thì đổi): xoá đánh giá rồi tạo lại không còn được thưởng điểm lần hai (chặn farm điểm); vòng quay không tiêu được điểm của đơn còn trong cửa sổ đổi trả (giống checkout, đổi quà, góp quỹ cây).
 - Việc còn lại chỉ chủ dự án làm được hoặc hoãn có chủ đích: DNS, quét QR UAT trên Zalo thật (kèm ô chọn ngày gói định kỳ, WebView có hỗ trợ `inert` không), nội dung FAQ/Academy, PA-1 yêu cầu 5 và "Ví trả một phần đơn" sau UAT, dọn worktree/container/volume Docker.
+
+### Cần chủ dự án chọn (sau đợt F4, 2026-10-12): trần giải POINTS của vòng quay
+
+`game.spin_prizes` do admin ghi qua `PUT /admin/config`. Từ PF-6a giải POINTS không còn nhận số âm hay quá Int32, nhưng chưa có trần trên, nên gõ nhầm đơn vị (xu thay vì Điểm Xanh) làm một lượt quay cộng cả triệu điểm. Đề xuất mặc định: trần 100 Điểm Xanh mỗi giải (100.000đ). Chủ dự án chọn số khác thì sửa một hằng số ở `apps/api/src/modules/system-config/spin-prizes.ts`.
