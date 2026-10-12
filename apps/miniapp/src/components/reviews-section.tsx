@@ -272,6 +272,8 @@ export function ReviewsSection({ slug }: { slug: string }) {
 // Biểu mẫu không biết khách đã nhận thưởng sản phẩm này trước đó hay chưa (xoá đánh giá rồi viết lại thì BE cho
 // pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
 const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
+// Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy snackbar không kèm điểm.
+const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.';
 
 function WriteReview({
   slug,
@@ -375,6 +377,11 @@ function WriteReview({
               : images.length > 0
                 ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
                 : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
+        </Text>
+      )}
+      {!isEdit && !showReward && (
+        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
+          {REWARD_ALREADY_GIVEN}
         </Text>
       )}
       <Button fullWidth loading={submit.isPending} onPress={() => submit.mutate()} style={{ marginTop: 16 }}>

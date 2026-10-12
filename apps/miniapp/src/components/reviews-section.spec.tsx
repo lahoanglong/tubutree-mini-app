@@ -401,14 +401,17 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
 
   // PG-4: API báo hết thưởng (đã nhận, hoặc đang sửa) thì không hứa điểm nữa. Thiếu cờ (API cũ) giữ câu cũ.
   describe('cờ rewardAvailable từ can-review', () => {
-    it('rewardAvailable === false: form viết mới không có câu nào nhắc Điểm Xanh, ở cả ba trạng thái chữ/ảnh/video', async () => {
+    it('rewardAvailable === false: form viết mới không hứa +5/+10/+15 mà nói rõ đã nhận thưởng trước đó, ở cả ba trạng thái chữ/ảnh/video', async () => {
       mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: false });
       await openNewForm();
-      expect(screen.queryByText(/Điểm Xanh/)).not.toBeInTheDocument();
+      const noPromise = () => expect(screen.queryByText(/\+\d+ Điểm Xanh|Lần đầu đánh giá/)).not.toBeInTheDocument();
+      noPromise();
+      expect(screen.getByText('Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
-      expect(screen.queryByText(/Điểm Xanh/)).not.toBeInTheDocument();
+      noPromise();
       fireEvent.click(screen.getByRole('button', { name: 'Chọn video thử (0)' }));
-      expect(screen.queryByText(/Điểm Xanh/)).not.toBeInTheDocument();
+      noPromise();
+      expect(screen.getAllByText(/Điểm Xanh/)).toHaveLength(1);
       expect(screen.getByRole('button', { name: 'Gửi đánh giá' })).toBeInTheDocument();
     });
 

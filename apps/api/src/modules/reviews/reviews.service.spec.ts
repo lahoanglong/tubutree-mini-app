@@ -773,6 +773,7 @@ describe('ReviewsService.canReview', () => {
       const prisma = makePrisma({ review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0', rating: 4, comment: null, images: [], videoUrl: null }) } });
       const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
       expect(r.rewardAvailable).toBe(false);
+      expect(prisma.pointsTransaction.findMany).not.toHaveBeenCalled();
     });
 
     it('đọc sổ đúng cặp khách-sản phẩm như luật thưởng (REVIEW:slug, REVIEW_DELETE:id)', async () => {
