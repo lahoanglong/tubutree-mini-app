@@ -29,6 +29,11 @@ describe('OrderCard', () => {
     expect(card).toHaveTextContent('Giao thành công');
   });
 
+  it('ngày tạo đơn hiện dd/MM/yyyy có đệm số 0 (qua formatDate, không phụ thuộc ICU của webview)', () => {
+    render(<OrderCard order={ORDER} onOpen={() => {}} onReorder={() => {}} />);
+    expect(shell()).toHaveTextContent('3 món · 20/09/2026');
+  });
+
   it('nút mở đơn có tên "Đơn <mã>" và mô tả là tóm tắt (món, ngày, tổng) để trình đọc màn hình đọc được', () => {
     render(<OrderCard order={ORDER} onOpen={() => {}} onReorder={() => {}} />);
     expect(openButton()).toHaveAccessibleDescription(/Nước rửa chén \+1.*3 món.*149\.000đ/);

@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Package } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import type { OrderView } from '../../services/shop-api';
+import { formatDate } from '../../utils/format';
 import { STATUS_TONE, isReorderable, orderUnitCount } from '../../utils/order-status';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -81,7 +82,7 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
             </Text>
           )}
           <Text variant="caption" tone="tertiary" as="div">
-            {vi.orders.itemCount(orderUnitCount(o.items))} · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+            {vi.orders.itemCount(orderUnitCount(o.items))} · {formatDate(o.createdAt)}
           </Text>
         </div>
         <PriceTag value={o.total} size="sm" />
