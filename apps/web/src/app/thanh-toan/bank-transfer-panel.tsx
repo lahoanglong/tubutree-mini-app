@@ -55,6 +55,18 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
     );
   }
 
+  // PAID xét trước lỗi: khung xác nhận tiền là điều khách đã thấy, một lần dò lại hỏng (mất mạng, đơn sau đó bị hủy nên
+  // API từ chối QR) không được thay nó bằng báo lỗi. React Query giữ `data` cũ khi refetch lỗi.
+  if (data?.paymentStatus === 'PAID') {
+    return (
+      <section role="status" className="mt-4 rounded-card border border-forest-200 bg-forest-50 p-6 text-center">
+        <CheckCircle2 className="mx-auto h-9 w-9 text-success-fg" aria-hidden="true" />
+        <p className="mt-2 font-semibold text-forest-800">Đã nhận thanh toán!</p>
+        <p className="text-sm text-forest-700">Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn.</p>
+      </section>
+    );
+  }
+
   if (isError || !data) {
     return (
       <section className={`mt-4 p-6 text-center ${ui.card}`}>
@@ -62,16 +74,6 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
         <button type="button" onClick={() => void refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
           Thử lại
         </button>
-      </section>
-    );
-  }
-
-  if (data.paymentStatus === 'PAID') {
-    return (
-      <section role="status" className="mt-4 rounded-card border border-forest-200 bg-forest-50 p-6 text-center">
-        <CheckCircle2 className="mx-auto h-9 w-9 text-success-fg" aria-hidden="true" />
-        <p className="mt-2 font-semibold text-forest-800">Đã nhận thanh toán!</p>
-        <p className="text-sm text-forest-700">Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn.</p>
       </section>
     );
   }

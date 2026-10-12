@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Leaf, ExternalLink } from 'lucide-react';
@@ -37,7 +37,11 @@ export default function OrderDetailPage() {
   // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
   const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
+  // Tiền về thì đơn hết "chờ thanh toán" và `canPayAgain` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
+  // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
+  const [paidNotice, setPaidNotice] = useState(false);
   const refreshOrder = useCallback(() => {
+    setPaidNotice(true);
     void qc.invalidateQueries({ queryKey: ['order', code] });
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
@@ -100,11 +104,13 @@ export default function OrderDetailPage() {
         <span className="text-sm text-stone-600">Đặt lúc {formatDateTime(o.createdAt)}</span>
       </div>
 
-      {canPayAgain(o) && (
+      {(canPayAgain(o) || paidNotice) && (
         <div className="mt-2">
-          <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
-            Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
-          </p>
+          {canPayAgain(o) && (
+            <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
+              Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
+            </p>
+          )}
           <BankTransferPanel order={o} onPaid={refreshOrder} />
         </div>
       )}

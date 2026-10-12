@@ -97,6 +97,31 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
   });
 
+  // PC-7: khung xác nhận tiền là kết quả khách đã thấy; một lần dò lại lỗi (mất mạng, đơn sau đó bị hủy nên API từ chối QR)
+  // không được thay nó bằng "Không tải được thông tin thanh toán".
+  it('đã PAID rồi dò lại bị lỗi (quay lại tab): vẫn giữ khung "Đã nhận thanh toán", không đổi sang báo lỗi', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls += 1;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ ...QR_BODY, paymentStatus: 'PAID' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({ message: 'Đơn đã hủy/trả, không thể thanh toán.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    expect(container.textContent).toContain('Đã nhận thanh toán');
+
+    window.dispatchEvent(new Event('visibilitychange'));
+    await flush(8);
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(container.textContent).toContain('Đã nhận thanh toán');
+    expect(container.textContent).not.toMatch(/không tải được/i);
+  });
+
   it('lỗi tải API → hiện thông báo lỗi + nút Thử lại (không crash)', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { status: 500, body: { message: 'lỗi' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
