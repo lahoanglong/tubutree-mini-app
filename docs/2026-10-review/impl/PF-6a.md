@@ -98,3 +98,7 @@ Test: hai dòng `@ts-expect-error` trong `loyalty-locked-window.spec.ts`. Kiểm
 - `npx jest src/modules/loyalty src/modules/game src/modules/checkout src/modules/system-config`: 32 suite, 795 test xanh (trước review 783).
 - `DATABASE_URL=postgresql://tubu:tubu@localhost:5801/tubutree_it?schema=public npx jest -c test/integration-race/jest.config.js --runInBand pf5-spin pd3- pf3- game- loyalty pe3- pe5- sellable-product wallet-ledger-flows pf6- system-config`: exit 0, 24 suite, 239 test xanh (trước review 234).
 - Không chạy Playwright, capture/axe, full suite. Postgres throwaway `pf6a-pg` cổng 5801 đã xoá khi xong.
+
+## Đóng finding 1 của review (2026-10-12)
+
+Trần giải POINTS đã được chủ dự án chốt 100 Điểm Xanh và thêm vào `spinPrizeProblem` (`SPIN_POINTS_PRIZE_MAX`), có test biên 100 qua / 101 bị từ chối, test đọc giải đã lưu vượt trần bị bỏ, và review opus APPROVE. Giải SEEDS/COUPON/NONE có `value` lẻ đã bị chặn từ vòng sửa trước (`isDbInt`), nên finding 2 của review lượt 1 cũng đã đóng.

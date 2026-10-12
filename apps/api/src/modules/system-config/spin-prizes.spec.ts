@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BadRequestException } from '@nestjs/common';
 import { SystemConfigService } from './system-config.service';
-import { spinPrizeProblem } from './spin-prizes';
+import { SPIN_POINTS_PRIZE_MAX, spinPrizeProblem } from './spin-prizes';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -35,9 +35,16 @@ describe('spinPrizeProblem', () => {
 
   it('weight được phép lẻ (chỉ là tỉ trọng của pickWeighted); value lớn nhất vừa cột Int của DB vẫn hợp lệ', () => {
     expect(spinPrizeProblem({ ...ok, weight: 0.5 })).toBeNull();
-    for (const rewardType of ['POINTS', 'COUPON', 'SEEDS', 'NONE']) {
+    for (const rewardType of ['COUPON', 'SEEDS', 'NONE']) {
       expect(spinPrizeProblem({ id: 'x', name: 'x', weight: 1, rewardType, value: 2 ** 31 - 1 })).toBeNull();
     }
+  });
+
+  it('giải POINTS có trần nghiệp vụ 100 Điểm Xanh: đúng trần qua, hơn trần một điểm bị từ chối', () => {
+    expect(SPIN_POINTS_PRIZE_MAX).toBe(100);
+    expect(spinPrizeProblem({ ...ok, value: SPIN_POINTS_PRIZE_MAX })).toBeNull();
+    expect(spinPrizeProblem({ ...ok, value: 1 })).toBeNull();
+    expect(spinPrizeProblem({ ...ok, value: SPIN_POINTS_PRIZE_MAX + 1 })).toMatch(/POINTS.*100/);
   });
 
   it.each([
@@ -55,6 +62,8 @@ describe('spinPrizeProblem', () => {
     ['SEEDS value vượt cột Int của DB', { id: 's', name: 'x', weight: 1, rewardType: 'SEEDS', value: 3e9 }, /value/],
     ['NONE value vượt cột Int của DB', { id: 'n', name: 'x', weight: 1, rewardType: 'NONE', value: 1e12 }, /value/],
     ['POINTS value vượt cột Int của DB', { ...ok, value: 2 ** 31 }, /POINTS/],
+    ['POINTS value gõ nhầm đơn vị (1.000.000 thay vì 100)', { ...ok, value: 1_000_000 }, /POINTS/],
+    ['POINTS value sát trần cột Int', { ...ok, value: 2 ** 31 - 1 }, /POINTS/],
     ['weight âm', { ...ok, weight: -1 }, /weight/],
     ['weight Infinity', { ...ok, weight: Number.POSITIVE_INFINITY }, /weight/],
     ['rewardType lạ', { ...ok, rewardType: 'XU' }, /rewardType/],

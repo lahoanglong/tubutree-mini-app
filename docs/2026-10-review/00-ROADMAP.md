@@ -195,6 +195,6 @@ Gói PE-3 cho điểm thưởng vòng quay (`GAME_SPIN_WIN`), nhiệm vụ (`MIS
 - Hành vi mới cần chủ dự án biết (mặc định coi là duyệt, phản đối thì đổi): xoá đánh giá rồi tạo lại không còn được thưởng điểm lần hai (chặn farm điểm); vòng quay không tiêu được điểm của đơn còn trong cửa sổ đổi trả (giống checkout, đổi quà, góp quỹ cây).
 - Việc còn lại chỉ chủ dự án làm được hoặc hoãn có chủ đích: DNS, quét QR UAT trên Zalo thật (kèm ô chọn ngày gói định kỳ, WebView có hỗ trợ `inert` không), nội dung FAQ/Academy, PA-1 yêu cầu 5 và "Ví trả một phần đơn" sau UAT, dọn worktree/container/volume Docker.
 
-### Cần chủ dự án chọn (sau đợt F4, 2026-10-12): trần giải POINTS của vòng quay
+### Chốt ngày 2026-10-12 (sau đợt F4): trần giải POINTS của vòng quay
 
-`game.spin_prizes` do admin ghi qua `PUT /admin/config`. Từ PF-6a giải POINTS không còn nhận số âm hay quá Int32, nhưng chưa có trần trên, nên gõ nhầm đơn vị (xu thay vì Điểm Xanh) làm một lượt quay cộng cả triệu điểm. Đề xuất mặc định: trần 100 Điểm Xanh mỗi giải (100.000đ). Chủ dự án chọn số khác thì sửa một hằng số ở `apps/api/src/modules/system-config/spin-prizes.ts`.
+Chủ dự án chọn theo đề xuất: mỗi giải POINTS của `game.spin_prizes` tối đa 100 Điểm Xanh (100.000đ), hằng `SPIN_POINTS_PRIZE_MAX` ở `apps/api/src/modules/system-config/spin-prizes.ts`. Luật dùng chung cho lúc ghi cấu hình (`PUT /admin/config` bị từ chối) và lúc đọc (giải đã lưu vượt trần bị bỏ khỏi vòng quay kèm một dòng cảnh báo; không còn giải hợp lệ thì vòng quay báo "chưa cấu hình" và không trừ điểm). Seed lớn nhất là 50 nên không đổi. Muốn đổi mức thì sửa hằng số và hai test biên.

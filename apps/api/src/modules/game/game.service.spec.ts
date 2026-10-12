@@ -294,6 +294,7 @@ describe('GameService.spin', () => {
         ['SEEDS value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'SEEDS', value: 2.5 }],
         ['COUPON value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 20000.5 }],
         ['COUPON value vượt cột Int của DB', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 3e9 }],
+        ['POINTS value vượt trần 100 Điểm Xanh (cấu hình lưu từ trước khi có trần)', { id: 'bad', name: 'x', weight: 100, rewardType: 'POINTS', value: 101 }],
       ])('%s không bao giờ được chọn dù là giải đầu và trọng số lớn nhất', async (_label, bad) => {
         jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
         const prisma = makePrisma();
