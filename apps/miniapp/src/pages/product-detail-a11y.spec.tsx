@@ -105,6 +105,31 @@ describe('Chi tiết sản phẩm — ngữ nghĩa trang (C-114)', () => {
     expect(h1).toHaveLength(1);
     expect(h1[0]).toHaveTextContent('Mật ong rừng');
   });
+
+  it('đang tải: đúng một h1 (tiêu đề ẩn vì chưa có tên sản phẩm)', async () => {
+    mocks.fetchProduct.mockReturnValue(new Promise(() => {}));
+    const { container } = renderPdp();
+    await waitFor(() => expect(container.querySelector('.zaui-page')).not.toBeNull());
+    const h1 = screen.getAllByRole('heading', { level: 1 });
+    expect(h1).toHaveLength(1);
+    expect(h1[0]).toHaveTextContent('Chi tiết sản phẩm');
+  });
+
+  it('lỗi tải: đúng một h1 cạnh khối báo lỗi', async () => {
+    mocks.fetchProduct.mockRejectedValue(new Error('boom'));
+    renderPdp();
+    await screen.findByRole('button', { name: /thử lại/i });
+    const h1 = screen.getAllByRole('heading', { level: 1 });
+    expect(h1).toHaveLength(1);
+    expect(h1[0]).toHaveTextContent('Chi tiết sản phẩm');
+  });
+
+  it('không thấy sản phẩm (API trả rỗng): đúng một h1', async () => {
+    mocks.fetchProduct.mockResolvedValue(null);
+    renderPdp();
+    await screen.findByRole('button', { name: /thử lại/i });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
 });
 
 describe('Chi tiết sản phẩm — vùng cuộn ngang focus được (axe scrollable-region-focusable)', () => {

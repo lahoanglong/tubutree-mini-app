@@ -25,6 +25,7 @@ import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
@@ -51,6 +52,8 @@ import { useScrollHints } from '../components/ui/use-scroll-hints';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
+// Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
+const PDP_TITLE = 'Chi tiết sản phẩm';
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
@@ -237,6 +240,7 @@ export default function ProductDetailPage() {
   if (product.isError || !product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
       </Page>
     );
@@ -1029,6 +1033,7 @@ function CartIcon() {
 function PdpSkeleton() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
       <Box p={4} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={70} height={12} />
