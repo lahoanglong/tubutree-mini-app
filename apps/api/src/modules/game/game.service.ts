@@ -127,6 +127,10 @@ export class GameService {
     // Thưởng điểm là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Tính NGOÀI tx: đọc cấu hình không giữ
     // kết nối tx; và thiếu LoyaltyService thì dừng trước khi trừ điểm, không để lọt dòng thưởng không hạn.
     const winExpiresAt = prize.rewardType === 'POINTS' ? await this.rewardPointsExpiresAt() : null;
+    // lockedOrderPoints (trong tx bên dưới) đọc returns.window_days qua cùng SystemConfigService. Nạp cache TRƯỚC khi mở tx:
+    // lần trượt cache trong tx xin kết nối pool thứ hai khi tx đang giữ một, nhiều lượt quay cùng chạm lúc cache hết hạn
+    // có thể cạn pool (P2024). Cùng khoá và mặc định với LoyaltyService.returnWindowDays.
+    await this.config.get<number>('returns.window_days', 7);
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:

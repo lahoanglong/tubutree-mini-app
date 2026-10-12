@@ -385,4 +385,34 @@ describe('PF-5a vòng quay không tiêu điểm đơn còn trong hạn đổi/tr
       expect((await spinRows(user.id)).map((r) => r.delta)).toEqual([-COST]);
     });
   });
+
+  describe('(g) cache cấu hình trượt không xin kết nối thứ hai trong lúc tx quay đang giữ kết nối', () => {
+    /**
+     * Mỗi lần SystemConfigService.get trượt cache sẽ lấy thêm một kết nối pool. Nếu lần trượt xảy ra trong tx của spin
+     * (đang giữ một kết nối và khoá dòng user) thì nhiều lượt quay cùng chạm lúc cache hết hạn có thể cạn pool (P2024).
+     * Đếm số phiên "idle in transaction" lúc get trượt: tx của spin đang chờ JS nên hiện ra ở đó.
+     */
+    it('xoá sạch cache cấu hình rồi quay: mọi lần đọc cấu hình trượt cache đều xảy ra khi KHÔNG có tx nào đang mở', async () => {
+      const { user } = await holder({ lockedPts: 20, freePts: 20 });
+      const config = moduleRef.get(SystemConfigService);
+      const cache = (config as unknown as { cache: Map<string, unknown> }).cache;
+      cache.clear();
+      const realGet = config.get.bind(config) as (key: string, fallback?: unknown) => Promise<unknown>;
+      const inTxMisses: string[] = [];
+      jest.spyOn(config, 'get').mockImplementation((async (key: string, fallback?: unknown) => {
+        if (!cache.has(key)) {
+          const [{ n }] = await prisma.$queryRaw<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND state LIKE 'idle in transaction%'`;
+          if (n > 0) inTxMisses.push(key);
+        }
+        return realGet(key, fallback);
+      }) as never);
+
+      await game.spin(user.id);
+
+      expect(inTxMisses).toEqual([]);
+      expect(await balance(user.id)).toBe(30);
+    });
+  });
 });
