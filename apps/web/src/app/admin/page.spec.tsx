@@ -4,6 +4,7 @@ import { act } from 'react';
 import AdminPage from './page';
 import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
+import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
@@ -600,6 +601,36 @@ describe('admin/page — tab Cấu hình', () => {
     const err = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tải được danh sách cấu hình.')!;
     expect(err.className).toContain('text-danger-fg');
     expect(container.querySelector('h3')).toBeNull();
+  });
+
+  describe('key của danh sách tham số (cảnh báo React "two children with the same key")', () => {
+    const duplicateKeyWarnings = (spy: ReturnType<typeof vi.spyOn>) =>
+      spy.mock.calls.filter((c) => /same key/i.test(String(c[0]))).map((c) => String(c[0]));
+
+    it('107 dòng cấu hình đúng hình dạng API thật dựng xong mà không có console.error nào', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        mocks.config = ADMIN_CONFIG_ROWS;
+        const { container } = await openConfig();
+        expect(new Set(ADMIN_CONFIG_ROWS.map((r) => r.key)).size).toBe(ADMIN_CONFIG_ROWS.length);
+        expect(container.textContent).toContain(ADMIN_CONFIG_ROWS[ADMIN_CONFIG_ROWS.length - 1]!.key);
+        expect(spy.mock.calls.map((c) => String(c[0]))).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('bắt được cảnh báo khi API trả hai dòng trùng key và trùng giá trị (kiểm chứng bộ bắt console.error)', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const dup = ADMIN_CONFIG_ROWS[0]!;
+        mocks.config = [dup, ...ADMIN_CONFIG_ROWS.slice(0, 3)];
+        await openConfig();
+        expect(duplicateKeyWarnings(spy)).not.toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 });
 
