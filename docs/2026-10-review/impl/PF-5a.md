@@ -1,8 +1,8 @@
 # PF-5a: vòng quay phải tôn trọng lockedOrderPoints
 
-Nhánh `hz17/PF-5a`, base `6c504cf8`. Chỉ đụng `apps/api` (game, comment ở loyalty, hai race spec) và hai file tài liệu. Không sửa `apps/miniapp`, `apps/web`, `packages/**`, `schema.prisma`, migration. Không push, không deploy, không ghi DB dùng chung (Postgres throwaway cổng 5701, container `tubu_it_pf5a`, đã xoá khi xong).
+Nhánh `hz17/PF-5a`, base `6c504cf8`. Chỉ đụng `apps/api` (game, comment ở loyalty, hai race spec) và hai file tài liệu. Không sửa `apps/miniapp`, `apps/web`, `packages/**`, `schema.prisma`, migration. Không push, không deploy, không ghi DB dùng chung (Postgres throwaway cổng 5701, container `tubu_it_pf5a` ở lượt đầu và `tubu_it_pf5a_r2` ở lượt sửa review, đã xoá khi xong).
 
-Commit: `f11f4034` (mục 1 và 2), `d7f0baec` (mục 4), `0d025a6e` (mục 5), commit kế tiếp là báo cáo này. Mục 3 không đổi mã.
+Commit: `f11f4034` (mục 1 và 2), `d7f0baec` (mục 4), `0d025a6e` (mục 5), `9731f529` (báo cáo lượt đầu). Sau review độc lập: `5e36c9a1` (sửa lại chữ mục 4 và PF-3.md, thêm ca (f)), `d06f7412` (nạp cache cấu hình trước tx của spin, thêm ca (g)), và commit cập nhật báo cáo này. Mục 3 không đổi mã.
 
 ## Mục 1: GameService.spin() không trừ lockedOrderPoints
 
@@ -19,14 +19,14 @@ Sửa (`game.service.ts`, `spin`):
 
 ## Mục 2: race test thật
 
-`apps/api/test/integration-race/pf5-spin-locked-points.race-spec.ts`, 12 ca, Postgres thật, `afterEach` kiểm `findPointsLotDrift` rỗng:
+`apps/api/test/integration-race/pf5-spin-locked-points.race-spec.ts`, 14 ca (12 ca (a) đến (e) ở lượt đầu, thêm (f) và (g) sau review, xem "Sau review"), Postgres thật, `afterEach` kiểm `findPointsLotDrift` rỗng:
 
 - (a) đơn giao +20 đang khoá, số dư chỉ có 20: quay bị 400 kèm lý do khoá, số dư vẫn 20, không có dòng `GAME_SPIN*`, không có `GameSpin`. Thêm: thiếu điểm mà không có khoá thì thông báo không nhắc khoá; đơn giao 10 ngày trước (quá cửa sổ 7 ngày) thì hết khoá, quay được.
 - (b) 20 khoá + 25 tự do: tuần tự 3 lần được 2 lần, số dư còn 25; 6 lượt song song được đúng 2 lượt; trúng giải điểm thì `GAME_SPIN_WIN` vẫn có hạn khoảng 12 tháng, số dư 25 và lượt kế bị từ chối (điểm thắng không mở khoá điểm đơn); chạm trần lượt/ngày thì 400 và rollback hết, không mất phí.
 - (c) quay bị chặn rồi trả hàng thì `ORDER_REVERSED` -20, số dư 0; có 15 điểm tự do thì quay được một lần dùng phần tự do, trả hàng vẫn thu hồi đủ 20, không âm.
 - (d) quay song song với trả hàng cùng khách, ba dạng: ba lượt quay xếp hàng ở khoá TRƯỚC lượt thu hồi (giữ khoá bằng một tx riêng, đếm `pg_stat_activity` chờ khoá): đúng 1 lượt quay thành công, thu hồi -20, số dư 0; lượt thu hồi xếp hàng TRƯỚC lượt quay: quay vẫn được (không bị từ chối nhầm), số dư 0; 4 khách bắn cùng lúc 3 quay + 1 thu hồi: mọi lỗi phải là `BadRequestException`, thu hồi thành công, số dư 0. Deadlock hay P2034 sẽ làm ca này đỏ. Kết quả cuối không phụ thuộc thứ tự xếp hàng ở khoá (cả hai thứ tự cho số dư 0, một lượt quay).
 - (e) đột biến. Bản gốc `6c504cf8` chạy với spec mới: 9 đỏ, 3 xanh (ba ca xanh không liên quan khoá: quá cửa sổ, chạm trần lượt/ngày, thu hồi xếp trước quay); 8 ca đỏ vì quay tiêu điểm khoá, 1 ca đỏ vì câu thông báo cũ viết "điểm Xanh" thường. Bỏ phần trừ `lock.locked` (giữ `FOR UPDATE`): 8 đỏ, gồm cả ca (a). Bỏ `FOR UPDATE` (giữ phần trừ khoá): 2 đỏ (quay sau thu hồi bị từ chối nhầm vì đọc khoá trước khi thu hồi commit, và ca bắn đồng thời). Bỏ `+ lock.locked` ở guard `updateMany` (giữ `FOR UPDATE` và kiểm trước): 12 xanh, vì guard đó là lớp thứ hai dưới `FOR UPDATE`, không phải lớp duy nhất; ghi lại để không ai tưởng nó được test riêng.
-- Ổn định: chạy lại 6 lần liên tiếp, 12/12 xanh mỗi lần.
+- Ổn định: chạy lại 6 lần liên tiếp, 12/12 xanh mỗi lần (lượt đầu); sau review chạy lại 6 lần, 14/14 xanh mỗi lần.
 
 Unit `game.service.spec.ts`: thêm 6 ca (khoá toàn bộ, ngưỡng dùng được, guard cộng điểm khoá, thứ tự `FOR UPDATE` rồi đọc khoá bằng đúng tx rồi trừ rồi đếm lượt, guard `count 0`, không chạm lô quy đổi, thiếu `LoyaltyService`) và đổi các ca spin cũ sang stub `$queryRaw` + `LoyaltyService`. Chạy bản `spin` cũ với spec này: 18 đỏ (một phần vì stub đọc số dư đã đổi nên ca cũ cũng đỏ; bằng chứng đỏ thật cho hành vi nằm ở race spec).
 
@@ -48,15 +48,35 @@ Grep trong `apps/api/src` (không tính spec) `pointsBalance` `decrement`/`gte`,
 | `points-ledger.ts` ~80 `applyPointsDelta` | helper dùng chung | caller âm duy nhất là `buyTree` và phần quy đổi của checkout (đã nêu); `reward-points.service.ts` và `order-reversal.service.ts` chỉ cộng |
 | `auth.service.ts` ~435, `wallet.service.ts` ~134, `subscriptions.service.ts` ~655, `dealer.service.ts` ~451 và ~1220, `order-reversal.service.ts` ~349 | không phải sổ điểm | sổ Ví hoặc hạn mức đại lý (`applyWalletDelta`, `dealerCreditLedger`), `auth.service.ts` ~453 chỉ cộng điểm khi gộp khách |
 
-Không có đường chi tiêu nào khác: mở lô vườn (`game-garden.service.ts`, `unlockPlot`) dùng giọt nước chứ không dùng điểm (đường xu trả 410), các file game khác (`game-economy`, quiz, gift, collection, community) không đọc `pointsBalance`, Season Pass chỉ cộng qua `RewardPointsService.grant`. Các đường thu hồi và hết hạn không bị chặn là cố ý (chặn thu hồi bằng khoá nghĩa là không thu hồi được); chúng có thể kéo số dư xuống dưới phần cần thu hồi, khi đó `reverseOrderPoints` thu hồi ít hơn thay vì làm âm (xem mục 4).
+Không có đường chi tiêu nào khác: mở lô vườn (`game-garden.service.ts`, `unlockPlot`) dùng giọt nước chứ không dùng điểm (đường xu trả 410), các file game khác (`game-economy`, quiz, gift, collection, community) không đọc `pointsBalance`, Season Pass chỉ cộng qua `RewardPointsService.grant`. Các đường thu hồi và hết hạn không bị chặn là cố ý (chặn thu hồi bằng khoá nghĩa là không thu hồi được); chúng có thể kéo số dư xuống dưới phần cần thu hồi, khi đó `reverseOrderPoints` thu hồi ít hơn thay vì làm âm. Riêng thu hồi đánh giá (`reviews.service.ts` `remove`) và thu hồi thưởng giới thiệu cấp bằng điểm (`referral-reward.ts`) chặn theo SỐ DƯ chứ không theo phần dùng được, nên có thể ăn vào điểm đơn đang khoá (xem mục 4 và "Sau review"). Phân loại "không phải chi tiêu" vẫn đúng; hệ quả của việc không chặn chúng mới là chỗ bản đầu viết sai.
 
 ## Mục 4: hai comment sai
 
-Đã viết lại (chỉ đổi comment): `loyalty.service.ts` ở `reverseOrderPoints` và `loyalty-expiry.service.ts` ở `lotRecoverable`. Nội dung đúng nay là: bốn đường khách chi tiêu Điểm Xanh thường (checkout, đổi voucher, góp quỹ cây, vòng quay) chỉ tiêu phần vượt `lockedOrderPoints`; thu hồi/hết hạn không phải chi tiêu nên không bị chặn và có thể làm số dư thấp hơn phần cần thu hồi; trần theo số dư chỉ là lưới an toàn cuối, không phải bảo đảm "luôn đủ". Không còn đường chi tiêu nào không chặn.
+Đã viết lại (chỉ đổi comment): `loyalty.service.ts` ở `reverseOrderPoints` và `loyalty-expiry.service.ts` ở `lotRecoverable`. Nội dung đúng nay là: bốn đường khách chi tiêu Điểm Xanh thường (checkout, đổi voucher, góp quỹ cây, vòng quay) chỉ tiêu phần vượt `lockedOrderPoints`, nên không đường chi tiêu nào tiêu thẳng được điểm đơn còn trong cửa sổ đổi/trả. Điểm đơn vẫn có thể thiếu lúc thu hồi, vì các đường không phải chi tiêu (cron hết hạn, thu hồi đánh giá, thu hồi thưởng giới thiệu cấp bằng điểm) không bị chặn bởi `lockedOrderPoints`, và hai đường thu hồi sau chặn theo số dư chứ không theo phần dùng được. Khi khách đã tiêu điểm của chính lô bị thu hồi, thu hồi đó ăn vào điểm đơn đang khoá và phần hụt rơi vào `ORDER_REVERSED`; khách giữ giá trị đã tiêu theo chính sách "điểm đã tiêu không đòi lại" của PF-3. Trần theo số dư là lưới an toàn cuối (không để số dư âm), không phải bảo đảm "luôn đủ để thu hồi".
+
+Bản đầu của mục này (`d7f0baec`) kết luận "không còn đường chi tiêu nào không chặn" và "khách không giữ giá trị nào từ phần thiếu". Vế đầu đúng; vế sau sai, và câu "trần theo số dư chỉ là lưới an toàn cuối" đọc như thể khách không còn cách nào giữ giá trị khi trả đơn. Sửa ở `5e36c9a1`.
 
 ## Mục 5: PF-3.md
 
 Sửa hai chỗ cũ sau `abf37df5` (dòng "Mục 2" và dòng "Rủi ro") cho đúng: chỉ `ORDER_REVERSED` có thể có delta 0 và bị lọc khỏi lịch sử khách, `REVIEW_DELETE` không ghi dòng 0. Thêm mục "Sau review (lượt 2)" ghi finding vòng quay và cách xử lý (PF-5a). PF-3 không đổi mã.
+
+## Sau review
+
+Review độc lập (opus) cho hai finding. Cả hai xác minh trên mã trước khi sửa.
+
+### Major: comment ở `reverseOrderPoints` nói sai "khách không giữ giá trị nào từ phần thiếu"
+
+Đúng. Tái hiện trên Postgres thật bằng ca (f) của race spec, đúng kịch bản của reviewer: đơn giao 2 ngày trước +20 (khoá), đánh giá video +15 (số dư 35, dùng được 15), quay tốn 10 (qua, số dư 25), xoá đánh giá: `REVIEW_DELETE` -15 (số dư 25 đủ), số dư 10; trả đơn: `ORDER_REVERSED` -10 thay vì -20, số dư 0. Khách có một lượt quay mà cả đơn lẫn đánh giá đều đã bị đảo. `findPointsLotDrift` rỗng. Nguyên nhân đọc từ mã: `ReviewsService.remove` lấy `min(pointsEarned, lotRecoverable, số dư)` và `debitReferralReward` lấy `min(số dư lô, due)`, đều không trừ `lockedOrderPoints`; `lotRecoverable` không trừ điểm đã tiêu theo FIFO (cố ý, PF-3 lượt 1).
+
+Không phải lỗi hành vi của vòng quay: không đường chi tiêu nào tiêu thẳng điểm đơn còn khoá, bản sửa mục 1 vẫn đúng. Phần hụt là điểm của lô khác mà khách đã tiêu rồi bị thu hồi sau, rơi vào chính sách PF-3 "điểm đã tiêu không đòi lại", chỉ là hiện ở dòng `ORDER_REVERSED`. Vì vậy chỉ sửa chữ, không có test đỏ cho hành vi: ca (f) xanh ngay khi thêm vì mã không đổi; nó ghim hành vi hiện tại để comment không lệch khỏi thực tế (nếu sau này đổi cách chặn thu hồi, ca này phải đổi theo, đó là ý định). Đã sửa: comment ở `reverseOrderPoints` (có ví dụ xoá đánh giá) và `lotRecoverable`, mục 4 ở trên, và `PF-3.md` ("Sau review (lượt 2)": đoạn "Hệ quả cho PF-3" và "Xử lý ở PF-5a" sửa lại, thêm mục "Thu hồi đánh giá và thu hồi thưởng giới thiệu vẫn ăn được vào điểm đơn đang khoá"). Commit `5e36c9a1`.
+
+Việc cần làm, quyết định riêng của điều phối viên, KHÔNG làm ở gói này: nếu muốn phần hụt luôn nằm ở dòng của chính lô bị thu hồi thay vì ở đơn, chặn `REVIEW_DELETE` và thu hồi thưởng giới thiệu ở `max(0, số dư − lockedOrderPoints)`. Đánh đổi: khách giữ phần điểm đánh giá hay thưởng giới thiệu đã tiêu (hụt nằm ở `REVIEW_DELETE`/`REFERRAL_DEBT`), còn trả đơn thu hồi đủ. Đổi thì ca (f) phải đổi theo; chưa có race riêng cho nhánh thu hồi thưởng giới thiệu (kết luận về nhánh này đọc từ mã).
+
+### Minor: spin đọc cấu hình trong tx
+
+Có thật theo mã, chưa chứng minh bằng tải (không dựng tải). `lockedOrderPoints` gọi `returnWindowDays` gọi `SystemConfigService.get`; lúc cache 60 giây hết hạn lệnh này lấy kết nối pool thứ hai khi tx của spin đang giữ một và đang khoá dòng user. Trước PF-5a spin không có lần đọc cấu hình nào trong tx (trừ `game.tank_capacity` ở giải SEEDS, có từ trước; `grantCoupon` và `creditPoints` không đọc cấu hình), nên đây là hồi quy do bản sửa mục 1 thêm vào. Sửa rẻ và an toàn nên làm: trong `spin`, đọc `returns.window_days` một lần ngoài tx (cùng khoá và mặc định 7 với `LoyaltyService.returnWindowDays`) để vào tx là cache hit; `SystemConfigModule` là `@Global` nên hai service dùng chung một cache. Test đỏ trước bản sửa là ca (g): xoá cache cấu hình, bọc `SystemConfigService.get`, mỗi lần trượt cache đếm phiên `idle in transaction` trong `pg_stat_activity`; trước sửa `["returns.window_days"]` trượt khi đang có tx mở, sau sửa rỗng. Ca (g) không phụ thuộc tên khoá nên cũng bắt các lần đọc cấu hình trong tx thêm sau này ở nhánh giải NONE. Commit `d06f7412`.
+
+Không sửa: `buyTree`, `redeemReward` và checkout có cùng mẫu từ trước PF-5a (gọi `lockedOrderPoints` trong tx), và ngoài `game/**`. Gốc nằm ở `lockedOrderPoints` đọc cấu hình lúc gọi; cách gọn là cho nó nhận `windowDays` đã đọc sẵn hoặc cho caller làm ấm cache, làm một lần cho cả bốn caller ở một gói chung. Lần trượt cache trong tx còn có thể xảy ra nếu cache hết hạn đúng giữa bước làm ấm và lần đọc trong tx (khoảng vài mili giây), nên bản sửa giảm chứ không loại hẳn rủi ro.
 
 ## Miniapp hiển thị lỗi 400 của vòng quay ra sao (chỉ đọc, không sửa)
 
@@ -68,19 +88,20 @@ Thông báo mới có tới tay khách. Chuỗi gọi: `WheelOfFortune.handleSpi
 
 ## Lệnh đã chạy và kết quả
 
-Trong worktree, `PATH` node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhost:5701/tubutree_it?schema=public`.
+Trong worktree, `PATH` node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhost:5701/tubutree_it?schema=public` (container throwaway `tubu_it_pf5a_r2`, `--tmpfs`, xoá khi xong). Số dưới đây là lần chạy lại sau review (commit `d06f7412` và mã không đổi sau đó).
 
-- `pnpm install --frozen-lockfile`, `pnpm --filter @tubutree/shared-types build`, `npx prisma generate`, `npx prisma migrate deploy` (DB throwaway): thoát 0.
+- `pnpm install --frozen-lockfile` (đã up to date), `pnpm --filter @tubutree/shared-types build`, `npx prisma generate`, `npx prisma migrate deploy` trên DB throwaway mới: thoát 0.
 - `npx tsc --noEmit -p tsconfig.json` (apps/api): thoát 0.
 - `npx eslint --max-warnings=0` trên 6 file `.ts` đã sửa (`game.service.ts`, `game.service.spec.ts`, `loyalty.service.ts`, `loyalty-expiry.service.ts`, `pf5-spin-locked-points.race-spec.ts`, `game-spin-limit.race-spec.ts`): thoát 0. Không đụng file miniapp nên không có lint `tubu-ds` để chạy.
 - `npx jest src/modules/game src/modules/loyalty src/modules/reviews`: 23 suite, 605 test xanh, thoát 0.
-- `npx jest -c test/integration-race/jest.config.js --runInBand pf5 pf3 pe5-reversal pe3-reward pd3 game-spin-limit game-tree loyalty order-cancel review-edit`: 21 suite, 190 test xanh, thoát 0 (gồm mọi race spec khác gọi `spin`: `pe3-reward-expiry`, `pd3-checkout-points`, `game-spin-limit`).
-- Race riêng của gói chạy thêm 6 lần liên tiếp: 12/12 xanh mỗi lần.
-- Phép đỏ trước và đột biến: như mục 2 (mã cũ đặt tạm bằng `git show 6c504cf8:...` rồi đặt lại, kiểm `md5` bản sửa trước và sau mỗi lần; `git status` sạch sau đó).
+- `npx jest -c test/integration-race/jest.config.js --runInBand pf5 pf3 pe5-reversal pe3-reward pd3 game-spin-limit game-tree loyalty order-cancel review-edit`: 21 suite, 192 test xanh, thoát 0 (gồm mọi race spec khác gọi `spin`).
+- Race riêng của gói chạy thêm 6 lần liên tiếp: 14/14 xanh mỗi lần, thoát 0.
+- Phép đỏ: ca (g) đỏ trước `d06f7412` với `["returns.window_days"]`, xanh sau. Ca (f) xanh ngay (mã không đổi, xem "Sau review"). Phép đỏ và đột biến của mục 1 và 2 giữ nguyên như lượt đầu (mã cũ đặt tạm bằng `git show 6c504cf8:...` rồi đặt lại).
 
 ## Chưa verify
 
 - Không chạy Playwright e2e, full suite, `nest build`, capture/axe. Chưa chạy miniapp, nên thông báo mới hiển thị ra sao trong snackbar thật (độ dài, cắt dòng) chưa kiểm.
+- Chưa chứng minh bằng tải rủi ro cạn pool khi cache cấu hình hết hạn; chỉ chứng minh bằng ca (g) rằng lần đọc không còn nằm trong tx của spin.
 - Không kiểm trên DB dùng chung: chưa biết khách nào đã quay hết điểm khoá trước bản sửa (số dư vẫn khớp sổ nhưng điểm của đơn đã trả có thể đã bị giữ). Mã mới không sửa ngược các khách đó.
 - Chưa có race riêng cho ba lượt quay song song với đổi voucher hoặc checkout của cùng khách (mỗi đường đã có race với khoá riêng; chung quy ước khoá user trước, nên không phát hiện nguy cơ deadlock, nhưng chưa chạy tổ hợp).
 
