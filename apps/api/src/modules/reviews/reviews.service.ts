@@ -35,6 +35,7 @@ export class ReviewsService {
     canReview: boolean;
     reason: 'NOT_PURCHASED' | null;
     myReview?: { id: string; rating: number; comment: string | null; images: string[]; videoUrl: string | null } | null;
+    rewardAvailable?: boolean;
   }> {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
@@ -55,9 +56,13 @@ export class ReviewsService {
 
     // Q-30: đã có đánh giá thì vẫn được (mua lại → sửa đánh giá cũ); trả đánh giá hiện có để FE điền sẵn form.
     const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
+    // Chỉ để miniapp ẩn câu gợi ý điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept).
+    // Đang có đánh giá thì gọi tạo là sửa nên không thưởng; chưa có thì thưởng hay không tuỳ sổ điểm của cặp này.
+    const rewardAvailable = !existing && !(await this.rewardAlreadyKept(this.prisma, userId, product));
     return {
       canReview: true,
       reason: null,
+      rewardAvailable,
       myReview: existing
         ? {
             id: existing.id,
@@ -169,7 +174,7 @@ export class ReviewsService {
    * phẩm>`; còn dương nghĩa là còn phần thưởng chưa thu hồi. slug không đổi sau khi tạo sản phẩm (đồng bộ Pancake chỉ
    * ghi slug lúc tạo).
    */
-  private async rewardAlreadyKept(tx: Prisma.TransactionClient, userId: string, product: { id: string; slug: string }): Promise<boolean> {
+  private async rewardAlreadyKept(tx: Db, userId: string, product: { id: string; slug: string }): Promise<boolean> {
     const rows = await tx.pointsTransaction.findMany({
       where: {
         userId,
