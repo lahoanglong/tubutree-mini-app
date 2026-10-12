@@ -68,6 +68,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
           provide: LoyaltyService,
           useValue: {
             lockedOrderPoints: jest.fn().mockResolvedValue({ locked: 0 }),
+            returnWindowDays: jest.fn().mockResolvedValue(7),
             getTierMultiplier: jest.fn().mockResolvedValue(1),
           },
         },

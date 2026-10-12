@@ -214,6 +214,11 @@ export class CheckoutService {
     const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
     const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
 
+    const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
+    // Cửa sổ đổi/trả cho lockedOrderPoints trong tx, đọc NGOÀI tx: lần trượt cache cấu hình trong tx xin kết nối pool thứ
+    // hai khi tx đang giữ một và đang khoá dòng user (đặt đơn dồn dập lúc cache hết hạn có thể cạn pool, P2024).
+    const windowDays = usedStandard > 0 ? await this.loyalty.returnWindowDays() : undefined;
+
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
       order = await this.prisma.$transaction(async (tx) => {
@@ -293,7 +298,6 @@ export class CheckoutService {
           },
         });
 
-        const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
         if (computed.pointsUsed > 0) {
           // Khoá dòng user (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/
           // redeemReward đều ghi CHÍNH dòng này) và trước khi trừ bất kỳ lô nào.
@@ -305,7 +309,7 @@ export class CheckoutService {
           // đơn vừa giao còn trong hạn đổi/trả / đang có yêu cầu đổi-trả thì chưa tiêu được, không thì
           // nhận điểm đơn A → tiêu vào đơn B → trả đơn A là giữ giảm giá miễn phí. Guard
           // `pointsBalance >= dùng + khoá` tính trên phần khoá đọc dưới khoá dòng.
-          const lock = await this.loyalty.lockedOrderPoints(userId, new Date(), tx);
+          const lock = await this.loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
           const dec = await tx.user.updateMany({
             where: { id: userId, pointsBalance: { gte: usedStandard + lock.locked } },
             data: { pointsBalance: { decrement: usedStandard } },

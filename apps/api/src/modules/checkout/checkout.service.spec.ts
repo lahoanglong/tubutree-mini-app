@@ -22,6 +22,9 @@ jest.mock('../wallet/wallet-ledger.service', () => ({
 }));
 const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
 
+/** Cửa sổ đổi/trả mà stub `returnWindowDays` trả: khác mặc định 7 để test thấy đúng giá trị này được truyền đi (PF-6a). */
+const WINDOW_DAYS = 9;
+
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
   ward: 'W', street: 'S', provinceCode: '1', districtCode: '2', wardCode: '3',
@@ -122,6 +125,7 @@ function build(
   const loyalty = {
     getTierMultiplier: jest.fn().mockResolvedValue(1),
     lockedOrderPoints: jest.fn().mockResolvedValue(lock),
+    returnWindowDays: jest.fn().mockResolvedValue(WINDOW_DAYS),
     // Câu giải thích THẬT (không phụ thuộc state) — lỗi checkout phải dùng đúng câu của redeemReward.
     lockedPointsMessage: (l: LockedPoints) => LoyaltyService.prototype.lockedPointsMessage.call({}, l),
   } as unknown as LoyaltyService;
@@ -558,6 +562,30 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
       where: { id: 'u1', pointsBalance: { gte: 900 } },
       data: { pointsBalance: { decrement: 300 } },
     });
+  });
+
+  it('PF-6a (b): placeOrder đọc cửa sổ đổi/trả NGOÀI tx (trước $transaction) và truyền cho lockedOrderPoints trong tx', async () => {
+    const { svc, prisma, loyalty } = build({ pointsBalance: 1000, locked: 100, pointsUsed: 300 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 300 } as never);
+
+    const returnWindowDays = loyalty.returnWindowDays as jest.Mock;
+    const transaction = (prisma as unknown as { $transaction: jest.Mock }).$transaction;
+    expect(returnWindowDays).toHaveBeenCalledTimes(1);
+    expect(returnWindowDays.mock.invocationCallOrder[0]).toBeLessThan(transaction.mock.invocationCallOrder[0]!);
+    const locked = (loyalty.lockedOrderPoints as jest.Mock).mock;
+    const inTx = locked.calls.filter((c) => c[2] === prisma);
+    expect(inTx).toHaveLength(1);
+    expect(inTx[0]![3]).toBe(WINDOW_DAYS);
+    // Lần đọc ngoài tx (báo giá trong compute) không truyền gì: không có tx nào đang giữ kết nối, hành vi giữ nguyên.
+    expect(locked.calls.filter((c) => c[2] === undefined).every((c) => c[3] === undefined)).toBe(true);
+  });
+
+  it('PF-6a (b): placeOrder không tiêu điểm thường (chỉ lô quy đổi) → không đọc cửa sổ đổi/trả và không đọc phần khoá trong tx', async () => {
+    const { svc, prisma, loyalty } = build({ pointsBalance: 1000, pointsConvertedBalance: 500, pointsUsedConverted: 200 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 200 } as never);
+
+    expect(loyalty.returnWindowDays as jest.Mock).not.toHaveBeenCalled();
+    expect((loyalty.lockedOrderPoints as jest.Mock).mock.calls.some((c) => c[2] === prisma)).toBe(false);
   });
 
   it('placeOrder: điểm vừa bị khoá giữa báo giá và đặt đơn (đơn cũ vừa chuyển trả hàng) → lỗi tiếng Việt giải thích, không tạo đơn', async () => {

@@ -27,6 +27,35 @@ function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigServic
 /** Hạn cố định do stub `pointsExpiresAt` trả; test kiểm đúng giá trị này được ghi vào dòng sổ. */
 const REWARD_EXPIRES_AT = new Date('2027-10-11T00:00:00.000Z');
 
+/** Cửa sổ đổi/trả mà stub `returnWindowDays` trả: khác mặc định 7 để test thấy đúng giá trị này được truyền đi. */
+const WINDOW_DAYS = 9;
+
+/**
+ * Bọc `$transaction` của stub để biết lúc nào tx đang mở, và dựng config ghi lại từng lần `get` kèm cờ "đang trong tx".
+ * Lần trượt cache của `get` trong tx xin thêm một kết nối pool khi tx đang giữ một (PF-6a).
+ */
+function trackTx(prisma: PrismaService, overrides: Record<string, unknown> = {}) {
+  const state = { txOpen: false };
+  const configGets: { key: string; inTx: boolean }[] = [];
+  const run = (prisma.$transaction as jest.Mock).getMockImplementation()!;
+  (prisma.$transaction as jest.Mock).mockImplementation(async (cb: unknown, ...rest: unknown[]) => {
+    state.txOpen = true;
+    try {
+      return await run(cb, ...rest);
+    } finally {
+      state.txOpen = false;
+    }
+  });
+  const base = makeConfig(overrides);
+  const config = {
+    get: jest.fn(async <T>(key: string, fallback?: T): Promise<T> => {
+      configGets.push({ key, inTx: state.txOpen });
+      return base.get<T>(key, fallback);
+    }),
+  } as unknown as SystemConfigService;
+  return { config, configGets };
+}
+
 /**
  * LoyaltyService chỉ với `pointsExpiresAt` (helper hạn dùng chung của điểm danh, điểm hoàn, POS, PE-3) và hai hàm đọc
  * điểm đang khoá của đơn còn trong hạn đổi/trả (PF-5a); `locked` = số điểm đang khoá, 0 là không có đơn nào khoá.
@@ -35,10 +64,12 @@ function loyaltyWithExpiry(locked = 0) {
   const pointsExpiresAt = jest.fn(async (_from: Date) => REWARD_EXPIRES_AT);
   const lockedOrderPoints = jest.fn(async (..._args: unknown[]) => ({ locked, lockedReturn: 0, lockedUntil: null }));
   const lockedPointsMessage = jest.fn(() => 'điểm từ đơn mới giao dùng được sau hạn đổi/trả');
+  const returnWindowDays = jest.fn(async () => WINDOW_DAYS);
   return {
-    loyalty: { pointsExpiresAt, lockedOrderPoints, lockedPointsMessage } as unknown as LoyaltyService,
+    loyalty: { pointsExpiresAt, lockedOrderPoints, lockedPointsMessage, returnWindowDays } as unknown as LoyaltyService,
     pointsExpiresAt,
     lockedOrderPoints,
+    returnWindowDays,
   };
 }
 
@@ -188,6 +219,23 @@ describe('GameService.spin', () => {
       expect(order(raw)).toBeLessThan(order(lockedOrderPoints));
       expect(order(lockedOrderPoints)).toBeLessThan(order(prisma.user.updateMany as jest.Mock));
       expect(order(prisma.user.updateMany as jest.Mock)).toBeLessThan(order(prisma.gameSpin.count as jest.Mock));
+    });
+
+    it('PF-6a (b): cửa sổ đổi/trả đọc NGOÀI tx (loyalty.returnWindowDays trước $transaction), truyền vào lockedOrderPoints; không có lần đọc cấu hình nào trong tx', async () => {
+      const prisma = makePrisma();
+      jest.spyOn(Math, 'random').mockReturnValue(0.9);
+      const { loyalty, lockedOrderPoints, returnWindowDays } = loyaltyWithExpiry(0);
+      const { config, configGets } = trackTx(prisma, { 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES });
+
+      await new GameService(prisma, config, analytics, undefined, undefined, undefined, loyalty).spin('u1');
+
+      expect(returnWindowDays).toHaveBeenCalledTimes(1);
+      const opened = (prisma.$transaction as jest.Mock).mock.invocationCallOrder[0]!;
+      expect(returnWindowDays.mock.invocationCallOrder[0]).toBeLessThan(opened);
+      expect(lockedOrderPoints.mock.calls[0]![3]).toBe(WINDOW_DAYS);
+      expect(configGets.filter((g) => g.inTx)).toEqual([]);
+      // Việc đọc cửa sổ giao hết cho LoyaltyService (một nơi định nghĩa khoá và mặc định), GameService không đọc song song.
+      expect(configGets.map((g) => g.key)).not.toContain('returns.window_days');
     });
 
     it('guard atomic count=0 dù pre-check qua (số dư đổi giữa hai câu) → 400, không ghi sổ/lượt quay', async () => {
@@ -775,8 +823,9 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
   /** Điểm đang khoá của đơn còn trong hạn đổi/trả (lockedOrderPoints); 0 = không có đơn nào đang khoá. */
   function loyaltyWithLock(locked = 0) {
     return {
-      lockedOrderPoints: jest.fn(async () => ({ locked, lockedReturn: 0, lockedUntil: null })),
+      lockedOrderPoints: jest.fn(async (..._args: unknown[]) => ({ locked, lockedReturn: 0, lockedUntil: null })),
       lockedPointsMessage: () => 'điểm từ đơn mới giao dùng được sau hạn đổi/trả',
+      returnWindowDays: jest.fn(async () => WINDOW_DAYS),
     } as unknown as LoyaltyService;
   }
   const buyService = (prisma: PrismaService, config = makeConfig(), loyalty = loyaltyWithLock()) =>
@@ -861,6 +910,34 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
     expect(state).toEqual({ pointsBalance: 60, pointsConvertedBalance: 0 });
     expect(entries).toHaveLength(0);
     expect(prisma.plantedTree.create).not.toHaveBeenCalled();
+  });
+
+  it('PF-6a (b): góp quỹ đọc cửa sổ đổi/trả NGOÀI tx (trước $transaction), truyền vào lockedOrderPoints; không có lần đọc cấu hình nào trong tx', async () => {
+    const { prisma } = buyPrisma({ pointsBalance: 80, pointsConvertedBalance: 0 });
+    const loyalty = loyaltyWithLock(0);
+    const { config, configGets } = trackTx(prisma);
+
+    await buyService(prisma, config, loyalty).buyTree('u1');
+
+    const returnWindowDays = loyalty.returnWindowDays as jest.Mock;
+    expect(returnWindowDays).toHaveBeenCalledTimes(1);
+    expect(returnWindowDays.mock.invocationCallOrder[0]).toBeLessThan((prisma.$transaction as jest.Mock).mock.invocationCallOrder[0]!);
+    expect((loyalty.lockedOrderPoints as jest.Mock).mock.calls[0]![3]).toBe(WINDOW_DAYS);
+    expect(configGets.filter((g) => g.inTx)).toEqual([]);
+  });
+
+  it('PF-6a (b): góp quỹ phát lại theo Idempotency-Key (không đi tới lockedOrderPoints) vẫn không đọc cấu hình trong tx', async () => {
+    const { prisma } = buyPrisma({ pointsBalance: 200, pointsConvertedBalance: 0 });
+    const loyalty = loyaltyWithLock(0);
+    const { config, configGets } = trackTx(prisma);
+    const svc = buyService(prisma, config, loyalty);
+    const key = '11111111-2222-4333-8444-555555555555';
+
+    const first = await svc.buyTree('u1', key);
+    const replay = await svc.buyTree('u1', key);
+
+    expect(replay.certificateCode).toBe(first.certificateCode);
+    expect(configGets.filter((g) => g.inTx)).toEqual([]);
   });
 
   it('review C1: dựng GameService không có LoyaltyService thì góp quỹ ném lỗi (không âm thầm bỏ qua khoá), không trừ gì', async () => {

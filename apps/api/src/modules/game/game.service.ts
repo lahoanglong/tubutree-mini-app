@@ -127,17 +127,17 @@ export class GameService {
     // Thưởng điểm là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Tính NGOÀI tx: đọc cấu hình không giữ
     // kết nối tx; và thiếu LoyaltyService thì dừng trước khi trừ điểm, không để lọt dòng thưởng không hạn.
     const winExpiresAt = prize.rewardType === 'POINTS' ? await this.rewardPointsExpiresAt() : null;
-    // lockedOrderPoints (trong tx bên dưới) đọc returns.window_days qua cùng SystemConfigService. Nạp cache TRƯỚC khi mở tx:
-    // lần trượt cache trong tx xin kết nối pool thứ hai khi tx đang giữ một, nhiều lượt quay cùng chạm lúc cache hết hạn
-    // có thể cạn pool (P2024). Cùng khoá và mặc định với LoyaltyService.returnWindowDays.
-    await this.config.get<number>('returns.window_days', 7);
+    // Cửa sổ đổi/trả cho lockedOrderPoints trong tx bên dưới, đọc TRƯỚC khi mở tx rồi truyền vào: lần trượt cache cấu hình
+    // trong tx xin kết nối pool thứ hai khi tx đang giữ một (và khoá dòng user), nhiều lượt quay cùng chạm lúc cache hết
+    // hạn có thể cạn pool (P2024). Làm ấm cache không đủ vì khoảng hở gồm cả thời gian chờ FOR UPDATE.
+    const windowDays = await loyalty.returnWindowDays();
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
       // user rồi mới tới sổ): trả hàng song song xếp hàng ở đây thay vì chen giữa lúc đã đọc "dùng được" và lúc trừ.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number }[]>`
         SELECT "pointsBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
       if (Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked) < cost) {
         throw new BadRequestException(
           lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
@@ -407,6 +407,8 @@ export class GameService {
     const certificateCode = key ? treeCertificateCodeFor(userId, key) : `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const reason = `GAME_BUY_TREE:${certificateCode}`;
     const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
+    // Đọc ngoài tx rồi truyền cho lockedOrderPoints, cùng lý do như spin().
+    const windowDays = await loyalty.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
@@ -415,7 +417,7 @@ export class GameService {
         const replay = await this.replayTreeBuy(tx, userId, certificateCode);
         if (replay) return replay;
       }
-      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
       const std = Math.min(price, Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked));
       const conv = price - std;
       if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) {
