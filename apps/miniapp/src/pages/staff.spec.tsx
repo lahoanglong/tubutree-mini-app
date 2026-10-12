@@ -422,6 +422,14 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
   });
 
   describe('đăng ký nhanh cả tuần', () => {
+    it('hai ô giờ có tên truy cập phân biệt "Bắt đầu"/"Kết thúc", không rơi về tên mặc định "Giờ"', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      expect(screen.getByLabelText('Bắt đầu')).toHaveValue('08:00');
+      expect(screen.getByLabelText('Kết thúc')).toHaveValue('17:00');
+      expect(screen.queryByLabelText('Giờ')).not.toBeInTheDocument();
+    });
+
     it('mặc định T2–T6 từ hôm nay; ngày đã qua bị khoá; gửi đúng các ngày với giờ 08:00–17:00', async () => {
       mocks.createShifts.mockResolvedValue({ created: 3 });
       renderPage();

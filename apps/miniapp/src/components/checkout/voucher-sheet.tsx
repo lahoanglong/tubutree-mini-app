@@ -5,7 +5,7 @@ import { Ticket, TriangleAlert } from 'lucide-react';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
-import { formatVnd } from '../../utils/format';
+import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { Badge } from '../ui/badge';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -157,7 +157,7 @@ export function VoucherSheet({
                 const isApplied = currentCode?.toUpperCase() === coupon.code.toUpperCase();
                 const notEligible = coupon.minOrder != null && subtotal < coupon.minOrder;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
-                const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? endAtDate.toLocaleDateString('vi-VN') : 'Không thời hạn';
+                const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
 
                 return (

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Input } from 'zmp-ui';
 import { Field, Checkbox, Radio, Switch } from './form';
+import { describeNested, findNestedInteractive } from './nested-interactive';
 
 describe('Field', () => {
   it('renders label and error message', () => {
@@ -167,6 +168,29 @@ describe('control không có tên (C-077)', () => {
     expect(input.tabIndex).toBe(-1);
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByRole('radio')).toBeNull();
+  });
+
+  it.each([
+    ['Checkbox', <Checkbox key="c" checked={false} onChange={() => {}} />, 'checkbox-hit-area'],
+    ['Radio', <Radio key="r" checked={false} onChange={() => {}} />, 'radio-hit-area'],
+    ['Switch', <Switch key="s" checked={false} onChange={() => {}} />, 'switch-hit-area'],
+  ])('%s không tên bọc `inert`: tabindex=-1 một mình vẫn là phần tử focus được lồng trong hàng cha (axe nested-interactive)', (_n, ui, testId) => {
+    render(<div role="radio" aria-checked="false" tabIndex={0}>{ui}</div>);
+    expect(screen.getByTestId(testId)).toHaveAttribute('inert');
+    expect(findNestedInteractive(document.body).map(describeNested)).toEqual([]);
+  });
+
+  it('control CÓ tên không bị `inert` (là control thật, phải focus và đọc được)', () => {
+    render(
+      <>
+        <Checkbox label="Chọn tất cả" checked={false} onChange={() => {}} />
+        <Radio aria-label="Chuyển khoản" checked={false} onChange={() => {}} />
+        <Switch aria-label="Nhận thông báo" checked={false} onChange={() => {}} />
+      </>,
+    );
+    for (const id of ['checkbox-hit-area', 'radio-hit-area', 'switch-hit-area']) {
+      expect(screen.getByTestId(id)).not.toHaveAttribute('inert');
+    }
   });
 
   it('Checkbox không tên vẫn nhận onChange khi bấm (cha giữ ngữ nghĩa, DS không nuốt sự kiện)', () => {

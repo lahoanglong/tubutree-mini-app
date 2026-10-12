@@ -83,7 +83,17 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
     expect(screen.getByText('Miễn phí ship (tối đa 20.000đ)')).toBeInTheDocument();
     expect(screen.getByText('Cần đơn tối thiểu 500.000đ')).toBeInTheDocument();
-    expect(screen.getAllByText('HSD: 1/1/2027')).toHaveLength(2);
+    expect(screen.getAllByText('HSD: 01/01/2027')).toHaveLength(2);
+  });
+
+  it('mã không có hạn hoặc hạn hỏng → "HSD: Không thời hạn", không hiện "—" hay Invalid Date', async () => {
+    mocks.getCoupons.mockResolvedValue([
+      { ...COUPONS[0], code: 'KHONGHAN', endAt: null },
+      { ...COUPONS[0], code: 'HANHONG', endAt: 'không phải ngày' },
+    ]);
+    renderSheet();
+    expect(await screen.findAllByText('HSD: Không thời hạn')).toHaveLength(2);
+    expect(screen.queryByText(/Invalid Date|—/)).toBeNull();
   });
 
   it('chạm "Dùng mã" → áp dụng đúng mã, báo thành công, báo cho trang và đóng sheet', async () => {

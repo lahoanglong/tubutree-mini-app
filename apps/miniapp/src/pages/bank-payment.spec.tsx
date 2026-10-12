@@ -113,3 +113,39 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001', { replace: true });
   });
 });
+
+describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 (axe page-has-heading-one, C-114)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const onlyH1 = () => {
+    const h1 = screen.getAllByRole('heading', { level: 1 });
+    expect(h1).toHaveLength(1);
+    return h1[0]!;
+  };
+
+  it('chờ thanh toán: tiêu đề "Quét QR để chuyển khoản" là h1', async () => {
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ });
+    expect(onlyH1().textContent).toBe('Quét QR để chuyển khoản');
+  });
+
+  it('đã thanh toán: "Đã nhận thanh toán!" là h1', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentStatus: 'PAID' });
+    renderPage();
+    await screen.findByRole('button', { name: 'Xem đơn hàng' });
+    expect(onlyH1().textContent).toBe('Đã nhận thanh toán!');
+  });
+
+  it('đang tải và tải lỗi: h1 ẩn "Thanh toán chuyển khoản" giữ trang có tiêu đề mà không đổi bố cục', async () => {
+    mocks.getBankQr.mockReturnValue(new Promise(() => {}));
+    const loading = renderPage();
+    expect(onlyH1().textContent).toBe('Thanh toán chuyển khoản');
+    loading.unmount();
+
+    mocks.getBankQr.mockRejectedValue(new Error('x'));
+    renderPage();
+    await screen.findByText('Không tải được thông tin thanh toán.');
+    expect(onlyH1().textContent).toBe('Thanh toán chuyển khoản');
+  });
+});

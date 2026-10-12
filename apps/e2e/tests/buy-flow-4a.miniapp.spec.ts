@@ -9,6 +9,10 @@ import { eventsNamed, flushEvents } from './support/events';
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
  * (docs/superpowers/specs/2026-09-30-buy-flow-redesign-design.md §3-4). API mock toàn bộ.
  */
+/** Thẻ đơn (vỏ không tương tác) chứa nút mở đơn "Đơn <mã>"; "Mua lại" là anh em của nút đó nên phải tìm trong vỏ. */
+const orderCardOf = (page: Page, code: string) =>
+  page.getByTestId('order-card').filter({ has: page.getByRole('button', { name: `Đơn ${code}` }) });
+
 /**
  * Chờ kệ Mua lại ở trạng thái CUỐI (đã gọi /me/purchased-items và skeleton đã biến mất) — nếu không,
  * "kệ vắng mặt" có thể đúng chỉ vì query còn bị tắt (chờ đăng nhập) chứ chưa nhận phản hồi.
@@ -188,7 +192,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     mockOrdersTab(api);
     await page.goto('/orders');
 
-    const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+    const card = orderCardOf(page, DELIVERED_CODE);
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.locator('img')).toHaveAttribute('src', THUMB);
     await expect(card.getByText(/3 món/)).toBeVisible();
@@ -209,7 +213,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     api.get('/orders/me/returns', []);
     await page.goto('/orders');
 
-    const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+    const card = orderCardOf(page, DELIVERED_CODE);
     await expect(card).toBeVisible({ timeout: 15_000 });
     const button = card.getByRole('button', { name: 'Mua lại', exact: true });
 
@@ -467,7 +471,7 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
       await page.screenshot({ path: test.info().outputPath(`home-${width}.png`) });
 
       await page.goto('/orders');
-      const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+      const card = orderCardOf(page, DELIVERED_CODE);
       await expect(card).toBeVisible({ timeout: 15_000 });
       expect(await noHorizontalScroll()).toBe(true);
       await card.getByRole('button', { name: 'Mua lại', exact: true }).click();

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -205,5 +205,34 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     renderPage();
     const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này — nhận tới 15% hoa hồng/ });
     expect(banner.tagName).toBe('BUTTON');
+  });
+});
+
+describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (axe scrollable-region-focusable)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getPublicBrand.mockResolvedValue(BRAND);
+    mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
+    mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false });
+  });
+
+  afterEach(() => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth;
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+  });
+
+  it('hàng huy hiệu là vùng .scroll-x có tên "Chứng nhận" chứa huy hiệu', async () => {
+    renderPage();
+    const region = await screen.findByRole('region', { name: 'Chứng nhận' });
+    expect(region.className).toContain('scroll-x');
+    expect(within(region).getByText('USDA Organic')).toBeInTheDocument();
+  });
+
+  it('huy hiệu không bấm được: hàng tràn ngang thì tự focus được bằng bàn phím', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 600 });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 300 });
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Chứng nhận' })).toHaveAttribute('tabindex', '0');
   });
 });

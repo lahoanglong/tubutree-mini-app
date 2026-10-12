@@ -45,6 +45,9 @@ import { PriceTag } from '../components/ui/price-tag';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { ScrollRow } from '../components/ui/scroll-row';
+import { useScrollHints } from '../components/ui/use-scroll-hints';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -331,9 +334,11 @@ export default function ProductDetailPage() {
           </Box>
         </Box>
 
-        <Text.Title size="small" style={{ marginTop: 2 }}>
-          {p.name}
-        </Text.Title>
+        {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
+            hình dáng vẫn do Text.Title quyết định như trước. */}
+        <h1 style={{ margin: '2px 0 0', font: 'inherit' }}>
+          <Text.Title size="small">{p.name}</Text.Title>
+        </h1>
 
         {reviews.data && reviews.data.count > 0 && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
@@ -414,11 +419,12 @@ export default function ProductDetailPage() {
 
         {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
         {(couponsQ.data?.length ?? 0) > 0 && (
-          <Box className="scroll-x" style={{ gap: 8, marginTop: 12 }}>
+          <ScrollRow label="Mã giảm giá có thể dùng" style={{ gap: 8, marginTop: 12 }}>
             {couponsQ.data!.slice(0, 6).map((c) => (
               <Box
                 key={c.code}
                 role="button"
+                {...rowKeyboardProps()}
                 aria-label={`Sao chép mã ${c.code}`}
                 className="tubu-press"
                 onClick={() => {
@@ -457,7 +463,7 @@ export default function ProductDetailPage() {
                 ) : null}
               </Box>
             ))}
-          </Box>
+          </ScrollRow>
         )}
 
         {selected && inStock && (
@@ -794,7 +800,8 @@ const BUY_NOW_LINE: CSSProperties = {
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
 function Gallery({ images, alt }: { images: string[]; alt: string }) {
   const [index, setIndex] = useState(0);
-  const trackRef = useRef<HTMLDivElement>(null);
+  // Ảnh không bấm được nên vùng cuộn phải tự focus được khi tràn, nếu không bàn phím không lật ảnh được (axe scrollable-region-focusable).
+  const track = useScrollHints<HTMLDivElement>();
 
   if (images.length === 0) {
     return (
@@ -816,7 +823,8 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
   }
 
   const onScroll = () => {
-    const el = trackRef.current;
+    track.onScroll();
+    const el = track.ref.current;
     if (!el) return;
     setIndex(Math.round(el.scrollLeft / el.clientWidth));
   };
@@ -824,7 +832,10 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
   return (
     <Box style={{ position: 'relative' }}>
       <div
-        ref={trackRef}
+        ref={track.ref}
+        role="region"
+        aria-label="Ảnh sản phẩm"
+        tabIndex={track.tabIndex}
         onScroll={onScroll}
         style={{
           display: 'flex',

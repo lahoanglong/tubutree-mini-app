@@ -70,11 +70,19 @@ export function Field({ label, error, children }: FieldProps) {
 // định co theo nội dung (flex-shrink, không tự giãn ngang) — hộp chạm thực tế co lại còn đúng
 // bề rộng control gốc (24px medium/16px small), dưới ngưỡng 44px dù minHeight đã đủ (audit
 // A4-14 phát hiện khi migrate cart.tsx dùng lại component này — Task 25).
+// `inert` (không phải `true`: React 18 không biết thuộc tính này, chuỗi rỗng mới ra đúng `inert=""` trên DOM) khi
+// chấm chọn chỉ là hình: axe `nested-interactive` vẫn tính `<input tabindex="-1">` là phần tử focus được lồng trong
+// hàng cha role radio/checkbox, kể cả khi đã aria-hidden. Cây inert không focus được và không nhận chạm, nên cú
+// chạm vào chấm đi thẳng tới `onClick` của hàng cha (đúng một sự kiện). Trình duyệt không hiểu `inert` thì vẫn còn
+// `tabIndex -1` ở dưới, hành vi như trước.
+const INERT = { inert: '' } as Record<string, string>;
+
 function hitArea(testId: string, children: ReactNode, decorative: boolean) {
   return (
     <div
       data-testid={testId}
       aria-hidden={decorative || undefined}
+      {...(decorative ? INERT : null)}
       style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center' }}
     >
       {children}

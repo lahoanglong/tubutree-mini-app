@@ -376,11 +376,15 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
           </g>
         </svg>
 
-        {/* 8 Interactive Floating Sleek Brand Pins Overlaid on the 3D Map */}
+        {/* 8 ghim thương hiệu nổi trên bản đồ. Chỉ là lối tắt bằng hình trùng với 8 ô lưới bên dưới (cùng mở sheet), nên
+            ẩn khỏi trình đọc màn hình và thứ tự Tab: ở cụm Lâm Đồng/Mekong các hộp 44px chồng lên nhau không thể tách
+            (axe target-size, WCAG 2.5.8), còn chức năng vẫn đủ qua các ô lưới, là nút thật cao ≥135px. Chạm vẫn dùng được. */}
         {BRAND_ORIGINS.map((loc) => (
           <button
             key={loc.id}
             type="button"
+            aria-hidden="true"
+            tabIndex={-1}
             aria-label={`${loc.brand} — ${loc.province}`}
             className="tubu-press"
             onClick={() => onPick(loc)}

@@ -192,6 +192,10 @@ body.with-back-btn .page.page-bleed {
   left: 0;
   border-radius: var(--radius-card);
 }
+/* Thẻ phẳng toàn bề ngang (bài đăng cộng đồng) không có góc bo: lớp phủ và vòng focus cũng vuông. */
+.tubu-tile-link[data-flat]::after {
+  border-radius: 0;
+}
 .tubu-tile-link:focus-visible {
   outline: none;
 }

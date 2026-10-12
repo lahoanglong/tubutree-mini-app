@@ -22,6 +22,7 @@ import { Button } from '../components/ui/button';
 import { ProductTile } from '../components/ui/product-tile';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
+import { ScrollRow } from '../components/ui/scroll-row';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của StorePageShell. */
 const PAGE_TITLE = 'Nhãn hàng';
@@ -168,14 +169,14 @@ export default function BrandViewPage() {
         {b.certifications.length > 0 && (
           <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
-            <div className="scroll-x" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
+            <ScrollRow label="Chứng nhận" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
               {b.certifications.map((c) => (
                 <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <Icon icon={Leaf} size="sm" tone="brand" />
                   {c.label}
                 </Badge>
               ))}
-            </div>
+            </ScrollRow>
           </div>
         )}
 

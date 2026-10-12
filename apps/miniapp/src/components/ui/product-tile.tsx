@@ -6,6 +6,7 @@ import { WishlistHeart } from '../wishlist-heart';
 import { PriceTag } from './price-tag';
 import { Text } from './text';
 import { Button } from './button';
+import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET } from './stretched-link';
 
 export interface ProductTileProduct {
   id: string;
@@ -24,20 +25,8 @@ export interface ProductTileProduct {
 /** Chiều cao tối thiểu ô tên (2 dòng) — skeleton của CatalogGrid dựng từ cùng hằng số này. */
 export const TILE_NAME_MIN_HEIGHT = 44;
 
-/** Nút tên thẻ trông như chữ thường. Cố ý KHÔNG đặt `position`: `.tubu-tile-link::after` phải định vị
- * theo vỏ thẻ (position:relative) thì mới phủ kín cả thẻ. */
-const LINK_RESET: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  margin: '2px 0 0',
-  padding: 0,
-  border: 'none',
-  background: 'none',
-  font: 'inherit',
-  color: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
+/** Nút tên thẻ: nút phủ cả thẻ (xem stretched-link.ts) trải hết bề ngang, cách dòng trên 2px. */
+const LINK_RESET: CSSProperties = { ...STRETCHED_LINK_RESET, display: 'block', width: '100%', margin: '2px 0 0' };
 
 export interface ProductTileProps {
   product: ProductTileProduct;
@@ -160,7 +149,7 @@ export function ProductTile({
             truy cập (e2e, trình đọc màn hình) không phụ thuộc cấu trúc con. */}
         <button
           type="button"
-          className="tubu-tile-link"
+          className={STRETCHED_LINK_CLASS}
           aria-label={p.name}
           aria-describedby={priceId}
           onClick={onPress}

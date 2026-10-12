@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AddressDTO } from '../../services/shop-api';
@@ -19,10 +20,10 @@ const ADDR: AddressDTO = {
   ward: 'P1', wardCode: '84_VN79_001', district: '', districtCode: '', isDefault: true,
 };
 
-function renderSection(addresses: AddressDTO[]) {
+function renderSection(addresses: AddressDTO[], onSelect: (id: string) => void = () => {}) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <AddressSection addresses={addresses} selectedId={null} onSelect={() => {}} />
+      <AddressSection addresses={addresses} selectedId={null} onSelect={onSelect} />
     </QueryClientProvider>,
   );
 }
@@ -41,5 +42,36 @@ describe('AddressSection — xin tên + SĐT Zalo chỉ ở đơn đầu (C-065,
     renderSection([ADDR]);
     fireEvent.click(screen.getByText('Thêm địa chỉ mới'));
     expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: false }));
+  });
+});
+
+describe('AddressSection — hàng chọn địa chỉ dùng được bằng bàn phím', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // Hàng là <button role="radio"> thật: Tab tới và Enter/Space là hành vi gốc của trình duyệt, không cần rowKeyboardProps
+  // (chỉ dành cho <div role="radio">). Đổi hàng về div không focus được thì test này đỏ.
+  it('Tab tới hàng, Enter rồi Space mỗi phím chọn đúng một lần', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    renderSection([ADDR, { ...ADDR, id: 'a2', recipient: 'Bình', isDefault: false }], onSelect);
+
+    const rows = screen.getAllByRole('radio');
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.tagName).toBe('BUTTON');
+
+    await user.tab();
+    expect(rows[0]).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenLastCalledWith('a1');
+
+    await user.keyboard(' ');
+    expect(onSelect).toHaveBeenCalledTimes(2);
+
+    await user.tab();
+    expect(rows[1]).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onSelect).toHaveBeenCalledTimes(3);
+    expect(onSelect).toHaveBeenLastCalledWith('a2');
   });
 });
