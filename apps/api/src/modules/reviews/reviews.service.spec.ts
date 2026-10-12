@@ -715,7 +715,7 @@ describe('ReviewsService.canReview', () => {
   it('đã có đơn DELIVERED chứa sản phẩm, chưa đánh giá → được đánh giá', async () => {
     const prisma = makePrisma();
     const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
-    expect(r).toEqual({ canReview: true, reason: null, myReview: null });
+    expect(r).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
   });
 
   it('chưa từng mua → không được, kèm lý do để FE hiện đúng thông điệp', async () => {
@@ -746,6 +746,49 @@ describe('ReviewsService.canReview', () => {
       canReview: true,
       reason: null,
       myReview: { id: 'r0', rating: 4, comment: 'ổn', images: ['a.jpg'], videoUrl: null },
+      rewardAvailable: false,
+    });
+  });
+
+  // PG-4: cờ chỉ để miniapp ẩn câu gợi ý điểm; dùng đúng luật rewardAlreadyKept của createFirst.
+  describe('rewardAvailable', () => {
+    const ledger = (rows: { delta: number }[]) => makePrisma({ pointsTransaction: { findMany: jest.fn().mockResolvedValue(rows) } });
+
+    it('chưa từng đánh giá, sổ điểm trống → true', async () => {
+      const r = await new ReviewsService(ledger([]), analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(r.rewardAvailable).toBe(true);
+    });
+
+    it('đã nhận thưởng và đã xoá đánh giá nhưng điểm không thu hồi được (sổ còn dương) → false', async () => {
+      const r = await new ReviewsService(ledger([{ delta: 5 }]), analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(r.rewardAvailable).toBe(false);
+    });
+
+    it('đã nhận thưởng, xoá đánh giá và thu hồi đủ (sổ về 0) → true, giống createFirst', async () => {
+      const r = await new ReviewsService(ledger([{ delta: 10 }, { delta: -10 }]), analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(r.rewardAvailable).toBe(true);
+    });
+
+    it('đang có đánh giá (gọi tạo lại là sửa, không thưởng) → false, không cần đọc sổ', async () => {
+      const prisma = makePrisma({ review: { findFirst: jest.fn().mockResolvedValue({ id: 'r0', rating: 4, comment: null, images: [], videoUrl: null }) } });
+      const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(r.rewardAvailable).toBe(false);
+      expect(prisma.pointsTransaction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('đọc sổ đúng cặp khách-sản phẩm như luật thưởng (REVIEW:slug, REVIEW_DELETE:id)', async () => {
+      const prisma = ledger([]);
+      await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(prisma.pointsTransaction.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', refType: 'REVIEW', reason: { in: ['REVIEW:tinh-dau', 'REVIEW_DELETE:p1'] } },
+        select: { delta: true },
+      });
+    });
+
+    it('chưa mua → không có cờ (hợp đồng cũ giữ nguyên)', async () => {
+      const prisma = makePrisma({ order: { findFirst: jest.fn().mockResolvedValue(null) } });
+      const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
+      expect(r).not.toHaveProperty('rewardAvailable');
     });
   });
 

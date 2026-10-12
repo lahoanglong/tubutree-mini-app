@@ -411,10 +411,14 @@ export interface MyReview {
   images: string[];
   videoUrl: string | null;
 }
-/** Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. */
+/**
+ * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối.
+ * `rewardAvailable` (optional, API cũ không trả): false khi khách đã nhận thưởng sản phẩm này hoặc đang có đánh giá;
+ * chỉ để ẩn câu gợi ý điểm, máy chủ vẫn quyết định thưởng lúc tạo.
+ */
 export const canReviewProduct = (slug: string) =>
   api
-    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | null; myReview?: MyReview | null }>(
+    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | null; myReview?: MyReview | null; rewardAvailable?: boolean }>(
       `/products/${slug}/reviews/can-review`,
     )
     .then((r) => r.data);

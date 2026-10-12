@@ -210,14 +210,52 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   it('can-review: có đánh giá rồi vẫn được, trả đánh giá hiện có; chưa mua thì NOT_PURCHASED', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
-    expect(await reviews.canReview(u.id, p.slug)).toEqual({ canReview: true, reason: null, myReview: null });
+    expect(await reviews.canReview(u.id, p.slug)).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
     const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://i/1.jpg'] });
     expect(await reviews.canReview(u.id, p.slug)).toEqual({
       canReview: true,
       reason: null,
       myReview: { id: first.id, rating: 4, comment: 'Ổn', images: ['https://i/1.jpg'], videoUrl: null },
+      rewardAvailable: false,
     });
     const stranger = await createUser(prisma);
     expect(await reviews.canReview(stranger.id, p.slug)).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
+  });
+
+  // PG-4: cờ rewardAvailable phải khớp với điều createFirst làm thật trên sổ điểm.
+  it('rewardAvailable khớp thưởng thật: xoá thu hồi đủ thì còn thưởng, xoá khi điểm đã tiêu hết thì hết thưởng', async () => {
+    const { p, v } = await product();
+    const { u } = await buyer(v.id);
+    expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(true);
+
+    const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Một' });
+    expect(first.pointsEarned).toBe(5);
+    expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(false);
+
+    await reviews.remove(u.id, 'USER', first.id);
+    expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(true);
+    const again = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Hai' });
+    expect(again.pointsEarned).toBe(5);
+
+    // Tiêu hết Điểm Xanh rồi xoá: không thu hồi được nên thưởng coi như đã dùng, tạo lại không thưởng.
+    await prisma.user.update({ where: { id: u.id }, data: { pointsBalance: 0 } });
+    await reviews.remove(u.id, 'USER', again.id);
+    expect((await reviews.canReview(u.id, p.slug)).rewardAvailable).toBe(false);
+    const third = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Ba' });
+    expect(third.pointsEarned).toBe(0);
+  });
+
+  it('rewardAvailable chỉ tính theo đúng sản phẩm: đã nhận thưởng sản phẩm A không ảnh hưởng sản phẩm B', async () => {
+    const a = await product();
+    const b = await product();
+    const { u } = await buyer(a.v.id);
+    await createOrder(prisma, {
+      userId: u.id,
+      status: 'DELIVERED',
+      items: { create: [{ variationId: b.v.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
+    });
+    await reviews.create(u.id, a.p.slug, { rating: 5 });
+    expect((await reviews.canReview(u.id, a.p.slug)).rewardAvailable).toBe(false);
+    expect((await reviews.canReview(u.id, b.p.slug)).rewardAvailable).toBe(true);
   });
 });

@@ -257,6 +257,7 @@ export function ReviewsSection({ slug }: { slug: string }) {
           slug={slug}
           draft={draft}
           isEdit={!!myReview}
+          showReward={eligQ.data?.rewardAvailable !== false}
           onDraftChange={(patch) => setEdited((d) => ({ ...(d ?? base), ...patch }))}
           onDone={() => {
             setEdited(null);
@@ -271,17 +272,22 @@ export function ReviewsSection({ slug }: { slug: string }) {
 // Biểu mẫu không biết khách đã nhận thưởng sản phẩm này trước đó hay chưa (xoá đánh giá rồi viết lại thì BE cho
 // pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
 const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
+// Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy snackbar không kèm điểm.
+const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.';
 
 function WriteReview({
   slug,
   draft,
   isEdit,
+  showReward,
   onDraftChange,
   onDone,
 }: {
   slug: string;
   draft: ReviewDraft;
   isEdit: boolean;
+  /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
+  showReward: boolean;
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
   onDone: () => void;
 }) {
@@ -357,20 +363,27 @@ function WriteReview({
       />
       <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} max={5} />
       <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} />
-      <Text
-        variant="caption"
-        tone={bonus ? 'success' : 'tertiary'}
-        as="p"
-        style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
-      >
-        {isEdit
-          ? 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.'
-          : video
-            ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`
-            : images.length > 0
-              ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
-              : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
-      </Text>
+      {(isEdit || showReward) && (
+        <Text
+          variant="caption"
+          tone={bonus ? 'success' : 'tertiary'}
+          as="p"
+          style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
+        >
+          {isEdit
+            ? 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.'
+            : video
+              ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`
+              : images.length > 0
+                ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
+                : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
+        </Text>
+      )}
+      {!isEdit && !showReward && (
+        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
+          {REWARD_ALREADY_GIVEN}
+        </Text>
+      )}
       <Button fullWidth loading={submit.isPending} onPress={() => submit.mutate()} style={{ marginTop: 16 }}>
         {isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
       </Button>

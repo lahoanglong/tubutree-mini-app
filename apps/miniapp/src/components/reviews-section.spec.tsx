@@ -398,6 +398,43 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
     expect(hint.textContent).not.toContain(FIRST_ONLY);
     expect(screen.getAllByText(/Điểm Xanh/)).toHaveLength(1);
   });
+
+  // PG-4: API báo hết thưởng (đã nhận, hoặc đang sửa) thì không hứa điểm nữa. Thiếu cờ (API cũ) giữ câu cũ.
+  describe('cờ rewardAvailable từ can-review', () => {
+    it('rewardAvailable === false: form viết mới không hứa +5/+10/+15 mà nói rõ đã nhận thưởng trước đó, ở cả ba trạng thái chữ/ảnh/video', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: false });
+      await openNewForm();
+      const noPromise = () => expect(screen.queryByText(/\+\d+ Điểm Xanh|Lần đầu đánh giá/)).not.toBeInTheDocument();
+      noPromise();
+      expect(screen.getByText('Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+      noPromise();
+      fireEvent.click(screen.getByRole('button', { name: 'Chọn video thử (0)' }));
+      noPromise();
+      expect(screen.getAllByText(/Điểm Xanh/)).toHaveLength(1);
+      expect(screen.getByRole('button', { name: 'Gửi đánh giá' })).toBeInTheDocument();
+    });
+
+    it('rewardAvailable === true: giữ câu gợi ý như cũ', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
+      await openNewForm();
+      expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
+    });
+
+    it('thiếu trường (API cũ) → giữ câu gợi ý như cũ', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+      await openNewForm();
+      expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
+    });
+
+    it('chế độ sửa vẫn giữ câu giải thích "sửa không cộng thêm" dù cờ là false', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, rewardAvailable: false });
+      renderSection();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(screen.getByText(/Điểm Xanh/)).toHaveTextContent(EDIT_HINT);
+    });
+  });
 });
 
 describe('Stars', () => {
