@@ -81,3 +81,35 @@ export function smallTouchTargets(root: ParentNode): string[] {
     .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className))
     .map((el) => el.outerHTML.slice(0, 120));
 }
+
+const FIELDS = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]), select, textarea';
+
+/**
+ * Ô nhập/select thiếu nhãn theo đúng luật axe `label` và `select-name`: tên lấy từ <label>, aria-label,
+ * aria-labelledby hoặc title; `placeholder` chỉ được axe chấp nhận cho ô chữ (input/textarea), KHÔNG cho select
+ * và không có tác dụng với ô ngày giờ (trình duyệt không hiện placeholder). Dùng cho màn admin/merchant, nơi
+ * nhiều ô chữ chỉ có placeholder (axe cho qua); khác với `unnamedControls` chặt hơn của web khách.
+ */
+export function unlabeledFields(root: ParentNode): string[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FIELDS))
+    .filter((el) => el.getAttribute('aria-hidden') !== 'true')
+    .filter((el) => {
+      if (accessibleName(el)) return false;
+      const type = el.getAttribute('type');
+      const placeholderCounts = el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !/^(date|datetime-local|time|month|week|color|file|range)$/.test(type ?? ''));
+      return !(placeholderCounts && el.getAttribute('placeholder')?.trim());
+    })
+    .map((el) => `<${el.tagName.toLowerCase()}${el.getAttribute('type') ? ` type=${el.getAttribute('type')}` : ''}> ${el.outerHTML.slice(0, 120)}`);
+}
+
+/**
+ * Khung cuộn ngang bọc bảng phải focus được bằng bàn phím (axe `scrollable-region-focusable`): `tabindex="0"`,
+ * kèm `role="region"` + `aria-label` để người dùng đọc màn hình biết đang đứng trong bảng nào. Rỗng = đạt.
+ */
+export function scrollRegionProblems(root: ParentNode): string[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('table'))
+    .map((t) => t.parentElement!)
+    .filter((box) => /\boverflow-(?:x-)?auto\b/.test(box.className))
+    .filter((box) => box.getAttribute('tabindex') !== '0' || box.getAttribute('role') !== 'region' || !box.getAttribute('aria-label')?.trim())
+    .map((box) => box.outerHTML.slice(0, 120));
+}

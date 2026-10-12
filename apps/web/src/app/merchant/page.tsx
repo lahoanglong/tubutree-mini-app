@@ -44,7 +44,7 @@ import {
 } from '@/lib/merchant-client';
 import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
-import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from '@/components/admin/ui';
+import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, ScrollRegion, TOUCH_H } from '@/components/admin/ui';
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 
 const POPULAR_BANKS = [
@@ -111,11 +111,11 @@ export default function MerchantPage() {
 
   if (status !== 'authenticated') {
     return (
-      <div className="mx-auto max-w-md px-4 py-20 text-center">
+      <main className="mx-auto max-w-md px-4 py-20 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-700 shadow-card">
           <Store className="h-8 w-8" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 font-display text-2xl font-semibold text-stone-900">Cổng Quản Trị Đối Tác</h2>
+        <h1 className="mt-4 font-display text-2xl font-semibold text-stone-900">Cổng Quản Trị Đối Tác</h1>
         <p className="mt-2 text-sm text-stone-600">
           Vui lòng đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, kho hàng và đơn hàng.
         </p>
@@ -125,7 +125,7 @@ export default function MerchantPage() {
         >
           <span>Đăng nhập ngay</span>
         </Link>
-      </div>
+      </main>
     );
   }
 
@@ -134,16 +134,16 @@ export default function MerchantPage() {
   // tiêu đề, 4 thẻ số liệu 0, 5 tab — kèm một hộp lỗi 403. Trang /admin đã kiểm; trang này sót.
   if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role)) {
     return (
-      <div className="mx-auto max-w-md px-4 py-20 text-center">
+      <main className="mx-auto max-w-md px-4 py-20 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-700 shadow-card">
           <Store className="h-8 w-8" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 font-display text-2xl font-semibold text-stone-900">Kênh dành cho đối tác</h2>
+        <h1 className="mt-4 font-display text-2xl font-semibold text-stone-900">Kênh dành cho đối tác</h1>
         <p className="mt-2 text-sm text-stone-600">
           Tài khoản của bạn chưa phải đại lý hoặc cộng tác viên. Đăng ký trong Mini App Tubu Tree
           để mở kênh bán hàng riêng.
         </p>
-      </div>
+      </main>
     );
   }
 
@@ -344,8 +344,9 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         <h3 className="font-display font-semibold text-stone-900">Thiết lập mặt tiền & Subdomain</h3>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Tên gian hàng / Thương hiệu</label>
+          <label htmlFor="merchant-store-title" className="block text-xs font-medium text-stone-700">Tên gian hàng / Thương hiệu</label>
           <input
+            id="merchant-store-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
@@ -354,10 +355,11 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
+          <label htmlFor="merchant-store-subdomain" className="block text-xs font-medium text-stone-700">Subdomain riêng biệt</label>
           <div className="mt-1 flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-50 px-3 py-2 text-sm focus-within:border-forest-600 focus-within:bg-stone-0 sm:min-h-[36px]">
             <span className="text-stone-500">https://</span>
             <input
+              id="merchant-store-subdomain"
               value={subdomain}
               onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
               placeholder="ten-thuong-hieu"
@@ -369,8 +371,8 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Màu chủ đạo giao diện (Theme Color)</label>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <span id="merchant-store-theme-color" className="block text-xs font-medium text-stone-700">Màu chủ đạo giao diện (Theme Color)</span>
+          <div role="group" aria-labelledby="merchant-store-theme-color" className="mt-2 flex flex-wrap gap-2">
             {THEME_COLORS.map((c) => (
               <button
                 key={c.hex}
@@ -389,8 +391,9 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Thông điệp thương hiệu / Slogan</label>
+          <label htmlFor="merchant-store-header-note" className="block text-xs font-medium text-stone-700">Thông điệp thương hiệu / Slogan</label>
           <textarea
+            id="merchant-store-header-note"
             value={headerNote}
             onChange={(e) => setHeaderNote(e.target.value)}
             rows={2}
@@ -401,8 +404,9 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-medium text-stone-700">URL Logo thương hiệu</label>
+            <label htmlFor="merchant-store-avatar-url" className="block text-xs font-medium text-stone-700">URL Logo thương hiệu</label>
             <input
+              id="merchant-store-avatar-url"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
               placeholder="https://..."
@@ -410,8 +414,9 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-stone-700">URL Ảnh bìa (Cover Banner)</label>
+            <label htmlFor="merchant-store-cover-url" className="block text-xs font-medium text-stone-700">URL Ảnh bìa (Cover Banner)</label>
             <input
+              id="merchant-store-cover-url"
               value={coverUrl}
               onChange={(e) => setCoverUrl(e.target.value)}
               placeholder="https://..."
@@ -593,8 +598,9 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Ngân hàng thụ hưởng</label>
+          <label htmlFor="merchant-bank-name" className="block text-xs font-medium text-stone-700">Ngân hàng thụ hưởng</label>
           <select
+            id="merchant-bank-name"
             value={bankName}
             onChange={handleBankSelect}
             className={MERCHANT_INPUT}
@@ -608,8 +614,9 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Số tài khoản ngân hàng</label>
+          <label htmlFor="merchant-bank-account-no" className="block text-xs font-medium text-stone-700">Số tài khoản ngân hàng</label>
           <input
+            id="merchant-bank-account-no"
             value={bankAccountNo}
             onChange={(e) => setBankAccountNo(e.target.value.trim())}
             required
@@ -619,8 +626,9 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-stone-700">Tên chủ tài khoản (viết hoa không dấu)</label>
+          <label htmlFor="merchant-bank-account-name" className="block text-xs font-medium text-stone-700">Tên chủ tài khoản (viết hoa không dấu)</label>
           <input
+            id="merchant-bank-account-name"
             value={bankAccountName}
             onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
             required
@@ -707,8 +715,9 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-stone-700">Số nhà, tên đường, khu công nghiệp / toà nhà</label>
+        <label htmlFor="merchant-warehouse-address" className="block text-xs font-medium text-stone-700">Số nhà, tên đường, khu công nghiệp / toà nhà</label>
         <input
+          id="merchant-warehouse-address"
           value={warehouseAddress}
           onChange={(e) => setWarehouseAddress(e.target.value)}
           required
@@ -719,8 +728,9 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className="block text-xs font-medium text-stone-700">Tỉnh / Thành phố</label>
+          <label htmlFor="merchant-warehouse-city" className="block text-xs font-medium text-stone-700">Tỉnh / Thành phố</label>
           <input
+            id="merchant-warehouse-city"
             value={warehouseCity}
             onChange={(e) => setWarehouseCity(e.target.value)}
             required
@@ -729,8 +739,9 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-stone-700">Quận / Huyện</label>
+          <label htmlFor="merchant-warehouse-district" className="block text-xs font-medium text-stone-700">Quận / Huyện</label>
           <input
+            id="merchant-warehouse-district"
             value={warehouseDistrict}
             onChange={(e) => setWarehouseDistrict(e.target.value)}
             required
@@ -739,8 +750,9 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-stone-700">Phường / Xã</label>
+          <label htmlFor="merchant-warehouse-ward" className="block text-xs font-medium text-stone-700">Phường / Xã</label>
           <input
+            id="merchant-warehouse-ward"
             value={warehouseWard}
             onChange={(e) => setWarehouseWard(e.target.value)}
             required
@@ -751,8 +763,9 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-stone-700">Số điện thoại liên hệ kho / điều phối vận chuyển</label>
+        <label htmlFor="merchant-warehouse-phone" className="block text-xs font-medium text-stone-700">Số điện thoại liên hệ kho / điều phối vận chuyển</label>
         <input
+          id="merchant-warehouse-phone"
           value={warehousePhone}
           onChange={(e) => setWarehousePhone(e.target.value)}
           required
@@ -863,7 +876,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
       {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách sản phẩm.</p>}
 
       {subTab === 'own' && q.data && (
-        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion label="Sản phẩm do tôi đăng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
@@ -916,11 +929,11 @@ function ProductsTab({ store }: { store: MerchantStore }) {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       {subTab === 'resell' && q.data && (
-        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion label="Sản phẩm Tubu Tree bán lại" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
@@ -962,7 +975,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       {q.data && (
@@ -1040,8 +1053,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <div>
-            <label className="block text-xs font-medium text-stone-700">Tên sản phẩm *</label>
+            <label htmlFor="merchant-product-name" className="block text-xs font-medium text-stone-700">Tên sản phẩm *</label>
             <input
+              id="merchant-product-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -1052,8 +1066,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-stone-700">Giá bán (VNĐ) *</label>
+              <label htmlFor="merchant-product-price" className="block text-xs font-medium text-stone-700">Giá bán (VNĐ) *</label>
               <input
+                id="merchant-product-price"
                 type="number"
                 value={basePrice}
                 onChange={(e) => setBasePrice(Number(e.target.value))}
@@ -1063,8 +1078,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-stone-700">Số lượng tồn kho ban đầu *</label>
+              <label htmlFor="merchant-product-stock" className="block text-xs font-medium text-stone-700">Số lượng tồn kho ban đầu *</label>
               <input
+                id="merchant-product-stock"
                 type="number"
                 value={stock}
                 onChange={(e) => setStock(Number(e.target.value))}
@@ -1076,8 +1092,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-stone-700">Mô tả ngắn</label>
+            <label htmlFor="merchant-product-short-desc" className="block text-xs font-medium text-stone-700">Mô tả ngắn</label>
             <input
+              id="merchant-product-short-desc"
               value={shortDesc}
               onChange={(e) => setShortDesc(e.target.value)}
               placeholder="Chiết xuất bồ hòn tự nhiên, an toàn cho da nhạy cảm..."
@@ -1086,8 +1103,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-stone-700">Nội dung mô tả chi tiết *</label>
+            <label htmlFor="merchant-product-description" className="block text-xs font-medium text-stone-700">Nội dung mô tả chi tiết *</label>
             <textarea
+              id="merchant-product-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required
@@ -1098,8 +1116,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-stone-700">Tiêu chuẩn / Chứng nhận xanh (phân cách bằng dấu phẩy)</label>
+            <label htmlFor="merchant-product-certifications" className="block text-xs font-medium text-stone-700">Tiêu chuẩn / Chứng nhận xanh (phân cách bằng dấu phẩy)</label>
             <input
+              id="merchant-product-certifications"
               value={certifications}
               onChange={(e) => setCertifications(e.target.value)}
               className={MERCHANT_INPUT}
@@ -1107,8 +1126,9 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
+            <label htmlFor="merchant-product-image-url" className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
             <input
+              id="merchant-product-image-url"
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
               placeholder="https://..."
@@ -1221,7 +1241,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
       {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách đơn hàng.</p>}
 
       {q.data && (
-        <div className="overflow-x-auto rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion label="Đơn hàng xuất phát từ kho" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
@@ -1333,7 +1353,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
 
       {q.data && (

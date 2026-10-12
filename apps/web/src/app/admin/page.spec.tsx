@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
 import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
@@ -1383,5 +1384,94 @@ describe('admin/page — tab Academy', () => {
     click(btn(container, 'Xoá'));
     await flush();
     expect(mocks.deleteAcademyLesson).toHaveBeenCalledWith('l1');
+  });
+});
+
+// PF-4 (axe select-name/label): mọi select và ô ngày giờ phải có tên truy cập; ô chữ chỉ có placeholder thì axe cho qua.
+describe('admin/page — nhãn truy cập của ô nhập (axe select-name, label)', () => {
+  const TABS_WITH_FIELDS = [
+    'dealers', 'orders', 'returns', 'users', 'coupons', 'brands', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'config',
+  ];
+  it.each(TABS_WITH_FIELDS)('tab %s: không có select/ô ngày thiếu nhãn', async (tab) => {
+    window.history.replaceState(null, '', `/admin?tab=${tab}`);
+    const { container } = await mount();
+    await flush();
+    expect(unlabeledFields(container)).toEqual([]);
+  });
+
+  it('tab Academy: select loại bài học của form thêm bài và form sửa bài có nhãn', async () => {
+    mocks.courses = [
+      {
+        id: 'c1',
+        title: 'Bán hàng cơ bản',
+        description: null,
+        level: 'BEGINNER',
+        sortOrder: 1,
+        isActive: true,
+        lessons: [{ id: 'l1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://v.test/1', body: null, sortOrder: 1 }],
+      },
+    ];
+    window.history.replaceState(null, '', '/admin?tab=academy');
+    const { container } = await mount();
+    click(btn(container, /Quản lý|Sửa/));
+    await flush();
+    click(btn(container, 'Sửa'));
+    await flush();
+    expect(container.querySelectorAll('select').length).toBeGreaterThan(0);
+    expect(unlabeledFields(container)).toEqual([]);
+  });
+});
+
+// PF-4 (axe target-size, WCAG 2.5.8): nút chữ xếp dọc trong hàng FAQ/mẫu tin nhanh chỉ cách nhau 4px; ở màn máy tính
+// cao tối thiểu 24px thì mới đạt, nên lớp `sm:min-h-0` không được để chiều cao rơi về chiều cao dòng chữ.
+describe('admin/page — vùng chạm tối thiểu 24px ở màn máy tính (axe target-size)', () => {
+  it('hàng câu hỏi thường gặp: ba nút chữ xếp dọc có sm:min-h-6', async () => {
+    mocks.faqs = [{ id: 'f1', category: 'Vận chuyển', question: 'Ship bao lâu?', answer: '2-3 ngày', sortOrder: 2, isActive: true }];
+    window.history.replaceState(null, '', '/admin?tab=faqs');
+    const { container } = await mount();
+    for (const label of ['Sửa', 'Ẩn', 'Xoá']) {
+      const b = [...container.querySelectorAll('button')].find((x) => x.textContent === label)!;
+      expect(b, label).toBeDefined();
+      expect(b.className, label).toContain('sm:min-h-6');
+      expect(b.className, label).not.toContain('sm:min-h-0');
+    }
+  });
+
+  it('hàng mẫu tin nhanh: các nút chữ có sm:min-h-6', async () => {
+    mocks.quickReplies = [
+      { id: 'q1', category: null, title: 'Chào khách', content: 'Xin chào', keywords: ['chào'], isGreeting: false, sortOrder: 1, isActive: true },
+    ];
+    window.history.replaceState(null, '', '/admin?tab=quickReplies');
+    const { container } = await mount();
+    const row = [...container.querySelectorAll('button')].filter((x) => ['Sửa', 'Tắt', 'Xoá'].includes(x.textContent ?? ''));
+    expect(row.map((x) => x.textContent)).toEqual(['Sửa', 'Tắt', 'Xoá']);
+    for (const b of row) expect(b.className).toContain('sm:min-h-6');
+  });
+});
+
+// PF-4 (axe scrollable-region-focusable): khung cuộn ngang bọc bảng không có phần tử focus được bên trong thì bàn phím
+// không cuộn tới phần bị che; khung phải tự nhận tab.
+describe('admin/page — khung cuộn bảng focus được bằng bàn phím', () => {
+  it('tab Tổng quan (đơn gần đây) và tab Người dùng: khung bọc bảng có tabindex=0, role=region, aria-label', async () => {
+    const dash = await mount();
+    expect(dash.container.querySelector('table')).not.toBeNull();
+    expect(scrollRegionProblems(dash.container)).toEqual([]);
+    dash.unmount();
+    mounted = mounted.filter((m) => m !== dash);
+
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const users = await mount();
+    expect(users.container.querySelector('table')).not.toBeNull();
+    expect(scrollRegionProblems(users.container)).toEqual([]);
+  });
+
+  it('tab Đơn hàng: bảng đơn có khung cuộn focus được', async () => {
+    mocks.orders = [
+      { id: 'o1', code: 'TT1', total: 100000, status: 'CONFIRMED', paymentMethod: 'COD', createdAt: '2026-10-01T03:00:00.000Z', user: { fullName: 'Khách', phone: '0900000000' }, items: [] },
+    ];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    expect(container.querySelector('table')).not.toBeNull();
+    expect(scrollRegionProblems(container)).toEqual([]);
   });
 });

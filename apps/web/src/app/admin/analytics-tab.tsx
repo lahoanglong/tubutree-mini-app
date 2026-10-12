@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getRetentionDaily } from '@/lib/admin-client';
 import { Ns1Card } from '@/components/admin/ns1-card';
+import { ScrollRegion } from '@/components/admin/ui';
 
 export function AnalyticsTab() {
   const q = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30) });
@@ -24,7 +25,7 @@ export function AnalyticsTab() {
         <StatCard label="Đơn hôm qua" value={latest.ordersCount} />
         <StatCard label="Đơn/khách/tháng (luỹ kế)" value={latest.ordersPerBuyerMtd.toFixed(2)} />
       </div>
-      <div className="mt-4 overflow-x-auto">
+      <ScrollRegion label="Số liệu retention 30 ngày" className="mt-4">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-stone-500">
@@ -45,7 +46,7 @@ export function AnalyticsTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </div>
   );
 }
