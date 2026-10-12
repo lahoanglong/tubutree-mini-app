@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
@@ -97,13 +98,8 @@ export class CommunityFeedController {
   }
 
   @Get('events/:id/posts')
-  eventPosts(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-    @Query('cursor') cursor?: string,
-    @Query('take') take?: string,
-  ) {
-    return this.feed.eventPosts(id, userId, take ? Number(take) : undefined, cursor);
+  eventPosts(@CurrentUser('sub') userId: string, @Param('id') id: string, @Query() query: CursorPageQuery) {
+    return this.feed.eventPosts(id, userId, query.take ? Number(query.take) : undefined, query.cursor);
   }
 
   @Roles('ADMIN')
@@ -172,13 +168,8 @@ export class CommunityFeedController {
   }
 
   @Get(':id/comments')
-  comments(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-    @Query('cursor') cursor?: string,
-    @Query('take') take?: string,
-  ) {
-    return this.feed.getComments(id, userId, take ? Number(take) : undefined, cursor);
+  comments(@CurrentUser('sub') userId: string, @Param('id') id: string, @Query() query: CursorPageQuery) {
+    return this.feed.getComments(id, userId, query.take ? Number(query.take) : undefined, query.cursor);
   }
 
   @Throttle({ default: { limit: 15, ttl: 60_000 } })
