@@ -418,11 +418,21 @@ export const canReviewProduct = (slug: string) =>
       `/products/${slug}/reviews/can-review`,
     )
     .then((r) => r.data);
-/** `updated`: true khi đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới. */
+/**
+ * POST /products/:slug/reviews trả nguyên dòng Review (không có author/avatar như mục của danh sách công khai) kèm
+ * `updated`. Hai trường dưới là optional để chịu được API cũ chưa trả.
+ * - `updated`: true khi đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
+ * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách còn giữ phần thưởng cũ của sản phẩm này
+ *   (xoá rồi tạo lại). Khi `updated` là true nó là phần thưởng của lần tạo gốc, không phải của lần gọi này.
+ */
+export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'images' | 'videoUrl' | 'createdAt'> & {
+  pointsEarned?: number;
+  updated?: boolean;
+};
 export const createReview = (
   slug: string,
   data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },
-) => api.post<ReviewItem & { updated?: boolean }>(`/products/${slug}/reviews`, data).then((r) => r.data);
+) => api.post<CreatedReview>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders
 /** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */
