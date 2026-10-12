@@ -117,7 +117,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Gift className="h-4 w-4 text-forest-700" aria-hidden />
-          <h3 className="font-display text-sm font-semibold text-stone-900">Điểm Xanh — điểm danh & tích điểm tại quầy</h3>
+          <h2 className="font-display text-sm font-semibold text-stone-900">Điểm Xanh — điểm danh & tích điểm tại quầy</h2>
         </div>
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
           <input
