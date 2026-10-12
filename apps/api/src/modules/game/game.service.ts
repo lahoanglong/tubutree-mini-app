@@ -1,8 +1,9 @@
-import { BadRequestException, GoneException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { spinPrizeProblem } from '../system-config/spin-prizes';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
@@ -32,6 +33,10 @@ interface EcoImpact {
 /** Vườn Xanh Tubu (Build Spec §6.7). Tham số đọc từ SystemConfig. */
 @Injectable()
 export class GameService {
+  private readonly logger = new Logger(GameService.name);
+  /** Giải hỏng đã cảnh báo (id + lý do), để một cấu hình hỏng không log ở mỗi lượt quay. */
+  private readonly warnedPrizes = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
@@ -120,7 +125,7 @@ export class GameService {
     // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
     const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
     const notEnough = `Cần ${cost} Điểm Xanh để quay.`;
-    const prizes = await this.config.get<SpinPrize[]>('game.spin_prizes', []);
+    const prizes = this.usableSpinPrizes(await this.config.get<SpinPrize[]>('game.spin_prizes', []));
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
     const prize = this.pickWeighted(prizes);
@@ -205,6 +210,27 @@ export class GameService {
       });
 
       return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
+    });
+  }
+
+  /**
+   * Chỉ giữ giải hợp lệ. Luật ghi cấu hình (SystemConfigService) đã chặn giải hỏng, nhưng bảng đã lưu từ trước vẫn có thể
+   * có giải POINTS value âm: trúng giải đó đi vào nhánh trừ điểm của creditPoints, trừ điểm của khách ngoài lockedOrderPoints.
+   * Bỏ giải hỏng khỏi vòng quay (không đoán ý admin) và ghi log để sửa cấu hình.
+   */
+  private usableSpinPrizes(prizes: SpinPrize[]): SpinPrize[] {
+    if (!Array.isArray(prizes)) return [];
+    return prizes.filter((p) => {
+      const problem = spinPrizeProblem(p);
+      if (!problem) return true;
+      const id = (p as { id?: unknown } | null)?.id;
+      const label = typeof id === 'string' ? id : '(không có id)';
+      const key = `${label}|${problem}`;
+      if (!this.warnedPrizes.has(key)) {
+        this.warnedPrizes.add(key);
+        this.logger.warn(`Bỏ giải "${label}" khỏi vòng quay (game.spin_prizes): ${problem}.`);
+      }
+      return false;
     });
   }
 
@@ -634,7 +660,11 @@ export class GameService {
     return this.loyalty.pointsExpiresAt(new Date());
   }
 
-  /** `expiresAt` bắt buộc cho lệnh cộng (điểm thưởng có hạn); lệnh trừ không dùng tới. */
+  /**
+   * `expiresAt` bắt buộc cho lệnh cộng (điểm thưởng có hạn); lệnh trừ không dùng tới. Nhánh trừ KHÔNG tính lockedOrderPoints
+   * nên không phải đường chi tiêu của khách: caller chỉ truyền thưởng dương (giải vòng quay đã qua usableSpinPrizes, thưởng
+   * nhiệm vụ lấy từ bảng missions chỉ có seed ghi).
+   */
   private async creditPoints(
     userId: string,
     delta: number,

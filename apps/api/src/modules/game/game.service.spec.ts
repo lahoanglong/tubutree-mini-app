@@ -1,4 +1,4 @@
-import { BadRequestException, GoneException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, GoneException, Logger, NotFoundException } from '@nestjs/common';
 import { GameService } from './game.service';
 import { treeCertificateCodeFor } from './tree-purchase-key';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -268,6 +268,60 @@ describe('GameService.spin', () => {
       await new GameService(prisma, config, analytics, undefined, undefined, undefined, loyalty).spin('u1');
 
       expect(configGets.map((g) => g.key)).not.toContain('game.tank_capacity');
+    });
+
+    describe('PF-6a: giải có thưởng không hợp lệ trong cấu hình đã lưu từ trước luật ghi', () => {
+      const BAD_NEGATIVE = { id: 'bad', name: 'Trừ 50 điểm', weight: 100, rewardType: 'POINTS', value: -50 };
+      const NONE = { id: 'none', name: 'Chúc may mắn', weight: 1, rewardType: 'NONE', value: 0 };
+
+      it('giải POINTS value âm không bao giờ được chọn dù là giải đầu và trọng số lớn nhất: chỉ trừ phí quay, không có dòng thưởng, có log cảnh báo', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const prisma = makePrisma();
+        jest.spyOn(Math, 'random').mockReturnValue(0); // pickWeighted chọn giải ĐẦU nếu nó còn trong danh sách
+        const svc = spinWith(prisma, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': [BAD_NEGATIVE, NONE] });
+
+        const res = (await svc.spin('u1')) as { prize: { id: string } };
+
+        expect(res.prize.id).toBe('none');
+        expect((prisma.user.updateMany as jest.Mock).mock.calls.map((c) => c[0].data)).toEqual([{ pointsBalance: { decrement: 10 } }]);
+        expect((prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data)).toEqual([
+          { userId: 'u1', delta: -10, reason: 'GAME_SPIN_COST', refType: 'GAME' },
+        ]);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('bad'));
+      });
+
+      it('chỉ còn giải không hợp lệ → "Vòng quay chưa cấu hình", không mở tx, không trừ điểm', async () => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const prisma = makePrisma();
+        const svc = spinWith(prisma, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': [BAD_NEGATIVE] });
+
+        await expect(svc.spin('u1')).rejects.toThrow('Vòng quay chưa cấu hình.');
+
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('log cảnh báo mỗi giải hỏng một lần cho mỗi bản cấu hình, không lặp ở các lượt quay sau', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        jest.spyOn(Math, 'random').mockReturnValue(0);
+        const svc = spinWith(makePrisma(), loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': [BAD_NEGATIVE, NONE] });
+
+        await svc.spin('u1');
+        await svc.spin('u1');
+
+        expect(warn).toHaveBeenCalledTimes(1);
+      });
+
+      it('cấu hình hợp lệ: không log, không đổi phân phối (giải đầu vẫn trúng khi random = 0)', async () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        jest.spyOn(Math, 'random').mockReturnValue(0);
+        const prisma = makePrisma();
+
+        const res = (await spinWith(prisma, loyaltyWithExpiry(0).loyalty).spin('u1')) as { prize: { id: string } };
+
+        expect(res.prize.id).toBe('a');
+        expect(warn).not.toHaveBeenCalled();
+      });
     });
 
     it('guard atomic count=0 dù pre-check qua (số dư đổi giữa hai câu) → 400, không ghi sổ/lượt quay', async () => {
