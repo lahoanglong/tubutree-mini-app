@@ -536,3 +536,20 @@ describe('cổng đối tác — truy cập', () => {
     expect(customer.querySelector('main h1')?.textContent).toBe('Kênh dành cho đối tác');
   });
 });
+
+// PG-3 (axe heading-order): tiêu đề từng tab là h2 ngay dưới h1 của trang; các tiêu đề con nối tiếp không nhảy cấp.
+describe('cổng đối tác — thứ bậc heading của các tab', () => {
+  it.each(['Gian hàng & Subdomain', 'Tài khoản VietQR', 'Kho Hàng & Giao Nhận', 'Quản Lý Sản Phẩm', 'Đơn Hàng Thuộc Kho'])(
+    'tab %s: không nhảy cấp heading',
+    async (label) => {
+      await mount();
+      await openTab(label);
+      expect(headingProblems(ui!.container)).toEqual([]);
+    },
+  );
+
+  it('tên gian hàng trong khung mô phỏng điện thoại không phải heading của trang', async () => {
+    const root = await mount();
+    expect(root.querySelectorAll('h5').length).toBe(0);
+  });
+});

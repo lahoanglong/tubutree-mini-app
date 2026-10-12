@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
 import { click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
+import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
 const mocks = vi.hoisted(() => ({
@@ -589,7 +589,7 @@ describe('admin/page — tab Cấu hình', () => {
   it('khối "Tất cả tham số" dùng tiêu đề Fraunces, chữ phụ stone-500 và liệt kê từng khoá cấu hình', async () => {
     mocks.config = [{ key: 'shipping.freeThreshold', value: 500000, description: 'Ngưỡng miễn phí vận chuyển', category: 'shipping' }];
     const { container } = await openConfig();
-    const h3 = [...container.querySelectorAll('h3')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!;
+    const h3 = [...container.querySelectorAll('h2')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!;
     expect(h3.className).toContain('font-display');
     expect(h3.nextElementSibling!.className).toContain('text-stone-500');
     expect(container.textContent).toContain('shipping.freeThreshold');
@@ -600,7 +600,7 @@ describe('admin/page — tab Cấu hình', () => {
     const { container } = await openConfig();
     const err = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tải được danh sách cấu hình.')!;
     expect(err.className).toContain('text-danger-fg');
-    expect(container.querySelector('h3')).toBeNull();
+    expect(container.querySelector('h2')).toBeNull();
   });
 
   describe('key của danh sách tham số (cảnh báo React "two children with the same key")', () => {
@@ -919,7 +919,7 @@ describe('admin/page — tab Flash Sale', () => {
 
   it('form tạo đợt: ô nhập/nút 44px, khoá tới khi đủ tên + 2 mốc giờ, gửi mốc giờ ISO; báo success/danger', async () => {
     const { container } = await openSales();
-    const heading = container.querySelector('h3')!;
+    const heading = container.querySelector('h2')!;
     expect(heading.className).toContain('font-display');
     const inputs = [...container.querySelectorAll('input')];
     expect(inputs).toHaveLength(3);
@@ -1007,7 +1007,7 @@ describe('admin/page — tab Câu hỏi thường gặp', () => {
 
   it('form thêm: tiêu đề font-display, ghi chú stone-500, ô nhập 44px, khoá tới khi có câu hỏi + trả lời, gửi đúng dữ liệu', async () => {
     const { container } = await openFaqs();
-    expect(container.querySelector('h3')!.className).toContain('font-display');
+    expect(container.querySelector('h2')!.className).toContain('font-display');
     expect(para(container, 'Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.').className).toContain('text-stone-500');
     const fields = [...container.querySelectorAll('input')];
     expect(fields).toHaveLength(3);
@@ -1098,7 +1098,7 @@ describe('admin/page — tab CSKH mẫu tin nhanh', () => {
 
   it('form thêm: ô nhập/nút 44px, từ khoá khoá khi bật lời chào, công tắc cao 44px, gửi đúng dữ liệu', async () => {
     const { container } = await openQuick();
-    expect(container.querySelector('h3')!.className).toContain('font-display');
+    expect(container.querySelector('h2')!.className).toContain('font-display');
     const hint = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Dùng để auto-reply'))!;
     expect(hint.className).toContain('text-stone-500');
     const inputs = [...container.querySelectorAll('input:not([type="checkbox"])')];
@@ -1201,7 +1201,7 @@ describe('admin/page — tab Content Kit CTV', () => {
 
   it('thẻ chọn sản phẩm: tiêu đề font-display, ghi chú stone-500 vẫn có {ten_ctv}/{link}, nút Tải khoá tới khi chọn', async () => {
     const { container } = await openKit();
-    expect(container.querySelector('h3')!.className).toContain('font-display');
+    expect(container.querySelector('h2')!.className).toContain('font-display');
     const hint = container.querySelector('p')!;
     expect(hint.className).toContain('text-stone-500');
     expect([...hint.querySelectorAll('code')].map((c) => c.textContent)).toEqual(['{ten_ctv}', '{link}']);
@@ -1282,7 +1282,7 @@ describe('admin/page — tab Academy', () => {
 
   it('form tạo khoá: tiêu đề font-display, ô nhập/nút 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu', async () => {
     const { container } = await openAcademy();
-    expect(container.querySelector('h3')!.className).toContain('font-display');
+    expect(container.querySelector('h2')!.className).toContain('font-display');
     const inputs = [...container.querySelectorAll('input')];
     expect(inputs).toHaveLength(3);
     for (const el of inputs) {
@@ -1505,4 +1505,17 @@ describe('admin/page — khung cuộn bảng focus được bằng bàn phím', 
     expect(container.querySelector('table')).not.toBeNull();
     expect(scrollRegionProblems(container)).toEqual([]);
   });
+});
+
+// PG-3 (axe heading-order): tiêu đề form của các tab sau h1 "Quản trị Tubu Tree" phải là h2, không nhảy h1 -> h3.
+describe('admin/page — thứ bậc heading của các tab', () => {
+  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders'])(
+    'tab %s: không nhảy cấp heading',
+    async (tab) => {
+      window.history.replaceState(null, '', `/admin?tab=${tab}`);
+      const { container } = await mount();
+      await flush();
+      expect(headingProblems(container)).toEqual([]);
+    },
+  );
 });

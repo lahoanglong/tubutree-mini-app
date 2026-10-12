@@ -342,7 +342,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6 md:col-span-2">
-        <h3 className="font-display font-semibold text-stone-900">Thiết lập mặt tiền & Subdomain</h3>
+        <h2 className="font-display font-semibold text-stone-900">Thiết lập mặt tiền & Subdomain</h2>
 
         <div>
           <label htmlFor="merchant-store-title" className="block text-xs font-medium text-stone-700">Tên gian hàng / Thương hiệu</label>
@@ -461,7 +461,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
       {/* Live iPhone Mockup Preview Frame */}
       <div className="flex flex-col items-center justify-start rounded-card border border-stone-200 bg-stone-100/60 p-5">
         <div className="mb-3 flex w-full items-center justify-between">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">Mô phỏng Mobile</h4>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Mô phỏng Mobile</h3>
           <span className="rounded-full bg-forest-100 px-2 py-0.5 text-[10px] font-semibold text-forest-700">Live Preview</span>
         </div>
 
@@ -499,7 +499,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
                   )}
                 </div>
                 <div className="pb-0.5 min-w-0 flex-1">
-                  <h5 className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</h5>
+                  <p className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</p>
                   <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
                 </div>
               </div>
@@ -592,7 +592,7 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6 md:col-span-2">
         <div>
-          <h3 className="font-display font-semibold text-stone-900">Tài khoản Ngân Hàng Nhận Tiền Trực Tiếp</h3>
+          <h2 className="font-display font-semibold text-stone-900">Tài khoản Ngân Hàng Nhận Tiền Trực Tiếp</h2>
           <p className="mt-1 text-xs text-stone-500">
             Khi khách hàng đặt đơn trên subdomain của bạn và chọn thanh toán chuyển khoản, hệ thống sẽ tự động tạo mã VietQR trỏ thẳng về tài khoản này.
           </p>
@@ -658,7 +658,7 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
 
       {/* VietQR Preview */}
       <div className="rounded-card border border-stone-200 bg-stone-50 p-5 text-center">
-        <h4 className="text-xs font-semibold uppercase text-stone-500">Mô phỏng VietQR khách quét</h4>
+        <h3 className="text-xs font-semibold uppercase text-stone-500">Mô phỏng VietQR khách quét</h3>
         {sampleQrUrl ? (
           <div className="mt-3 flex flex-col items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -709,7 +709,7 @@ function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: (
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6">
       <div>
-        <h3 className="font-display font-semibold text-stone-900">Địa Chỉ Kho Hàng & Xuất Kiện Riêng</h3>
+        <h2 className="font-display font-semibold text-stone-900">Địa Chỉ Kho Hàng & Xuất Kiện Riêng</h2>
         <p className="mt-1 text-xs text-stone-500">
           Địa chỉ kho này sẽ dùng để tính toán phí ship cho khách hàng và in trên vận đơn gửi hàng của đối tác.
         </p>
@@ -1037,7 +1037,7 @@ function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuc
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised sm:p-6">
         <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
-          <h3 className="font-display font-semibold text-stone-900">Đăng sản phẩm mới lên gian hàng</h3>
+          <h2 className="font-display font-semibold text-stone-900">Đăng sản phẩm mới lên gian hàng</h2>
           <button
             onClick={onClose}
             aria-label="Đóng"
@@ -1223,7 +1223,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display font-semibold text-stone-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h3>
+        <h2 className="font-display font-semibold text-stone-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h2>
         <label htmlFor="merchant-orders-status" className="sr-only">Lọc theo trạng thái đơn</label>
         <select
           id="merchant-orders-status"

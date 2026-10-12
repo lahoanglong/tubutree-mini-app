@@ -1247,7 +1247,7 @@ function ConfigTab() {
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <div>
-        <h3 className="font-display text-sm font-semibold text-stone-900">Tất cả tham số (JSON)</h3>
+        <h2 className="font-display text-sm font-semibold text-stone-900">Tất cả tham số (JSON)</h2>
         <p className="mt-0.5 text-xs text-stone-500">
           Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
         </p>
@@ -1646,7 +1646,7 @@ function FlashSalesTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h3>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h2>
         <div className="flex flex-wrap items-end gap-2">
           <input
             placeholder="Tên đợt (vd Flash Sale cuối tuần)"
@@ -1807,7 +1807,7 @@ function FaqTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm câu hỏi thường gặp</h3>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm câu hỏi thường gặp</h2>
         <p className="mb-2 text-xs text-stone-500">Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.</p>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
@@ -1961,7 +1961,7 @@ function QuickReplyTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm mẫu tin nhanh</h3>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm mẫu tin nhanh</h2>
         <p className="mb-2 text-xs text-stone-500">
           Dùng để auto-reply khi khách nhắn vào Zalo OA — so khớp từ khoá (cách nhau bằng dấu phẩy),
           hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
@@ -2133,7 +2133,7 @@ function ContentKitTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h3>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h2>
         <p className="mb-2 text-xs text-stone-500">
           Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
@@ -2294,7 +2294,7 @@ function AcademyTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo khoá học mới</h3>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo khoá học mới</h2>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <input
