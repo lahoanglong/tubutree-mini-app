@@ -27,7 +27,11 @@ vi.mock('./image-upload', () => ({
       Thêm ảnh ({value.length})
     </button>
   ),
-  VideoUpload: () => null,
+  VideoUpload: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <button type="button" onClick={() => onChange('https://v/moi.mp4')}>
+      Chọn video thử ({value ? 1 : 0})
+    </button>
+  ),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -45,6 +49,14 @@ const review = (id: string, rating: number, extra: Record<string, unknown> = {})
   createdAt: '2026-09-01T00:00:00.000Z',
   ...extra,
 });
+
+// PF-6b: sau PF-3 điểm đánh giá chỉ cấp ở lần đánh giá ĐẦU TIÊN của mỗi (khách, sản phẩm); form không biết khách đã nhận
+// thưởng trước đó hay chưa (xoá rồi tạo lại) nên mọi câu nhắc điểm phải nêu điều kiện "lần đầu" ngay trong câu.
+const FIRST_ONLY = 'Lần đầu đánh giá sản phẩm này';
+const HINT_TEXT_ONLY = `${FIRST_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`;
+const HINT_IMAGES = `${FIRST_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`;
+const HINT_VIDEO = `Tuyệt! ${FIRST_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`;
+const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
 const DATA = {
   count: 3,
@@ -218,7 +230,7 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
     expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Lưu đánh giá' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Gửi đánh giá' })).toBeNull();
-    expect(screen.getByText(/Điểm Xanh chỉ được cộng ở lần đánh giá đầu/)).toBeInTheDocument();
+    expect(screen.getByText(EDIT_HINT)).toBeInTheDocument();
     expect(screen.queryByText(/Thêm video \+15/)).toBeNull();
   });
 
@@ -312,6 +324,79 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
     await screen.findByRole('radiogroup', { name: 'Số sao' });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật đánh giá của bạn', type: 'success' }));
+  });
+});
+
+// PF-6b: câu gợi ý điểm hiện TRƯỚC khi gửi. Không bao giờ hứa điểm vô điều kiện vì khách đã nhận thưởng sản phẩm này
+// trước đó (rồi xoá đánh giá) sẽ được tạo lại với pointsEarned = 0.
+describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần đầu)', () => {
+  const MINE = { id: 'mine', rating: 4, comment: 'Dùng ổn', images: [], videoUrl: null };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 5 });
+  });
+
+  async function openNewForm() {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+  }
+
+  const hintOf = (text: string) => screen.getByText(text);
+
+  it('chỉ chữ: nêu điều kiện lần đầu rồi mới nêu +15 / +10 / +5', async () => {
+    await openNewForm();
+    expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
+  });
+
+  it('có ảnh: nêu điều kiện lần đầu rồi mới nêu +10 (và +15 nếu thêm video)', async () => {
+    await openNewForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+    expect(hintOf(HINT_IMAGES)).toBeInTheDocument();
+  });
+
+  it('có video: nêu điều kiện lần đầu rồi mới nêu +15, kể cả khi có cả ảnh', async () => {
+    await openNewForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn video thử (0)' }));
+    expect(hintOf(HINT_VIDEO)).toBeInTheDocument();
+  });
+
+  it('không nhánh nào của form viết mới nhắc điểm trước khi nêu điều kiện lần đầu', async () => {
+    await openNewForm();
+    const seen: string[] = [];
+    const read = () => {
+      const el = screen.getByText(/Điểm Xanh/);
+      seen.push(el.textContent ?? '');
+    };
+    read();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+    read();
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn video thử (0)' }));
+    read();
+    expect(seen).toHaveLength(3);
+    for (const text of seen) {
+      const firstPromise = text.search(/\+\d+/);
+      expect(firstPromise).toBeGreaterThan(-1);
+      expect(text.indexOf(FIRST_ONLY)).toBeGreaterThan(-1);
+      expect(text.indexOf(FIRST_ONLY)).toBeLessThan(firstPromise);
+    }
+  });
+
+  it('sửa đánh giá: nêu điều kiện lần đầu, không hứa +5 / +10 / +15 và không lặp câu của form viết mới', async () => {
+    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    const hint = screen.getByText(/Điểm Xanh/);
+    expect(hint).toHaveTextContent(EDIT_HINT);
+    expect(hint.textContent).not.toMatch(/\+\d+/);
+    expect(hint.textContent).not.toContain(FIRST_ONLY);
+    expect(screen.getAllByText(/Điểm Xanh/)).toHaveLength(1);
   });
 });
 

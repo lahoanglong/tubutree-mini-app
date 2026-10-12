@@ -268,6 +268,10 @@ export function ReviewsSection({ slug }: { slug: string }) {
   );
 }
 
+// Biểu mẫu không biết khách đã nhận thưởng sản phẩm này trước đó hay chưa (xoá đánh giá rồi viết lại thì BE cho
+// pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
+const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
+
 function WriteReview({
   slug,
   draft,
@@ -360,12 +364,12 @@ function WriteReview({
         style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
       >
         {isEdit
-          ? 'Điểm Xanh chỉ được cộng ở lần đánh giá đầu tiên, sửa đánh giá không cộng thêm.'
+          ? 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.'
           : video
-          ? 'Tuyệt! Đánh giá có video nhận +15 Điểm Xanh!'
-          : images.length > 0
-            ? 'Bạn sẽ nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.'
-            : 'Thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.'}
+            ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`
+            : images.length > 0
+              ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
+              : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
       </Text>
       <Button fullWidth loading={submit.isPending} onPress={() => submit.mutate()} style={{ marginTop: 16 }}>
         {isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
