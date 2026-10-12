@@ -322,6 +322,37 @@ describe('huỷ/trả đơn so với cron hết hạn điểm (real Postgres)', 
     });
   });
 
+  describe('trần thu hồi tính SAU khi cộng điểm hoàn của chính đơn đó (cùng transaction)', () => {
+    it('số dư 0 nhưng đơn từng dùng 40 điểm: điểm hoàn 40 đủ trang trải việc thu hồi 20, không cắt thu hồi xuống 0', async () => {
+      const user = await customer();
+      await oldLot(user.id, 40);
+      const order = await deliveredOrder(user.id, 20, 40); // dùng 40 điểm lúc đặt, giao rồi tích 20: số dư 20
+      await spend(user.id, 20);
+      expect(await balance(user.id)).toBe(0);
+
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await rowsOf(user.id, 'ORDER_REFUND_POINTS:')).map((r) => r.delta)).toEqual([40]);
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-20]);
+      expect(await balance(user.id)).toBe(20);
+      expect(await standardSum(user.id)).toBe(20);
+    });
+
+    it('điểm hoàn không đủ trang trải thì phần thiếu vẫn bị cắt theo số dư sau hoàn, không bao giờ âm', async () => {
+      const user = await customer();
+      await oldLot(user.id, 10);
+      const order = await deliveredOrder(user.id, 20, 5); // dùng 5 điểm, tích 20: số dư 25
+      await spend(user.id, 25);
+      expect(await balance(user.id)).toBe(0);
+
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-5]);
+      expect(await balance(user.id)).toBe(0);
+      expect(await standardSum(user.id)).toBe(0);
+    });
+  });
+
   describe('đơn còn hạn nhưng điểm đã tiêu: chỉ thu hồi phần còn lại, không âm', () => {
     it('lô cũ 30 + đơn +20, đã tiêu 40 (ăn lô cũ 30 rồi 10 của lô đơn) → thu hồi 10, số dư về 0 chứ không -10', async () => {
       const user = await customer();

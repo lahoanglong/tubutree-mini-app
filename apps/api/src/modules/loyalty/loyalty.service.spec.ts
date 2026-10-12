@@ -267,10 +267,10 @@ describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DE
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
     expect(txn).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledTimes(2);
-    expect(create.mock.calls[0][0].data.reason).toBe('ORDER_REVERSED:C1');
-    expect(create.mock.calls[0][0].data.delta).toBe(-50);
-    expect(create.mock.calls[1][0].data.reason).toBe('ORDER_REFUND_POINTS:C1');
-    expect(create.mock.calls[1][0].data.delta).toBe(10);
+    expect(create.mock.calls[0][0].data.reason).toBe('ORDER_REFUND_POINTS:C1');
+    expect(create.mock.calls[0][0].data.delta).toBe(10);
+    expect(create.mock.calls[1][0].data.reason).toBe('ORDER_REVERSED:C1');
+    expect(create.mock.calls[1][0].data.delta).toBe(-50);
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(updateMany.mock.calls[0]![0]).toEqual({
       where: { id: 'u1', pointsBalance: { gte: 50 } },
@@ -394,10 +394,27 @@ describe('LoyaltyService.reverseOrderPoints khoá dòng user và thu hồi tối
     const { h, done } = run({ ...order, pointsUsed: 40 }, { ledger: [lot({ expiresAt: new Date('2026-12-01T00:00:00.000Z') }), { id: 'x1', delta: -20, expiresAt: null, createdAt: new Date('2026-12-02T01:00:00.000Z'), reason: 'POINTS_EXPIRED' }] });
     await done;
     expect(h.create.mock.calls.map((c) => [c[0].data.reason, c[0].data.delta])).toEqual([
-      ['ORDER_REVERSED:C1', 0],
       ['ORDER_REFUND_POINTS:C1', 40],
+      ['ORDER_REVERSED:C1', 0],
     ]);
     expect(h.update.mock.calls[0][0].data).toEqual({ pointsBalance: { increment: 40 } });
+  });
+
+  it('trần theo số dư gồm cả điểm hoàn của chính đơn: số dư 0 + hoàn 40 → thu hồi đủ 20, hoàn trước rồi mới trừ', async () => {
+    const { h, done } = run({ ...order, pointsUsed: 40 }, { ledger: [lot()], balance: 0 });
+    await done;
+    expect(h.create.mock.calls.map((c) => [c[0].data.reason, c[0].data.delta])).toEqual([
+      ['ORDER_REFUND_POINTS:C1', 40],
+      ['ORDER_REVERSED:C1', -20],
+    ]);
+    expect(h.update.mock.invocationCallOrder[0]).toBeLessThan(h.updateMany.mock.invocationCallOrder[0]!);
+    expect(h.updateMany.mock.calls[0]![0]).toEqual({ where: { id: 'u1', pointsBalance: { gte: 20 } }, data: { pointsBalance: { decrement: 20 } } });
+  });
+
+  it('điểm hoàn không đủ trang trải (số dư 3 + hoàn 5) → thu hồi 8 là tối đa, không quá số dư sau hoàn', async () => {
+    const { h, done } = run({ ...order, pointsUsed: 5 }, { ledger: [lot()], balance: 3 });
+    await done;
+    expect(h.create.mock.calls[1][0].data.delta).toBe(-8);
   });
 });
 
@@ -476,8 +493,8 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
       await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
       const rows = create.mock.calls.map((c) => c[0].data);
       expect(rows.map((r) => [r.reason, r.delta, r.expiresAt ?? null])).toEqual([
-        ['ORDER_REVERSED:C1', -50, null],
         ['ORDER_REFUND_POINTS:C1', 40, new Date('2027-10-11T03:00:00.000Z')],
+        ['ORDER_REVERSED:C1', -50, null],
       ]);
     });
 
@@ -512,8 +529,8 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
     });
     await new LoyaltyService(prisma, makeConfig()).reverseOrderPoints('o1');
     expect(create.mock.calls.map((c) => [c[0].data.reason, c[0].data.delta])).toEqual([
-      ['ORDER_REVERSED:C1', -50],
       ['ORDER_REFUND_POINTS:C1', 30],
+      ['ORDER_REVERSED:C1', -50],
     ]);
   });
 });

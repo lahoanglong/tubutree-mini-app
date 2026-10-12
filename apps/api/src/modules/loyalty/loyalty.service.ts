@@ -179,33 +179,8 @@ export class LoyaltyService {
             )
           : false;
 
-        if (wasCredited) {
-          const balance = Math.max(0, lockedUser[0]?.pointsBalance ?? 0);
-          const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
-          const take = Math.min(order.pointsEarned, recoverable ?? order.pointsEarned, balance);
-          // create() trước user.updateMany — nếu duplicate caller chạy đồng thời, P2002
-          // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
-          await tx.pointsTransaction.create({
-            data: {
-              userId: order.userId,
-              delta: take > 0 ? -take : 0,
-              reason: `ORDER_REVERSED:${order.code}`,
-              refType: 'ORDER',
-              refId: order.id,
-            },
-          });
-          if (take > 0) {
-            // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
-            const dec = await tx.user.updateMany({
-              where: { id: order.userId, pointsBalance: { gte: take } },
-              data: { pointsBalance: { decrement: take } },
-            });
-            if (dec.count !== 1) throw new Error(`reverseOrderPoints ${order.code}: số dư đổi giữa chừng`);
-          }
-          if (take < order.pointsEarned) {
-            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
-          }
-        }
+        // Hoàn điểm đã dùng TRƯỚC khi thu hồi điểm tích: cả hai nằm trong tx này nên số dư dùng làm trần thu hồi phải gồm
+        // phần hoàn, nếu không khách còn ít điểm sẽ được hoàn đủ mà điểm tích của đơn bị cắt, trái với "như chưa có đơn".
         if (usedStandard > 0) {
           await tx.pointsTransaction.create({
             data: {
@@ -222,6 +197,34 @@ export class LoyaltyService {
             where: { id: order.userId },
             data: { pointsBalance: { increment: usedStandard } },
           });
+        }
+
+        if (wasCredited) {
+          const balance = Math.max(0, (lockedUser[0]?.pointsBalance ?? 0) + usedStandard);
+          const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
+          const take = Math.min(order.pointsEarned, recoverable ?? order.pointsEarned, balance);
+          // create() trước user.updateMany — nếu duplicate caller chạy đồng thời, P2002
+          // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
+          await tx.pointsTransaction.create({
+            data: {
+              userId: order.userId,
+              delta: take > 0 ? -take : 0,
+              reason: `ORDER_REVERSED:${order.code}`,
+              refType: 'ORDER',
+              refId: order.id,
+            },
+          });
+          if (take > 0) {
+            // Số dư (kể cả phần vừa hoàn) đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
+            const dec = await tx.user.updateMany({
+              where: { id: order.userId, pointsBalance: { gte: take } },
+              data: { pointsBalance: { decrement: take } },
+            });
+            if (dec.count !== 1) throw new Error(`reverseOrderPoints ${order.code}: số dư đổi giữa chừng`);
+          }
+          if (take < order.pointsEarned) {
+            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
+          }
         }
       });
     } catch (err) {
