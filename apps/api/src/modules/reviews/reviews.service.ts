@@ -279,21 +279,22 @@ export class ReviewsService {
       // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
       if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
         // Thu hồi tối đa phần lô đánh giá chưa mất theo sổ lô (lotRecoverable) và không quá số dư, nên số dư không bao
-        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi (delta 0 nếu không còn gì); điểm đã thưởng nằm ở dòng
-        // REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
+        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi; không thu hồi được gì thì không ghi dòng nào (khác đơn hàng,
+        // xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất nên không có lượt xoá thứ hai). Điểm đã thưởng nằm
+        // ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
         const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
         const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
         const take = Math.min(review.pointsEarned, recoverable ?? review.pointsEarned, balance);
-        await tx.pointsTransaction.create({
-          data: {
-            userId: review.userId,
-            delta: take > 0 ? -take : 0,
-            reason: `REVIEW_DELETE:${review.productId}`,
-            refType: 'REVIEW',
-            refId: id,
-          },
-        });
         if (take > 0) {
+          await tx.pointsTransaction.create({
+            data: {
+              userId: review.userId,
+              delta: -take,
+              reason: `REVIEW_DELETE:${review.productId}`,
+              refType: 'REVIEW',
+              refId: id,
+            },
+          });
           // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
           const dec = await tx.user.updateMany({
             where: { id: review.userId, pointsBalance: { gte: take } },

@@ -210,6 +210,24 @@ function reverseHarness(order: ReverseOrder, opts: { reversed?: unknown; deliver
   return { prisma, txn, calls, lockSql, queryRaw, findFirst, findMany, create, update, updateMany };
 }
 
+/**
+ * PF-3: dòng ORDER_REVERSED delta 0 là dấu "đã xử lý" của reverseOrderPoints (idempotency, lockedOrderPoints, tierPoints) chứ
+ * không phải biến động điểm nên không được hiện trong lịch sử điểm của khách. Câu truy vấn thật được kiểm ở
+ * test/integration-race/pf3-reverse-order-points.race-spec.ts.
+ */
+describe('LoyaltyService.getPointsTransactions (lịch sử điểm của khách)', () => {
+  it('loại dòng ORDER_REVERSED delta 0, giữ mọi dòng khác (kể cả ORDER_REVERSED có số điểm), mới nhất trước, tối đa 100', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { pointsTransaction: { findMany } } as unknown as PrismaService;
+    await new LoyaltyService(prisma, makeConfig()).getPointsTransactions('u1');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  });
+});
+
 describe('LoyaltyService.reverseOrderPoints (idempotent)', () => {
   // reverseOrderPoints chạy ALL check + write trong 1 callback $transaction, sau khi khoá dòng user.
   const order = { id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0, pointsUsedConverted: 0 };

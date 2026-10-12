@@ -353,6 +353,43 @@ describe('huỷ/trả đơn so với cron hết hạn điểm (real Postgres)', 
     });
   });
 
+  describe('lịch sử điểm của khách không hiện dòng ORDER_REVERSED delta 0 (dòng đó chỉ là dấu đã xử lý)', () => {
+    it('đã tiêu hết nên thu hồi 0: dòng đánh dấu vẫn nằm trong sổ nhưng getPointsTransactions không trả nó; dòng thu hồi thật và dòng hoàn vẫn hiện', async () => {
+      const user = await customer();
+      await oldLot(user.id, 30);
+      const zero = await deliveredOrder(user.id, 20);
+      await spend(user.id, 50);
+      await loyalty.reverseOrderPoints(zero.id);
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([0]);
+
+      const real = await customer();
+      await oldLot(real.id, 30);
+      const order = await deliveredOrder(real.id, 20, 10);
+      await loyalty.reverseOrderPoints(order.id);
+
+      const zeroHistory = await loyalty.getPointsTransactions(user.id);
+      expect(zeroHistory.some((r) => r.reason.startsWith('ORDER_REVERSED:'))).toBe(false);
+      expect(zeroHistory.map((r) => r.reason)).toContain(`ORDER_DELIVERED:${zero.code}`);
+      const realHistory = await loyalty.getPointsTransactions(real.id);
+      expect(realHistory.filter((r) => r.reason.startsWith('ORDER_REVERSED:')).map((r) => r.delta)).toEqual([-20]);
+      expect(realHistory.filter((r) => r.reason.startsWith('ORDER_REFUND_POINTS:')).map((r) => r.delta)).toEqual([10]);
+    });
+
+    it('dấu delta 0 vẫn chặn lượt huỷ thứ hai và vẫn mở khoá điểm đơn (lockedOrderPoints) dù ẩn khỏi lịch sử', async () => {
+      const user = await customer();
+      await oldLot(user.id, 30);
+      const order = await deliveredOrder(user.id, 20);
+      await spend(user.id, 50);
+      await loyalty.reverseOrderPoints(order.id);
+      await oldLot(user.id, 7); // điểm mới về sau: lượt huỷ lặp lại (webhook) không được lấy lại gì
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([0]);
+      expect(await balance(user.id)).toBe(7);
+      expect((await loyalty.lockedOrderPoints(user.id, new Date())).locked).toBe(0);
+    });
+  });
+
   describe('đơn còn hạn nhưng điểm đã tiêu: chỉ thu hồi phần còn lại, không âm', () => {
     it('lô cũ 30 + đơn +20, đã tiêu 40 (ăn lô cũ 30 rồi 10 của lô đơn) → thu hồi 10, số dư về 0 chứ không -10', async () => {
       const user = await customer();

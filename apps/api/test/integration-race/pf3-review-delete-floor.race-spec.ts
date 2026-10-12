@@ -15,8 +15,8 @@ const REVIEW_POINTS = 5;
 
 /**
  * PF-3 mục 2: xoá đánh giá đã thưởng mà khách đã tiêu hết điểm không được đẩy pointsBalance xuống dưới 0. ReviewsService.remove
- * thu hồi tối đa phần còn lại của lô REVIEW theo sổ lô và không quá số dư; phần không thu hồi được ghi rõ ở dòng
- * REVIEW_DELETE (delta 0 hoặc nhỏ hơn điểm đã thưởng). Các bất biến của PE-3 (REVIEW_DELETE ăn đúng lô REVIEW, không trừ hai
+ * thu hồi tối đa phần lô REVIEW chưa mất theo sổ lô và không quá số dư; dòng REVIEW_DELETE ghi đúng số đã thu hồi và không
+ * có dòng nào khi không thu hồi được gì (không để dòng delta 0 lọt vào lịch sử điểm của khách). Các bất biến của PE-3 (REVIEW_DELETE ăn đúng lô REVIEW, không trừ hai
  * lần khi lô đã hết hạn) nằm ở pe3-reward-expiry.race-spec.ts và được chạy lại cùng gói này.
  *
  * "Thời gian trôi" dựng bằng lùi createdAt/expiresAt trong sổ như pe3-reward-expiry.
@@ -145,7 +145,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
   const reviewDeleteRows = (userId: string) => rowsOf(userId, 'REVIEW_DELETE:');
   const expiredRows = (userId: string) => rowsOf(userId, 'POINTS_EXPIRED');
 
-  it('khách đã tiêu hết điểm đánh giá (không còn điểm nào khác) → xoá đánh giá, số dư ở 0 chứ không -5; sổ ghi rõ không thu hồi gì', async () => {
+  it('khách đã tiêu hết điểm đánh giá (không còn điểm nào khác) → xoá đánh giá, số dư ở 0 chứ không -5; không có dòng thu hồi delta 0 trong sổ', async () => {
     const { user, product } = await player();
     const review = await reviews.create(user.id, product.slug, { rating: 5 });
     await spend(user.id, REVIEW_POINTS);
@@ -154,7 +154,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     await reviews.remove(user.id, 'USER', review.id);
 
     expect(await balance(user.id)).toBe(0);
-    expect((await reviewDeleteRows(user.id)).map((r) => [r.delta, r.refType, r.refId])).toEqual([[0, 'REVIEW', review.id]]);
+    expect(await reviewDeleteRows(user.id)).toEqual([]);
     expect(await standardSum(user.id)).toBe(0);
   });
 

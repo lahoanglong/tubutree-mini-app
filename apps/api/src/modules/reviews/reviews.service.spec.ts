@@ -596,14 +596,13 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
       expect(prisma.user.updateMany.mock.calls[0]![0]).toEqual({ where: { id: 'u1', pointsBalance: { gte: 3 } }, data: { pointsBalance: { decrement: 3 } } });
     });
 
-    it('đã tiêu hết → dòng REVIEW_DELETE ghi 0 (đánh dấu không thu hồi được), không đụng số dư', async () => {
+    it('đã tiêu hết (số dư 0) → không thu hồi gì: không ghi dòng REVIEW_DELETE delta 0 vào sổ khách, không đụng số dư, vẫn xoá đánh giá', async () => {
       const { prisma, out } = await removeWith(still, 10, { ledger: [reviewCredit(10), spent(-10)], balance: 0 });
       expect(out).toEqual({ ok: true });
-      const data = prisma.pointsTransaction.create.mock.calls[0]![0].data;
-      expect(data).toMatchObject({ reason: 'REVIEW_DELETE:p1', refType: 'REVIEW', refId: 'r1' });
-      expect(Object.is(data.delta, 0)).toBe(true); // không phải -0
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
       expect(prisma.review.delete).toHaveBeenCalled();
+      expect(prisma.product.update).toHaveBeenCalled();
     });
 
     it('lô cũ ăn phần tiêu trước (FIFO): lô đánh giá còn nguyên thì thu hồi đủ', async () => {
@@ -618,9 +617,9 @@ describe('ReviewsService.remove (chống farm điểm qua tạo→xóa→tạo l
       expect(prisma.user.updateMany.mock.calls[0]![0].where).toEqual({ id: 'u1', pointsBalance: { gte: 4 } });
     });
 
-    it('số dư âm (dữ liệu cũ) → không thu hồi gì, không làm âm thêm', async () => {
+    it('số dư âm (dữ liệu cũ) → không thu hồi gì, không làm âm thêm, không ghi dòng delta 0', async () => {
       const { prisma } = await removeWith(still, 10, { ledger: [reviewCredit(10)], balance: -3 });
-      expect(Object.is(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta, 0)).toBe(true);
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
     });
 

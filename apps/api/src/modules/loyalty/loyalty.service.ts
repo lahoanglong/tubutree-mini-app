@@ -532,7 +532,9 @@ export class LoyaltyService {
 
   getPointsTransactions(userId: string) {
     return this.prisma.pointsTransaction.findMany({
-      where: { userId },
+      // ORDER_REVERSED delta 0 chỉ là dấu "đã xử lý" của reverseOrderPoints (khi không còn gì để thu hồi), không phải
+      // biến động điểm: hiện nó thành dòng "Hoàn ngược điểm 0" trong lịch sử khách.
+      where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
