@@ -43,6 +43,27 @@ async function fetchDetail<T>(path: string, revalidate: number): Promise<T | nul
   return (await res.json()) as T;
 }
 
+/**
+ * Lấy danh sách cho trang ISR. Lỗi lúc runtime phải ném: trả [] sẽ khiến Next lưu bản rỗng tới hết
+ * revalidate, còn ném thì Next giữ bản đã render tốt. Riêng `next build` thường chạy khi API chưa
+ * lên, nên lúc đó trả [] để build không hỏng (trang được tái tạo ở runtime sau đó).
+ */
+async function fetchList<T>(path: string, revalidate: number, select: (json: unknown) => T[]): Promise<T[]> {
+  const building = process.env.NEXT_PHASE === 'phase-production-build';
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, serverInit({ revalidate }));
+  } catch (err) {
+    if (building) return [];
+    throw new ApiUnavailableError(path, null, { cause: err });
+  }
+  if (!res.ok) {
+    if (building) return [];
+    throw new ApiUnavailableError(path, res.status);
+  }
+  return select(await res.json());
+}
+
 export interface ProductCard {
   id: string;
   slug: string;
@@ -84,17 +105,10 @@ interface Page<T> {
   meta: { page: number; limit: number; total: number };
 }
 
-/** Fetch catalog server-side (ISR 5 phút). Trả mảng rỗng nếu API chưa chạy. */
+/** Fetch catalog server-side (ISR 5 phút). Lỗi API: xem fetchList. */
 export async function getProducts(params: Record<string, string> = {}): Promise<ProductCard[]> {
   const qs = new URLSearchParams({ limit: '30', ...params }).toString();
-  try {
-    const res = await fetch(`${BASE}/products?${qs}`, serverInit({ revalidate: 300 }));
-    if (!res.ok) return [];
-    const json = (await res.json()) as Page<ProductCard>;
-    return json.data;
-  } catch {
-    return [];
-  }
+  return fetchList<ProductCard>(`/products?${qs}`, 300, (json) => (json as Page<ProductCard>).data);
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
@@ -102,28 +116,20 @@ export async function getProduct(slug: string): Promise<ProductDetail | null> {
 }
 
 export async function getBrands(): Promise<{ brand: string; count: number }[]> {
-  try {
-    const res = await fetch(`${BASE}/brands`, serverInit({ revalidate: 600 }));
-    if (!res.ok) return [];
-    return (await res.json()) as { brand: string; count: number }[];
-  } catch {
-    return [];
-  }
+  return fetchList<{ brand: string; count: number }>('/brands', 600, (json) => json as { brand: string; count: number }[]);
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
   return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
 }
 
-/** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Mảng rỗng nếu API chưa chạy. */
+/** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Lỗi API: xem fetchList. */
 export async function getStorefrontList(): Promise<{ slug: string; updatedAt: string }[]> {
-  try {
-    const res = await fetch(`${BASE}/storefront/public-list`, serverInit({ revalidate: 3600 }));
-    if (!res.ok) return [];
-    return (await res.json()) as { slug: string; updatedAt: string }[];
-  } catch {
-    return [];
-  }
+  return fetchList<{ slug: string; updatedAt: string }>(
+    '/storefront/public-list',
+    3600,
+    (json) => json as { slug: string; updatedAt: string }[],
+  );
 }
 
 export interface StorefrontItem {
