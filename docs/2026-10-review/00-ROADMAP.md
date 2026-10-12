@@ -188,3 +188,9 @@ Gói PE-3 cho điểm thưởng vòng quay (`GAME_SPIN_WIN`), nhiệm vụ (`MIS
 - Hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3): chủ dự án đồng ý giữ có hạn. Mục "Cần chủ dự án xác nhận" ngay phía trên đã được chốt.
 - PA-1 yêu cầu 5 (đơn CTV lên hộ ghi `userId` là khách cuối, thiết kế ở `impl/PA-1.md` Lượt 2): HOÃN sang sau UAT. Lý do: không có lỗi tiền đang mở (hoàn về khách thật qua SĐT snapshot, CTV không tự huỷ đơn PAID, SĐT của chính CTV bị chặn), đổi chủ đơn chạm luồng CTV đang chạy và cần migration `placedByUserId`. Khi làm lại cần chủ dự án gật hai điểm: hạng CTV chỉ tính từ đơn CTV tự mua (Q-09), và nội dung tin gửi khách cuối ("CTV [tên] đã đặt hộ bạn đơn [mã]"). Làm thành gói riêng, review opus hai lượt.
 - Ô chọn ngày của gói định kỳ chỉ kiểm được trên Zalo thật: thử khi quét QR UAT; nếu lỗi thì thay bằng nút chọn nhanh ("Giao ngay", "Ngày mai", "Sau 3 ngày", "Sau 7 ngày").
+
+### Chốt ngày 2026-10-12 (sau đợt F, PF-1..PF-5b)
+
+- Đợt F đã sửa các bug còn lại có thể sửa bằng mã; danh sách và kết quả kiểm ở `99-release-readiness.md` mục 5c.
+- Hành vi mới cần chủ dự án biết (mặc định coi là duyệt, phản đối thì đổi): xoá đánh giá rồi tạo lại không còn được thưởng điểm lần hai (chặn farm điểm); vòng quay không tiêu được điểm của đơn còn trong cửa sổ đổi trả (giống checkout, đổi quà, góp quỹ cây).
+- Việc còn lại chỉ chủ dự án làm được hoặc hoãn có chủ đích: DNS, quét QR UAT trên Zalo thật (kèm ô chọn ngày gói định kỳ, WebView có hỗ trợ `inert` không), nội dung FAQ/Academy, PA-1 yêu cầu 5 và "Ví trả một phần đơn" sau UAT, dọn worktree/container/volume Docker.
