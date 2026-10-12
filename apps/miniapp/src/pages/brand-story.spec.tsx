@@ -16,9 +16,13 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import { BRAND_ORIGINS } from '../utils/brand-origins';
 import BrandStoryPage from './brand-story';
 
-// Ghim trên bản đồ: nút có aria-label "<nhãn> — <tỉnh>", cùng mở sheet với ô lưới bên dưới. Ghim aria-hidden (xem
-// test target-size bên dưới) nên getByRole không thấy, tìm bằng aria-label.
-const tile = (brand: string) => screen.getByLabelText(new RegExp(`^${brand} — `));
+// Ghim trên bản đồ: nút data-testid "brand-pin-<id>", cùng mở sheet với ô lưới bên dưới. Ghim aria-hidden (xem
+// test target-size bên dưới) nên getByRole không thấy và cũng không có aria-label (tên vô nghĩa trên phần tử ẩn).
+const tile = (brand: string) => {
+  const origin = BRAND_ORIGINS.find((o) => o.brand === brand);
+  if (!origin) throw new Error(`không có nhãn ${brand}`);
+  return screen.getByTestId(`brand-pin-${origin.id}`);
+};
 
 describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách (C-079)', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -47,11 +51,9 @@ describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách
   });
 });
 
-/** Ô lưới dưới bản đồ: nút không có aria-label (ghim bản đồ có), tên đọc ra từ chữ bên trong. */
+/** Ô lưới dưới bản đồ: tên đọc ra từ chữ bên trong. getAllByRole bỏ qua ghim bản đồ vì chúng aria-hidden. */
 const gridTile = (brand: string) => {
-  const found = screen
-    .getAllByRole('button')
-    .find((b) => !b.hasAttribute('aria-label') && (b.textContent ?? '').includes(brand));
+  const found = screen.getAllByRole('button').find((b) => (b.textContent ?? '').includes(brand));
   if (!found) throw new Error(`không có ô lưới cho ${brand}`);
   return found;
 };
@@ -121,6 +123,7 @@ describe('BrandStoryPage — ghim bản đồ và vùng chạm (axe target-size,
     for (const o of BRAND_ORIGINS) {
       const pin = tile(o.brand);
       expect(pin).toHaveAttribute('aria-hidden', 'true');
+      expect(pin).not.toHaveAttribute('aria-label');
       expect(pin.tabIndex).toBe(-1);
       expect(minHeightOf(pin)).toBeGreaterThanOrEqual(44);
     }
@@ -132,14 +135,14 @@ describe('BrandStoryPage — ghim bản đồ và vùng chạm (axe target-size,
     render(<BrandStoryPage />);
     const accessible = screen.getAllByRole('button');
     for (const o of BRAND_ORIGINS) {
-      const grid = accessible.find((b) => !b.hasAttribute('aria-label') && (b.textContent ?? '').includes(o.brand));
+      const grid = accessible.find((b) => (b.textContent ?? '').includes(o.brand));
       expect(grid, `ô lưới ${o.brand}`).toBeDefined();
       expect(grid!.textContent).toContain(o.province);
       expect(grid!.tabIndex).toBe(0);
     }
-    fireEvent.click(accessible.find((b) => !b.hasAttribute('aria-label') && (b.textContent ?? '').includes('Cobote'))!);
+    fireEvent.click(accessible.find((b) => (b.textContent ?? '').includes('Cobote'))!);
     expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Cobote' })).toBeTruthy();
-    // Không còn ghim nào trong cây truy cập: mọi nút có aria-label dạng "<nhãn> — <tỉnh>" đều bị ẩn.
-    expect(accessible.filter((b) => / — /.test(b.getAttribute('aria-label') ?? ''))).toEqual([]);
+    // Không có ghim nào trong cây truy cập.
+    expect(accessible.filter((b) => (b.getAttribute('data-testid') ?? '').startsWith('brand-pin-'))).toEqual([]);
   });
 });

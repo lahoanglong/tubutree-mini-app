@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Input } from 'zmp-ui';
 import { Field, Checkbox, Radio, Switch } from './form';
@@ -193,11 +193,23 @@ describe('control không có tên (C-077)', () => {
     }
   });
 
-  it('Checkbox không tên vẫn nhận onChange khi bấm (cha giữ ngữ nghĩa, DS không nuốt sự kiện)', () => {
+  // jsdom không mô phỏng `inert`: `input.click()` vẫn chạy onChange, còn trình duyệt thật thì cú chạm vào chấm
+  // không bao giờ tới input mà đi thẳng lên hàng cha. Vì vậy không có ca nào ở đây khẳng định "chấm không tên
+  // phát onChange"; hợp đồng là hàng cha giữ onClick và chấm không tên chỉ đi với onChange no-op.
+  it('chạm vào chấm không tên chỉ tới onClick của hàng cha (chạm xuyên qua), onChange của chấm là no-op', () => {
+    const onRow = vi.fn();
     const onChange = vi.fn();
-    render(<Checkbox checked={false} onChange={onChange} />);
-    screen.getByTestId('checkbox-hit-area').querySelector('input')!.click();
-    expect(onChange).toHaveBeenCalledTimes(1);
+    render(
+      <div role="checkbox" aria-checked="false" tabIndex={0} onClick={onRow}>
+        <Checkbox checked={false} onChange={onChange} />
+      </div>,
+    );
+    const hit = screen.getByTestId('checkbox-hit-area');
+    expect(hit).toHaveAttribute('inert');
+    expect(hit).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(hit);
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

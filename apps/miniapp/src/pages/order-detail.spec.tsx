@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -44,6 +46,7 @@ vi.mock('../components/image-upload', () => ({ MultiImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import OrderDetailPage from './order-detail';
+import { STATUS_COLOR } from '../utils/order-status';
 
 const ORDER = {
   id: 'o1',
@@ -180,5 +183,47 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
     const line = await screen.findByText(label);
     expect(line.querySelector('svg')).not.toBeNull();
     expect(EMOJI.test(container.textContent ?? '')).toBe(false);
+  });
+});
+
+// axe color-contrast (serious) ở khung trạng thái: chữ ngày giờ dùng opacity 0.8 trên cặp màu trạng thái, riêng
+// "chờ thanh toán" #8A5300 trên #FFF4E0 rơi từ 5,81 xuống 3,84 (ngưỡng 4,5). Opacity làm chữ nhạt hơn mức token
+// đã cho; ý "phụ" được giữ bằng cỡ chữ xSmall không đậm dưới tiêu đề trạng thái.
+const TOKENS = readFileSync(join(process.cwd(), '../../packages/design-tokens/src/tokens.css'), 'utf8');
+function resolveToken(ref: string): string {
+  const name = ref.match(/^var\((--[\w-]+)\)$/)![1]!;
+  const value = TOKENS.match(new RegExp(`${name}:\\s*([^;]+);`))![1]!.trim();
+  return value.startsWith('var(') ? resolveToken(value) : value;
+}
+function luminance(hex: string): number {
+  const ch = (at: number) => {
+    const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * ch(1) + 0.7152 * ch(3) + 0.0722 * ch(5);
+}
+function contrast(fg: string, bg: string): number {
+  const [a, b] = [luminance(fg), luminance(bg)];
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+describe('OrderDetailPage — tương phản chữ ngày giờ ở khung trạng thái (axe color-contrast)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it.each(Object.keys(STATUS_COLOR))('%s: chữ ngày giờ không bị làm mờ bằng opacity', async (status) => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status });
+    renderPage();
+    const stamps = await screen.findAllByText('10:00 01/10/2026');
+    for (const el of stamps) {
+      const opacity = el.style.opacity;
+      expect(opacity === '' || Number(opacity) === 1, `opacity=${opacity}`).toBe(true);
+    }
+  });
+
+  it.each(Object.entries(STATUS_COLOR))('%s: cặp màu token đầy đủ (không opacity) đạt 4,5:1', (_status, { bg, fg }) => {
+    expect(contrast(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
   });
 });

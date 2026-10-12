@@ -59,6 +59,45 @@ describe('ContentKitService.getForCtv', () => {
     expect(out.shareLink).toBe('https://zalo.me/s/123/product/tra-xanh?ref=CODE1');
   });
 
+  // app.miniapp_base_url là URL gốc MINI APP (zalo.me/s/<appId>), nơi /product/:slug là route thật (apps/miniapp
+  // components/app.tsx). Link tuyệt đối do API dựng vì vậy đi vào Mini App và phải giữ /product/; chỉ khi base trống,
+  // API trả đường dẫn tương đối của Mini App và Mini App tự ghép domain WEB (đổi sang /san-pham/<slug>).
+  it('base URL là Mini App: {link} trong bài mẫu và shareLink cùng là URL tuyệt đối vào /product/<slug> của Mini App', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
+    (prisma as any).productContentKit.findUnique.mockResolvedValue({ captions: ['Mua tại {link}'], usps: [], faqs: null, videoUrls: [] });
+    (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: 'A', referralCode: 'CODE1' });
+
+    const out = await new ContentKitService(prisma, makeConfig('https://zalo.me/s/123')).getForCtv('u1', 'tra-xanh');
+
+    expect(out.shareLink).toBe('https://zalo.me/s/123/product/tra-xanh?ref=CODE1');
+    expect(out.captions).toEqual(['Mua tại https://zalo.me/s/123/product/tra-xanh?ref=CODE1']);
+  });
+
+  it('base URL cấu hình có dấu "/" ở cuối: không sinh "//product"', async () => {
+    const prisma = makePrisma();
+    (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
+    (prisma as any).productContentKit.findUnique.mockResolvedValue(null);
+    (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: 'A', referralCode: 'CODE1' });
+
+    const out = await new ContentKitService(prisma, makeConfig('https://zalo.me/s/123//')).getForCtv('u1', 'tra-xanh');
+
+    expect(out.shareLink).toBe('https://zalo.me/s/123/product/tra-xanh?ref=CODE1');
+  });
+
+  it('config lưu giá trị không phải chuỗi (null, số): coi như chưa cấu hình, trả đường dẫn tương đối, không lỗi', async () => {
+    for (const bad of [null, 0, { url: 'x' }]) {
+      const prisma = makePrisma();
+      (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: [], isActive: true, affiliateBlocked: false });
+      (prisma as any).productContentKit.findUnique.mockResolvedValue(null);
+      (prisma as any).user.findUniqueOrThrow.mockResolvedValue({ fullName: 'A', referralCode: 'CODE1' });
+
+      const out = await new ContentKitService(prisma, makeConfig(bad as unknown as string)).getForCtv('u1', 'tra-xanh');
+
+      expect(out.shareLink).toBe('/product/tra-xanh?ref=CODE1');
+    }
+  });
+
   it('kit null → trả mảng rỗng nhưng vẫn dựng đúng shareLink', async () => {
     const prisma = makePrisma();
     (prisma as any).product.findUnique.mockResolvedValue({ id: 'p1', name: 'Trà xanh', images: ['img1.jpg'], isActive: true, affiliateBlocked: false });

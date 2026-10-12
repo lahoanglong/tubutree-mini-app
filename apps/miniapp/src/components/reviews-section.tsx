@@ -6,7 +6,7 @@ import { fetchReviews, createReview, canReviewProduct, type MyReview } from '../
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
-import { formatDate } from '../utils/format';
+import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -268,6 +268,9 @@ export function ReviewsSection({ slug }: { slug: string }) {
   );
 }
 
+// POST /products/:slug/reviews trả nguyên dòng Review (kể cả pointsEarned) kèm `updated`; kiểu của shop-api chưa khai báo cột này.
+type CreatedReview = Awaited<ReturnType<typeof createReview>> & { pointsEarned?: number };
+
 function WriteReview({
   slug,
   draft,
@@ -293,11 +296,17 @@ function WriteReview({
         images: images.length > 0 ? images : undefined,
         videoUrl: video.trim() || undefined,
       }),
-    onSuccess: (res) => {
+    onSuccess: (res: CreatedReview) => {
       haptic('medium');
-      // Theo BE chứ không theo chế độ form: đánh giá có thể đã được tạo từ thiết bị khác.
+      // Theo BE chứ không theo chế độ form: đánh giá có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho mỗi
+      // (khách, sản phẩm) nên tạo lại sau khi xoá có thể ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.
+      const earned = res.updated ? 0 : (res.pointsEarned ?? 0);
       openSnackbar({
-        text: res.updated ? 'Đã cập nhật đánh giá của bạn' : 'Cảm ơn đánh giá của bạn! Đã cộng Điểm Xanh',
+        text: res.updated
+          ? 'Đã cập nhật đánh giá của bạn'
+          : earned > 0
+            ? `Cảm ơn đánh giá của bạn! Đã cộng ${formatNumber(earned)} Điểm Xanh`
+            : 'Đã gửi đánh giá của bạn',
         type: 'success',
       });
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });

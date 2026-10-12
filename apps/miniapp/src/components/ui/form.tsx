@@ -107,8 +107,12 @@ function hasName(p: NameProps): boolean {
 
 // Control không có tên không dùng được bằng trình đọc màn hình (axe `label`, A4-005 — 6 ô ở checkout).
 // Mọi chỗ dùng như vậy hiện nay là chấm chọn thị giác thuần tuý nằm trong hàng cha role=radio/checkbox
-// đã có tên và tự xử lý bấm (checkout.tsx) — nên coi là trang trí: ẩn khỏi cây truy cập và khỏi thứ tự
-// Tab (tabIndex -1 để không thành "ẩn mà vẫn focus được"), nhưng vẫn bấm/đổi giá trị bình thường.
+// đã có tên và tự xử lý bấm (checkout.tsx) — nên coi là trang trí: ẩn khỏi cây truy cập, khỏi thứ tự Tab
+// (tabIndex -1 để không thành "ẩn mà vẫn focus được") và, nhờ `inert` ở hitArea, khỏi cú chạm.
+// Hợp đồng: chấm không tên là thuần hình, KHÔNG nhận bấm và KHÔNG phát onChange. Hàng cha giữ `onClick`;
+// chấm không tên chỉ đi với `onChange={() => {}}` (bắt buộc để React coi là controlled). jsdom bỏ qua
+// `inert` nên `input.click()` trong test vẫn gọi onChange, đó không phải hành vi trình duyệt thật
+// (`form-decorative-usage.spec.ts` canh các chỗ gọi bằng phân tích mã nguồn).
 const DECORATIVE_INPUT = { tabIndex: -1 } as const;
 
 // ZaUI's own CheckboxProps declares `value: string | number` as REQUIRED (it's only actually

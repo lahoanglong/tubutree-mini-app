@@ -1224,10 +1224,11 @@ function OrdersTab({ store }: { store: MerchantStore }) {
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-display font-semibold text-stone-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h3>
+        <label htmlFor="merchant-orders-status" className="sr-only">Lọc theo trạng thái đơn</label>
         <select
+          id="merchant-orders-status"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          aria-label="Lọc theo trạng thái đơn"
           className={`${FIELD_CLASS} ${TOUCH_H} text-xs`}
         >
           <option value="">Tất cả trạng thái</option>

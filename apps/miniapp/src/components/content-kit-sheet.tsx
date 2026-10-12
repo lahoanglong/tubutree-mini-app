@@ -15,12 +15,26 @@ import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 
 /**
- * `app.miniapp_base_url` chưa cấu hình thì API trả đường dẫn tương đối ('/product/..?ref=..'): dán
- * vào Zalo/Facebook không mở được. Ghép domain web (cùng nguồn với share-sheet/affiliate).
+ * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<appId>) chưa cấu hình thì API trả đường dẫn tương
+ * đối của Mini App ('/product/<slug>?ref=..'): dán vào Zalo/Facebook không mở được, nên ghép domain WEB (cùng nguồn
+ * với share-sheet/affiliate). Trên web trang sản phẩm là /san-pham/<slug>; route /product/<slug> của web chỉ là
+ * redirect 307 cho link đã chia sẻ trước đây, nên link mới đi thẳng tới đường thật. URL tuyệt đối do API dựng từ
+ * `app.miniapp_base_url` trỏ vào Mini App (nơi /product/<slug> là route thật) nên giữ nguyên.
  */
 function absoluteLink(link: string): string {
   if (!link.startsWith('/')) return link;
-  return `${WEB_BASE_URL}${link}`;
+  return `${WEB_BASE_URL}${link.replace(/^\/product\//, '/san-pham/')}`;
+}
+
+/**
+ * Thay `relative` bằng `absolute` trong bài mẫu, chỉ khi nó đứng đầu từ (đầu chuỗi, sau khoảng trắng hay ngoặc mở): nếu
+ * không, "https://app.tubutree.com/product/x?ref=A" (admin gõ sẵn link tuyệt đối) sẽ bị chèn domain lần thứ hai.
+ * Không dùng lookbehind vì webview Zalo cũ trên iOS không hiểu cú pháp này.
+ */
+function withAbsoluteLink(caption: string, relative: string, absolute: string): string {
+  if (absolute === relative) return caption;
+  const escaped = relative.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return caption.replace(new RegExp(`(^|[\\s(\\[])${escaped}`, 'g'), (_m, lead: string) => `${lead}${absolute}`);
 }
 
 /** Bài mẫu do admin soạn tay có thể thiếu {link}: chép thiếu mã giới thiệu thì CTV mất hoa hồng. */
@@ -64,8 +78,10 @@ export function ContentKitSheet({
 
   const data = q.data;
   const link = data ? absoluteLink(data.shareLink) : '';
+  // API thay {link} trong bài mẫu bằng đúng `shareLink`; khi đó là đường dẫn tương đối thì bài mẫu cũng phải mang link tuyệt đối.
+  const captions = data ? data.captions.map((c) => withAbsoluteLink(c, data.shareLink, link)) : [];
   const hasContent =
-    data && (data.captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
+    data && (captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
   return (
     <BottomSheet open={visible} onClose={onClose} title={vi.contentKit.sheetTitle}>
@@ -103,11 +119,11 @@ export function ContentKitSheet({
                   void shareWithFallback(
                     {
                       title: data.productName,
-                      description: data.captions[0] ?? data.productName,
+                      description: captions[0] ?? data.productName,
                       thumbnail: data.images[0],
                       path: data.shareLink,
                     },
-                    shareFallbackText(data.captions[0], link),
+                    shareFallbackText(captions[0], link),
                   );
                 }}
               >
@@ -124,9 +140,9 @@ export function ContentKitSheet({
               </Text>
             )}
 
-            {data.captions.length > 0 && (
+            {captions.length > 0 && (
               <Section title={vi.contentKit.captionsHeading}>
-                {data.captions.map((c, i) => (
+                {captions.map((c, i) => (
                   <CopyRow key={i} onPress={() => void copy(c)}>
                     <Text variant="caption" tone="secondary">{c}</Text>
                   </CopyRow>

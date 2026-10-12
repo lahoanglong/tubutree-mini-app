@@ -385,7 +385,7 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
             type="button"
             aria-hidden="true"
             tabIndex={-1}
-            aria-label={`${loc.brand} — ${loc.province}`}
+            data-testid={`brand-pin-${loc.id}`}
             className="tubu-press"
             onClick={() => onPick(loc)}
             style={{

@@ -46,7 +46,9 @@ export class ContentKitService {
       }),
     ]);
 
-    const baseUrl = await this.config.get<string>('app.miniapp_base_url', '');
+    // URL gốc Mini App (zalo.me/s/<appId>): /product/:slug là route của Mini App. Bỏ "/" cuối để admin gõ thừa không sinh "//product".
+    const rawBase: unknown = await this.config.get<string>('app.miniapp_base_url', '');
+    const baseUrl = typeof rawBase === 'string' ? rawBase.trim().replace(/\/+$/, '') : '';
     const link = `${baseUrl}/product/${productSlug}?ref=${user.referralCode}`;
     const ctvName = user.fullName?.trim() || 'Shop';
     // 1 lần quét duy nhất bằng regex + hàm thay thế (KHÔNG dùng 2 lần .replaceAll string nối

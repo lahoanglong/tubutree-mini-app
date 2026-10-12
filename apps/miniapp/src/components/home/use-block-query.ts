@@ -20,19 +20,26 @@ export interface BlockQuery<T> {
  *
  * `errorUpdateCount` chỉ tăng khi lỗi được GHI nhận (sau cả lượt retry tự động của query), và về 0 khi query bị reset
  * → khung chờ vẫn hiện đúng ở lần tải đầu và sau khi reset.
+ *
+ * Lỗi được nhớ theo TỪNG lần mount của hook (useRef), kèm `errorUpdatedAt` của query đã gây ra nó. React Query bỏ lỗi
+ * (error=null) khi tải lại nên không ai khác giữ hộ: instance mới gắn vào giữa lúc tải lại, hay mount lại sau khi
+ * unmount, không biết lỗi là gì và coi đó là lần tải đầu của nó (khung chờ) thay vì dựng khối lỗi không có lỗi; còn
+ * instance đổi sang query khác (đổi key) không được mượn lỗi của query trước (`errorUpdatedAt` lệch; hai lỗi trùng đến từng
+ * mili giây thì không phân biệt được, chấp nhận vì cần hai query cùng lỗi trong một mili giây và đổi qua lại giữa chúng).
  */
 export function useBlockQuery<T>(q: UseQueryResult<T>): BlockQuery<T> {
-  const lastError = useRef<unknown>(undefined);
-  if (q.isError) lastError.current = q.error;
-  else if (q.errorUpdateCount === 0) lastError.current = undefined;
+  const seen = useRef<{ error: unknown; at: number } | null>(null);
+  if (q.isError) seen.current = { error: q.error, at: q.errorUpdatedAt };
+  else if (q.errorUpdateCount === 0) seen.current = null;
 
-  const retryingAfterFailure = q.data === undefined && q.isPending && q.errorUpdateCount > 0;
+  const retryingAfterFailure =
+    q.data === undefined && q.isPending && q.errorUpdateCount > 0 && seen.current !== null && seen.current.at === q.errorUpdatedAt;
   return {
     data: q.data,
     isLoading: q.isLoading && !retryingAfterFailure,
     isPending: q.isPending && !retryingAfterFailure,
     isError: q.isError || retryingAfterFailure,
-    error: q.isError ? q.error : retryingAfterFailure ? lastError.current : null,
+    error: q.isError ? q.error : retryingAfterFailure ? seen.current?.error : null,
     isFetching: q.isFetching,
     refetch: q.refetch,
   };
