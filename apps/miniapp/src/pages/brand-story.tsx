@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { MapPin } from 'lucide-react';
 import { haptic } from '../utils/haptic';
-import { BRAND_ORIGINS, type BrandOrigin } from '../utils/brand-origins';
+import { BRAND_ORIGINS, PIN_CIRCLE, PIN_GAP, type BrandOrigin } from '../utils/brand-origins';
 import { brandBrowsePath } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { PageHeader } from '../components/ui/page-header';
@@ -410,8 +410,8 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
               aria-hidden
               className="tubu-pulse"
               style={{
-                width: 32,
-                height: 32,
+                width: PIN_CIRCLE,
+                height: PIN_CIRCLE,
                 borderRadius: '50%',
                 background: loc.gradient,
                 display: 'grid',
@@ -435,6 +435,13 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
                 whiteSpace: 'nowrap',
                 boxShadow: 'var(--elevation-1)',
                 border: '1px solid var(--color-brandmap-wood-400)',
+                // Nhãn lệch sang bên để cụm ghim Lâm Đồng/Mekong không đè nhau (vị trí kiểm ở brand-origins.spec.ts).
+                ...(loc.labelSide && {
+                  position: 'absolute',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  ...(loc.labelSide === 'left' ? { right: `calc(50% + ${PIN_CIRCLE / 2 + PIN_GAP}px)` } : { left: `calc(50% + ${PIN_CIRCLE / 2 + PIN_GAP}px)` }),
+                }),
               }}
             >
               {loc.brand}
