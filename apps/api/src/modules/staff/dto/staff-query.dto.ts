@@ -2,7 +2,8 @@ import { IsOptional, IsString } from 'class-validator';
 
 /**
  * Query khoảng thời gian của lịch ca/chấm công. Chỉ ép kiểu chuỗi: thiếu/không hợp lệ vẫn do controller
- * trả đúng thông điệp 400 cũ. Mảng/object (?from=a&from=b) bị chặn ở đây vì Prisma coi là sai kiểu → 500.
+ * trả đúng thông điệp 400 cũ. Không khai báo thì ValidationPipe (transform) ép mảng/object thành chuỗi "a,b" hay
+ * "[object Object]" rồi chạy tiếp như giá trị thật; @IsString chặn lại để trả 400 rõ ràng.
  */
 export class DateRangeQuery {
   @IsOptional() @IsString() from?: string;
@@ -10,7 +11,7 @@ export class DateRangeQuery {
 }
 
 export class AdminShiftsQuery extends DateRangeQuery {
-  // staffId mảng/object đi thẳng vào where của Prisma → PrismaClientValidationError (500).
+  // Cùng lý do với from/to: staffId mảng/object không được ép thầm thành chuỗi rồi đi vào where.
   @IsOptional() @IsString() staffId?: string;
 }
 

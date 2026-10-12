@@ -95,6 +95,19 @@ describe('controller nhân sự/lương không chuyển ngày/kỳ cực đoan x
     expect(payroll.recomputeStaffMonth).toHaveBeenCalledWith('s', 2026, 10, { reprice: true });
   });
 
+  // reprice định giá lại cả công đã làm xong (xem chú thích ở recompute): mặc định phải tắt, và chỉ '1'/'true' mới bật.
+  it('recompute: không có reprice → tắt; chỉ "1" và "true" mới bật', () => {
+    const admin = new AdminPayrollController(payroll as never, attendance as never);
+    admin.recompute('s', { year: '2026', month: '10' });
+    expect(payroll.recomputeStaffMonth).toHaveBeenLastCalledWith('s', 2026, 10, { reprice: false });
+    for (const off of ['', '0', 'false', 'yes', 'TRUE']) {
+      admin.recompute('s', { year: '2026', month: '10', reprice: off });
+      expect(payroll.recomputeStaffMonth).toHaveBeenLastCalledWith('s', 2026, 10, { reprice: false });
+    }
+    admin.recompute('s', { year: '2026', month: '10', reprice: '1' });
+    expect(payroll.recomputeStaffMonth).toHaveBeenLastCalledWith('s', 2026, 10, { reprice: true });
+  });
+
   it('các controller khai báo query bằng DTO (để ValidationPipe chặn mảng/object)', () => {
     const t = (c: { prototype: object }, m: string) => Reflect.getMetadata('design:paramtypes', c.prototype, m) as unknown[];
     expect(t(StaffController, 'listShifts')).toContain(DateRangeQuery);
