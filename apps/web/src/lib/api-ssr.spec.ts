@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getBrand, getProduct, getProducts, getStorefront } from './api';
+import {
+  ApiUnavailableError,
+  getBrand,
+  getBrands,
+  getProduct,
+  getProducts,
+  getStorefront,
+  getStorefrontList,
+} from './api';
 
 function res(status: number, body: unknown = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -72,5 +80,41 @@ describe('header miễn throttle khi SSR', () => {
     await getProducts();
     const headers = new Headers((f.mock.calls[0]?.[1] as RequestInit).headers);
     expect(headers.has('x-throttle-bypass')).toBe(false);
+  });
+});
+
+// Trang danh sách ISR: trả [] khi API chớp lỗi sẽ khiến Next lưu bản rỗng cả 300-3600 giây.
+// Ném lỗi để Next giữ bản đã render tốt; riêng lúc `next build` (API thường chưa chạy) vẫn trả [].
+describe.each([
+  ['getProducts', () => getProducts(), { data: [{ id: 'p1' }], meta: {} }, [{ id: 'p1' }]],
+  ['getBrands', () => getBrands(), [{ brand: 'Tubu', count: 2 }], [{ brand: 'Tubu', count: 2 }]],
+  [
+    'getStorefrontList',
+    () => getStorefrontList(),
+    [{ slug: 'a', updatedAt: '2026-10-01T00:00:00.000Z' }],
+    [{ slug: 'a', updatedAt: '2026-10-01T00:00:00.000Z' }],
+  ],
+] as const)('%s — danh sách ISR', (_name, call, okBody, expected) => {
+  it('thành công → trả dữ liệu', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, okBody)));
+    await expect(call()).resolves.toEqual(expected);
+  });
+
+  it('mất kết nối lúc runtime → ném ApiUnavailableError', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(call()).rejects.toBeInstanceOf(ApiUnavailableError);
+  });
+
+  it.each([429, 500, 503])('%i lúc runtime → ném ApiUnavailableError', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(status)));
+    await expect(call()).rejects.toBeInstanceOf(ApiUnavailableError);
+  });
+
+  it('lúc build (API chưa chạy) → trả [] để next build không hỏng', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(call()).resolves.toEqual([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(503)));
+    await expect(call()).resolves.toEqual([]);
   });
 });
