@@ -58,6 +58,9 @@ export class SystemConfigService {
    */
   private static readonly RANGES: Record<string, { min: number; max: number; note: string; integer?: true }> = {
     'loyalty.max_redeem_pct': { min: 0, max: 1, note: 'phân số (0.2 = 20%)' },
+    // Hạn của mọi điểm thưởng mới (điểm đơn, điểm danh, đánh giá, vòng quay, giới thiệu…). 0 hay số âm làm điểm hết hạn
+    // ngay lúc cộng, số quá lớn làm điểm không bao giờ hết hạn; số lẻ bị các nguồn cộng điểm cắt bỏ phần thập phân.
+    'loyalty.point_expire_months': { min: 1, max: 120, note: 'số tháng nguyên (12 = điểm hết hạn sau 12 tháng)', integer: true },
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },

@@ -308,16 +308,17 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
   });
 
   /**
-   * loyalty.point_expire_months không có biên trong SystemConfigService, nên admin đặt được 0 hay số âm. Mọi nguồn cộng
-   * điểm thường phải rơi về 12 tháng như nhau; điểm đơn giao trước đây tự tính tháng nên hết hạn ngay và cron đêm sau
-   * trừ lại chính điểm khách vừa nhận.
+   * Giá trị hỏng của loyalty.point_expire_months (0, âm) nay bị SystemConfigService.set từ chối (biên 1–120), nhưng vẫn
+   * có thể nằm sẵn trong DB từ trước biên đó hoặc do ghi tay. Mọi nguồn cộng điểm thường phải rơi về 12 tháng như nhau;
+   * điểm đơn giao trước đây tự tính tháng nên hết hạn ngay và cron đêm sau trừ lại chính điểm khách vừa nhận.
    */
   describe('loyalty.point_expire_months hỏng (0, âm): điểm đơn giao và thưởng đều có hạn 12 tháng', () => {
     const MONTHS_KEY = 'loyalty.point_expire_months';
 
     it.each([[0], [-3]])('cấu hình %i: ORDER_DELIVERED và thưởng cộng đồng có hạn ≈ bây giờ + 12 tháng, cron không trừ gì', async (bad) => {
       const user = await customer();
-      await config.set(MONTHS_KEY, bad, 'it-pe5');
+      await setConfig(prisma, MONTHS_KEY, bad); // ghi thẳng DB: set() chặn giá trị này
+      config['cache'].delete(MONTHS_KEY);
       const before = new Date();
       try {
         const order = await deliveredOrder(user.id, 20);

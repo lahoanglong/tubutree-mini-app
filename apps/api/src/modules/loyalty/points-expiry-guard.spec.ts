@@ -118,6 +118,11 @@ const EXCEPTIONS: { file: string; argsInclude: string; why: string }[] = [
     argsInclude: 'delta: take > 0 ? -take : 0',
     why: 'thu hồi thưởng giới thiệu: delta là âm hoặc 0 (phần thiếu ghi thành REFERRAL_DEBT).',
   },
+  {
+    file: 'modules/loyalty/loyalty.service.ts',
+    argsInclude: 'delta: take > 0 ? -take : 0',
+    why: 'thu hồi điểm đơn khi huỷ/trả (ORDER_REVERSED): tối đa phần lô chưa mất, delta là âm hoặc 0 (dấu đã xử lý).',
+  },
 ];
 
 function violation(site: Site): boolean {

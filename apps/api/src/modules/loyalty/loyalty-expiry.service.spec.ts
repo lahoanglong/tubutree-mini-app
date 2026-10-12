@@ -1,4 +1,12 @@
-import { computePointExpiry, LoyaltyExpiryService, type PointExpiryTxn } from './loyalty-expiry.service';
+import {
+  computePointExpiry,
+  loadPointExpiryTxns,
+  LoyaltyExpiryService,
+  lotRecoverable,
+  orderLotKey,
+  reviewLotKey,
+  type PointExpiryTxn,
+} from './loyalty-expiry.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -704,6 +712,109 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       WINDOW,
     );
     expect(r.expiredNow).toBe(0);
+  });
+});
+
+/**
+ * PF-3: phần của MỘT lô còn thu hồi được theo sổ. reverseOrderPoints và ReviewsService.remove dùng nó làm trần thu hồi: chỉ
+ * phần lô đã bị cron trừ vì HẾT HẠN, hay đã bị dòng thu hồi cùng khoá lấy, mới là "đã mất". Điểm bị FIFO tiêu ăn không phải
+ * mất: lockedOrderPoints giữ cho số dư đủ để thu hồi trong cửa sổ đổi trả, nên chi tiêu từ lô KHÁC không được tính vào lô này.
+ */
+describe('lotRecoverable (phần lô còn thu hồi được theo sổ)', () => {
+  const ORDER = { refType: 'ORDER' };
+  const delivered = (id: string, delta: number, createdAt: string, expiresAt: string | null, orderId: string) =>
+    tx(id, delta, createdAt, expiresAt, 'ORDER_DELIVERED:C1', { ...ORDER, refId: orderId });
+  const reversed = (id: string, delta: number, createdAt: string, orderId: string) =>
+    tx(id, delta, createdAt, null, 'ORDER_REVERSED:C1', { ...ORDER, refId: orderId });
+  const key = orderLotKey('o1');
+
+  it('lô chưa ai đụng → còn nguyên', () => {
+    expect(lotRecoverable([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', '2027-06-01', 'o1')], key)).toBe(20);
+  });
+
+  it('cron đã trừ POINTS_EXPIRED cho lô đã hết hạn → còn 0 (không còn gì để thu hồi)', () => {
+    const r = lotRecoverable(
+      [tx('a', 30, '2025-01-01'), delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'), expired('x', 20, '2026-05-02')],
+      key,
+    );
+    expect(r).toBe(0);
+  });
+
+  it('cron mới trừ một phần lô hết hạn (phần còn lại sau khi FIFO tiêu bớt) → chỉ phần cron trừ là mất', () => {
+    const r = lotRecoverable(
+      [delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'), tx('s', -5, '2025-06-01'), expired('x', 15, '2026-05-02')],
+      key,
+    );
+    expect(r).toBe(5);
+  });
+
+  it('lô đã hết hạn nhưng cron chưa chạy → còn nguyên (thu hồi lúc này thì cron đêm sau không trừ nữa)', () => {
+    expect(lotRecoverable([delivered('d', 20, '2025-05-01', '2026-05-01', 'o1')], key)).toBe(20);
+  });
+
+  it('điểm tiêu ăn lô cũ trước (FIFO) rồi tới lô đơn: phần đó không tính là mất, lô đơn vẫn thu hồi đủ', () => {
+    const r = lotRecoverable([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', null, 'o1'), tx('s', -40, '2026-06-10')], key);
+    expect(r).toBe(20);
+  });
+
+  it('lô đơn là lô CŨ NHẤT còn tồn, chi tiêu từ lô khác ăn vào nó theo FIFO: vẫn thu hồi đủ (số dư còn đủ nhờ lockedOrderPoints)', () => {
+    const txns = [delivered('d', 20, '2026-07-03', '2027-07-03', 'o1'), tx('g', 100, '2026-07-04', null, 'GAME_X'), tx('s', -100, '2026-07-05')];
+    expect(lotRecoverable(txns, key)).toBe(20);
+  });
+
+  it('tiêu hết cả lô theo FIFO → vẫn là phần chưa mất (trần theo số dư lo phần không đủ)', () => {
+    expect(lotRecoverable([delivered('d', 20, '2026-06-01', null, 'o1'), tx('s', -20, '2026-06-10')], key)).toBe(20);
+  });
+
+  it('dòng thu hồi đã ghi ăn đúng lô này', () => {
+    expect(lotRecoverable([tx('a', 30, '2025-01-01'), delivered('d', 20, '2026-06-01', null, 'o1'), reversed('v', -12, '2026-06-05', 'o1')], key)).toBe(8);
+  });
+
+  it('chỉ tính đúng khoá: lô của đơn khác không lẫn vào', () => {
+    const txns = [delivered('d1', 20, '2026-06-01', null, 'o1'), delivered('d2', 50, '2026-06-02', null, 'o2')];
+    expect(lotRecoverable(txns, orderLotKey('o1'))).toBe(20);
+    expect(lotRecoverable(txns, orderLotKey('o2'))).toBe(50);
+  });
+
+  it('không có lô nào mang khoá (dòng cộng cũ thiếu refType/refId, hay đơn chưa giao) → null để caller không thu hẹp', () => {
+    expect(lotRecoverable([tx('d', 20, '2026-06-01', null, 'ORDER_DELIVERED:C1')], key)).toBeNull();
+    expect(lotRecoverable([], key)).toBeNull();
+    expect(lotRecoverable([tx('a', 30, '2025-01-01')], key)).toBeNull();
+  });
+
+  it('đánh giá: khoá theo id đánh giá, dòng REVIEW_DELETE đã ghi ăn đúng lô', () => {
+    const txns = [tx('a', 30, '2025-01-01'), review('r1', 5, '2026-06-01', '2027-06-01', 'rv1'), review('r2', -2, '2026-06-02', null, 'rv1')];
+    expect(lotRecoverable(txns, reviewLotKey('rv1'))).toBe(3);
+  });
+
+  it('đánh giá cũ hơn lô đã bị tiêu: chi tiêu FIFO ăn vào lô đánh giá không làm nó mất', () => {
+    const txns = [review('r1', 5, '2026-06-01', '2027-06-01', 'rv1'), tx('g', 40, '2026-06-02', null, 'GAME_X'), tx('s', -40, '2026-06-03')];
+    expect(lotRecoverable(txns, reviewLotKey('rv1'))).toBe(5);
+  });
+
+  it('không đổi thứ tự đầu vào của caller (hàm thuần)', () => {
+    const txns = [delivered('d', 20, '2026-06-01', null, 'o1'), tx('a', 30, '2025-01-01')];
+    const before = txns.map((t) => t.id);
+    lotRecoverable(txns, key);
+    expect(txns.map((t) => t.id)).toEqual(before);
+  });
+
+  it('lô hết hạn mà cron chưa chạy vẫn còn nguyên dù FIFO đã tiêu bớt: expiredNow chỉ tính phần chưa tiêu, trần thu hồi thì không', () => {
+    const txns = [tx('a', 30, '2025-01-01'), delivered('d', 20, '2025-05-01', '2026-05-01', 'o1'), tx('s', -35, '2025-06-01')];
+    expect(lotRecoverable(txns, key)).toBe(20);
+    expect(computePointExpiry(txns, NOW, 0).expiredNow).toBe(15);
+  });
+});
+
+describe('loadPointExpiryTxns', () => {
+  it('chỉ lô STANDARD của đúng user, theo createdAt rồi id, kèm reason/refType/refId', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await loadPointExpiryTxns({ pointsTransaction: { findMany } } as never, 'u1');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', lot: 'STANDARD' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
+    });
   });
 });
 
