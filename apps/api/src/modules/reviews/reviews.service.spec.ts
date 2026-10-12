@@ -34,7 +34,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({ id: 'old', rating: 3 }),
       aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 }, _count: 2 }),
     },
-    pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+    pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     user: { update: jest.fn() },
     $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
@@ -230,6 +230,70 @@ describe('ReviewsService.create', () => {
     expect(p.review.create.mock.calls[0][0].data.videoUrl).toBe('https://res.cloudinary.com/x/video/upload/v1/rv.mp4');
   });
 
+  // Q-30: thưởng chỉ lần đầu. Xoá rồi tạo lại chỉ được thưởng lại khi lần xoá đã thu hồi đủ điểm đã thưởng.
+  describe('thưởng đánh giá chỉ một lần dù xoá rồi tạo lại (Q-30)', () => {
+    const row = (delta: number) => ({ delta });
+    const withLedger = (rows: { delta: number }[]) => {
+      const prisma = makePrisma();
+      (prisma as unknown as { pointsTransaction: { findMany: jest.Mock } }).pointsTransaction.findMany.mockResolvedValue(rows);
+      return prisma as unknown as {
+        pointsTransaction: { create: jest.Mock; findMany: jest.Mock };
+        user: { update: jest.Mock };
+        review: { create: jest.Mock };
+      } & PrismaService;
+    };
+    const create = (prisma: PrismaService) => new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
+
+    it('sổ chưa có dòng REVIEW nào của cặp → thưởng bình thường', async () => {
+      const prisma = withLedger([]);
+      await create(prisma);
+      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5);
+    });
+
+    it('thưởng 5 đã thu hồi đủ (+5, -5) → thưởng lại được', async () => {
+      const prisma = withLedger([row(5), row(-5)]);
+      await create(prisma);
+      expect(prisma.pointsTransaction.create.mock.calls[0]![0].data.delta).toBe(5);
+    });
+
+    it('thưởng 5 chỉ thu hồi được 3 (+5, -3) → còn giữ 2: tạo lại không thưởng, không ghi sổ, không cộng số dư, pointsEarned 0', async () => {
+      const prisma = withLedger([row(5), row(-3)]);
+      const out = await create(prisma);
+      expect(out).toMatchObject({ id: 'r1', updated: false });
+      expect(prisma.review.create.mock.calls[0]![0].data.pointsEarned).toBe(0);
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('thưởng đã tiêu hết nên không thu hồi được (chỉ có +15) hay đã hết hạn → không thưởng lần hai', async () => {
+      const prisma = withLedger([row(15)]);
+      await create(prisma);
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('chỉ đọc đúng sổ REVIEW của đúng khách và đúng sản phẩm (thưởng theo slug, thu hồi theo id sản phẩm), trong tx', async () => {
+      const prisma = withLedger([]);
+      await create(prisma);
+      expect(prisma.pointsTransaction.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', refType: 'REVIEW', reason: { in: ['REVIEW:tinh-dau', 'REVIEW_DELETE:p1'] } },
+        select: { delta: true },
+      });
+    });
+
+    it('đọc sổ TRƯỚC khi tạo đánh giá (pointsEarned nằm trên dòng đánh giá)', async () => {
+      const prisma = withLedger([]);
+      await create(prisma);
+      expect(prisma.pointsTransaction.findMany.mock.invocationCallOrder[0]).toBeLessThan(prisma.review.create.mock.invocationCallOrder[0]!);
+    });
+
+    it('analytics review_created ghi pointsEarned thật (0 khi không thưởng)', async () => {
+      const prisma = withLedger([row(5)]);
+      const spy = { record: jest.fn().mockResolvedValue(undefined), recordBestEffort: jest.fn() };
+      await new ReviewsService(prisma, spy as unknown as AnalyticsEventsService, loyalty).create('u1', 'tinh-dau', dto as never);
+      expect(spy.record.mock.calls[0]![1].props).toMatchObject({ action: 'review_created', pointsEarned: 0 });
+    });
+  });
+
   // PE-3 (OQ-1): điểm thưởng đánh giá là Điểm Xanh thường, hết hạn theo loyalty.point_expire_months.
   describe('điểm thưởng có hạn (PE-3)', () => {
     beforeEach(() => pointsExpiresAt.mockClear());
@@ -326,7 +390,7 @@ describe('ReviewsService.create', () => {
     const prisma = makePrisma();
     const tx = {
       review: { create: jest.fn().mockResolvedValue({ id: 'r1' }) },
-      pointsTransaction: { create: jest.fn().mockResolvedValue({}) },
+      pointsTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
       user: { update: jest.fn().mockResolvedValue({}) },
       product: { update: jest.fn().mockResolvedValue({}) },
     };

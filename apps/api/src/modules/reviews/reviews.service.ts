@@ -119,12 +119,15 @@ export class ReviewsService {
     // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
     const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
-    const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
+    const rewardPoints = hasVideo ? 15 : hasImages ? 10 : 5;
     // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
     // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
     const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
+      // pointsEarned nằm ngay trên dòng đánh giá nên phải biết trước review.create. Cặp (khách, sản phẩm) này chưa có
+      // đánh giá nào (unique chặn) nên sổ REVIEW của nó không đổi giữa lúc đọc và lúc ghi.
+      const pointsEarned = (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
       const r = await tx.review.create({
         data: {
           userId,
@@ -137,10 +140,12 @@ export class ReviewsService {
           pointsEarned,
         },
       });
-      await tx.pointsTransaction.create({
-        data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id, expiresAt },
-      });
-      await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
+      if (pointsEarned > 0) {
+        await tx.pointsTransaction.create({
+          data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id, expiresAt },
+        });
+        await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
+      }
       // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
       // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
       await this.recomputeRating(product.id, tx);
@@ -152,6 +157,28 @@ export class ReviewsService {
       });
       return r;
     });
+  }
+
+  /**
+   * Khách đã nhận thưởng đánh giá của sản phẩm này và còn giữ nó chưa. Q-30: thưởng chỉ lần đầu, nên xoá rồi tạo lại chỉ
+   * được thưởng lại khi lần xoá đã thu hồi đủ điểm đã thưởng (tạo, xoá, tạo lại ra đúng một lần thưởng). Điểm đã tiêu
+   * hết nên không thu hồi được, hay đã hết hạn và cron đã trừ, thì thưởng đó khách đã dùng rồi: tạo lại không thưởng
+   * thêm, không thì vòng tạo, tiêu điểm, xoá, tạo lại cho điểm vô hạn.
+   *
+   * Cộng mọi dòng sổ REVIEW của cặp (khách, sản phẩm): thưởng dương `REVIEW:<slug>`, thu hồi âm `REVIEW_DELETE:<id sản
+   * phẩm>`; còn dương nghĩa là còn phần thưởng chưa thu hồi. slug không đổi sau khi tạo sản phẩm (đồng bộ Pancake chỉ
+   * ghi slug lúc tạo).
+   */
+  private async rewardAlreadyKept(tx: Prisma.TransactionClient, userId: string, product: { id: string; slug: string }): Promise<boolean> {
+    const rows = await tx.pointsTransaction.findMany({
+      where: {
+        userId,
+        refType: 'REVIEW',
+        reason: { in: [`REVIEW:${product.slug}`, `REVIEW_DELETE:${product.id}`] },
+      },
+      select: { delta: true },
+    });
+    return rows.reduce((sum, r) => sum + r.delta, 0) > 0;
   }
 
   /**

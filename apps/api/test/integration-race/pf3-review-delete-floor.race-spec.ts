@@ -25,6 +25,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let reviews: ReviewsService;
+  let loyalty: LoyaltyService;
   let expiry: LoyaltyExpiryService;
   const touched: string[] = [];
 
@@ -43,6 +44,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     reviews = moduleRef.get(ReviewsService);
+    loyalty = moduleRef.get(LoyaltyService);
     expiry = moduleRef.get(LoyaltyExpiryService);
     await warmPool(prisma);
     await setConfig(prisma, 'loyalty.point_expire_months', 12);
@@ -111,6 +113,22 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
        WHERE "userId" = ${userId} AND "reason" LIKE 'REVIEW:%'`;
   }
 
+  const VIDEO = 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4';
+  const VIDEO_POINTS = 15;
+
+  /** Đơn COD đang xử lý dùng `points` Điểm Xanh, ghi sổ như CheckoutService (dòng ORDER_REDEEM + trừ số dư). */
+  async function codOrderSpending(userId: string, points: number) {
+    const order = await createOrder(prisma, { userId, status: 'CONFIRMED', pointsUsed: points });
+    await prisma.$transaction([
+      prisma.pointsTransaction.create({
+        data: { userId, delta: -points, lot: 'STANDARD', reason: `ORDER_REDEEM:${order.code}`, refType: 'ORDER', refId: order.id },
+      }),
+      prisma.user.update({ where: { id: userId }, data: { pointsBalance: { decrement: points } } }),
+    ]);
+    return order;
+  }
+  const rewardRows = (userId: string) => rowsOf(userId, 'REVIEW:');
+
   async function ageLedger(userId: string, months: number) {
     await prisma.$executeRaw`
       UPDATE "points_transactions"
@@ -163,6 +181,103 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
 
     expect(await balance(user.id)).toBe(0);
     expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-2]);
+  });
+
+  describe('thưởng đánh giá chỉ nhận một lần cho mỗi (khách, sản phẩm) dù xoá rồi tạo lại (Q-30)', () => {
+    it('vòng lặp farm: tạo (+15) → tiêu hết bằng đơn COD → xoá → huỷ đơn (hoàn điểm đã dùng) → tạo lại: 3 vòng chỉ nhận thưởng đúng một lần', async () => {
+      const { user, product } = await player();
+      const earned: number[] = [];
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const review = await reviews.create(user.id, product.slug, { rating: 5, videoUrl: VIDEO });
+        earned.push(review.pointsEarned);
+        const order = await codOrderSpending(user.id, await balance(user.id));
+        expect(await balance(user.id)).toBe(0);
+        await reviews.remove(user.id, 'USER', review.id);
+        await loyalty.reverseOrderPoints(order.id);
+        expect(await balance(user.id)).toBe(VIDEO_POINTS);
+      }
+      expect(earned).toEqual([VIDEO_POINTS, 0, 0]);
+      expect(await rewardRows(user.id)).toHaveLength(1);
+      expect(await balance(user.id)).toBe(VIDEO_POINTS);
+    });
+
+    it('tiêu hết điểm đánh giá rồi xoá (thu hồi 0) → tạo lại không được thưởng lần hai', async () => {
+      const { user, product } = await player();
+      const first = await reviews.create(user.id, product.slug, { rating: 5 });
+      await codOrderSpending(user.id, REVIEW_POINTS);
+      await reviews.remove(user.id, 'USER', first.id);
+
+      const again = await reviews.create(user.id, product.slug, { rating: 4 });
+
+      expect(again).toMatchObject({ updated: false, pointsEarned: 0 });
+      expect(await balance(user.id)).toBe(0);
+      expect(await rewardRows(user.id)).toHaveLength(1);
+      expect(await standardSum(user.id)).toBe(await balance(user.id));
+    });
+
+    it('chỉ thu hồi được một phần (đã tiêu 2/5, thu hồi 3) → phần giữ lại là thưởng đã nhận, tạo lại không thưởng thêm', async () => {
+      const { user, product } = await player();
+      const first = await reviews.create(user.id, product.slug, { rating: 5 });
+      await spend(user.id, 2);
+      await reviews.remove(user.id, 'USER', first.id);
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-3]);
+
+      const again = await reviews.create(user.id, product.slug, { rating: 4 });
+
+      expect(again.pointsEarned).toBe(0);
+      expect(await balance(user.id)).toBe(0);
+    });
+
+    it('điểm thưởng đã hết hạn và cron đã trừ rồi mới xoá → tạo lại cũng không thưởng lại (thưởng lần đầu đã nhận)', async () => {
+      const { user, product } = await player();
+      await legacyUnlimited(user.id, 30);
+      const first = await reviews.create(user.id, product.slug, { rating: 5 });
+      await ageLedger(user.id, 13);
+      await expiry.expirePoints();
+      await reviews.remove(user.id, 'USER', first.id);
+
+      const again = await reviews.create(user.id, product.slug, { rating: 4 });
+
+      expect(again.pointsEarned).toBe(0);
+      expect(await balance(user.id)).toBe(30);
+    });
+
+    it('thu hồi đủ rồi tạo lại vẫn được thưởng (đúng một lần thưởng đang giữ): tạo → xoá → tạo lại → xoá về 0', async () => {
+      const { user, product } = await player();
+      const first = await reviews.create(user.id, product.slug, { rating: 5 });
+      await reviews.remove(user.id, 'USER', first.id);
+      expect(await balance(user.id)).toBe(0);
+
+      const again = await reviews.create(user.id, product.slug, { rating: 4 });
+
+      expect(again.pointsEarned).toBe(REVIEW_POINTS);
+      expect(await balance(user.id)).toBe(REVIEW_POINTS);
+      await reviews.remove(user.id, 'USER', again.id);
+      expect(await balance(user.id)).toBe(0);
+    });
+
+    it('sản phẩm khác không bị ảnh hưởng: đã tiêu thưởng của sản phẩm A, đánh giá sản phẩm B vẫn được thưởng', async () => {
+      const a = await player();
+      const second = await prisma.product.create({
+        data: { pancakeId: `it-pf3-p2-${randCode(8)}`, brand: 'IT', slug: `it-pf3-b-${randCode(8).toLowerCase()}`, name: 'SP B', description: 'IT', basePrice: 100_000 },
+      });
+      const variation = await prisma.variation.create({
+        data: { pancakeId: `it-pf3-v2-${randCode(8)}`, productId: second.id, sku: `PF3B-${randCode(8)}`, name: 'Chai', attributes: {}, retailPrice: 100_000, salePrice: 100_000, stock: 9 },
+      });
+      await createOrder(prisma, {
+        userId: a.user.id,
+        status: 'DELIVERED',
+        items: { create: [{ variationId: variation.id, productName: 'SP B', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
+      });
+      const first = await reviews.create(a.user.id, a.product.slug, { rating: 5 });
+      await codOrderSpending(a.user.id, REVIEW_POINTS);
+      await reviews.remove(a.user.id, 'USER', first.id);
+
+      const other = await reviews.create(a.user.id, second.slug, { rating: 5 });
+
+      expect(other.pointsEarned).toBe(REVIEW_POINTS);
+      expect(await balance(a.user.id)).toBe(REVIEW_POINTS);
+    });
   });
 
   it('lô đánh giá là lô CŨ NHẤT, khách tiêu điểm từ lô thưởng game ăn vào nó theo FIFO → vẫn thu hồi đủ phần số dư còn có', async () => {
