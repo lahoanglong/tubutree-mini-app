@@ -218,8 +218,8 @@ Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trướ
 ## 9. Môi trường và dọn dẹp (ghi lại để chủ dự án biết)
 
 - Docker Desktop hết chỗ (ổ ảo 39 GB đầy 100%, Postgres `tubu_pg` crash-loop `No space left on device`) giữa lượt đo tải. Theo đồng ý của chủ dự án, đã chạy `docker volume prune` xoá 560 volume ẩn danh không gắn container (tạo từ 02/10, ~35 GB). Volume có tên (`tubu_pg_data`, `tubu_redis_data`) và container đang chạy không bị đụng. Nguyên nhân gốc: container Postgres tạm của race test bị `docker rm` mà không có `-v` nên volume ẩn danh còn lại. Các agent đã được dặn dùng `--rm --tmpfs`.
-- Sau đợt E lại có 107 volume ẩn danh không gắn container (~6,8 GB, `docker volume ls -qf dangling=true`); chưa dọn vì `docker volume prune` cần chủ dự án đồng ý lại. Mọi container Postgres tạm của đợt E đã chạy với `--rm --tmpfs`.
-- Chỉ chủ dự án dọn (theo `HANDOFF.md` mục 8): worktree `.claude/worktrees/hz*-*` (gồm `hz13-PE-1a/1b/2`, `hz14-PE-3/4`, `hz15-PE-5`, `hz16-PF-1..4`, `hz17-PF-5a/5b`; đừng `git worktree remove --force`), container `tubu_it_main`, `tubu_it_pd2`, `tubu_it_pd3`, DB `tubutree_perf`, `tubutree_perf_103` trong `tubu_pg`, thư mục `scripts/loadtest/results/` (gitignore).
+- Sau đợt F, theo đồng ý của chủ dự án (2026-10-12), đã dọn: 27 worktree `.claude/worktrees/hz*-*` (đều sạch, 0 commit chưa merge; xoá không `--force`), container `tubu_it_main`, `tubu_it_pd2`, `tubu_it_pd3` (`docker rm -f -v`), 107 volume Docker ẩn danh (~6,8 GB). Volume có tên `tubutree-mini-app_tubu_pg_data` và `tubutree-mini-app_tubu_redis_data` không bị đụng. Các nhánh `hz*/…` vẫn còn (đã merge hết, xoá bằng `git branch -d` khi muốn).
+- Chưa dọn: DB `tubutree_perf`, `tubutree_perf_103` trong `tubu_pg`, thư mục `scripts/loadtest/results/` (gitignore). Muốn chạy lại race suite thì dựng container mới bằng lệnh ở mục 10.
 - Việc cũ: README, DEMO_SCRIPT đã sửa ở T5; `scripts/loadtest/node_modules` cài bằng `npm ci` (không thuộc workspace pnpm).
 
 ## 10. Phụ lục: lệnh tái hiện

@@ -100,4 +100,4 @@ Cách đã dùng cho `cb92dc8`: `git bundle` lên VPS, `pg_dump` backup trước
 - Duyệt quy tắc PA-7: đơn đã thưởng cho cùng người mời thì không thưởng lại.
 - Quyết định 3 mục PC-6 ở mục 6.
 - Quét QR UAT trên Zalo thật; nhập nội dung FAQ/Academy.
-- Dọn sau cùng: worktree `.claude/worktrees/hz*-*` (không `git worktree remove --force`, coi chừng junction), container `tubu_it_*`.
+- Đã dọn 2026-10-12 theo đồng ý của chủ dự án: worktree `.claude/worktrees/hz*-*`, container `tubu_it_*`, 107 volume ẩn danh (chi tiết `99-release-readiness.md` mục 9). Nhánh `hz*/…` còn lại, đã merge hết.
