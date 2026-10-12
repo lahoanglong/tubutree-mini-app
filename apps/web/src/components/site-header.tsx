@@ -46,7 +46,8 @@ export default function SiteHeader() {
         </Link>
 
         {/* Tìm kiếm: hàng riêng ở điện thoại để ô nhập đủ rộng, nằm giữa logo và giỏ hàng từ màn sm. */}
-        <div className="order-last flex w-full empty:hidden sm:order-none sm:w-auto sm:max-w-md sm:flex-1">
+        {/* data-site-search: html[data-tenant-host] ẩn khung này từ khung hình đầu trên host gian hàng CTV (globals.css). */}
+        <div data-site-search className="order-last flex w-full empty:hidden sm:order-none sm:w-auto sm:max-w-md sm:flex-1">
           <SiteSearch />
         </div>
 

@@ -38,3 +38,19 @@ export function tenantSubdomainOf(host: string | null | undefined): string | nul
   else if (parts.length >= 3 && !hostname.endsWith('.localhost')) sub = parts[0]!;
   return sub && !SYSTEM_SUBDOMAINS.includes(sub) ? sub : null;
 }
+
+/**
+ * Mã JS chạy ở <head> trước khi trình duyệt vẽ: gắn `data-tenant-host` lên <html> khi đang ở host gian hàng CTV,
+ * để CSS ẩn ô tìm kiếm ngay từ khung hình đầu. Trang dựng sẵn (ISR) có HTML như nhau cho mọi host nên server không
+ * biết host nào đang xem; chờ effect sau hydrate mới ẩn thì ô hiện lên rồi biến mất, và không bao giờ ẩn khi JS chưa
+ * chạy. Quy tắc nhận host lặp lại `tenantSubdomainOf` (site.spec.ts so hai bên trên cùng bảng host); sai thì chỉ
+ * mất việc ẩn sớm, `SiteSearch` vẫn tự gỡ sau hydrate.
+ */
+export function tenantHostBootScript(): string {
+  return (
+    "(function(){try{var h=location.host.split(':')[0].toLowerCase(),p=h.split('.'),s=null;" +
+    "if(/\\.localhost$/.test(h)){if(p.length===2)s=p[0]}else if(p.length>=3)s=p[0];" +
+    `if(s&&${JSON.stringify(SYSTEM_SUBDOMAINS)}.indexOf(s)<0)document.documentElement.setAttribute('data-tenant-host','')` +
+    '}catch(e){}})()'
+  );
+}
