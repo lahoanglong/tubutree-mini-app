@@ -142,6 +142,8 @@ describe('useBlockQuery: trạng thái lỗi theo từng lần mount', () => {
     const qc = newClient();
     // Query B đã từng lỗi (errorUpdateCount > 0) rồi nằm trong cache; khi instance chuyển sang B thì nó tải lại.
     await qc.fetchQuery({ queryKey: ['b'], queryFn: () => Promise.reject(eb) }).catch(() => undefined);
+    // Hai lỗi cùng một mili giây có cùng errorUpdatedAt (hook không phân biệt được): cách ra để test không chập chờn.
+    await new Promise((r) => setTimeout(r, 5));
     const fns: Record<string, () => Promise<string>> = { a: () => Promise.reject(ea), b: never };
     const hook = renderHook(({ k }: { k: string }) => useBlockQuery(useQuery({ queryKey: [k], queryFn: fns[k]! })), {
       wrapper: wrap(qc),

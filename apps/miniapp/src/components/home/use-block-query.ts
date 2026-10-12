@@ -24,7 +24,8 @@ export interface BlockQuery<T> {
  * Lỗi được nhớ theo TỪNG lần mount của hook (useRef), kèm `errorUpdatedAt` của query đã gây ra nó. React Query bỏ lỗi
  * (error=null) khi tải lại nên không ai khác giữ hộ: instance mới gắn vào giữa lúc tải lại, hay mount lại sau khi
  * unmount, không biết lỗi là gì và coi đó là lần tải đầu của nó (khung chờ) thay vì dựng khối lỗi không có lỗi; còn
- * instance đổi sang query khác (đổi key) không được mượn lỗi của query trước (`errorUpdatedAt` lệch).
+ * instance đổi sang query khác (đổi key) không được mượn lỗi của query trước (`errorUpdatedAt` lệch; hai lỗi trùng đến từng
+ * mili giây thì không phân biệt được, chấp nhận vì cần hai query cùng lỗi trong một mili giây và đổi qua lại giữa chúng).
  */
 export function useBlockQuery<T>(q: UseQueryResult<T>): BlockQuery<T> {
   const seen = useRef<{ error: unknown; at: number } | null>(null);
