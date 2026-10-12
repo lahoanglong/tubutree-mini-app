@@ -131,6 +131,9 @@ export class GameService {
     // trong tx xin kết nối pool thứ hai khi tx đang giữ một (và khoá dòng user), nhiều lượt quay cùng chạm lúc cache hết
     // hạn có thể cạn pool (P2024). Làm ấm cache không đủ vì khoảng hở gồm cả thời gian chờ FOR UPDATE.
     const windowDays = await loyalty.returnWindowDays();
+    // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
+    // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
+    const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
@@ -168,9 +171,6 @@ export class GameService {
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
-        // Mặc định khớp với các call site khác (buySeeds/checkIn/collectDew/quiz/gift) và giá
-        // trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config bị thiếu.
-        const tankCap = await this.config.get<number>('game.tank_capacity', 500);
         // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
         // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
         // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).

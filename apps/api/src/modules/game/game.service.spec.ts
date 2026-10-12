@@ -238,6 +238,38 @@ describe('GameService.spin', () => {
       expect(configGets.map((g) => g.key)).not.toContain('returns.window_days');
     });
 
+    it('PF-6a (b): trúng giải SEEDS → game.tank_capacity cũng đọc NGOÀI tx, và vẫn kẹp totalSeeds theo đúng trần đã đọc', async () => {
+      const prisma = makePrisma();
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const prizes = [{ id: 's', name: '30 giọt', weight: 1, rewardType: 'SEEDS', value: 30 }];
+      const { loyalty } = loyaltyWithExpiry(0);
+      const { config, configGets } = trackTx(prisma, {
+        'game.spin_buy_cost_points': 10,
+        'game.spin_prizes': prizes,
+        'game.tank_capacity': 250,
+      });
+
+      await new GameService(prisma, config, analytics, undefined, undefined, undefined, loyalty).spin('u1');
+
+      expect(configGets.map((g) => g.key)).toContain('game.tank_capacity');
+      expect(configGets.filter((g) => g.inTx)).toEqual([]);
+      expect(prisma.gameProfile.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', totalSeeds: { gt: 250 } },
+        data: { totalSeeds: 250 },
+      });
+    });
+
+    it('PF-6a (b): trúng giải không phải SEEDS → không đọc game.tank_capacity', async () => {
+      const prisma = makePrisma();
+      jest.spyOn(Math, 'random').mockReturnValue(0.9); // giải 'b' (NONE)
+      const { loyalty } = loyaltyWithExpiry(0);
+      const { config, configGets } = trackTx(prisma, { 'game.spin_buy_cost_points': 10, 'game.spin_prizes': PRIZES });
+
+      await new GameService(prisma, config, analytics, undefined, undefined, undefined, loyalty).spin('u1');
+
+      expect(configGets.map((g) => g.key)).not.toContain('game.tank_capacity');
+    });
+
     it('guard atomic count=0 dù pre-check qua (số dư đổi giữa hai câu) → 400, không ghi sổ/lượt quay', async () => {
       const prisma = makePrisma();
       withBalance(prisma, 100);
