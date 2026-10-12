@@ -130,19 +130,26 @@ function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpi
 }
 
 interface ExpiryLot {
+  initial: number;
   remaining: number;
+  /**
+   * Phần của lô đã MẤT: cron hết hạn đã trừ (POINTS_EXPIRED) hoặc dòng thu hồi cùng khoá đã lấy. Chi tiêu FIFO ăn vào
+   * lô không tính vào đây: xem lotRecoverable.
+   */
+  lost: number;
   expiresAt: Date | null;
   /** Khoá cặp của khoản cộng đã tạo lô (xem ReversalRule); null nếu khoản cộng không thể bị thu hồi. */
   key: string | null;
 }
 
-/** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. */
-function consumeFifo(lots: ExpiryLot[], amount: number): number {
+/** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. `asLost`: phần trừ được ghi vào `lost` của lô. */
+function consumeFifo(lots: ExpiryLot[], amount: number, asLost = false): number {
   let left = amount;
   for (const lot of lots) {
     if (left <= 0) break;
     const take = Math.min(lot.remaining, left);
     lot.remaining -= take;
+    if (asLost) lot.lost += take;
     left -= take;
   }
   return left;
@@ -163,15 +170,15 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
   const lots: ExpiryLot[] = [];
   for (const t of sorted) {
     if (t.delta > 0) {
-      lots.push({ remaining: t.delta, expiresAt: t.expiresAt, key: firstKey(t, (rule) => rule.lotKey) });
+      lots.push({ initial: t.delta, remaining: t.delta, lost: 0, expiresAt: t.expiresAt, key: firstKey(t, (rule) => rule.lotKey) });
     } else if (t.delta < 0) {
       let toConsume = -t.delta;
       if (t.reason === EXPIRY_REASON) {
         const expiredAtThatTime = lots.filter((l) => l.expiresAt != null && l.expiresAt.getTime() <= t.createdAt.getTime());
-        toConsume = consumeFifo(expiredAtThatTime, toConsume);
+        toConsume = consumeFifo(expiredAtThatTime, toConsume, true);
       } else {
         const reversed = firstKey(t, (rule) => rule.reversedLotKey);
-        if (reversed) toConsume = consumeFifo(lots.filter((l) => l.key === reversed), toConsume);
+        if (reversed) toConsume = consumeFifo(lots.filter((l) => l.key === reversed), toConsume, true);
       }
       // Nếu còn dư (toConsume>0): lô đã cạn — bất biến vỡ, bỏ qua (không tạo remaining âm).
       consumeFifo(lots, toConsume);
@@ -181,13 +188,18 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
 }
 
 /**
- * Điểm còn lại của lô mang khoá `key` (orderLotKey, reviewLotKey) sau khi replay toàn bộ sổ: đã trừ phần cron hết hạn,
- * phần tiêu và các dòng thu hồi đã ghi. null nếu sổ không có lô nào mang khoá đó (dòng cộng cũ thiếu refType/refId):
- * caller không có căn cứ để thu hẹp số điểm thu hồi.
+ * Phần của lô mang khoá `key` (orderLotKey, reviewLotKey) còn thu hồi được: điểm đã cộng trừ phần cron đã trừ vì hết hạn
+ * (POINTS_EXPIRED) và phần các dòng thu hồi đã ghi lấy. null nếu sổ không có lô nào mang khoá đó (dòng cộng cũ thiếu
+ * refType/refId): caller không có căn cứ để thu hẹp số điểm thu hồi.
+ *
+ * Cố ý KHÔNG trừ điểm đã bị tiêu theo FIFO. Replay FIFO gán chi tiêu cho lô cũ nhất, mà lô đơn/đánh giá thường là lô cũ
+ * nhất khi khách tiêu điểm từ lô khác (thưởng game, điểm danh) bằng đúng phần số dư vượt lockedOrderPoints. Coi phần đó
+ * là "đã tiêu từ lô đơn" thì khách giữ trọn điểm của đơn bị trả dù số dư vẫn đủ để thu hồi. Caller chặn thêm bằng số dư
+ * hiện có (lưới an toàn cuối), nên không bao giờ thu hồi quá những gì khách còn.
  */
-export function lotRemaining(txns: PointExpiryTxn[], key: string): number | null {
+export function lotRecoverable(txns: PointExpiryTxn[], key: string): number | null {
   const matching = replayLots(txns).filter((l) => l.key === key);
-  return matching.length === 0 ? null : matching.reduce((sum, l) => sum + l.remaining, 0);
+  return matching.length === 0 ? null : matching.reduce((sum, l) => sum + l.initial - l.lost, 0);
 }
 
 /**
@@ -236,7 +248,7 @@ export function computePointExpiry(
 }
 
 /**
- * Sổ lô STANDARD của một user để đưa vào computePointExpiry / lotRemaining. Chỉ lô STANDARD (PD-3): dòng lô CONVERTED
+ * Sổ lô STANDARD của một user để đưa vào computePointExpiry / lotRecoverable. Chỉ lô STANDARD (PD-3): dòng lô CONVERTED
  * (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông
  * "còn nguyên" và cron trừ quá tay; ngược lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
  */

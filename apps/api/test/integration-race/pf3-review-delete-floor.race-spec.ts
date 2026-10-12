@@ -93,6 +93,24 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
     ]);
   }
 
+  /** Lô thưởng game không hạn với createdAt do test đặt (để thứ tự lô trong sổ cố định). */
+  async function gameLot(userId: string, points: number, createdAt: Date) {
+    await prisma.$transaction([
+      prisma.pointsTransaction.create({
+        data: { userId, delta: points, lot: 'STANDARD', reason: 'GAME_SPIN_WIN', refType: 'GAME', createdAt, expiresAt: null },
+      }),
+      prisma.user.update({ where: { id: userId }, data: { pointsBalance: { increment: points } } }),
+    ]);
+  }
+
+  /** Lùi createdAt của dòng thưởng đánh giá `days` ngày: đẩy lô đánh giá về trước trong thứ tự FIFO. */
+  async function backdateReviewReward(userId: string, days: number) {
+    await prisma.$executeRaw`
+      UPDATE "points_transactions"
+         SET "createdAt" = "createdAt" - (${days}::int * interval '1 day')
+       WHERE "userId" = ${userId} AND "reason" LIKE 'REVIEW:%'`;
+  }
+
   async function ageLedger(userId: string, months: number) {
     await prisma.$executeRaw`
       UPDATE "points_transactions"
@@ -145,6 +163,21 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
 
     expect(await balance(user.id)).toBe(0);
     expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-2]);
+  });
+
+  it('lô đánh giá là lô CŨ NHẤT, khách tiêu điểm từ lô thưởng game ăn vào nó theo FIFO → vẫn thu hồi đủ phần số dư còn có', async () => {
+    const { user, product } = await player();
+    const review = await reviews.create(user.id, product.slug, { rating: 5 });
+    await backdateReviewReward(user.id, 2);
+    await gameLot(user.id, 40, new Date(Date.now() - 1 * DAY));
+    await spend(user.id, 40); // FIFO ăn lô đánh giá 5 rồi 35 của lô game: số dư 5 nằm ở lô game
+    expect(await balance(user.id)).toBe(5);
+
+    await reviews.remove(user.id, 'USER', review.id);
+
+    expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-REVIEW_POINTS]);
+    expect(await balance(user.id)).toBe(0);
+    expect(await standardSum(user.id)).toBe(0);
   });
 
   it('thu hồi một phần rồi qua hạn: cron không trừ gì thêm, số dư không âm', async () => {

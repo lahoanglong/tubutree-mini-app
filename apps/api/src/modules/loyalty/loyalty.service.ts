@@ -18,7 +18,7 @@ import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { loadPointExpiryTxns, lotRemaining, orderLotKey } from './loyalty-expiry.service';
+import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from './loyalty-expiry.service';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -122,7 +122,7 @@ export class LoyaltyService {
   }
 
   /**
-   * Hoàn ngược khi hủy/trả: thu hồi điểm đã tích (tối đa phần còn lại của lô), hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
+   * Hoàn ngược khi hủy/trả: thu hồi điểm đã tích (tối đa phần lô chưa mất), hoàn lại điểm đã tiêu (lô STANDARD; lô CONVERTED xem OrderReversalService).
    *
    * RACE: 2 caller song song (orders.cancel + webhook RETURNED) trước đây cùng
    * findFirst NGOÀI tx → cùng thấy chưa reverse → cùng cộng/trừ → DOUBLE.
@@ -134,10 +134,11 @@ export class LoyaltyService {
    * dòng này rồi tính lại sổ trong tx, nên đọc sổ khi chưa có khoá thì cron commit giữa chừng, trừ lô đơn (POINTS_EXPIRED)
    * rồi ta trừ lần hai (ORDER_REVERSED). Hai caller song song nay xếp hàng ở khoá, kẻ sau thấy dòng của kẻ trước.
    *
-   * Điểm đơn thu hồi tối đa phần còn lại của lô ORDER_DELIVERED theo sổ lô (lotRemaining) và không quá số dư: lô đã hết
-   * hạn và cron đã trừ thì không trừ lần hai (admin đặt loyalty.point_expire_months ngắn hơn cửa sổ trả hàng), điểm đã
-   * tiêu thì không đòi lại, và số dư không bao giờ âm. Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để
-   * thu hồi): nó là dấu "đã xử lý" của idempotency và của lockedOrderPoints.
+   * Điểm đơn thu hồi tối đa phần lô ORDER_DELIVERED chưa mất theo sổ lô (lotRecoverable) và không quá số dư: lô đã hết
+   * hạn và cron đã trừ thì phần đó không trừ lần hai (admin đặt loyalty.point_expire_months ngắn hơn cửa sổ trả hàng),
+   * và số dư không bao giờ âm. Chi tiêu của khách KHÔNG làm lô đơn "đã tiêu" (lotRecoverable giải thích vì sao): số dư
+   * trong cửa sổ đổi trả luôn đủ để thu hồi nhờ lockedOrderPoints, số dư chỉ là lưới an toàn cuối. Dòng ORDER_REVERSED
+   * luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của lockedOrderPoints.
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -180,8 +181,8 @@ export class LoyaltyService {
 
         if (wasCredited) {
           const balance = Math.max(0, lockedUser[0]?.pointsBalance ?? 0);
-          const remaining = lotRemaining(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
-          const take = Math.min(order.pointsEarned, remaining ?? order.pointsEarned, balance);
+          const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
+          const take = Math.min(order.pointsEarned, recoverable ?? order.pointsEarned, balance);
           // create() trước user.updateMany — nếu duplicate caller chạy đồng thời, P2002
           // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
           await tx.pointsTransaction.create({
@@ -202,7 +203,7 @@ export class LoyaltyService {
             if (dec.count !== 1) throw new Error(`reverseOrderPoints ${order.code}: số dư đổi giữa chừng`);
           }
           if (take < order.pointsEarned) {
-            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc đã tiêu`);
+            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
           }
         }
         if (usedStandard > 0) {

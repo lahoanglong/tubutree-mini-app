@@ -95,6 +95,24 @@ describe('huỷ/trả đơn so với cron hết hạn điểm (real Postgres)', 
     ]);
   }
 
+  /** Lô thưởng game không hạn tạo SAU lô đơn (createdAt do test đặt để thứ tự lô cố định). */
+  async function gameLot(userId: string, points: number, createdAt: Date) {
+    await prisma.$transaction([
+      prisma.pointsTransaction.create({
+        data: { userId, delta: points, lot: 'STANDARD', reason: 'GAME_SPIN_WIN', refType: 'GAME', createdAt, expiresAt: null },
+      }),
+      prisma.user.update({ where: { id: userId }, data: { pointsBalance: { increment: points } } }),
+    ]);
+  }
+
+  /** Lùi createdAt của các dòng có reason bắt đầu bằng `prefix` đi `days` ngày (đẩy lô đó về trước trong thứ tự FIFO). */
+  async function backdate(userId: string, prefix: string, days: number) {
+    await prisma.$executeRaw`
+      UPDATE "points_transactions"
+         SET "createdAt" = "createdAt" - (${days}::int * interval '1 day')
+       WHERE "userId" = ${userId} AND "reason" LIKE ${prefix + '%'}`;
+  }
+
   /** Thời gian trôi N tháng: lùi mọi mốc createdAt/expiresAt của user đi N tháng (NULL giữ NULL). */
   async function ageLedger(userId: string, months: number) {
     await prisma.$executeRaw`
@@ -269,6 +287,38 @@ describe('huỷ/trả đơn so với cron hết hạn điểm (real Postgres)', 
       await loyalty.reverseOrderPoints(order.id);
 
       expect(await balance(user.id)).toBe(30);
+    });
+  });
+
+  describe('lô đơn là lô CŨ NHẤT còn tồn: chi tiêu từ lô khác ăn vào nó theo FIFO không làm điểm của đơn "đã tiêu"', () => {
+    it('đơn giao 2 ngày trước (+20, đang bị khoá), thưởng game +100, khách tiêu đúng phần số dư vượt phần khoá (100) → trả hàng thu hồi đủ 20', async () => {
+      const user = await customer();
+      const order = await deliveredOrder(user.id, 20);
+      await backdate(user.id, 'ORDER_DELIVERED:', 2);
+      await gameLot(user.id, 100, new Date(Date.now() - 1 * DAY));
+      const lock = await loyalty.lockedOrderPoints(user.id, new Date());
+      expect(lock.locked).toBe(20);
+      expect(await balance(user.id)).toBe(120);
+      await spend(user.id, 100); // đúng phần được phép tiêu: số dư 120 - khoá 20
+      expect(await balance(user.id)).toBe(20);
+
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-20]);
+      expect(await balance(user.id)).toBe(0);
+      expect(await standardSum(user.id)).toBe(0);
+    });
+
+    it('lô cũ không hạn nằm TRƯỚC lô đơn vẫn như cũ: tiêu 40 (ăn lô cũ 30 và 10 của lô đơn) → số dư 10 chỉ đủ thu hồi 10', async () => {
+      const user = await customer();
+      await oldLot(user.id, 30);
+      const order = await deliveredOrder(user.id, 20);
+      await spend(user.id, 40);
+
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-10]);
+      expect(await balance(user.id)).toBe(0);
     });
   });
 

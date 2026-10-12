@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { loadPointExpiryTxns, lotRemaining, reviewLotKey } from '../loyalty/loyalty-expiry.service';
+import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -251,12 +251,12 @@ export class ReviewsService {
       // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
       // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
       if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
-        // Thu hồi tối đa phần còn lại của lô đánh giá theo sổ lô và không quá số dư: điểm đã tiêu thì không đòi lại,
-        // số dư không bao giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi (delta 0 nếu không còn gì); điểm đã thưởng
-        // nằm ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
-        const remaining = lotRemaining(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
+        // Thu hồi tối đa phần lô đánh giá chưa mất theo sổ lô (lotRecoverable) và không quá số dư, nên số dư không bao
+        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi (delta 0 nếu không còn gì); điểm đã thưởng nằm ở dòng
+        // REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
+        const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
         const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
-        const take = Math.min(review.pointsEarned, remaining ?? review.pointsEarned, balance);
+        const take = Math.min(review.pointsEarned, recoverable ?? review.pointsEarned, balance);
         await tx.pointsTransaction.create({
           data: {
             userId: review.userId,
