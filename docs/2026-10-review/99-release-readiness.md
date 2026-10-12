@@ -31,13 +31,13 @@ Môi trường: macOS arm64, Node 22.23.3 (jsdom 30 cần Node ≥ 22.22), Postg
 | Migration trên DB trống (`prisma migrate deploy`) | 132/132 áp sạch, `migrate status` "up to date" |
 | Drift schema (`migrate diff --exit-code`) | "No difference detected" |
 | `prisma/check-partial-indexes.ts` | 20/20 |
-| `npx jest` (api) | 188 suite / 3.630 test pass |
+| `npx jest` (api) | 190 suite / 3.639 test pass |
 | Race suite trên Postgres thật (`--runInBand`) | 69 suite / 495 test pass (các spec mới của PE-1a, PE-3, PE-5, PF-3, PF-5a, PF-6a mỗi cái chạy lặp nhiều lần trong gói của nó, không dao động) |
 | `vitest run` miniapp | 206 file / 2.710 test pass |
-| `vitest run` web | 63 file / 987 test pass |
+| `vitest run` web | 63 file / 1.005 test pass |
 | Build: `nest build`, `next build`, miniapp `tsc --noEmit && vite build` | cả ba thoát 0 (miniapp cảnh báo chunk > 500 kB, đã có từ trước) |
-| Playwright 3 project (Zalo Mini App, Web Admin, API), `--workers=2 --retries=0`, DB dev dựng mới | 138/138 pass (2,1 phút), chạy lại sau đợt G (mã `a2977383`) |
-| axe (`scripts/uiux/capture.mjs`, 390px, trạng thái normal; đo trên mã `fc55c6b0`, PF-6 chỉ đổi chữ và kiểu ở miniapp nên không đo lại) | miniapp 43 route: 0 vi phạm ở mọi mức, mỗi route đúng 1 `<main>` và 1 `<h1>`; web 36 route: 0 serious/critical; `heading-order` 11 → 0 ở 27 route admin và merchant (đo 1440px sau PG-3, số "trước" lấy từ kết quả cũ), khung 390px của web chưa đo lại |
+| Playwright 3 project (Zalo Mini App, Web Admin, API), `--workers=2 --retries=0`, DB dev dựng mới | 138/138 pass (2,1 phút), chạy lại sau đợt G (mã `aa64dc66`) |
+| axe (`scripts/uiux/capture.mjs`, 390px, trạng thái normal; đo trên mã `fc55c6b0`, PF-6 chỉ đổi chữ và kiểu ở miniapp nên không đo lại) | miniapp 43 route: 0 vi phạm ở mọi mức, mỗi route đúng 1 `<main>` và 1 `<h1>`; web 36 route: 0 serious/critical; `heading-order` 11 → 0 ở 27 route admin và merchant (đo 1440px sau PG-3, số "trước" lấy từ kết quả cũ); đo lại 390px cả 36 route web (PG-7, dữ liệu mock): 0 vi phạm ở mọi mức, mỗi route đúng 1 `<h1>` và có `<main>` |
 | Flash sale 200 user/quota 50 với `connection_limit=20&pool_timeout=30` | 3 vòng: mỗi vòng bán đúng 50, 0 bán quá, 0 lỗi P2028 hay lỗi khác, p95 0,68–1,24 giây; đặt trùng cùng user và cùng `Idempotency-Key` chỉ tạo 1 đơn. Máy lúc đo không bị tranh chấp (không có agent chạy cùng) |
 
 Lưu ý: sau khi gộp schema Prisma phải chạy `npx prisma generate` rồi mới `tsc`/race; lần verify đầu có 13 suite race đỏ chỉ vì client Prisma cũ, đã xác nhận xanh sau khi generate.
@@ -164,8 +164,7 @@ Tác động của PF-5a lên khách: nút Quay hiện lỗi 400 "Cần N Điể
 
 ## 6. Bug và rủi ro còn mở
 
-- Trang danh sách của web (`getProducts` trong `apps/web/src/lib/api.ts`) trả danh sách rỗng khi API lỗi, nên ISR có thể giữ trang trống tới 300 giây sau một lần API chớp lỗi; trang chi tiết đã ném `ApiUnavailableError`. Đổi cần cân nhắc build khi API chưa chạy, chưa làm.
-- `geo/communes` nhận `provinceCode` dạng mảng/object và dùng chính giá trị đó làm khoá Map cache (giữ 24 giờ): không 500 nhưng là điểm rò bộ nhớ chậm ở endpoint công khai. Cách sửa gọn là DTO `@IsString`; chưa làm (`impl/PG-2.md`).
+- Đã xử lý ở đợt G cuối: `geo/communes` nay đối chiếu `provinceCode` với danh sách tỉnh nên số ô cache bị chặn bằng số tỉnh (trước đó mảng/object và chuỗi tuỳ ý đều thành ô cache giữ 24 giờ). Hàm danh sách của web (`getProducts`, `getBrands`, `getStorefrontList`) ném `ApiUnavailableError` lúc runtime thay vì trả `[]` (PG-6): lúc `next build` vẫn trả `[]`; sitemap không còn nuốt lỗi. Đánh đổi cần biết: trang chủ web là route động, nên khi API lỗi và chưa có bản cache thì khách thấy trang lỗi "Có chút trục trặc" kèm nút Thử lại thay vì trang chủ với danh sách rỗng; crawler nhận 500 thay vì 200 rỗng. Việc Next giữ bản cũ khi tái tạo ISR lỗi dựa vào tài liệu Next 14, chưa chạy thử với API lúc sống lúc chết.
 **Cần chủ dự án xác nhận hoặc làm (không phải lỗi mã):**
 - Trỏ DNS Cloudflare, quét QR UAT trên Zalo thật, nhập FAQ/Academy (mục 1). Từng bước UAT có kỳ vọng nằm ở `UAT-ZALO.md`.
 - Hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3): chủ dự án đã đồng ý giữ có hạn (2026-10-11).
@@ -190,7 +189,7 @@ Tác động của PF-5a lên khách: nút Quay hiện lỗi 400 "Cần N Điể
 | Cộng đồng (OQ-6) | 1 điểm = 1.000đ nên dễ bị farm bằng nick phụ; có trần ngày, hạn 12 tháng, trần dùng 20% | Theo dõi tuần đầu |
 
 **Bug nhỏ và nợ kỹ thuật (không chặn):**
-- a11y: axe serious/critical đã về 0 trên ảnh chụp miniapp (43 route) và web (36 route), trạng thái normal ở 390px. Chưa quét trạng thái loading/lỗi/rỗng, viewport khác, VoiceOver/TalkBack và WebView Zalo thật (WebView không hỗ trợ `inert` thì chấm Checkbox/Radio ở checkout có thể vẫn nhận chạm riêng; hàng cha vẫn bấm được). Web hết `heading-order` ở 27 route admin/merchant sau PG-3 (khung 390px chưa đo lại). Ghim bản đồ brand-story đã tách nhãn trái/phải và dịch vị trí (PG-3), còn ghim Pơ Lang che một phần chữ "Khánh Hòa"/"Lâm Đồng" vẽ sẵn trong SVG; kiểm tra chồng nhau dùng ước lượng độ rộng nhãn, khung hẹp hơn 328px chưa thử.
+- a11y: axe serious/critical đã về 0 trên ảnh chụp miniapp (43 route) và web (36 route), trạng thái normal ở 390px. Chưa quét trạng thái loading/lỗi/rỗng, viewport khác, VoiceOver/TalkBack và WebView Zalo thật (WebView không hỗ trợ `inert` thì chấm Checkbox/Radio ở checkout có thể vẫn nhận chạm riêng; hàng cha vẫn bấm được). Web hết `heading-order` ở 27 route admin/merchant sau PG-3 (đã đo lại 390px cả 36 route ở PG-7, 0 vi phạm). Ghim bản đồ brand-story đã tách nhãn trái/phải và dịch vị trí (PG-3), còn ghim Pơ Lang che một phần chữ "Khánh Hòa"/"Lâm Đồng" vẽ sẵn trong SVG; kiểm tra chồng nhau dùng ước lượng độ rộng nhãn, khung hẹp hơn 328px chưa thử.
 - Cảnh báo React trùng `key` từng thấy trong bộ chụp ở game, loyalty, about, admin (miniapp) và admin-config (web) không phải lỗi app: `scripts/uiux/lib/fabricate.mjs` giả mọi phần tử của một danh sách cùng một giá trị (cùng số điện thoại, cùng chữ "Nội dung mẫu", `day`/`rank` lặp), còn dữ liệu thật có khoá duy nhất (`rank = i + 1` ở API, khoá cấu hình là khoá chính). Đã sửa bộ giả cho giá trị khác nhau theo thứ tự; chạy lại 5 route, 0 cảnh báo.
 - Bộ chụp `scripts/uiux` không giả `GET /home` và `GET /home/me`: trả 404 nên Home tự lùi về các request lẻ (đúng đường dự phòng của `home-feed.ts`, các request lẻ có mock), vì vậy ảnh Home vẫn đủ nội dung nhưng đường request gộp chưa được chụp; 404 ở console là của bộ chụp. Route Cài đặt hay hết giờ chụp ảnh.
 - Điểm thu hồi và vòng quay: thu hồi đánh giá và thu hồi thưởng giới thiệu bị chặn theo số dư chứ không theo phần dùng được. Khách đã tiêu điểm của lô bị thu hồi thì phần hụt nằm ở dòng `ORDER_REVERSED` ngắn hơn (khách giữ giá trị đó), đúng chính sách PF-3 "điểm đã tiêu không đòi lại".
@@ -235,7 +234,7 @@ Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trướ
 
 - Docker Desktop hết chỗ (ổ ảo 39 GB đầy 100%, Postgres `tubu_pg` crash-loop `No space left on device`) giữa lượt đo tải. Theo đồng ý của chủ dự án, đã chạy `docker volume prune` xoá 560 volume ẩn danh không gắn container (tạo từ 02/10, ~35 GB). Volume có tên (`tubu_pg_data`, `tubu_redis_data`) và container đang chạy không bị đụng. Nguyên nhân gốc: container Postgres tạm của race test bị `docker rm` mà không có `-v` nên volume ẩn danh còn lại. Các agent đã được dặn dùng `--rm --tmpfs`.
 - Sau đợt F, theo đồng ý của chủ dự án (2026-10-12), đã dọn: 27 worktree `.claude/worktrees/hz*-*` (đều sạch, 0 commit chưa merge; xoá không `--force`), container `tubu_it_main`, `tubu_it_pd2`, `tubu_it_pd3` (`docker rm -f -v`), 107 volume Docker ẩn danh (~6,8 GB). Volume có tên `tubutree-mini-app_tubu_pg_data` và `tubutree-mini-app_tubu_redis_data` không bị đụng. Các nhánh `hz*/…` vẫn còn (đã merge hết, xoá bằng `git branch -d` khi muốn).
-- Chưa dọn: DB `tubutree_perf`, `tubutree_perf_103` trong `tubu_pg`, thư mục `scripts/loadtest/results/` (gitignore). Muốn chạy lại race suite thì dựng container mới bằng lệnh ở mục 10.
+- Sau đợt G cuối (2026-10-12): đã gỡ 13 worktree `hz18`..`hz21` còn lại và xoá 34 nhánh `hz*` đã merge bằng `git branch -d`; chỉ còn `hardening/2026-10` và `main` ở máy này (nhánh trên origin không đụng). Chưa dọn: DB `tubutree_perf` (207.668 đơn, 1,2 GB) và `tubutree_perf_103` (200.000 đơn, 929 MB) trong `tubu_pg`, dữ liệu tổng hợp của bài đo tải, ~2,2 GB; lệnh DROP bị cổng quyền chặn nên chờ chủ dự án tự chạy (`docker exec tubu_pg psql -U tubu -d postgres -c "DROP DATABASE tubutree_perf WITH (FORCE)"`, tương tự cho `tubutree_perf_103`). Thư mục `scripts/loadtest/results/` (12 MB, gitignore) giữ lại vì báo cáo mục 4 dẫn số đo từ đó. Muốn chạy lại race suite thì dựng container mới bằng lệnh ở mục 10.
 - Việc cũ: README, DEMO_SCRIPT đã sửa ở T5; `scripts/loadtest/node_modules` cài bằng `npm ci` (không thuộc workspace pnpm).
 
 ## 10. Phụ lục: lệnh tái hiện

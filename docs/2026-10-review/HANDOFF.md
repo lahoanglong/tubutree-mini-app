@@ -15,7 +15,7 @@ Lý do bàn giao: máy cũ hay crash. Mọi tiến độ đã nằm trong git; w
 | Vòng C3 (PC-10a/b/c, PC-11, C-076, UI hoàn tiền thủ công, cấu hình liên hệ) | XONG, đã merge, CHƯA deploy |
 | Đợt D (PD-1, PD-2, PD-3) | XONG, đã merge, CHƯA deploy |
 | Giai đoạn 4 (T1–T5) | XONG; T5 review đã sửa và merge (HEAD `c46fe6a6`) |
-| Giai đoạn 5 (`99-release-readiness.md`) | XONG, cập nhật sau đợt G (2026-10-12). Kết luận: kỹ thuật đạt trên mã `a2977383` (jest 3630, race 495, vitest 2710/987, Playwright 138/138); checklist UAT ở `UAT-ZALO.md`; chủ dự án đã duyệt các câu hỏi mở (`00-ROADMAP.md` cuối file); GO cho UAT/bản thử, chưa phát hành cho khách thật tới khi trỏ DNS, quét QR UAT trên Zalo thật và xác nhận hạn điểm vòng quay/đánh giá |
+| Giai đoạn 5 (`99-release-readiness.md`) | XONG, cập nhật sau đợt G (2026-10-12). Kết luận: kỹ thuật đạt trên mã `aa64dc66` (jest 3639, race 495, vitest 2710/1005, Playwright 138/138); checklist UAT ở `UAT-ZALO.md`; chủ dự án đã duyệt các câu hỏi mở (`00-ROADMAP.md` cuối file); GO cho UAT/bản thử, chưa phát hành cho khách thật tới khi trỏ DNS, quét QR UAT trên Zalo thật và xác nhận hạn điểm vòng quay/đánh giá |
 | Đợt E (PE-1a, PE-1b, PE-2, PE-3, PE-4, PE-5) | XONG, đã merge, CHƯA deploy |
 | Đợt F (PF-1..PF-4, PF-5a, PF-5b, PF-6a, PF-6b: a11y miniapp và web, hành vi miniapp, điểm thu hồi/xoá đánh giá, vòng quay chặn điểm đơn còn đổi trả, PC-7/PC-9 web, minor) | XONG, đã merge, kiểm lại toàn bộ (mục 2 của `99-release-readiness.md`), CHƯA deploy. Mục 5c của báo cáo 99 liệt kê từng gói |
 
