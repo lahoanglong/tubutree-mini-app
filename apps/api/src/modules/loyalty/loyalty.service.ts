@@ -408,15 +408,17 @@ export class LoyaltyService {
    * (đọc SAU khi đã khoá dòng user), mặc định this.prisma cho màn hình tổng quan / báo giá checkout. Câu SQL thật được
    * kiểm ở test/integration-race. Public vì checkout và game tiêu điểm theo CÙNG luật (không tự viết lại SQL).
    *
-   * `windowDays`: caller đang ở trong tx PHẢI đọc `returnWindowDays()` NGOÀI tx rồi truyền vào. Không truyền thì hàm
-   * tự đọc cấu hình, và lần trượt cache của lệnh đó xin THÊM một kết nối pool trong lúc tx vẫn giữ kết nối và khoá
-   * dòng user (nhiều request cùng chạm lúc cache hết hạn có thể cạn pool, P2024). Chỉ nên bỏ trống khi `db` là
-   * this.prisma (không có tx nào đang giữ kết nối).
+   * `windowDays`: caller đang ở trong tx PHẢI đọc `returnWindowDays()` NGOÀI tx rồi truyền vào, và overload thứ hai
+   * bắt buộc điều đó bằng kiểu: truyền `db` thì phải có `windowDays`. Bỏ cả hai (overload đầu) thì hàm tự đọc cấu hình
+   * và đọc bằng this.prisma; lần trượt cache của lệnh đọc đó xin THÊM một kết nối pool, an toàn khi không có tx nào đang
+   * giữ kết nối nhưng trong tx thì nhiều request cùng chạm lúc cache hết hạn có thể cạn pool (P2024).
    */
+  lockedOrderPoints(userId: string, now: Date): Promise<LockedPoints>;
+  lockedOrderPoints(userId: string, now: Date, db: LockedPointsDb, windowDays: number): Promise<LockedPoints>;
   async lockedOrderPoints(
     userId: string,
     now: Date,
-    db: Pick<Prisma.TransactionClient, '$queryRaw'> = this.prisma,
+    db: LockedPointsDb = this.prisma,
     windowDays?: number,
   ): Promise<LockedPoints> {
     windowDays ??= await this.returnWindowDays();
@@ -1236,6 +1238,9 @@ const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm
  */
 const TIER_DELIVERED_PREFIX = 'ORDER_DELIVERED:';
 const TIER_REVERSED_PREFIX = 'ORDER_REVERSED:';
+
+/** Phần của Prisma client mà câu SQL đọc điểm đang khoá cần: this.prisma hoặc tx của caller. */
+type LockedPointsDb = Pick<Prisma.TransactionClient, '$queryRaw'>;
 
 /** Điểm Xanh chưa đổi quà được (xem LoyaltyService.lockedOrderPoints). */
 export interface LockedPoints {

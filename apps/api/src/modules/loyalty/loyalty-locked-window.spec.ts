@@ -48,11 +48,11 @@ const lockedRow = (deliveredAt: Date) => [{ delta: 20, deliveredAt, pendingRetur
 
 describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc ngoài tx', () => {
   it('(a) có truyền windowDays thì KHÔNG đọc cấu hình, và dùng đúng giá trị truyền vào để tính mốc mở khoá', async () => {
-    const { svc, get, queryRaw } = setup(7);
+    const { svc, get, queryRaw, prisma } = setup(7);
     const deliveredAt = new Date('2026-10-01T00:00:00.000Z');
     queryRaw.mockResolvedValueOnce(lockedRow(deliveredAt));
 
-    const lock = await svc.lockedOrderPoints('u1', new Date('2026-10-03T00:00:00.000Z'), undefined, 3);
+    const lock = await svc.lockedOrderPoints('u1', new Date('2026-10-03T00:00:00.000Z'), prisma, 3);
 
     expect(get).not.toHaveBeenCalled();
     expect(lock.locked).toBe(20);
@@ -60,10 +60,10 @@ describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc
   });
 
   it('(a) windowDays truyền vào cũng quyết định mốc cắt của câu SQL (cutoff = now - windowDays)', async () => {
-    const { svc, queryRaw } = setup(7);
+    const { svc, queryRaw, prisma } = setup(7);
     const now = new Date('2026-10-12T00:00:00.000Z');
 
-    await svc.lockedOrderPoints('u1', now, undefined, 3);
+    await svc.lockedOrderPoints('u1', now, prisma, 3);
 
     // Mẫu tagged-template: giá trị nội suy đi sau mảng chuỗi; có đúng một Date là cutoff (hai lần xuất hiện).
     const dates = queryRaw.mock.calls[0]!.slice(1).filter((v): v is Date => v instanceof Date);
@@ -72,11 +72,11 @@ describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc
   });
 
   it('(a) windowDays = 0 là giá trị hợp lệ (không rơi về cấu hình): cửa sổ 0 ngày', async () => {
-    const { svc, get, queryRaw } = setup(7);
+    const { svc, get, queryRaw, prisma } = setup(7);
     const deliveredAt = new Date('2026-10-01T00:00:00.000Z');
     queryRaw.mockResolvedValueOnce(lockedRow(deliveredAt));
 
-    const lock = await svc.lockedOrderPoints('u1', new Date('2026-10-12T00:00:00.000Z'), undefined, 0);
+    const lock = await svc.lockedOrderPoints('u1', new Date('2026-10-12T00:00:00.000Z'), prisma, 0);
 
     expect(get).not.toHaveBeenCalled();
     expect(lock.lockedUntil?.getTime()).toBe(deliveredAt.getTime());
@@ -92,6 +92,24 @@ describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc
     expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith('returns.window_days', 7);
     expect(lock.lockedUntil?.getTime()).toBe(deliveredAt.getTime() + 5 * DAY);
+  });
+
+  /**
+   * Quy tắc "caller trong tx phải truyền windowDays" được giữ bằng kiểu (overload), không bằng lời nhắc: truyền `db` thì
+   * `windowDays` bắt buộc. Kiểm bằng `tsc --noEmit` (`npm run typecheck`, gồm cả file spec): nếu overload bị bỏ thì
+   * `@ts-expect-error` thành "directive không dùng" và typecheck đỏ. Jest chỉ chạy qua hàm, không gọi các dòng này.
+   */
+  it('(c) gate kiểu: truyền db (caller trong tx) mà thiếu windowDays không biên dịch được', () => {
+    const { svc, prisma } = setup();
+    const neverCalled = () => [
+      // @ts-expect-error db đi kèm thì windowDays bắt buộc
+      svc.lockedOrderPoints('u1', new Date(), prisma),
+      // @ts-expect-error windowDays phải là số đã đọc ngoài tx, không phải undefined
+      svc.lockedOrderPoints('u1', new Date(), prisma, undefined),
+      svc.lockedOrderPoints('u1', new Date(), prisma, 7),
+      svc.lockedOrderPoints('u1', new Date()),
+    ];
+    expect(typeof neverCalled).toBe('function');
   });
 
   it('returnWindowDays là public, mặc định 7 và cấu hình sai kiểu / âm rơi về 7', async () => {

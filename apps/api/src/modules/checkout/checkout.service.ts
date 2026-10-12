@@ -217,7 +217,9 @@ export class CheckoutService {
     const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
     // Cửa sổ đổi/trả cho lockedOrderPoints trong tx, đọc NGOÀI tx: lần trượt cache cấu hình trong tx xin kết nối pool thứ
     // hai khi tx đang giữ một và đang khoá dòng user (đặt đơn dồn dập lúc cache hết hạn có thể cạn pool, P2024).
-    const windowDays = usedStandard > 0 ? await this.loyalty.returnWindowDays() : undefined;
+    // null khi không tiêu điểm thường: nhánh trừ điểm trong tx chỉ chạy khi windowDays khác null (kiểu của lockedOrderPoints
+    // bắt buộc có số trong tx).
+    const windowDays = usedStandard > 0 ? await this.loyalty.returnWindowDays() : null;
 
     let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
     try {
@@ -303,7 +305,7 @@ export class CheckoutService {
           // redeemReward đều ghi CHÍNH dòng này) và trước khi trừ bất kỳ lô nào.
           await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
         }
-        if (usedStandard > 0) {
+        if (windowDays !== null) {
           // Trừ điểm ATOMIC (gte) — chống TOCTOU khi đặt nhiều đơn đồng thời tiêu cùng điểm.
           // CHỈ tiêu điểm DÙNG ĐƯỢC — cùng luật LoyaltyService.redeemReward (lockedOrderPoints): điểm
           // đơn vừa giao còn trong hạn đổi/trả / đang có yêu cầu đổi-trả thì chưa tiêu được, không thì
