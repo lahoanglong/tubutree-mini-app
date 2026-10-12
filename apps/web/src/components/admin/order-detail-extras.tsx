@@ -10,6 +10,7 @@ import { safeHttpsLink } from '@/lib/admin-pickers';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
 
@@ -89,7 +90,7 @@ export function OrderStatusHistory({ order }: { order: AdminOrder }) {
                     <span className="font-medium text-stone-900">
                       {statusText(h.fromStatus)} → {statusText(h.toStatus)}
                     </span>
-                    <span className="text-stone-500">{new Date(h.createdAt).toLocaleString('vi-VN')}</span>
+                    <span className="text-stone-500">{formatDateTime(h.createdAt)}</span>
                   </div>
                   <div className="text-stone-500">{actorLabel(h)}</div>
                   {h.note && <div className="break-words text-stone-600">{h.note}</div>}

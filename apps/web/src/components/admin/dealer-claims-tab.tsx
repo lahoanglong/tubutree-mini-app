@@ -22,6 +22,7 @@ import {
 import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
+import { formatDateTime } from '@/lib/format-date';
 
 const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
   PENDING: 'warning',
@@ -195,7 +196,7 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
           </div>
           {c.note && <div className="mt-1 text-xs text-stone-600">Đại lý ghi chú: {c.note}</div>}
         </div>
-        <span className="text-xs text-stone-500">{new Date(c.createdAt).toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-stone-500">{formatDateTime(c.createdAt)}</span>
       </div>
 
       {(c.rejectionReason || c.adminNote || c.reviewedAt || c.paidAt) && (
@@ -206,8 +207,8 @@ export function ClaimRow({ claim: c }: { claim: AdminDealerRewardClaim }) {
             </div>
           )}
           {c.adminNote && <div>Ghi chú admin: <span className="text-stone-700">{c.adminNote}</span></div>}
-          {c.reviewedAt && <div>Xử lý lúc: {new Date(c.reviewedAt).toLocaleString('vi-VN')}</div>}
-          {c.paidAt && <div>Trao thưởng lúc: {new Date(c.paidAt).toLocaleString('vi-VN')}</div>}
+          {c.reviewedAt && <div>Xử lý lúc: {formatDateTime(c.reviewedAt)}</div>}
+          {c.paidAt && <div>Trao thưởng lúc: {formatDateTime(c.paidAt)}</div>}
         </div>
       )}
 

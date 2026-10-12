@@ -15,6 +15,7 @@ import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutRe
 import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
+import { formatDateTime } from '@/lib/format-date';
 
 const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
   REQUESTED: 'warning',
@@ -188,7 +189,7 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
             </div>
           )}
         </div>
-        <span className="text-xs text-stone-500">{new Date(p.requestedAt).toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-stone-500">{formatDateTime(p.requestedAt)}</span>
       </div>
 
       {(p.rejectionReason || p.adminNote || p.reviewedAt || p.paidAt || p.bankRef) && (
@@ -203,13 +204,13 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
               Ghi chú admin: <span className="text-stone-700">{p.adminNote}</span>
             </div>
           )}
-          {p.reviewedAt && <div>Xử lý lúc: {new Date(p.reviewedAt).toLocaleString('vi-VN')}</div>}
+          {p.reviewedAt && <div>Xử lý lúc: {formatDateTime(p.reviewedAt)}</div>}
           {p.bankRef && (
             <div>
               Mã giao dịch NH: <span className="font-medium text-stone-800">{p.bankRef}</span>
             </div>
           )}
-          {p.paidAt && <div>Đã chuyển khoản lúc: {new Date(p.paidAt).toLocaleString('vi-VN')}</div>}
+          {p.paidAt && <div>Đã chuyển khoản lúc: {formatDateTime(p.paidAt)}</div>}
         </div>
       )}
 

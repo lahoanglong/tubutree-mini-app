@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
 import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
 
@@ -150,12 +151,12 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
             Lý do: <span className="text-stone-800">{r.reason || 'Không ghi lý do'}</span>
           </div>
         </div>
-        <span className="text-xs text-stone-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</span>
+        <span className="text-xs text-stone-500">{formatDateTime(r.createdAt)}</span>
       </div>
 
       {!pending && (
         <div className="mt-2 space-y-0.5 text-xs text-stone-500">
-          {r.reviewedAt && <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>}
+          {r.reviewedAt && <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>}
           {r.adminNote && (
             <div>
               Ghi chú admin: <span className="text-stone-700">{r.adminNote}</span>

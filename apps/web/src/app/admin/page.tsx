@@ -119,6 +119,7 @@ import {
   ORDER_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
 } from '@/lib/export-csv';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 type Tab =
   | 'dashboard'
@@ -572,7 +573,7 @@ function DashboardTab({
                       <OrderStatusBadge status={o.status} />
                     </td>
                     <td className="px-3 py-2.5 text-xs text-stone-500">
-                      {new Date(o.createdAt).toLocaleString('vi-VN')}
+                      {formatDateTime(o.createdAt)}
                     </td>
                   </tr>
                 ))
@@ -802,7 +803,7 @@ function OrdersTab({
                           <OrderStatusBadge status={o.status} />
                         </td>
                         <td className="px-3 py-3 text-xs text-stone-500">
-                          {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+                          {formatDate(o.createdAt)}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <button
@@ -1028,7 +1029,7 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
           </div>
         </div>
         <span className="text-xs text-stone-500">
-          {new Date(r.createdAt).toLocaleString('vi-VN')}
+          {formatDateTime(r.createdAt)}
         </span>
       </div>
 
@@ -1071,7 +1072,7 @@ function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
         <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-500">
           {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-stone-700">{r.adminNote}</span></div>}
           {r.reviewedAt && (
-            <div>Xử lý lúc: {new Date(r.reviewedAt).toLocaleString('vi-VN')}</div>
+            <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>
           )}
         </div>
       )}
@@ -1118,7 +1119,7 @@ function UsersTab() {
                 <td className="px-3 py-2">
                   <UserPointsCell user={u} />
                 </td>
-                <td className="px-3 py-2 text-stone-500">{new Date(u.createdAt).toLocaleDateString('vi-VN')}</td>
+                <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
               </tr>
             ))}
           </Table>
@@ -1722,7 +1723,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setItemErr(e instanceof Error ? e.message : 'Lỗi thêm sản phẩm'),
   });
 
-  const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN');
+  const fmt = formatDateTime;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (

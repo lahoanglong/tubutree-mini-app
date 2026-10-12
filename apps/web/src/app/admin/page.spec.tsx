@@ -502,7 +502,7 @@ describe('admin/page — tab Người dùng', () => {
     const table = container.querySelector('table')!;
     expect(table.parentElement!.className).toContain('overflow-x-auto');
     const cells = [...table.querySelectorAll('tbody td')];
-    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', new Date('2026-09-01T00:00:00.000Z').toLocaleDateString('vi-VN')]);
+    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', '01/09/2026']);
     for (const c of cells) expect(c.className).toContain('px-3');
   });
 

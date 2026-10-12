@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getRetentionDaily } from '@/lib/admin-client';
 import { Ns1Card } from '@/components/admin/ns1-card';
 import { ScrollRegion } from '@/components/admin/ui';
+import { formatDate } from '@/lib/format-date';
 
 export function AnalyticsTab() {
   const q = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30) });
@@ -38,7 +39,7 @@ export function AnalyticsTab() {
           <tbody>
             {rows.map((r) => (
               <tr key={r.date} className="border-t border-stone-200">
-                <td className="py-1">{new Date(r.date).toLocaleDateString('vi-VN')}</td>
+                <td className="py-1">{formatDate(r.date)}</td>
                 <td>{r.newBuyers}</td>
                 <td>{r.ordersCount}</td>
                 <td>{r.dauProxyRefreshToken}</td>

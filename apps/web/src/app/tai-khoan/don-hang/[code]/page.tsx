@@ -21,6 +21,7 @@ import {
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
+import { formatDateTime } from '@/lib/format-date';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
@@ -220,13 +221,6 @@ function Row({ label, value, positive }: { label: string; value: string; positiv
       <span className="text-right">{value}</span>
     </div>
   );
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' });
 }
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {

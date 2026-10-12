@@ -46,6 +46,7 @@ import { pageRange } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, ScrollRegion, TOUCH_H } from '@/components/admin/ui';
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
+import { formatDate } from '@/lib/format-date';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -921,7 +922,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                       <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
                       <td className="px-3 py-2.5">{badge}</td>
                       <td className="px-3 py-2.5 text-xs text-stone-500">
-                        {new Date(p.createdAt).toLocaleDateString('vi-VN')}
+                        {formatDate(p.createdAt)}
                       </td>
                     </tr>
                   );

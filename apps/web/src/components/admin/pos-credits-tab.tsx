@@ -10,6 +10,7 @@ import { personLabel } from '@/lib/admin-pickers';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
 import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
 export function summarizePosCredits(rows: AdminPosCredit[]) {
@@ -107,7 +108,7 @@ export function PosCreditsTab() {
                 ) : (
                   q.data.map((r) => (
                     <tr key={r.id} className="border-t border-stone-200 align-top">
-                      <td className="px-3 py-2 text-xs text-stone-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
+                      <td className="px-3 py-2 text-xs text-stone-500">{formatDateTime(r.createdAt)}</td>
                       <td className="px-3 py-2">
                         <div className="font-mono text-xs font-semibold">{r.receiptId}</div>
                         {r.note && <div className="text-[11px] text-stone-500">{r.note}</div>}

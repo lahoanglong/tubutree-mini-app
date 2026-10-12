@@ -21,6 +21,7 @@ import {
   type PosErrorView,
 } from '@/lib/loyalty-pos';
 import { Field, INPUT_CLASS, Notice, TOUCH_H } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 function ErrorBox({ err }: { err: PosErrorView }) {
   return (
@@ -248,7 +249,7 @@ export function PosScreen() {
               {result.replayed ? (
                 <Notice tone="warning">
                   Hoá đơn <b>{result.posTransaction.receiptId}</b> ĐÃ được tích điểm trước đó (
-                  {new Date(result.posTransaction.creditedAt).toLocaleString('vi-VN')}, +{result.posTransaction.pointsEarned} điểm) —
+                  {formatDateTime(result.posTransaction.creditedAt)}, +{result.posTransaction.pointsEarned} điểm) —
                   KHÔNG cộng thêm lần nữa.
                 </Notice>
               ) : (

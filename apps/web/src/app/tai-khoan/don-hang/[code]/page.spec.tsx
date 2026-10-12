@@ -155,6 +155,11 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).toContain('Đã dùng 500 Điểm Xanh (đã tính trong giảm giá)');
   });
 
+  it('ngày đặt đơn theo giờ Việt Nam, dáng HH:mm dd/MM/yyyy', async () => {
+    const { container } = await mount();
+    expect(container.textContent).toContain('Đặt lúc 10:00 01/10/2026');
+  });
+
   it('đủ truy cập: một h1, không nhảy cấp, mọi điều khiển có tên và vùng chạm 44px', async () => {
     const { container } = await mount();
     expect(headingProblems(container)).toEqual([]);

@@ -8,6 +8,7 @@ import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from 
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { formatDate } from '@/lib/format-date';
 
 export default function AccountPage() {
   const { user, status, logout } = useAuth();
@@ -82,7 +83,7 @@ export default function AccountPage() {
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-stone-600">
-                  {o.items.length} sản phẩm · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+                  {o.items.length} sản phẩm · {formatDate(o.createdAt)}
                 </div>
                 <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
                 <RecyclingStatus order={o} />
