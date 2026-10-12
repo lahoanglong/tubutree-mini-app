@@ -419,8 +419,9 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
   it('bộ lọc trạng thái có tên truy cập, cao 44px và gọi lại danh sách ở trang 1 theo trạng thái chọn', async () => {
     const root = await mount();
     await openTab('Đơn Hàng Thuộc Kho');
-    const select = root.querySelector<HTMLSelectElement>('select[aria-label="Lọc theo trạng thái đơn"]')!;
+    const select = root.querySelector<HTMLSelectElement>('select#merchant-orders-status')!;
     expect(select.className).toContain('min-h-[44px]');
+    expect(select.labels?.[0]?.textContent).toBe('Lọc theo trạng thái đơn');
     selectValue(select, 'CONFIRMED');
     await flush();
     expect(mocks.listOrders).toHaveBeenLastCalledWith('CONFIRMED', 1);
@@ -464,6 +465,27 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
   });
 });
 
+/**
+ * `unlabeledFields` chấp nhận placeholder/aria-label làm tên truy cập nên không bảo vệ cặp `<label for>` ↔ `id`: xoá
+ * `htmlFor` hay đổi `id` vẫn xanh. Hàm này chặt hơn: mỗi label[for] phải trỏ tới đúng một control có thật, và mỗi ô
+ * nhập của form (trừ hidden/submit/button...) phải có ít nhất một <label> gắn với nó (`el.labels`).
+ */
+const NOT_LABELED_BY_ELEMENT = /^(hidden|submit|button|reset|image)$/;
+function labelPairProblems(root: ParentNode): string[] {
+  const problems: string[] = [];
+  for (const label of Array.from(root.querySelectorAll<HTMLLabelElement>('label[for]'))) {
+    const target = root.querySelector(`[id="${CSS.escape(label.htmlFor)}"]`);
+    if (!target || !/^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) {
+      problems.push(`label[for=${label.htmlFor}] không trỏ tới input/select/textarea nào: ${(label.textContent ?? '').trim()}`);
+    }
+  }
+  for (const el of Array.from(root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea'))) {
+    if (el instanceof HTMLInputElement && NOT_LABELED_BY_ELEMENT.test(el.type)) continue;
+    if (!el.labels || el.labels.length === 0) problems.push(`không có <label> gắn: ${el.outerHTML.slice(0, 120)}`);
+  }
+  return problems;
+}
+
 // PF-4 (axe label, select-name, scrollable-region-focusable, page-has-heading-one, landmark-one-main).
 describe('cổng đối tác — truy cập', () => {
   it.each([
@@ -476,6 +498,7 @@ describe('cổng đối tác — truy cập', () => {
     const root = await mount();
     await openTab(tabLabel);
     expect(unlabeledFields(root)).toEqual([]);
+    expect(labelPairProblems(root)).toEqual([]);
     expect(scrollRegionProblems(root)).toEqual([]);
   });
 
@@ -488,6 +511,16 @@ describe('cổng đối tác — truy cập', () => {
     await flush();
     expect(root.querySelector('textarea')).not.toBeNull();
     expect(unlabeledFields(root)).toEqual([]);
+    expect(labelPairProblems(root)).toEqual([]);
+  });
+
+  it('labelPairProblems bắt label[for] trỏ hụt và ô nhập không có <label> (guard không vô nghĩa)', () => {
+    const box = document.createElement('div');
+    box.innerHTML = '<label for="a">A</label><input id="b" placeholder="B"><label for="c">C</label><input id="c"><input type="hidden"><button>ok</button>';
+    expect(labelPairProblems(box)).toEqual([
+      'label[for=a] không trỏ tới input/select/textarea nào: A',
+      expect.stringContaining('không có <label> gắn: <input id="b"'),
+    ]);
   });
 
   it('chưa đăng nhập và không phải đối tác: trang có đúng một h1 nằm trong <main>', async () => {
