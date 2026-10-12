@@ -1,8 +1,9 @@
-import { BadRequestException, GoneException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { spinPrizeProblem } from '../system-config/spin-prizes';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
@@ -32,6 +33,10 @@ interface EcoImpact {
 /** Vườn Xanh Tubu (Build Spec §6.7). Tham số đọc từ SystemConfig. */
 @Injectable()
 export class GameService {
+  private readonly logger = new Logger(GameService.name);
+  /** Giải hỏng đã cảnh báo (id + lý do), để một cấu hình hỏng không log ở mỗi lượt quay. */
+  private readonly warnedPrizes = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
@@ -120,24 +125,27 @@ export class GameService {
     // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
     const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
     const notEnough = `Cần ${cost} Điểm Xanh để quay.`;
-    const prizes = await this.config.get<SpinPrize[]>('game.spin_prizes', []);
+    const prizes = this.usableSpinPrizes(await this.config.get<SpinPrize[]>('game.spin_prizes', []));
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
     const prize = this.pickWeighted(prizes);
     // Thưởng điểm là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Tính NGOÀI tx: đọc cấu hình không giữ
     // kết nối tx; và thiếu LoyaltyService thì dừng trước khi trừ điểm, không để lọt dòng thưởng không hạn.
     const winExpiresAt = prize.rewardType === 'POINTS' ? await this.rewardPointsExpiresAt() : null;
-    // lockedOrderPoints (trong tx bên dưới) đọc returns.window_days qua cùng SystemConfigService. Nạp cache TRƯỚC khi mở tx:
-    // lần trượt cache trong tx xin kết nối pool thứ hai khi tx đang giữ một, nhiều lượt quay cùng chạm lúc cache hết hạn
-    // có thể cạn pool (P2024). Cùng khoá và mặc định với LoyaltyService.returnWindowDays.
-    await this.config.get<number>('returns.window_days', 7);
+    // Cửa sổ đổi/trả cho lockedOrderPoints trong tx bên dưới, đọc TRƯỚC khi mở tx rồi truyền vào: lần trượt cache cấu hình
+    // trong tx xin kết nối pool thứ hai khi tx đang giữ một (và khoá dòng user), nhiều lượt quay cùng chạm lúc cache hết
+    // hạn có thể cạn pool (P2024). Làm ấm cache không đủ vì khoảng hở gồm cả thời gian chờ FOR UPDATE.
+    const windowDays = await loyalty.returnWindowDays();
+    // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
+    // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
+    const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
       // user rồi mới tới sổ): trả hàng song song xếp hàng ở đây thay vì chen giữa lúc đã đọc "dùng được" và lúc trừ.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number }[]>`
         SELECT "pointsBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
       if (Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked) < cost) {
         throw new BadRequestException(
           lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
@@ -168,9 +176,6 @@ export class GameService {
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
-        // Mặc định khớp với các call site khác (buySeeds/checkIn/collectDew/quiz/gift) và giá
-        // trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config bị thiếu.
-        const tankCap = await this.config.get<number>('game.tank_capacity', 500);
         // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
         // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
         // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
@@ -205,6 +210,27 @@ export class GameService {
       });
 
       return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
+    });
+  }
+
+  /**
+   * Chỉ giữ giải hợp lệ. Luật ghi cấu hình (SystemConfigService) đã chặn giải hỏng, nhưng bảng đã lưu từ trước vẫn có thể
+   * có giải POINTS value âm: trúng giải đó đi vào nhánh trừ điểm của creditPoints, trừ điểm của khách ngoài lockedOrderPoints.
+   * Bỏ giải hỏng khỏi vòng quay (không đoán ý admin) và ghi log để sửa cấu hình.
+   */
+  private usableSpinPrizes(prizes: SpinPrize[]): SpinPrize[] {
+    if (!Array.isArray(prizes)) return [];
+    return prizes.filter((p) => {
+      const problem = spinPrizeProblem(p);
+      if (!problem) return true;
+      const id = (p as { id?: unknown } | null)?.id;
+      const label = typeof id === 'string' ? id : '(không có id)';
+      const key = `${label}|${problem}`;
+      if (!this.warnedPrizes.has(key)) {
+        this.warnedPrizes.add(key);
+        this.logger.warn(`Bỏ giải "${label}" khỏi vòng quay (game.spin_prizes): ${problem}.`);
+      }
+      return false;
     });
   }
 
@@ -407,6 +433,8 @@ export class GameService {
     const certificateCode = key ? treeCertificateCodeFor(userId, key) : `TUBU-${randomUUID().slice(0, 8).toUpperCase()}`;
     const reason = `GAME_BUY_TREE:${certificateCode}`;
     const notEnough = `Cần ${price} Điểm Xanh để góp quỹ trồng cây.`;
+    // Đọc ngoài tx rồi truyền cho lockedOrderPoints, cùng lý do như spin().
+    const windowDays = await loyalty.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
       const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
@@ -415,7 +443,7 @@ export class GameService {
         const replay = await this.replayTreeBuy(tx, userId, certificateCode);
         if (replay) return replay;
       }
-      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
       const std = Math.min(price, Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked));
       const conv = price - std;
       if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) {
@@ -632,7 +660,11 @@ export class GameService {
     return this.loyalty.pointsExpiresAt(new Date());
   }
 
-  /** `expiresAt` bắt buộc cho lệnh cộng (điểm thưởng có hạn); lệnh trừ không dùng tới. */
+  /**
+   * `expiresAt` bắt buộc cho lệnh cộng (điểm thưởng có hạn); lệnh trừ không dùng tới. Nhánh trừ KHÔNG tính lockedOrderPoints
+   * nên không phải đường chi tiêu của khách: caller chỉ truyền thưởng dương (giải vòng quay đã qua usableSpinPrizes, thưởng
+   * nhiệm vụ lấy từ bảng missions chỉ có seed ghi).
+   */
   private async creditPoints(
     userId: string,
     delta: number,

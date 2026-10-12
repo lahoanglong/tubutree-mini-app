@@ -404,16 +404,24 @@ export class LoyaltyService {
    * và chưa có dòng ORDER_REVERSED. Lạm dụng mà hàm này chặn: nhận điểm đơn vừa giao → đổi ngay
    * voucher → trả hàng (điểm bị trừ lại, số dư có thể âm) nhưng voucher vẫn giữ.
    *
-   * `db` = tx của redeemReward / CheckoutService.placeOrder khi dùng làm guard (đọc SAU khi đã khoá
-   * dòng user), mặc định this.prisma cho màn hình tổng quan / báo giá checkout. Câu SQL thật được kiểm
-   * ở test/integration-race. Public vì checkout tiêu điểm theo CÙNG luật (không tự viết lại SQL).
+   * `db` = tx của redeemReward / CheckoutService.placeOrder / GameService.spin / GameService.buyTree khi dùng làm guard
+   * (đọc SAU khi đã khoá dòng user), mặc định this.prisma cho màn hình tổng quan / báo giá checkout. Câu SQL thật được
+   * kiểm ở test/integration-race. Public vì checkout và game tiêu điểm theo CÙNG luật (không tự viết lại SQL).
+   *
+   * `windowDays`: caller đang ở trong tx PHẢI đọc `returnWindowDays()` NGOÀI tx rồi truyền vào, và overload thứ hai
+   * bắt buộc điều đó bằng kiểu: truyền `db` thì phải có `windowDays`. Bỏ cả hai (overload đầu) thì hàm tự đọc cấu hình
+   * và đọc bằng this.prisma; lần trượt cache của lệnh đọc đó xin THÊM một kết nối pool, an toàn khi không có tx nào đang
+   * giữ kết nối nhưng trong tx thì nhiều request cùng chạm lúc cache hết hạn có thể cạn pool (P2024).
    */
+  lockedOrderPoints(userId: string, now: Date): Promise<LockedPoints>;
+  lockedOrderPoints(userId: string, now: Date, db: LockedPointsDb, windowDays: number): Promise<LockedPoints>;
   async lockedOrderPoints(
     userId: string,
     now: Date,
-    db: Pick<Prisma.TransactionClient, '$queryRaw'> = this.prisma,
+    db: LockedPointsDb = this.prisma,
+    windowDays?: number,
   ): Promise<LockedPoints> {
-    const windowDays = await this.returnWindowDays();
+    windowDays ??= await this.returnWindowDays();
     const cutoff = new Date(now.getTime() - windowDays * DAY_MS);
     const rows = await db.$queryRaw<{ delta: number; deliveredAt: Date; pendingReturn: boolean }[]>`
       SELECT pt."delta" AS "delta",
@@ -451,8 +459,11 @@ export class LoyaltyService {
     return { locked, lockedReturn, lockedUntil };
   }
 
-  /** returns.window_days (mặc định 7, cùng key/mặc định với OrdersService.requestReturn); sai kiểu → 7. */
-  private async returnWindowDays(): Promise<number> {
+  /**
+   * returns.window_days (mặc định 7, cùng key/mặc định với OrdersService.requestReturn); sai kiểu → 7. Public để caller
+   * có tx đọc TRƯỚC khi mở tx rồi truyền cho `lockedOrderPoints` (xem ghi chú ở đó).
+   */
+  async returnWindowDays(): Promise<number> {
     const v = Number(await this.config.get<number>('returns.window_days', 7));
     return Number.isFinite(v) && v >= 0 ? v : 7;
   }
@@ -650,9 +661,11 @@ export class LoyaltyService {
       throw new NotFoundException(`Phần thưởng "${rewardId}" không tồn tại.`);
     }
 
+    // NGOÀI tx: xem lockedOrderPoints (lần trượt cache cấu hình trong tx xin kết nối pool thứ hai khi đang khoá dòng user).
+    const windowDays = await this.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const lock = await this.lockedOrderPoints(userId, new Date(), tx);
+      const lock = await this.lockedOrderPoints(userId, new Date(), tx, windowDays);
       const dec = await tx.user.updateMany({
         where: { id: userId, pointsBalance: { gte: reward.pointsCost + lock.locked } },
         data: { pointsBalance: { decrement: reward.pointsCost } },
@@ -1225,6 +1238,9 @@ const CHECKIN_ALREADY_MESSAGE = 'Hôm nay bạn đã điểm danh nhận điểm
  */
 const TIER_DELIVERED_PREFIX = 'ORDER_DELIVERED:';
 const TIER_REVERSED_PREFIX = 'ORDER_REVERSED:';
+
+/** Phần của Prisma client mà câu SQL đọc điểm đang khoá cần: this.prisma hoặc tx của caller. */
+type LockedPointsDb = Pick<Prisma.TransactionClient, '$queryRaw'>;
 
 /** Điểm Xanh chưa đổi quà được (xem LoyaltyService.lockedOrderPoints). */
 export interface LockedPoints {

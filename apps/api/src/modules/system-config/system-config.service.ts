@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { spinPrizeProblem } from './spin-prizes';
 
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
@@ -117,6 +118,19 @@ export class SystemConfigService {
         if (!Number.isInteger(count) || (count as number) < 1) return 'mỗi mốc cần count là số nguyên ≥ 1';
         if (!Number.isInteger(bonus) || (bonus as number) < 1 || (bonus as number) > max) {
           return `mỗi mốc cần bonusPoints là Điểm Xanh nguyên 1–${max} (không phải xu; trường cũ "bonus" không còn dùng)`;
+        }
+      }
+      return null;
+    },
+    // Giải POINTS âm trừ điểm của khách trong lần quay trúng giải (GameService.creditPoints nhánh delta < 0). Mảng rỗng
+    // hợp lệ: tắt vòng quay ("Vòng quay chưa cấu hình").
+    'game.spin_prizes': (value) => {
+      if (!Array.isArray(value)) return 'phải là mảng giải [{ id, name, weight, rewardType, value }]';
+      for (const [i, prize] of value.entries()) {
+        const problem = spinPrizeProblem(prize);
+        if (problem) {
+          const id = (prize as { id?: unknown } | null)?.id;
+          return `giải thứ ${i + 1}${typeof id === 'string' ? ` ("${id}")` : ''}: ${problem}`;
         }
       }
       return null;
