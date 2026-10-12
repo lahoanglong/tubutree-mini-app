@@ -74,7 +74,7 @@ export function createFabricator({ state = 'normal', seed = 'x' } = {}) {
     if (/(thumbnail|image|avatar|cover|photo|logo|banner|picture|poster)/.test(k) && !/(alt|caption|count)/.test(k))
       return artUri(`${key}${i}${PRODUCT_NAMES[i % PRODUCT_NAMES.length]}`, /avatar|logo/.test(k) ? 'avatar' : 'product');
     if (/(url|link|href|qr)/.test(k)) return /qr/.test(k) ? artUri('QR', 'product') : `https://tubutree.com/example/${i + 1}`;
-    if (/(phone|mobile|sdt)/.test(k)) return '0901234567';
+    if (/(phone|mobile|sdt)/.test(k)) return i === 0 ? '0901234567' : `09012345${String(10 + i).padStart(2, '0')}`;
     if (k.includes('email')) return 'khach@example.com';
     if (/(code)$/.test(k) || k === 'code') return /referral|ref/.test(k) ? 'TUBU2410' : `TUBU2610090${i + 1}`;
     if (/(fullname|ownername|recipient|author|customer|nickname|username|staffname|displayname|buyer|member|creator|reviewer|owner)/.test(k)) return PEOPLE[i % PEOPLE.length];
@@ -104,7 +104,10 @@ export function createFabricator({ state = 'normal', seed = 'x' } = {}) {
     if (/(currency)/.test(k)) return 'VND';
     if (/(bank|account)/.test(k)) return 'Vietcombank';
     if (k.includes('tag') || k.includes('category') || k.includes('segment')) return pick(['Chăm sóc da', 'Gia dụng xanh', 'Cho bé'], i);
-    return long ? 'Nội dung mẫu rất dài dùng để kiểm tra việc cắt dòng và tràn chữ trong giao diện' : 'Nội dung mẫu';
+    // Phần tử thứ hai trở đi mang số thứ tự để danh sách giả không có hai dòng trùng giá trị (React cảnh báo key trùng khi
+    // trang dùng chính chữ/số đó làm key, che mất cảnh báo thật).
+    const sample = long ? 'Nội dung mẫu rất dài dùng để kiểm tra việc cắt dòng và tràn chữ trong giao diện' : 'Nội dung mẫu';
+    return i > 0 ? `${sample} ${i + 1}` : sample;
   }
 
   function num(key, ctx) {
@@ -116,6 +119,7 @@ export function createFabricator({ state = 'normal', seed = 'x' } = {}) {
       if (k === 'total' || k === 'totalpages') return state === 'empty' ? 0 : isLong ? 60 : 4;
     }
     if (k === 'page') return 1;
+    if (/^(day|rank|position|step|level|sortorder|order)$/.test(k)) return i + 1;
     if (state === 'empty' && /^(total|count|itemcount|totalcount|unread|unreadcount|badge|pending)$/.test(k)) return 0;
     if (/(rating|avg|average|score)/.test(k)) return 4.6;
     if (/(pct|percent|progress|ratio|rate|soldpct)/.test(k)) return k.includes('discount') ? 0.12 : 60;
