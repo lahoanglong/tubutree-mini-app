@@ -99,5 +99,5 @@ Cách đã dùng cho `cb92dc8`: `git bundle` lên VPS, `pg_dump` backup trước
 - Cloudflare: trỏ `api.tubutree.com` và `app.tubutree.com` về 14.225.207.177, DNS-only, không proxy (hiện vẫn trỏ IP GCP đã chết 34.142.194.160); sau đó mới cấp SSL.
 - Duyệt quy tắc PA-7: đơn đã thưởng cho cùng người mời thì không thưởng lại.
 - Quyết định 3 mục PC-6 ở mục 6.
-- Quét QR UAT trên Zalo thật; nhập nội dung FAQ/Academy.
+- Quét QR UAT trên Zalo thật (checklist từng bước ở `UAT-ZALO.md`); nhập nội dung FAQ/Academy.
 - Đã dọn 2026-10-12 theo đồng ý của chủ dự án: worktree `.claude/worktrees/hz*-*`, container `tubu_it_*`, 107 volume ẩn danh (chi tiết `99-release-readiness.md` mục 9). Nhánh `hz*/…` còn lại, đã merge hết.

@@ -161,7 +161,7 @@ Tác động của PF-5a lên khách: nút Quay hiện lỗi 400 "Cần N Điể
 - Trang danh sách của web (`getProducts` trong `apps/web/src/lib/api.ts`) trả danh sách rỗng khi API lỗi, nên ISR có thể giữ trang trống tới 300 giây sau một lần API chớp lỗi; trang chi tiết đã ném `ApiUnavailableError`. Đổi cần cân nhắc build khi API chưa chạy, chưa làm.
 - Tám chỗ nghi vấn 500 cùng lớp với PG-1 liệt kê ở `impl/PG-1.md`, chưa xác minh bằng Prisma thật.
 **Cần chủ dự án xác nhận hoặc làm (không phải lỗi mã):**
-- Trỏ DNS Cloudflare, quét QR UAT trên Zalo thật, nhập FAQ/Academy (mục 1).
+- Trỏ DNS Cloudflare, quét QR UAT trên Zalo thật, nhập FAQ/Academy (mục 1). Từng bước UAT có kỳ vọng nằm ở `UAT-ZALO.md`.
 - Hạn 12 tháng cho điểm vòng quay, nhiệm vụ, đánh giá (PE-3): chủ dự án đã đồng ý giữ có hạn (2026-10-11).
 - PA-1 yêu cầu 5 (đơn CTV lên hộ ghi `userId` là khách cuối): hoãn sang sau UAT theo quyết định của chủ dự án; không có lỗi tiền đang mở. Ô chọn ngày của gói định kỳ chỉ kiểm được trên Zalo thật.
 - "Ví trả một phần đơn" (Q-03 phương án 1) hoãn: Ví chỉ trả trọn đơn, thiếu thì báo 400 và khách chọn COD/chuyển khoản.
