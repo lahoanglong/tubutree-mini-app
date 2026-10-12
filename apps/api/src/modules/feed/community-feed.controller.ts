@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
@@ -53,24 +54,15 @@ export class CommunityFeedController {
   constructor(private readonly feed: CommunityFeedService) {}
 
   @Get()
-  getFeed(
-    @CurrentUser('sub') userId: string,
-    @Query('category') category?: string,
-    @Query('kind') kind?: string,
-    @Query('sort') sort?: 'new' | 'popular',
-    @Query('cursor') cursor?: string,
-    @Query('q') q?: string,
-    @Query('unanswered') unanswered?: string,
-    @Query('tag') tag?: string,
-  ) {
+  getFeed(@CurrentUser('sub') userId: string, @Query() query: FeedQuery) {
     return this.feed.getFeed(userId, {
-      category,
-      kind,
-      sort,
-      cursor,
-      q,
-      unanswered: unanswered === '1' || unanswered === 'true',
-      tag,
+      category: query.category,
+      kind: query.kind,
+      sort: query.sort === 'popular' ? 'popular' : query.sort === 'new' ? 'new' : undefined,
+      cursor: query.cursor,
+      q: query.q,
+      unanswered: query.unanswered === '1' || query.unanswered === 'true',
+      tag: query.tag,
     });
   }
 
