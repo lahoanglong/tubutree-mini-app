@@ -68,3 +68,67 @@ Trong worktree, PATH node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhos
 - `scripts/audit/seed-audit-personas.ts:1036` gieo `ORDER_REVERSED` với `-pointsEarned` nên không ảnh hưởng, ghi lại để biết.
 - Số liệu admin tính tổng `ORDER_REVERSED` theo delta (nếu có ở nơi khác ngoài `apps/api/src`, grep không thấy) sẽ nhỏ hơn điểm giao khi lô đã hết hạn hay đã tiêu; đó là đúng ý nghĩa mới.
 - Điểm đã tiêu không đòi lại là quyết định có chủ đích: đơn bị trả sau khi khách đã dùng điểm đó thì phần đã dùng không thu hồi được. Muốn ghi nợ điểm thì cần thiết kế riêng (không thuộc PF-3).
+
+## Sau review (lượt 1)
+
+Review độc lập lượt 1 kết luận CHANGES: hai blocker, hai minor. Mỗi finding được xác minh trên mã và trên Postgres thật trước khi sửa; cả bốn đều đúng. Mỗi mục một commit riêng, test đỏ trước (đặt tạm mã cũ rồi đặt lại, `git status` sạch sau mỗi lần).
+
+Commit: `e175c412` (blocker 2), `d2aaad18` (minor 1), `d29f2b46` (blocker 1), `abf37df5` (minor 2), `cac2d81d` (minor 3), kế tiếp là mục báo cáo này.
+
+### Blocker 2: lotRemaining coi chi tiêu FIFO là điểm đã mất (`e175c412`)
+
+Đúng lỗi. Replay FIFO gán điểm tiêu cho lô cũ nhất, mà lô đơn thường là lô cũ nhất khi khách tiêu điểm từ lô khác (thưởng game) bằng đúng phần `số dư - lockedOrderPoints`. Tái hiện bằng race spec: đơn giao 2 ngày trước +20, thưởng game +100, tiêu 100, trả hàng: bản cũ thu hồi 0 và khách giữ 20, bản mới thu hồi -20 và số dư về 0. Test đỏ trên `loyalty-expiry.service.ts` cũ: 1 ca race đơn hàng, 1 ca race đánh giá (lô đánh giá cũ hơn lô bị tiêu), 6 ca unit.
+
+Sửa: mỗi lô trong `replayLots` có thêm `initial` và `lost`. `lost` chỉ tăng ở hai chỗ: phần dòng `POINTS_EXPIRED` ăn của các lô đã quá hạn lúc nó được ghi, và phần dòng thu hồi cùng khoá lấy (`ReversalRule`). Phần FIFO tiêu ăn không tính. Hàm đổi tên `lotRemaining` thành `lotRecoverable` (= tổng `initial - lost` của lô mang khoá) vì nghĩa đã khác "còn lại sau chi tiêu"; `computePointExpiry` giữ nguyên hành vi (cả bộ spec PE-1a, PE-3, PE-5 vẫn xanh). Trần theo số dư giữ làm lưới an toàn cuối ở cả hai caller (`reverseOrderPoints`, `ReviewsService.remove`), nên số dư không bao giờ âm. Ca "lô cũ 30, đơn +20, tiêu 40" vẫn thu hồi 10: không còn nhờ FIFO mà nhờ số dư còn 10.
+
+Hệ quả có chủ đích: lô đơn hết hạn một phần đã bị FIFO tiêu trước đó, thì phần đã tiêu vẫn được tính là thu hồi được (bị cắt theo số dư). Đó là đúng đặc tả điều phối viên ("chỉ coi là mất khi cron trừ vì hết hạn").
+
+### Minor 1: trần theo số dư đọc trước khi cộng điểm hoàn (`d2aaad18`)
+
+Đúng. Số dư đọc ở câu khoá, dòng `ORDER_REFUND_POINTS` ghi sau nên khách còn ít điểm được hoàn đủ mà điểm tích bị cắt. Đỏ: 2 ca race (số dư 0 + đơn từng dùng 40: bản cũ thu hồi 0, bản mới -20; số dư 0 + hoàn 5: cũ 0, mới -5). Sửa: ghi dòng hoàn (và cộng số dư) TRƯỚC, rồi tính `take = min(pointsEarned, lotRecoverable, số dư khoá + usedStandard)`. Thứ tự hai dòng trong sổ đảo lại (hoàn trước, thu hồi sau); replay không phụ thuộc thứ tự này (dòng thu hồi chỉ ăn lô cùng khoá). Đã sửa các ca unit khẳng định thứ tự cũ, thêm 2 ca unit.
+
+### Blocker 1: vòng lặp farm điểm đánh giá (`d29f2b46`)
+
+Đúng lỗi, đã tái hiện trên Postgres thật. Gốc rễ: `createFirst` thưởng mọi lần tạo khi chưa có dòng đánh giá; không có unique nào trên `points_transactions` theo (khách, sản phẩm) (unique chỉ ở bảng `reviews`, mà xoá đánh giá mở lại nó). Bản gốc `0c481225` chống farm bằng cách thu hồi đủ lúc xoá; bản PF-3 lượt trước thu hồi 0 khi khách đã tiêu hết, nên vòng tạo +15, tiêu hết bằng đơn COD, xoá, huỷ đơn (hoàn điểm đã dùng thành lô mới), tạo lại cho thêm 15 mỗi vòng. Test đỏ (3 vòng): số dư vòng 2 là 30 thay vì 15.
+
+Quyết định thiết kế (chọn khác gợi ý "cấm tạo lại sau mọi lần xoá", có bằng chứng): `createFirst` cộng mọi dòng sổ REVIEW của cặp (khách, sản phẩm): thưởng dương `REVIEW:<slug>` và thu hồi âm `REVIEW_DELETE:<id sản phẩm>`. Còn dương nghĩa là khách còn giữ phần thưởng đã nhận (đã tiêu hết, đã tiêu một phần, hay đã hết hạn rồi mới xoá) thì tạo lại cho `pointsEarned = 0`, không ghi dòng điểm, không cộng số dư. Thu hồi đủ rồi tạo lại vẫn được thưởng. Lý do không cấm tuyệt đối: spec đã chốt ở PD-2 (`review-edit.race-spec.ts`, "xoá rồi viết lại: sổ [10, -10, 10], đúng một lần thưởng") và khách xoá để viết lại không có lỗi gì thì không nên mất điểm; cấm tuyệt đối sẽ làm hỏng ca đó và phạt khách thật mà không đóng thêm lỗ hổng nào (thu hồi đủ nghĩa là khách không giữ gì). Với cả hai cách, 3 vòng tạo/tiêu/xoá chỉ nhận thưởng đúng một lần. slug được giả định bất biến (đồng bộ Pancake chỉ ghi slug lúc tạo sản phẩm, đã kiểm ở `pancake-sync.service.ts`).
+
+Test: 6 ca race (vòng farm 3 lần có cả bước huỷ đơn, tiêu hết rồi xoá rồi tạo lại, thu hồi một phần, hết hạn rồi xoá rồi tạo lại, thu hồi đủ rồi tạo lại vẫn thưởng, sản phẩm khác không bị ảnh hưởng), 7 ca unit. Cả bốn ca đỏ đúng lý do trên bản cũ; hai ca đối chứng xanh cả trước lẫn sau.
+
+Hệ quả cần biết: phản hồi tạo đánh giá có thể có `pointsEarned: 0` với `updated: false`, nên miniapp `reviews-section.tsx` ("Đã cộng Điểm Xanh" khi `updated=false`) sẽ báo cộng điểm sai trong ca này. Ngoài nhóm file, không sửa; nên đổi câu báo theo `pointsEarned > 0`.
+
+### Dòng thu hồi delta 0 (`abf37df5`)
+
+Hai trường hợp khác nhau:
+
+- `ORDER_REVERSED` delta 0: PHẢI giữ trong sổ. Nó là dấu "đã xử lý": nếu bỏ, lượt huỷ lặp (webhook) tính lại với số dư mới và đòi lại điểm không liên quan; `lockedOrderPoints` (NOT EXISTS ORDER_REVERSED) khoá điểm đơn đã trả mãi mãi; `tierPoints` không loại được đơn. Chặn khỏi lịch sử khách ở `LoyaltyService.getPointsTransactions` (nằm trong nhóm file): `where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } }`. Race test thật: dòng 0 vẫn trong sổ nhưng không có trong lịch sử; dòng thu hồi thật và dòng hoàn vẫn hiện; lượt huỷ thứ hai không lấy lại gì và `lockedOrderPoints.locked` = 0. Đỏ trước: dòng 0 hiện trong lịch sử.
+- `REVIEW_DELETE` delta 0: không cần (đánh giá đã xoá thì không có lượt xoá thứ hai; `createFirst` dựa vào dòng thưởng, không dựa vào dòng 0). Nay không ghi khi `take = 0`. `points-expiry-guard.spec.ts` bỏ ngoại lệ cũ của `reviews.service.ts` (nay `delta: -take` khớp luật "delta âm" sẵn có).
+
+Ngoài nhóm file, ghi lại: `apps/miniapp/src/services/account-api.ts:231` gắn nhãn "Hoàn ngược điểm (hủy/trả)" cho `ORDER_REVERSED`. Lịch sử khách nay không còn dòng 0 nên không cần sửa ở đó để hết lỗi hiển thị; endpoint khác trả sổ điểm cho khách (nếu có ngoài `apps/api/src/modules/loyalty`) chưa tìm thấy qua grep `pointsTransaction.findMany`.
+
+### Minor 3: test walk bỏ thư mục sinh ra xanh theo cấu trúc (`cac2d81d`)
+
+Đúng. `walk` nhận thêm tham số tập thư mục bỏ qua. Test mới dựng thư mục tạm (`mkdtemp`) có `results/`, `.probe/`, `generated/`, `node_modules/` ở gốc và lồng nhiều cấp, mọi file nhắc `/beta`, rồi kiểm walk chỉ trả hai file nguồn; kiểm thêm `SKIPPED_DIRS` đúng bốn tên và walk với tập thiếu một tên quét lại thư mục đó. Đặt `SKIPPED_DIRS` rỗng thì 3 ca đỏ (đã chạy, rồi đặt lại).
+
+### Lệnh đã chạy (lượt sửa này)
+
+Trong worktree, PATH node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhost:5603/tubutree_it`, container `tubu_it_pf3` (đã `docker rm -f -v` khi xong).
+
+- `pnpm install --frozen-lockfile`, `pnpm --filter @tubutree/shared-types build`, `npx prisma generate`, `npx prisma migrate deploy`: thoát 0.
+- `npx tsc --noEmit -p tsconfig.json` (apps/api): thoát 0.
+- `npx jest src/modules/loyalty src/modules/reviews src/modules/system-config src/modules/auth src/common/beta-removed-audit.spec.ts src/common/endpoint-inventory.spec.ts src/common/route-graph-build.spec.ts src/common/beta-removed.spec.ts`: 25 suite, 570 test xanh, thoát 0.
+- `npx eslint --max-warnings=0` trên 15 file `.ts` đã đổi so với base: thoát 0.
+- `npx jest -c test/integration-race/jest.config.js --runInBand pf3 pe5-reversal pe3-reward pd3-points loyalty auth-merge review-edit second-order-review-invite admin-lookups pd3-order-reversal pd3-checkout system-config order-cancel pd3-reward`: 18 suite, 161 test xanh, thoát 0.
+- Đỏ trước: `loyalty-expiry.service.ts` cũ chạy với `pf3-reverse-order-points` (1 đỏ) và `pf3-review-delete-floor` (1 đỏ); unit `lotRemaining` 6 đỏ trước khi sửa; hai ca trần theo số dư đỏ; bốn ca farm đỏ; ca lịch sử điểm và ca `REVIEW_DELETE` delta 0 đỏ; `SKIPPED_DIRS` rỗng: 3 đỏ.
+
+### Chưa verify (cập nhật)
+
+- Không chạy Playwright e2e, full suite, `nest build`, `turbo run test` thật (như lượt trước).
+- Không có race riêng cho thứ tự `createFirst` đọc sổ so với `remove` chạy song song của cùng một khách; an toàn dựa vào unique `(userId, productId)` (tạo lại phải chờ lượt xoá commit mới thấy dòng đánh giá đã mất) và khoá `FOR UPDATE` ở lượt xoá.
+- Không kiểm DB thật: khách đã bị lệch số dư trước lượt sửa này (nếu có) không được sửa lại bởi mã mới.
+
+### Rủi ro còn lại
+
+- Khách xoá đánh giá đã hết hạn điểm rồi tạo lại sẽ không được thưởng lại (trước đây được). Đúng tinh thần "thưởng lần đầu" của Q-30 nhưng là thay đổi hành vi nhìn thấy được; cần chủ dự án xác nhận.
+- Khách còn ít điểm sau khi trả đơn: trần mới (số dư + điểm hoàn) làm khoản thu hồi lớn hơn trước (trước bị cắt theo số dư thấp), đúng ý "như chưa có đơn".
+- Dòng `ORDER_REVERSED` delta 0 vẫn có thể có mặt ở các API/báo cáo khác đọc sổ điểm thô (admin); chỉ lịch sử điểm của khách được lọc.
