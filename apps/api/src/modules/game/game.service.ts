@@ -42,7 +42,8 @@ export class GameService {
     @Optional() private readonly collection?: GameCollectionService,
     // Optional: bảng tin cộng đồng §6.14.12 — auto-post thành tích khi thu hoạch.
     @Optional() private readonly feed?: CommunityFeedService,
-    // Optional như các dịch vụ trên để test dựng GameService ít tham số; riêng buyTree BẮT BUỘC có (xem đó).
+    // Optional như các dịch vụ trên để test dựng GameService ít tham số; riêng spin và buyTree (hai chỗ tiêu Điểm Xanh
+    // thường của khách) BẮT BUỘC có để đọc điểm đang khoá.
     @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
@@ -106,15 +107,19 @@ export class GameService {
   }
 
   // ── Spin wheel ─────────────────────────────────────
+  /**
+   * Quay bằng Điểm Xanh thường (lô STANDARD; lô quy đổi không vào vòng quay, PD-3 OQ-3). Chỉ tiêu phần DÙNG ĐƯỢC
+   * (số dư − lockedOrderPoints, cùng luật checkout/đổi voucher/góp quỹ): điểm đơn vừa giao còn trong hạn đổi/trả mà
+   * bị quay hết thì trả đơn không thu hồi được (thu hồi không làm số dư âm), khách giữ điểm của đơn đã trả.
+   */
   async spin(userId: string) {
+    if (!this.loyalty) throw new Error('GameService.spin cần LoyaltyService để đọc điểm đang khoá');
+    const loyalty = this.loyalty;
     const cost = await this.config.get<number>('game.spin_buy_cost_points', 10);
     const rawLimit = Number(await this.config.get<number>('game.spin_buy_daily_limit', 5));
     // Config hỏng rơi về mặc định; 0/âm nghĩa là khoá vòng quay (không hiểu thành "không giới hạn").
     const dailyLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5;
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.pointsBalance < cost) {
-      throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
-    }
+    const notEnough = `Cần ${cost} Điểm Xanh để quay.`;
     const prizes = await this.config.get<SpinPrize[]>('game.spin_prizes', []);
     if (prizes.length === 0) throw new BadRequestException('Vòng quay chưa cấu hình.');
 
@@ -122,17 +127,31 @@ export class GameService {
     // Thưởng điểm là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Tính NGOÀI tx: đọc cấu hình không giữ
     // kết nối tx; và thiếu LoyaltyService thì dừng trước khi trừ điểm, không để lọt dòng thưởng không hạn.
     const winExpiresAt = prize.rewardType === 'POINTS' ? await this.rewardPointsExpiresAt() : null;
+    // lockedOrderPoints (trong tx bên dưới) đọc returns.window_days qua cùng SystemConfigService. Nạp cache TRƯỚC khi mở tx:
+    // lần trượt cache trong tx xin kết nối pool thứ hai khi tx đang giữ một, nhiều lượt quay cùng chạm lúc cache hết hạn
+    // có thể cạn pool (P2024). Cùng khoá và mặc định với LoyaltyService.returnWindowDays.
+    await this.config.get<number>('returns.window_days', 7);
 
     return this.prisma.$transaction(async (tx) => {
-      // Trừ điểm ATOMIC (gte) trong transaction — chống quay đồng thời làm âm điểm (TOCTOU).
+      // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
+      // user rồi mới tới sổ): trả hàng song song xếp hàng ở đây thay vì chen giữa lúc đã đọc "dùng được" và lúc trừ.
+      const [bal] = await tx.$queryRaw<{ pointsBalance: number }[]>`
+        SELECT "pointsBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx);
+      if (Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked) < cost) {
+        throw new BadRequestException(
+          lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+        );
+      }
+      // Trừ điểm ATOMIC (gte phí + điểm khoá) trong transaction — lưới an toàn cuối nếu số dư đổi giữa hai câu.
       const dec = await tx.user.updateMany({
-        where: { id: userId, pointsBalance: { gte: cost } },
+        where: { id: userId, pointsBalance: { gte: cost + lock.locked } },
         data: { pointsBalance: { decrement: cost } },
       });
-      if (dec.count === 0) throw new BadRequestException(`Cần ${cost} điểm Xanh để quay.`);
-      // Đếm SAU updateMany ở trên: lệnh đó giữ khoá dòng user tới hết tx, nên các lượt quay song
-      // song của cùng user xếp hàng ở đây, và (READ COMMITTED) mỗi câu lệnh mới thấy lượt quay mà
-      // tx trước đã commit — không thể cùng đọc "còn lượt" rồi cùng vượt trần.
+      if (dec.count === 0) throw new BadRequestException(notEnough);
+      // Đếm SAU khi đã giữ khoá dòng user (FOR UPDATE ở trên, giữ tới hết tx): các lượt quay song song của cùng user
+      // xếp hàng ở khoá, và (READ COMMITTED) mỗi câu lệnh mới thấy lượt quay mà tx trước đã commit — không thể cùng
+      // đọc "còn lượt" rồi cùng vượt trần.
       const spunToday = await tx.gameSpin.count({
         where: { userId, spunAt: { gte: this.startOfDay(new Date()) } },
       });

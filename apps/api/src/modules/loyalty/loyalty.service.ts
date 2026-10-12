@@ -136,9 +136,20 @@ export class LoyaltyService {
    *
    * Điểm đơn thu hồi tối đa phần lô ORDER_DELIVERED chưa mất theo sổ lô (lotRecoverable) và không quá số dư: lô đã hết
    * hạn và cron đã trừ thì phần đó không trừ lần hai (admin đặt loyalty.point_expire_months ngắn hơn cửa sổ trả hàng),
-   * và số dư không bao giờ âm. Chi tiêu của khách KHÔNG làm lô đơn "đã tiêu" (lotRecoverable giải thích vì sao): số dư
-   * trong cửa sổ đổi trả luôn đủ để thu hồi nhờ lockedOrderPoints, số dư chỉ là lưới an toàn cuối. Dòng ORDER_REVERSED
-   * luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của lockedOrderPoints.
+   * và số dư không bao giờ âm. Chi tiêu của khách KHÔNG làm lô đơn "đã tiêu" (lotRecoverable giải thích vì sao).
+   *
+   * Số dư chỉ là lưới an toàn cuối, không phải bảo đảm "luôn đủ để thu hồi". Bốn đường khách tiêu Điểm Xanh thường
+   * (checkout, redeemReward, góp quỹ cây, vòng quay) đều chỉ tiêu phần số dư vượt lockedOrderPoints, nên không đường chi
+   * tiêu nào tiêu thẳng được điểm đơn còn trong cửa sổ đổi/trả. Điểm đơn vẫn có thể thiếu lúc thu hồi: các đường KHÔNG
+   * phải chi tiêu (cron hết hạn, thu hồi điểm đánh giá, thu hồi thưởng giới thiệu cấp bằng điểm của người mời) không bị
+   * chặn bởi lockedOrderPoints, và hai đường thu hồi sau chặn theo SỐ DƯ chứ không theo phần dùng được, nên ăn được vào
+   * phần điểm đơn đang khoá khi khách đã tiêu điểm của chính lô bị thu hồi. Ví dụ: đơn giao +20 (khoá), đánh giá +15,
+   * quay tốn 10 (dùng được 15 nên qua), xoá đánh giá thu hồi đủ 15 (số dư 25 đủ) còn 10; trả đơn chỉ thu hồi 10 thay vì
+   * 20. Phần hụt hiện ở dòng ORDER_REVERSED và khách giữ giá trị đó (một lượt quay) theo chính sách "điểm đã tiêu không
+   * đòi lại" (PF-3). Thu hồi lấy ít hơn pointsEarned thay vì làm số dư âm.
+   *
+   * Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của
+   * lockedOrderPoints.
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });

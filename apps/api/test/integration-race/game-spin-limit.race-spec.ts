@@ -4,6 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
+import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { createUser, setConfig, summarize, warmPool } from './helpers';
 
@@ -22,7 +23,7 @@ describe('GameService.spin daily limit race (real Postgres)', () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, AnalyticsEventsService, GameService],
+      providers: [SystemConfigService, AnalyticsEventsService, LoyaltyService, GameService],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);

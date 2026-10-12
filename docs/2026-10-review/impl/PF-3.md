@@ -27,7 +27,7 @@ Quyết định thiết kế:
 
 Có lỗi thật. Postgres thật (`pf3-review-delete-floor.race-spec.ts`): đã tiêu hết 5 điểm của đánh giá rồi xoá thì `pointsBalance` về -5; còn 3/5 thì -2; lô cũ 30, tiêu 33 (ăn lô cũ rồi 3 điểm của lô đánh giá) thì -3; thu hồi một phần rồi qua hạn thì -3. Lượt chạy đỏ lần này: 4 ca đỏ đúng các số trên.
 
-Sửa: sau câu khoá dòng user (nay đọc luôn số dư), thu hồi `min(pointsEarned, lotRemaining(lô REVIEW), số dư)` bằng `updateMany` có guard, ghi `REVIEW_DELETE` đúng số đã thu hồi (delta 0 nếu không còn gì). Phần thiếu tra lại được qua dòng `REVIEW:<slug>` cùng `refId`. Giữ nguyên các bất biến PE-3: lô đã quá hạn thì không ghi dòng thu hồi (cron trừ đúng một lần), `REVIEW_DELETE` ăn đúng lô REVIEW khi cron replay, chiêu tạo, xoá, tạo lại vẫn bị chặn khi điểm còn nguyên.
+Sửa: sau câu khoá dòng user (nay đọc luôn số dư), thu hồi `min(pointsEarned, lotRemaining(lô REVIEW), số dư)` bằng `updateMany` có guard, ghi `REVIEW_DELETE` đúng số đã thu hồi, và CHỈ khi số đó > 0 (bản đầu ghi cả dòng delta 0, đã bỏ ở `abf37df5`, xem "Sau review (lượt 1)"). Phần thiếu tra lại được qua dòng `REVIEW:<slug>` cùng `refId`. Giữ nguyên các bất biến PE-3: lô đã quá hạn thì không ghi dòng thu hồi (cron trừ đúng một lần), `REVIEW_DELETE` ăn đúng lô REVIEW khi cron replay, chiêu tạo, xoá, tạo lại vẫn bị chặn khi điểm còn nguyên.
 
 ## Mục 3: biên loyalty.point_expire_months
 
@@ -64,7 +64,7 @@ Trong worktree, PATH node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhos
 
 ## Rủi ro và việc ngoài nhóm file
 
-- Dòng `ORDER_REVERSED` hay `REVIEW_DELETE` nay có thể có delta 0. `apps/miniapp/src/services/account-api.ts:231` gắn nhãn "Hoàn ngược điểm (hủy/trả)" cho mọi dòng `ORDER_REVERSED`, nên lịch sử điểm có thể hiện một dòng 0. Ngoài nhóm file nên không sửa; gói miniapp nên ẩn dòng delta 0 hoặc đổi nhãn.
+- Chỉ dòng `ORDER_REVERSED` có thể có delta 0 (dấu "đã xử lý" của idempotency, `lockedOrderPoints` và `tierPoints`, nên phải giữ trong sổ). `REVIEW_DELETE` KHÔNG còn ghi dòng 0 (commit `abf37df5`, xem "Sau review (lượt 1)"). Lịch sử điểm của khách đã lọc dòng `ORDER_REVERSED` delta 0 ở `LoyaltyService.getPointsTransactions`, nên `apps/miniapp/src/services/account-api.ts:231` (nhãn "Hoàn ngược điểm (hủy/trả)") không còn hiện dòng 0. API/báo cáo khác đọc sổ điểm thô (admin) vẫn có thể thấy dòng `ORDER_REVERSED` delta 0.
 - `scripts/audit/seed-audit-personas.ts:1036` gieo `ORDER_REVERSED` với `-pointsEarned` nên không ảnh hưởng, ghi lại để biết.
 - Số liệu admin tính tổng `ORDER_REVERSED` theo delta (nếu có ở nơi khác ngoài `apps/api/src`, grep không thấy) sẽ nhỏ hơn điểm giao khi lô đã hết hạn hay đã tiêu; đó là đúng ý nghĩa mới.
 - Điểm đã tiêu không đòi lại là quyết định có chủ đích: đơn bị trả sau khi khách đã dùng điểm đó thì phần đã dùng không thu hồi được. Muốn ghi nợ điểm thì cần thiết kế riêng (không thuộc PF-3).
@@ -132,3 +132,29 @@ Trong worktree, PATH node 22.23.3, `DATABASE_URL=postgresql://tubu:tubu@localhos
 - Khách xoá đánh giá đã hết hạn điểm rồi tạo lại sẽ không được thưởng lại (trước đây được). Đúng tinh thần "thưởng lần đầu" của Q-30 nhưng là thay đổi hành vi nhìn thấy được; cần chủ dự án xác nhận.
 - Khách còn ít điểm sau khi trả đơn: trần mới (số dư + điểm hoàn) làm khoản thu hồi lớn hơn trước (trước bị cắt theo số dư thấp), đúng ý "như chưa có đơn".
 - Dòng `ORDER_REVERSED` delta 0 vẫn có thể có mặt ở các API/báo cáo khác đọc sổ điểm thô (admin); chỉ lịch sử điểm của khách được lọc.
+
+## Sau review (lượt 2)
+
+Review độc lập lượt 2 (opus) tìm ra một lỗ hổng mà PF-3 không đụng tới và còn viết sai trong comment. Điều phối viên xác minh sơ bộ, gói PF-5a (nhánh `hz17/PF-5a`, báo cáo `PF-5a.md`) xác minh trên Postgres thật và xử lý. PF-3 không đổi mã ở lượt này, chỉ cập nhật tài liệu.
+
+### Vòng quay tiêu điểm đơn còn trong hạn đổi/trả
+
+Đúng lỗi. `GameService.spin()` chỉ kiểm `pointsBalance >= phí` rồi trừ bằng `updateMany` có guard `gte`, không trừ `lockedOrderPoints`. Kịch bản: khách giao đơn nhận +20 Điểm Xanh (đang khoá vì đơn còn đổi/trả được), quay hết 20 điểm đó, rồi trả hàng. `reverseOrderPoints` giữ "không âm số dư" và chặn thu hồi theo số dư nên khách giữ nguyên điểm của đơn đã trả. Checkout, `redeemReward` và `buyTree` đã chặn bằng `lockedOrderPoints`; chỉ vòng quay thiếu. PD-3 đã ghi chính chỗ này là "yếu từ trước PD-3, ngoài phạm vi, không sửa" và từ đó không ai quay lại.
+
+Hệ quả cho PF-3: hai comment (`reverseOrderPoints` ở `loyalty.service.ts`, `lotRecoverable` ở `loyalty-expiry.service.ts`) khẳng định "số dư trong cửa sổ đổi trả luôn đủ để thu hồi nhờ lockedOrderPoints". Câu đó sai hai tầng. Một: vòng quay còn hở, nên khi khách quay hết điểm khoá thì trần theo số dư chặn thu hồi (khách giữ điểm của đơn đã trả) thay vì chỉ là lưới an toàn cuối. Hai: kể cả khi mọi đường chi tiêu đều chặn, vẫn còn đường thu hồi không phải chi tiêu có thể kéo số dư xuống (mục kế).
+
+Xử lý ở PF-5a, không ở PF-3: `spin()` khoá dòng user (`FOR UPDATE`) rồi chỉ tiêu `pointsBalance − lockedOrderPoints` (commit `f11f4034`); hai comment được viết lại đúng (`d7f0baec`): bốn đường khách chi tiêu (checkout, đổi voucher, góp quỹ cây, vòng quay) đã chặn bằng `lockedOrderPoints` nên không đường chi tiêu nào tiêu thẳng được điểm đơn còn khoá; cron hết hạn, thu hồi điểm đánh giá, thu hồi thưởng giới thiệu không phải chi tiêu nên không bị chặn. Bản viết lại đầu còn kết luận thêm rằng khách "không giữ giá trị nào từ phần thiếu"; câu đó sai, sửa ở mục kế. Kết quả rà mọi đường trừ điểm nằm ở `PF-5a.md`.
+
+### Thu hồi đánh giá và thu hồi thưởng giới thiệu vẫn ăn được vào điểm đơn đang khoá
+
+Review lượt 2 xác minh tiếp trên Postgres thật (cổng riêng, import mã của worktree) và PF-5a ghim lại bằng race spec (`pf5-spin-locked-points.race-spec.ts`, mục (f)). Kịch bản khách tự làm được: đơn giao 2 ngày trước +20 (khoá), tạo đánh giá có video +15 (số dư 35, dùng được 15), quay tốn 10 (qua, số dư 25), xoá đánh giá: `REVIEW_DELETE` -15 (số dư 25 đủ cho 15), số dư 10; trả đơn: `ORDER_REVERSED` -10 thay vì -20, số dư 0. Sổ: `ORDER_DELIVERED +20, REVIEW +15, GAME_SPIN_COST -10, REVIEW_DELETE -15, ORDER_REVERSED -10`. Khách có một lượt quay (10 điểm) mà cả đơn lẫn đánh giá đều đã bị đảo.
+
+Nguyên nhân: `ReviewsService.remove` và thu hồi thưởng giới thiệu (`debitReferralReward`, thưởng cấp bằng điểm) chặn theo SỐ DƯ, không theo phần dùng được (số dư − `lockedOrderPoints`); `lotRecoverable` không trừ điểm đã tiêu theo FIFO (cố ý, xem "Sau review (lượt 1)"). Nên thu hồi đánh giá lấy lại đủ điểm đánh giá dù khách đã tiêu chúng bằng chính điểm đơn đang khoá, và phần hụt rơi vào `ORDER_REVERSED` của đơn. Đúng chính sách "điểm đã tiêu không đòi lại" của PF-3: khách giữ giá trị đã tiêu, chỉ là nằm ở dòng của đơn chứ không ở dòng của lô bị thu hồi. `findPointsLotDrift` rỗng, số dư không âm.
+
+Không phải lỗi mã của vòng quay: bản sửa của PF-5a vẫn đúng (không đường chi tiêu nào tiêu thẳng điểm đơn còn khoá). Lỗi là ở chữ: hai comment, và dòng "Không còn đường chi tiêu nào không chặn / trần theo số dư chỉ là lưới an toàn cuối" ở `PF-5a.md` đọc như khách không còn cách nào giữ được giá trị khi trả đơn. Đã sửa chữ, không đổi mã.
+
+Việc cần làm (quyết định riêng của điều phối viên, KHÔNG làm ở PF-3 hay PF-5a): nếu muốn phần hụt luôn nằm ở dòng của chính lô bị thu hồi thay vì ở đơn, chặn `REVIEW_DELETE` và thu hồi thưởng giới thiệu ở `max(0, số dư − lockedOrderPoints)`. Đánh đổi: khách giữ trọn điểm đánh giá hay thưởng giới thiệu đã tiêu, và thu hồi không còn lấy được từ điểm đơn khoá. Nếu đổi thì race spec mục (f) phải đổi theo.
+
+### Tài liệu PF-3 cũ
+
+Dòng "Rủi ro và việc ngoài nhóm file" đầu tiên và mục "Mục 2" viết `REVIEW_DELETE` có thể có delta 0 và lịch sử điểm có thể hiện dòng 0; đã cũ sau `abf37df5` (`REVIEW_DELETE` không ghi dòng 0; `ORDER_REVERSED` delta 0 bị lọc khỏi lịch sử khách). Đã sửa hai chỗ đó ở trên, các đoạn khác ("Sau review (lượt 1)") vốn đã đúng.
