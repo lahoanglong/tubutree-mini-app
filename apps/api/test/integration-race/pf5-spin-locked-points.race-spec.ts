@@ -7,7 +7,8 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
-import { createOrder, createUser, setConfig, summarize, warmPool } from './helpers';
+import { ReviewsService } from '../../src/modules/reviews/reviews.service';
+import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 864e5;
 const COST = 10;
@@ -26,18 +27,20 @@ describe('PF-5a vòng quay không tiêu điểm đơn còn trong hạn đổi/tr
   let prisma: PrismaService;
   let game: GameService;
   let loyalty: LoyaltyService;
+  let reviews: ReviewsService;
   const touched: string[] = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, AnalyticsEventsService, LoyaltyService, GameService],
+      providers: [SystemConfigService, AnalyticsEventsService, LoyaltyService, GameService, ReviewsService],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     game = moduleRef.get(GameService);
     loyalty = moduleRef.get(LoyaltyService);
+    reviews = moduleRef.get(ReviewsService);
     // Config PHẢI có trước lần get() đầu (SystemConfigService cache 60s).
     await setConfig(prisma, 'game.spin_buy_cost_points', COST);
     await setConfig(prisma, 'game.spin_buy_daily_limit', 100);
@@ -327,6 +330,59 @@ describe('PF-5a vòng quay không tiêu điểm đơn còn trong hạn đổi/tr
         expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-20]);
         expect(await balance(user.id)).toBe(0);
       }
+    });
+  });
+
+  describe('(f) thu hồi không phải chi tiêu: chặn theo số dư, không theo phần dùng được', () => {
+    const VIDEO = 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4';
+
+    /** Sản phẩm và một đơn DELIVERED cũ (không điểm, ngoài cửa sổ đổi/trả) để khách đủ điều kiện đánh giá. */
+    async function reviewableProduct(userId: string) {
+      const tag = randCode(8);
+      const product = await prisma.product.create({
+        data: { pancakeId: `it-pf5-p-${tag}`, brand: 'IT', slug: `it-pf5-${tag.toLowerCase()}`, name: `SP PF5 ${tag}`, description: 'IT', basePrice: 100_000 },
+      });
+      const variation = await prisma.variation.create({
+        data: { pancakeId: `it-pf5-v-${tag}`, productId: product.id, sku: `PF5-${tag}`, name: 'Chai', attributes: {}, retailPrice: 100_000, salePrice: 100_000, stock: 9 },
+      });
+      await createOrder(prisma, {
+        userId,
+        status: 'DELIVERED',
+        deliveredAt: new Date(Date.now() - 20 * DAY),
+        items: { create: [{ variationId: variation.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
+      });
+      return product;
+    }
+
+    const reviewDeleteRows = (userId: string) =>
+      prisma.pointsTransaction.findMany({ where: { userId, reason: { startsWith: 'REVIEW_DELETE:' } } });
+
+    /**
+     * Ghim hành vi hiện tại để comment ở reverseOrderPoints/lotRecoverable không lệch khỏi thực tế: vòng quay không tiêu
+     * được điểm đơn khoá, nhưng xoá đánh giá chặn theo SỐ DƯ nên có thể lấy lại điểm đánh giá đã bị tiêu bằng chính điểm
+     * đơn khoá, và phần hụt rơi vào ORDER_REVERSED. Nếu sau này thu hồi đánh giá và thu hồi thưởng giới thiệu được chặn ở
+     * max(0, số dư - lockedOrderPoints) thì hụt chuyển sang dòng của lô bị thu hồi và test này phải đổi theo.
+     */
+    it('đơn giao +20 (khoá) + đánh giá video +15, quay tốn 10 (dùng được 15), xoá đánh giá thu hồi đủ 15, trả đơn: ORDER_REVERSED chỉ -10, số dư 0', async () => {
+      const { user, order } = await holder({ lockedPts: 20, freePts: 0 });
+      const product = await reviewableProduct(user.id);
+      const review = await reviews.create(user.id, product.slug, { rating: 5, videoUrl: VIDEO });
+      expect(review.pointsEarned).toBe(15);
+      expect(await balance(user.id)).toBe(35);
+
+      await game.spin(user.id);
+      expect(await balance(user.id)).toBe(25);
+
+      await reviews.remove(user.id, 'USER', review.id);
+      expect((await reviewDeleteRows(user.id)).map((r) => r.delta)).toEqual([-15]);
+      expect(await balance(user.id)).toBe(10);
+
+      await returnOrder(order.id);
+      await loyalty.reverseOrderPoints(order.id);
+
+      expect((await reversedRows(user.id)).map((r) => r.delta)).toEqual([-10]);
+      expect(await balance(user.id)).toBe(0);
+      expect((await spinRows(user.id)).map((r) => r.delta)).toEqual([-COST]);
     });
   });
 });
