@@ -1,8 +1,8 @@
 import { CashbackStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsIn, IsNumberString, IsOptional } from 'class-validator';
+import { emptyToUndefined } from '../../../common/cursor-page-query.dto';
 
-const emptyToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
 
 /**
  * Query của GET /admin/cashback/transactions. `status` lạ hoặc mảng đi thẳng vào where của Prisma

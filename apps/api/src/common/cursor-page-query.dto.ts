@@ -2,7 +2,7 @@ import { Transform } from 'class-transformer';
 import { IsNumberString, IsOptional, IsString } from 'class-validator';
 
 // Query rỗng (`?take=`) trước đây được controller coi như không gửi (`take ?` / `cursor ||`).
-const emptyToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
+export const emptyToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
 
 /**
  * Query phân trang cursor dùng chung (`cursor` + `take`). Giữ nguyên là chuỗi để các service/clampTake
