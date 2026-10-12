@@ -291,7 +291,8 @@ export class StorefrontService {
   }
 
   async getPublicByHost(host: string) {
-    if (!host) throw new BadRequestException('Host không hợp lệ.');
+    // ?host=a&host=b đến đây là mảng (không phải chuỗi) nên không được gọi .split trên nó.
+    if (typeof host !== 'string' || !host) throw new BadRequestException('Host không hợp lệ.');
     const hostname = host.split(':')[0]!.toLowerCase();
     const parts = hostname.split('.');
     if (parts.length >= 2) {

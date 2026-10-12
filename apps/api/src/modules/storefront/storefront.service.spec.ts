@@ -723,3 +723,21 @@ describe('StorefrontService.updateMine — xoá được ảnh/lời nhắn', ()
     expect(update.mock.calls[0][0].data).toEqual({ headerNote: 'xin chào' });
   });
 });
+
+describe('StorefrontService.getPublicByHost', () => {
+  const mk = () => {
+    const prisma = makePrisma();
+    return { svc: new StorefrontService(prisma, config, affiliate), prisma };
+  };
+
+  it.each([[['a.tubutree.vn', 'b.tubutree.vn']], [{ x: 1 }], [undefined], [''], [123]])(
+    'host %p không phải chuỗi hợp lệ → 400 "Host không hợp lệ.", không chạm DB',
+    async (host) => {
+      const { svc, prisma } = mk();
+      const err = await svc.getPublicByHost(host as unknown as string).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toBe('Host không hợp lệ.');
+      expect((prisma.storefront.findFirst as jest.Mock)).not.toHaveBeenCalled();
+    },
+  );
+});
