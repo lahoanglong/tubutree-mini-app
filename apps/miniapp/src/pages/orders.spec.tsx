@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSubscriptions: vi.fn(), search: '',
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/orders', search: mocks.search, state: null }),
@@ -20,6 +20,7 @@ vi.mock('../services/shop-api', () => ({
   repurchaseOrder: mocks.repurchaseOrder,
   addToCart: vi.fn(),
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
+  getAddresses: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../services/subscriptions-api', () => ({
   getSubscriptions: mocks.getSubscriptions, setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) =>
 vi.mock('../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import OrdersPage from './orders';
 
 const ORDER = {
@@ -82,13 +84,20 @@ describe('OrdersPage (tab gốc)', () => {
       cart: { items: [], itemCount: 2 }, legacy: false, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }],
     });
     renderPage();
-    const card = await screen.findByRole('button', { name: 'Đơn TUBU-777' });
-    fireEvent.click(card.querySelector('button.tubu-btn') as HTMLElement);
+    await screen.findByRole('button', { name: 'Đơn TUBU-777' });
+    fireEvent.click(within(screen.getByTestId('order-card')).getByRole('button', { name: 'Mua lại' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (2)' }));
     await waitFor(() =>
       expect(mocks.repurchaseOrder).toHaveBeenCalledWith('TUBU-777', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' }),
     );
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('thẻ đơn có "Mua lại" mà không phần tử bấm được nào chứa phần tử focus được khác (axe nested-interactive)', async () => {
+    const { container } = renderPage();
+    await screen.findByRole('button', { name: 'Đơn TUBU-777' });
+    expect(within(screen.getByTestId('order-card')).getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
+    expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
   });
 
   it('chạm thẻ → chi tiết đơn', async () => {

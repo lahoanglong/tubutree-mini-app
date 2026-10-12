@@ -2,6 +2,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
 import type { Env } from '../../config/env.validation';
+import { normalizeZaloPhone } from '../../common/phone';
 
 export interface ZaloUserInfo {
   zaloId: string; // openId / id
@@ -114,23 +115,11 @@ export class ZaloService {
         this.logger.warn(`resolvePhoneNumber Zalo error ${data.error}: ${data.message ?? ''}`);
         return null;
       }
-      return this.normalizePhone(data.data?.number);
+      return normalizeZaloPhone(data.data?.number);
     } catch (err) {
       const ax = err as AxiosError;
       this.logger.error(`Zalo resolvePhoneNumber error: ${ax.message}`);
       return null; // không chặn đăng nhập nếu giải mã SĐT lỗi
     }
-  }
-
-  /** Chuẩn hoá số Zalo (thường trả 84xxxxxxxxx) về dạng nội địa 0xxxxxxxxx. */
-  private normalizePhone(raw?: string): string | null {
-    if (!raw) return null;
-    const digits = raw.replace(/[^0-9]/g, '');
-    if (!digits) return null;
-    let formatted = digits;
-    if (digits.startsWith('84')) formatted = `0${digits.slice(2)}`;
-    else if (!digits.startsWith('0')) formatted = `0${digits}`;
-    if (!/^0[0-9]{9}$/.test(formatted)) return null;
-    return formatted;
   }
 }

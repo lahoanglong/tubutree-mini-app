@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PayrollService } from './payroll.service';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 @Injectable()
 export class PayrollJob {
@@ -20,7 +21,7 @@ export class PayrollJob {
    * làm của chính ngày hôm đó, còn lần chạy kế đã sang tháng mới — nên công ngày cuối mỗi
    * tháng không bao giờ được cron đưa vào bảng lương tháng đó.
    */
-  @Cron('30 0 * * *')
+  @Cron('30 0 * * *', { timeZone: CRON_TZ })
   async nightly(): Promise<void> {
     const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const year = vn.getUTCFullYear();

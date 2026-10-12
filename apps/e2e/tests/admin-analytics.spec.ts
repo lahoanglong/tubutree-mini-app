@@ -28,6 +28,8 @@ function mockAdminSession(api: MockApi) {
     freeshipThreshold: 0,
     itemCount: 0,
   });
+  // Huy hiệu tab "Hoàn tiền khách" (Q-01) gọi số khoản chờ chuyển khoản ở MỌI lần mở /admin.
+  api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
 }
 
 test.describe('Admin — tab Retention & North-star', () => {
@@ -48,6 +50,8 @@ test.describe('Admin — tab Retention & North-star', () => {
         ordersPerBuyerMtd: 4.1,
         dauProxyRefreshToken: 30,
         dauEventBased: null,
+        ns1CohortSize: null,
+        ns1RepeatCount: null,
       },
     ];
     api.get('/admin/analytics/retention-daily', rows);
@@ -58,8 +62,8 @@ test.describe('Admin — tab Retention & North-star', () => {
     await expect(p.getByText('Khách mới hôm qua')).toBeVisible();
     // "5" (newBuyers) xuất hiện CẢ ở StatCard lẫn ở dòng bảng bên dưới (cùng snapshot mới nhất) →
     // getByText('5', {exact:true}) trần vi phạm strict mode (khớp 2 phần tử). Thu hẹp về đúng
-    // StatCard "Khách mới hôm qua" rồi mới assert số bên trong nó.
-    const newBuyersCard = p.locator('div.rounded-lg', { hasText: 'Khách mới hôm qua' });
+    // StatCard "Khách mới hôm qua" (role group, tên = nhãn) rồi mới assert số bên trong nó.
+    const newBuyersCard = p.getByRole('group', { name: 'Khách mới hôm qua' });
     await expect(newBuyersCard.getByText('5', { exact: true })).toBeVisible();
   });
 

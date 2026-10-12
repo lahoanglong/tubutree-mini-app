@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Box, Text } from 'zmp-ui';
 import { useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import type { AddressDTO } from '../../services/shop-api';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
 import { addressLine } from '../../utils/format';
 import { AddressForm } from '../address-form';
+import { Badge } from '../ui/badge';
+import { Icon } from '../ui/icon';
+import { Text } from '../ui/text';
 
 interface AddressSectionProps {
   addresses: AddressDTO[];
@@ -18,13 +21,13 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
   const queryClient = useQueryClient();
 
   return (
-    <Box p={4} mt={2} style={{ background: 'var(--neutral-0)' }}>
-      <Text bold size="small" style={{ marginBottom: 8 }}>
+    <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
+      <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 8 }}>
         {vi.checkout.address}
       </Text>
 
       {addresses.length === 0 && !adding && (
-        <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+        <Text variant="body-sm" tone="tertiary" as="div">
           {vi.checkout.addressEmpty}
         </Text>
       )}
@@ -34,9 +37,10 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
       ))}
 
       {adding ? (
-        <Box style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8 }}>
           <AddressForm
             initial={null}
+            askZaloProfile={addresses.length === 0}
             onCancel={() => setAdding(false)}
             onSaved={(a) => {
               void queryClient.invalidateQueries({ queryKey: ['addresses'] });
@@ -44,23 +48,29 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
               setAdding(false);
             }}
           />
-        </Box>
+        </div>
       ) : (
-        <Box
-          role="button"
+        <button
+          type="button"
           className="tubu-press"
           onClick={() => {
             haptic('light');
             setAdding(true);
           }}
           style={{
-            marginTop: 8,
-            padding: '12px 0',
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            width: '100%',
+            marginTop: 8,
+            padding: '12px 0',
             minHeight: 44,
             boxSizing: 'border-box',
+            border: 'none',
+            background: 'none',
+            font: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
           }}
         >
           <span
@@ -69,23 +79,20 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
               width: 20,
               height: 20,
               borderRadius: '50%',
-              border: '1.5px dashed var(--primary-600)',
-              color: 'var(--primary-600)',
+              border: '1.5px dashed var(--color-action-primary-bg)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 14,
-              lineHeight: 1,
             }}
           >
-            +
+            <Icon icon={Plus} size="sm" tone="brand" />
           </span>
-          <Text size="small" bold style={{ color: 'var(--primary-700)' }}>
+          <Text variant="body-sm" style={{ fontWeight: 600, color: 'var(--color-text-brand)' }}>
             {vi.checkout.addAddress}
           </Text>
-        </Box>
+        </button>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -99,7 +106,8 @@ function AddressCard({
   onClick: () => void;
 }) {
   return (
-    <Box
+    <button
+      type="button"
       role="radio"
       aria-checked={active}
       className="tubu-press"
@@ -107,37 +115,31 @@ function AddressCard({
         haptic('light');
         onClick();
       }}
-      p={3}
       style={{
-        border: `1.5px solid ${active ? 'var(--primary-600)' : 'var(--neutral-200)'}`,
-        background: active ? 'var(--primary-50)' : 'var(--neutral-0)',
-        borderRadius: 'var(--radius-md)',
+        display: 'block',
+        width: '100%',
+        padding: 12,
         marginBottom: 8,
         minHeight: 44,
         boxSizing: 'border-box',
+        border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
+        background: active ? 'var(--color-bg-subtle)' : 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-control)',
+        font: 'inherit',
+        color: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
       }}
     >
-      <Box flex alignItems="center" style={{ gap: 6 }}>
-        <Text size="small" bold>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Text variant="body-sm" style={{ fontWeight: 600 }}>
           {address.recipient} · {address.phone}
         </Text>
-        {address.isDefault && (
-          <Text
-            size="xSmall"
-            style={{
-              background: 'var(--leaf-50)',
-              color: 'var(--leaf-700)',
-              padding: '1px 8px',
-              borderRadius: 'var(--radius-full)',
-            }}
-          >
-            {vi.checkout.addressDefault}
-          </Text>
-        )}
-      </Box>
-      <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+        {address.isDefault && <Badge tone="brand">{vi.checkout.addressDefault}</Badge>}
+      </span>
+      <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', marginTop: 2 }}>
         {addressLine(address)}
       </Text>
-    </Box>
+    </button>
   );
 }

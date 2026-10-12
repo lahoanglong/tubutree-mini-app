@@ -73,6 +73,32 @@ export class PricingService {
   }
 
   /**
+   * PD-3 (spec 2.3): chia `pointsToUse` giữa hai lô Điểm Xanh.
+   *  s = phần STANDARD, chịu trần `loyalty.max_redeem_pct` như resolvePointsRedemption.
+   *  c = phần CONVERTED (xu cũ quy đổi), không trần %: phủ phần giá trị hàng còn lại, trừ lẻ < 1 điểm.
+   * Lấy STANDARD tới trần trước vì lô đó hết hạn còn lô CONVERTED thì không, và vì CONVERTED vẫn bù
+   * được tới `orderValue` nên tổng giảm không bao giờ nhỏ hơn cách chia khác. Tổng giảm ≤ orderValue
+   * (không bao giờ trừ vào phí ship).
+   */
+  async resolvePointsRedemptionByLot(
+    pointsToUse: number,
+    standardUsable: number,
+    convertedBalance: number,
+    orderValue: number,
+  ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; discount: number }> {
+    const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 };
+    const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1000);
+    if (!(vnd > 0) || !(orderValue > 0) || !(pointsToUse > 0)) return none;
+    const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue);
+    const s = std.pointsUsed;
+    const c = Math.max(
+      0,
+      Math.min(pointsToUse - s, Math.max(0, convertedBalance), Math.floor((orderValue - s * vnd) / vnd)),
+    );
+    return { pointsUsed: s + c, pointsUsedStandard: s, pointsUsedConverted: c, discount: (s + c) * vnd };
+  }
+
+  /**
    * Giảm giá TỰ ĐỘNG theo hạng thành viên (P0 A3-05 — audit `docs/audit-2026-09/03-retention-loops.md`:
    * hạng hứa "Cổ Thụ: Freeship + giảm 5% mọi đơn" — cột `MembershipTier.discountPct` (seed.ts) đã có
    * sẵn nhưng KHÔNG có chỗ nào trong pricing/checkout đọc nó trước fix này; mọi hạng nhận giá giống hệt

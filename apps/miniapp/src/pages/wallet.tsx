@@ -1,18 +1,39 @@
 import { useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle2, ShoppingBag, Coins, Gift, Leaf, ChevronRight, ArrowRightLeft, Landmark, type LucideIcon } from 'lucide-react';
-import { getWallet, withdraw, getCoins, convertToXu, getLoyalty, type BankInfo } from '../services/account-api';
+import { Page, Input, useSnackbar } from 'zmp-ui';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
+import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { canWithdraw as canWithdrawRule, canConvertToXu } from '../utils/wallet-rules';
-import { formatVnd, formatPoints, formatXu } from '../utils/format';
-import { Skeleton } from '../components/ui/skeleton';
+import { canWithdraw as canWithdrawRule, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
+import { formatVnd, formatPoints } from '../utils/format';
+import { uniqueById } from '../utils/unique-by-id';
+import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
+import { CASHBACK_ENABLED } from '../utils/features';
+import { Badge } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
+
+const CARD: CSSProperties = {
+  background: 'var(--color-bg-surface)',
+  borderRadius: 'var(--radius-card)',
+  boxShadow: 'var(--elevation-1)',
+};
+
+// Chú thích dưới thẻ: lùi 4px cho thẳng mép chữ trong thẻ (thẻ bo góc làm chữ nhìn như lệch trái).
+const CAPTION_BELOW: CSSProperties = { marginTop: 6, paddingLeft: 4 };
 
 export default function WalletPage() {
   const { openSnackbar } = useSnackbar();
@@ -21,19 +42,19 @@ export default function WalletPage() {
   // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
   // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
   const authed = useAuthStore((s) => s.status === 'authenticated');
+  // CTV chỉ hưởng hoa hồng; API không bao giờ thưởng Điểm Xanh giới thiệu cho role này.
+  const isAffiliate = useAuthStore((s) => s.user?.role === 'AFFILIATE');
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
-  const coinsQ = useQuery({ queryKey: ['coins'], queryFn: getCoins, enabled: authed });
+  // Thống kê giới thiệu là phần phụ: lỗi chỉ làm ẩn khối mời bạn, không chặn cả màn Ví.
+  const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [convertOpen, setConvertOpen] = useState(false);
   const [amount, setAmount] = useState('');
-  const [convertAmount, setConvertAmount] = useState('');
   const [bank, setBank] = useState<BankInfo>({ bankName: '', accountNumber: '', accountName: '' });
 
   const refreshAll = () => {
     void qc.invalidateQueries({ queryKey: ['wallet'] });
-    void qc.invalidateQueries({ queryKey: ['coins'] });
   };
 
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
@@ -50,106 +71,81 @@ export default function WalletPage() {
     },
     // Lỗi (kể cả server đã tạo giao dịch thật, hoặc BE báo key đã dùng với số tiền khác) →
     // regenerate key TRƯỚC khi cho phép bấm lại, để lần thử tiếp theo (số tiền có thể đã sửa)
-    // dùng key MỚI thay vì lặp lại đúng lệnh cũ (mirror convertMut bên dưới).
+    // dùng key MỚI thay vì lặp lại đúng lệnh cũ.
     onError: (e) => {
       withdrawKey.current = newIdempotencyKey();
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
 
-  // Cung ly do voi withdrawKey: giu nguyen key qua cac lan retry cua CUNG 1 lenh doi,
-  // regenerate sau khi doi thanh cong (lenh sau la lenh moi).
-  const convertKey = useRef(newIdempotencyKey());
-  const convertMut = useMutation({
-    mutationFn: () => convertToXu(Number(convertAmount), convertKey.current),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã đổi ${formatVnd(r.spent)} → ${formatXu(r.received)} 🎉`, type: 'success' });
-      convertKey.current = newIdempotencyKey();
-      setConvertOpen(false);
-      setConvertAmount('');
-      refreshAll();
-    },
-    // Lỗi mạng/timeout: server CÓ THỂ đã tạo giao dịch thật dù FE nhận lỗi. Nếu user sửa số tiền
-    // rồi bấm lại mà vẫn dùng key CŨ, BE sẽ coi là replay của lệnh trước (idempotency) → trả/ghép
-    // sai số tiền. Regenerate key ngay khi lỗi để lần bấm tiếp theo luôn là lệnh MỚI.
-    onError: (e) => {
-      convertKey.current = newIdempotencyKey();
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    },
-  });
-
   const w = walletQ.data;
-  const coins = coinsQ.data;
+  const referral = referralQ.data;
   const loyalty = loyaltyQ.data;
   const amountNum = Number(amount) || 0;
-  const convertNum = Number(convertAmount) || 0;
   const fee = w?.withdrawFee ?? 3000;
   const min = w?.withdrawMin ?? 100000;
-  const multiplier = w?.xuConvertMultiplier ?? 1.2;
 
   const canWithdraw = canWithdrawRule(amountNum, w, min, bank);
-  const canConvert = canConvertToXu(convertNum, w);
 
   const shareReferral = async () => {
-    if (!coins) return;
+    if (!referral) return;
     try {
       await shareLink({
         title: 'Tubu Tree — Trồng cây, nhận quà 🌳',
-        description: `Dùng mã ${coins.referralCode} vào Tubu Tree, cả hai cùng nhận TubuXu khi bạn hoàn tiền đơn đầu!`,
-        path: `/?ref=${coins.referralCode}`,
+        description: `Dùng mã ${referral.referralCode} khi mua hàng ở Tubu Tree nhé!`,
+        path: `/?ref=${referral.referralCode}`,
       });
     } catch {
-      openSnackbar({ text: `Mã giới thiệu của bạn: ${coins.referralCode}`, type: 'info' });
+      openSnackbar({ text: `Mã giới thiệu của bạn: ${referral.referralCode}`, type: 'info' });
     }
   };
 
+  const balance = w?.walletBalance ?? 0;
+  const points = loyalty ? pointsSummary(loyalty) : null;
+  const convertedNote = convertedPointsNote(points?.converted);
+
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={vi.profile.wallet} />
       {!authed || walletQ.isLoading ? (
-        <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
-          <Skeleton style={{ height: 140, borderRadius: 16 }} />
-          <Skeleton style={{ height: 110, borderRadius: 16 }} />
-          <Skeleton style={{ height: 90, borderRadius: 16 }} />
-        </Box>
+        <div style={{ padding: 16, gap: 12, display: 'flex', flexDirection: 'column' }}>
+          <Skeleton height={140} radius="var(--radius-card)" />
+          <Skeleton height={110} radius="var(--radius-card)" />
+          <Skeleton height={90} radius="var(--radius-card)" />
+        </div>
       ) : walletQ.isError ? (
-        <Box p={6}>
+        <div style={{ padding: 24 }}>
           <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
-        </Box>
+        </div>
       ) : w ? (
         <>
           {/* Ví Tubu (tiền thật) */}
-          <Box p={4} pb={2}>
-            <Box
-              p={5}
+          <div style={{ padding: '16px 16px 8px' }}>
+            <div
               style={{
-                background: 'linear-gradient(135deg, var(--leaf-600), var(--leaf-700))',
-                borderRadius: 'var(--radius-xl)',
-                color: 'var(--neutral-0)',
-                boxShadow: 'var(--shadow-md)',
+                padding: 20,
+                background: 'linear-gradient(135deg, var(--forest-600), var(--forest-700))',
+                borderRadius: 'var(--radius-card)',
+                boxShadow: 'var(--elevation-2)',
               }}
             >
-              <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <Text variant="body-sm" tone="inverse" as="div">
                 Ví Tubu (số dư khả dụng)
               </Text>
-              <Text bold style={{ fontSize: 32, lineHeight: '40px', color: 'var(--neutral-0)', marginTop: 4 }}>
+              <Text
+                variant="price-xl"
+                tone="inverse"
+                as="div"
+                style={{ fontSize: 'var(--type-display-lg-size)', lineHeight: 'var(--type-display-lg-lh)', marginTop: 4 }}
+              >
                 {formatVnd(w.walletBalance)}
               </Text>
-              <Box flex style={{ gap: 8, marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                 <Button
                   variant="secondary"
-                  size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.95)', color: 'var(--leaf-700)', fontSize: 13, padding: '0 8px' }}
-                  prefixIcon={<ArrowRightLeft size={15} strokeWidth={2} />}
-                  onClick={() => setConvertOpen(true)}
-                >
-                  Đổi TubuXu
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: 'var(--neutral-0)', fontSize: 13, padding: '0 8px' }}
-                  prefixIcon={<Landmark size={15} strokeWidth={2} />}
-                  onClick={() => {
+                  icon={Landmark}
+                  fullWidth
+                  onPress={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
                     // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
                     withdrawKey.current = newIdempotencyKey();
@@ -158,125 +154,106 @@ export default function WalletPage() {
                 >
                   Rút ngân hàng
                 </Button>
-              </Box>
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
-              Tiền thật từ hoa hồng &amp; hoàn tiền sàn ngoài — rút về ngân hàng hoặc đổi sang TubuXu (×{multiplier}).
+              </div>
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
+              Tiền thật từ hoa hồng{CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.
             </Text>
-          </Box>
-
-          {/* TubuXu */}
-          <Box px={4} pb={2}>
-            <Box
-              p={4}
-              flex
-              style={{
-                alignItems: 'center',
-                gap: 12,
-                background: 'linear-gradient(135deg, var(--clay-500), var(--clay-700))',
-                borderRadius: 'var(--radius-xl)',
-                color: 'var(--neutral-0)',
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Coins size={24} color="var(--neutral-0)" strokeWidth={2} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="small" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                  TubuXu (tiêu trong app)
-                </Text>
-                <Text bold style={{ fontSize: 24, color: 'var(--neutral-0)', lineHeight: '30px' }}>
-                  {formatXu(coins?.coinsBalance ?? w.coinsBalance)}
-                </Text>
-              </Box>
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
-              Dùng để mua hàng, mua nước 💧 và mua cây 🌳 trong app. Không rút được.
-            </Text>
-          </Box>
+          </div>
 
           {/* Điểm Xanh (đổi giảm giá) */}
-          <Box px={4} pb={2}>
-            <Box
-              p={4}
-              flex
+          <div style={{ padding: '0 16px 8px' }}>
+            <div
+              role="button"
+              {...rowKeyboardProps()}
+              className="tubu-press"
               onClick={() => navigate('/loyalty')}
-              style={{
-                alignItems: 'center',
-                gap: 12,
-                background: 'var(--neutral-0)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-sm)',
-                cursor: 'pointer',
-              }}
+              style={{ ...CARD, padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}
             >
-              <Box style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Leaf size={22} color="var(--leaf-700)" strokeWidth={2} />
-              </Box>
-              <Box style={{ flex: 1 }}>
-                <Text size="small" style={{ color: 'var(--neutral-400)' }}>
+              <IconBubble>
+                <Icon icon={Leaf} size="md" tone="brand" />
+              </IconBubble>
+              <div style={{ flex: 1 }}>
+                <Text variant="body-sm" tone="tertiary" as="div">
                   Điểm Xanh (đổi giảm giá)
                 </Text>
-                <Text bold style={{ fontSize: 24, color: 'var(--neutral-900)', lineHeight: '30px' }}>
-                  {formatPoints(loyalty?.pointsBalance ?? 0)}
+                <Text variant="price-xl" as="div">
+                  {formatPoints(points?.total ?? 0)}
                 </Text>
-              </Box>
+                {convertedNote && (
+                  <Text variant="caption" tone="secondary" as="div">
+                    {convertedNote}
+                  </Text>
+                )}
+              </div>
               {loyalty?.tier && (
-                <Box px={2} py={1} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)', flex: '0 0 auto' }}>
-                  <Text size="xSmall" bold style={{ color: 'var(--leaf-700)' }}>{loyalty.tier.name}</Text>
-                </Box>
+                <Badge tone="brand" style={{ flex: '0 0 auto' }}>
+                  {loyalty.tier.name}
+                </Badge>
               )}
-              <ChevronRight size={18} color="var(--neutral-300)" style={{ flex: '0 0 auto' }} />
-            </Box>
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 6, paddingLeft: 4 }}>
+              <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: '0 0 auto' }} />
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               Tích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau &amp; lên hạng thành viên.
             </Text>
-          </Box>
+            {convertedNote && (
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2, paddingLeft: 4 }}>
+                Điểm không hết hạn dùng trả đơn hàng tới 100% giá trị hàng và góp quỹ trồng cây. Không rút ra tiền.
+              </Text>
+            )}
+          </div>
 
           {/* Giới thiệu bạn bè */}
-          {coins && (
-            <Box px={4} pb={2}>
-              <Box p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}>
-                <Box flex style={{ alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <Gift size={18} color="var(--leaf-700)" strokeWidth={1.9} />
-                  <Text bold>Mời bạn — cả hai nhận TubuXu</Text>
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Bạn bè vào app bằng mã của bạn và hoàn tiền đơn đầu tiên → cả hai cùng được thưởng xu.
+          {referral && !isAffiliate && (
+            <div style={{ padding: '0 16px 8px' }}>
+              <div style={{ ...CARD, padding: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Icon icon={Gift} size="md" tone="brand" />
+                  <Text variant="body-lg" style={{ fontWeight: 600 }}>Mời bạn — nhận Điểm Xanh</Text>
+                </div>
+                <Text variant="caption" tone="secondary" as="div">
+                  {vi.wallet.referralPromise(referral.minOrderAmount ?? 200_000, referral.windowDays ?? 30)}
                 </Text>
-                <Box flex style={{ gap: 16, marginTop: 12, marginBottom: 12 }}>
-                  <Box>
-                    <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{coins.referralSuccessCount}</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>bạn thành công</Text>
-                  </Box>
-                  <Box>
-                    <Text bold size="large" style={{ color: 'var(--clay-700)' }}>{formatXu(coins.referralEarned)}</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>đã nhận từ giới thiệu</Text>
-                  </Box>
-                </Box>
-                {coins.nextMilestone && (
-                  <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 16, marginTop: 12, marginBottom: 12 }}>
+                  <div>
+                    <Text variant="price-lg" tone="brand" as="div">{referral.successCount}</Text>
+                    <Text variant="caption" tone="tertiary" as="div">bạn thành công</Text>
+                  </div>
+                  <div>
+                    <Text variant="price-lg" as="div" style={{ color: 'var(--color-promo-fg)' }}>{formatPoints(referral.earnedPoints)}</Text>
+                    <Text variant="caption" tone="tertiary" as="div">đã nhận từ giới thiệu</Text>
+                  </div>
+                </div>
+                {referral.nextMilestone && (
+                  <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 12 }}>
                     {vi.wallet.referralMilestoneProgress(
-                      coins.nextMilestone.count - coins.referralSuccessCount,
-                      formatXu(coins.nextMilestone.bonus),
+                      referral.nextMilestone.count - referral.successCount,
+                      formatPoints(referral.nextMilestone.bonusPoints),
                     )}
                   </Text>
                 )}
-                <Box flex style={{ alignItems: 'center', gap: 8 }}>
-                  <Box p={2} style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-                    <Text bold style={{ letterSpacing: 1.5, color: 'var(--neutral-900)' }}>{coins.referralCode}</Text>
-                  </Box>
-                  <Button size="small" style={{ background: 'var(--leaf-600)' }} onClick={() => void shareReferral()}>
-                    Chia sẻ
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 44,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--color-bg-subtle)',
+                      borderRadius: 'var(--radius-control)',
+                    }}
+                  >
+                    <Text variant="body-lg" style={{ fontWeight: 600, letterSpacing: 1.5 }}>{referral.referralCode}</Text>
+                  </div>
+                  <Button onPress={() => void shareReferral()}>Chia sẻ</Button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Nguồn tiền chờ */}
-          <Box mx={4} mb={3} flex style={{ gap: 10 }}>
+          <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
             <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
             {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
                 Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
@@ -288,120 +265,205 @@ export default function WalletPage() {
               hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
               onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
             />
-          </Box>
-          <Box mx={4} mb={3}>
-            {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
-                không phải đơn đang chờ sàn duyệt. */}
-            <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
-          </Box>
+          </div>
+          {/* Khoản đã duyệt còn chờ về Ví là tiền của khách nên vẫn hiện dù lối vào Hoàn tiền sàn ngoài đã ẩn. */}
+          {(CASHBACK_ENABLED || w.cashbackPending > 0) && (
+            <div style={{ margin: '0 16px 12px', display: 'flex' }}>
+              {/* Cùng lý do với màn Hoàn tiền: đây là khoản sàn ĐÃ duyệt, đang chờ về Ví —
+                  không phải đơn đang chờ sàn duyệt. */}
+              <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} Icon={ShoppingBag} wide />
+            </div>
+          )}
 
-          <Box mx={4} mb={4} p={4} flex style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-lg)', gap: 8 }}>
-            <Coins size={18} color="var(--clay-700)" strokeWidth={1.9} style={{ flex: '0 0 auto', marginTop: 1 }} />
-            <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-              Mẹo: đổi tiền Ví sang <b>TubuXu (×{multiplier})</b> để được thêm{' '}
-              {Math.round((multiplier - 1) * 100)}% giá trị mua sắm — và <b>miễn phí</b>, thay vì rút về
-              ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
+          <div
+            style={{
+              margin: '0 16px 16px',
+              padding: 16,
+              display: 'flex',
+              gap: 8,
+              background: 'var(--color-promo-bg)',
+              borderRadius: 'var(--radius-card)',
+            }}
+          >
+            <Icon icon={Wallet} size="md" style={{ flex: '0 0 auto', color: 'var(--color-promo-fg)' }} />
+            <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
+              Mẹo: dùng Ví Tubu để <b>trả đơn hàng</b> — <b>miễn phí</b>, thay vì rút về ngân hàng (phí chuyển
+              khoản {formatVnd(fee)}/lần).
             </Text>
-          </Box>
+          </div>
+
+          <WalletHistory enabled={authed} />
         </>
       ) : null}
 
-      {/* Sheet đổi Ví → TubuXu */}
-      <Sheet visible={convertOpen} onClose={() => { setConvertOpen(false); setConvertAmount(''); }} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large" style={{ marginBottom: 4 }}>Đổi Ví → TubuXu</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
-            Nhận thêm {Math.round((multiplier - 1) * 100)}% giá trị quy đổi — hoàn toàn miễn phí.
-          </Text>
-
-          {(w?.walletBalance ?? 0) <= 0 && (
-            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-                🌱 Bạn chưa có số dư khả dụng trong Ví Tubu (0đ). Hãy tích lũy hoa hồng từ Đơn hàng/CTV hoặc Hoàn tiền sàn ngoài để đổi sang TubuXu (×{multiplier})!
-              </Text>
-            </Box>
-          )}
-
-          <Input
-            label={`Số tiền muốn đổi (Khả dụng: ${formatVnd(w?.walletBalance ?? 0)})`}
-            type="number"
-            placeholder="VD: 100.000"
-            value={convertAmount}
-            disabled={(w?.walletBalance ?? 0) <= 0}
-            onChange={(e) => setConvertAmount(e.target.value)}
-          />
-          {convertNum > 0 && (
-            <Box mt={2} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)' }}>
-              <Text size="small" style={{ color: 'var(--clay-700)' }}>
-                Nhận ≈ <b>{formatXu(Math.floor(convertNum * multiplier))}</b>
-              </Text>
-            </Box>
-          )}
-          <Button
-            fullWidth
-            style={{ marginTop: 20, background: 'var(--leaf-600)' }}
-            disabled={!canConvert || convertMut.isPending}
-            onClick={() => convertMut.mutate()}
-          >
-            {convertMut.isPending ? 'Đang đổi...' : 'Đổi ngay'}
-          </Button>
-        </Box>
-      </Sheet>
-
       {/* Sheet rút tiền */}
-      <Sheet visible={withdrawOpen} onClose={() => { setWithdrawOpen(false); setAmount(''); }} autoHeight>
-        <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-          <Text bold size="large" style={{ marginBottom: 4 }}>Rút tiền về ngân hàng</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginBottom: 12 }}>
-            Khả dụng: <b>{formatVnd(w?.walletBalance ?? 0)}</b> • Tối thiểu: <b>{formatVnd(min)}</b>
-          </Text>
+      <BottomSheet
+        open={withdrawOpen}
+        onClose={() => {
+          setWithdrawOpen(false);
+          setAmount('');
+        }}
+        title="Rút tiền về ngân hàng"
+        description={`Khả dụng: ${formatVnd(balance)} • Tối thiểu: ${formatVnd(min)}`}
+        footer={
+          <Button fullWidth disabled={!canWithdraw || withdrawMut.isPending} onPress={() => withdrawMut.mutate()}>
+            {withdrawMut.isPending ? 'Đang gửi...' : `Rút ${amountNum > 0 ? formatVnd(amountNum) : ''}`}
+          </Button>
+        }
+      >
+        {balance < min && (
+          <Notice icon={AlertTriangle}>
+            Số dư Ví Tubu của bạn ({formatVnd(balance)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
+          </Notice>
+        )}
 
-          {(w?.walletBalance ?? 0) < min && (
-            <Box mb={3} p={3} style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--clay-200)' }}>
-              <Text size="xSmall" style={{ color: 'var(--clay-700)' }}>
-                ⚠️ Số dư Ví Tubu của bạn ({formatVnd(w?.walletBalance ?? 0)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
-              </Text>
-            </Box>
-          )}
-
-          <Box flex flexDirection="column" style={{ gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Số tiền rút">
             <Input
-              label="Số tiền rút"
               type="number"
               placeholder={`Tối thiểu ${formatVnd(min)}`}
               value={amount}
-              disabled={(w?.walletBalance ?? 0) < min}
+              disabled={balance < min}
               onChange={(e) => setAmount(e.target.value)}
             />
-            <Input label="Tên ngân hàng" placeholder="VD: Techcombank" value={bank.bankName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
-            <Input label="Số tài khoản" value={bank.accountNumber} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
-            <Input label="Chủ tài khoản" placeholder="Tên in trên thẻ" value={bank.accountName} disabled={(w?.walletBalance ?? 0) < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
-          </Box>
-          {amountNum >= min && (
-            <Box mt={2} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)' }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
-              </Text>
-            </Box>
-          )}
-          <Button
-            fullWidth
-            style={{ marginTop: 20, background: 'var(--leaf-600)' }}
-            disabled={!canWithdraw || withdrawMut.isPending}
-            onClick={() => withdrawMut.mutate()}
-          >
-            {withdrawMut.isPending ? 'Đang gửi...' : `Rút ${amountNum > 0 ? formatVnd(amountNum) : ''}`}
-          </Button>
-        </Box>
-      </Sheet>
+          </Field>
+          <Field label="Tên ngân hàng">
+            <Input placeholder="VD: Techcombank" value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
+          </Field>
+          <Field label="Số tài khoản">
+            <Input value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
+          </Field>
+          <Field label="Chủ tài khoản">
+            <Input placeholder="Tên in trên thẻ" value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
+          </Field>
+        </div>
+        {amountNum >= min && (
+          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="caption" tone="secondary" as="div">
+              Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
+            </Text>
+          </div>
+        )}
+      </BottomSheet>
     </Page>
+  );
+}
+
+/** Ô tròn chứa biểu tượng ở đầu thẻ số dư. */
+function IconBubble({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: '50%',
+        background: 'var(--color-bg-subtle)',
+        display: 'grid',
+        placeItems: 'center',
+        flex: '0 0 auto',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Khung cảnh báo trong sheet — biểu tượng + chữ cùng màu khuyến mãi/đất sét, thay emoji ⚠️ cũ. */
+function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        padding: 12,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'flex-start',
+        background: 'var(--color-promo-bg)',
+        borderRadius: 'var(--radius-control)',
+        border: '1px solid var(--clay-100)',
+      }}
+    >
+      <Icon icon={icon} size="sm" style={{ flex: '0 0 auto', marginTop: 2, color: 'var(--color-promo-fg)' }} />
+      <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
+        {children}
+      </Text>
+    </div>
+  );
+}
+
+/** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
+function WalletHistory({ enabled }: { enabled: boolean }) {
+  // Khoá con của ['wallet'] → refreshAll() sau khi rút tiền làm mới luôn sao kê.
+  const q = useInfiniteQuery({
+    queryKey: ['wallet', 'transactions'],
+    queryFn: ({ pageParam }) => getWalletTransactions(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    enabled,
+  });
+  const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
+
+  return (
+    <div style={{ ...CARD, margin: '0 16px 24px', padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <Icon icon={History} size="md" tone="brand" />
+        <Text variant="body-lg" style={{ fontWeight: 600 }}>Lịch sử Ví</Text>
+      </div>
+      {q.isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+          <Skeleton height={44} />
+          <Skeleton height={44} />
+        </div>
+      ) : q.isError ? (
+        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+      ) : rows.length === 0 ? (
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
+          Chưa có biến động nào trong Ví.
+        </Text>
+      ) : (
+        <>
+          {rows.map((t) => (
+            <div
+              key={t.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--color-border-subtle)' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="body-sm" as="div">{walletTxLabel(t.type)}</Text>
+                <Text variant="caption" tone="tertiary" as="div">
+                  {formatWalletTxTime(t.createdAt)}
+                  {t.reason ? ` · ${t.reason}` : ''}
+                </Text>
+              </div>
+              <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                <Text variant="price-sm" tone={t.delta > 0 ? 'success' : 'primary'} as="div">
+                  {t.delta > 0 ? '+' : '−'}
+                  {formatVnd(Math.abs(t.delta))}
+                </Text>
+                <Text variant="caption" tone="tertiary" as="div">Số dư {formatVnd(t.balanceAfter)}</Text>
+              </div>
+            </div>
+          ))}
+          {q.hasNextPage && (
+            <Button
+              fullWidth
+              variant="ghost"
+              loading={q.isFetchingNextPage}
+              onPress={() => void q.fetchNextPage()}
+              style={{ marginTop: 8 }}
+            >
+              Xem thêm
+            </Button>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 function SourceCard({
   label,
   value,
-  Icon,
+  Icon: SourceIcon,
   wide,
   hint,
   onClick,
@@ -415,27 +477,29 @@ function SourceCard({
   onClick?: () => void;
 }) {
   return (
-    <Box
-      p={3}
+    <div
       role={onClick ? 'button' : undefined}
+      {...(onClick ? rowKeyboardProps() : null)}
       className={onClick ? 'tubu-press' : undefined}
       onClick={onClick}
-      style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xs)' }}
+      style={{ ...CARD, flex: 1, minWidth: 0, padding: 12 }}
     >
-      <Box style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-        <Icon size={17} color="var(--leaf-700)" strokeWidth={1.9} />
-      </Box>
-      <Text bold size={wide ? 'normal' : 'small'} style={{ color: 'var(--neutral-900)', marginTop: 4 }}>
+      <div
+        style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}
+      >
+        <Icon icon={SourceIcon} size="sm" tone="brand" />
+      </div>
+      <Text variant={wide ? 'price-md' : 'price-sm'} as="div" style={{ marginTop: 4 }}>
         {formatVnd(value)}
       </Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+      <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>
       {hint && (
-        <Text size="xSmall" style={{ color: 'var(--primary-700)', marginTop: 4, fontWeight: 600 }}>
+        <Text variant="caption" tone="brand" as="div" style={{ marginTop: 4, fontWeight: 600 }}>
           {hint}
         </Text>
       )}
-    </Box>
+    </div>
   );
 }

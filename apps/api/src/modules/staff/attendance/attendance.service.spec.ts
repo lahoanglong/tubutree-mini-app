@@ -254,18 +254,6 @@ describe('AttendanceService.checkout / heartbeat', () => {
     expect(await mk(prisma).heartbeat('u1', GOOD_IP, IN)).toEqual({ open: false });
   });
 
-  it('heartbeat rớt vùng → đóng OUT_OF_RANGE', async () => {
-    const update = jest.fn().mockResolvedValue({});
-    const prisma = makePrisma({
-      attendanceSession: { findFirst: jest.fn().mockResolvedValue({ id: 'open1' }), update },
-    });
-    const out = await mk(prisma).heartbeat('u1', '8.8.8.8', IN);
-    expect(out).toEqual({ open: false, closed: true, reason: 'IP_NOT_ALLOWED' });
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ closeReason: 'OUT_OF_RANGE' }) }),
-    );
-  });
-
   it('heartbeat còn trong vùng → cập nhật lastHeartbeatAt, {open:true}', async () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = makePrisma({
@@ -276,6 +264,153 @@ describe('AttendanceService.checkout / heartbeat', () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ lastHeartbeatAt: expect.any(Date) }) }),
     );
+  });
+
+  // C-056: GPS nhảy một nhịp không được tự chấm ra, mất giờ công.
+  describe('heartbeat ngoài vùng — grace nhiều nhịp', () => {
+    const checkinAt = new Date(Date.now() - 3 * 3600_000);
+    const OUT_IP = '8.8.8.8';
+
+    function sessionPrisma(openRow: Record<string, unknown>, afterIncrement: Record<string, unknown>) {
+      const update = jest.fn().mockResolvedValue(afterIncrement);
+      const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const prisma = makePrisma({
+        attendanceSession: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'open1', checkinAt, ...openRow }),
+          update,
+          updateMany,
+        },
+      });
+      return { prisma, update, updateMany };
+    }
+
+    afterEach(() => {
+      delete CFG['attendance.out_of_range_max_count'];
+      delete CFG['attendance.out_of_range_max_min'];
+    });
+
+    it('nhịp ngoài vùng đầu tiên → KHÔNG checkout, tăng bộ đếm + ghi mốc bắt đầu ngoài vùng', async () => {
+      const { prisma, update, updateMany } = sessionPrisma(
+        { outOfRangeCount: 0, outOfRangeSince: null },
+        { outOfRangeCount: 1, outOfRangeSince: new Date() },
+      );
+      const out = await mk(prisma).heartbeat('u1', OUT_IP, IN);
+      expect(out).toEqual({ open: true, outOfRange: true, reason: 'IP_NOT_ALLOWED', missed: 1, maxMissed: 3 });
+      expect(updateMany).not.toHaveBeenCalled();
+      const data = update.mock.calls[0][0].data;
+      expect(data.outOfRangeCount).toEqual({ increment: 1 });
+      expect(data.outOfRangeSince).toBeInstanceOf(Date);
+      expect(data.checkoutAt).toBeUndefined();
+      expect(data.closeReason).toBeUndefined();
+    });
+
+    it('nhịp ngoài vùng thứ 2 → vẫn mở, không ghi đè mốc bắt đầu ngoài vùng', async () => {
+      const since = new Date(Date.now() - 3 * 60_000);
+      const { prisma, update, updateMany } = sessionPrisma(
+        { outOfRangeCount: 1, outOfRangeSince: since },
+        { outOfRangeCount: 2, outOfRangeSince: since },
+      );
+      const out = await mk(prisma).heartbeat('u1', OUT_IP, IN);
+      expect(out).toMatchObject({ open: true, outOfRange: true, missed: 2 });
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(update.mock.calls[0][0].data.outOfRangeSince).toBeUndefined();
+    });
+
+    it('đủ N nhịp liên tiếp → đóng OUT_OF_RANGE, giờ ra = nhịp ngoài vùng ĐẦU TIÊN (không cộng giờ ngoài vùng)', async () => {
+      const since = new Date(Date.now() - 6 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { outOfRangeCount: 2, outOfRangeSince: since },
+        { outOfRangeCount: 3, outOfRangeSince: since },
+      );
+      const out = await mk(prisma).heartbeat('u1', OUT_IP, IN);
+      expect(out).toEqual({ open: false, closed: true, reason: 'IP_NOT_ALLOWED' });
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'open1', checkoutAt: null },
+        data: { checkoutAt: since, closeReason: 'OUT_OF_RANGE' },
+      });
+    });
+
+    it('N đọc từ SystemConfig: N=2 thì nhịp thứ 2 đã đóng, N=5 thì nhịp thứ 3 chưa đóng', async () => {
+      CFG['attendance.out_of_range_max_count'] = 2;
+      const since = new Date(Date.now() - 3 * 60_000);
+      const a = sessionPrisma({ outOfRangeCount: 1, outOfRangeSince: since }, { outOfRangeCount: 2, outOfRangeSince: since });
+      expect(await mk(a.prisma).heartbeat('u1', OUT_IP, IN)).toMatchObject({ closed: true });
+
+      CFG['attendance.out_of_range_max_count'] = 5;
+      const b = sessionPrisma({ outOfRangeCount: 2, outOfRangeSince: since }, { outOfRangeCount: 3, outOfRangeSince: since });
+      expect(await mk(b.prisma).heartbeat('u1', OUT_IP, IN)).toMatchObject({ open: true, outOfRange: true, maxMissed: 5 });
+      expect(b.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('chưa đủ N nhưng ngoài vùng quá M phút (heartbeat thưa vì cất điện thoại) → đóng, giờ ra = mốc bắt đầu ngoài vùng', async () => {
+      const since = new Date(Date.now() - 40 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { outOfRangeCount: 1, outOfRangeSince: since },
+        { outOfRangeCount: 2, outOfRangeSince: since },
+      );
+      const out = await mk(prisma).heartbeat('u1', OUT_IP, IN);
+      expect(out).toMatchObject({ open: false, closed: true });
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { checkoutAt: since, closeReason: 'OUT_OF_RANGE' } }),
+      );
+    });
+
+    it('M đọc từ SystemConfig: M=60 thì 40 phút ngoài vùng chưa đóng', async () => {
+      CFG['attendance.out_of_range_max_min'] = 60;
+      const since = new Date(Date.now() - 40 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { outOfRangeCount: 1, outOfRangeSince: since },
+        { outOfRangeCount: 2, outOfRangeSince: since },
+      );
+      expect(await mk(prisma).heartbeat('u1', OUT_IP, IN)).toMatchObject({ open: true, outOfRange: true });
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mốc bắt đầu ngoài vùng bị sửa lệch trước giờ checkin → giờ ra không lùi trước giờ checkin', async () => {
+      const lateCheckin = new Date(Date.now() - 60_000);
+      const since = new Date(Date.now() - 6 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { checkinAt: lateCheckin, outOfRangeCount: 2, outOfRangeSince: since },
+        { outOfRangeCount: 3, outOfRangeSince: since },
+      );
+      await mk(prisma).heartbeat('u1', OUT_IP, IN);
+      expect(updateMany.mock.calls[0][0].data.checkoutAt).toEqual(lateCheckin);
+    });
+
+    it('giá trị cấu hình rác (0, âm, chuỗi) → rơi về mặc định N=3, M=15', async () => {
+      CFG['attendance.out_of_range_max_count'] = 0;
+      CFG['attendance.out_of_range_max_min'] = 'abc';
+      const since = new Date(Date.now() - 3 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { outOfRangeCount: 1, outOfRangeSince: since },
+        { outOfRangeCount: 2, outOfRangeSince: since },
+      );
+      expect(await mk(prisma).heartbeat('u1', OUT_IP, IN)).toMatchObject({ open: true, maxMissed: 3 });
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('phiên đã bị đóng song song (checkout tay) → không ghi đè, trả {open:false}', async () => {
+      const since = new Date(Date.now() - 6 * 60_000);
+      const { prisma, updateMany } = sessionPrisma(
+        { outOfRangeCount: 2, outOfRangeSince: since },
+        { outOfRangeCount: 3, outOfRangeSince: since },
+      );
+      updateMany.mockResolvedValue({ count: 0 });
+      expect(await mk(prisma).heartbeat('u1', OUT_IP, IN)).toEqual({ open: false });
+    });
+
+    it('heartbeat hợp lệ trở lại → reset bộ đếm + mốc ngoài vùng', async () => {
+      const { prisma, update } = sessionPrisma(
+        { outOfRangeCount: 2, outOfRangeSince: new Date(Date.now() - 6 * 60_000) },
+        {},
+      );
+      const out = await mk(prisma).heartbeat('u1', GOOD_IP, IN);
+      expect(out).toEqual({ open: true });
+      expect(update).toHaveBeenCalledWith({
+        where: { id: 'open1' },
+        data: { lastHeartbeatAt: expect.any(Date), outOfRangeCount: 0, outOfRangeSince: null },
+      });
+    });
   });
 });
 

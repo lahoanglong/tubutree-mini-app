@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
@@ -19,8 +19,14 @@ import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
-// zmp-ui Button vẫn dùng cho các CTA loại khác (nợ migrate); CTA nhắc mua lại dùng DS v2 (spec 4a.4).
+import { formatDate, formatDateTime } from '../utils/format';
 import { Button as DsButton } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Heading, Text } from '../components/ui/text';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 import { pickReminderItem, reorderReminderAction } from '../components/reorder/reorder-reminder';
@@ -35,7 +41,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
-  if (code.startsWith('POINTS')) return { Icon: Leaf, title: 'Điểm Xanh' };
+  if (code.startsWith('POINTS') || code === 'XU_CONVERTED') return { Icon: Leaf, title: 'Điểm Xanh' };
   if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
   // REORDER_REMINDER (§6.14.7, LifecycleService.sendReorderReminders) — nhắc mua lại khi 1 SP đã
   // qua ~chu kỳ tiêu dùng kể từ đơn DELIVERED gần nhất. Trước đây rơi về nhãn chung "Thông báo"
@@ -61,6 +67,63 @@ export function notificationOrderLink(templateCode: string, orderCode: unknown):
   return templateCode.startsWith('ORDER') || !!orderCode;
 }
 
+export type NotificationAction = { kind: 'reorder'; label: string } | { kind: 'link'; label: string; to: string };
+
+const enc = (v: string) => encodeURIComponent(v);
+
+/** Đường dẫn nội bộ an toàn: bắt đầu bằng "/" một lần (chặn "//host" và URL ngoài). */
+function internalRoute(v: unknown): string | null {
+  return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : null;
+}
+
+/** Tin chỉ gửi cho admin; việc xử lý nằm ở trang quản trị web, mini app không có màn tương ứng. */
+const ADMIN_ONLY_CODES = new Set(['DEALER_CREDIT_PAYMENT_REPORTED', 'DEALER_REWARD_CLAIM_NEW']);
+
+/**
+ * Nút đi tiếp trong chi tiết thông báo, quyết định theo LOẠI tin (templateCode) và dữ liệu có cấu trúc
+ * trong payload. Bản cũ dò từ khoá trong nội dung tin nên tin nói về sản phẩm bị dẫn nhầm sang Vườn Xanh,
+ * còn tin giảm giá/cộng đồng không có nút.
+ */
+export function notificationAction(templateCode: string, data: Record<string, string> | undefined): NotificationAction | null {
+  const d = data ?? {};
+  if (templateCode.startsWith('OPS_') || ADMIN_ONLY_CODES.has(templateCode)) return null;
+  const orderCode = d.order_code ?? d.orderCode;
+  const productSlug = d.product_slug ?? d.productSlug;
+  const route = internalRoute(d.route);
+
+  if (templateCode.startsWith('REORDER_REMINDER')) return { kind: 'reorder', label: vi.reorder.reminderCta };
+  if (notificationOrderLink(templateCode, orderCode)) {
+    return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
+  }
+  if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
+  if (templateCode.startsWith('FLASH')) {
+    // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.
+    return { kind: 'link', label: 'Xem ưu đãi giờ vàng', to: productSlug ? `/product/${enc(productSlug)}` : '/' };
+  }
+  if (templateCode === 'PRICE_DROP_ALERT') {
+    return { kind: 'link', label: 'Xem sản phẩm', to: productSlug ? `/product/${enc(productSlug)}` : '/wishlist' };
+  }
+  if (templateCode.startsWith('COMMUNITY_')) {
+    const postId = d.post_id ?? d.postId;
+    return { kind: 'link', label: 'Xem trong Cộng đồng', to: postId ? `/feed/${enc(postId)}` : '/feed' };
+  }
+  if (templateCode.startsWith('GAME_')) return { kind: 'link', label: 'Đến Vườn Xanh', to: '/game' };
+  if (templateCode === 'CART_ABANDONED') return { kind: 'link', label: 'Xem giỏ hàng', to: '/cart' };
+  if (templateCode.endsWith('_VOUCHER') || templateCode.startsWith('VOUCHER')) {
+    return { kind: 'link', label: 'Xem mã giảm giá', to: '/loyalty' };
+  }
+  if (templateCode.startsWith('POINTS') || templateCode === 'XU_CONVERTED') {
+    return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
+  }
+  if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };
+  if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
+  if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
+  if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
+  if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
+  if (templateCode.startsWith('REFILL')) return { kind: 'link', label: 'Xem đổi vỏ chai', to: '/refill' };
+  return null;
+}
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
@@ -70,7 +133,7 @@ function relativeTime(iso: string): string {
   if (hr < 24) return `${hr} giờ trước`;
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day} ngày trước`;
-  return new Date(iso).toLocaleDateString('vi-VN');
+  return formatDate(iso);
 }
 
 export default function NotificationsPage() {
@@ -163,64 +226,68 @@ export default function NotificationsPage() {
   };
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title="Thông báo" />
 
       {notifQ.isLoading ? (
-        <Box p={4} flex flexDirection="column" style={{ gap: 10 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <LineItemSkeleton />
           <LineItemSkeleton />
-        </Box>
+        </div>
       ) : notifQ.isError ? (
         <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
       ) : notifQ.data && notifQ.data.length > 0 ? (
-        <Box p={4} flex flexDirection="column" style={{ gap: 8 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {notifQ.data.map((n) => {
             const m = notificationMeta(n.templateCode);
             const unread = n.status !== 'READ';
             return (
-              <Box
+              <div
                 key={n.id}
+                role="button"
+                {...rowKeyboardProps()}
                 className="tubu-press"
-                flex
-                p={3}
                 onClick={() => onTap(n)}
                 style={{
+                  display: 'flex',
                   gap: 12,
-                  background: unread ? 'var(--primary-50)' : 'var(--neutral-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: `1px solid ${unread ? 'var(--primary-200)' : 'var(--neutral-200)'}`,
-                  boxShadow: 'var(--shadow-card)',
+                  padding: 12,
+                  background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
+                  borderRadius: 'var(--radius-card)',
+                  border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
+                  boxShadow: 'var(--elevation-1)',
                   cursor: 'pointer',
                 }}
               >
-                <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                  <m.Icon size={20} color="var(--leaf-700)" strokeWidth={1.9} />
-                </Box>
-                <Box style={{ flex: 1 }}>
-                  <Box flex alignItems="center" style={{ gap: 6 }}>
-                    <Text size="small" bold>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                  <Icon icon={m.Icon} tone="brand" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Text variant="body-sm" style={{ fontWeight: 600 }}>
                       {m.title}
                     </Text>
                     {unread && (
                       <span
+                        role="img"
                         aria-label="chưa đọc"
-                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary-600)' }}
+                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
                       />
                     )}
-                  </Box>
+                  </div>
                   {n.payload.body && (
-                    <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+                    <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
                       {n.payload.body}
                     </Text>
                   )}
-                  <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+                  <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
                     {relativeTime(n.sentAt)}
                   </Text>
-                </Box>
-              </Box>
+                </div>
+              </div>
             );
           })}
-        </Box>
+        </div>
       ) : (
         <EmptyState
           art="leaf"
@@ -231,7 +298,10 @@ export default function NotificationsPage() {
 
       {/* ── Detail View Overlay ── */}
       {selectedNotif && (
-        <Box
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chi tiết thông báo"
           style={{
             position: 'fixed',
             top: 0,
@@ -239,199 +309,90 @@ export default function NotificationsPage() {
             right: 0,
             bottom: 0,
             zIndex: 500,
-            background: 'var(--neutral-50)',
+            background: 'var(--color-bg-canvas)',
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
           {/* Top Bar with Left Back Button */}
-          <Box
-            flex
-            alignItems="center"
+          <div
             style={{
-              padding: 'calc(var(--safe-top) + 12px) 16px 12px 16px',
-              background: 'var(--neutral-0)',
-              borderBottom: '1px solid var(--neutral-100)',
-              gap: 12,
+              display: 'flex',
+              alignItems: 'center',
+              padding: 'calc(var(--safe-top) + 4px) 16px 4px 4px',
+              background: 'var(--color-bg-surface)',
+              borderBottom: '1px solid var(--color-border-subtle)',
+              gap: 4,
             }}
           >
-            <button
-              type="button"
-              aria-label="Quay lại"
-              className="tubu-press"
-              onClick={handleCloseDetail}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'var(--neutral-100)',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 0,
-                cursor: 'pointer',
-                flex: '0 0 auto',
-              }}
-            >
-              <ChevronLeft size={22} color="var(--neutral-800)" strokeWidth={2.2} />
-            </button>
-            <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
+            <IconButton icon={ChevronLeft} label="Quay lại" onPress={handleCloseDetail} />
+            <Heading variant="title-md" as="h2">
               Chi tiết thông báo
-            </Text>
-          </Box>
+            </Heading>
+          </div>
 
           {/* Detail Content */}
-          <Box p={4} style={{ flex: 1 }}>
+          <div style={{ padding: 16, flex: 1 }}>
             {(() => {
               const m = notificationMeta(selectedNotif.templateCode);
               const bodyText = selectedNotif.payload.body || '';
-              const orderCode = selectedNotif.payload.data?.order_code ?? selectedNotif.payload.data?.orderCode;
-              const isOrder = notificationOrderLink(selectedNotif.templateCode, orderCode);
-              const isGame = selectedNotif.templateCode.includes('GAME') || /cây|vườn|tưới|khát|chuỗi/i.test(bodyText);
-              const isCart = selectedNotif.templateCode.includes('CART') || /giỏ/i.test(bodyText);
-              const isLoyalty = selectedNotif.templateCode.includes('VOUCHER') || selectedNotif.templateCode.includes('POINTS');
-              // Thông báo giờ vàng trước đây KHÔNG có nút đi tiếp: khách đặt nhắc, đúng giờ mở
-              // thông báo, đọc xong rồi phải tự back và tự tìm lại sản phẩm — đúng lúc chuyển
-              // đổi cao nhất lại bắt đi vòng (P1-6 audit mạch lạc).
-              const isFlash = selectedNotif.templateCode.startsWith('FLASH');
-              const flashSlug = selectedNotif.payload.data?.product_slug ?? selectedNotif.payload.data?.productSlug;
-              // REORDER_REMINDER (A1-01=A2-06=A3-02): trước đây payload chỉ có "product" (tên) nên
-              // không nhánh CTA nào ở đây khớp được — khách đọc xong nhắc mua lại rồi phải tự đi
-              // tìm lại sản phẩm, đúng lúc ý định mua cao nhất lại bắt đi vòng. Nay BE
-              // (lifecycle.service.ts) gửi kèm product_slug khi có, mirror đúng field FLASH đã
-              // dùng ở trên.
-              const isReorder = selectedNotif.templateCode.startsWith('REORDER_REMINDER');
-              const isStorefront = selectedNotif.templateCode.startsWith('STOREFRONT');
+              const action = notificationAction(selectedNotif.templateCode, selectedNotif.payload.data);
 
               return (
-                <Box
-                  p={4}
-                  style={{
-                    background: 'var(--neutral-0)',
-                    borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-sm)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 16,
-                  }}
-                >
-                  <Box flex alignItems="center" style={{ gap: 12 }}>
-                    <Box style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--leaf-50)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                      <m.Icon size={24} color="var(--leaf-700)" strokeWidth={2} />
-                    </Box>
-                    <Box style={{ flex: 1 }}>
-                      <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
-                        {m.title}
-                      </Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
-                        {new Date(selectedNotif.sentAt).toLocaleString('vi-VN')} ({relativeTime(selectedNotif.sentAt)})
-                      </Text>
-                    </Box>
-                  </Box>
+                <Card padding={16}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                        <Icon icon={m.Icon} size="lg" tone="brand" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
+                          {m.title}
+                        </Text>
+                        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+                          {formatDateTime(selectedNotif.sentAt)} ({relativeTime(selectedNotif.sentAt)})
+                        </Text>
+                      </div>
+                    </div>
 
-                  <div style={{ height: 1, background: 'var(--neutral-100)' }} />
+                    <div style={{ height: 1, background: 'var(--color-border-subtle)' }} />
 
-                  <Text size="small" style={{ color: 'var(--neutral-700)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                    {bodyText}
-                  </Text>
+                    <Text variant="body-sm" as="div" style={{ lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                      {bodyText}
+                    </Text>
 
-                  {isOrder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate(orderCode ? `/order/${encodeURIComponent(orderCode)}` : '/orders');
-                      }}
-                    >
-                      Xem chi tiết đơn hàng
-                    </Button>
-                  )}
-                  {isFlash && !isOrder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        // Có slug trong payload thì tới thẳng sản phẩm; không thì về trang chủ,
-                        // nơi dải "Ưu đãi giờ vàng" đang hiển thị.
-                        navigate(flashSlug ? `/product/${encodeURIComponent(String(flashSlug))}` : '/');
-                      }}
-                    >
-                      Xem ưu đãi giờ vàng ⚡
-                    </Button>
-                  )}
-                  {isReorder && !isOrder && !isFlash && (
-                    <DsButton
-                      fullWidth
-                      size="lg"
-                      loading={reminderBusy}
-                      onPress={() => void openReorderReminder(selectedNotif)}
-                      style={{ marginTop: 8 }}
-                    >
-                      {vi.reorder.reminderCta}
-                    </DsButton>
-                  )}
-                  {isGame && !isOrder && !isFlash && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/game');
-                      }}
-                    >
-                      Đến Vườn Xanh 🌿
-                    </Button>
-                  )}
-                  {isCart && !isOrder && !isGame && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/cart');
-                      }}
-                    >
-                      Xem giỏ hàng 🛒
-                    </Button>
-                  )}
-                  {isLoyalty && !isOrder && !isGame && !isCart && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/loyalty');
-                      }}
-                    >
-                      Xem ưu đãi 🎁
-                    </Button>
-                  )}
-                  {isStorefront && !isOrder && !isGame && !isCart && !isLoyalty && !isReorder && (
-                    <Button
-                      fullWidth
-                      style={{ background: 'var(--primary-600)', minHeight: 44, marginTop: 8 }}
-                      onClick={() => {
-                        haptic('light');
-                        setSelectedNotif(null);
-                        navigate('/storefront');
-                      }}
-                    >
-                      Thêm vào gian hàng 🛍️
-                    </Button>
-                  )}
-                </Box>
+                    {action?.kind === 'reorder' && (
+                      <DsButton
+                        fullWidth
+                        size="lg"
+                        loading={reminderBusy}
+                        onPress={() => void openReorderReminder(selectedNotif)}
+                        style={{ marginTop: 8 }}
+                      >
+                        {action.label}
+                      </DsButton>
+                    )}
+                    {action?.kind === 'link' && (
+                      <DsButton
+                        fullWidth
+                        size="lg"
+                        onPress={() => {
+                          haptic('light');
+                          setSelectedNotif(null);
+                          navigate(action.to);
+                        }}
+                        style={{ marginTop: 8 }}
+                      >
+                        {action.label}
+                      </DsButton>
+                    )}
+                  </div>
+                </Card>
               );
             })()}
-          </Box>
-        </Box>
+          </div>
+        </div>
       )}
 
       {/* Nhắc mua lại → sheet mua lại 1 SP (addSource=reorder_notification). */}

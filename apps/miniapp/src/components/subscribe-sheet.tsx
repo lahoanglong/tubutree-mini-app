@@ -1,11 +1,30 @@
-import { useState } from 'react';
-import { Box, Text, Button, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSnackbar } from 'zmp-ui';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAddresses } from '../services/shop-api';
-import { createSubscription } from '../services/subscriptions-api';
+import { getWallet } from '../services/account-api';
+import {
+  createSubscription,
+  MAX_START_DAYS_AHEAD,
+  type SubscriptionPaymentMethod,
+} from '../services/subscriptions-api';
 import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { vi } from '../i18n/vi';
+import { BottomSheet } from './ui/bottom-sheet';
+import { Button } from './ui/button';
+import { Chip } from './ui/chip';
+import { Field } from './ui/form';
+import { Text } from './ui/text';
+import {
+  AddressPicker,
+  formatVnDate,
+  isStartDateAllowed,
+  PaymentMethodPicker,
+  SectionLabel,
+  startDateRange,
+} from './subscription-options';
 
 const INTERVALS = [4, 6, 8, 10];
 
@@ -20,89 +39,169 @@ export function SubscribeSheet({
   variationId: string;
   quantity: number;
 }) {
+  const t = vi.subscriptions;
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [weeks, setWeeks] = useState(4);
+  const [startMode, setStartMode] = useState<'now' | 'date'>('now');
+  const [startDate, setStartDate] = useState('');
+  const [payment, setPayment] = useState<SubscriptionPaymentMethod>('COD');
+  const [addressId, setAddressId] = useState<string | undefined>();
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
-  const defaultAddr = addrQ.data?.find((a) => a.isDefault) ?? addrQ.data?.[0];
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: visible });
+  const addresses = addrQ.data ?? [];
+  const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
+
+  useEffect(() => {
+    if (!addressId && defaultAddr) setAddressId(defaultAddr.id);
+  }, [addressId, defaultAddr]);
+
+  const range = startDateRange();
+  const dateOk = startMode === 'now' || isStartDateAllowed(startDate);
+  const dateError = startMode === 'date' && startDate !== '' && !dateOk ? t.startDateInvalid(MAX_START_DAYS_AHEAD) : undefined;
 
   const create = useMutation({
     mutationFn: () =>
-      createSubscription({ variationId, quantity, intervalWeeks: weeks, addressId: defaultAddr!.id }),
-    onSuccess: () => {
+      createSubscription({
+        variationId,
+        quantity,
+        intervalWeeks: weeks,
+        addressId: addressId!,
+        paymentMethod: payment,
+        ...(startMode === 'date' ? { startDate } : {}),
+      }),
+    onSuccess: (sub) => {
       haptic('medium');
-      openSnackbar({ text: `Đã tạo lịch đặt định kỳ! Tiết kiệm ${discountPct}% mỗi đơn 🌿`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      const first = sub.firstOrder;
+      if (first) {
+        void qc.invalidateQueries({ queryKey: ['orders'] });
+        if (first.paymentMethod === 'WALLET') void qc.invalidateQueries({ queryKey: ['wallet'] });
+      }
       onClose();
+      if (first?.paymentMethod === 'BANK_TRANSFER' && first.status === 'PENDING_PAYMENT') {
+        openSnackbar({ text: t.createdAwaitTransfer(first.code), type: 'success' });
+        navigate(`/bank-payment/${first.code}`);
+        return;
+      }
+      // Giao ngay mà không có đơn đầu = API trả lại gói y hệt đã có (bấm đúp/thử lại).
+      const text = first
+        ? t.createdNow(first.code)
+        : startMode === 'now'
+          ? t.createdExisting
+          : t.createdScheduled(formatVnDate(startDate));
+      openSnackbar({ text, type: 'success' });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const noAddress = addrQ.isSuccess && addresses.length === 0;
+
   return (
-    <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-        <Text bold size="large">
-          Đặt định kỳ — tiết kiệm {discountPct}%
-        </Text>
-        <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 4 }}>
-          Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng/hủy bất kỳ lúc nào.
-        </Text>
+    <BottomSheet
+      open={visible}
+      onClose={onClose}
+      title={t.sheetTitle(discountPct)}
+      description={t.sheetBody}
+      size="full"
+      footer={
+        noAddress ? undefined : (
+          <Button
+            fullWidth
+            loading={create.isPending}
+            disabled={!addressId || !dateOk}
+            onPress={() => create.mutate()}
+          >
+            {t.createCta}
+          </Button>
+        )
+      }
+    >
+      <SectionLabel>{t.intervalLabel}</SectionLabel>
+      <div role="group" aria-label={t.intervalLabel} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
+        {INTERVALS.map((w) => (
+          <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
+            {t.intervalOption(w)}
+          </Chip>
+        ))}
+      </div>
 
-        <Text size="small" bold style={{ marginTop: 16, marginBottom: 8 }}>
-          Chu kỳ giao
+      <SectionLabel>{t.startLabel}</SectionLabel>
+      <div role="group" aria-label={t.startLabel} style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
+        <Chip selected={startMode === 'now'} onPress={() => setStartMode('now')}>
+          {t.startNow}
+        </Chip>
+        <Chip
+          selected={startMode === 'date'}
+          onPress={() => {
+            setStartMode('date');
+            if (!startDate) setStartDate(range.min);
+          }}
+        >
+          {t.startPick}
+        </Chip>
+      </div>
+      {startMode === 'now' ? (
+        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 4 }}>
+          {t.startNowHint}
         </Text>
-        <Box flex style={{ gap: 8 }}>
-          {INTERVALS.map((w) => (
-            <Box
-              key={w}
-              className="tubu-press"
-              onClick={() => setWeeks(w)}
+      ) : (
+        <div style={{ marginTop: 8 }}>
+          <Field label={t.startDateLabel} error={dateError}>
+            <input
+              type="date"
+              value={startDate}
+              min={range.min}
+              max={range.max}
+              onChange={(e) => setStartDate(e.target.value)}
               style={{
-                flex: 1,
-                textAlign: 'center',
-                padding: '12px 0',
-                borderRadius: 'var(--radius-md)',
-                border: `1.5px solid ${weeks === w ? 'var(--leaf-600)' : 'var(--neutral-200)'}`,
-                background: weeks === w ? 'var(--leaf-50)' : 'var(--neutral-0)',
+                width: '100%',
+                minHeight: 44,
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-control)',
+                border: '1px solid var(--color-border-subtle)',
+                background: 'var(--color-bg-surface)',
+                color: 'var(--color-text-primary)',
+                fontFamily: 'inherit',
+                fontSize: 16,
+                boxSizing: 'border-box',
               }}
-            >
-              <Text bold={weeks === w} style={{ color: weeks === w ? 'var(--leaf-700)' : 'var(--neutral-900)' }}>
-                {w} tuần
-              </Text>
-            </Box>
-          ))}
-        </Box>
-
-        {addrQ.data && !defaultAddr ? (
-          <Box mt={4}>
-            <Text size="small" style={{ color: 'var(--clay-700)' }}>
-              Bạn cần thêm địa chỉ giao hàng trước.
+            />
+          </Field>
+          {!dateError && (
+            <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 4 }}>
+              {t.startDateHint(MAX_START_DAYS_AHEAD)}
             </Text>
-            <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onClick={() => { onClose(); navigate('/addresses'); }}>
-              Thêm địa chỉ
-            </Button>
-          </Box>
-        ) : (
-          <>
-            {defaultAddr && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 12 }}>
-                Giao tới: {defaultAddr.recipient} · {defaultAddr.street}, {defaultAddr.ward}
-              </Text>
-            )}
-            <Button
-              fullWidth
-              loading={create.isPending}
-              disabled={!defaultAddr || create.isPending}
-              onClick={() => create.mutate()}
-              style={{ marginTop: 16, background: 'var(--leaf-600)' }}
-            >
-              Bắt đầu đặt định kỳ
-            </Button>
-          </>
-        )}
-      </Box>
-    </Sheet>
+          )}
+        </div>
+      )}
+
+      <SectionLabel>{t.paymentLabel}</SectionLabel>
+      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} />
+
+      <SectionLabel>{t.addressLabel}</SectionLabel>
+      {noAddress ? (
+        <div>
+          <Text variant="body-sm" tone="danger" as="p">
+            {t.needAddress}
+          </Text>
+          <Button
+            fullWidth
+            variant="secondary"
+            style={{ marginTop: 8 }}
+            onPress={() => {
+              onClose();
+              navigate('/addresses');
+            }}
+          >
+            {t.addAddress}
+          </Button>
+        </div>
+      ) : (
+        <AddressPicker addresses={addresses} value={addressId} onChange={setAddressId} />
+      )}
+    </BottomSheet>
   );
 }

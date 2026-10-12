@@ -1,16 +1,25 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
+
+const errCode = (err: unknown): string | undefined =>
+  typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
+
+/** Số lần thử lại khi tạo/sửa thua một request đồng thời của chính người đó (tạo cùng lúc, hoặc xoá đúng lúc sửa). */
+const SAVE_ATTEMPTS = 3;
 
 @Injectable()
 export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analytics: AnalyticsEventsService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   /**
@@ -19,7 +28,15 @@ export class ReviewsService {
    * chọn sao, upload ảnh/video (đã tải lên server) rồi bấm Gửi mới nhận lỗi và mất trắng công
    * sức (P1-2, audit mạch lạc B2C). Trả kèm `reason` để FE nói đúng lý do thay vì báo chung.
    */
-  async canReview(userId: string, slug: string): Promise<{ canReview: boolean; reason: string | null }> {
+  async canReview(
+    userId: string,
+    slug: string,
+  ): Promise<{
+    canReview: boolean;
+    reason: 'NOT_PURCHASED' | null;
+    myReview?: { id: string; rating: number; comment: string | null; images: string[]; videoUrl: string | null } | null;
+    rewardAvailable?: boolean;
+  }> {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
 
@@ -37,10 +54,25 @@ export class ReviewsService {
     });
     if (!delivered) return { canReview: false, reason: 'NOT_PURCHASED' };
 
+    // Q-30: đã có đánh giá thì vẫn được (mua lại → sửa đánh giá cũ); trả đánh giá hiện có để FE điền sẵn form.
     const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
-    if (existing) return { canReview: false, reason: 'ALREADY_REVIEWED' };
-
-    return { canReview: true, reason: null };
+    // Chỉ để miniapp ẩn câu gợi ý điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept).
+    // Đang có đánh giá thì gọi tạo là sửa nên không thưởng; chưa có thì thưởng hay không tuỳ sổ điểm của cặp này.
+    const rewardAvailable = !existing && !(await this.rewardAlreadyKept(this.prisma, userId, product));
+    return {
+      canReview: true,
+      reason: null,
+      rewardAvailable,
+      myReview: existing
+        ? {
+            id: existing.id,
+            rating: existing.rating,
+            comment: existing.comment,
+            images: existing.images,
+            videoUrl: existing.videoUrl,
+          }
+        : null,
+    };
   }
 
   async create(userId: string, slug: string, dto: CreateReviewDto) {
@@ -64,54 +96,121 @@ export class ReviewsService {
       throw new BadRequestException('Chỉ đánh giá sản phẩm đã mua và nhận hàng.');
     }
 
-    // Mỗi user chỉ đánh giá 1 lần / sản phẩm — tránh farm điểm review.
-    const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
-    if (existing) throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
+    // Q-30: mỗi người một đánh giá cho mỗi sản phẩm (unique userId+productId). Đã có thì gọi tạo
+    // lại = SỬA đánh giá cũ và KHÔNG thưởng điểm; chỉ lần tạo đầu được thưởng (chống farm điểm).
+    // Khoá unique là chốt chặn cuối: hai request tạo đồng thời thì request thua nhận P2002 ở bước
+    // tạo (trước cả bước ghi điểm, cùng transaction) rồi đọc lại và chuyển sang sửa.
+    for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
+      const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
+      try {
+        const review = existing
+          ? await this.updateOwn(userId, product, dto)
+          : await this.createFirst(userId, product, delivered.id, dto);
+        return { ...review, updated: !!existing };
+      } catch (err) {
+        const lostRace = errCode(err) === (existing ? 'P2025' : 'P2002');
+        if (!lostRace) throw err;
+      }
+    }
+    throw new ConflictException('Không lưu được đánh giá do thao tác đồng thời, vui lòng thử lại.');
+  }
 
+  private async createFirst(
+    userId: string,
+    product: { id: string; slug: string },
+    orderId: string,
+    dto: CreateReviewDto,
+  ) {
     // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
     const hasVideo = !!dto.videoUrl;
     const hasImages = (dto.images?.length ?? 0) > 0;
-    const pointsEarned = hasVideo ? 15 : hasImages ? 10 : 5;
+    const rewardPoints = hasVideo ? 15 : hasImages ? 10 : 5;
+    // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
+    // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
+    const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
-    let review;
-    try {
-      review = await this.prisma.$transaction(async (tx) => {
-        const r = await tx.review.create({
-          data: {
-            userId,
-            productId: product.id,
-            orderId: delivered.id,
-            rating: dto.rating,
-            comment: dto.comment,
-            images: dto.images ?? [],
-            videoUrl: dto.videoUrl ?? null,
-            pointsEarned,
-          },
-        });
+    return this.prisma.$transaction(async (tx) => {
+      // pointsEarned nằm ngay trên dòng đánh giá nên phải biết trước review.create. Cặp (khách, sản phẩm) này chưa có
+      // đánh giá nào (unique chặn) nên sổ REVIEW của nó không đổi giữa lúc đọc và lúc ghi.
+      const pointsEarned = (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
+      const r = await tx.review.create({
+        data: {
+          userId,
+          productId: product.id,
+          orderId,
+          rating: dto.rating,
+          comment: dto.comment,
+          images: dto.images ?? [],
+          videoUrl: dto.videoUrl ?? null,
+          pointsEarned,
+        },
+      });
+      if (pointsEarned > 0) {
         await tx.pointsTransaction.create({
-          data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id },
+          data: { userId, delta: pointsEarned, reason: `REVIEW:${product.slug}`, refType: 'REVIEW', refId: r.id, expiresAt },
         });
         await tx.user.update({ where: { id: userId }, data: { pointsBalance: { increment: pointsEarned } } });
-        // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
-        // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
-        await this.recomputeRating(product.id, tx);
-        await this.analytics.record(tx, {
-          eventName: 'engagement_action',
-          userId,
-          platform: 'miniapp',
-          props: { action: 'review_created', productSlug: slug, pointsEarned },
-        });
-        return r;
-      });
-    } catch (err) {
-      // Race: 2 request đánh giá đồng thời — unique(userId,productId) chặn cái thứ hai.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
-        throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi.');
       }
-      throw err;
-    }
+      // Cập nhật rating denormalized cho Product (hiển thị sao trên card/PDP) — trong
+      // cùng transaction để tránh lệch dữ liệu nếu bước này lỗi sau khi review đã tạo.
+      await this.recomputeRating(product.id, tx);
+      await this.analytics.record(tx, {
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'review_created', productSlug: product.slug, pointsEarned },
+      });
+      return r;
+    });
+  }
 
-    return review;
+  /**
+   * Khách đã nhận thưởng đánh giá của sản phẩm này và còn giữ nó chưa. Q-30: thưởng chỉ lần đầu, nên xoá rồi tạo lại chỉ
+   * được thưởng lại khi lần xoá đã thu hồi đủ điểm đã thưởng (tạo, xoá, tạo lại ra đúng một lần thưởng). Điểm đã tiêu
+   * hết nên không thu hồi được, hay đã hết hạn và cron đã trừ, thì thưởng đó khách đã dùng rồi: tạo lại không thưởng
+   * thêm, không thì vòng tạo, tiêu điểm, xoá, tạo lại cho điểm vô hạn.
+   *
+   * Cộng mọi dòng sổ REVIEW của cặp (khách, sản phẩm): thưởng dương `REVIEW:<slug>`, thu hồi âm `REVIEW_DELETE:<id sản
+   * phẩm>`; còn dương nghĩa là còn phần thưởng chưa thu hồi. slug không đổi sau khi tạo sản phẩm (đồng bộ Pancake chỉ
+   * ghi slug lúc tạo).
+   */
+  private async rewardAlreadyKept(tx: Db, userId: string, product: { id: string; slug: string }): Promise<boolean> {
+    const rows = await tx.pointsTransaction.findMany({
+      where: {
+        userId,
+        refType: 'REVIEW',
+        reason: { in: [`REVIEW:${product.slug}`, `REVIEW_DELETE:${product.id}`] },
+      },
+      select: { delta: true },
+    });
+    return rows.reduce((sum, r) => sum + r.delta, 0) > 0;
+  }
+
+  /**
+   * Sửa đánh giá của chính người gọi (khoá theo userId+productId nên không thể sửa của người khác).
+   * Thay toàn bộ sao/nội dung/ảnh/video như lúc tạo; giữ nguyên điểm đã thưởng (pointsEarned còn
+   * được `remove` dùng để hoàn điểm), orderId và isVisible — sửa không gỡ được lệnh ẩn của admin.
+   */
+  private async updateOwn(userId: string, product: { id: string; slug: string }, dto: CreateReviewDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const r = await tx.review.update({
+        where: { userId_productId: { userId, productId: product.id } },
+        data: {
+          rating: dto.rating,
+          comment: dto.comment ?? null,
+          images: dto.images ?? [],
+          videoUrl: dto.videoUrl ?? null,
+        },
+      });
+      await this.recomputeRating(product.id, tx);
+      await this.analytics.record(tx, {
+        eventName: 'engagement_action',
+        userId,
+        platform: 'miniapp',
+        props: { action: 'review_updated', productSlug: product.slug, pointsEarned: 0 },
+      });
+      return r;
+    });
   }
 
   /** Tính lại ratingAvg + reviewCount cho 1 sản phẩm từ review hiển thị. */
@@ -171,27 +270,56 @@ export class ReviewsService {
       throw new ForbiddenException('Không có quyền xóa đánh giá này.');
     }
     await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng user TRƯỚC khi đọc hạn của dòng thưởng: cron hết hạn cũng khoá dòng này rồi mới trừ lô đã quá hạn.
+      // Đọc hạn khi chưa có khoá thì lô chạm hạn đúng lúc cron đang trừ nó vẫn bị coi là còn hạn, và thu hồi ghi sau
+      // đó trừ thêm lần hai. Số dư đọc cùng câu khoá để chặn thu hồi quá số dư.
+      const locked =
+        review.pointsEarned > 0
+          ? await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${review.userId} FOR UPDATE`
+          : [];
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn
       // bằng cách tạo review (+điểm) rồi xóa (unique(userId,productId) mở lại) rồi tạo lại.
-      if (review.pointsEarned > 0) {
-        await tx.pointsTransaction.create({
-          data: {
-            userId: review.userId,
-            delta: -review.pointsEarned,
-            reason: `REVIEW_DELETE:${review.productId}`,
-            refType: 'REVIEW',
-            refId: id,
-          },
-        });
-        await tx.user.update({
-          where: { id: review.userId },
-          data: { pointsBalance: { increment: -review.pointsEarned } },
-        });
+      // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
+      // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
+      if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
+        // Thu hồi tối đa phần lô đánh giá chưa mất theo sổ lô (lotRecoverable) và không quá số dư, nên số dư không bao
+        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi; không thu hồi được gì thì không ghi dòng nào (khác đơn hàng,
+        // xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất nên không có lượt xoá thứ hai). Điểm đã thưởng nằm
+        // ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
+        const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
+        const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
+        const take = Math.min(review.pointsEarned, recoverable ?? review.pointsEarned, balance);
+        if (take > 0) {
+          await tx.pointsTransaction.create({
+            data: {
+              userId: review.userId,
+              delta: -take,
+              reason: `REVIEW_DELETE:${review.productId}`,
+              refType: 'REVIEW',
+              refId: id,
+            },
+          });
+          // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
+          const dec = await tx.user.updateMany({
+            where: { id: review.userId, pointsBalance: { gte: take } },
+            data: { pointsBalance: { decrement: take } },
+          });
+          if (dec.count !== 1) throw new Error(`Xoá đánh giá ${id}: số dư đổi giữa chừng`);
+        }
       }
       await this.recomputeRating(review.productId, tx);
     });
     return { ok: true };
+  }
+
+  /** Dòng thưởng của đánh giá đã tới hạn chưa; cùng quy tắc `expiresAt <= now` với cron hết hạn. */
+  private async rewardExpired(tx: Prisma.TransactionClient, userId: string, reviewId: string): Promise<boolean> {
+    const credit = await tx.pointsTransaction.findFirst({
+      where: { userId, refType: 'REVIEW', refId: reviewId, delta: { gt: 0 } },
+      select: { expiresAt: true },
+    });
+    return credit?.expiresAt != null && credit.expiresAt.getTime() <= Date.now();
   }
 
   /** Admin ẩn/hiện review vi phạm (§6.13: ẩn KHÔNG xóa) — rating tính lại loại review ẩn. */

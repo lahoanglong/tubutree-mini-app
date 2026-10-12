@@ -20,9 +20,11 @@ export interface AuthUser {
   role: UserRole;
   tierId?: string | null;
   referralCode: string;
+  /** Điểm Xanh lô thường (có hạn, trần % khi dùng). Tổng khách thấy = pointsBalance + pointsConvertedBalance. */
   pointsBalance: number;
+  /** Điểm Xanh lô quy đổi từ xu cũ: không hết hạn, dùng ở thanh toán tới 100% giá trị hàng, không rút ra tiền. */
+  pointsConvertedBalance: number;
   walletBalance: number;
-  coinsBalance: number;
 }
 
 export interface AuthTokens {

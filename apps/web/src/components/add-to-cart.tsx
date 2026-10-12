@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { addToCart, formatVnd } from '@/lib/shop-client';
+import { ui } from '@/lib/guest-ui';
 
 interface Variation {
   id: string;
@@ -65,8 +66,10 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
   return (
     <div className="mt-4">
       {variations.length > 1 && (
-        <>
-          <div className="text-sm font-semibold">Phân loại</div>
+        <div role="group" aria-labelledby="variation-label">
+          <div id="variation-label" className="text-sm font-semibold text-stone-900">
+            Phân loại
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {variations.map((v) => {
               const out = v.stock <= 0;
@@ -74,48 +77,52 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
               return (
                 <button
                   key={v.id}
+                  type="button"
+                  aria-pressed={active}
                   onClick={() => setSelectedId(v.id)}
-                  className={`rounded-md border px-3 py-1.5 text-sm transition ${
-                    active ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-neutral-200'
-                  } ${out ? 'opacity-50 line-through' : ''}`}
+                  className={`min-h-11 rounded-control border px-4 text-sm transition ${
+                    active
+                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700'
+                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
+                  } ${out ? 'opacity-60 line-through' : ''}`}
                 >
                   {v.name} · {formatVnd(v.salePrice ?? v.retailPrice)}
                 </button>
               );
             })}
           </div>
-        </>
+        </div>
       )}
 
       <div className="mt-4 flex items-center gap-3">
-        <div className="flex items-center rounded-md border border-neutral-200">
+        <div className="flex items-center rounded-control border border-stone-450 bg-stone-0">
           <button
+            type="button"
             onClick={() => setQty((q) => Math.max(1, q - 1))}
-            className="px-3 py-2 text-lg"
-            aria-label="Giảm"
+            className="h-11 w-11 text-lg text-stone-800"
+            aria-label="Giảm số lượng"
           >
             −
           </button>
-          <span className="w-8 text-center">{qty}</span>
+          <span className="w-8 text-center text-stone-900" aria-live="polite">
+            {qty}
+          </span>
           <button
+            type="button"
             onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-            className="px-3 py-2 text-lg"
-            aria-label="Tăng"
+            className="h-11 w-11 text-lg text-stone-800"
+            aria-label="Tăng số lượng"
           >
             +
           </button>
         </div>
-        <button
-          onClick={onAdd}
-          disabled={busy || !available}
-          className="flex-1 rounded-md bg-primary-600 px-6 py-3 font-medium text-white transition hover:bg-primary-700 disabled:bg-neutral-300"
-        >
+        <button type="button" onClick={onAdd} disabled={busy || !available} className={`${ui.btnPrimary} flex-1`}>
           {!available ? 'Hết hàng' : busy ? 'Đang thêm…' : `Thêm vào giỏ · ${formatVnd(price * qty)}`}
         </button>
       </div>
 
       {msg && (
-        <p className="mt-3 text-sm text-leaf-700">
+        <p role="status" className={`mt-3 text-sm ${success ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg}{' '}
           {success && (
             <a href="/gio-hang" className="font-semibold underline">

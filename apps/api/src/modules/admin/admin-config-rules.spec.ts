@@ -10,6 +10,19 @@ const bad = (key: string, value: unknown) => expect(() => validateAdminConfigVal
  * positiveConfig) — admin bấm Lưu thấy "đã lưu" mà hệ thống vẫn chạy số cũ. Chặn ngay lúc ghi, báo rõ.
  */
 describe('validateAdminConfigValue', () => {
+  // C-054 (A1-032): admin tưởng đã tắt COD / đặt trần COD mà không code nào đọc khoá → chặn ghi và nói rõ.
+  it.each(['payment.cod_max_amount', 'payment.enabled_methods', 'loyalty.welcome_voucher_amount', 'rbac.admin_phones'])(
+    'khoá chết %s: từ chối ghi, thông báo nêu rõ không có tác dụng',
+    (key) => {
+      expect(() => validateAdminConfigValue(key, 1)).toThrow(BadRequestException);
+      expect(() => validateAdminConfigValue(key, 1)).toThrow(/không còn được hệ thống đọc/);
+    },
+  );
+
+  it('khoá thay thế đang sống vẫn ghi được (voucher.welcome_amount)', () => {
+    ok('voucher.welcome_amount', 50000);
+  });
+
   it('loyalty.checkin_points: đúng 7 số nguyên 0..100', () => {
     ok('loyalty.checkin_points', [1, 1, 1, 1, 1, 1, 2]);
     ok('loyalty.checkin_points', [0, 0, 0, 0, 0, 0, 100]);
@@ -39,6 +52,18 @@ describe('validateAdminConfigValue', () => {
     ok('loyalty.pos_member_daily_points_cap', 1000);
   });
 
+  // Cron huỷ đơn quá hạn thanh toán kẹp giá trị ngoài biên về 1/720 hoặc 24 — chặn lúc ghi để admin không thấy
+  // "đã lưu" một con số mà cron không chạy theo.
+  it('orders.pending_payment_ttl_hours: số nguyên 1..720 giờ', () => {
+    ok('orders.pending_payment_ttl_hours', 24);
+    ok('orders.pending_payment_ttl_hours', 1);
+    ok('orders.pending_payment_ttl_hours', 720);
+    bad('orders.pending_payment_ttl_hours', 0);
+    bad('orders.pending_payment_ttl_hours', 721);
+    bad('orders.pending_payment_ttl_hours', 1.5);
+    bad('orders.pending_payment_ttl_hours', '24');
+  });
+
   it('shipping.gomdon.config: kho + cân nặng mặc định hợp lệ', () => {
     ok('shipping.gomdon.config', {
       defaultWarehouse: { name: 'Kho', phone: '0900000000', address: '1 A', ward: 'P1', district: '', province: 'HCM' },
@@ -50,6 +75,44 @@ describe('validateAdminConfigValue', () => {
     bad('shipping.gomdon.config', { defaultWarehouse: { name: '', phone: '0900000000', address: 'a', ward: 'w', province: 'p' } });
     bad('shipping.gomdon.config', { defaultWarehouse: { name: 'Kho', phone: 'abc', address: 'a', ward: 'w', province: 'p' } });
     bad('shipping.gomdon.config', 'x');
+  });
+
+  it('voucher.* dạng số phải là số nguyên (đồng/ngày); khoảng do SystemConfigService kiểm', () => {
+    for (const k of ['voucher.welcome_amount', 'voucher.welcome_min_order', 'voucher.birthday_amount', 'voucher.winback_amount', 'voucher.winback_days']) {
+      ok(k, 30000);
+      bad(k, 30000.5);
+      bad(k, '30000');
+    }
+  });
+
+  it('voucher.milestones: mảng mốc {spend>0, reward>0} số nguyên, không trùng spend, ≤ 10 mốc', () => {
+    ok('voucher.milestones', [{ spend: 1_000_000, reward: 30_000 }, { spend: 3_000_000, reward: 100_000 }]);
+    ok('voucher.milestones', []);
+    bad('voucher.milestones', { spend: 1, reward: 1 });
+    bad('voucher.milestones', [{ spend: 0, reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: 0 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: -5 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000.5, reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: '1000000', reward: 30_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000 }]);
+    bad('voucher.milestones', [{ spend: 1_000_000, reward: 1 }, { spend: 1_000_000, reward: 2 }]);
+    bad('voucher.milestones', Array.from({ length: 11 }, (_, i) => ({ spend: (i + 1) * 1000, reward: 1000 })));
+    // Thưởng vượt mốc chi tiêu = lỗ mỗi lần cấp → nhiều khả năng nhầm cột.
+    bad('voucher.milestones', [{ spend: 30_000, reward: 1_000_000 }]);
+  });
+
+  // toShippingEta âm thầm ẩn dòng giao dự kiến khi max < min nên admin thấy "đã lưu" mà app không hiện gì.
+  it('ETA giao hàng: max không nhỏ hơn min hiện có; khoá đối ứng chưa đặt (null) thì bỏ qua', () => {
+    const v = (k: string, n: unknown, partner: unknown) => () => validateAdminConfigValue(k, n, partner);
+    expect(v('shipping.eta_max_days', 4, 2)).not.toThrow();
+    expect(v('shipping.eta_max_days', 2, 2)).not.toThrow();
+    expect(v('shipping.eta_max_days', 1, 2)).toThrow(BadRequestException);
+    expect(v('shipping.eta_max_days', 1, null)).not.toThrow();
+    expect(v('shipping.eta_max_days', 1, undefined)).not.toThrow();
+    expect(v('shipping.eta_min_days', 2, 4)).not.toThrow();
+    expect(v('shipping.eta_min_days', 5, 4)).toThrow(BadRequestException);
+    expect(v('shipping.eta_min_days', 5, 4)).toThrow(/shipping\.eta_max_days/);
+    expect(v('shipping.eta_min_days', 3.5, null)).toThrow(BadRequestException);
   });
 
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {

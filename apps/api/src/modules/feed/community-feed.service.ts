@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
+import { startOfVnDay } from '../../common/vn-time';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
 const LEVEL_NAMES: Record<number, string> = {
@@ -137,7 +138,8 @@ export interface CreateEventInput {
   coverUrl?: string;
   startAt: Date;
   endAt: Date;
-  rewardXu?: number;
+  /** Điểm Xanh thưởng người thắng (PD-3; cột rewardXu cũ chỉ còn cho sự kiện tạo trước gộp). */
+  rewardPoints?: number;
 }
 
 const FEED_INCLUDE = {
@@ -145,11 +147,12 @@ const FEED_INCLUDE = {
   category: { select: { slug: true, name: true, icon: true } },
   productTags: { include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } } },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
-  // comments đếm CÓ LỌC isRemoved: thẻ bài và màn chi tiết cùng hiện con số này, trong khi
-      // danh sách bình luận lại lọc bỏ bài đã gỡ — người đọc thấy "💬 5" cạnh "Trả lời (3)" và
-      // tưởng bị giấu nội dung.
-      _count: { select: { reactions: true, comments: { where: { isRemoved: false } } } },
 } as const;
+
+interface FeedCounts {
+  likes: Map<string, number>;
+  comments: Map<string, number>;
+}
 
 /** Hình dạng FeedPost sau khi include FEED_INCLUDE + reactions (dùng chung getFeed/getPost/eventPosts). */
 type FeedPostRow = Prisma.FeedPostGetPayload<{
@@ -188,7 +191,7 @@ export class CommunityFeedService {
    *     liên tục (+rep_answer mỗi lần) là lên top bảng xếp hạng trong vài phút.
    *  2. IDEMPOTENT: unique (userId, reason, refId) → retry/gọi lại cùng nguồn không cộng 2 lần.
    *  3. ĐẢO ĐƯỢC: xoá bài phải trừ lại đúng số đã cộng (xem reverseReputationForPost).
-   * Đếm-rồi-quyết nằm TRONG transaction Serializable — cùng pattern với trần thưởng xu ở
+   * Đếm-rồi-quyết nằm TRONG transaction Serializable — cùng pattern với trần thưởng Điểm Xanh ở
    * `CommunityRewardService.rewardWithDailyCap` — để 2 request dồn dập không cùng lọt trần.
    */
   async bumpReputation(userId: string, amount: number, reason: string, refId: string): Promise<void> {
@@ -196,8 +199,7 @@ export class CommunityFeedService {
     try {
       const thresholds = await this.config.get<number[]>('community.rep_thresholds', DEFAULT_REP_THRESHOLDS);
       const dailyCap = await this.config.get<number>('community.daily_rep_cap', 30);
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
+      const since = startOfVnDay();
       await this.prisma.$transaction(
         async (tx) => {
           const earnedToday = await tx.reputationEvent.aggregate({
@@ -341,16 +343,16 @@ export class CommunityFeedService {
       where.bestCommentId = null;
     }
     if (opts.tag) where.tags = { some: { tag: { slug: opts.tag } } };
-    // HẠN CHẾ ĐÃ BIẾT của sort 'popular': khoá sắp xếp là số tim — một con số THAY ĐỔI ĐƯỢC. Ai
-    // đó thả tim cho một bài ở trang 2 trong lúc người dùng đang xem trang 1 thì bài đó có thể
-    // nhảy lên và hiện lần thứ hai (hoặc một bài khác bị bỏ qua). Sửa triệt để cần cột likeCount
-    // vật chất hoá + keyset theo (likeCount, createdAt, id), tức phải bảo trì bộ đếm ở mọi lượt
-    // thả/bỏ tim — chưa làm vì rủi ro lệch bộ đếm lớn hơn phiền toái hiện tại.
+    // 'popular' sắp theo cột likeCount (bảo trì trong toggleReaction) nên không phải đếm cả bảng
+    // feed_reactions. HẠN CHẾ ĐÃ BIẾT: khoá sắp xếp là số tim — một con số THAY ĐỔI ĐƯỢC. Ai đó
+    // thả tim cho một bài ở trang 2 trong lúc người dùng đang xem trang 1 thì bài đó có thể nhảy
+    // lên và hiện lần thứ hai (hoặc một bài khác bị bỏ qua); keyset theo (likeCount, createdAt,
+    // id) mới triệt để, chưa làm. Cột chỉ để xếp hạng: số hiển thị vẫn đếm thật theo trang.
     const orderBy =
       opts.sort === 'popular'
         ? [
             { isPinned: 'desc' as const },
-            { reactions: { _count: 'desc' as const } },
+            { likeCount: 'desc' as const },
             { createdAt: 'desc' as const },
             { id: 'desc' as const },
           ]
@@ -364,8 +366,9 @@ export class CommunityFeedService {
     });
     const hasMore = posts.length > take;
     const page = hasMore ? posts.slice(0, take) : posts;
+    const counts = await this.countsForPage(page.map((p) => p.id));
     return {
-      posts: page.map((p) => this.toItem(p, userId)),
+      posts: page.map((p) => this.toItem(p, userId, counts)),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -382,7 +385,34 @@ export class CommunityFeedService {
     // UPDATE khoá đúng một dòng (ghi tuần tự trên bài viral), trong khi toItem() và FeedItem
     // KHÔNG hề trả `viewCount` ra — không màn nào hiển thị con số đó. Cột vẫn còn trong schema
     // cho báo cáo sau này; khi cần hãy đếm theo phiên/ngày hoặc gom batch thay vì ghi mỗi request.
-    return this.toItem(p, userId);
+    return this.toItem(p, userId, await this.countsForPage([p.id]));
+  }
+
+  /**
+   * Đếm tim/bình luận CHỈ cho các bài của trang hiện tại (theo index postId). Cách cũ dùng
+   * `_count` của include khiến Prisma LEFT JOIN hai subquery GROUP BY quét cả bảng reactions và
+   * comments mỗi lần tải feed (C-042). Bình luận đếm CÓ LỌC isRemoved: thẻ bài và màn chi tiết
+   * cùng hiện con số này, trong khi danh sách bình luận lại lọc bỏ bài đã gỡ — người đọc thấy
+   * "💬 5" cạnh "Trả lời (3)" và tưởng bị giấu nội dung.
+   */
+  private async countsForPage(postIds: string[]): Promise<FeedCounts> {
+    if (postIds.length === 0) return { likes: new Map(), comments: new Map() };
+    const [likes, comments] = await Promise.all([
+      this.prisma.feedReaction.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.feedComment.groupBy({
+        by: ['postId'],
+        where: { postId: { in: postIds }, isRemoved: false },
+        _count: { _all: true },
+      }),
+    ]);
+    return {
+      likes: new Map(likes.map((g) => [g.postId, g._count._all])),
+      comments: new Map(comments.map((g) => [g.postId, g._count._all])),
+    };
   }
 
   /** Danh mục cộng đồng đang hiển thị, sắp theo order — dùng cho tabs FE. */
@@ -394,7 +424,7 @@ export class CommunityFeedService {
     });
   }
 
-  private toItem(p: FeedPostRow, userId: string) {
+  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts) {
     return {
       id: p.id,
       kind: p.kind,
@@ -414,8 +444,8 @@ export class CommunityFeedService {
         salePrice: t.product.salePrice, basePrice: t.product.basePrice,
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
-      likeCount: p._count.reactions,
-      commentCount: p._count.comments,
+      likeCount: counts.likes.get(p.id) ?? 0,
+      commentCount: counts.comments.get(p.id) ?? 0,
       liked: p.reactions.length > 0,
       bestCommentId: p.bestCommentId ?? null,
       isOwner: p.userId === userId,
@@ -445,7 +475,7 @@ export class CommunityFeedService {
       }
       // App đã khoá nút nộp bài sau hạn, nhưng BE thì không: chỉ cần admin chưa bấm đóng sự
       // kiện là gọi thẳng API (hoặc dùng bản app cũ) vẫn nộp được bài muộn, và bài đó đủ tư
-      // cách được chọn trúng giải kèm rewardXu.
+      // cách được chọn trúng giải kèm rewardPoints.
       const now = new Date();
       if (event.startAt > now || event.endAt < now) {
         throw new BadRequestException('Sự kiện chưa mở hoặc đã hết hạn nộp bài.');
@@ -555,7 +585,7 @@ export class CommunityFeedService {
       this.logger.warn(`bumpReputation(approve) failed for ${post.userId}: ${(err as Error).message}`);
     }
     try {
-      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', {});
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_APPROVED', { post_id: post.id });
     } catch (err) {
       this.logger.warn(`notify(approve) failed ${post.id}: ${(err as Error).message}`);
     }
@@ -566,7 +596,7 @@ export class CommunityFeedService {
   async rejectPost(postId: string) {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
-    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm + xu), nên phải đảo điểm y như
+    // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm uy tín + Điểm Xanh thưởng), nên phải đảo điểm y như
     // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
@@ -610,11 +640,23 @@ export class CommunityFeedService {
     if (existing) {
       // deleteMany thay vì delete: hai thiết bị bấm cùng lúc thì kẻ thua gặp "record not found"
       // → 500 cho một thao tác thực ra đã thành công.
-      await this.prisma.feedReaction.deleteMany({ where: { postId, userId } });
+      await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.feedReaction.deleteMany({ where: { postId, userId } });
+        if (count > 0) {
+          await tx.feedPost.updateMany({
+            where: { id: postId, likeCount: { gt: 0 } },
+            data: { likeCount: { decrement: count } },
+          });
+        }
+      });
       return { liked: false };
     }
     try {
-      await this.prisma.feedReaction.create({ data: { postId, userId } });
+      // Cùng transaction để likeCount không lệch khi tạo tim thất bại (P2002 → rollback cả hai).
+      await this.prisma.$transaction([
+        this.prisma.feedReaction.create({ data: { postId, userId } }),
+        this.prisma.feedPost.update({ where: { id: postId }, data: { likeCount: { increment: 1 } } }),
+      ]);
       // Task 9: chỉ phát khi THẬT SỰ tạo được reaction ở request này — nhánh P2002 bên dưới nghĩa
       // là thiết bị khác đã tạo trước, không phải hành động của request này.
       await this.analytics.recordBestEffort({
@@ -637,8 +679,8 @@ export class CommunityFeedService {
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true } });
     // Chỉ bài ĐÃ DUYỆT mới bình luận được. Bài PENDING không hiện trên bảng tin nhưng trước
     // đây vẫn nhận bình luận nếu biết id — hai tài khoản của cùng một người hỏi–đáp trên bài
-    // vô hình đó để rút xu (100 xu/bình luận, 500 xu/câu trả lời hay nhất) mà không ai kiểm
-    // duyệt được. Xu tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
+    // vô hình đó để rút Điểm Xanh thưởng (bình luận, câu trả lời hay nhất) mà không ai kiểm
+    // duyệt được. Điểm Xanh tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     // Task 9: addComment luôn TẠO mới (không có nhánh xoá/toggle-off) — phát ngay sau khi ghi thành công.
@@ -661,6 +703,7 @@ export class CommunityFeedService {
           await this.notifications?.notify(post.userId, template, {
             author: answerer?.fullName ?? 'Thành viên',
             title: post.title ?? 'câu hỏi của bạn',
+            post_id: post.id,
           });
         } catch (err) {
           this.logger.warn(`notify(answer) failed for comment ${comment.id}: ${(err as Error).message}`);
@@ -684,7 +727,7 @@ export class CommunityFeedService {
     if (!post || post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.status === 'PENDING' && post.userId !== viewerId) throw new NotFoundException('Bài viết không tồn tại.');
     // Phân trang: trước đây cắt cứng ở 50 bình luận và không có đường xem tiếp — câu hỏi hot 80
-    // câu trả lời thì 30 người đã được cộng xu/uy tín nhưng không ai đọc được nội dung của họ,
+    // câu trả lời thì 30 người đã được cộng điểm thưởng/uy tín nhưng không ai đọc được nội dung của họ,
     // trong khi con số đếm vẫn nói 80. `id` là cuid (tăng dần theo thời gian tạo) nên đủ ổn định
     // làm khoá cursor cho thứ tự thời gian.
     const limit = Math.min(Math.max(take, 1), 100);
@@ -725,7 +768,7 @@ export class CommunityFeedService {
       where: { id: postId },
       select: { id: true, userId: true, kind: true, bestCommentId: true, status: true },
     });
-    // Cùng lý do với addComment: thưởng 500 xu chỉ được chi cho nội dung đã qua kiểm duyệt.
+    // Cùng lý do với addComment: thưởng Điểm Xanh cho câu trả lời hay nhất chỉ được chi cho nội dung đã qua kiểm duyệt.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
     if (post.kind !== 'QUESTION') throw new BadRequestException('Chỉ câu hỏi mới có câu trả lời hay nhất.');
     if (post.userId !== userId && role !== 'ADMIN') throw new ForbiddenException('Chỉ chủ bài mới chọn được.');
@@ -766,7 +809,7 @@ export class CommunityFeedService {
         this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
       }
       try {
-        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', {});
+        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', { post_id: postId });
       } catch (err) {
         this.logger.warn(`notify(best-answer) failed for comment ${commentId}: ${(err as Error).message}`);
       }
@@ -1018,13 +1061,6 @@ export class CommunityFeedService {
     });
   }
 
-  /** Chi tiết 1 sự kiện. */
-  async getEvent(id: string) {
-    const event = await this.prisma.communityEvent.findUnique({ where: { id } });
-    if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
-    return event;
-  }
-
   /** Bài tham gia sự kiện — lọc FeedPost PUBLISHED có meta.eventId khớp. */
   /**
    * Bài dự thi của một sự kiện, có phân trang.
@@ -1044,8 +1080,9 @@ export class CommunityFeedService {
     });
     const hasMore = rows.length > limit;
     const posts = hasMore ? rows.slice(0, limit) : rows;
+    const counts = await this.countsForPage(posts.map((p) => p.id));
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId)),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts)),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
   }
@@ -1065,7 +1102,7 @@ export class CommunityFeedService {
   }
 
   /**
-   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng TubuXu. Thưởng NON-FATAL:
+   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng Điểm Xanh. Thưởng NON-FATAL:
    * lỗi thưởng (vd trùng idempotency) không chặn việc chốt người thắng.
    *
    * Money-critical: CHỈ chốt được khi sự kiện còn OPEN. Vì reason thưởng nhúng userId
@@ -1078,7 +1115,7 @@ export class CommunityFeedService {
   async pickWinner(eventId: string, userId: string) {
     const event = await this.prisma.communityEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, status: true, rewardXu: true },
+      select: { id: true, status: true, rewardPoints: true },
     });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
@@ -1090,7 +1127,7 @@ export class CommunityFeedService {
     });
     if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
     try {
-      await this.reward.rewardEventWinner(userId, eventId, event.rewardXu);
+      await this.reward.rewardEventWinner(userId, eventId, event.rewardPoints);
     } catch (err) {
       this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
     }

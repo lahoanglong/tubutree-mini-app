@@ -74,7 +74,8 @@ export class CouponsService {
    * Ghi nhận đã dùng (gọi sau khi đặt đơn thành công).
    * B4: nhận tx? để chạy ATOMIC cùng transaction đặt đơn — chống race usageLimit.
    *  - updateMany với guard `usedCount < usageLimit` → bộ đếm atomic, count=0 nghĩa là hết lượt.
-   *  - bắt P2002 (couponId+orderId trùng) → coi như đã redeem (idempotent cho retry).
+   *  - đơn đã có redemption cho mã này (retry/double-submit) → no-op, KHÔNG đụng usedCount.
+   *    Không dựa vào bắt P2002: lỗi unique làm Postgres huỷ cả transaction checkout (C-061).
    *
    * Nếu KHÔNG được gọi trong 1 transaction có sẵn (tx=undefined — checkout.service.ts luôn
    * truyền tx, nhưng hàm này vẫn hỗ trợ gọi standalone), tự mở transaction riêng: advisory lock
@@ -111,17 +112,8 @@ export class CouponsService {
     if (!coupon) return;
     await this.assertScopeOwnership(coupon, userId, db);
 
-    if (coupon.usageLimit != null) {
-      const hit = await db.coupon.updateMany({
-        where: { id: coupon.id, usedCount: { lt: coupon.usageLimit } },
-        data: { usedCount: { increment: 1 } },
-      });
-      if (hit.count === 0) {
-        throw new BadRequestException('Mã giảm giá đã hết lượt sử dụng.');
-      }
-    }
-
-    if (coupon.perUserLimit != null && coupon.perUserLimit > 0) {
+    const limitPerUser = coupon.perUserLimit != null && coupon.perUserLimit > 0;
+    if (limitPerUser) {
       // Race cũ: validateAndCompute() check pre-flight KHÔNG atomic, và count()+create() ở đây
       // cũng không atomic với nhau → 2 checkout song song cùng user (2 đơn khác nhau) cùng đọc
       // usedByUser < limit rồi cùng tạo CouponRedemption với orderId khác nhau → UNIQUE(couponId,
@@ -134,6 +126,16 @@ export class CouponsService {
       // stock, ví, điểm...) — nâng Serializable toàn bộ sẽ mở rộng rủi ro serialization-failure ra
       // ngoài phạm vi coupon, trong khi advisory lock chỉ khoá đúng cặp (couponId,userId) liên quan.
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${coupon.id}), hashtext(${userId}))`;
+    }
+
+    // Đọc SAU advisory lock: request cùng đơn đi trước đã commit thì ở đây thấy redemption của nó.
+    const existing = await db.couponRedemption.findUnique({
+      where: { couponId_orderId: { couponId: coupon.id, orderId } },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    if (limitPerUser) {
       const usedByUser = await db.couponRedemption.count({
         where: { couponId: coupon.id, userId },
       });
@@ -142,25 +144,28 @@ export class CouponsService {
       }
     }
 
-    try {
-      await db.couponRedemption.create({
-        data: { couponId: coupon.id, userId, orderId },
+    // ON CONFLICT DO NOTHING: request cùng đơn chạy song song (không có perUserLimit để xếp hàng)
+    // chờ dòng của kẻ thắng rồi không ghi gì, thay vì ném P2002 làm hỏng transaction.
+    const inserted = await db.couponRedemption.createMany({
+      data: [{ couponId: coupon.id, userId, orderId }],
+      skipDuplicates: true,
+    });
+    if (inserted.count === 0) return;
+
+    if (coupon.usageLimit != null) {
+      const hit = await db.coupon.updateMany({
+        where: { id: coupon.id, usedCount: { lt: coupon.usageLimit } },
+        data: { usedCount: { increment: 1 } },
       });
-    } catch (err) {
-      // P2002 = unique (couponId, orderId): retry/double-submit cùng đơn → no-op.
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        return;
+      if (hit.count === 0) {
+        throw new BadRequestException('Mã giảm giá đã hết lượt sử dụng.');
       }
-      throw err;
     }
   }
 
   /**
    * Hoàn coupon khi đơn bị hủy/hoàn trước khi hoàn tất — đối xứng với redeem(). Trước đây
-   * không có hàm này: hủy/trả đơn hoàn ví/xu/điểm/hoa hồng/stock đầy đủ nhưng CouponRedemption
+   * không có hàm này: hủy/trả đơn hoàn ví/điểm/hoa hồng/stock đầy đủ nhưng CouponRedemption
    * + usedCount vẫn còn nguyên → voucher usageLimit=1 (birthday/welcome/referral...) bị đốt
    * vĩnh viễn cho một đơn chưa từng thực sự hoàn tất (P1, docs/2026-09-08-review-progress.md).
    * Idempotent: không có redemption nào bị xóa (đã release trước đó, hoặc đơn không thực sự

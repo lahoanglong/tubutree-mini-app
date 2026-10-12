@@ -1,19 +1,12 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Truck, Leaf, Ticket, X } from 'lucide-react';
+import { ShoppingBag, Truck, Leaf } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import {
-  getCart,
-  updateCartItem,
-  removeCartItem,
-  formatVnd,
-  getMyCoupons,
-  applyCoupon,
-  removeCoupon,
-} from '@/lib/shop-client';
+import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
+import { CouponBox } from '@/components/coupon-box';
+import { ui } from '@/lib/guest-ui';
 
 export default function CartPage() {
   const { status } = useAuth();
@@ -39,7 +32,7 @@ export default function CartPage() {
     return (
       <Shell>
         <div className="py-20 text-center">
-          <p className="text-neutral-400">Đang tải…</p>
+          <p className="text-stone-600">Đang tải…</p>
         </div>
       </Shell>
     );
@@ -49,8 +42,8 @@ export default function CartPage() {
     return (
       <Shell>
         <div className="py-20 text-center">
-          <p className="text-neutral-600">Vui lòng đăng nhập để xem giỏ hàng.</p>
-          <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
+          <p className="text-stone-700">Vui lòng đăng nhập để xem giỏ hàng.</p>
+          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
             Đăng nhập với Zalo
           </Link>
         </div>
@@ -63,26 +56,51 @@ export default function CartPage() {
 
   return (
     <Shell>
+      {cart && (cart.unavailableItems?.length ?? 0) > 0 && (
+        <div
+          role="status"
+          className="mb-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+        >
+          <p className="font-semibold">{cart.unavailableItems!.length} sản phẩm đã ngừng bán</p>
+          <p className="mt-0.5">Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.</p>
+          <ul className="mt-2 space-y-1">
+            {cart.unavailableItems!.map((it) => (
+              <li key={it.id} className="flex items-center justify-between gap-2">
+                <span className="line-through">
+                  {it.productName}
+                  {it.variationName ? ` · ${it.variationName}` : ''} × {it.quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => remove.mutate(it.id)}
+                  disabled={remove.isPending && remove.variables === it.id}
+                  aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
+                  className="inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-semibold underline disabled:opacity-50"
+                >
+                  Xoá
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {cartQ.isLoading ? (
-        <p className="py-10 text-center text-neutral-400">Đang tải giỏ hàng…</p>
+        <p className="py-10 text-center text-stone-600">Đang tải giỏ hàng…</p>
       ) : cartQ.isError ? (
         <div className="py-20 text-center">
-          <p className="text-neutral-600">Không tải được giỏ hàng.</p>
-          <button
-            onClick={() => void cartQ.refetch()}
-            className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white"
-          >
+          <p className="text-stone-700">Không tải được giỏ hàng.</p>
+          <button type="button" onClick={() => void cartQ.refetch()} className={`${ui.btnPrimary} mt-4`}>
             Thử lại
           </button>
         </div>
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 shadow-sm ring-8 ring-leaf-50/50">
-            <ShoppingBag className="h-8 w-8 text-primary-600 stroke-[1.5]" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
+            <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
           </div>
-          <p className="mt-4 font-semibold text-neutral-800">Giỏ hàng đang trống</p>
-          <p className="mt-1 text-sm text-neutral-500">Khám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree</p>
-          <Link href="/" className="mt-5 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white shadow-sm hover:bg-primary-700 transition">
+          <h2 className="mt-4 font-display text-lg font-semibold text-stone-900">Giỏ hàng đang trống</h2>
+          <p className="mt-1 text-sm text-stone-600">Khám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree</p>
+          <Link href="/" className={`${ui.btnPrimary} mt-5`}>
             Khám phá sản phẩm
           </Link>
         </div>
@@ -90,86 +108,93 @@ export default function CartPage() {
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2">
             {!cart.freeship && remainingFreeship > 0 && (
-              <div className="mb-3 flex items-center gap-2 rounded-xl bg-leaf-50 px-3.5 py-2.5 text-sm text-leaf-800 border border-leaf-200">
-                <Truck className="h-4 w-4 text-leaf-600 shrink-0" />
-                <span>Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí vận chuyển</span>
+              <div className="mb-3 flex items-center gap-2 rounded-card border border-forest-200 bg-forest-50 px-4 py-3 text-sm text-forest-800">
+                <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <span>
+                  Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí vận chuyển
+                </span>
               </div>
             )}
-            <div className="divide-y rounded-lg border border-neutral-100 bg-white">
+            <div className={`divide-y divide-stone-200 ${ui.card}`}>
               {cart.items.map((it) => (
                 <div key={it.id} className="flex gap-3 p-3">
-                  <div className="flex h-16 w-16 flex-none items-center justify-center rounded bg-leaf-50 text-2xl overflow-hidden">
+                  <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
                     {it.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.thumbnail} alt={it.productName} className="h-full w-full rounded object-cover" />
+                      <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
                     ) : (
-                      <Leaf className="h-6 w-6 text-leaf-600" />
+                      <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
                     )}
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{it.productName}</div>
-                    <div className="text-xs text-neutral-400">{it.variationName}</div>
-                    <div className="mt-1 font-semibold text-clay-700">{formatVnd(it.unitPrice)}</div>
-                    <div className="mt-2 flex items-center gap-3">
-                      <div className="flex items-center rounded border border-neutral-200 text-sm">
+                    <div className="text-sm font-medium text-stone-900">{it.productName}</div>
+                    <div className="text-xs text-stone-600">{it.variationName}</div>
+                    <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2">
+                      <div className="flex items-center rounded-control border border-stone-450 text-sm">
                         <button
+                          type="button"
                           onClick={() => update.mutate({ id: it.id, q: Math.max(1, it.quantity - 1) })}
                           disabled={busyItemId === it.id}
-                          className="px-2 py-1 disabled:opacity-40"
+                          aria-label={`Giảm số lượng ${it.productName}`}
+                          className="h-11 w-11 text-lg disabled:opacity-40"
                         >
                           −
                         </button>
-                        <span className="w-7 text-center">{it.quantity}</span>
+                        <span className="w-7 text-center text-stone-900" aria-live="polite">
+                          {it.quantity}
+                        </span>
                         <button
+                          type="button"
                           onClick={() => update.mutate({ id: it.id, q: Math.min(it.stock, it.quantity + 1) })}
                           disabled={busyItemId === it.id}
-                          className="px-2 py-1 disabled:opacity-40"
+                          aria-label={`Tăng số lượng ${it.productName}`}
+                          className="h-11 w-11 text-lg disabled:opacity-40"
                         >
                           +
                         </button>
                       </div>
                       <button
+                        type="button"
                         onClick={() => remove.mutate(it.id)}
                         disabled={busyItemId === it.id}
-                        className="text-xs text-red-500 disabled:opacity-40"
+                        aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
+                        className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40"
                       >
                         Xóa
                       </button>
                     </div>
                     {failedItemId === it.id && (
-                      <p className="mt-1 text-xs text-red-600">
+                      <p role="alert" className="mt-1 text-xs text-danger-fg">
                         {(update.error ?? remove.error) instanceof Error
                           ? (update.error ?? remove.error)?.message
                           : 'Cập nhật giỏ hàng thất bại.'}
                       </p>
                     )}
                   </div>
-                  <div className="flex-none font-semibold">{formatVnd(it.total)}</div>
+                  <div className="flex-none font-semibold text-stone-900">{formatVnd(it.total)}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="h-fit rounded-lg border border-neutral-100 bg-white p-4">
+          <div className={`h-fit p-4 ${ui.card}`}>
             <div className="flex justify-between text-sm">
-              <span className="text-neutral-600">Tạm tính</span>
-              <span>{formatVnd(cart.subtotal)}</span>
+              <span className="text-stone-600">Tạm tính</span>
+              <span className="text-stone-900">{formatVnd(cart.subtotal)}</span>
             </div>
             {cart.discount > 0 && (
-              <div className="mt-1 flex justify-between text-sm text-leaf-700">
+              <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá{cart.couponCode ? ` (${cart.couponCode})` : ''}</span>
                 <span>-{formatVnd(cart.discount)}</span>
               </div>
             )}
             <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} />
-            <div className="mt-3 flex justify-between border-t pt-3 font-bold">
+            <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span className="text-clay-700">{formatVnd(cart.subtotal - cart.discount)}</span>
+              <span>{formatVnd(cart.subtotal - cart.discount)}</span>
             </div>
-            <Link
-              href="/thanh-toan"
-              className="mt-4 block rounded-md bg-primary-600 px-6 py-3 text-center font-medium text-white hover:bg-primary-700"
-            >
+            <Link href="/thanh-toan" className={`${ui.btnPrimary} mt-4 w-full`}>
               Thanh toán ({cart.itemCount})
             </Link>
           </div>
@@ -182,99 +207,11 @@ export default function CartPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className="text-sm text-primary-600">← Tiếp tục mua sắm</Link>
-      <h1 className="mt-3 text-xl font-bold">Giỏ hàng</h1>
+      <Link href="/" className={ui.backLink}>
+        ← Tiếp tục mua sắm
+      </Link>
+      <h1 className={`mt-1 ${ui.pageTitle}`}>Giỏ hàng</h1>
       <div className="mt-4">{children}</div>
     </main>
-  );
-}
-
-/**
- * Chọn/nhập mã giảm giá.
- *
- * Web trước đây chỉ HIỂN THỊ `cart.discount` mà không có chỗ nào áp mã, còn Mini App thì có đủ:
- * cùng một giỏ, khách có mã WELCOME30 trong ví mà mua trên web vẫn trả nguyên giá — rồi khiếu
- * nại, CSKH phải huỷ đơn tạo lại.
- */
-function CouponBox({ currentCode, subtotal }: { currentCode: string | null; subtotal: number }) {
-  const qc = useQueryClient();
-  const [code, setCode] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-  const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
-
-  const apply = useMutation({
-    mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
-    onSuccess: (cart) => {
-      setErr(null);
-      setCode('');
-      qc.setQueryData(['cart'], cart);
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không áp được mã'),
-  });
-  const drop = useMutation({
-    mutationFn: removeCoupon,
-    onSuccess: (cart) => qc.setQueryData(['cart'], cart),
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không bỏ được mã'),
-  });
-  const busy = apply.isPending || drop.isPending;
-
-  return (
-    <div className="mt-3 border-t pt-3">
-      {currentCode ? (
-        <div className="flex items-center justify-between rounded-md border border-dashed border-clay-500 bg-clay-50 px-3 py-2">
-          <span className="flex items-center gap-2 text-sm font-semibold text-clay-800">
-            <Ticket className="h-4 w-4" /> {currentCode}
-          </span>
-          <button
-            type="button"
-            onClick={() => drop.mutate()}
-            disabled={busy}
-            aria-label="Bỏ mã giảm giá"
-            className="text-neutral-500 disabled:opacity-50"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="flex gap-2">
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Nhập mã ưu đãi"
-              className="min-w-0 flex-1 rounded border border-neutral-200 px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => apply.mutate(code)}
-              disabled={!code.trim() || busy}
-              className="rounded bg-primary-600 px-3 py-2 text-sm font-medium text-white disabled:bg-neutral-300"
-            >
-              Áp dụng
-            </button>
-          </div>
-          {(couponsQ.data?.length ?? 0) > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {couponsQ.data!.slice(0, 6).map((c) => {
-                const notEligible = c.minOrder != null && subtotal < c.minOrder;
-                return (
-                  <button
-                    key={c.code}
-                    type="button"
-                    disabled={notEligible || busy}
-                    onClick={() => apply.mutate(c.code)}
-                    title={notEligible ? `Cần đơn tối thiểu ${formatVnd(c.minOrder!)}` : undefined}
-                    className="rounded-md border border-dashed border-clay-500 px-2 py-1 text-xs font-semibold text-clay-800 disabled:opacity-50"
-                  >
-                    {c.code}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
-    </div>
   );
 }

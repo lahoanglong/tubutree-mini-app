@@ -3,6 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate } from '../../common/vn-time';
 
 /**
  * Remarketing reminders: nhắc user quay lại app.
@@ -31,7 +33,7 @@ export class RemarketingService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi notify từng giỏ đã được
    * cô lập ở try/catch trong vòng lặp bên dưới.
    */
-  @Cron('0 * * * *')
+  @Cron('0 * * * *', { timeZone: CRON_TZ })
   async sendCartAbandonReminders(): Promise<void> {
     try {
       const minH = await this.config.get<number>('remarketing.cart_abandon_min_hours', 6);
@@ -107,7 +109,7 @@ export class RemarketingService {
    * unhandledRejection, Node 20 mặc định crash cả process. Lỗi notify từng coupon đã được cô lập
    * ở try/catch trong vòng lặp bên dưới.
    */
-  @Cron('0 5 * * *')
+  @Cron('0 5 * * *', { timeZone: CRON_TZ })
   async sendVoucherExpiryReminders(): Promise<void> {
     try {
       const days = await this.config.get<number>('remarketing.voucher_expiry_days', 3);
@@ -139,7 +141,7 @@ export class RemarketingService {
         try {
           await this.notifications.notify(meta.userId, 'VOUCHER_EXPIRING', {
             code: c.code,
-            expires: c.endAt.toLocaleDateString('vi-VN'),
+            expires: formatVnDate(c.endAt),
           });
           sent++;
         } catch (err) {

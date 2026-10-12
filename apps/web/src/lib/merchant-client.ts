@@ -139,8 +139,8 @@ export const removeResellProduct = (productId: string) =>
   apiFetch(`/merchant/resell-products/${productId}`, { method: 'DELETE' });
 
 /**
- * Một dòng trong `data` của GET /merchant/orders: nguyên Prisma `Order` kèm include `items` + `user`
- * (merchant.service.listMerchantOrders) — cùng entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ
+ * Một dòng trong `data` của GET /merchant/orders: tập field whitelist (MERCHANT_ORDER_SELECT trong
+ * merchant.service.ts — không có note/invoiceRequest/userId/referrerUserId) — cùng entity Order mà admin-client.ts (AdminOrder) mô tả, chỉ
  * khác là đơn ở đây còn cần `shippingAddress` để đối tác đóng gói/ghi vận đơn. Tái dùng AdminOrderItem
  * cho `items` — tránh khai trùng một interface item thứ hai cho cùng một shape.
  */
@@ -151,7 +151,6 @@ export interface MerchantOrder {
   total: number;
   paymentMethod?: string;
   paymentStatus?: string;
-  note?: string | null;
   createdAt: string;
   shippingAddress?: {
     recipient?: string;
@@ -162,7 +161,6 @@ export interface MerchantOrder {
     province?: string;
   } | null;
   user?: {
-    id: string;
     phone: string | null;
     fullName: string | null;
   } | null;

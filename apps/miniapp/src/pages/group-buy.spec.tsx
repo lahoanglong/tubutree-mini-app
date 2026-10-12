@@ -1,0 +1,211 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { GroupBuy } from '../services/groupbuy-api';
+import { formatVnd } from '../utils/format';
+
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  openSnackbar: vi.fn(),
+  login: vi.fn(),
+  listGroupBuys: vi.fn(),
+  joinGroupBuy: vi.fn(),
+  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
+}));
+
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/group-buy', search: '', state: null }),
+  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+}));
+vi.mock('../services/groupbuy-api', () => ({ listGroupBuys: mocks.listGroupBuys, joinGroupBuy: mocks.joinGroupBuy }));
+vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../store/auth', () => ({
+  useAuthStore: (sel?: (s: unknown) => unknown) => {
+    const state = { status: mocks.auth.status, login: mocks.login };
+    return sel ? sel(state) : state;
+  },
+}));
+
+import GroupBuyPage from './group-buy';
+
+const HOUR = 3600 * 1000;
+const GROUP = (id: string, over: Partial<GroupBuy> = {}): GroupBuy => ({
+  id,
+  product: { name: `Sản phẩm ${id}`, slug: `sp-${id}`, thumbnail: `https://img.test/${id}.jpg` },
+  targetSize: 5,
+  currentSize: 2,
+  unitPrice: 80_000,
+  basePrice: 100_000,
+  discountPct: 20,
+  status: 'OPEN',
+  expiresAt: new Date(Date.now() + 2.5 * HOUR).toISOString(),
+  joined: false,
+  ...over,
+});
+
+function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <GroupBuyPage />
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.auth.status = 'authenticated';
+  mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
+  mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
+});
+
+describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
+  it('hiện tên, giá nhóm, giá gốc, % giảm, số người và thời hạn của từng nhóm', async () => {
+    renderPage();
+    expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
+    expect(screen.getAllByText(formatVnd(80_000))).toHaveLength(2);
+    expect(screen.getAllByText(formatVnd(100_000))).toHaveLength(2);
+    expect(screen.getAllByText('−20%')).toHaveLength(2);
+    expect(screen.getAllByText('2/5 người · còn 2 giờ')).toHaveLength(2);
+  });
+
+  it('bấm ảnh sản phẩm mở trang sản phẩm', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByAltText('Sản phẩm a'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-a');
+  });
+
+  it('đã đăng nhập, chưa tham gia: bấm nút gửi đúng id, báo "Đã tham gia nhóm" rồi tải lại danh sách', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm 🛒', type: 'success' }),
+    );
+    await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
+  });
+
+  it('nhóm đủ người (SUCCESS): báo mã giảm giá đã vào ví', async () => {
+    mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 5, status: 'SUCCESS' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({
+        text: '🎉 Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.',
+        type: 'success',
+      }),
+    );
+  });
+
+  it('tham gia lỗi: hiện thông báo lỗi và không tải lại danh sách', async () => {
+    mocks.joinGroupBuy.mockRejectedValue(new Error('Nhóm đã hết hạn'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Nhóm đã hết hạn', type: 'error' }));
+    expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
+  });
+
+  it('đã tham gia: nút "Đã tham gia" bị khoá', async () => {
+    renderPage();
+    const joined = await screen.findByRole('button', { name: 'Đã tham gia' });
+    expect(joined).toBeDisabled();
+    fireEvent.click(joined);
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('chưa đăng nhập: nút "Đăng nhập để tham gia" gọi login, không gửi yêu cầu tham gia, kể cả nhóm đã joined', async () => {
+    mocks.auth.status = 'anonymous';
+    renderPage();
+    const buttons = await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' });
+    expect(buttons).toHaveLength(2);
+    expect(buttons[1]).not.toBeDisabled();
+    fireEvent.click(buttons[0]!);
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('đang gửi tham gia: bấm lại không gửi thêm', async () => {
+    mocks.joinGroupBuy.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' }));
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+  });
+
+  it('chưa có nhóm nào: hiện trạng thái trống, "Khám phá sản phẩm" sang /browse', async () => {
+    mocks.listGroupBuys.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText('Chưa có nhóm mua chung nào')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Khám phá sản phẩm' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+  });
+
+  it('lỗi tải: báo lỗi và Thử lại tải lại', async () => {
+    mocks.listGroupBuys.mockRejectedValueOnce(new Error('mất mạng')).mockResolvedValue([GROUP('a')]);
+    renderPage();
+    expect(await screen.findByText('mất mạng')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
+  });
+});
+
+describe('GroupBuyPage — tiêu đề, vùng chạm, thanh tiến độ (C-076, C-114)', () => {
+  it('có đúng một h1 "Mua chung giá tốt" ở mọi trạng thái', async () => {
+    mocks.listGroupBuys.mockReturnValue(new Promise(() => {}));
+    const loading = renderPage();
+    expect(loading.container.querySelectorAll('h1')).toHaveLength(1);
+    loading.unmount();
+
+    mocks.listGroupBuys.mockRejectedValue(new Error('mất mạng'));
+    const failed = renderPage();
+    await screen.findByText('mất mạng');
+    expect(failed.container.querySelectorAll('h1')).toHaveLength(1);
+    failed.unmount();
+
+    mocks.listGroupBuys.mockResolvedValue([]);
+    const empty = renderPage();
+    await screen.findByText('Chưa có nhóm mua chung nào');
+    expect(empty.container.querySelectorAll('h1')).toHaveLength(1);
+    empty.unmount();
+
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a')]);
+    const loaded = renderPage();
+    await screen.findByText('Sản phẩm a');
+    expect(loaded.container.querySelectorAll('h1')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Mua chung giá tốt');
+  });
+
+  it('nút tham gia cao >= 44px', async () => {
+    renderPage();
+    const join = await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    expect(Number.parseFloat(join.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it('ảnh sản phẩm là nút thật (bàn phím) và có tên là tên sản phẩm', async () => {
+    renderPage();
+    const open = await screen.findByRole('button', { name: 'Sản phẩm a' });
+    expect(open.tagName).toBe('BUTTON');
+  });
+
+  it('thanh tiến độ giữ đúng phần trăm (2/5 = 40%) và nhóm không có chỉ tiêu thì 0%', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('z', { targetSize: 0, currentSize: 3 })]);
+    renderPage();
+    await screen.findByText('Sản phẩm a');
+    const fills = screen.getAllByTestId('progress-fill');
+    expect(fills[0]!.style.width).toBe('40%');
+    expect(fills[1]!.style.width).toBe('0%');
+  });
+
+  it('ảnh thay thế khi không có ảnh sản phẩm vẫn là nút mở sản phẩm', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { product: { name: 'Sản phẩm a', slug: 'sp-a', thumbnail: null } })]);
+    renderPage();
+    const open = await screen.findByRole('button', { name: 'Sản phẩm a' });
+    fireEvent.click(open);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-a');
+  });
+});

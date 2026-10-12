@@ -3,6 +3,67 @@
 const BASE =
   process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
 
+/**
+ * Mọi request SSR đi ra từ cùng một IP container web, nên nếu bị đếm như khách thì cả site chia
+ * chung một bộ đếm throttle. API miễn throttle khi header khớp THROTTLE_BYPASS_TOKEN. Chỉ gửi ở
+ * phía server: file này cũng được bundle cho client (formatVnd), và biến không có tiền tố
+ * NEXT_PUBLIC_ nên ở trình duyệt vốn đã rỗng — kiểm `window` để không bao giờ phụ thuộc vào đó.
+ */
+function serverInit(next: { revalidate: number }): RequestInit {
+  const token = typeof window === 'undefined' ? process.env.THROTTLE_BYPASS_TOKEN : undefined;
+  return token ? { next, headers: { 'x-throttle-bypass': token } } : { next };
+}
+
+/** API trả lỗi tạm thời (429/5xx) hoặc không kết nối được — khác hẳn với "không tồn tại". */
+export class ApiUnavailableError extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number | null,
+    options?: { cause?: unknown },
+  ) {
+    super(`API ${path} không sẵn sàng (${status ?? 'mất kết nối'})`, options);
+    this.name = 'ApiUnavailableError';
+  }
+}
+
+/**
+ * Lấy một tài nguyên cho trang chi tiết. Chỉ 404 mới trả null (trang gọi notFound()); lỗi
+ * khác ném ra để Next hiện error boundary và ISR giữ bản đã render, thay vì báo "không tìm
+ * thấy" cho Googlebot với một sản phẩm còn bán chỉ vì API đang 429/5xx.
+ */
+async function fetchDetail<T>(path: string, revalidate: number): Promise<T | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, serverInit({ revalidate }));
+  } catch (err) {
+    throw new ApiUnavailableError(path, null, { cause: err });
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiUnavailableError(path, res.status);
+  return (await res.json()) as T;
+}
+
+/**
+ * Lấy danh sách cho trang ISR. Lỗi lúc runtime phải ném: trả [] sẽ khiến Next lưu bản rỗng tới hết
+ * revalidate, còn ném thì Next giữ bản đã render tốt. Riêng `next build` thường chạy khi API chưa
+ * lên, nên lúc đó trả [] để build không hỏng (trang được tái tạo ở runtime sau đó).
+ */
+async function fetchList<T>(path: string, revalidate: number, select: (json: unknown) => T[]): Promise<T[]> {
+  const building = process.env.NEXT_PHASE === 'phase-production-build';
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, serverInit({ revalidate }));
+  } catch (err) {
+    if (building) return [];
+    throw new ApiUnavailableError(path, null, { cause: err });
+  }
+  if (!res.ok) {
+    if (building) return [];
+    throw new ApiUnavailableError(path, res.status);
+  }
+  return select(await res.json());
+}
+
 export interface ProductCard {
   id: string;
   slug: string;
@@ -44,58 +105,31 @@ interface Page<T> {
   meta: { page: number; limit: number; total: number };
 }
 
-/** Fetch catalog server-side (ISR 5 phút). Trả mảng rỗng nếu API chưa chạy. */
+/** Fetch catalog server-side (ISR 5 phút). Lỗi API: xem fetchList. */
 export async function getProducts(params: Record<string, string> = {}): Promise<ProductCard[]> {
   const qs = new URLSearchParams({ limit: '30', ...params }).toString();
-  try {
-    const res = await fetch(`${BASE}/products?${qs}`, { next: { revalidate: 300 } });
-    if (!res.ok) return [];
-    const json = (await res.json()) as Page<ProductCard>;
-    return json.data;
-  } catch {
-    return [];
-  }
+  return fetchList<ProductCard>(`/products?${qs}`, 300, (json) => (json as Page<ProductCard>).data);
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
-  try {
-    const res = await fetch(`${BASE}/products/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as ProductDetail;
-  } catch {
-    return null;
-  }
+  return fetchDetail<ProductDetail>(`/products/${slug}`, 300);
 }
 
 export async function getBrands(): Promise<{ brand: string; count: number }[]> {
-  try {
-    const res = await fetch(`${BASE}/brands`, { next: { revalidate: 600 } });
-    if (!res.ok) return [];
-    return (await res.json()) as { brand: string; count: number }[];
-  } catch {
-    return [];
-  }
+  return fetchList<{ brand: string; count: number }>('/brands', 600, (json) => json as { brand: string; count: number }[]);
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
-  try {
-    const res = await fetch(`${BASE}/storefront/public/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as StorefrontDetail;
-  } catch {
-    return null;
-  }
+  return fetchDetail<StorefrontDetail>(`/storefront/public/${slug}`, 300);
 }
 
-/** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Mảng rỗng nếu API chưa chạy. */
+/** Danh sách nhẹ gian hàng đã đăng, dùng cho sitemap.ts. Lỗi API: xem fetchList. */
 export async function getStorefrontList(): Promise<{ slug: string; updatedAt: string }[]> {
-  try {
-    const res = await fetch(`${BASE}/storefront/public-list`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    return (await res.json()) as { slug: string; updatedAt: string }[];
-  } catch {
-    return [];
-  }
+  return fetchList<{ slug: string; updatedAt: string }>(
+    '/storefront/public-list',
+    3600,
+    (json) => json as { slug: string; updatedAt: string }[],
+  );
 }
 
 export interface StorefrontItem {
@@ -194,12 +228,38 @@ export interface BrandDetail {
 }
 
 export async function getBrand(slug: string): Promise<BrandDetail | null> {
+  return fetchDetail<BrandDetail>(`/brand/public/${slug}`, 300);
+}
+
+/** Thông tin liên hệ hiển thị ở chân trang. */
+export interface SupportContact {
+  hotline: string;
+  email: string;
+  /** Chỉ có khi admin đã cấu hình tên Zalo OA; chưa có OA thì không có trường (Q-17: ẩn). */
+  zaloOaName?: string;
+}
+
+/** Khớp giá trị mặc định của API (system-config.controller: support.hotline / support.email). */
+export const DEFAULT_SUPPORT: SupportContact = { hotline: '0899 149 229', email: 'tubutree@gmail.com' };
+
+/**
+ * Hotline/email do admin cấu hình (GET /config/public → support). Chân trang nằm trên MỌI trang
+ * nên không được để API chậm/hỏng làm sập hay làm trống nó: lỗi gì cũng rơi về giá trị mặc định,
+ * và trường admin để trống (null) chỉ thay đúng trường đó.
+ */
+export async function getPublicSupport(): Promise<SupportContact> {
   try {
-    const res = await fetch(`${BASE}/brand/public/${slug}`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as BrandDetail;
+    const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
+    if (!res.ok) return DEFAULT_SUPPORT;
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null } };
+    const zaloOaName = json.support?.zaloOaName?.trim();
+    return {
+      hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
+      email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
+      ...(zaloOaName ? { zaloOaName } : {}),
+    };
   } catch {
-    return null;
+    return DEFAULT_SUPPORT;
   }
 }
 

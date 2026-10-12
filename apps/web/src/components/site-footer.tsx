@@ -1,0 +1,43 @@
+import { Mail, Phone } from 'lucide-react';
+import { getPublicSupport } from '@/lib/api';
+
+const LINK =
+  'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
+
+/** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
+export default async function SiteFooter() {
+  const { hotline, email } = await getPublicSupport();
+  // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0899 149 229".
+  const tel = hotline.replace(/[^\d+]/g, '');
+
+  return (
+    <footer className="mt-12 border-t border-stone-200 bg-stone-0">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-2">
+        <div>
+          <p className="font-display text-lg font-semibold text-stone-900">Tubu Tree</p>
+          <p className="mt-1 max-w-sm text-sm text-stone-600">
+            Sống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.
+          </p>
+        </div>
+
+        <div>
+          <h2 className="text-sm font-semibold text-stone-900">Hỗ trợ khách hàng</h2>
+          <ul className="mt-1">
+            <li>
+              <a href={`tel:${tel}`} className={LINK}>
+                <Phone className="h-4 w-4" aria-hidden="true" />
+                <span>Hotline: {hotline}</span>
+              </a>
+            </li>
+            <li>
+              <a href={`mailto:${email}`} className={LINK}>
+                <Mail className="h-4 w-4" aria-hidden="true" />
+                <span>{email}</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  );
+}

@@ -45,9 +45,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      # Cron/Date local theo giờ VN (cron còn có timeZone riêng, xem apps/api/src/common/cron-tz.ts).
+      TZ: Asia/Ho_Chi_Minh
       # Trỏ về service nội bộ — GHI ĐÈ giá trị trong .env.
       DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
       REDIS_URL: redis://redis:6379
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -83,6 +86,8 @@ services:
       # domain công khai qua Caddy. Không set thì các hàm đó fallback NEXT_PUBLIC_API_BASE_URL
       # (đã inline lúc build = domain public) — vẫn chạy được, chỉ tốn 1 hop mạng ngoài.
       API_BASE_URL: http://api:3001/api
+      # Cùng giá trị với api: SSR gửi qua header x-throttle-bypass để không bị 429 theo IP máy chủ web.
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     depends_on:
       api:
         condition: service_healthy

@@ -7,10 +7,11 @@ function makeDeps(over: any = {}) {
     storefrontItem: { count: jest.fn().mockResolvedValue(0) },
     commission: { count: jest.fn().mockResolvedValue(0) },
     coinTransaction: { findMany: jest.fn().mockResolvedValue([]) },
-    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ coinsBalance: 0 }) },
+    pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ pointsBalance: 0 }) },
     ...over,
   } as any;
-  const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) } as any;
+  const coins = { grant: jest.fn().mockResolvedValue(true) } as any;
   return { prisma, coins };
 }
 
@@ -22,7 +23,7 @@ describe('StorefrontQuestService.listQuests', () => {
     await expect(svc.listQuests('u1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('tính done theo stats + claimed theo CoinTransaction', async () => {
+  it('tính done theo stats + claimed theo dòng QUEST ở sổ xu cũ HOẶC sổ điểm (PD-3)', async () => {
     const { prisma, coins } = makeDeps();
     prisma.storefront.findFirst.mockResolvedValue({
       id: 'sf1', avatarUrl: 'a', headerNote: 'n', coverUrl: 'c', isPublished: true,
@@ -30,18 +31,25 @@ describe('StorefrontQuestService.listQuests', () => {
     });
     prisma.commission.count.mockResolvedValue(1);
     prisma.coinTransaction.findMany.mockResolvedValue([{ reason: 'STOREFRONT_QUEST:profile_complete' }]);
+    prisma.pointsTransaction.findMany.mockResolvedValue([{ reason: 'STOREFRONT_QUEST:publish' }]);
     const svc = new StorefrontQuestService(prisma, coins);
     const out = await svc.listQuests('u1');
     const byCode = Object.fromEntries(out.quests.map((q) => [q.code, q]));
     expect(byCode['profile_complete']?.done).toBe(true);
-    expect(byCode['profile_complete']?.claimed).toBe(true);
+    expect(byCode['profile_complete']?.claimed).toBe(true); // nhận bằng xu trước gộp
+    expect(byCode['publish']?.claimed).toBe(true); // nhận bằng điểm sau gộp
     expect(byCode['add_5_products']?.done).toBe(true); // 5 items
     expect(byCode['add_5_products']?.claimed).toBe(false);
+    for (const where of [prisma.coinTransaction.findMany.mock.calls[0][0].where, prisma.pointsTransaction.findMany.mock.calls[0][0].where]) {
+      expect(where).toEqual({ userId: 'u1', refType: 'QUEST' });
+    }
     expect(byCode['notes_3']?.done).toBe(true); // 4 có note >= 3
     expect(byCode['publish']?.done).toBe(true);
     expect(byCode['first_order']?.done).toBe(true);
-    expect(out.totalEarnedXu).toBe(QUESTS.find((q) => q.code === 'profile_complete')!.rewardXu);
-    expect(out.level).toBe(1);
+    expect(out.totalEarnedPoints).toBe(2 + 1);
+    expect(out).not.toHaveProperty('totalEarnedXu');
+    expect(out.quests[0]).not.toHaveProperty('rewardXu');
+    expect(out.level).toBe(2);
     expect(out.levelMax).toBe(QUESTS.length);
   });
 
@@ -71,7 +79,7 @@ describe('StorefrontQuestService.claimQuest', () => {
     prisma.storefront.findFirst.mockResolvedValue({ ...baseSf, isPublished: false });
     const svc = new StorefrontQuestService(prisma, coins);
     await expect(svc.claimQuest('u1', 'publish')).rejects.toBeInstanceOf(BadRequestException);
-    expect(coins.grantCoins).not.toHaveBeenCalled();
+    expect(coins.grant).not.toHaveBeenCalled();
   });
 
   it('ném BadRequest nếu code không tồn tại', async () => {
@@ -81,14 +89,31 @@ describe('StorefrontQuestService.claimQuest', () => {
     await expect(svc.claimQuest('u1', 'khong-co')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('grantCoins đúng reason + refType QUEST khi đạt', async () => {
+  it('cấp Điểm Xanh đúng reason + refType QUEST khi đạt, trả số dư điểm', async () => {
     const { prisma, coins } = makeDeps();
     prisma.storefront.findFirst.mockResolvedValue(baseSf);
-    prisma.user.findUniqueOrThrow.mockResolvedValue({ coinsBalance: 4000 });
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ pointsBalance: 7 });
     const svc = new StorefrontQuestService(prisma, coins);
-    const reward = QUESTS.find((q) => q.code === 'publish')!.rewardXu;
     const out = await svc.claimQuest('u1', 'publish');
-    expect(coins.grantCoins).toHaveBeenCalledWith('u1', reward, 'STOREFRONT_QUEST:publish', 'QUEST', 'sf1');
-    expect(out).toEqual({ claimed: true, code: 'publish', rewardXu: reward, coinsBalance: 4000 });
+    expect(coins.grant).toHaveBeenCalledWith('u1', 1, 'STOREFRONT_QUEST:publish', 'QUEST', 'sf1');
+    expect(out).toEqual({ claimed: true, alreadyClaimed: false, code: 'publish', rewardPoints: 1, pointsBalance: 7 });
+  });
+
+  it('đã nhận trước đó (bằng xu trước gộp hoặc bằng điểm) → báo đã nhận, không cấp thêm', async () => {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue(baseSf);
+    coins.grant.mockResolvedValue(false);
+    const out = await new StorefrontQuestService(prisma, coins).claimQuest('u1', 'publish');
+    expect(out).toMatchObject({ claimed: true, alreadyClaimed: true, rewardPoints: 1 });
+  });
+
+  it('mức thưởng nhiệm vụ theo bảng PD-3 mục 4: 2/2/2/1/5 Điểm Xanh (1.500 xu làm tròn lên 2)', () => {
+    expect(QUESTS.map((q) => [q.code, q.rewardPoints])).toEqual([
+      ['profile_complete', 2],
+      ['add_5_products', 2],
+      ['notes_3', 2],
+      ['publish', 1],
+      ['first_order', 5],
+    ]);
   });
 });

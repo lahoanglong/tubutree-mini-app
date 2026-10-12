@@ -11,6 +11,8 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useConfirm } from './confirm-dialog';
+import { BTN_WARNING, FIELD_XS } from './ui';
 
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
@@ -29,6 +31,7 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const userId = order.user?.id;
   const enabled = open && order.type === 'DEALER' && !!userId;
@@ -60,18 +63,21 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
 
   if (order.type !== 'DEALER' || !userId) return null;
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
     if (inFlight.current || payMut.isPending) return;
     const amt = Math.trunc(Number(amount));
     if (!amt || amt <= 0) {
       setMsg({ ok: false, text: 'Nhập số tiền hợp lệ (đơn vị đồng, số nguyên dương).' });
       return;
     }
-    const ok = window.confirm(
-      `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n` +
+    const ok = await confirm({
+      title: 'Xác nhận đã nhận tiền trả nợ',
+      message:
+        `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n` +
         'Số tiền sẽ bị chặn không vượt quá dư nợ hiện tại tại thời điểm xác nhận. Không có thao tác huỷ — chỉ bấm khi đã thấy tiền về tài khoản.',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã nhận tiền',
+    });
+    if (!ok || inFlight.current || payMut.isPending) return;
     inFlight.current = true;
     setMsg(null);
     payMut.mutate();
@@ -81,36 +87,36 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
   const busy = payMut.isPending;
 
   return (
-    <section aria-label="Công nợ đại lý" className="rounded border border-neutral-200 bg-white p-3">
+    <section aria-label="Công nợ đại lý" className="rounded-card border border-stone-200 bg-stone-0 p-3">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-control text-left sm:min-h-0"
       >
         <span className="flex items-center gap-2">
-          <Landmark className="h-4 w-4 text-neutral-500" aria-hidden />
-          <span className="text-xs font-semibold uppercase text-neutral-600">Công nợ đại lý</span>
+          <Landmark className="h-4 w-4 text-stone-500" aria-hidden />
+          <span className="text-xs font-semibold uppercase text-stone-600">Công nợ đại lý</span>
         </span>
-        {open ? <ChevronUp className="h-4 w-4 text-neutral-400" /> : <ChevronDown className="h-4 w-4 text-neutral-400" />}
+        {open ? <ChevronUp className="h-4 w-4 text-stone-500" aria-hidden /> : <ChevronDown className="h-4 w-4 text-stone-500" aria-hidden />}
       </button>
 
       {open && (
         <div className="mt-2 space-y-2">
-          {ledgerQ.isLoading && <p className="text-xs text-neutral-500">Đang tải sổ công nợ…</p>}
-          {ledgerQ.isError && <p role="alert" className="text-xs text-red-600">Không tải được sổ công nợ.</p>}
+          {ledgerQ.isLoading && <p className="text-xs text-stone-500">Đang tải sổ công nợ…</p>}
+          {ledgerQ.isError && <p role="alert" className="text-xs text-danger-fg">Không tải được sổ công nợ.</p>}
           {ledgerQ.data && (
             <>
-              <p className="text-xs font-semibold text-neutral-800">
-                Dư nợ hiện tại: <span className={balance < 0 ? 'text-red-600' : 'text-green-700'}>{formatVnd(-balance)}</span>
+              <p className="text-xs font-semibold text-stone-800">
+                Dư nợ hiện tại: <span className={balance < 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(-balance)}</span>
               </p>
-              <ul className="max-h-32 overflow-y-auto rounded border border-neutral-100 bg-neutral-50 p-1.5 text-[11px] text-neutral-600">
+              <ul className="max-h-32 overflow-y-auto rounded-control border border-stone-200 bg-stone-50 p-1.5 text-[11px] text-stone-600">
                 {ledgerQ.data.entries.slice(0, 20).map((e) => (
                   <li key={e.id} className="flex justify-between gap-2 py-0.5">
                     <span className="truncate">{e.note || e.refType}</span>
-                    <span className={e.delta < 0 ? 'text-red-600' : 'text-green-700'}>{formatVnd(e.delta)}</span>
+                    <span className={e.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(e.delta)}</span>
                   </li>
                 ))}
-                {ledgerQ.data.entries.length === 0 && <li className="py-0.5 text-neutral-400">Chưa có phát sinh.</li>}
+                {ledgerQ.data.entries.length === 0 && <li className="py-0.5 text-stone-500">Chưa có phát sinh.</li>}
               </ul>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -122,7 +128,7 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   disabled={busy}
-                  className="w-32 rounded border border-neutral-300 px-2 py-1 text-xs"
+                  className={`${FIELD_XS} w-32`}
                 />
                 <input
                   type="text"
@@ -132,7 +138,7 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
                   value={bankRef}
                   onChange={(e) => setBankRef(e.target.value)}
                   disabled={busy}
-                  className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+                  className={`${FIELD_XS} grow basis-40`}
                 />
                 <input
                   type="text"
@@ -142,13 +148,13 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   disabled={busy}
-                  className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+                  className={`${FIELD_XS} grow basis-40`}
                 />
                 <button
                   type="button"
                   onClick={onConfirm}
                   disabled={busy}
-                  className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:bg-neutral-300"
+                  className={BTN_WARNING}
                 >
                   {busy ? 'Đang xác nhận…' : 'Xác nhận đã nhận, giảm nợ'}
                 </button>
@@ -156,12 +162,13 @@ export function DealerCreditPanel({ order }: { order: AdminOrder }) {
             </>
           )}
           {msg && (
-            <p role={msg.ok ? 'status' : 'alert'} className={`text-xs ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
+            <p role={msg.ok ? 'status' : 'alert'} className={`text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
               {msg.text}
             </p>
           )}
         </div>
       )}
+      {dialog}
     </section>
   );
 }

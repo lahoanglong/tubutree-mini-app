@@ -1,8 +1,9 @@
+import type { ClientEventName } from '@tubutree/shared-types';
 import { api } from './api';
 
 interface QueuedEvent {
   eventId: string;
-  eventName: string;
+  eventName: ClientEventName;
   occurredAt: string;
   platform: 'miniapp';
   props: Record<string, unknown>;
@@ -24,7 +25,7 @@ function newEventId(): string {
 }
 
 export function trackEvent(
-  eventName: string,
+  eventName: ClientEventName,
   platform: 'miniapp',
   props: Record<string, unknown>,
   extra?: Partial<Pick<QueuedEvent, 'entrySource' | 'notificationId' | 'refCode' | 'storefrontSlug'>>,

@@ -4,8 +4,22 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
-import type { CoinsService } from '../wallet/coins.service';
+import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để các mock tx sẵn có vẫn đo được tiền vào ví.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
+const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 // Ship mặc định 0 cho test (override bằng mockResolvedValue trong test lên-đơn-hộ).
@@ -13,7 +27,7 @@ const pricing = { calcShippingFee: jest.fn().mockResolvedValue(0) } as unknown a
 // Không dùng ở đa số test (chỉ placeOrderForCustomer gọi) — no-op mặc định.
 const pancakeOrder = { enqueuePush: jest.fn().mockResolvedValue(undefined) } as unknown as PancakeOrderService;
 // Chỉ claimMilestone dùng (affiliate-tier.spec.ts) — no-op ở đây.
-const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) } as unknown as CoinsService;
+const coins = { grant: jest.fn().mockResolvedValue(true) } as unknown as RewardPointsService;
 // Tham số bắt buộc thứ 6 (Task 10) — hầu hết test ở file này KHÔNG đụng recordTouch/
 // placeOrderForCustomer nên chỉ cần no-op để type-check; các test thật của
 // referral_touched/order_placed tự dựng analytics mock RIÊNG (không dùng chung biến này) để
@@ -27,7 +41,7 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
-    commission: { create: createSpy },
+    commission: { createMany: createSpy },
   } as unknown as PrismaService;
 }
 
@@ -193,22 +207,27 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   function build(
     opts: {
-      variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string } }>;
+      variations?: Array<{ id: string; isActive?: boolean; salePrice?: number | null; retailPrice?: number; name?: string; product?: { name: string; isActive?: boolean; approvalStatus?: string } }>;
       stockCount?: number;
       executeRaw?: jest.Mock;
       role?: string;
+      ctvPhone?: string | null;
       storefront?: { slug: string } | null;
       shippingFee?: number;
     } = {},
   ) {
     const variations =
-      opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }];
+      opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }];
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const commissionCreate = jest.fn().mockResolvedValue({});
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE' }) },
+      user: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'ctv', role: opts.role ?? 'AFFILIATE', phone: opts.ctvPhone === undefined ? '0911111111' : opts.ctvPhone }),
+      },
       variation: { findMany: jest.fn().mockResolvedValue(variations) },
       $executeRaw: executeRaw,
       storefront: { findFirst: jest.fn().mockResolvedValue(opts.storefront === undefined ? { slug: 'ctv-shop' } : opts.storefront) },
@@ -220,7 +239,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
           // 1) createCommissionForOrder đọc order + items; 2) trả đơn cuối cùng
           .mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1' }),
       },
-      commission: { create: commissionCreate },
+      commission: { createMany: commissionCreate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -277,7 +296,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   it('dùng salePrice khi có (ưu tiên salePrice ?? retailPrice)', async () => {
     const { svc, orderCreate } = build({
-      variations: [{ id: 'v1', isActive: true, salePrice: 80000, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+      variations: [{ id: 'v1', isActive: true, salePrice: 80000, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }],
     });
     await svc.placeOrderForCustomer('ctv', DTO() as never);
     const data = orderCreate.mock.calls[0][0].data;
@@ -299,15 +318,18 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('tạo hoa hồng cho CTV sau khi đặt đơn (createCommissionForOrder)', async () => {
+  it('tạo hoa hồng cho CTV trong cùng tx với đơn (createCommissionForOrder)', async () => {
     const { svc, commissionCreate, prisma } = build();
     // order fetch trong createCommissionForOrder: đơn CTV placedForCustomer + 1 item có rate.
     (prisma.order.findUniqueOrThrow as jest.Mock)
       .mockResolvedValueOnce({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 200000, items: [{ variationId: 'v1', total: 200000 }] })
       .mockResolvedValueOnce({ id: 'o1', code: 'TUBU1', total: 200000, items: [] });
     (prisma.variation.findMany as jest.Mock).mockResolvedValueOnce([
-      { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } },
-    ]).mockResolvedValueOnce([{ id: 'v1', affiliateRate: 10 }]);
+      { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+    ])
+      // kiểm lại SP còn bán trong tx (cart/sellable.ts)
+      .mockResolvedValueOnce([{ id: 'v1' }])
+      .mockResolvedValueOnce([{ id: 'v1', affiliateRate: 10 }]);
     await svc.placeOrderForCustomer('ctv', DTO() as never);
     expect(commissionCreate).toHaveBeenCalledTimes(1);
     expect(commissionCreate.mock.calls[0][0].data.affiliateUserId).toBe('ctv');
@@ -320,15 +342,53 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
 
   it('variation ngừng bán (isActive=false) → BadRequest', async () => {
     const { svc } = build({
-      variations: [{ id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P' } }],
+      variations: [{ id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'X', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }],
     });
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
+  });
+
+  it('SP cha ngừng bán / chưa duyệt (variation vẫn active) → PRODUCT_DISCONTINUED, không tạo đơn (C-007)', async () => {
+    for (const product of [
+      { name: 'P', isActive: false, approvalStatus: 'APPROVED' },
+      { name: 'P', isActive: true, approvalStatus: 'PENDING_REVIEW' },
+      { name: 'P', isActive: true, approvalStatus: 'REJECTED' },
+    ]) {
+      const { svc, orderCreate } = build({
+        variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'X', product }],
+      });
+      await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toMatchObject({
+        response: { code: 'PRODUCT_DISCONTINUED' },
+      });
+      expect(orderCreate).not.toHaveBeenCalled();
+    }
   });
 
   it('người dùng không phải CTV/ADMIN → BadRequest (chống tự-giao-dịch)', async () => {
     const { svc, orderCreate } = build({ role: 'CUSTOMER' });
     await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow();
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  // C-028: SĐT người nhận trùng SĐT tài khoản CTV = CTV tự mua cho mình qua đường "đơn hộ" để
+  // ăn hoa hồng (và khi huỷ, đích hoàn theo SĐT cũng trỏ về chính CTV).
+  it.each([
+    ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
+    ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
+    ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+  ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
+    const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
+    await expect(
+      svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: customerPhone } }) as never),
+    ).rejects.toThrow('SĐT của chính bạn');
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(commissionCreate).not.toHaveBeenCalled();
+  });
+
+  it('CTV chưa có SĐT trên tài khoản → vẫn lên đơn hộ bình thường', async () => {
+    const { svc, orderCreate } = build({ ctvPhone: null });
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    expect(orderCreate).toHaveBeenCalledTimes(1);
   });
 
   it('xếp hàng đẩy đơn sang Pancake sau khi tạo (đơn hộ phải vào pipeline giao vận như đơn thường)', async () => {
@@ -365,6 +425,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(commissionCreate).not.toHaveBeenCalled();
   });
 
+  it('mã đơn lên hộ có dạng TUBU<yyyymmdd><5 số> như đơn checkout', async () => {
+    const { svc, orderCreate, prisma } = build();
+    await svc.placeOrderForCustomer('ctv', DTO() as never);
+    const code = orderCreate.mock.calls[0][0].data.code as string;
+    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');
@@ -384,9 +452,8 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.source).toBe('ctv_assisted');
     expect(data.platform).toBe('miniapp');
-    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (zalo.service.ts normalizePhone /
-    // loyalty.service.ts normalizeVnPhone), KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua
-    // được (chỉ strip ký tự không phải số ở đây).
+    // Cùng kiểu chuẩn hoá 84→0xxxxxxxxx mà User.phone luôn lưu (common/phone.ts toLocalPhone),
+    // KHÔNG PHẢI hash — SĐT không có mã +84 cũng phải qua được (chỉ strip ký tự không phải số ở đây).
     expect(data.endCustomerKey).toBe('0901234567');
 
     expect(analyticsLocal.record).toHaveBeenCalledTimes(1);
@@ -431,13 +498,20 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
   it('order_placed được ghi bằng ĐÚNG object `tx` của $transaction, không phải this.prisma ở ngoài (chứng minh atomic thật — mirror dealer-order-payment.spec.ts)', async () => {
     const txOrderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     const txExecuteRaw = jest.fn().mockResolvedValue(1);
-    const txMarker = { order: { create: txOrderCreate }, $executeRaw: txExecuteRaw };
+    const txMarker = {
+      order: {
+        create: txOrderCreate,
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [] }),
+      },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
+      $executeRaw: txExecuteRaw,
+    };
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv', role: 'AFFILIATE' }) },
       variation: {
         findMany: jest
           .fn()
-          .mockResolvedValue([{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc' } }]),
+          .mockResolvedValue([{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }]),
       },
       storefront: { findFirst: jest.fn().mockResolvedValue({ slug: 'ctv-shop' }) },
       order: {
@@ -733,6 +807,10 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(r.credited).toBe(100_000);
     expect(userUpdate.mock.calls[0][0].data.walletBalance).toEqual({ increment: 100_000 });
     expect(payoutCreate.mock.calls[0][0].data.status).toBe('PAID');
+    expect(ledger).toHaveBeenLastCalledWith(
+      prisma,
+      expect.objectContaining({ userId: 'u1', delta: 100_000, type: 'COMMISSION_PAYOUT', refType: 'PAYOUT', refId: 'payout-1' }),
+    );
     // Không còn quảng cáo hệ số nhân (đã bỏ) trong thông báo cho CTV.
     expect(r.note).not.toContain('×');
   });
@@ -889,54 +967,40 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   });
 });
 
-describe('AffiliateService.grantReferralReward (refer-reward 1 lần, cộng dồn hoa hồng)', () => {
-  function makePrisma(order: unknown, existingCoupon: unknown = null) {
+describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER, chuyển sang xu đơn thứ 2)', () => {
+  function makePrisma(order: unknown) {
     const couponCreate = jest.fn().mockResolvedValue({});
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      coupon: { findUnique: jest.fn().mockResolvedValue(existingCoupon), create: couponCreate },
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: couponCreate },
     } as unknown as PrismaService;
     return { prisma, couponCreate };
   }
+  function makeCoins() {
+    const grantReferralOrderReward = jest.fn().mockResolvedValue(true);
+    return { svc: { grantReferralOrderReward } as unknown as RewardPointsService, grantReferralOrderReward };
+  }
 
-  it('đơn ≥200k có người giới thiệu → thưởng voucher 50k cho CẢ hai (§6.14.5)', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).toHaveBeenCalledTimes(2);
-    const data = couponCreate.mock.calls.map((c) => c[0].data);
-    const codes = data.map((d) => d.code);
-    expect(codes).toContain('REFER-REFERRER-REFEREE'); // người mời (cặp)
-    expect(codes).toContain('REFERRED-REFEREE'); // người được mời (welcome)
-    expect(data.every((d) => d.value === 50000)).toBe(true); // cả hai 50k
-    expect(data.every((d) => d.minOrder === 200000)).toBe(true); // áp đơn ≥200k
-    expect(data.map((d) => d.scopeMeta.userId)).toEqual(expect.arrayContaining(['referrer', 'referee']));
-  });
-
-  it('đơn < 200k → KHÔNG thưởng (chưa đạt ngưỡng §6.14.5)', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 150000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
+  it('đơn lẻ giao xong → xét thưởng xu cho người mời của chủ đơn, KHÔNG tạo voucher', async () => {
+    const { prisma, couponCreate } = makePrisma({ userId: 'referee', type: 'RETAIL', placedForCustomer: false });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).toHaveBeenCalledWith('referee');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
-  it('tự giới thiệu (referrer === buyer) → không thưởng', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: 'u1', total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
+  it('đơn CTV lên hộ khách (userId là CTV) → không xét thưởng giới thiệu', async () => {
+    const { prisma } = makePrisma({ userId: 'ctv', type: 'RETAIL', placedForCustomer: true });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).not.toHaveBeenCalled();
   });
 
-  it('không có người giới thiệu → không thưởng', async () => {
-    const { prisma, couponCreate } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, total: 250000 });
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
-  });
-
-  it('voucher đã tồn tại (đã thưởng cặp này) → không cấp lại (idempotent)', async () => {
-    const { prisma, couponCreate } = makePrisma(
-      { id: 'o1', userId: 'referee', referrerUserId: 'referrer', total: 250000 },
-      { id: 'existing' },
-    );
-    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).grantReferralReward('o1');
-    expect(couponCreate).not.toHaveBeenCalled();
+  it('đơn đại lý → không xét thưởng giới thiệu', async () => {
+    const { prisma } = makePrisma({ userId: 'dealer', type: 'DEALER', placedForCustomer: false });
+    const c = makeCoins();
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
+    expect(c.grantReferralOrderReward).not.toHaveBeenCalled();
   });
 });
 
@@ -1019,7 +1083,7 @@ describe('AffiliateService analytics', () => {
   });
 });
 
-describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', () => {
+describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-31)', () => {
   const NOW = new Date('2026-06-27T00:00:00Z');
   function makePrisma(over: any = {}) {
     return {
@@ -1029,14 +1093,25 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 3 ngày)', 
     } as unknown as PrismaService;
   }
 
-  it('recordTouch: resolve referralCode → upsert với expiresAt = now + 3 ngày', async () => {
+  it('recordTouch: resolve referralCode → upsert với expiresAt = now + 7 ngày (mặc định Q-31)', async () => {
     const prisma = makePrisma();
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: 'LINH', kind: 'ctv' }, NOW);
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.where).toEqual({ userId: 'buyer1' });
     expect(call.create.referrerUserId).toBe('ctv1');
-    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 3 * 86400000);
+    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * 86400000);
+  });
+
+  it('recordTouch: đọc affiliate.attribution_days từ config (admin chỉnh được)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1' });
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.attribution_days' ? (10 as unknown as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).recordTouch('buyer1', { referralCode: 'LINH' }, NOW);
+    const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
+    expect(call.create.expiresAt.getTime()).toBe(NOW.getTime() + 10 * 86400000);
   });
 
   it('recordTouch: ghi thành công → phát referral_touched (best-effort, đúng refCode/storefrontSlug/kind)', async () => {
@@ -1258,6 +1333,10 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
     // gross = net (97k) + fee (3k) = đúng số đã bị trừ khỏi walletBalance lúc withdraw().
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { walletBalance: { increment: 100_000 } } });
+    expect(ledger).toHaveBeenLastCalledWith(
+      prisma,
+      expect.objectContaining({ userId: 'u1', delta: 100_000, type: 'WITHDRAW_REFUND', refType: 'PAYOUT', refId: 'p1' }),
+    );
     expect(commissionUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -1336,5 +1415,35 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     await expect(
       new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).markPayoutPaid('admin1', 'p1', {}),
     ).rejects.toThrow('tải lại');
+  });
+});
+
+describe('AffiliateService.listLinks (giới hạn, C-100)', () => {
+  const svcWith = (findMany: jest.Mock) =>
+    new AffiliateService(
+      { affiliateLink: { findMany } } as unknown as PrismaService,
+      config,
+      pricing,
+      pancakeOrder,
+      coins,
+      analytics,
+    );
+
+  it('mặc định chỉ lấy 100 liên kết mới nhất, thứ tự ổn định theo (createdAt, id)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await svcWith(findMany).listLinks('u1');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+  });
+
+  it('take bị kẹp ở 200; cursor được chuyển thành cursor+skip', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await svcWith(findMany).listLinks('u1', { take: 5000, cursor: 'l9' });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 200, cursor: { id: 'l9' }, skip: 1 }),
+    );
   });
 });

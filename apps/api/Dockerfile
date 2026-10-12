@@ -22,10 +22,12 @@ RUN pnpm --filter @tubutree/api build
 
 # ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl tzdata
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 ENV NODE_ENV=production
+# Mốc "đầu ngày" của Date local và cron không có timeZone theo giờ VN (cần tzdata trên alpine).
+ENV TZ=Asia/Ho_Chi_Minh
 
 # Copy nguyên cây đã build (node_modules pnpm symlink giữ nguyên trong /app).
 COPY --from=builder /app ./

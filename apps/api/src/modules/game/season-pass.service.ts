@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { RewardPointsService } from '../wallet/reward-points.service';
 
-/** Phần thưởng 1 bậc: 💧 (SEEDS) hoặc TubuXu (XU). */
+/**
+ * Phần thưởng 1 bậc: 💧 (SEEDS) hoặc Điểm Xanh (POINTS). 'XU' là dạng trước PD-3 (đơn vị xu); migration
+ * pd3_points_config_keys đã đổi sang POINTS ceil(n/1000), còn sót thì claim từ chối thay vì cấp 1.000×.
+ */
 export interface SeasonPassReward {
-  type: 'SEEDS' | 'XU';
+  type: 'SEEDS' | 'POINTS' | 'XU';
   amount: number;
 }
 interface SeasonPassTierConfig {
@@ -27,6 +31,7 @@ export class SeasonPassService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly rewards: RewardPointsService,
   ) {}
 
   /** Mùa đang diễn ra theo cửa sổ thời gian (khớp GameSeasonService.getActiveSeason). */
@@ -102,6 +107,13 @@ export class SeasonPassService {
     if (!tierCfg) throw new BadRequestException('Bậc không hợp lệ.');
     const reward = track === 'free' ? tierCfg.free : tierCfg.premium;
     const arrField = track === 'free' ? 'claimedFree' : 'claimedPremium';
+    if (reward?.type !== 'SEEDS' && reward?.type !== 'POINTS') {
+      this.logger.error(
+        `seasonpass.tiers bậc ${tier} (${track}) có phần thưởng ${JSON.stringify(reward)} không cấp được ` +
+          '(chỉ SEEDS/POINTS; XU là đơn vị xu cũ) — sửa cấu hình.',
+      );
+      throw new BadRequestException('Phần thưởng bậc này đang được cập nhật, bạn quay lại sau nhé.');
+    }
 
     const pass = await this.prisma.userSeasonPass.findUnique({
       where: { userId_seasonId: { userId, seasonId: season.id } },
@@ -143,22 +155,10 @@ export class SeasonPassService {
             data: { totalSeeds: cap },
           });
         }
-      } else {
-        // XU thưởng: ghi TRỰC TIẾP trên tx (atomic với việc đánh dấu đã nhận) thay vì
-        // coins.grantCoins (mở $transaction riêng ở root client → không rollback cùng claim).
-        await tx.coinTransaction.create({
-          data: {
-            userId,
-            delta: reward.amount,
-            reason: `SEASONPASS:${season.id}:${tier}:${track}`,
-            refType: 'SEASONPASS',
-            refId: season.id,
-          },
-        });
-        await tx.user.update({
-          where: { id: userId },
-          data: { coinsBalance: { increment: reward.amount } },
-        });
+      } else if (reward.amount > 0) {
+        // Cấp TRÊN tx của claim: grant ném (vd vượt trần 2.000 điểm) thì việc đánh dấu đã nhận
+        // rollback cùng, khách nhận lại được sau khi sửa cấu hình.
+        await this.rewards.grant(userId, reward.amount, `SEASONPASS:${season.id}:${tier}:${track}`, 'SEASONPASS', season.id, tx);
       }
     });
 

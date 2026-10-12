@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Type } from 'class-transformer';
 import {
   Allow,
   IsArray,
@@ -10,6 +11,8 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -21,7 +24,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, type RecyclingFilter } from './admin-order-filter';
+import { ADMIN_ORDER_STATUSES, type InvoiceFilter, type RecyclingFilter } from './admin-order-filter';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -153,6 +156,12 @@ class UpdateOrderStatusDto {
   note?: string;
 }
 
+export class ConfirmOrderPaymentDto {
+  /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào lịch sử đơn để đối soát. */
+  @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
 /**
  * Query có lọc — PHẢI khai báo trong DTO. ValidationPipe toàn cục bật forbidNonWhitelisted, nên
  * `@Query() q: PaginationQuery` kèm `@Query('status')` riêng làm MỌI request có `?status=`/`?search=`
@@ -179,6 +188,36 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   /** attention = "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
+  /** pending = đơn VAT chưa xuất xong; issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
+  @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
+}
+
+export class ListUsersQuery extends PaginationQuery {
+  /** SĐT (chứa), tên (chứa, không phân biệt hoa thường) hoặc id đúng — cho ô chọn khách. */
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+}
+
+export class ProductSearchQuery {
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
+}
+
+export class VariationLookupQuery {
+  /** Các Variation ID phân tách bằng dấu phẩy (tối đa 100 id được tra). */
+  @IsString() @MaxLength(3000) ids!: string;
+}
+
+export class ListReviewsQuery extends PaginationQuery {
+  @IsOptional() @IsIn(['visible', 'hidden']) visibility?: 'visible' | 'hidden';
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
+}
+
+export class ListSubscriptionsQuery extends PaginationQuery {
+  @IsOptional() @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+}
+
+export class IssueInvoiceDto {
+  /** Link hoá đơn điện tử (tuỳ chọn). Chỉ https — link này hiển thị lại cho admin, không cho javascript:/http. */
+  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(500) invoiceUrl?: string;
 }
 
 export class DealerPriceHistoryQuery extends PaginationQuery {
@@ -198,10 +237,12 @@ export class GomdonMarkHandledDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
-class SetUserRoleDto {
+export class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
+  /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
+  @IsOptional() @IsString() @MaxLength(100) tierId?: string;
 }
 
 /** Parse CSV "sku,giá" (phân tách , ; hoặc tab); bỏ dòng header/giá không hợp lệ. */
@@ -251,19 +292,54 @@ export class AdminController {
   }
 
   @Get('users')
-  users(@Query() q: PaginationQuery) {
-    return this.admin.listUsers(q.page, q.limit);
+  users(@Query() q: ListUsersQuery) {
+    return this.admin.listUsers(q.page, q.limit, q.search);
+  }
+
+  /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */
+  @Get('products/search')
+  searchProducts(@Query() q: ProductSearchQuery) {
+    return this.admin.searchProducts(q.q ?? '');
+  }
+
+  /** Nhãn cho các Variation ID đã lưu (danh sách mặt hàng của đợt Flash Sale). */
+  @Get('variations/lookup')
+  lookupVariations(@Query() q: VariationLookupQuery) {
+    return this.admin.lookupVariations(q.ids);
+  }
+
+  @Get('dealer-tiers')
+  dealerTiers() {
+    return this.admin.listDealerTiers();
+  }
+
+  /** Đánh giá cho admin duyệt (kể cả đã ẩn); ẩn/hiện qua POST /reviews/:id/visibility. */
+  @Get('reviews')
+  reviews(@Query() q: ListReviewsQuery) {
+    return this.admin.listReviews(q.page, q.limit, q.visibility, q.rating);
+  }
+
+  /** Gói mua định kỳ (chỉ xem). */
+  @Get('subscriptions')
+  subscriptions(@Query() q: ListSubscriptionsQuery) {
+    return this.admin.listSubscriptions(q.page, q.limit, q.status);
   }
 
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
   @Post('users/role')
   setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
-    return this.admin.setUserRole(adminId, dto.phone, dto.role);
+    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
   @Get('orders')
   orders(@Query() q: ListOrdersQuery) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling);
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice);
+  }
+
+  /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */
+  @Post('orders/:id/issue-invoice')
+  issueInvoice(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: IssueInvoiceDto) {
+    return this.admin.issueOrderInvoice(adminId, id, { invoiceUrl: dto.invoiceUrl });
   }
 
   /**
@@ -301,6 +377,16 @@ export class AdminController {
   @Get('orders/:id/status-history')
   orderStatusHistory(@Param('id') id: string) {
     return this.admin.orderStatusHistory(id);
+  }
+
+  /** "Đã nhận tiền" cho đơn chuyển khoản lẻ: UNPAID → PAID (PENDING_PAYMENT → CONFIRMED), idempotent. */
+  @Post('orders/:id/confirm-payment')
+  confirmOrderPayment(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') id: string,
+    @Body() dto: ConfirmOrderPaymentDto,
+  ) {
+    return this.admin.confirmOrderPayment(adminId, id, dto);
   }
 
   @Put('orders/:id/status')

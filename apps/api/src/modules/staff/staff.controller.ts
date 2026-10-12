@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,6 +11,8 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { DateRangeQuery } from './dto/staff-query.dto';
+import { parseDateRange } from './date-range';
 import { ShiftsService } from './shifts/shifts.service';
 import {
   CancelShiftDto,
@@ -33,17 +34,8 @@ export class StaffController {
   }
 
   @Get('shifts')
-  listShifts(
-    @CurrentUser('sub') staffId: string,
-    @Query('from') from: string,
-    @Query('to') to: string,
-  ) {
-    if (!from || !to) throw new BadRequestException('Thiếu khoảng thời gian (from/to).');
-    const f = new Date(from);
-    const t = new Date(to);
-    if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) {
-      throw new BadRequestException('from/to không hợp lệ.');
-    }
+  listShifts(@CurrentUser('sub') staffId: string, @Query() query: DateRangeQuery) {
+    const { f, t } = parseDateRange(query.from, query.to);
     return this.shifts.listShifts(staffId, f, t);
   }
 

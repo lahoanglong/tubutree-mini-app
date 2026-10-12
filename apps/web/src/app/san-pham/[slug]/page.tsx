@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Leaf, Check } from 'lucide-react';
 import { getProduct, formatVnd } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
+import { ui } from '@/lib/guest-ui';
 
 export const revalidate = 300;
 
@@ -33,11 +34,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className="text-sm text-primary-600">
+      <Link href="/" className={ui.backLink}>
         ← Về trang chủ
       </Link>
-      <div className="mt-4 grid gap-8 md:grid-cols-2">
-        <div className="flex aspect-square items-center justify-center rounded-2xl bg-leaf-50 text-leaf-600 overflow-hidden shadow-sm border border-neutral-100">
+      <div className="mt-2 grid gap-8 md:grid-cols-2">
+        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sheet border border-stone-200 bg-forest-50 text-forest-600 shadow-card">
           {product.thumbnail ? (
             // Ảnh LCP của trang: tải sớm và ưu tiên cao thay vì để trình duyệt đoán. Chưa dùng
             // next/image vì ảnh sản phẩm đến từ host tuỳ ý (Pancake/Cloudinary/…) — bật
@@ -47,26 +48,26 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <img
               src={product.thumbnail}
               alt={product.name}
-              className="h-full w-full rounded-2xl object-cover"
+              className="h-full w-full object-cover"
               loading="eager"
               fetchPriority="high"
               decoding="async"
             />
           ) : (
-            <Leaf className="h-20 w-20 text-leaf-600 stroke-[1.5]" />
+            <Leaf className="h-20 w-20 stroke-[1.5] text-forest-600" aria-hidden="true" />
           )}
         </div>
         <div>
-          <div className="text-sm font-semibold text-primary-600">{product.brand}</div>
-          <h1 className="text-2xl font-bold text-neutral-900">{product.name}</h1>
-          <div className="mt-2 text-2xl font-bold text-clay-700">{formatVnd(price)}</div>
-          {product.shortDesc && <p className="mt-3 text-neutral-600">{product.shortDesc}</p>}
+          <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
+          <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
+          <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
+          {product.shortDesc && <p className="mt-3 text-stone-600">{product.shortDesc}</p>}
 
           {product.certifications.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {product.certifications.map((c) => (
-                <span key={c} className="rounded-lg bg-leaf-50 px-2.5 py-1 text-xs text-leaf-800 border border-leaf-200 flex items-center gap-1 font-medium">
-                  <Check className="h-3.5 w-3.5 text-leaf-600" />
+                <span key={c} className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800">
+                  <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
                   <span>{c}</span>
                 </span>
               ))}
@@ -79,8 +80,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
       {product.description && (
         <section className="mt-8">
-          <h2 className="text-lg font-semibold">Mô tả sản phẩm</h2>
-          <p className="mt-2 whitespace-pre-line text-neutral-600">{product.description}</p>
+          <h2 className={ui.sectionTitle}>Mô tả sản phẩm</h2>
+          <p className="mt-2 whitespace-pre-line text-stone-700">{product.description}</p>
         </section>
       )}
     </main>

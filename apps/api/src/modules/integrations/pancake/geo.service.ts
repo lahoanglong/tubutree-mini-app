@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PancakeClient } from './pancake.client';
 
 /** DTO địa giới rút gọn cho FE. `code` = mã gửi Pancake khi đặt đơn. */
@@ -50,6 +50,10 @@ export class GeoService {
   }
 
   async communes(provinceCode: string): Promise<GeoOption[]> {
+    // Endpoint công khai: chỉ nhận mã có trong danh sách tỉnh (đã cache 24h) để số ô cache và số lượt gọi Pancake
+    // bị chặn trên bằng số tỉnh, không phụ thuộc vào chuỗi người gọi gửi.
+    const known = await this.provinces();
+    if (!known.some((p) => p.code === provinceCode)) throw new BadRequestException('provinceCode không hợp lệ.');
     const cached = this.communesCache.get(provinceCode);
     if (cached && Date.now() - cached.at < GeoService.TTL_MS) return cached.data;
     const inflight = this.communesInflight.get(provinceCode);

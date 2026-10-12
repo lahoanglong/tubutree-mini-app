@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { vi } from '../../i18n/vi';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
+import { getErrorMessage } from '../../services/api';
 import type { PurchasedItem } from '../../services/shop-api';
+import { haptic } from '../../utils/haptic';
+import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { ProductTile, type ProductTileProduct } from '../ui/product-tile';
 import { Skeleton } from '../ui/skeleton';
-import { Heading } from '../ui/text';
+import { Heading, Text } from '../ui/text';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 
@@ -18,7 +22,8 @@ const HEADING_HEIGHT = 24;
 const HEADING_PAD_TOP = 4;
 const HEADING_PAD_BOTTOM = 8;
 const RAIL_PADDING_BOTTOM = 12;
-const RAIL_LIMIT = 10;
+/** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
+export const PURCHASED_RAIL_LIMIT = 10;
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
   return {
@@ -39,14 +44,17 @@ export interface PurchasedRailProps {
 
 /**
  * Kệ "Mua lại" (spec 4a.2/4a.3): SP khách đã nhận hàng, mới mua trước. Khách mới / chưa đăng nhập
- * / API cũ (404) → không render gì (không ErrorState trên đầu trang). Mua lại = 2 chạm.
+ * / API cũ (404) / lỗi ở lần tải đầu → không render gì (không ErrorState trên đầu trang; Trang chủ tự dựng khối lỗi
+ * "Thử lại" cho lỗi thật). Làm mới lỗi nhưng còn dữ liệu cũ → vẫn hiện kệ cũ kèm một dòng báo nhẹ + "Thử lại", không
+ * để kệ biến mất im lặng. Mua lại = 2 chạm rồi tự sang
+ * giỏ (như thẻ đơn/chi tiết đơn): ở lại Home thì khách phải tự tìm giỏ và hay tưởng đã đặt xong.
  *
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa
  * chọn theo danh tính `target`, không được dựng target inline trong JSX.
  */
 export function PurchasedRail({ source }: PurchasedRailProps) {
   const navigate = useNavigate();
-  const q = usePurchasedItems(RAIL_LIMIT);
+  const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
 
   if (q.isLoading) {
@@ -65,7 +73,7 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
     );
   }
   const items = q.data?.items ?? [];
-  if (q.isError || items.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
@@ -74,6 +82,25 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
           {vi.reorder.railTitle}
         </Heading>
       </div>
+      {q.isError && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 16px 8px' }}>
+          <Text variant="body-sm" tone="secondary" style={{ minWidth: 0 }}>
+            {getErrorMessage(q.error)}
+          </Text>
+          <Button
+            variant="secondary"
+            loading={q.isFetching}
+            aria-label={vi.home.retryLabel(vi.reorder.railTitle)}
+            onPress={() => {
+              haptic('light');
+              return q.refetch();
+            }}
+            style={{ flex: '0 0 auto', minWidth: 0 }}
+          >
+            {vi.home.retry}
+          </Button>
+        </div>
+      )}
       <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '0 16px', minWidth: 0, maxWidth: '100%' }}>
         {items.map((p) => (
           <div key={p.variationId} style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>
@@ -89,7 +116,7 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
           </div>
         ))}
       </div>
-      <ReorderSheet target={target} source={source} onClose={() => setTarget(null)} />
+      <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
     </section>
   );
 }

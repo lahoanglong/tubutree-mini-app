@@ -1,8 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
+
+/** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
+function displayText(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+}
 
 /**
  * Config hiển thị an toàn cho client (public) — WHITELIST rõ ràng, KHÔNG dùng getByCategory
@@ -14,6 +20,7 @@ export class SystemConfigController {
   constructor(private readonly config: SystemConfigService) {}
 
   @Get('public')
+  @PublicCache('STATIC')
   /**
    * Tham số nghiệp vụ FE cần để HIỂN THỊ đúng. Mọi giá trị ở đây trước đó bị hardcode rải rác
    * trong miniapp ("tiết kiệm 12%", "Ví Tubu ×1.5", "rút tối thiểu 50k") — admin đổi config là
@@ -24,16 +31,17 @@ export class SystemConfigController {
     const [
       freeshipThreshold,
       subscribeDiscountPct,
-      affiliateWalletMultiplier,
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,
       etaMinDays,
       etaMaxDays,
+      hotline,
+      supportEmail,
+      zaloOaName,
     ] = await Promise.all([
       this.config.get<number>('shipping.free_threshold', 200000),
       this.config.get<number>('subscribe.discount_pct', 0.12),
-      this.config.get<number>('affiliate.tubu_wallet_multiplier', 1.5),
       this.config.get<number>('affiliate.min_withdraw_bank', 50000),
       this.config.get<number>('cashback.hold_days', 30),
       // Chỉ trả boolean — KHÔNG lộ cấu hình/tài khoản Gomdon. true khi Gomdon đã cấu hình VÀ admin
@@ -41,15 +49,21 @@ export class SystemConfigController {
       isGomdonRecyclingEnabled(this.config).catch(() => false),
       this.config.get<number | null>('shipping.eta_min_days', null),
       this.config.get<number | null>('shipping.eta_max_days', null),
+      this.config.get<unknown>('support.hotline', '0899 149 229'),
+      this.config.get<unknown>('support.email', 'tubutree@gmail.com'),
+      this.config.get<unknown>('support.zalo_oa_name', ''),
     ]);
     return {
       freeshipThreshold,
       subscribeDiscountPct,
-      affiliateWalletMultiplier,
+      // Luật Ví ×1,5 đã bỏ: rút hoa hồng về Ví Tubu là 1:1 (affiliate.service). Giữ trường (cố định 1) để miniapp
+      // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.
+      affiliateWalletMultiplier: 1,
       affiliateMinWithdrawBank,
       cashbackHoldDays,
       recyclingEnabled,
       shippingEta: toShippingEta(etaMinDays, etaMaxDays),
+      support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName) },
     };
   }
 }

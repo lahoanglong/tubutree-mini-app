@@ -1,8 +1,22 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { notifyAdmins } from '../../common/notify-admins';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+
+/** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
+export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
+
+function addressInUseError(productNames: string[]): BadRequestException {
+  const which = productNames.length > 0 ? ` "${[...new Set(productNames)].join('", "')}"` : '';
+  return new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    code: ADDRESS_IN_USE_BY_SUBSCRIPTION,
+    message: `Địa chỉ đang dùng cho gói giao định kỳ${which}, hãy đổi địa chỉ của gói trước.`,
+  });
+}
 
 @Injectable()
 export class UsersService {
@@ -107,9 +121,31 @@ export class UsersService {
     );
   }
 
+  /**
+   * Q-12 (C-014): địa chỉ đang dùng cho gói giao định kỳ ACTIVE/PAUSED thì KHÔNG cho xoá — khách đổi địa
+   * chỉ của gói trước. Gói đã huỷ không còn sinh đơn nên đi theo địa chỉ như trước (FK nay là RESTRICT).
+   */
   async deleteAddress(userId: string, id: string) {
     await this.assertOwner(userId, id);
-    await this.prisma.address.delete({ where: { id } });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Khoá dòng địa chỉ: tạo gói song song (INSERT có FK cần FOR KEY SHARE) phải chờ tới khi xoá xong
+        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá.
+        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${id} FOR UPDATE`;
+        const inUse = await tx.subscription.findMany({
+          where: { addressId: id, status: { in: ['ACTIVE', 'PAUSED'] } },
+          select: { variation: { select: { product: { select: { name: true } } } } },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (inUse.length > 0) throw addressInUseError(inUse.map((s) => s.variation.product.name));
+        await tx.subscription.deleteMany({ where: { addressId: id, status: 'CANCELLED' } });
+        await tx.address.delete({ where: { id } });
+      });
+    } catch (err) {
+      // Lưới an toàn: có gói gắn vào địa chỉ mà bước kiểm không thấy thì FK RESTRICT chặn (P2003).
+      if ((err as { code?: string })?.code === 'P2003') throw addressInUseError([]);
+      throw err;
+    }
     return { ok: true };
   }
 
@@ -133,9 +169,9 @@ export class UsersService {
 
   /**
    * A1-03 (audit 2026-09): nút "Gửi yêu cầu xoá tài khoản" trước đây chỉ hiện snackbar giả, không
-   * gọi API nào. Đây KHÔNG phải xoá thật (cascade/ẩn danh hoá dữ liệu là quyết định nghiệp vụ lớn
-   * hơn phạm vi vá lỗi này) — chỉ ghi nhận YÊU CẦU thật + báo admin qua NotificationsService để CSKH
-   * xử lý thủ công, mirror notifyAdminsOfCreditReport (dealer.service.ts). Idempotent-ish: đã có
+   * gọi API nào. Ở đây chỉ ghi nhận YÊU CẦU + báo admin qua NotificationsService
+   * (common/notify-admins); việc ẩn danh thật do admin bấm "Xử lý" ở web admin
+   * (AccountDeletionService.process, C-016) sau khi CSKH liên hệ khách. Idempotent-ish: đã có
    * yêu cầu PENDING thì trả lại chính yêu cầu đó, không tạo dòng mới (khách bấm nhiều lần không
    * tạo hàng đợi vô hạn cho CSKH).
    */
@@ -157,45 +193,20 @@ export class UsersService {
       data: { userId, reason: reason?.trim() || null },
     });
 
-    await this.notifyAdminsOfDeletionRequest(user, request.id).catch((e) =>
-      this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${userId} lỗi: ${(e as Error).message}`),
-    );
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      {
+        template: 'ACCOUNT_DELETION_REQUESTED',
+        subject: `yêu cầu xoá tài khoản ${user.id} (request ${request.id})`,
+        data: () => ({ user: user.fullName || user.phone || user.id, phone: user.phone ?? '' }),
+      },
+    ).catch((e) => this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${userId} lỗi: ${(e as Error).message}`));
 
     return {
       alreadyRequested: false,
       createdAt: request.createdAt,
       message: 'Yêu cầu đã được ghi nhận. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc — tài khoản CHƯA bị xoá.',
     };
-  }
-
-  /** Báo mọi tài khoản ADMIN có yêu cầu xoá tài khoản mới cần xử lý — mirror
-   * DealerService.notifyAdminsOfCreditReport (cùng kiểu: query ADMIN, Promise.allSettled, log warn
-   * không throw — thiếu thông báo không được chặn việc ghi nhận yêu cầu của khách). */
-  private async notifyAdminsOfDeletionRequest(
-    user: { id: string; fullName: string | null; phone: string | null },
-    requestId: string,
-  ) {
-    if (!this.notifications) {
-      this.logger.warn(`NotificationsService chưa wiring — không báo được admin yêu cầu xoá tài khoản ${user.id} (request ${requestId}).`);
-      return;
-    }
-    const admins = await this.prisma.user.findMany({
-      where: { role: 'ADMIN', isBlocked: false },
-      select: { id: true },
-      take: 20,
-    });
-    if (admins.length === 0) {
-      this.logger.warn(`Không có tài khoản ADMIN nào để báo yêu cầu xoá tài khoản ${user.id}.`);
-      return;
-    }
-    const data = { user: user.fullName || user.phone || user.id, phone: user.phone ?? '' };
-    const results = await Promise.allSettled(
-      admins.map((a) => this.notifications!.notify(a.id, 'ACCOUNT_DELETION_REQUESTED', data)),
-    );
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    if (failed > 0) {
-      this.logger.warn(`Báo admin yêu cầu xoá tài khoản ${user.id}: lỗi ${failed}/${admins.length}.`);
-    }
   }
 
   private serialize(user: {
@@ -210,6 +221,7 @@ export class UsersService {
     tierId: string | null;
     referralCode: string;
     pointsBalance: number;
+    pointsConvertedBalance: number;
     walletBalance: number;
     cashbackPending: number;
     metadata?: unknown;
@@ -229,6 +241,9 @@ export class UsersService {
       tierName: user.tier?.name ?? null,
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
+      // Lô quy đổi từ xu cũ (không hết hạn); pointsTotal là con số "Điểm Xanh" khách thấy.
+      pointsConvertedBalance: user.pointsConvertedBalance,
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       walletBalance: user.walletBalance,
       cashbackPending: user.cashbackPending,
       onboarded: Boolean(meta?.onboardedAt),

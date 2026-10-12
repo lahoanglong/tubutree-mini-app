@@ -3,6 +3,7 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CashbackService } from './cashback.service';
+import { CashbackAdminListQuery } from './dto/cashback-admin-list-query.dto';
 
 class ReviewCashbackDto {
   @IsIn(['CONFIRMED', 'REJECTED']) status!: 'CONFIRMED' | 'REJECTED';
@@ -23,8 +24,8 @@ export class CashbackAdminController {
   constructor(private readonly cashback: CashbackService) {}
 
   @Get('cashback/transactions')
-  list(@Query('status') status?: string, @Query('take') take?: string) {
-    return this.cashback.adminListTransactions(status, take ? Number(take) : undefined);
+  list(@Query() query: CashbackAdminListQuery) {
+    return this.cashback.adminListTransactions(query.status, query.take ? Number(query.take) : undefined);
   }
 
   @Post('cashback/transactions/:id/review')

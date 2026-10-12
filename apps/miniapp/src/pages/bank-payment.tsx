@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { Copy, CheckCircle2, Clock } from 'lucide-react';
+import { Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
 import { Skeleton } from '../components/ui/skeleton';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
 import { Money } from '../components/ui/price-tag';
+import { SR_ONLY } from '../components/ui/sr-only';
+
+const PAGE_TITLE = 'Thanh toán chuyển khoản';
+// Trang không dùng PageHeader nên tiêu đề đang hiện chữ là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
+// hình dáng vẫn do Text quyết định như trước. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
+const H1_RESET = { margin: 0, font: 'inherit' } as const;
+const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 
 export default function BankPaymentPage() {
   const { code } = useParams<{ code: string }>();
@@ -50,32 +58,32 @@ export default function BankPaymentPage() {
       const status = res.data?.paymentStatus;
       if (status === 'PAID') {
         openSnackbar({
-          text: '🎉 Đã nhận được thanh toán thành công! Đơn hàng của bạn đã được xác nhận.',
+          text: 'Đã nhận được thanh toán thành công! Đơn hàng của bạn đã được xác nhận.',
           type: 'success',
           position: 'top',
         });
       } else if (status === 'UNPAID') {
         openSnackbar({
-          text: '⏳ Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Vui lòng kiểm tra lại sau ít phút nhé!',
+          text: 'Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Vui lòng kiểm tra lại sau ít phút nhé!',
           type: 'warning',
           position: 'top',
         });
       } else if (status === 'FAILED' || status === 'REFUNDED') {
         openSnackbar({
-          text: '⚠️ Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+          text: 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
           type: 'error',
           position: 'top',
         });
       } else {
         openSnackbar({
-          text: '🔄 Đã làm mới trạng thái. Đang chờ hệ thống ngân hàng xác nhận.',
+          text: 'Đã làm mới trạng thái. Đang chờ hệ thống ngân hàng xác nhận.',
           type: 'info',
           position: 'top',
         });
       }
     } catch {
       openSnackbar({
-        text: '❌ Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        text: 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
         type: 'error',
         position: 'top',
       });
@@ -87,6 +95,7 @@ export default function BankPaymentPage() {
   if (isLoading) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+        <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
         <Box p={3} style={{ background: 'var(--color-bg-surface)' }}>
           <Skeleton width={200} height={20} />
           <Skeleton width={240} height={13} style={{ marginTop: 8 }} />
@@ -109,6 +118,7 @@ export default function BankPaymentPage() {
   if (isError || !data) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
+        <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
         <Box style={{ textAlign: 'center', padding: '48px 24px' }}>
           <Text style={{ color: 'var(--color-text-secondary)' }}>Không tải được thông tin thanh toán.</Text>
           {/* loading+disabled không còn cùng gán 1 biến (Button, Task 10, đã tự chặn bấm-2-lần khi
@@ -133,9 +143,11 @@ export default function BankPaymentPage() {
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <Box style={{ textAlign: 'center', padding: '56px 24px' }}>
           <CheckCircle2 size={64} color="var(--color-text-success)" style={{ margin: '0 auto' }} />
-          <Text bold size="large" style={{ marginTop: 12 }}>Đã nhận thanh toán! 🎉</Text>
+          <h1 style={H1_RESET_MT12}>
+            <Text bold size="large">Đã nhận thanh toán!</Text>
+          </h1>
           <Text size="small" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-            Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn 🌿
+            Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn
           </Text>
           <Button
             fullWidth
@@ -162,7 +174,9 @@ export default function BankPaymentPage() {
   return (
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
       <Box p={3} style={{ background: 'var(--color-bg-surface)', textAlign: 'center' }}>
-        <Text bold size="large">Quét QR để chuyển khoản</Text>
+        <h1 style={H1_RESET}>
+          <Text bold size="large">Quét QR để chuyển khoản</Text>
+        </h1>
         <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
           Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới
         </Text>
@@ -188,7 +202,8 @@ export default function BankPaymentPage() {
             <Row label="Nội dung CK" value={data.memo} highlight onCopy={() => copy(data.memo, 'nội dung')} />
           </Box>
           <Text size="xSmall" style={{ color: 'var(--color-text-danger)', marginTop: 8 }}>
-            ⚠️ Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
+            <Icon icon={TriangleAlert} size="sm" tone="danger" style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+            Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
           </Text>
         </Box>
 

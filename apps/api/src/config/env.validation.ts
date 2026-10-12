@@ -83,6 +83,12 @@ export const envSchema = z.object({
   AUTH_COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   // Để trống nếu web và API cùng host. Đặt '.tubutree.com' để cookie dùng chung mọi subdomain.
   AUTH_COOKIE_DOMAIN: z.string().optional(),
+  // Token nội bộ web SSR gửi qua header x-throttle-bypass để được miễn throttle (mọi SSR đi ra từ
+  // cùng một IP máy chủ web). Rỗng = tắt hẳn đường miễn. Đặt thì phải đủ dài để không đoán được.
+  THROTTLE_BYPASS_TOKEN: z
+    .string()
+    .refine((v) => v === '' || v.length >= 32, 'THROTTLE_BYPASS_TOKEN phải rỗng hoặc dài ít nhất 32 ký tự.')
+    .default(''),
 
   // AI tư vấn 24/7 (§6.14.3) — DeepSeek (chính) + Gemini (dự phòng). Trống → tính năng tự tắt graceful.
   // CẢ HAI đều gọi qua endpoint OpenAI-compatible (/chat/completions, Bearer). Gemini ở đây là

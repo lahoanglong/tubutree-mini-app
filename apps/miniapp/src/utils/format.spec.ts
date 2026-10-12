@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { formatRatePct, formatPoints, formatXu, formatVndShort, formatMultiplier } from './format';
+import * as format from './format';
+import {
+  formatRatePct,
+  formatPoints,
+  formatVndShort,
+  formatMultiplier,
+  formatNumber,
+  formatDrops,
+  formatDate,
+  formatDateTime,
+  formatVnd,
+} from './format';
 
 // Seed lưu baseRate dạng phân số: Shopee 0.035, Lazada 0.042, TikTok 0.049.
 describe('formatRatePct — tỉ lệ hoàn tiền (DB lưu phân số, hiển thị phần trăm)', () => {
@@ -41,16 +52,11 @@ describe('formatPoints — điểm Xanh hiển thị thống nhất', () => {
   });
 });
 
-// Trước đây formatXu bị định nghĩa lặp ở milestone-copy.ts và wallet.tsx — gộp về đây (A4-10).
-describe('formatXu — Tubu Xu hiển thị thống nhất', () => {
-  it('luôn có dấu phân cách nghìn + đơn vị "xu"', () => {
-    expect(formatXu(50_000)).toBe('50.000 xu');
-  });
-
-  it('null/undefined/rác → 0 xu, không ra NaN', () => {
-    expect(formatXu(null)).toBe('0 xu');
-    expect(formatXu(undefined)).toBe('0 xu');
-    expect(formatXu(Number('x'))).toBe('0 xu');
+// Xu đã gộp vào Điểm Xanh (PD-3): không còn định dạng "N xu" nào cho khách.
+describe('format — không còn formatXu', () => {
+  it('module chỉ xuất định dạng điểm, không xuất formatXu', () => {
+    expect('formatXu' in format).toBe(false);
+    expect(format.formatPoints(50_000)).toBe('50.000 điểm');
   });
 });
 
@@ -72,9 +78,11 @@ describe('formatVndShort — số tiền rút gọn trong câu chữ', () => {
     expect(formatVndShort(50_500)).toBe('50.500đ');
   });
 
-  it('null/0 → "0đ"', () => {
-    expect(formatVndShort(null)).toBe('0đ');
+  it('0 → "0đ"; giá thiếu (null/undefined/NaN) → "—", không giả làm "0đ"', () => {
     expect(formatVndShort(0)).toBe('0đ');
+    expect(formatVndShort(null)).toBe('—');
+    expect(formatVndShort(undefined)).toBe('—');
+    expect(formatVndShort(Number('x'))).toBe('—');
   });
 });
 
@@ -93,5 +101,97 @@ describe('formatMultiplier — hệ số nhân', () => {
 
   it('thiếu config → "1" (không nhân sai lên)', () => {
     expect(formatMultiplier(undefined)).toBe('1');
+  });
+});
+
+// Game/Home/Chi tiết đơn từng in số trần ("1250000", "89000") cạnh "65.000 điểm" — cùng một kiểu số mà
+// mỗi màn một dáng (C-083). Mọi số hiển thị đi qua helper dùng chung.
+describe('formatNumber — số có dấu phân cách nghìn kiểu Việt', () => {
+  it('1250000 → "1.250.000", số nhỏ giữ nguyên', () => {
+    expect(formatNumber(1_250_000)).toBe('1.250.000');
+    expect(formatNumber(89_000)).toBe('89.000');
+    expect(formatNumber(999)).toBe('999');
+  });
+
+  it('null/undefined/rác/vô cực → "0", không ra NaN', () => {
+    expect(formatNumber(null)).toBe('0');
+    expect(formatNumber(undefined)).toBe('0');
+    expect(formatNumber(Number('x'))).toBe('0');
+    expect(formatNumber(Infinity)).toBe('0');
+  });
+
+  it('nhận cả chuỗi số (Decimal serialize qua API)', () => {
+    expect(formatNumber('65000' as unknown as number)).toBe('65.000');
+  });
+});
+
+describe('formatVnd — cùng đường định dạng với formatNumber', () => {
+  it('289000 → "289.000đ"', () => {
+    expect(formatVnd(289_000)).toBe('289.000đ');
+  });
+
+  it('nhận cả chuỗi số (Decimal serialize qua API)', () => {
+    expect(formatVnd('65000')).toBe('65.000đ');
+    expect(formatVnd('65000.00')).toBe('65.000đ');
+  });
+
+  it('số âm giữ dấu', () => {
+    expect(formatVnd(-5_000)).toBe('-5.000đ');
+  });
+});
+
+// Giá thiếu (API không trả, chuỗi rỗng, phép tính ra NaN) không được hiện như một mức giá thật: "0đ" nghĩa là MIỄN PHÍ.
+describe('formatVnd — giá thiếu hiện "—", giá 0 hợp lệ vẫn là "0đ"', () => {
+  it('0 và "0" là giá hợp lệ → "0đ"', () => {
+    expect(formatVnd(0)).toBe('0đ');
+    expect(formatVnd('0')).toBe('0đ');
+    expect(formatVnd(-0)).toBe('0đ');
+  });
+
+  it('null / undefined / chuỗi rỗng hoặc toàn khoảng trắng → "—"', () => {
+    expect(formatVnd(null)).toBe('—');
+    expect(formatVnd(undefined)).toBe('—');
+    expect(formatVnd('')).toBe('—');
+    expect(formatVnd('   ')).toBe('—');
+  });
+
+  it('NaN / vô cực / chuỗi không phải số → "—" (không in "NaNđ", không giả làm "0đ")', () => {
+    expect(formatVnd(Number('x'))).toBe('—');
+    expect(formatVnd(Infinity)).toBe('—');
+    expect(formatVnd(-Infinity)).toBe('—');
+    expect(formatVnd('abc')).toBe('—');
+  });
+});
+
+describe('formatDrops — giọt nước 💧 của Vườn Xanh', () => {
+  it('có dấu nghìn + biểu tượng giọt nước', () => {
+    expect(formatDrops(1250)).toBe('1.250💧');
+    expect(formatDrops(20)).toBe('20💧');
+  });
+
+  it('rác → "0💧"', () => {
+    expect(formatDrops(undefined)).toBe('0💧');
+  });
+});
+
+// toLocale*String('vi-VN') phụ thuộc phiên bản ICU của webview ("15-10" thay vì "15/10" trên Node 24),
+// nên ngày giờ tự ghép để mọi máy ra cùng một chuỗi.
+describe('formatDate / formatDateTime — ngày giờ theo giờ máy, không phụ thuộc ICU', () => {
+  const d = new Date(2026, 9, 5, 7, 4, 9); // 05/10/2026 07:04:09 giờ địa phương
+
+  it('formatDate → dd/MM/yyyy', () => {
+    expect(formatDate(d)).toBe('05/10/2026');
+    expect(formatDate(d.toISOString())).toBe('05/10/2026');
+  });
+
+  it('formatDateTime → HH:mm dd/MM/yyyy (bỏ giây)', () => {
+    expect(formatDateTime(d)).toBe('07:04 05/10/2026');
+  });
+
+  it('rỗng / ngày hỏng → "—", không in "Invalid Date"', () => {
+    expect(formatDate(null)).toBe('—');
+    expect(formatDate('không phải ngày')).toBe('—');
+    expect(formatDateTime(undefined)).toBe('—');
+    expect(formatDateTime('')).toBe('—');
   });
 });

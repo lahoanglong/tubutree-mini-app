@@ -5,6 +5,7 @@ import { PancakeClient } from './pancake.client';
 import { PancakeOrderService } from './pancake-order.service';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
+import { CRON_TZ } from '../../../common/cron-tz';
 
 /**
  * Lưới an toàn cuối cho P0-2 (docs/2026-09-08-review-progress.md): nếu enqueuePush() ở
@@ -38,7 +39,7 @@ export class PancakePushReconcileService {
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi (DB blip...) ném ra ngoài là
   // unhandledRejection, Node 20 mặc định crash cả process. Lỗi enqueuePush từng đơn đã được cô
   // lập ở try/catch trong vòng lặp bên dưới; lớp ngoài này bắt phần còn lại (query, v.v).
-  @Cron('0 */15 * * * *') // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
+  @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
   async reconcile(): Promise<void> {
     try {
       if (!this.client.isConfigured()) return; // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()
@@ -49,10 +50,15 @@ export class PancakePushReconcileService {
           pancakeOrderId: null,
           status: { notIn: ['CANCELLED'] }, // đơn đã hủy không cần đẩy — không tồn tại để giao
           createdAt: { lt: cutoff },
+          // Đơn đại lý còn hàng đặt trước (chưa đủ 100%) chỉ được đẩy khi DealerBackorderService lấp đủ
+          // (thiết kế duyệt 12/09): lọc ngay trong query để chúng không chiếm lô BATCH_SIZE của đơn khác.
+          NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } },
         },
         select: {
           id: true,
           code: true,
+          type: true,
+          items: { select: { backorderedQty: true } },
           createdAt: true,
           hasRecyclingPickup: true,
           gomdonOrderId: true,
@@ -69,6 +75,7 @@ export class PancakePushReconcileService {
       this.logger.warn(`Phát hiện ${stale.length} đơn chưa đẩy Pancake sau ${PancakePushReconcileService.STALE_MINUTES} phút — re-enqueue.`);
       for (const order of stale) {
         try {
+          if (order.type === 'DEALER' && order.items?.some((i) => i.backorderedQty > 0)) continue;
           const waitingGomdon =
             order.hasRecyclingPickup &&
             !order.gomdonOrderId &&

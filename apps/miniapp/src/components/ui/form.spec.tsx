@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { Input } from 'zmp-ui';
 import { Field, Checkbox, Radio, Switch } from './form';
+import { describeNested, findNestedInteractive } from './nested-interactive';
 
 describe('Field', () => {
   it('renders label and error message', () => {
@@ -69,5 +71,169 @@ describe('Switch', () => {
   it('has a 44px min touch target wrapper', () => {
     render(<Switch label="Bật thông báo" checked={false} onChange={() => {}} />);
     expect(screen.getByRole('checkbox').closest('[data-testid="switch-hit-area"]')).toHaveStyle({ minHeight: '44px' });
+  });
+});
+
+describe('Field gắn nhãn với control (C-077, axe label)', () => {
+  it('ô nhập native: nhãn trỏ đúng ô nhập (getByLabelText)', () => {
+    render(
+      <Field label="Họ tên người nhận">
+        <input />
+      </Field>,
+    );
+    expect(screen.getByLabelText('Họ tên người nhận').tagName).toBe('INPUT');
+  });
+
+  it('Input của ZaUI: nhãn trỏ đúng <input> thật và id không bị trùng', () => {
+    const { container } = render(
+      <Field label="Số điện thoại">
+        <Input />
+      </Field>,
+    );
+    const input = screen.getByLabelText('Số điện thoại');
+    expect(input.tagName).toBe('INPUT');
+    expect(container.querySelectorAll(`[id="${input.id}"]`)).toHaveLength(1);
+  });
+
+  it('có lỗi: control nhận aria-invalid và aria-describedby trỏ vào thông báo lỗi', () => {
+    render(
+      <Field label="Tên" error="Vui lòng nhập tên">
+        <input />
+      </Field>,
+    );
+    const input = screen.getByLabelText('Tên');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription('Vui lòng nhập tên');
+  });
+
+  it('không lỗi: không gắn aria-invalid / aria-describedby', () => {
+    render(
+      <Field label="Tên">
+        <input />
+      </Field>,
+    );
+    const input = screen.getByLabelText('Tên');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(input).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('control đã có id riêng thì giữ nguyên id đó', () => {
+    render(
+      <Field label="Ghi chú">
+        <input id="ghi-chu" />
+      </Field>,
+    );
+    expect(screen.getByLabelText('Ghi chú')).toHaveAttribute('id', 'ghi-chu');
+  });
+
+  it('nhiều control con: nhóm có tên theo nhãn của Field', () => {
+    render(
+      <Field label="Giờ làm">
+        <input aria-label="Từ" />
+        <input aria-label="Đến" />
+      </Field>,
+    );
+    expect(screen.getByRole('group', { name: 'Giờ làm' })).toBeInTheDocument();
+  });
+});
+
+describe('control không có tên (C-077)', () => {
+  it('Checkbox/Radio/Switch có label hoặc aria-label vẫn là control bình thường, đọc được tên', () => {
+    render(
+      <>
+        <Checkbox label="Chọn tất cả" checked={false} onChange={() => {}} />
+        <Radio aria-label="Chuyển khoản" checked={false} onChange={() => {}} />
+        <Switch aria-label="Nhận thông báo" checked={false} onChange={() => {}} />
+      </>,
+    );
+    expect(screen.getByRole('checkbox', { name: 'Chọn tất cả' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Chuyển khoản' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Nhận thông báo' })).toBeInTheDocument();
+  });
+
+  it('Checkbox có children làm nhãn vẫn được tính là có tên', () => {
+    render(<Checkbox checked={false} onChange={() => {}}>Tubu Xà phòng</Checkbox>);
+    expect(screen.getByRole('checkbox', { name: 'Tubu Xà phòng' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Checkbox', <Checkbox key="c" checked={false} onChange={() => {}} />, 'checkbox-hit-area'],
+    ['Radio', <Radio key="r" checked={false} onChange={() => {}} />, 'radio-hit-area'],
+    ['Switch', <Switch key="s" checked={false} onChange={() => {}} />, 'switch-hit-area'],
+  ])('%s không tên = thị giác thuần tuý: ẩn khỏi trình đọc màn hình và khỏi thứ tự Tab, nhưng vẫn bấm được', (_n, ui, testId) => {
+    render(ui);
+    const hit = screen.getByTestId(testId);
+    expect(hit).toHaveAttribute('aria-hidden', 'true');
+    const input = hit.querySelector('input')!;
+    expect(input.tabIndex).toBe(-1);
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
+  });
+
+  it.each([
+    ['Checkbox', <Checkbox key="c" checked={false} onChange={() => {}} />, 'checkbox-hit-area'],
+    ['Radio', <Radio key="r" checked={false} onChange={() => {}} />, 'radio-hit-area'],
+    ['Switch', <Switch key="s" checked={false} onChange={() => {}} />, 'switch-hit-area'],
+  ])('%s không tên bọc `inert`: tabindex=-1 một mình vẫn là phần tử focus được lồng trong hàng cha (axe nested-interactive)', (_n, ui, testId) => {
+    render(<div role="radio" aria-checked="false" tabIndex={0}>{ui}</div>);
+    expect(screen.getByTestId(testId)).toHaveAttribute('inert');
+    expect(findNestedInteractive(document.body).map(describeNested)).toEqual([]);
+  });
+
+  it('control CÓ tên không bị `inert` (là control thật, phải focus và đọc được)', () => {
+    render(
+      <>
+        <Checkbox label="Chọn tất cả" checked={false} onChange={() => {}} />
+        <Radio aria-label="Chuyển khoản" checked={false} onChange={() => {}} />
+        <Switch aria-label="Nhận thông báo" checked={false} onChange={() => {}} />
+      </>,
+    );
+    for (const id of ['checkbox-hit-area', 'radio-hit-area', 'switch-hit-area']) {
+      expect(screen.getByTestId(id)).not.toHaveAttribute('inert');
+    }
+  });
+
+  // jsdom không mô phỏng `inert`: `input.click()` vẫn chạy onChange, còn trình duyệt thật thì cú chạm vào chấm
+  // không bao giờ tới input mà đi thẳng lên hàng cha. Vì vậy không có ca nào ở đây khẳng định "chấm không tên
+  // phát onChange"; hợp đồng là hàng cha giữ onClick và chấm không tên chỉ đi với onChange no-op.
+  it('chạm vào chấm không tên chỉ tới onClick của hàng cha (chạm xuyên qua), onChange của chấm là no-op', () => {
+    const onRow = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <div role="checkbox" aria-checked="false" tabIndex={0} onClick={onRow}>
+        <Checkbox checked={false} onChange={onChange} />
+      </div>,
+    );
+    const hit = screen.getByTestId('checkbox-hit-area');
+    expect(hit).toHaveAttribute('inert');
+    expect(hit).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(hit);
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Checkbox/Radio/Switch có nhãn qua Field không bị coi là trang trí (C-077)', () => {
+  it.each([
+    ['Checkbox', <Checkbox checked onChange={() => {}} />, 'checkbox-hit-area'],
+    ['Radio', <Radio checked onChange={() => {}} />, 'radio-hit-area'],
+    ['Switch', <Switch checked onChange={() => {}} />, 'switch-hit-area'],
+  ])('%s trong Field: đọc được tên, nằm trong thứ tự Tab, không có tổ tiên aria-hidden', (_n, ui, testId) => {
+    render(<Field label="Đồng ý">{ui}</Field>);
+    const input = screen.getByLabelText('Đồng ý') as HTMLInputElement;
+    expect(input.tabIndex).not.toBe(-1);
+    expect(input.closest('[aria-hidden="true"]')).toBeNull();
+    expect(screen.getByTestId(testId)).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('Field có lỗi: control vẫn có tên và mô tả lỗi, không bị ẩn', () => {
+    render(
+      <Field label="Đồng ý" error="Phải đồng ý">
+        <Checkbox checked={false} onChange={() => {}} />
+      </Field>,
+    );
+    const input = screen.getByLabelText('Đồng ý');
+    expect(input.closest('[aria-hidden="true"]')).toBeNull();
+    expect(input).toHaveAccessibleDescription('Phải đồng ý');
   });
 });

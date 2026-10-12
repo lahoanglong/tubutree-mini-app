@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Icon } from './icon';
 import { Text } from './text';
@@ -18,18 +18,32 @@ export interface ListRowProps {
 
 /** Dòng trong danh sách cài đặt/menu: icon + tiêu đề + mô tả + phần bên phải.
  *
- * `onClick` giờ nằm trên NGUYÊN HÀNG (`role="button"`), không chỉ vùng chữ như bản cũ ở
- * primitives.tsx — bản cũ áp hiệu ứng nhấn `tubu-press` cho cả hàng nhưng chỉ gắn `onClick` vào
+ * `onClick` giờ nằm trên NGUYÊN HÀNG (`role="button"`), không chỉ vùng chữ như bản `Row` cũ
+ * (đã xoá) — bản cũ áp hiệu ứng nhấn `tubu-press` cho cả hàng nhưng chỉ gắn `onClick` vào
  * `Box` bọc tiêu đề, nên chạm vào icon/khoảng trống/chevron bên phải không có phản hồi gì
  * (audit A4-07). */
 export function ListRow({ icon, title, subtitle, trailing, onPress, destructive, className, style }: ListRowProps) {
   const interactive = typeof onPress === 'function';
   const trailingNode = trailing === 'chevron' ? <Icon icon={ChevronRight} size="sm" tone="muted" /> : trailing === 'switch' ? null : trailing;
 
+  // Hàng là div role=button → tự làm bàn phím: Tab + Enter/Space. Chỉ khi phím bấm TRÊN hàng (không phải
+  // nút/liên kết lồng trong `trailing`) để không bắn đôi. Hàng không tương tác: không role, không tabIndex.
+  const onKeyDown = interactive
+    ? (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.target !== e.currentTarget || e.repeat) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onPress();
+        }
+      }
+    : undefined;
+
   return (
     <div
       role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
       onClick={onPress}
+      onKeyDown={onKeyDown}
       className={[interactive ? 'tubu-press' : '', className].filter(Boolean).join(' ') || undefined}
       style={{
         display: 'flex',

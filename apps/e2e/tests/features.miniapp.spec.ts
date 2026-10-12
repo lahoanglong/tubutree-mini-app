@@ -1,4 +1,4 @@
-import type { LoyaltyOverview } from '../../miniapp/src/services/account-api';
+import type { LoyaltyOverview, WalletSummary } from '../../miniapp/src/services/account-api';
 import type { OwnedBrand } from '../../miniapp/src/services/brand-owner-api';
 import type { DealerMe } from '../../miniapp/src/services/dealer-api';
 import type { QuestList, StorefrontEdit, StorefrontStats } from '../../miniapp/src/services/storefront-api';
@@ -22,17 +22,29 @@ const LOYALTY: LoyaltyOverview = {
   ],
 };
 
+const WALLET: WalletSummary = {
+  walletBalance: 0,
+  cashbackPending: 0,
+  commissionApproved: 0,
+  commissionPending: 0,
+  withdrawMin: 50000,
+  withdrawFee: 0,
+};
+
 const NOT_DEALER: DealerMe = { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 };
 
 function mockProfile(api: MockApi): void {
   api.get('/me/loyalty', LOYALTY);
   api.get('/me/notifications', []);
+  // Thanh số dư của hub Cá nhân (C-086) đọc ví và mã giảm giá.
+  api.get('/me/wallet', WALLET);
+  api.get('/me/coupons', []);
   api.get('/dealer/me', NOT_DEALER);
 }
 
 test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', () => {
   test('Gian hàng Nhãn hàng (Brand Owner Flow)', async ({ page, api }, testInfo) => {
-    // walletBalance/pointsBalance/coinsBalance/referralCode bắt buộc (AuthUser, shared-types) —
+    // walletBalance/pointsBalance/pointsConvertedBalance/referralCode bắt buộc (AuthUser, shared-types) —
     // thiếu walletBalance làm ProfilePage crash ở formatVnd(user.walletBalance).
     mockSession(api, makeUser({ id: 'brand-1', role: 'ADMIN', fullName: 'Brand Owner 1', referralCode: 'BRAND1' }));
     mockProfile(api);
@@ -89,7 +101,7 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
       isPublished: false,
       collections: [],
     };
-    const quests: QuestList = { quests: [], totalEarnedXu: 0, level: 0, levelMax: 5 };
+    const quests: QuestList = { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 };
     api.get('/storefront/me', storefront);
     api.get('/storefront/me/quests', quests);
     api.get('/storefront/me/products', []);

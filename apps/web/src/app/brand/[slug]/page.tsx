@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { Award, Tag, Sparkles, Building2, Leaf } from 'lucide-react';
+import { Award, BadgeCheck, Sparkles, Building2, Leaf } from 'lucide-react';
 import { getBrand, formatVnd, formatSold } from '@/lib/api';
 
 export const revalidate = 300;
@@ -36,39 +36,40 @@ export default async function BrandPage({
     <main className="mx-auto max-w-3xl px-4 py-6">
       {b.coverUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={b.coverUrl} alt={b.name} className="mb-4 h-44 w-full rounded-xl object-cover" />
+        <img src={b.coverUrl} alt={b.name} className="mb-4 h-44 w-full rounded-card object-cover" />
       )}
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {b.logoUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={b.logoUrl} alt={b.name} className="h-14 w-14 rounded-full object-cover ring-2 ring-white" />
+          <img src={b.logoUrl} alt={b.name} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-stone-0" />
         )}
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
+        <div className="min-w-0">
+          <h1 className="flex flex-wrap items-center gap-2 break-words font-display text-2xl font-semibold text-stone-900">
             {b.name}
             {b.isVerified && (
-              <span className="rounded-full bg-leaf-600 px-2 py-0.5 text-xs font-medium text-white">
-                ✓ Chính hãng
+              <span className="inline-flex items-center gap-1 rounded-full bg-forest-600 px-2 py-0.5 font-ui text-xs font-medium text-stone-0">
+                <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                Chính hãng
               </span>
             )}
           </h1>
-          {b.tagline && <p className="text-neutral-600">{b.tagline}</p>}
+          {b.tagline && <p className="text-stone-600">{b.tagline}</p>}
         </div>
       </div>
 
       {b.certifications.length > 0 && (
         <section className="mt-5">
-          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
-            <Award className="h-4 w-4 text-primary-600" />
+          <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
+            <Award className="h-4 w-4 text-forest-600" aria-hidden="true" />
             <span>Chứng nhận</span>
           </h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {b.certifications.map((c) => (
               <span
                 key={c.code}
-                className="whitespace-nowrap rounded-lg bg-leaf-50 px-3 py-1.5 text-sm text-leaf-800 border border-leaf-200 flex items-center gap-1"
+                className="flex items-center gap-1 whitespace-nowrap rounded-control border border-forest-200 bg-forest-50 px-3 py-1.5 text-sm text-forest-800"
               >
-                <Leaf className="h-3.5 w-3.5 text-leaf-600" />
+                <Leaf className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
                 <span>{c.label}</span>
               </span>
             ))}
@@ -78,19 +79,19 @@ export default async function BrandPage({
 
       {b.promotions.length > 0 && (
         <section className="mt-5">
-          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-amber-500" />
+          <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
+            <Sparkles className="h-4 w-4 text-promo-solid" aria-hidden="true" />
             <span>Khuyến mãi</span>
           </h2>
           <div className="space-y-2">
             {b.promotions.map((p) => (
               <div
                 key={p.id}
-                className="rounded-xl border border-clay-200 bg-clay-50 p-3"
+                className="rounded-card border border-promo-solid/30 bg-promo-bg p-3"
                 style={p.themeColor ? { borderColor: p.themeColor } : undefined}
               >
-                <p className="font-semibold text-clay-800">{p.title}</p>
-                {p.subtitle && <p className="text-sm text-neutral-600">{p.subtitle}</p>}
+                <p className="font-semibold text-promo-fg">{p.title}</p>
+                {p.subtitle && <p className="text-sm text-stone-600">{p.subtitle}</p>}
               </div>
             ))}
           </div>
@@ -99,13 +100,13 @@ export default async function BrandPage({
 
       {b.products.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-3 font-semibold text-neutral-900">Sản phẩm</h2>
+          <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
           <div className="grid grid-cols-2 gap-3">
             {b.products.map((p) => (
               <a
                 key={p.id}
                 href={`/san-pham/${p.slug}`}
-                className="block overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-md transition"
+                className="block overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised"
               >
                 {p.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -116,16 +117,16 @@ export default async function BrandPage({
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-leaf-50 text-leaf-600">
-                    <Leaf className="h-10 w-10 text-leaf-600" />
+                  <div className="flex aspect-square w-full items-center justify-center bg-forest-50 text-forest-600">
+                    <Leaf className="h-10 w-10 text-forest-600" aria-hidden="true" />
                   </div>
                 )}
                 <div className="p-2">
-                  <p className="line-clamp-2 text-sm text-neutral-900">{p.name}</p>
-                  <p className="mt-1 font-bold text-clay-700">
+                  <p className="line-clamp-2 text-sm text-stone-900">{p.name}</p>
+                  <p className="mt-1 font-bold text-stone-900">
                     {formatVnd(p.salePrice ?? p.basePrice)}
                   </p>
-                  {formatSold(p.sold) && <p className="mt-0.5 text-xs text-neutral-400">{formatSold(p.sold)}</p>}
+                  {formatSold(p.sold) && <p className="mt-0.5 text-xs text-stone-500">{formatSold(p.sold)}</p>}
                 </div>
               </a>
             ))}
@@ -135,16 +136,16 @@ export default async function BrandPage({
 
       {b.dealerRewards.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2 font-semibold text-neutral-900 flex items-center gap-1.5">
-            <Building2 className="h-4 w-4 text-primary-700" />
+          <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
+            <Building2 className="h-4 w-4 text-forest-700" aria-hidden="true" />
             <span>Chương trình đại lý</span>
           </h2>
           <div className="space-y-2">
             {b.dealerRewards.map((d) => (
-              <div key={d.id} className="rounded-xl border border-neutral-200 bg-white p-3">
-                <p className="font-semibold text-neutral-900">{d.title}</p>
-                {d.description && <p className="text-sm text-neutral-600">{d.description}</p>}
-                <p className="mt-1 text-xs text-neutral-500">
+              <div key={d.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
+                <p className="font-semibold text-stone-900">{d.title}</p>
+                {d.description && <p className="text-sm text-stone-600">{d.description}</p>}
+                <p className="mt-1 text-xs text-stone-500">
                   Đạt doanh số {formatVnd(d.threshold)} / {d.period === 'YEAR' ? 'năm' : 'quý'}
                 </p>
               </div>
@@ -155,8 +156,8 @@ export default async function BrandPage({
 
       {b.story && (
         <section className="mt-6">
-          <h2 className="mb-2 font-semibold text-neutral-900">Câu chuyện thương hiệu</h2>
-          <p className="whitespace-pre-line text-neutral-700">{b.story}</p>
+          <h2 className="mb-2 font-display font-semibold text-stone-900">Câu chuyện thương hiệu</h2>
+          <p className="whitespace-pre-line break-words text-stone-700">{b.story}</p>
         </section>
       )}
     </main>

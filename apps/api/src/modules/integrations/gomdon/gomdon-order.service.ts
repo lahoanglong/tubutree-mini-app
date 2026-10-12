@@ -774,7 +774,7 @@ export class GomdonOrderService {
 
     const addr = (order.shippingAddress as unknown as Partial<ShippingSnapshot>) ?? {};
     const wh = config.defaultWarehouse;
-    // COD: bưu tá thu đúng tổng đơn; đã thanh toán (ví/xu/chuyển khoản/ZaloPay) → thu 0.
+    // COD: bưu tá thu đúng tổng đơn; đã thanh toán (ví/chuyển khoản/ZaloPay, kể cả đơn XU cũ) → thu 0.
     const collectAmount = order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID' ? order.total : 0;
 
     const productName = order.items

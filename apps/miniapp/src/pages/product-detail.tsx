@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -25,14 +25,16 @@ import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
-import { brandAccent } from '../utils/brands';
+import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
@@ -42,10 +44,16 @@ import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { PriceTag } from '../components/ui/price-tag';
 import { Badge } from '../components/ui/badge';
+import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { ScrollRow } from '../components/ui/scroll-row';
+import { useScrollHints } from '../components/ui/use-scroll-hints';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
+// Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
+const PDP_TITLE = 'Chi tiết sản phẩm';
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
@@ -97,6 +105,8 @@ export default function ProductDetailPage() {
     queryFn: () => fetchProduct(slug!),
     enabled: !!slug,
   });
+  // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
+  useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
@@ -230,6 +240,7 @@ export default function ProductDetailPage() {
   if (product.isError || !product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
       </Page>
     );
@@ -287,13 +298,26 @@ export default function ProductDetailPage() {
       {/* ── Info chính ── */}
       <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
-          <span
-            aria-hidden
-            style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
-          />
-          <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
-            {p.brand}
-          </Text>
+          {/* Lọc theo tên nhãn đúng như catalog (p.brand), không phải slug: API so khớp chính xác tên. */}
+          <button
+            type="button"
+            className="tubu-press"
+            aria-label={brandBrowseLabel(p.brand)}
+            onClick={() => navigate(brandBrowsePath(p.brand))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: 0,
+              background: 'none', border: 'none', cursor: 'pointer', font: 'inherit',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
+            />
+            <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
+              {p.brand}
+            </Text>
+            <Icon icon={ChevronRight} size="sm" tone="muted" />
+          </button>
           <Box style={{ marginLeft: 'auto' }}>
             <WishlistHeart productId={p.id} size={22} />
           </Box>
@@ -314,9 +338,11 @@ export default function ProductDetailPage() {
           </Box>
         </Box>
 
-        <Text.Title size="small" style={{ marginTop: 2 }}>
-          {p.name}
-        </Text.Title>
+        {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
+            hình dáng vẫn do Text.Title quyết định như trước. */}
+        <h1 style={{ margin: '2px 0 0', font: 'inherit' }}>
+          <Text.Title size="small">{p.name}</Text.Title>
+        </h1>
 
         {reviews.data && reviews.data.count > 0 && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
@@ -383,9 +409,13 @@ export default function ProductDetailPage() {
                   padding: '3px 10px',
                   borderRadius: 'var(--radius-pill)',
                   fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                ✓ {c}
+                <Icon icon={Check} size="sm" tone="brand" />
+                {c}
               </Text>
             ))}
           </Box>
@@ -393,11 +423,12 @@ export default function ProductDetailPage() {
 
         {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
         {(couponsQ.data?.length ?? 0) > 0 && (
-          <Box className="scroll-x" style={{ gap: 8, marginTop: 12 }}>
+          <ScrollRow label="Mã giảm giá có thể dùng" style={{ gap: 8, marginTop: 12 }}>
             {couponsQ.data!.slice(0, 6).map((c) => (
               <Box
                 key={c.code}
                 role="button"
+                {...rowKeyboardProps()}
                 aria-label={`Sao chép mã ${c.code}`}
                 className="tubu-press"
                 onClick={() => {
@@ -436,7 +467,7 @@ export default function ProductDetailPage() {
                 ) : null}
               </Box>
             ))}
-          </Box>
+          </ScrollRow>
         )}
 
         {selected && inStock && (
@@ -620,7 +651,7 @@ export default function ProductDetailPage() {
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
-              <span style={{ color: 'var(--color-text-brand)', fontWeight: 700, flexShrink: 0 }}>✓</span>
+              <Icon icon={Check} size="sm" tone="brand" style={{ flexShrink: 0 }} />
               <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>{t}</Text>
             </Box>
           ))}
@@ -773,7 +804,8 @@ const BUY_NOW_LINE: CSSProperties = {
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
 function Gallery({ images, alt }: { images: string[]; alt: string }) {
   const [index, setIndex] = useState(0);
-  const trackRef = useRef<HTMLDivElement>(null);
+  // Ảnh không bấm được nên vùng cuộn phải tự focus được khi tràn, nếu không bàn phím không lật ảnh được (axe scrollable-region-focusable).
+  const track = useScrollHints<HTMLDivElement>();
 
   if (images.length === 0) {
     return (
@@ -795,7 +827,8 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
   }
 
   const onScroll = () => {
-    const el = trackRef.current;
+    track.onScroll();
+    const el = track.ref.current;
     if (!el) return;
     setIndex(Math.round(el.scrollLeft / el.clientWidth));
   };
@@ -803,7 +836,10 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
   return (
     <Box style={{ position: 'relative' }}>
       <div
-        ref={trackRef}
+        ref={track.ref}
+        role="region"
+        aria-label="Ảnh sản phẩm"
+        tabIndex={track.tabIndex}
         onScroll={onScroll}
         style={{
           display: 'flex',
@@ -849,7 +885,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
                 width: i === index ? 16 : 6,
                 height: 6,
                 borderRadius: 'var(--radius-pill)',
-                background: i === index ? 'var(--color-action-primary-bg)' : 'rgba(255,255,255,0.85)',
+                background: i === index ? 'var(--color-action-primary-bg)' : 'var(--color-media-dot-idle)',
                 transition: 'width var(--dur-base) var(--ease-out)',
                 boxShadow: 'var(--elevation-1)',
               }}
@@ -997,6 +1033,7 @@ function CartIcon() {
 function PdpSkeleton() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
+      <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
       <Box p={4} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={70} height={12} />

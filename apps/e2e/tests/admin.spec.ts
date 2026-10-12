@@ -1,5 +1,5 @@
 import { test, expect, type MockApi } from './support/mock-api';
-import type { DealerApp, Page } from '../../web/src/lib/admin-client';
+import type { AdminDealerTier, DealerApp, Page } from '../../web/src/lib/admin-client';
 
 /**
  * Web Admin Dashboard E2E — tab "Đại lý" (duyệt hồ sơ đại lý).
@@ -46,6 +46,15 @@ function page<T>(data: T[], p: number, limit: number, total: number): Page<T> {
   return { data, meta: { page: p, limit, total } };
 }
 
+/** Danh sách bậc đại lý cho DealerTierSelect (GET /admin/dealer-tiers → AdminDealerTier[]); mọi hồ sơ PENDING đều render select này. */
+function mockDealerTiers(api: MockApi) {
+  const tiers: AdminDealerTier[] = [
+    { id: 'dealer_l1', name: 'Đại lý cấp 1', minOrderVolume: 0, creditLimit: 0, paymentTerms: null },
+    { id: 'dealer_l2', name: 'Đại lý cấp 2', minOrderVolume: 5_000_000, creditLimit: 20_000_000, paymentTerms: 'Công nợ 15 ngày' },
+  ];
+  api.get('/admin/dealer-tiers', tiers);
+}
+
 /** Phiên admin giả: /auth/refresh (auth-context.tsx khôi phục phiên khi có cờ `tubu_web_session`) + badge giỏ hàng ở header. */
 function mockAdminSession(api: MockApi) {
   api.post('/auth/refresh', ADMIN_LOGIN);
@@ -58,11 +67,14 @@ function mockAdminSession(api: MockApi) {
     freeshipThreshold: 0,
     itemCount: 0,
   });
+  // Huy hiệu tab "Hoàn tiền khách" (Q-01) gọi số khoản chờ chuyển khoản ở MỌI lần mở /admin.
+  api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
 }
 
 test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
   test.beforeEach(async ({ page: p, api }) => {
     mockAdminSession(api);
+    mockDealerTiers(api);
     // Refresh token thật nằm ở cookie HttpOnly do BE set — test không giả được. Thứ auth-context.tsx nhìn để
     // quyết định có gọi /auth/refresh hay không là cờ `tubu_web_session` trong localStorage; đặt TRƯỚC khi
     // script của trang chạy (addInitScript) thay vì goto → evaluate → reload.
@@ -93,10 +105,11 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
     expect(list[0]!.query.get('status')).toBe('PENDING');
     expect(list[0]!.query.get('page')).toBe('1');
 
-    // Nút Duyệt khoá tới khi nhập Tier ID (BE bắt buộc tierId khi duyệt).
+    // Nút Duyệt khoá tới khi chọn bậc đại lý trong DealerTierSelect (BE bắt buộc tierId khi duyệt).
     const approve = p.getByRole('button', { name: 'Duyệt', exact: true });
     await expect(approve).toBeDisabled();
-    await p.fill('input[placeholder*="Tier"]', 'dealer_l1');
+    await p.getByLabel('Bậc đại lý').selectOption('dealer_l1');
+    await expect(approve).toBeEnabled();
 
     // Exact match bắt buộc: tab bar có nút "Duyệt SP đối tác" chứa "Duyệt" như chuỗi con.
     const reviewCall = api.waitForCall('POST', '/admin/dealer-applications/:id/review');
@@ -110,39 +123,42 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
     await expect(p.getByText('Tạp hoá Cô Lan')).toHaveCount(0);
   });
 
-  test('Hàng chờ quá 1 trang: hiện tổng, "Tải thêm" tải hồ sơ cũ hơn và xếp cũ nhất lên đầu', async ({ page: p, api }) => {
-    // API xếp mới nhất trước (createdAt desc): trang 1 = 100 hồ sơ mới, trang 2 = hồ sơ cũ nhất.
-    const newer = Array.from({ length: 100 }, (_, i) =>
+  test('Hàng chờ quá 1 trang: gửi order=asc, hiện tổng, "Tải thêm" tải hồ sơ mới hơn và giữ cũ nhất lên đầu', async ({ page: p, api }) => {
+    // order=asc: API xếp cũ nhất trước — trang 1 = 100 hồ sơ chờ lâu nhất, trang 2 = hồ sơ mới nhất.
+    const oldest = Array.from({ length: 100 }, (_, i) =>
       dealerApp({
         id: `d-${i}`,
-        businessName: `Đại lý mới ${i}`,
-        createdAt: new Date(Date.UTC(2026, 8, 25, 0, 0, 0) - i * 60_000).toISOString(),
+        businessName: `Đại lý chờ ${i}`,
+        createdAt: new Date(Date.UTC(2026, 8, 1, 0, 0, 0) + i * 60_000).toISOString(),
       }),
     );
-    const oldest = dealerApp({ id: 'd-old', businessName: 'Đại lý chờ lâu nhất', createdAt: '2026-08-01T00:00:00.000Z' });
+    const newest = dealerApp({ id: 'd-new', businessName: 'Đại lý mới nhất', createdAt: '2026-09-25T00:00:00.000Z' });
     api.get('/admin/dealer-applications', ({ call }) => {
+      expect(call.query.get('order')).toBe('asc');
       const pg = Number(call.query.get('page') ?? 1);
       const limit = Number(call.query.get('limit') ?? 20);
-      return page(pg === 1 ? newer : [oldest], pg, limit, 101);
+      return page(pg === 1 ? oldest : [newest], pg, limit, 101);
     });
 
     await p.goto('/admin?tab=dealers');
 
     await expect(p.getByText('Hiển thị 100/101 hồ sơ')).toBeVisible({ timeout: 15_000 });
-    await expect(p.getByText(/Còn 1 hồ sơ cũ hơn chưa tải/)).toBeVisible();
-    await expect(p.getByText('Đại lý chờ lâu nhất')).toHaveCount(0);
+    await expect(p.getByText(/Còn 1 hồ sơ mới hơn chưa tải/)).toBeVisible();
+    await expect(p.getByText('Đại lý mới nhất')).toHaveCount(0);
 
     const more = api.waitForCall('GET', '/admin/dealer-applications');
     await p.getByRole('button', { name: 'Tải thêm' }).click();
-    expect((await more).query.get('page')).toBe('2');
+    const call = await more;
+    expect(call.query.get('page')).toBe('2');
+    expect(call.query.get('order')).toBe('asc');
 
     await expect(p.getByText('Hiển thị 101/101 hồ sơ')).toBeVisible();
     await expect(p.getByRole('button', { name: 'Tải thêm' })).toHaveCount(0);
-    await expect(p.getByText(/Còn \d+ hồ sơ cũ hơn chưa tải/)).toHaveCount(0);
-    // Hồ sơ chờ lâu nhất đứng TRƯỚC mọi hồ sơ mới hơn.
+    await expect(p.getByText(/Còn \d+ hồ sơ mới hơn chưa tải/)).toHaveCount(0);
+    // Hồ sơ chờ lâu nhất đứng đầu; hồ sơ mới vừa tải thêm nằm cuối.
     const text = await p.locator('main').innerText();
-    expect(text.indexOf('Đại lý chờ lâu nhất')).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf('Đại lý chờ lâu nhất')).toBeLessThan(text.indexOf('Đại lý mới 99'));
-    expect(text.indexOf('Đại lý mới 99')).toBeLessThan(text.indexOf('Đại lý mới 0'));
+    expect(text.indexOf('Đại lý chờ 0')).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf('Đại lý chờ 0')).toBeLessThan(text.indexOf('Đại lý chờ 99'));
+    expect(text.indexOf('Đại lý chờ 99')).toBeLessThan(text.indexOf('Đại lý mới nhất'));
   });
 });

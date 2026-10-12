@@ -1,8 +1,11 @@
-import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { clampTake } from '../../common/pagination';
 import { AffiliateService } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
@@ -31,11 +34,11 @@ export class AffiliateController {
   constructor(private readonly affiliate: AffiliateService) {}
 
   @Post('register')
-  register(@CurrentUser('sub') userId: string) {
-    return this.affiliate.register(userId);
+  register(@CurrentUser('sub') userId: string, @Body() dto?: RegisterAffiliateDto) {
+    return this.affiliate.register(userId, dto?.termsVersion);
   }
 
-  // Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất).
+  // Ghi "chạm" giới thiệu để attribution sống affiliate.attribution_days ngày (fallback khi phiên mất).
   @Post('touch')
   touch(@CurrentUser('sub') userId: string, @Body() dto: TouchDto) {
     return this.affiliate.recordTouch(userId, dto);
@@ -52,8 +55,8 @@ export class AffiliateController {
   }
 
   @Get('links')
-  links(@CurrentUser('sub') userId: string) {
-    return this.affiliate.listLinks(userId);
+  links(@CurrentUser('sub') userId: string, @Query() query: CursorPageQuery) {
+    return this.affiliate.listLinks(userId, { take: clampTake(query.take, 100, 200), cursor: query.cursor });
   }
 
   @Get('dashboard')

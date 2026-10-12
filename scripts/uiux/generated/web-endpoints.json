@@ -1,0 +1,9375 @@
+[
+ {
+  "method": "POST",
+  "path": "/admin/academy/courses/:courseId/lessons",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "courseId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "contentType": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "VIDEO",
+       "ARTICLE"
+      ]
+     },
+     "opt": false
+    },
+    "videoUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "body": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:567"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/academy/courses/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:563"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/academy/courses/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "description": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "lessons": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "courseId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "contentType": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "VIDEO",
+           "ARTICLE"
+          ]
+         },
+         "opt": false
+        },
+        "videoUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "body": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "sortOrder": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:561"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/academy/courses",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "title": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "description": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "coverUrl": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "sortOrder": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "isPublished": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "lessons": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "obj",
+        "props": {
+         "id": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "courseId": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "title": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "contentType": {
+          "s": {
+           "k": "enum",
+           "v": [
+            "VIDEO",
+            "ARTICLE"
+           ]
+          },
+          "opt": false
+         },
+         "videoUrl": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "body": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "sortOrder": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       }
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:550"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/academy/courses",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "description": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "lessons": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "courseId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "contentType": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "VIDEO",
+           "ARTICLE"
+          ]
+         },
+         "opt": false
+        },
+        "videoUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "body": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "sortOrder": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:557"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/academy/lessons/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:573"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/academy/lessons/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "courseId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "contentType": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "VIDEO",
+       "ARTICLE"
+      ]
+     },
+     "opt": false
+    },
+    "videoUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "body": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:571"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/analytics/retention-daily",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "date": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "newBuyers": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "activeBuyers": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "ordersCount": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "ordersPerBuyerMtd": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "dauProxyRefreshToken": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "dauEventBased": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:835"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/brands/:id/link-by-name",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "linked": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:446"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/brands/:id/products",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "detached": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:448"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/brands/:id/products",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "slug": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "thumbnail": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "brand": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:444"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/brands/:id/promotions",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "title": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "subtitle": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "startAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "endAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:450"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/brands/:id/promotions",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtitle": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "startAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "endAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:452"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/brands/:id/verify",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "tagline": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "logoUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "story": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "origin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "certifications": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "label": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "verified": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "proofUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "isVerified": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "followerCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:442"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/brands/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "tagline": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "logoUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "story": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "origin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "certifications": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "label": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "verified": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "proofUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "isVerified": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "followerCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:440"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/brands",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "slug": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "tagline": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "logoUrl": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "coverUrl": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "story": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "origin": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "certifications": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "obj",
+        "props": {
+         "code": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "label": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "verified": {
+          "s": {
+           "k": "bool"
+          },
+          "opt": true
+         },
+         "proofUrl": {
+          "s": {
+           "k": "str"
+          },
+          "opt": true
+         }
+        }
+       }
+      },
+      "opt": false
+     },
+     "isVerified": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "isPublished": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "followerCount": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:424"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/brands",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "tagline": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "logoUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "story": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "origin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "certifications": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "label": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "verified": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "proofUrl": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "isVerified": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "followerCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:426"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/cashback/transactions:p0",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "userId": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provider": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "merchantOrderId": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "orderAmount": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "commission": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "userReward": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "status": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "REJECTED",
+        "PENDING",
+        "CONFIRMED",
+        "PAID"
+       ]
+      },
+      "opt": false
+     },
+     "confirmedAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "paidAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "user": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "fullName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "phone": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     },
+     "merchant": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:684"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/cashback/transactions/:id/review",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "provider": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "merchantOrderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderAmount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "commission": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "userReward": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REJECTED",
+       "PENDING",
+       "CONFIRMED",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "confirmedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "merchant": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "slug": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:686"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/config:p0",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "key": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "value": {
+      "s": {
+       "k": "any"
+      },
+      "opt": false
+     },
+     "description": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "category": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:358"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/admin/config",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:360"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/content-kits/:productId",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "productId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "captions": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "usps": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "faqs": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "q": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "a": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "videoUrls": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:514"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/admin/content-kits/:productId",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "productId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "captions": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "usps": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "faqs": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "q": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "a": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "videoUrls": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:518"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/coupons",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:374"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/dashboard/stats",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "totalRevenue": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "totalOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pendingOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "shippingOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "deliveredOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "cancelledOrders": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "totalUsers": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "totalAffiliates": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "totalProducts": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "plantedTreesCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "recentOrders": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paymentMethod": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "user": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "fullName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:242"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-applications/:id/review",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:183"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/dealer-applications",
+  "schema": {
+   "k": "union",
+   "of": [
+    {
+     "k": "arr",
+     "of": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "businessName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "ownerName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "address": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "taxCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "cccdFrontUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "cccdBackUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "status": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "createdAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "data": {
+       "s": {
+        "k": "arr",
+        "of": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "businessName": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "ownerName": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "phone": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "address": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "taxCode": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "cccdFrontUrl": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "cccdBackUrl": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "status": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "createdAt": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          }
+         }
+        }
+       },
+       "opt": false
+      },
+      "meta": {
+       "s": {
+        "k": "obj",
+        "props": {
+         "page": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "limit": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "total": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       },
+       "opt": false
+      }
+     }
+    }
+   ]
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:179"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-orders/:orderId/confirm-payment",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "alreadyPaid": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "message": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "order": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "code": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "status": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "paymentStatus": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:299"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-prices/import",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "updated": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "skipped": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "notFound": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:223"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-reward-claims/:id/approve",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "periodKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardTitle": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardType": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "TOUR",
+       "GIFT",
+       "OTHER"
+      ]
+     },
+     "opt": false
+    },
+    "rewardPeriod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "threshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "volumeAtClaim": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "note": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "APPROVED",
+       "REJECTED",
+       "PENDING",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dealer": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "businessName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:719"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-reward-claims/:id/mark-paid",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "periodKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardTitle": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardType": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "TOUR",
+       "GIFT",
+       "OTHER"
+      ]
+     },
+     "opt": false
+    },
+    "rewardPeriod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "threshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "volumeAtClaim": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "note": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "APPROVED",
+       "REJECTED",
+       "PENDING",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dealer": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "businessName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:729"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-reward-claims/:id/reject",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "periodKey": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardTitle": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rewardType": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "TOUR",
+       "GIFT",
+       "OTHER"
+      ]
+     },
+     "opt": false
+    },
+    "rewardPeriod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "threshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "volumeAtClaim": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "note": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "APPROVED",
+       "REJECTED",
+       "PENDING",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "dealer": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "businessName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:724"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/dealer-reward-claims",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "userId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "rewardId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "periodKey": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "rewardTitle": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "rewardType": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "TOUR",
+           "GIFT",
+           "OTHER"
+          ]
+         },
+         "opt": false
+        },
+        "rewardPeriod": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "threshold": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "volumeAtClaim": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "note": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "APPROVED",
+           "REJECTED",
+           "PENDING",
+           "PAID"
+          ]
+         },
+         "opt": false
+        },
+        "reviewedBy": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "reviewedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "rejectionReason": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paidBy": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paidAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "adminNote": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "dealer": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "id": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "fullName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "businessName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:715"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/dealer-rewards/:id",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:459"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/dealer-rewards",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "brandId": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "type": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "TOUR",
+        "GIFT",
+        "OTHER"
+       ]
+      },
+      "opt": false
+     },
+     "title": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "description": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "threshold": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "period": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:455"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealer-rewards",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "brandId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "TOUR",
+       "GIFT",
+       "OTHER"
+      ]
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "description": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "threshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "period": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:457"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/dealers/:userId/credit-ledger",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "balance": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "entries": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "delta": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "refType": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "refId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "note": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:321"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/dealers/:userId/credit-payment",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "balance": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:337"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/faqs/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:527"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/faqs/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "category": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "question": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "answer": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:526"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/faqs",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "category": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "question": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "answer": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "sortOrder": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "createdAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "updatedAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:520"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/faqs",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "category": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "question": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "answer": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:522"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/flash-sales/:id",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:482"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/flash-sales/:saleId/items",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:484"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/flash-sales/items/:itemId",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:486"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/flash-sales",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "title": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "startAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "endAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "items": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "obj",
+        "props": {
+         "id": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "variationId": {
+          "s": {
+           "k": "str"
+          },
+          "opt": false
+         },
+         "flashPrice": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "quota": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "soldCount": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "perUserLimit": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       }
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:478"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/flash-sales",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "startAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "endAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "flashPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quota": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "soldCount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "perUserLimit": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:480"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/gomdon/status",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "baseUrlSet": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "credentialsSet": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "configured": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "webhookSecretSet": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "recyclingToggle": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "recyclingEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:351"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/loyalty/pos-credits:p0",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "receiptId": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "orderTotal": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "points": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "multiplier": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "note": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "dayKey": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "createdAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "staff": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "phone": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     },
+     "member": {
+      "s": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "phone": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "memberCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:821"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/merchant-products/:productId/review",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "approvalStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:660"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/merchant-products/pending",
+  "schema": {
+   "k": "union",
+   "of": [
+    {
+     "k": "arr",
+     "of": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "slug": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "basePrice": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "salePrice": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "thumbnail": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "brand": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "category": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "description": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "ingredients": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "certifications": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "str"
+         }
+        },
+        "opt": false
+       },
+       "ecoBadges": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "str"
+         }
+        },
+        "opt": false
+       },
+       "approvalStatus": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "APPROVED",
+          "REJECTED",
+          "PENDING_REVIEW"
+         ]
+        },
+        "opt": false
+       },
+       "rejectReason": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "createdAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "storefront": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "title": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "subdomain": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "ownerUserId": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": true
+       },
+       "variations": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "obj",
+          "props": {
+           "id": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "name": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "sku": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "price": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           },
+           "stock": {
+            "s": {
+             "k": "num"
+            },
+            "opt": false
+           }
+          }
+         }
+        },
+        "opt": true
+       }
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "data": {
+       "s": {
+        "k": "arr",
+        "of": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "name": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "slug": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "basePrice": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          },
+          "salePrice": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          },
+          "thumbnail": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "brand": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "category": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "description": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "ingredients": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "certifications": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "str"
+            }
+           },
+           "opt": false
+          },
+          "ecoBadges": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "str"
+            }
+           },
+           "opt": false
+          },
+          "approvalStatus": {
+           "s": {
+            "k": "enum",
+            "v": [
+             "APPROVED",
+             "REJECTED",
+             "PENDING_REVIEW"
+            ]
+           },
+           "opt": false
+          },
+          "rejectReason": {
+           "s": {
+            "k": "str"
+           },
+           "opt": true
+          },
+          "createdAt": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "storefront": {
+           "s": {
+            "k": "obj",
+            "props": {
+             "id": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "title": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "subdomain": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "ownerUserId": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             }
+            }
+           },
+           "opt": true
+          },
+          "variations": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "obj",
+             "props": {
+              "id": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "name": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "sku": {
+               "s": {
+                "k": "str"
+               },
+               "opt": false
+              },
+              "price": {
+               "s": {
+                "k": "num"
+               },
+               "opt": false
+              },
+              "stock": {
+               "s": {
+                "k": "num"
+               },
+               "opt": false
+              }
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        }
+       },
+       "opt": false
+      },
+      "meta": {
+       "s": {
+        "k": "obj",
+        "props": {
+         "page": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "limit": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "total": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       },
+       "opt": false
+      }
+     }
+    }
+   ]
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:651"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/admin/orders/:id/status",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "dealerOnCredit": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "total": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "paymentMethod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paymentStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "shippingFee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "discountTotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "note": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "shippingPartner": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "shippingCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "shippingStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "hasRecyclingPickup": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "recyclingNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonOrderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonPartnerCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonStatusAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonCancelStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "deliveredAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    },
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "backorderedQty": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:353"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/orders/:orderId/gomdon/cancel-waybill",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "message": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "queued": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "result": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "QUEUED",
+       "CANCELLED"
+      ]
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:268"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/orders/:orderId/gomdon/mark-handled",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "result": {
+     "s": {
+      "k": "lit",
+      "v": "MANUAL_HANDLED"
+     },
+     "opt": false
+    },
+    "message": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:274"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/orders/:orderId/gomdon/retry",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "message": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "queued": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "result": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "QUEUED",
+       "CANCELLED"
+      ]
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:262"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/orders",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "type": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "dealerOnCredit": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "paymentMethod": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paymentStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "shippingFee": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "discountTotal": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "note": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "updatedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "shippingPartner": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "shippingCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "shippingStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "hasRecyclingPickup": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "recyclingNote": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonOrderId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonPartnerCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonStatusAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonCancelStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "deliveredAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "user": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "id": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "fullName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": true
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "productName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "variationName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": true
+            },
+            "unitPrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "quantity": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "total": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "backorderedQty": {
+             "s": {
+              "k": "num"
+             },
+             "opt": true
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:246"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/payouts/:id/approve",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "amount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "fee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankInfo": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "bankName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountNumber": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REQUESTED",
+       "APPROVED",
+       "REJECTED",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "requestedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankRef": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "referralCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:758"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/payouts/:id/mark-paid",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "amount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "fee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankInfo": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "bankName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountNumber": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REQUESTED",
+       "APPROVED",
+       "REJECTED",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "requestedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankRef": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "referralCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:768"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/payouts/:id/reject",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "amount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "fee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "method": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankInfo": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "bankName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountNumber": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       },
+       "accountName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": true
+       }
+      }
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REQUESTED",
+       "APPROVED",
+       "REJECTED",
+       "PAID"
+      ]
+     },
+     "opt": false
+    },
+    "requestedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "rejectionReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paidAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "bankRef": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "referralCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:763"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/payouts",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "userId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "amount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "fee": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "method": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "bankInfo": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "bankName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "accountNumber": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "accountName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           }
+          }
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "REQUESTED",
+           "APPROVED",
+           "REJECTED",
+           "PAID"
+          ]
+         },
+         "opt": false
+        },
+        "requestedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "reviewedBy": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "reviewedAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "rejectionReason": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paidBy": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paidAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "bankRef": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "adminNote": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "user": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "id": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "fullName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "referralCode": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:756"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/products/sold-external",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "updatedCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:228"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/promotions/:id",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:454"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/admin/quick-replies/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:612"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/admin/quick-replies/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "category": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "keywords": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "content": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isGreeting": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:610"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/quick-replies",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "category": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "keywords": {
+      "s": {
+       "k": "arr",
+       "of": {
+        "k": "str"
+       }
+      },
+      "opt": false
+     },
+     "title": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "content": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isGreeting": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "isActive": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     },
+     "sortOrder": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "createdAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "updatedAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:589"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/quick-replies",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "category": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "keywords": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "content": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isGreeting": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "isActive": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "sortOrder": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "updatedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:598"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/return-requests/:id/review",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "orderId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "userId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "images": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "REQUESTED",
+       "APPROVED",
+       "REJECTED"
+      ]
+     },
+     "opt": false
+    },
+    "refundMethod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "adminNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedBy": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "reviewedAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "order": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "code": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "status": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "paymentMethod": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:216"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/return-requests",
+  "schema": {
+   "k": "union",
+   "of": [
+    {
+     "k": "arr",
+     "of": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "orderId": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "userId": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "reason": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "images": {
+        "s": {
+         "k": "arr",
+         "of": {
+          "k": "str"
+         }
+        },
+        "opt": false
+       },
+       "status": {
+        "s": {
+         "k": "enum",
+         "v": [
+          "REQUESTED",
+          "APPROVED",
+          "REJECTED"
+         ]
+        },
+        "opt": false
+       },
+       "refundMethod": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "adminNote": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "reviewedBy": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "reviewedAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "createdAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "order": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "code": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "total": {
+           "s": {
+            "k": "num"
+           },
+           "opt": false
+          },
+          "status": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "paymentMethod": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": true
+       },
+       "user": {
+        "s": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "fullName": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "phone": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          }
+         }
+        },
+        "opt": true
+       }
+      }
+     }
+    },
+    {
+     "k": "obj",
+     "props": {
+      "data": {
+       "s": {
+        "k": "arr",
+        "of": {
+         "k": "obj",
+         "props": {
+          "id": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "orderId": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "userId": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "reason": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "images": {
+           "s": {
+            "k": "arr",
+            "of": {
+             "k": "str"
+            }
+           },
+           "opt": false
+          },
+          "status": {
+           "s": {
+            "k": "enum",
+            "v": [
+             "REQUESTED",
+             "APPROVED",
+             "REJECTED"
+            ]
+           },
+           "opt": false
+          },
+          "refundMethod": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "adminNote": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "reviewedBy": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "reviewedAt": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "createdAt": {
+           "s": {
+            "k": "str"
+           },
+           "opt": false
+          },
+          "order": {
+           "s": {
+            "k": "obj",
+            "props": {
+             "id": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "code": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "total": {
+              "s": {
+               "k": "num"
+              },
+              "opt": false
+             },
+             "status": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "paymentMethod": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             }
+            }
+           },
+           "opt": true
+          },
+          "user": {
+           "s": {
+            "k": "obj",
+            "props": {
+             "id": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "fullName": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             },
+             "phone": {
+              "s": {
+               "k": "str"
+              },
+              "opt": false
+             }
+            }
+           },
+           "opt": true
+          }
+         }
+        }
+       },
+       "opt": false
+      },
+      "meta": {
+       "s": {
+        "k": "obj",
+        "props": {
+         "page": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "limit": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         },
+         "total": {
+          "s": {
+           "k": "num"
+          },
+          "opt": false
+         }
+        }
+       },
+       "opt": false
+      }
+     }
+    }
+   ]
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:212"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/admin/users/role",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "phone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "fullName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "role": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "previousRole": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:237"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/admin/users",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "fullName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "phone": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "role": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "pointsBalance": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:234"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/affiliate/touch",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ok": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:110"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/auth/logout",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/auth-context.tsx:152"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/auth/refresh",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "accessToken": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "refreshToken": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "avatarUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "role": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "walletBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "referralCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/auth-context.tsx:87"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/auth/zalo-oauth",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "accessToken": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "refreshToken": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "user": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "fullName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "avatarUrl": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "role": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "walletBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "referralCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/auth-context.tsx:129"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/cart/coupon",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:101"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/cart/coupon",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:100"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/cart/items/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:86"
+  ]
+ },
+ {
+  "method": "PATCH",
+  "path": "/cart/items/:id",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:84"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/cart/items",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:82"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/cart",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "couponCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "freeship": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "itemCount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:80"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/checkout/place-order",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "code": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "status": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "shippingFee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "total": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "paymentMethod": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "paymentStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "items": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "productName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "variationName": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "unitPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "quantity": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "hasRecyclingPickup": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    },
+    "recyclingNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonPartnerCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "gomdonCancelStatus": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:132"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/checkout/quote",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "subtotal": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "discount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsUsed": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsDiscount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "shippingFee": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "total": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsEarned": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "pointsBalance": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "redeemablePoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "lockedPoints": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:114"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/config/public",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "freeshipThreshold": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "recyclingEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:77"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/geo/communes",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/geo-client.ts:14"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/geo/provinces",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "name": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/geo-client.ts:11"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/loyalty/staff/pos-credit",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "replayed": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "member": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "memberCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "tier": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "posTransaction": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "receiptId": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "orderTotal": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "pointsEarned": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "creditedAt": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:807"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/loyalty/staff/scan-member",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "member": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "id": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "memberCode": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "phone": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "tier": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "pointsBalance": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:805"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/addresses",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "id": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "recipient": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "phone": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "province": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "district": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "ward": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "street": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "provinceCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "districtCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "wardCode": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "isDefault": {
+      "s": {
+       "k": "bool"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:104"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/me/addresses",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "recipient": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "phone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "province": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "district": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "ward": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "street": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "provinceCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "districtCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "wardCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "isDefault": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:106"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/coupons",
+  "schema": {
+   "k": "arr",
+   "of": {
+    "k": "obj",
+    "props": {
+     "code": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     },
+     "type": {
+      "s": {
+       "k": "enum",
+       "v": [
+        "PERCENT",
+        "AMOUNT",
+        "FREESHIP"
+       ]
+      },
+      "opt": false
+     },
+     "value": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "minOrder": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "maxDiscount": {
+      "s": {
+       "k": "num"
+      },
+      "opt": false
+     },
+     "endAt": {
+      "s": {
+       "k": "str"
+      },
+      "opt": false
+     }
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:98"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/me/loyalty/member-card",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "posCreditEnabled": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/admin-client.ts:814"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/merchant/orders/:orderId/status",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:187"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/merchant/orders",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "paymentMethod": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "paymentStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "note": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "shippingAddress": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "recipient": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "street": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "ward": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "district": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           },
+           "province": {
+            "s": {
+             "k": "str"
+            },
+            "opt": true
+           }
+          }
+         },
+         "opt": true
+        },
+        "user": {
+         "s": {
+          "k": "obj",
+          "props": {
+           "id": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "phone": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           },
+           "fullName": {
+            "s": {
+             "k": "str"
+            },
+            "opt": false
+           }
+          }
+         },
+         "opt": true
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "productName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "variationName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": true
+            },
+            "unitPrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "quantity": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "total": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "backorderedQty": {
+             "s": {
+              "k": "num"
+             },
+             "opt": true
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "total": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:178"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/merchant/products",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "ownProducts": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "description": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "shortDesc": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "basePrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "salePrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "images": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "str"
+          }
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "approvalStatus": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "APPROVED",
+           "REJECTED",
+           "PENDING_REVIEW"
+          ]
+         },
+         "opt": false
+        },
+        "rejectReason": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "storefrontId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "variations": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "sku": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "name": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "retailPrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "salePrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": true
+            },
+            "stock": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "resellProducts": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "slug": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "description": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "shortDesc": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "basePrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "salePrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "images": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "str"
+          }
+         },
+         "opt": false
+        },
+        "thumbnail": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "approvalStatus": {
+         "s": {
+          "k": "enum",
+          "v": [
+           "APPROVED",
+           "REJECTED",
+           "PENDING_REVIEW"
+          ]
+         },
+         "opt": false
+        },
+        "rejectReason": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "storefrontId": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "variations": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "sku": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "name": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "retailPrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "salePrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": true
+            },
+            "stock": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "page": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "limit": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "ownTotal": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       },
+       "resellTotal": {
+        "s": {
+         "k": "num"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:130"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/merchant/products",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "name": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "description": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "shortDesc": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "basePrice": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "salePrice": {
+     "s": {
+      "k": "num"
+     },
+     "opt": true
+    },
+    "images": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "str"
+      }
+     },
+     "opt": false
+    },
+    "thumbnail": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "approvalStatus": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "APPROVED",
+       "REJECTED",
+       "PENDING_REVIEW"
+      ]
+     },
+     "opt": false
+    },
+    "rejectReason": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "storefrontId": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "variations": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "sku": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "name": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "retailPrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "salePrice": {
+         "s": {
+          "k": "num"
+         },
+         "opt": true
+        },
+        "stock": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        }
+       }
+      }
+     },
+     "opt": true
+    },
+    "createdAt": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:133"
+  ]
+ },
+ {
+  "method": "DELETE",
+  "path": "/merchant/resell-products/:productId",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:139"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/merchant/resell-products",
+  "schema": {
+   "k": "any"
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:136"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/merchant/store/publish",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subdomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "customDomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "headerNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "avatarUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "theme": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "themeColor": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankBin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountNo": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseAddress": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseCity": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseDistrict": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseWard": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehousePhone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "collections": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "productId": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "product": {
+             "s": {
+              "k": "obj",
+              "props": {
+               "id": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "name": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "basePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "salePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               },
+               "thumbnail": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               }
+              }
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:190"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/merchant/store",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subdomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "customDomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "headerNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "avatarUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "theme": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "themeColor": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankBin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountNo": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseAddress": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseCity": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseDistrict": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseWard": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehousePhone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "collections": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "productId": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "product": {
+             "s": {
+              "k": "obj",
+              "props": {
+               "id": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "name": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "basePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "salePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               },
+               "thumbnail": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               }
+              }
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:108"
+  ]
+ },
+ {
+  "method": "PUT",
+  "path": "/merchant/store",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "id": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "type": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "slug": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "subdomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "customDomain": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "title": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "headerNote": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "avatarUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "coverUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "theme": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "themeColor": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankBin": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountNo": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "bankAccountName": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseAddress": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseCity": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseDistrict": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehouseWard": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "warehousePhone": {
+     "s": {
+      "k": "str"
+     },
+     "opt": true
+    },
+    "isPublished": {
+     "s": {
+      "k": "bool"
+     },
+     "opt": false
+    },
+    "collections": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "id": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "title": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "id": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "productId": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "product": {
+             "s": {
+              "k": "obj",
+              "props": {
+               "id": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "name": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "basePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": false
+               },
+               "salePrice": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               },
+               "thumbnail": {
+                "s": {
+                 "k": "any"
+                },
+                "opt": true
+               }
+              }
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": true
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/merchant-client.ts:111"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/orders",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "data": {
+     "s": {
+      "k": "arr",
+      "of": {
+       "k": "obj",
+       "props": {
+        "code": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "status": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "subtotal": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "discount": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "shippingFee": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "total": {
+         "s": {
+          "k": "num"
+         },
+         "opt": false
+        },
+        "paymentMethod": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "paymentStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "createdAt": {
+         "s": {
+          "k": "str"
+         },
+         "opt": false
+        },
+        "items": {
+         "s": {
+          "k": "arr",
+          "of": {
+           "k": "obj",
+           "props": {
+            "productName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "variationName": {
+             "s": {
+              "k": "str"
+             },
+             "opt": false
+            },
+            "unitPrice": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "quantity": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            },
+            "total": {
+             "s": {
+              "k": "num"
+             },
+             "opt": false
+            }
+           }
+          }
+         },
+         "opt": false
+        },
+        "hasRecyclingPickup": {
+         "s": {
+          "k": "bool"
+         },
+         "opt": true
+        },
+        "recyclingNote": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonPartnerCode": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        },
+        "gomdonCancelStatus": {
+         "s": {
+          "k": "str"
+         },
+         "opt": true
+        }
+       }
+      }
+     },
+     "opt": false
+    },
+    "meta": {
+     "s": {
+      "k": "any"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:140"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/payments/bank-qr/:code",
+  "schema": {
+   "k": "obj",
+   "props": {
+    "orderCode": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "amount": {
+     "s": {
+      "k": "num"
+     },
+     "opt": false
+    },
+    "paymentStatus": {
+     "s": {
+      "k": "enum",
+      "v": [
+       "PAID",
+       "UNPAID",
+       "REFUNDED",
+       "FAILED"
+      ]
+     },
+     "opt": false
+    },
+    "bank": {
+     "s": {
+      "k": "obj",
+      "props": {
+       "bin": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "name": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "accountNo": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       },
+       "accountName": {
+        "s": {
+         "k": "str"
+        },
+        "opt": false
+       }
+      }
+     },
+     "opt": false
+    },
+    "memo": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "qrString": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    },
+    "qrImageUrl": {
+     "s": {
+      "k": "str"
+     },
+     "opt": false
+    }
+   }
+  },
+  "sources": [
+   "apps/web/src/lib/shop-client.ts:155"
+  ]
+ }
+]

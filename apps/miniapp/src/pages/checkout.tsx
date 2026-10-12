@@ -12,12 +12,21 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { newIdempotencyKey } from '../utils/idempotency';
-import { checkoutPoints, isInvoiceValid, shouldFallbackToCod } from '../utils/checkout-rules';
+import {
+  checkoutPoints,
+  isInvoiceValid,
+  pointsEarnLabel,
+  pointsUseLabel,
+  shouldFallbackToCod,
+  walletUnavailableReason,
+  zeroTotalNote,
+} from '../utils/checkout-rules';
 import {
   clearCheckoutSelection,
   recallCheckoutSelection,
@@ -30,6 +39,7 @@ import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Radio, Checkbox } from '../components/ui/form';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
@@ -56,6 +66,8 @@ export default function CheckoutPage() {
   const publicConfig = usePublicConfig();
   const recyclingEnabled = publicConfig.isLoaded && publicConfig.recyclingEnabled === true;
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
+  // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
+  const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
@@ -108,16 +120,16 @@ export default function CheckoutPage() {
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
 
   // Số dư PHẢI đọc từ query (được invalidate sau mọi thao tác tiền), KHÔNG từ auth store —
-  // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa đổi Ví→xu hoặc vừa
-  // tiêu xu trong Vườn Xanh sẽ thấy số cũ: hoặc không chọn được cách trả tiền mình vừa nạp,
+  // store chỉ được nạp lại lúc mở app và sau khi đặt đơn, nên khách vừa nhận tiền vào Ví hoặc vừa
+  // tiêu Điểm Xanh trong Vườn Xanh sẽ thấy số cũ: hoặc không chọn được cách trả tiền mình vừa nạp,
   // hoặc chọn được rồi bị BE từ chối "số dư không đủ" sau khi chờ spinner.
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const walletBalanceLive = walletQ.data?.walletBalance ?? user?.walletBalance ?? 0;
-  const coinsBalanceLive = walletQ.data?.coinsBalance ?? user?.coinsBalance ?? 0;
-  // Điểm DÙNG ĐƯỢC (redeemablePoints), không phải số dư: điểm đơn vừa giao còn trong hạn đổi/trả hoặc
-  // đang chờ xử lý đổi/trả chưa tiêu được — backend kẹp báo giá + đặt đơn đúng theo số này.
-  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0);
+  // Điểm DÙNG ĐƯỢC, không phải số dư: điểm thường của đơn vừa giao còn trong hạn đổi/trả hoặc đang chờ xử
+  // lý đổi/trả chưa tiêu được; điểm quy đổi (không hết hạn) luôn dùng được. Backend chia hai lô + kẹp theo
+  // đúng số này khi báo giá và đặt đơn.
+  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0);
 
   const pointsToUse = usePoints ? points.usable : 0;
   const quote = useQuery({
@@ -128,13 +140,18 @@ export default function CheckoutPage() {
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
 
-  // Đang chọn Ví/TubuXu mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
+  // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền). Gửi đúng phương thức đó và không mở màn QR chuyển
+  // khoản cho khoản 0đ dù khách đã lỡ chọn chuyển khoản trước khi dùng điểm.
+  const zeroNote = quote.data ? zeroTotalNote(quote.data) : null;
+  const paymentToSend = zeroNote ? 'COD' : payment;
+
+  // Đang chọn Ví mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
   useEffect(() => {
     if (!quote.data) return;
-    if (shouldFallbackToCod(payment, walletBalanceLive, coinsBalanceLive, quote.data.total)) {
+    if (shouldFallbackToCod(payment, walletBalanceLive, quote.data.total)) {
       setPayment('COD');
     }
-  }, [payment, quote.data, walletBalanceLive, coinsBalanceLive]);
+  }, [payment, quote.data, walletBalanceLive]);
 
   // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
   // khi quote refetch — vd đổi địa chỉ/mã giảm giá làm quote chạy lại nhiều lần trong 1 phiên).
@@ -162,8 +179,11 @@ export default function CheckoutPage() {
       placeOrder(
         {
           addressId: addressId!,
-          paymentMethod: payment,
+          paymentMethod: paymentToSend,
           pointsToUse,
+          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+          // tạo đơn COD có tiền phải trả mà khách không chọn.
+          ...(zeroNote ? { quotedZeroTotal: true } : {}),
           note: note.trim() || undefined,
           // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
@@ -175,7 +195,7 @@ export default function CheckoutPage() {
                 email: invoice.email.trim(),
               }
             : undefined,
-          referralCode: sfCtx.referralCode ?? undefined,
+          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
           storefrontSlug: ctvSlug,
           itemIds,
         },
@@ -196,7 +216,6 @@ export default function CheckoutPage() {
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
-      void queryClient.invalidateQueries({ queryKey: ['coins'] });
       // Điểm Xanh đọc từ ['loyalty'] (nguồn số dư dùng ở chính màn này) — đơn vừa tiêu/tích điểm.
       void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -205,7 +224,7 @@ export default function CheckoutPage() {
       idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
-      if (payment === 'BANK_TRANSFER') {
+      if (paymentToSend === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${o.code}`, { replace: true });
         return;
       }
@@ -278,23 +297,15 @@ export default function CheckoutPage() {
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
   const canPlace = !!addressId && quote.isSuccess && !!invoiceValid;
 
-  const coinsBalance = coinsBalanceLive;
+  // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
+  const walletReason = quote.isSuccess ? walletUnavailableReason(walletBalance, total) : null;
   const paymentMethods = [
-    { value: 'COD', label: vi.checkout.paymentCod, disabled: false },
+    { value: 'COD', label: vi.checkout.paymentCod, hint: null },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
-    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, disabled: false },
-    {
-      value: 'WALLET',
-      label: vi.checkout.paymentWallet(formatVnd(walletBalance)),
-      disabled: quote.isSuccess && walletBalance < total,
-    },
-    {
-      value: 'XU',
-      label: vi.checkout.paymentXu(`${coinsBalance.toLocaleString('vi-VN')} xu`),
-      disabled: quote.isSuccess && coinsBalance < total,
-    },
-  ];
+    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null },
+    { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)), hint: walletReason },
+  ].map((m) => ({ ...m, disabled: m.hint !== null }));
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -364,7 +375,7 @@ export default function CheckoutPage() {
           flex
           alignItems="center"
           justifyContent="space-between"
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', minHeight: 44 }}
         >
           <Box flex alignItems="center" style={{ gap: 10 }}>
             <Box
@@ -407,7 +418,7 @@ export default function CheckoutPage() {
                 </Box>
               ) : (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  Chọn hoặc nhập mã ưu đãi
+                  Chọn hoặc nhập mã giảm giá
                 </Text>
               )}
             </Box>
@@ -422,17 +433,31 @@ export default function CheckoutPage() {
         </Box>
       </Box>
 
+      {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}
+      <ReferralCodeBox
+        linkedCode={sfCtx.referralCode}
+        appliedCode={referralApplied}
+        onApplied={setReferralApplied}
+      />
+
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.payment}
         </Text>
-        {paymentMethods.map((m) => (
+        {zeroNote && (
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', minHeight: 44, display: 'block' }}>
+            {zeroNote}
+          </Text>
+        )}
+        {!zeroNote && paymentMethods.map((m) => (
           <Box
             key={m.value}
             role="radio"
+            {...rowKeyboardProps()}
             aria-checked={payment === m.value}
             aria-disabled={m.disabled}
+            aria-describedby={m.hint ? `pay-hint-${m.value}` : undefined}
             className={m.disabled ? undefined : 'tubu-press'}
             onClick={() => {
               if (m.disabled) return;
@@ -441,7 +466,7 @@ export default function CheckoutPage() {
             }}
             flex
             alignItems="center"
-            style={{ gap: 10, padding: '12px 0', minHeight: 44, opacity: m.disabled ? 0.45 : 1, boxSizing: 'border-box' }}
+            style={{ gap: 10, padding: '12px 0', minHeight: 44, boxSizing: 'border-box' }}
           >
             {/* Radio (Task 19) là thị giác thuần tuý ở đây — logic chọn phương thức thanh toán
                 VẪN nằm nguyên trong onClick của Box cha ở trên (không đổi). onChange rỗng chỉ để
@@ -449,8 +474,20 @@ export default function CheckoutPage() {
                 ĐÈ lên đúng vùng chấm tròn (zaui checkbox/radio input position:absolute che kín ô
                 24x24) nên 1 chạm tại đó chỉ phát sinh đúng 1 sự kiện click nổi bọt lên Box cha —
                 không có nguy cơ gọi setPayment 2 lần. */}
-            <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
-            <Text size="small">{m.label}</Text>
+            <Box style={{ opacity: m.disabled ? 0.45 : 1 }}>
+              <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
+            </Box>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="small" style={{ opacity: m.disabled ? 0.45 : 1 }}>
+                {m.label}
+              </Text>
+              {/* Lý do KHÔNG mờ theo dòng: chữ giải thích mà mờ thì khách vẫn không đọc được. */}
+              {m.hint && (
+                <Text id={`pay-hint-${m.value}`} size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {m.hint}
+                </Text>
+              )}
+            </Box>
           </Box>
         ))}
       </Box>
@@ -460,6 +497,7 @@ export default function CheckoutPage() {
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
+            {...rowKeyboardProps()}
             aria-checked={usePoints && points.usable > 0}
             aria-disabled={points.usable <= 0}
             className={points.usable > 0 ? 'tubu-press' : undefined}
@@ -479,9 +517,14 @@ export default function CheckoutPage() {
               </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {points.usable > 0 && usePoints && quote.data
-                  ? vi.checkout.pointsUse(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
+                  ? pointsUseLabel(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
+              {points.convertedNote && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  {points.convertedNote}
+                </Text>
+              )}
               {points.lockNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {points.lockNote}
@@ -508,6 +551,7 @@ export default function CheckoutPage() {
         <Box id="checkout-recycling" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Box
             role="checkbox"
+            {...rowKeyboardProps()}
             aria-label="Gửi lại vật liệu tái chế"
             aria-checked={hasRecyclingPickup}
             className="tubu-press"
@@ -561,7 +605,7 @@ export default function CheckoutPage() {
                   Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
                 </Text>
               </Box>
-              {payment !== 'COD' && payment !== 'WALLET' && payment !== 'XU' && (
+              {paymentToSend !== 'COD' && paymentToSend !== 'WALLET' && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
                   Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
                 </Text>
@@ -581,6 +625,7 @@ export default function CheckoutPage() {
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           role="checkbox"
+          {...rowKeyboardProps()}
           aria-checked={wantInvoice}
           className="tubu-press"
           onClick={() => {
@@ -669,7 +714,14 @@ export default function CheckoutPage() {
                 {getErrorMessage(quote.error)}
               </Text>
             </Box>
-            <Text role="button" size="xSmall" bold onClick={(e) => { e.stopPropagation(); void quote.refetch(); }} style={{ color: 'var(--color-text-brand)', padding: 8 }}>
+            <Text
+              role="button"
+              size="xSmall"
+              bold
+              className="tubu-hit-44"
+              onClick={(e) => { e.stopPropagation(); void quote.refetch(); }}
+              style={{ color: 'var(--color-text-brand)', padding: 8, display: 'inline-block' }}
+            >
               {vi.common.retry}
             </Text>
           </Box>
@@ -691,14 +743,11 @@ export default function CheckoutPage() {
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
             <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
-            {/* Đơn trả bằng TubuXu KHÔNG tích điểm (checkout.service.ts đặt pointsEarned=0 khi
-                paymentMethod='XU'), nhưng /checkout/quote không nhận paymentMethod nên vẫn trả
-                số điểm mặc định → nếu hiện nguyên, khách chọn XU sẽ được hứa điểm rồi không có. */}
-            {payment !== 'XU' && quote.data.pointsEarned > 0 && (
+            {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                  {vi.checkout.pointsEarn(quote.data.pointsEarned)}
+                  {pointsEarnLabel(quote.data.pointsEarned)}
                 </Text>
               </Box>
             )}
@@ -794,7 +843,7 @@ export default function CheckoutPage() {
           <KeyValueRow label="Tạm tính tiền hàng" value={formatVnd(quote.data?.subtotal ?? previewSubtotal)} />
 
           {(quote.data?.discount ?? previewDiscount) > 0 && (
-            <KeyValueRow label="Giảm giá voucher" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
+            <KeyValueRow label="Mã giảm giá" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
           )}
 
           {quote.data && quote.data.comboDiscount > 0 && (
@@ -802,7 +851,7 @@ export default function CheckoutPage() {
           )}
 
           {quote.data && quote.data.pointsDiscount > 0 && (
-            <KeyValueRow label="Giảm giá điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
+            <KeyValueRow label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
           )}
 
           <KeyValueRow
@@ -827,11 +876,11 @@ export default function CheckoutPage() {
             emphasis
           />
 
-          {payment !== 'XU' && (quote.data?.pointsEarned ?? 0) > 0 && (
+          {(quote.data?.pointsEarned ?? 0) > 0 && (
             <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
               <Sprout size={13} color="var(--color-text-success)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                Tích lũy +{quote.data!.pointsEarned} điểm Xanh khi giao thành công
+                {pointsEarnLabel(quote.data!.pointsEarned)}
               </Text>
             </Box>
           )}

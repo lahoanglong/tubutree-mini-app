@@ -1,22 +1,23 @@
 import { useRef, useState } from 'react';
-import { Box, Page, Text, Button, useSnackbar, useNavigate } from 'zmp-ui';
-import { Recycle, Droplets, Minus, Plus, Sprout, ChevronRight } from 'lucide-react';
+import { Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Droplets, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Icon } from '../components/ui/icon';
+import { ListRow } from '../components/ui/list-row';
+import { PageHeader } from '../components/ui/page-header';
+import { QuantitySelector } from '../components/ui/quantity-selector';
+import { Heading, Text } from '../components/ui/text';
+import { formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
-
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-  } catch {
-    return '';
-  }
-}
 
 export default function RefillPage() {
   const navigate = useNavigate();
@@ -50,164 +51,125 @@ export default function RefillPage() {
 
   const remaining = data?.monthlyRemaining ?? 0;
   const maxQty = Math.max(1, remaining);
-  const canSubmit = authed && remaining > 0 && qty >= 1 && qty <= remaining && !returnM.isPending;
+  // Không gộp `isPending` vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner.
+  const eligible = authed && remaining > 0 && qty >= 1 && qty <= remaining;
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 80 }}>
-      <Box p={3} style={{ background: 'var(--neutral-0)' }}>
-        <Box flex alignItems="center" style={{ gap: 8 }}>
-          <Recycle size={22} color="var(--leaf-600)" />
-          <Text bold size="large">Đổi vỏ chai — Nhận nước</Text>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
-          Mang vỏ chai rỗng đến cửa hàng đổi lấy 💧 tưới Vườn Xanh. Tái chế vỏ → nuôi cây thật 🌳
-        </Text>
-      </Box>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
+      <PageHeader
+        title="Đổi vỏ chai — Nhận nước"
+        subtitle="Mang vỏ chai rỗng đến cửa hàng đổi lấy 💧 tưới Vườn Xanh. Tái chế vỏ → nuôi cây, góp quỹ trồng cây 🌳"
+      />
 
       {isLoading ? (
-        <Box p={2} flex flexDirection="column" style={{ gap: 8 }}>
-          <Box flex style={{ gap: 8 }}>
-            <Skeleton height={70} style={{ flex: 1 }} />
-            <Skeleton height={70} style={{ flex: 1 }} />
-          </Box>
-          <Skeleton height={160} />
-        </Box>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Skeleton height={70} radius="var(--radius-card)" style={{ flex: 1 }} />
+            <Skeleton height={70} radius="var(--radius-card)" style={{ flex: 1 }} />
+          </div>
+          <Skeleton height={160} radius="var(--radius-card)" />
+        </div>
       ) : isError ? (
         <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
       ) : (
-        <Box p={2}>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Tổng quan dấu chân xanh */}
-          <Box flex style={{ gap: 8 }}>
-            <Box style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', padding: 14, textAlign: 'center' }}>
-              <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{data?.totalRecycled ?? 0}</Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>vỏ đã tái chế</Text>
-            </Box>
-            <Box style={{ flex: 1, background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', padding: 14, textAlign: 'center' }}>
-              <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{remaining}</Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>còn đổi được tháng này</Text>
-            </Box>
-          </Box>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Card padding={12} style={{ flex: 1, textAlign: 'center' }}>
+              <Text variant="price-lg" tone="brand" as="div">{data?.totalRecycled ?? 0}</Text>
+              <Text variant="caption" tone="tertiary" as="div">vỏ đã tái chế</Text>
+            </Card>
+            <Card padding={12} style={{ flex: 1, textAlign: 'center' }}>
+              <Text variant="price-lg" tone="brand" as="div">{remaining}</Text>
+              <Text variant="caption" tone="tertiary" as="div">còn đổi được tháng này</Text>
+            </Card>
+          </div>
 
           {/* Bộ đổi vỏ */}
-          <Box mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-            <Text size="small" bold>Bạn đang đổi mấy vỏ chai?</Text>
-            <Box flex alignItems="center" justifyContent="center" style={{ gap: 16, margin: '14px 0' }}>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={qty <= 1}
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                style={{ minWidth: 40 }}
-              >
-                <Minus size={16} />
-              </Button>
-              <Text bold style={{ fontSize: 28, minWidth: 40, textAlign: 'center' }}>{qty}</Text>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={qty >= maxQty}
-                onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-                style={{ minWidth: 40 }}
-              >
-                <Plus size={16} />
-              </Button>
-            </Box>
-            <Box flex alignItems="center" justifyContent="center" style={{ gap: 6 }}>
-              <Droplets size={16} color="var(--info)" />
-              <Text size="small" style={{ color: 'var(--neutral-600)' }}>
+          <Card padding={16}>
+            <Heading variant="title-sm" as="h2">Bạn đang đổi mấy vỏ chai?</Heading>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0' }}>
+              <QuantitySelector value={qty} min={1} max={maxQty} onChange={setQty} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Icon icon={Droplets} size="sm" tone="brand" />
+              <Text variant="body-sm" tone="secondary">
                 Nhận <b>{qty * (data?.perBottle ?? 0)}💧</b> ({data?.perBottle ?? 0}💧 / vỏ)
               </Text>
-            </Box>
+            </div>
             <Button
               fullWidth
               loading={returnM.isPending}
-              disabled={!canSubmit}
-              onClick={() => returnM.mutate()}
-              style={{ marginTop: 14, background: canSubmit ? 'var(--leaf-600)' : 'var(--neutral-300)' }}
+              disabled={!eligible}
+              onPress={() => returnM.mutate()}
+              style={{ marginTop: 14 }}
             >
               {remaining > 0 ? 'Gửi yêu cầu đổi vỏ' : 'Đã hết lượt đổi tháng này'}
             </Button>
             {!authed && (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8, textAlign: 'center' }}>
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8, textAlign: 'center' }}>
                 Đăng nhập để đổi vỏ lấy nước.
               </Text>
             )}
-          </Box>
+          </Card>
 
           {/* Lịch sử */}
           {data && data.history.length > 0 && (
-            <Box mt={2} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-              <Text size="small" bold style={{ marginBottom: 8 }}>Lịch sử đổi vỏ</Text>
+            <Card padding={16}>
+              <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Lịch sử đổi vỏ</Heading>
               {data.history.map((h) => {
                 const statusKey = h.status ?? 'PENDING';
                 const statusMeta = {
-                  PENDING: { label: 'Chờ duyệt', color: 'var(--warning)', bg: 'var(--warning-bg)' },
-                  APPROVED: { label: `+${h.seedsAwarded}💧`, color: 'var(--leaf-700)', bg: 'var(--success-bg)' },
-                  REJECTED: { label: 'Từ chối', color: 'var(--danger)', bg: 'var(--danger-bg)' },
-                }[statusKey];
+                  PENDING: { label: 'Chờ duyệt', tone: 'warning' },
+                  APPROVED: { label: `+${h.seedsAwarded}💧`, tone: 'success' },
+                  REJECTED: { label: 'Từ chối', tone: 'danger' },
+                }[statusKey] as { label: string; tone: 'warning' | 'success' | 'danger' };
 
                 return (
-                  <Box key={h.id} flex justifyContent="space-between" alignItems="center" style={{ padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-                    <Text size="small" style={{ color: 'var(--neutral-600)' }}>{h.quantity} vỏ · {fmtDate(h.createdAt)}</Text>
-                    <Text
-                      size="xSmall"
-                      bold
-                      style={{
-                        color: statusMeta.color,
-                        background: statusMeta.bg,
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                      }}
-                    >
-                      {statusMeta.label}
-                    </Text>
-                  </Box>
+                  <div
+                    key={h.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 0',
+                      borderBottom: '1px solid var(--color-border-subtle)',
+                    }}
+                  >
+                    <Text variant="body-sm" tone="secondary">{h.quantity} vỏ · {formatDate(h.createdAt)}</Text>
+                    <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
+                  </div>
                 );
               })}
-            </Box>
+            </Card>
           )}
 
           {/* Liên kết sang Vườn Cây Tubu */}
-          <Box
-            className="tubu-press"
-            onClick={() => navigate('/game')}
-            mt={2}
-            p={3}
-            flex
-            alignItems="center"
-            justifyContent="space-between"
-            style={{
-              background: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--leaf-200)',
-              cursor: 'pointer',
-            }}
-          >
-            <Box flex alignItems="center" style={{ gap: 10 }}>
-              <Box
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 8,
-                  background: 'var(--leaf-50)',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Sprout size={20} color="var(--leaf-600)" />
-              </Box>
-              <Box>
-                <Text size="small" bold style={{ color: 'var(--leaf-800)' }}>
-                  Vườn Cây Tubu
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Dùng giọt nước tích luỹ để chăm cây và đổi quà thật
-                </Text>
-              </Box>
-            </Box>
-            <ChevronRight size={18} color="var(--neutral-400)" />
-          </Box>
-        </Box>
+          <Card variant="outline" padding={0}>
+            <ListRow
+              icon={
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 'var(--radius-control)',
+                    background: 'var(--color-action-secondary-bg)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon icon={Sprout} size="md" tone="brand" />
+                </div>
+              }
+              title="Vườn Cây Tubu"
+              subtitle="Dùng giọt nước tích luỹ để chăm cây và đổi quà thật"
+              trailing="chevron"
+              onPress={() => navigate('/game')}
+              style={{ padding: 12 }}
+            />
+          </Card>
+        </div>
       )}
     </Page>
   );

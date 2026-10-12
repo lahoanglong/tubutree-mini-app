@@ -6,7 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { listPosCredits, type AdminPosCredit } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { vnDayKey } from '@/lib/loyalty-pos';
-import { INPUT_CLASS } from './ui';
+import { personLabel } from '@/lib/admin-pickers';
+import type { PickedItem } from './search-picker';
+import { UserPicker } from './user-picker';
+import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
 export function summarizePosCredits(rows: AdminPosCredit[]) {
@@ -22,8 +26,10 @@ export function summarizePosCredits(rows: AdminPosCredit[]) {
  */
 export function PosCreditsTab() {
   const [day, setDay] = useState(() => vnDayKey());
-  const [staffUserId, setStaffUserId] = useState('');
-  const [memberId, setMemberId] = useState('');
+  const [staff, setStaff] = useState<PickedItem | null>(null);
+  const [member, setMember] = useState<PickedItem | null>(null);
+  const staffUserId = staff?.id ?? '';
+  const memberId = member?.id ?? '';
   const q = useQuery({
     queryKey: ['admin-pos-credits', day, staffUserId, memberId],
     queryFn: () => listPosCredits({ day: day || undefined, staffUserId, memberId }),
@@ -34,64 +40,55 @@ export function PosCreditsTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-900">Sổ tích điểm tại quầy</h2>
-        <Link href="/admin/pos" className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+        <h2 className="text-base font-semibold text-stone-900">Sổ tích điểm tại quầy</h2>
+        <Link
+          href="/admin/pos"
+          className={`inline-flex items-center ${TOUCH_H} rounded-control bg-forest-600 px-3 py-1.5 text-xs font-medium text-stone-0 hover:bg-forest-700`}
+        >
           Mở màn thu ngân
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-white p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-card border border-stone-200 bg-stone-0 p-3">
         <label className="text-xs">
-          <span className="font-medium text-neutral-700">Ngày (giờ VN)</span>
+          <span className="font-medium text-stone-700">Ngày (giờ VN)</span>
           <input type="date" className={`${INPUT_CLASS} mt-1 w-40`} value={day} onChange={(e) => setDay(e.target.value)} />
         </label>
-        <label className="text-xs">
-          <span className="font-medium text-neutral-700">Mã nhân viên</span>
-          <input
-            className={`${INPUT_CLASS} mt-1 w-56 font-mono`}
-            placeholder="userId nhân viên"
-            value={staffUserId}
-            maxLength={40}
-            onChange={(e) => setStaffUserId(e.target.value.trim())}
-          />
-        </label>
-        <label className="text-xs">
-          <span className="font-medium text-neutral-700">Mã thành viên</span>
-          <input
-            className={`${INPUT_CLASS} mt-1 w-56 font-mono`}
-            placeholder="userId thành viên"
-            value={memberId}
-            maxLength={40}
-            onChange={(e) => setMemberId(e.target.value.trim())}
-          />
-        </label>
+        <div className="w-full text-xs sm:w-64">
+          <span className="font-medium text-stone-700">Nhân viên</span>
+          <UserPicker className="mt-1 w-full" label="Lọc theo nhân viên" value={staff} onChange={setStaff} />
+        </div>
+        <div className="w-full text-xs sm:w-64">
+          <span className="font-medium text-stone-700">Thành viên</span>
+          <UserPicker className="mt-1 w-full" label="Lọc theo thành viên" value={member} onChange={setMember} />
+        </div>
         {(filtered || day) && (
           <button
             type="button"
             onClick={() => {
               setDay('');
-              setStaffUserId('');
-              setMemberId('');
+              setStaff(null);
+              setMember(null);
             }}
-            className="rounded border border-neutral-300 px-2.5 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50"
+            className={BTN_XS_SECONDARY}
           >
             Xoá lọc (xem mọi ngày)
           </button>
         )}
       </div>
 
-      {q.isLoading && <p className="text-sm text-neutral-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-red-600">{q.error instanceof Error ? q.error.message : 'Không tải được sổ tích điểm.'}</p>}
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isError && <p className="text-sm text-danger-fg">{q.error instanceof Error ? q.error.message : 'Không tải được sổ tích điểm.'}</p>}
       {q.data && (
         <>
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-stone-600">
             <b>{sum.count}</b> hoá đơn · <b>{sum.points.toLocaleString('vi-VN')}</b> điểm · doanh thu quầy{' '}
             <b>{formatVnd(sum.orderTotal)}</b>
             {sum.count >= 200 && ' · chỉ hiển thị 200 dòng mới nhất, lọc hẹp hơn để xem đủ'}
           </p>
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+          <ScrollRegion label="Sổ tích điểm tại quầy" className="rounded-card border border-stone-200 bg-stone-0">
             <table className="w-full text-left text-sm">
-              <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <thead className="bg-stone-50 text-xs text-stone-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">Thời gian</th>
                   <th className="px-3 py-2 font-medium">Hoá đơn</th>
@@ -104,44 +101,44 @@ export function PosCreditsTab() {
               <tbody>
                 {q.data.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-xs text-neutral-400">
+                    <td colSpan={6} className="py-6 text-center text-xs text-stone-500">
                       Chưa có lượt tích điểm tại quầy nào{day ? ` ngày ${day}` : ''}.
                     </td>
                   </tr>
                 ) : (
                   q.data.map((r) => (
-                    <tr key={r.id} className="border-t border-neutral-100 align-top">
-                      <td className="px-3 py-2 text-xs text-neutral-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
+                    <tr key={r.id} className="border-t border-stone-200 align-top">
+                      <td className="px-3 py-2 text-xs text-stone-500">{formatDateTime(r.createdAt)}</td>
                       <td className="px-3 py-2">
                         <div className="font-mono text-xs font-semibold">{r.receiptId}</div>
-                        {r.note && <div className="text-[11px] text-neutral-500">{r.note}</div>}
+                        {r.note && <div className="text-[11px] text-stone-500">{r.note}</div>}
                       </td>
                       <td className="px-3 py-2">
-                        <button type="button" className="text-left hover:underline" onClick={() => setMemberId(r.member.id)} title="Lọc theo thành viên này">
+                        <button type="button" className="min-h-[44px] text-left hover:underline sm:min-h-0" onClick={() => setMember({ id: r.member.id, label: personLabel(r.member.name, r.member.phone, 'Thành viên') })} title="Lọc theo thành viên này">
                           <div className="font-medium">{r.member.name ?? 'Thành viên'}</div>
-                          <div className="text-[11px] text-neutral-500">
+                          <div className="text-[11px] text-stone-500">
                             {r.member.memberCode}
                             {r.member.phone ? ` · ${r.member.phone}` : ''}
                           </div>
                         </button>
                       </td>
                       <td className="px-3 py-2">
-                        <button type="button" className="text-left hover:underline" onClick={() => setStaffUserId(r.staff.id)} title="Lọc theo nhân viên này">
+                        <button type="button" className="min-h-[44px] text-left hover:underline sm:min-h-0" onClick={() => setStaff({ id: r.staff.id, label: personLabel(r.staff.name, r.staff.phone, 'Nhân viên') })} title="Lọc theo nhân viên này">
                           <div className="font-medium">{r.staff.name ?? 'Nhân viên'}</div>
-                          {r.staff.phone && <div className="text-[11px] text-neutral-500">{r.staff.phone}</div>}
+                          {r.staff.phone && <div className="text-[11px] text-stone-500">{r.staff.phone}</div>}
                         </button>
                       </td>
                       <td className="px-3 py-2 text-right">{formatVnd(r.orderTotal)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">
+                      <td className="px-3 py-2 text-right font-semibold text-forest-700">
                         +{r.points}
-                        {r.multiplier !== 1 && <div className="text-[11px] font-normal text-neutral-500">×{r.multiplier}</div>}
+                        {r.multiplier !== 1 && <div className="text-[11px] font-normal text-stone-500">×{r.multiplier}</div>}
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </>
       )}
     </div>

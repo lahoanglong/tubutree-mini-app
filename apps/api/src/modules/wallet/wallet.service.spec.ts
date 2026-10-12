@@ -1,22 +1,31 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, GoneException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { WalletService } from './wallet.service';
+import { applyWalletDelta } from './wallet-ledger.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
-// config trả default → dùng đúng default thiết kế: withdraw_min 100k, withdraw_fee 3k, ×1.2.
+// Sổ cái thật (khoá dòng + ghi wallet_transactions) được kiểm trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts; ở đây chỉ cần biết service gọi nó đúng.
+jest.mock('./wallet-ledger.service', () => ({ applyWalletDelta: jest.fn() }));
+const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
+
+// config trả default → dùng đúng default thiết kế: withdraw_min 100k, withdraw_fee 3k.
 const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
 
 function makePrisma(walletBalance: number, decCount = 1) {
-  const updateMany = jest.fn().mockResolvedValue({ count: decCount });
+  ledger.mockReset();
+  if (decCount === 0) ledger.mockRejectedValue(new BadRequestException('Số dư Ví không đủ.'));
+  else ledger.mockResolvedValue({ applied: true, balanceAfter: 0, entryId: 'wtx-1' });
+  const debit = ledger;
   const userUpdate = jest.fn().mockResolvedValue({});
   const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
   const payoutFindUnique = jest.fn().mockResolvedValue(null);
   const coinCreate = jest.fn().mockResolvedValue({});
   const prisma = {
-    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance }), updateMany, update: userUpdate },
+    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance }), update: userUpdate },
     payout: { create: payoutCreate, findUnique: payoutFindUnique },
     coinTransaction: { create: coinCreate, findFirst: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(),
@@ -24,37 +33,41 @@ function makePrisma(walletBalance: number, decCount = 1) {
   (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-  return { prisma, updateMany, userUpdate, payoutCreate, payoutFindUnique, coinCreate, coinFindFirst: (prisma as unknown as { coinTransaction: { findFirst: jest.Mock } }).coinTransaction.findFirst };
+  return { prisma, debit, userUpdate, payoutCreate, payoutFindUnique, coinCreate, coinFindFirst: (prisma as unknown as { coinTransaction: { findFirst: jest.Mock } }).coinTransaction.findFirst };
 }
 
 describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () => {
   it('dưới mức tối thiểu 100k → BadRequest, không trừ tiền', async () => {
-    const { prisma, updateMany } = makePrisma(1_000_000);
+    const { prisma, debit } = makePrisma(1_000_000);
     await expect(new WalletService(prisma, config).withdraw('u1', 99_999, {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(debit).not.toHaveBeenCalled();
   });
 
   it('số dư không đủ (check sớm) → BadRequest', async () => {
-    const { prisma, updateMany } = makePrisma(50_000);
+    const { prisma, debit } = makePrisma(50_000);
     await expect(new WalletService(prisma, config).withdraw('u1', 100_000, {})).rejects.toThrow('không đủ');
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(debit).not.toHaveBeenCalled();
   });
 
   it('rút 100k hợp lệ → trừ ví 100k ATOMIC, Payout thực nhận 97k + phí 3k', async () => {
-    const { prisma, updateMany, payoutCreate } = makePrisma(200_000);
+    const { prisma, debit, payoutCreate } = makePrisma(200_000);
     const r = await new WalletService(prisma, config).withdraw('u1', 100_000, { bank: 'VCB' });
     expect(r).toMatchObject({ status: 'REQUESTED', fee: 3000, net: 97_000, withdrawn: 100_000 });
-    expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'u1', walletBalance: { gte: 100_000 } });
-    expect(updateMany.mock.calls[0][0].data.walletBalance).toEqual({ decrement: 100_000 });
+    expect(debit.mock.calls[0]![1]).toMatchObject({
+      userId: 'u1',
+      delta: -100_000,
+      type: 'WITHDRAW',
+      refType: 'PAYOUT',
+      refId: 'payout-1',
+    });
     expect(payoutCreate.mock.calls[0][0].data).toMatchObject({ amount: 97_000, fee: 3000, method: 'BANK', status: 'REQUESTED' });
   });
 
-  it('race overdraft: updateMany count=0 → BadRequest, KHÔNG tạo payout', async () => {
-    const { prisma, payoutCreate } = makePrisma(200_000, 0);
+  it('race overdraft: sổ cái báo không đủ → BadRequest thoát ra khỏi tx (Payout vừa tạo rollback theo)', async () => {
+    const { prisma } = makePrisma(200_000, 0);
     await expect(new WalletService(prisma, config).withdraw('u1', 100_000, {})).rejects.toThrow('không đủ');
-    expect(payoutCreate).not.toHaveBeenCalled();
   });
 
   it('cấu hình sai (phí ≥ tiền rút) → net ≤ 0 bị chặn, KHÔNG trừ ví/ tạo payout âm', async () => {
@@ -63,18 +76,18 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
       get: async <T>(k: string, fb?: T): Promise<T> =>
         (k === 'wallet.withdraw_min' ? 2000 : k === 'wallet.withdraw_fee' ? 3000 : fb) as T,
     } as unknown as SystemConfigService;
-    const { prisma, updateMany, payoutCreate } = makePrisma(200_000);
+    const { prisma, debit, payoutCreate } = makePrisma(200_000);
     await expect(new WalletService(prisma, cfg).withdraw('u1', 2000, {})).rejects.toThrow();
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(debit).not.toHaveBeenCalled();
     expect(payoutCreate).not.toHaveBeenCalled();
   });
 
   it('idempotency: key đã có payout → trả lại payout cũ, KHÔNG trừ ví / tạo payout mới', async () => {
-    const { prisma, updateMany, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    const { prisma, debit, payoutCreate, payoutFindUnique } = makePrisma(200_000);
     payoutFindUnique.mockResolvedValue({ id: 'payout-old', userId: 'u1', status: 'REQUESTED', amount: 97_000, fee: 3000 });
     const r = await new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-1');
     expect(r).toMatchObject({ payoutId: 'payout-old', net: 97_000, fee: 3000, withdrawn: 100_000 });
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(debit).not.toHaveBeenCalled();
     expect(payoutCreate).not.toHaveBeenCalled();
   });
 
@@ -99,75 +112,83 @@ describe('WalletService.withdraw (Ví → ngân hàng, min 100k, phí 3k)', () =
   });
 
   it('idempotency key trùng nhưng thuộc user khác → BadRequest, KHÔNG trả payout của người khác', async () => {
-    const { prisma, updateMany, payoutCreate, payoutFindUnique } = makePrisma(200_000);
+    const { prisma, debit, payoutCreate, payoutFindUnique } = makePrisma(200_000);
     payoutFindUnique.mockResolvedValue({ id: 'payout-other', userId: 'u2', status: 'REQUESTED', amount: 97_000, fee: 3000 });
     await expect(new WalletService(prisma, config).withdraw('u1', 100_000, {}, 'idk-3')).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(debit).not.toHaveBeenCalled();
     expect(payoutCreate).not.toHaveBeenCalled();
   });
 });
 
-describe('WalletService.convertToXu (Ví → TubuXu ×1.2)', () => {
-  it('đổi 100.000đ → nhận 120.000 xu, trừ ví đúng, ghi CoinTransaction', async () => {
-    const { prisma, updateMany, userUpdate, coinCreate } = makePrisma(200_000);
-    const r = await new WalletService(prisma, config).convertToXu('u1', 100_000);
-    expect(r).toEqual({ spent: 100_000, received: 120_000, multiplier: 1.2 });
-    expect(updateMany.mock.calls[0][0]).toEqual({
-      where: { id: 'u1', walletBalance: { gte: 100_000 } },
-      data: { walletBalance: { decrement: 100_000 } },
-    });
-    expect(userUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { coinsBalance: { increment: 120_000 } } }),
-    );
-    expect(coinCreate.mock.calls[0][0].data).toMatchObject({ userId: 'u1', delta: 120_000, reason: 'CONVERT_FROM_WALLET', refType: 'CONVERT' });
-  });
-
-  it('ví không đủ (count 0) → throw, không cộng xu', async () => {
-    const { prisma, userUpdate } = makePrisma(200_000, 0);
-    await expect(new WalletService(prisma, config).convertToXu('u1', 100_000)).rejects.toThrow('Số dư Ví');
+// PD-3 (Q-03, spec 5, T18): bỏ đổi Ví → xu. Route giữ lại trả 410 cho client cũ; không mở tx, không trừ ví.
+describe('WalletService.convertToXu — đã ngừng (PD-3)', () => {
+  it('mọi lệnh đổi → GoneException, không đọc/ghi gì (không trừ ví, không cộng xu)', async () => {
+    const { prisma, debit, userUpdate, coinCreate, coinFindFirst } = makePrisma(200_000);
+    const svc = new WalletService(prisma, config);
+    const err = await svc.convertToXu().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GoneException);
+    expect((err as GoneException).getStatus()).toBe(410);
+    expect((await svc.convertToXu().catch((e: Error) => e.message))).toMatch(/Ví Tubu vẫn rút được/);
+    expect(debit).not.toHaveBeenCalled();
     expect(userUpdate).not.toHaveBeenCalled();
-  });
-
-  it('số tiền <= 0 hoặc không nguyên → throw', async () => {
-    const svc = new WalletService(makePrisma(200_000).prisma, config);
-    await expect(svc.convertToXu('u1', 0)).rejects.toThrow();
-    await expect(svc.convertToXu('u1', -5)).rejects.toThrow();
-    await expect(svc.convertToXu('u1', 1.5)).rejects.toThrow();
-  });
-
-  // P2 (docs/2026-09-08-review-progress.md): đây là endpoint tiền DUY NHẤT không có
-  // Idempotency-Key, trong khi chiều đổi là MỘT CHIỀU — xu không rút được, không có đường về
-  // ví. Double-tap "Đổi ngay" (react-query không tự dedupe, `disabled` chỉ có tác dụng sau
-  // khi re-render) là mất vĩnh viễn phần tiền rút được đã đổi dư.
-  it('cùng Idempotency-Key lần 2 → KHÔNG trừ ví lần 2, trả lại kết quả lần đầu', async () => {
-    const { prisma, updateMany, userUpdate, coinFindFirst } = makePrisma(200_000);
-    coinFindFirst.mockResolvedValue({ id: 'ct1', userId: 'u1', delta: 120_000, refId: 'key-1' });
-    const r = await new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1');
-    expect(r).toEqual({ spent: 100_000, received: 120_000, multiplier: 1.2 });
-    expect(updateMany).not.toHaveBeenCalled();
-    expect(userUpdate).not.toHaveBeenCalled();
-  });
-
-  it('có Idempotency-Key (lần đầu) → lưu key vào CoinTransaction.refId để lần sau nhận ra', async () => {
-    const { prisma, coinCreate } = makePrisma(200_000);
-    await new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1');
-    expect(coinCreate.mock.calls[0][0].data).toMatchObject({ refType: 'CONVERT', refId: 'key-1' });
-  });
-
-  it('key rỗng/khoảng trắng → coi như không có key (không ghi refId rỗng gây đụng unique)', async () => {
-    const { prisma, coinCreate, coinFindFirst } = makePrisma(200_000);
-    await new WalletService(prisma, config).convertToXu('u1', 100_000, '   ');
+    expect(coinCreate).not.toHaveBeenCalled();
     expect(coinFindFirst).not.toHaveBeenCalled();
-    expect(coinCreate.mock.calls[0][0].data.refId ?? null).toBeNull();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('WalletService.getWallet (PD-3: không còn số dư xu / hệ số đổi xu)', () => {
+  it('payload không có coinsBalance, xuConvertMultiplier', async () => {
+    const { prisma } = makePrisma(50_000);
+    (prisma as unknown as { commission: unknown }).commission = { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) };
+    const w = await new WalletService(prisma, config).getWallet('u1');
+    expect(w).toMatchObject({ walletBalance: 50_000, withdrawMin: 100000, withdrawFee: 3000 });
+    expect(w).not.toHaveProperty('coinsBalance');
+    expect(w).not.toHaveProperty('xuConvertMultiplier');
+  });
+});
+
+describe('WalletService.getTransactions (sao kê Ví, C-060)', () => {
+  function makeLedgerPrisma(rows: Record<string, unknown>[], total: number) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const count = jest.fn().mockResolvedValue(total);
+    const prisma = { walletTransaction: { findMany, count } } as unknown as PrismaService;
+    return { prisma, findMany, count };
+  }
+
+  const at = new Date('2026-10-01T03:00:00Z');
+
+  it('chỉ đọc sổ của chính user, mới nhất trước, phân trang skip/take + meta.total', async () => {
+    const { prisma, findMany, count } = makeLedgerPrisma([], 45);
+    const r = await new WalletService(prisma, config).getTransactions('u1', 3, 20);
+    const args = findMany.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args).toMatchObject({
+      where: { userId: 'u1' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: 40,
+      take: 20,
+    });
+    expect(count).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+    expect(r.meta).toEqual({ page: 3, limit: 20, total: 45 });
   });
 
-  it('key trùng nhưng của user KHÁC → từ chối, không trả giao dịch người khác ra ngoài', async () => {
-    const { prisma, coinFindFirst } = makePrisma(200_000);
-    coinFindFirst.mockResolvedValue({ id: 'ct1', userId: 'nguoi-khac', delta: 120_000, refId: 'key-1' });
-    await expect(new WalletService(prisma, config).convertToXu('u1', 100_000, 'key-1')).rejects.toThrow(
-      'Idempotency-Key',
+  it('chỉ lộ mã đơn với dòng tham chiếu ORDER; mã payout/user bên kia (gộp phiên) không trả ra', async () => {
+    const { prisma } = makeLedgerPrisma(
+      [
+        { id: 'w3', delta: 100_000, balanceAfter: 150_000, type: 'ORDER_REFUND', refType: 'ORDER', refId: 'ord-1', reason: 'Hoàn tiền đơn', createdAt: at },
+        { id: 'w2', delta: 20_000, balanceAfter: 50_000, type: 'MERGE_IN', refType: 'USER', refId: 'guest-9', reason: null, createdAt: at },
+        { id: 'w1', delta: -103_000, balanceAfter: 30_000, type: 'WITHDRAW', refType: 'PAYOUT', refId: 'po-1', reason: null, createdAt: at },
+      ],
+      3,
     );
+    const r = await new WalletService(prisma, config).getTransactions('u1', 1, 20);
+    expect(r.data).toEqual([
+      { id: 'w3', delta: 100_000, balanceAfter: 150_000, type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn', orderId: 'ord-1', createdAt: at },
+      { id: 'w2', delta: 20_000, balanceAfter: 50_000, type: 'MERGE_IN', reason: null, orderId: null, createdAt: at },
+      { id: 'w1', delta: -103_000, balanceAfter: 30_000, type: 'WITHDRAW', reason: null, orderId: null, createdAt: at },
+    ]);
+    expect(JSON.stringify(r.data)).not.toContain('guest-9');
   });
 });

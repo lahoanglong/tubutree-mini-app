@@ -35,7 +35,7 @@ export const PaymentMethod = {
   VNPAY: 'VNPAY',
   BANK_TRANSFER: 'BANK_TRANSFER',
   WALLET: 'WALLET',
-  XU: 'XU', // trả đơn bằng TubuXu (1 xu = 1đ)
+  XU: 'XU', // chỉ còn ở đơn cũ trước khi xu gộp vào Điểm Xanh; không nhận đơn mới
 } as const;
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 

@@ -9,6 +9,7 @@ import {
   addToCart,
   type CartSummary,
   type CartLine,
+  type UnavailableCartLine,
 } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -182,6 +183,14 @@ export default function CartPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 190 }}>
       <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
+      <DiscontinuedNotice
+        lines={summary.unavailableItems ?? []}
+        onRemove={(id) =>
+          removeCartItem(id)
+            .then((c) => queryClient.setQueryData(CART_KEY, c))
+            .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+        }
+      />
       {empty ? (
         <EmptyState
           art="basket"
@@ -240,7 +249,8 @@ export default function CartPage() {
             size="small"
             bold
             onClick={handleUndo}
-            style={{ color: 'var(--forest-200)', padding: '8px 6px' }}
+            className="tubu-hit-44"
+            style={{ color: 'var(--forest-200)', padding: '8px 6px', display: 'inline-block' }}
           >
             {vi.common.undo}
           </Text>
@@ -257,6 +267,44 @@ export default function CartPage() {
         />
       )}
     </Page>
+  );
+}
+
+function DiscontinuedNotice({ lines, onRemove }: { lines: UnavailableCartLine[]; onRemove: (id: string) => void }) {
+  if (lines.length === 0) return null;
+  return (
+    <Box
+      role="status"
+      mx={3}
+      mt={2}
+      p={3}
+      style={{
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border-default)',
+        borderRadius: 'var(--radius-control)',
+      }}
+    >
+      <Box flex alignItems="center" style={{ gap: 6 }}>
+        <AlertTriangle size={16} color="var(--color-text-warning)" aria-hidden />
+        <Text size="small" bold style={{ color: 'var(--color-text-warning)' }}>
+          {vi.cart.discontinuedHeading(lines.length)}
+        </Text>
+      </Box>
+      <Text size="xSmall" style={{ marginTop: 4, color: 'var(--color-text-secondary)' }}>
+        {vi.cart.discontinuedBody}
+      </Text>
+      {lines.map((l) => (
+        <Box key={l.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 8 }}>
+          <Text size="small" style={{ flex: 1, minWidth: 0, textDecoration: 'line-through' }}>
+            {l.productName}
+            {l.variationName ? ` · ${l.variationName}` : ''} × {l.quantity}
+          </Text>
+          <Button variant="ghost" onPress={() => onRemove(l.id)}>
+            {vi.cart.discontinuedRemove}
+          </Button>
+        </Box>
+      ))}
+    </Box>
   );
 }
 
@@ -345,7 +393,8 @@ function CartLineRow({
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>
-        <Text size="small" bold onClick={onOpen} style={{ cursor: 'pointer' }}>
+        {/* Tên 1-2 dòng chỉ cao 18-36px: tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
+        <Text size="small" bold onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
           {line.productName}
         </Text>
         {line.variationName && (
@@ -388,9 +437,10 @@ function CartLineRow({
             </Text>
           </Box>
         )}
-        <Box flex alignItems="center" style={{ marginTop: 8 }}>
+        {/* Stepper 44px + thùng rác 44px rộng ~180px: máy hẹp (320px) cho thùng rác xuống dòng thay vì tràn khỏi thẻ. */}
+        <Box flex alignItems="center" style={{ marginTop: 8, flexWrap: 'wrap', rowGap: 4 }}>
           <QuantitySelector
-            size="sm"
+            size="md"
             value={localQty}
             max={Math.max(1, line.stock)}
             onChange={setLocalQty}
@@ -468,7 +518,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
               </Box>
             ) : (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                Chọn hoặc nhập mã ưu đãi
+                Chọn hoặc nhập mã giảm giá
               </Text>
             )}
           </Box>

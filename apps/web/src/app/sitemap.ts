@@ -17,26 +17,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
   ];
-  try {
-    const products = await getProducts({ limit: '200' });
-    for (const p of products) {
-      base.push({ url: `${SITE_URL}/san-pham/${p.slug}`, changeFrequency: 'weekly', priority: 0.7 });
-    }
-  } catch {
-    // API hỏng thì vẫn trả sitemap tối thiểu — thà thiếu trang còn hơn trả 500 cho crawler.
+  // Không bắt lỗi: nếu nuốt lỗi rồi trả sitemap rút gọn thì ISR sẽ giữ bản thiếu cả giờ; để lỗi nổi lên
+  // thì Next giữ sitemap đầy đủ lần trước. Lúc build API chưa chạy đã được getProducts/getStorefrontList xử lý.
+  const products = await getProducts({ limit: '200' });
+  for (const p of products) {
+    base.push({ url: `${SITE_URL}/san-pham/${p.slug}`, changeFrequency: 'weekly', priority: 0.7 });
   }
-  try {
-    const storefronts = await getStorefrontList();
-    for (const s of storefronts) {
-      base.push({
-        url: `${SITE_URL}/s/${s.slug}`,
-        lastModified: new Date(s.updatedAt),
-        changeFrequency: 'weekly',
-        priority: 0.6,
-      });
-    }
-  } catch {
-    // Cùng nguyên tắc — thiếu gian hàng trong sitemap còn hơn sập cả sitemap.
+  const storefronts = await getStorefrontList();
+  for (const s of storefronts) {
+    base.push({
+      url: `${SITE_URL}/s/${s.slug}`,
+      lastModified: new Date(s.updatedAt),
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    });
   }
   return base;
 }

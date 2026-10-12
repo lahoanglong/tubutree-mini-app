@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Button } from './button';
 
@@ -99,6 +99,63 @@ describe('Button', () => {
       const btn = screen.getByRole('button', { name: 'Lưu' });
       expect(btn).toHaveAttribute('aria-busy', 'false');
       expect(btn).toHaveAttribute('aria-disabled', 'false');
+    });
+  });
+
+  // C-070 — `loading` chỉ có hiệu lực sau khi caller re-render; hai cú bấm đồng bộ (cùng tick,
+  // trước khi React kịp cập nhật prop) vẫn lọt qua. Khoá phải nằm trong ref của Button.
+  describe('khoá bấm đúp đồng bộ khi onPress trả Promise (C-070)', () => {
+    it('hai cú bấm liên tiếp trước khi loading render: onPress async chỉ chạy 1 lần', async () => {
+      let resolve!: () => void;
+      const onPress = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
+      render(<Button onPress={onPress}>Đặt hàng</Button>);
+      const btn = screen.getByText('Đặt hàng');
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      expect(onPress).toHaveBeenCalledTimes(1);
+      await act(async () => { resolve(); });
+    });
+
+    it('khi Promise xong thì nhả khoá: bấm lại được', async () => {
+      const onPress = vi.fn(() => Promise.resolve());
+      render(<Button onPress={onPress}>Lưu</Button>);
+      fireEvent.click(screen.getByText('Lưu'));
+      await act(async () => { await Promise.resolve(); });
+      fireEvent.click(screen.getByText('Lưu'));
+      expect(onPress).toHaveBeenCalledTimes(2);
+    });
+
+    it('Promise reject cũng nhả khoá (không kẹt nút vĩnh viễn)', async () => {
+      // Dùng thenable giả để test không sinh unhandledrejection thật (vitest coi đó là lỗi chạy test).
+      let reject!: (e: unknown) => void;
+      const onPress = vi.fn(() => ({
+        then: (_ok: () => void, fail: (e: unknown) => void) => { reject = (e) => { try { fail(e); } catch { /* Button ném lại lỗi cho nơi báo lỗi toàn cục */ } }; },
+      }) as unknown as Promise<void>);
+      render(<Button onPress={onPress}>Gửi</Button>);
+      fireEvent.click(screen.getByText('Gửi'));
+      fireEvent.click(screen.getByText('Gửi'));
+      expect(onPress).toHaveBeenCalledTimes(1);
+      await act(async () => { reject(new Error('mạng lỗi')); });
+      fireEvent.click(screen.getByText('Gửi'));
+      expect(onPress).toHaveBeenCalledTimes(2);
+    });
+
+    it('lỗi của Promise vẫn tới nơi báo lỗi toàn cục (Button không nuốt lỗi)', async () => {
+      let rethrown: unknown;
+      const onPress = vi.fn(() => ({
+        then: (_ok: () => void, fail: (e: unknown) => void) => { try { fail(new Error('mạng lỗi')); } catch (e) { rethrown = e; } },
+      }) as unknown as Promise<void>);
+      render(<Button onPress={onPress}>Gửi</Button>);
+      fireEvent.click(screen.getByText('Gửi'));
+      expect((rethrown as Error).message).toBe('mạng lỗi');
+    });
+
+    it('onPress đồng bộ (không trả Promise) KHÔNG bị khoá: nút +/- bấm nhanh vẫn gọi đủ', () => {
+      const onPress = vi.fn();
+      render(<Button onPress={onPress}>+</Button>);
+      fireEvent.click(screen.getByText('+'));
+      fireEvent.click(screen.getByText('+'));
+      expect(onPress).toHaveBeenCalledTimes(2);
     });
   });
 

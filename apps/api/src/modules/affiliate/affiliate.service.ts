@@ -1,16 +1,22 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, type PayoutStatus, type Prisma } from '@prisma/client';
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { reserveVariationStock } from '../catalog/variation-stock';
-import { CoinsService } from '../wallet/coins.service';
+import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
+import { RewardPointsService } from '../wallet/reward-points.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CTV_NOTIFICATION } from './ctv-notification-codes';
+import { generateUniqueOrderCode } from '../../common/order-code';
 import { paginated, skipTake } from '../../common/pagination';
+import { toLocalPhone } from '../../common/phone';
 import {
   CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
@@ -22,10 +28,13 @@ import {
   vnMonthBounds,
   type VnMonth,
 } from './ctv-milestones';
+import { CRON_TZ } from '../../common/cron-tz';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
+
+const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -41,17 +50,35 @@ export class AffiliateService {
     private readonly config: SystemConfigService,
     private readonly pricing: PricingService,
     private readonly pancakeOrder: PancakeOrderService,
-    private readonly coins: CoinsService,
+    private readonly rewards: RewardPointsService,
     private readonly analytics: AnalyticsEventsService,
+    // @Optional: test dựng service trực tiếp không truyền; AppModule luôn wiring (NotificationsModule là @Global).
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  async register(userId: string) {
+  async register(userId: string, termsVersion?: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role === 'DEALER' || user.role === 'ADMIN' || user.role === 'STAFF') {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
-    if (user.role !== 'AFFILIATE') {
-      await this.prisma.user.update({ where: { id: userId }, data: { role: 'AFFILIATE' } });
+    const data: Prisma.UserUpdateInput = {};
+    if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
+    // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
+    // segments/dealerTierId, không cần migration). Chỉ ghi khi phiên bản đổi để giữ thời điểm đồng
+    // ý đầu tiên của từng phiên bản; merge để không mất khoá metadata khác.
+    const version = termsVersion?.trim();
+    if (version) {
+      const meta = (user.metadata as Record<string, unknown> | null) ?? {};
+      const prev = meta.affiliateTerms as { version?: string } | undefined;
+      if (prev?.version !== version) {
+        data.metadata = {
+          ...meta,
+          affiliateTerms: { version, acceptedAt: new Date().toISOString() },
+        } as Prisma.InputJsonValue;
+      }
+    }
+    if (Object.keys(data).length > 0) {
+      await this.prisma.user.update({ where: { id: userId }, data });
     }
     return { ok: true, referralCode: user.referralCode };
   }
@@ -71,7 +98,7 @@ export class AffiliateService {
 
   /**
    * Ghi "chạm" giới thiệu (attribution last-touch persistent §quyết-định). Khi khách (đã đăng nhập)
-   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 3).
+   * mở link CTV/nhãn → lưu referrerUserId + slug, hạn = now + config(attribution_days, mặc định 7 — Q-31).
    * Mỗi lần mở làm mới hạn. Bỏ qua nếu thiếu code / code không tồn tại / trỏ chính mình.
    */
   async recordTouch(
@@ -92,7 +119,7 @@ export class AffiliateService {
       select: { id: true },
     });
     if (!ref || ref.id === userId) return { ok: false };
-    const days = await this.config.get<number>('affiliate.attribution_days', 3);
+    const days = await this.config.get<number>('affiliate.attribution_days', 7);
     const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     const data = {
       referrerUserId: ref.id,
@@ -137,8 +164,14 @@ export class AffiliateService {
     });
   }
 
-  listLinks(userId: string) {
-    return this.prisma.affiliateLink.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+  /** Mới nhất trước; mặc định 100 (tối đa 200) — CTV tạo link vô hạn nên không thể trả hết một lần. */
+  listLinks(userId: string, opts: { take?: number; cursor?: string } = {}) {
+    return this.prisma.affiliateLink.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: Math.min(Math.max(opts.take ?? 100, 1), 200),
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    });
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */
@@ -266,20 +299,29 @@ export class AffiliateService {
     if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
       throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
     }
+    // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
+    // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
+    // nhận) cũng chảy về CTV.
+    const ctvPhone = ctv.phone ? toLocalPhone(ctv.phone) : null;
+    if (ctvPhone && ctvPhone === toLocalPhone(dto.customer.phone)) {
+      throw new BadRequestException(
+        'Không thể lên đơn hộ với SĐT của chính bạn. Hãy đặt hàng như khách thường cho đơn của mình.',
+      );
+    }
 
     const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: variationIds } },
-      include: { product: { select: { name: true, slug: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
-    // Dựng line + validate (variation tồn tại + đang bán). unitPrice = salePrice ?? retailPrice.
+    // Dựng line + validate (variation tồn tại + đang bán + SP cha đang bán và đã duyệt).
+    // unitPrice = salePrice ?? retailPrice.
     const lines = dto.items.map((i) => {
       const v = vmap.get(i.variationId);
-      if (!v || !v.isActive) {
-        throw new BadRequestException('Sản phẩm không còn khả dụng.');
-      }
+      if (!v) throw new BadRequestException('Sản phẩm không còn khả dụng.');
+      if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
       const unitPrice = v.salePrice ?? v.retailPrice;
       return {
         variationId: v.id,
@@ -304,12 +346,14 @@ export class AffiliateService {
     const storefrontSlug = store?.slug ?? null;
 
     const status = dto.paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING_PAYMENT';
-    const code = await this.generateOrderCode();
+    const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
     const shippingAddress = this.customerSnapshot(dto.customer);
 
     let order: { id: string };
     try {
       order = await this.prisma.$transaction(async (tx) => {
+        // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
+        await assertVariationsSellable(tx, lines);
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
         for (const line of lines) {
           const hit = await reserveVariationStock(tx, line.variationId, line.quantity);
@@ -338,13 +382,13 @@ export class AffiliateService {
             source: 'ctv_assisted',
             platform: 'miniapp',
             // KHÔNG PHẢI hash mật mã — SĐT người nhận chuẩn hoá về DẠNG NỘI ĐỊA 0xxxxxxxxx (xem
-            // normalizeToLocalPhone ở dưới), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
+            // toLocalPhone ở common/phone.ts), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
             // trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn CTV lên hộ tạo
             // Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là nơi DUY NHẤT
             // set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này (hoặc chuẩn hoá sai dạng)
             // thì quyết định "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không
             // có hiệu lực / gộp sai người.
-            endCustomerKey: this.normalizeToLocalPhone(dto.customer.phone),
+            endCustomerKey: toLocalPhone(dto.customer.phone),
             note: dto.note,
             idempotencyKey: key ?? null,
             items: {
@@ -380,6 +424,7 @@ export class AffiliateService {
             orderSource: 'ctv_assisted',
           },
         });
+        await this.createCommissionForOrder(created.id, tx);
         return created;
       });
     } catch (err) {
@@ -400,43 +445,10 @@ export class AffiliateService {
     } catch (err) {
       this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
-    // Tạo hoa hồng cho CTV (placedForCustomer cho phép self-referral). Non-fatal.
-    await this.createCommissionForOrder(order.id).catch((err) =>
-      this.logger.error(`Tạo commission lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`),
-    );
-
     return this.prisma.order.findUniqueOrThrow({
       where: { id: order.id },
       include: { items: true },
     });
-  }
-
-  /** Sinh mã đơn TUBU<ymd><random5> duy nhất (mirror checkout.generateCode). */
-  private async generateOrderCode(): Promise<string> {
-    for (let i = 0; i < 6; i++) {
-      const d = new Date();
-      const ymd = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(
-        d.getUTCDate(),
-      ).padStart(2, '0')}`;
-      const code = `TUBU${ymd}${String(randomInt(0, 100000)).padStart(5, '0')}`;
-      const exists = await this.prisma.order.findUnique({ where: { code } });
-      if (!exists) return code;
-    }
-    return `TUBU${Date.now()}`;
-  }
-
-  /**
-   * Chuẩn hoá SĐT người nhận về CÙNG dạng nội địa 0xxxxxxxxx mà User.phone luôn lưu (mirror
-   * zalo.service.ts:normalizePhone / loyalty.service.ts:normalizeVnPhone — quy tắc 84→0 dùng
-   * chung toàn repo). Form lên đơn hộ (ctv-order-sheet.tsx) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx —
-   * chỉ strip ký tự không phải số (bỏ qua bước 84→0) sẽ tách 1 khách hàng thật thành 2
-   * endCustomerKey khác nhau tuỳ CTV gõ SĐT kiểu nào, làm hỏng chính quyết định nghiệp vụ
-   * "gộp theo endCustomerKey" mà cột này tồn tại để phục vụ.
-   */
-  private normalizeToLocalPhone(raw: string): string | null {
-    const digits = raw.replace(/\D/g, '');
-    const local = digits.replace(/^84(\d{9})$/, '0$1');
-    return local || null;
   }
 
   /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */
@@ -454,9 +466,15 @@ export class AffiliateService {
     };
   }
 
-  /** Tạo commission PENDING cho đơn có người giới thiệu (gọi từ checkout). */
-  async createCommissionForOrder(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUniqueOrThrow({
+  /**
+   * Tạo commission PENDING cho đơn có người giới thiệu. Caller tạo đơn truyền `tx` của chính
+   * transaction tạo đơn: hoa hồng commit/rollback cùng đơn, lỗi nổi lên thay vì đơn tồn tại mà CTV
+   * mất hoa hồng vĩnh viễn (C-002). Gọi lại / gọi song song an toàn: unique (orderId,
+   * affiliateUserId) + ON CONFLICT DO NOTHING — không dùng create rồi bắt P2002 vì trong tx của
+   * caller lỗi đó làm abort cả transaction đơn.
+   */
+  async createCommissionForOrder(orderId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
+    const order = await db.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true },
     });
@@ -465,7 +483,7 @@ export class AffiliateService {
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
-    const variations = await this.prisma.variation.findMany({
+    const variations = await db.variation.findMany({
       where: { id: { in: variationIds } },
       select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
     });
@@ -488,7 +506,8 @@ export class AffiliateService {
     }
     if (amount <= 0) return;
 
-    await this.prisma.commission.create({
+    await db.commission.createMany({
+      skipDuplicates: true,
       data: {
         affiliateUserId: order.referrerUserId,
         orderId: order.id,
@@ -510,60 +529,18 @@ export class AffiliateService {
   }
 
   /**
-   * Refer-reward MỘT LẦN (tách khỏi hoa hồng %): đơn DELIVERED có người giới thiệu →
-   * thưởng voucher cho cả người mời và người được mời. Idempotent qua coupon.code @unique:
-   * mỗi cặp (mời, được-mời) thưởng 1 lần; mỗi người-được-mời nhận welcome-giới-thiệu 1 lần.
+   * Đơn DELIVERED → xét thưởng giới thiệu cho người mời của chủ đơn (Q-05: một chương trình duy
+   * nhất, thưởng Điểm Xanh khi người được mời có đơn thứ 2 trong cửa sổ). Không còn voucher REFER/REFERRED
+   * 50k+50k: voucher đó cộng thêm cho CTV ngoài hoa hồng và không bị thu hồi khi đơn bị trả. Voucher
+   * đã cấp trước đây giữ nguyên.
    */
   async grantReferralReward(orderId: string): Promise<void> {
-    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    const referrerId = order.referrerUserId;
-    if (!referrerId || referrerId === order.userId) return;
-
-    // §6.14.5: chỉ kích hoạt khi đơn (đầu) của người được mời ≥ ngưỡng (mặc định 200k).
-    const minOrder = await this.config.get<number>('referral.min_order_amount', 200000);
-    if (order.total < minOrder) return;
-
-    const refereeId = order.userId;
-    // §6.14.5: CẢ hai nhận voucher 50k. Voucher áp cho đơn ≥ minOrder.
-    const referrerAmount = await this.config.get<number>('referral.referrer_reward_amount', 50000);
-    const refereeAmount = await this.config.get<number>('referral.referee_reward_amount', 50000);
-    await this.grantReferralVoucher(referrerId, `REFER-${referrerId}-${refereeId}`, referrerAmount, minOrder);
-    await this.grantReferralVoucher(refereeId, `REFERRED-${refereeId}`, refereeAmount, minOrder);
-  }
-
-  /** Cấp voucher cá nhân AMOUNT (USER_GROUP). Idempotent: code deterministic + catch P2002. */
-  private async grantReferralVoucher(
-    userId: string,
-    rawCode: string,
-    amount: number,
-    minOrder: number,
-  ): Promise<void> {
-    if (amount <= 0) return;
-    const code = rawCode.toUpperCase();
-    const existing = await this.prisma.coupon.findUnique({ where: { code } });
-    if (existing) return;
-    const now = new Date();
-    const endAt = new Date(now.getTime() + 30 * 864e5);
-    try {
-      await this.prisma.coupon.create({
-        data: {
-          code,
-          type: 'AMOUNT',
-          value: amount,
-          minOrder,
-          startAt: now,
-          endAt,
-          usageLimit: 1,
-          perUserLimit: 1,
-          scope: 'USER_GROUP',
-          scopeMeta: { userId },
-        },
-      });
-    } catch (err) {
-      // Race: instance khác vừa cấp cùng code → coi như đã thưởng.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') return;
-      throw err;
-    }
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { userId: true, type: true, placedForCustomer: true },
+    });
+    if (order.type !== 'RETAIL' || order.placedForCustomer) return;
+    await this.rewards.grantReferralOrderReward(order.userId);
   }
 
   /** Đơn hoàn/hủy trong cửa sổ → reject commission. */
@@ -598,7 +575,7 @@ export class AffiliateService {
     // total), bất kể SystemConfig còn seed giá trị gì cho key này. Key này vẫn tồn tại/được đọc bởi
     // `system-config` (public config — ngoài phạm vi sửa của bản vá này) và miniapp đã ngừng hiển
     // thị "×hệ số" (affiliate.tsx); nếu tương lai thật sự cần một khoản "bonus" khi đổi hoa hồng
-    // sang Ví, khoản đó PHẢI trả bằng TubuXu (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
+    // sang Ví, khoản đó PHẢI trả bằng Điểm Xanh (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
     // walletBalance bằng hệ số nhân > 1.
 
     // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
@@ -675,9 +652,16 @@ export class AffiliateService {
           }
           // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm.
           const credited = total;
-          await tx.user.update({ where: { id: userId }, data: { walletBalance: { increment: credited } } });
-          await tx.payout.create({
+          const payout = await tx.payout.create({
             data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date(), idempotencyKey: key },
+          });
+          await applyWalletDelta(tx, {
+            userId,
+            delta: credited,
+            type: 'COMMISSION_PAYOUT',
+            refType: 'PAYOUT',
+            refId: payout.id,
+            reason: `Rút ${rows.length} khoản hoa hồng về Ví`,
           });
           return { credited };
         });
@@ -754,7 +738,7 @@ export class AffiliateService {
    * toàn bộ process mỗi khi cron này lỗi, tức sập API cho MỌI user mỗi giờ vì một lỗi có thể chỉ
    * là nhất thời. Bắt lỗi + log để cron thử lại giờ sau thay vì sập process.
    */
-  @Cron('0 0 * * * *')
+  @Cron('0 0 * * * *', { timeZone: CRON_TZ })
   async approveDueCommissions(): Promise<void> {
     try {
       const holdDays = await this.effectiveHoldDays();
@@ -769,6 +753,7 @@ export class AffiliateService {
         select: { orderId: true },
       });
       const heldOrderIds = [...new Set(openReturns.map((r) => r.orderId))];
+      const approvedAt = new Date();
       const res = await this.prisma.commission.updateMany({
         where: {
           status: 'LOCKED',
@@ -779,11 +764,70 @@ export class AffiliateService {
           order: { status: 'DELIVERED' },
           ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
         },
-        data: { status: 'APPROVED', approvedAt: new Date() },
+        data: { status: 'APPROVED', approvedAt },
       });
-      if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+      if (res.count > 0) {
+        this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+        await this.notifyCommissionsApproved(approvedAt);
+      }
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Báo CTV hoa hồng vừa được duyệt (có thể rút), gộp theo người: một lượt cron có thể chốt nhiều
+   * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
+   * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
+   * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
+   */
+  private async notifyCommissionsApproved(approvedAt: Date): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const rows = await this.prisma.commission.findMany({
+        where: { status: 'APPROVED', approvedAt },
+        select: { affiliateUserId: true, amount: true },
+      });
+      const perUser = new Map<string, { count: number; amount: number }>();
+      for (const r of rows) {
+        const cur = perUser.get(r.affiliateUserId) ?? { count: 0, amount: 0 };
+        perUser.set(r.affiliateUserId, { count: cur.count + 1, amount: cur.amount + r.amount });
+      }
+      for (const [userId, sum] of perUser) {
+        try {
+          await this.notifications.notify(userId, CTV_NOTIFICATION.APPROVED, {
+            count: String(sum.count),
+            amount: vnd(sum.amount),
+          });
+        } catch (err) {
+          this.logger.error(`Gửi thông báo hoa hồng được duyệt cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`notifyCommissionsApproved lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Báo CTV có đơn mới từ link/mã của mình kèm hoa hồng dự kiến. Gọi SAU KHI đơn đã commit (hoa
+   * hồng được tạo trong transaction của đơn nên không báo từ trong đó: tx rollback thì CTV nhận tin
+   * về khoản không tồn tại). Không báo đơn CTV tự lên hộ (chính họ vừa tạo) và không kèm mã đơn:
+   * đó là đơn của KHÁCH, app sẽ hiện nút "Xem đơn" dẫn tới trang CTV không có quyền xem. Không bao
+   * giờ ném lỗi — thông báo hỏng không được làm hỏng đơn vừa đặt.
+   */
+  async notifyCommissionCreated(orderId: string): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const commission = await this.prisma.commission.findFirst({
+        where: { orderId },
+        select: { affiliateUserId: true, amount: true, order: { select: { placedForCustomer: true } } },
+      });
+      if (!commission || commission.order.placedForCustomer) return;
+      await this.notifications.notify(commission.affiliateUserId, CTV_NOTIFICATION.NEW, {
+        amount: vnd(commission.amount),
+      });
+    } catch (err) {
+      this.logger.error(`Gửi thông báo hoa hồng mới cho đơn ${orderId} lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -886,7 +930,7 @@ export class AffiliateService {
     return {
       revenue,
       tier: this.monthlyTier(revenue),
-      // Mỗi bậc kèm thưởng mốc TubuXu cùng ngưỡng — phần thưởng THẬT của bậc.
+      // Mỗi bậc kèm thưởng mốc Điểm Xanh cùng ngưỡng — phần thưởng THẬT của bậc.
       allTiers: tiersWithRewards(),
     };
   }
@@ -945,14 +989,13 @@ export class AffiliateService {
   }
 
   /**
-   * Nhận thưởng mốc doanh số tháng → cộng TubuXu (coinsBalance, KHÔNG rút được).
+   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (KHÔNG rút được, PD-3).
    * MONEY-CRITICAL:
    *  - Điều kiện đọc doanh số ĐÃ CHỐT trong CÙNG tx (không đếm đơn còn huỷ/trả được).
    *  - Idempotent dưới đồng thời: insert ctv_milestone_claims (unique userId+milestoneId+monthKey)
-   *    TRƯỚC khi cấp xu; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
-   *  - Cấp xu qua CoinsService.grantCoins(tx) — CoinTransaction + coinsBalance cùng tx (giữ bất
-   *    biến coinsBalance == SUM(delta)). Trước đây ghi CoinTransaction nhưng lại cộng walletBalance
-   *    (tiền rút được) → lệch cả 2 sổ và biến "xu" thành tiền mặt rút về ngân hàng.
+   *    TRƯỚC khi cấp điểm; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
+   *  - Cấp qua RewardPointsService.grant(tx) — dòng sổ điểm + pointsBalance cùng tx (giữ bất biến
+   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền rút được).
    *  - `monthKey` chỉ nhận tháng này hoặc tháng trước (VN).
    */
   async claimMilestone(userId: string, milestoneId: string, monthKey?: string, now: Date = new Date()) {
@@ -978,23 +1021,30 @@ export class AffiliateService {
           );
         }
 
-        // Insert claim TRƯỚC khi cấp xu: grantCoins nuốt P2002 của chính nó (trả void) nên không
+        // Insert claim TRƯỚC khi cấp điểm: grant nuốt trùng khoá của chính nó (trả false) nên không
         // thể làm khoá idempotency ở đây — khoá thật là unique của ctv_milestone_claims.
         const claim = await tx.ctvMilestoneClaim.create({
-          data: { userId, milestoneId: milestone.id, monthKey: month.key, rewardXu: milestone.rewardXu, revenue },
+          data: {
+            userId,
+            milestoneId: milestone.id,
+            monthKey: month.key,
+            rewardXu: 0,
+            rewardPoints: milestone.rewardPoints,
+            revenue,
+          },
         });
-        await this.coins.grantCoins(userId, milestone.rewardXu, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
+        await this.rewards.grant(userId, milestone.rewardPoints, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
 
         return {
           success: true,
-          message: `Chúc mừng bạn đã nhận ${milestone.rewardXu.toLocaleString('vi-VN')} Tubu Xu từ ${milestone.title}!`,
-          rewardXu: milestone.rewardXu,
+          message: `Chúc mừng bạn đã nhận ${milestone.rewardPoints.toLocaleString('vi-VN')} Điểm Xanh từ ${milestone.title}!`,
+          rewardPoints: milestone.rewardPoints,
           monthKey: month.key,
         };
       });
     } catch (err) {
       // Unique (userId, milestoneId, monthKey): đã nhận trước đó HOẶC thua race double-tap —
-      // tx đã rollback, xu KHÔNG bị cộng lần 2.
+      // tx đã rollback, điểm KHÔNG bị cộng lần 2.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         throw new BadRequestException('Bạn đã nhận thưởng mốc này rồi.');
       }
@@ -1095,9 +1145,13 @@ export class AffiliateService {
       } else {
         // Nguồn 1 (wallet.service.ts:withdraw): hoàn GROSS đã bị trừ — Payout.amount lưu NET
         // (amount = gross - fee), nên gross = amount + fee (xem wallet.service.ts:withdraw).
-        await tx.user.update({
-          where: { id: payout.userId },
-          data: { walletBalance: { increment: payout.amount + payout.fee } },
+        await applyWalletDelta(tx, {
+          userId: payout.userId,
+          delta: payout.amount + payout.fee,
+          type: 'WITHDRAW_REFUND',
+          refType: 'PAYOUT',
+          refId: payout.id,
+          reason: `Hoàn lệnh rút bị từ chối: ${why}`,
         });
       }
       this.logger.log(`Admin ${adminId} từ chối lệnh rút ${id}: ${why}`);
@@ -1123,6 +1177,18 @@ export class AffiliateService {
       );
     }
     this.logger.log(`Admin ${adminId} xác nhận đã chuyển khoản lệnh rút ${id}.`);
-    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    const payout = await this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    if (this.notifications) {
+      try {
+        // Payout.amount là số tiền THỰC chuyển (đã trừ phí), đúng con số CTV sẽ thấy trong tài khoản.
+        await this.notifications.notify(payout.userId, CTV_NOTIFICATION.PAYOUT_PAID, {
+          amount: vnd(payout.amount),
+          ref: payout.bankRef ? ` (mã giao dịch ${payout.bankRef})` : '',
+        });
+      } catch (err) {
+        this.logger.error(`Gửi thông báo đã chuyển khoản lệnh rút ${id} lỗi: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    return payout;
   }
 }

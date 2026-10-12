@@ -1,7 +1,11 @@
-import { Box, Select, Text } from 'zmp-ui';
+import type { CSSProperties } from 'react';
+import { Select } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { TriangleAlert } from 'lucide-react';
 import { getProvinces, getCommunes } from '../services/geo-api';
 import { vi } from '../i18n/vi';
+import { Icon } from './ui/icon';
+import { Text } from './ui/text';
 
 /** Giá trị địa giới: tên hiển thị + mã Pancake (gửi khi đặt đơn). */
 export interface GeoValue {
@@ -14,6 +18,20 @@ export interface GeoValue {
 export const EMPTY_GEO: GeoValue = { province: '', provinceCode: '', ward: '', wardCode: '' };
 
 const { Option } = Select;
+
+const RETRY_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: 44,
+  marginTop: 2,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
 
 /**
  * Picker địa giới 2 cấp Tỉnh → Phường/Xã, danh mục lấy TỪ Pancake (mã "84_VN*" chuẩn
@@ -40,7 +58,7 @@ export function GeoPicker({
 
   return (
     <>
-      <Box>
+      <div>
         <Select
           label="Tỉnh/Thành phố"
           placeholder={
@@ -62,17 +80,16 @@ export function GeoPicker({
         {errorProvince && <ErrText>{errorProvince}</ErrText>}
         {/* API lỗi thì Select sẽ im lặng mãi ở placeholder nếu không có dòng này — cho user biết + retry */}
         {provincesQ.isError && !errorProvince && (
-          <Text
-            size="xSmall"
-            onClick={() => void provincesQ.refetch()}
-            style={{ color: 'var(--danger)', marginTop: 2, cursor: 'pointer' }}
-          >
-            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
-          </Text>
+          <button type="button" onClick={() => void provincesQ.refetch()} style={RETRY_STYLE}>
+            <Icon icon={TriangleAlert} size="sm" tone="danger" />
+            <Text variant="caption" tone="danger">
+              {vi.errors.loadFailed} · {vi.common.retry}
+            </Text>
+          </button>
         )}
-      </Box>
+      </div>
 
-      <Box>
+      <div>
         <Select
           label="Phường/Xã"
           placeholder={
@@ -99,23 +116,25 @@ export function GeoPicker({
         </Select>
         {errorWard && <ErrText>{errorWard}</ErrText>}
         {communesQ.isError && !errorWard && (
-          <Text
-            size="xSmall"
-            onClick={() => void communesQ.refetch()}
-            style={{ color: 'var(--danger)', marginTop: 2, cursor: 'pointer' }}
-          >
-            ⚠ {vi.errors.loadFailed} · {vi.common.retry}
-          </Text>
+          <button type="button" onClick={() => void communesQ.refetch()} style={RETRY_STYLE}>
+            <Icon icon={TriangleAlert} size="sm" tone="danger" />
+            <Text variant="caption" tone="danger">
+              {vi.errors.loadFailed} · {vi.common.retry}
+            </Text>
+          </button>
         )}
-      </Box>
+      </div>
     </>
   );
 }
 
 function ErrText({ children }: { children: React.ReactNode }) {
   return (
-    <Text size="xSmall" style={{ color: 'var(--danger)', marginTop: 2 }}>
-      ⚠ {children}
-    </Text>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+      <Icon icon={TriangleAlert} size="sm" tone="danger" />
+      <Text variant="caption" tone="danger">
+        {children}
+      </Text>
+    </div>
   );
 }

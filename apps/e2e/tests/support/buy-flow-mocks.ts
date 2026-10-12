@@ -117,6 +117,8 @@ export function mockOrdersTab(api: MockApi): void {
     return { data, meta: { page: 1, limit: 20, total: data.length } };
   });
   api.get('/me/subscriptions', [SUBSCRIPTION]);
+  // Thẻ lịch định kỳ tra địa chỉ theo addressId để hiện dòng địa chỉ (subscriptions-panel); nội dung không liên quan test.
+  api.get('/me/addresses', []);
   api.post('/orders/:code/repurchase', {
     ...CART_AFTER_ADD,
     cart: CART_AFTER_ADD,

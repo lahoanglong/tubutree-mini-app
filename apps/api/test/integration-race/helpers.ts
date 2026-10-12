@@ -121,7 +121,10 @@ export function barrierOnFirstCalls<T extends object, K extends keyof T>(obj: T,
   });
 }
 
-/** Mở sẵn nhiều kết nối trong pool Prisma để các request "đồng thời" thật sự chạy song song ở DB. */
-export async function warmPool(prisma: PrismaService, connections = 12) {
+/**
+ * Mở sẵn nhiều kết nối trong pool Prisma để các request "đồng thời" thật sự chạy song song ở DB.
+ * Mở mới quá ~20 kết nối cùng lúc qua Docker Desktop có thể treo hàng giây (P2028 ở tx đầu), nên khởi động trước đủ.
+ */
+export async function warmPool(prisma: PrismaService, connections = 20) {
   await Promise.all(Array.from({ length: connections }, () => prisma.$queryRaw`SELECT pg_sleep(0.05)::text AS s`));
 }

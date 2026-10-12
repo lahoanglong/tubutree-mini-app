@@ -577,6 +577,7 @@ async function cleanup() {
   await prisma.userSeasonPass.deleteMany({ where: { userId: { in: ids } } });
   await prisma.gameProfile.deleteMany({ where: { userId: { in: ids } } });
   await prisma.bottleReturn.deleteMany({ where: { userId: { in: ids } } });
+  // Seed không còn tạo dòng beta, nhưng DB audit dựng từ bản seed cũ có thể còn dòng của persona; bảng không DROP nên vẫn dọn được.
   await prisma.betaFeedback.deleteMany({ where: { userId: { in: ids } } });
   await prisma.betaTester.deleteMany({ where: { userId: { in: ids } } });
   await prisma.communityReport.deleteMany({ where: { OR: [{ reporterId: { in: ids } }, { targetId: { in: [...postIds, ...commentIds] } }] } });
@@ -644,11 +645,6 @@ async function main() {
   const cfg = async (key: string, value: unknown, category: string, description: string) =>
     prisma.systemConfig.upsert({ where: { key }, update: { value, updatedBy: 'audit-seed' }, create: { key, value, category, description, updatedBy: 'audit-seed' } });
   await cfg('loyalty.pos_credit_enabled', true, 'loyalty', 'Bật tích điểm tại quầy (POS) do nhân viên nhập');
-  await cfg('beta.features', [
-    { key: 'ai-advisor', title: 'Tư vấn AI 24/7', desc: 'Hỏi nhanh về thành phần, cách dùng, chọn sản phẩm hợp da.' },
-    { key: 'garden-plots', title: 'Mở rộng vườn nhiều lô', desc: 'Trồng song song nhiều cây, thu hoạch nhanh hơn.' },
-    { key: 'refill-station', title: 'Trạm đổi vỏ chai', desc: 'Đổi vỏ chai rỗng lấy giọt nước tưới cây.' },
-  ], 'beta', 'Danh sách tính năng beta hiển thị cho người tham gia (mảng {key,title,desc})');
   await cfg('attendance.office_ips', ['127.0.0.1', '::1', '::ffff:127.0.0.1'], 'attendance', 'Danh sách IP/CIDR nội bộ được phép checkin (audit: localhost)');
   await cfg('attendance.office_lat', 10.8505, 'attendance', 'Vĩ độ văn phòng (audit: Golf Park, Thủ Đức)');
   await cfg('attendance.office_lng', 106.7717, 'attendance', 'Kinh độ văn phòng (audit: Golf Park, Thủ Đức)');
@@ -1221,7 +1217,7 @@ async function main() {
   }
   await prisma.payrollMonth.create({ data: { staffId: S, year: prevY, month: prevM, totalMinutes: pTotalMin, gross: pGross, totalFines: 0, net: pGross, status: 'PAID', finalizedAt: plus(MONTH_START, 2 * DAY), paidAt: plus(MONTH_START, 4 * DAY), paidBy: ADMIN, note: 'Chuyển khoản VCB' } });
 
-  // ── 9) game, season pass, refill, beta, wishlist, cart, subscription, brand follows ──
+  // ── 9) game, season pass, refill, wishlist, cart, subscription, brand follows ──
   const game = async (userId: string, data: Record<string, unknown>) => prisma.gameProfile.create({ data: { userId, ...data } });
   await game(A, { streakDays: 12, longestStreak: 21, lastCheckInAt: at(1, 20, 15), treeStage: 3, totalSeeds: 185, ecoImpact: { progress: 410, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 2 }, badges: ['FIRST_HARVEST', 'STREAK_7', 'REFILL_HERO'], lastWateredAt: at(1, 20, 20), streakFreezes: 1, lastDewAt: at(1, 7, 5) });
   await game(CTV, { streakDays: 3, longestStreak: 9, lastCheckInAt: at(1, 21), treeStage: 2, totalSeeds: 60, ecoImpact: { progress: 180, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 1 }, badges: ['FIRST_HARVEST'], lastWateredAt: at(1, 21, 5) });
@@ -1255,10 +1251,6 @@ async function main() {
   await prisma.bottleReturn.create({ data: { userId: A, quantity: 4, seedsAwarded: 200, status: 'PENDING', createdAt: hoursAgo(26) } });
   await prisma.bottleReturn.create({ data: { userId: A, quantity: 1, seedsAwarded: 50, status: 'REJECTED', createdAt: at(30, 17) } });
   await prisma.bottleReturn.create({ data: { userId: BG.linh.id, quantity: 6, seedsAwarded: 300, status: 'PENDING', createdAt: hoursAgo(3) } });
-  // Beta.
-  await prisma.betaTester.create({ data: { userId: A, status: 'ACTIVE', joinedAt: at(30, 21) } });
-  await prisma.betaFeedback.create({ data: { userId: A, message: 'Mong có thêm bộ lọc "an toàn cho bà bầu" ở trang danh mục.', createdAt: at(12, 21) } });
-  await prisma.betaTester.create({ data: { userId: CTV, status: 'ACTIVE', joinedAt: at(50, 21) } });
   // Wishlist / cart / subscriptions / follows / flash reminder.
   for (const [pid, d] of [['p-visante-vitc', 20], ['p-leplateau-coldbrew', 12], ['p-sokfram-granola', 6], ['p-bhnong-cagaileo', 2]] as const) {
     await prisma.wishlist.create({ data: { userId: A, productId: pid, createdAt: at(d, 21) } });
@@ -1574,7 +1566,6 @@ function buildRoutes(c: RouteCtx) {
     { pattern: '/ai-advisor', personas: LOGGED, examples: ['/ai-advisor'], notes: 'AI keys are blank in the audit env → graceful "not available" state.' },
     { pattern: '/group-buy', personas: LOGGED, examples: ['/group-buy'] },
     { pattern: '/refill', personas: LOGGED, examples: ['/refill'] },
-    { pattern: '/beta', personas: LOGGED, examples: ['/beta'] },
     { pattern: '/profile', personas: ALL, examples: ['/profile'] },
     { pattern: '/loyalty', personas: LOGGED, examples: ['/loyalty'] },
     { pattern: '/wallet', personas: LOGGED, examples: ['/wallet'] },
@@ -1626,7 +1617,7 @@ function buildRoutes(c: RouteCtx) {
     apiBase: `${API_ORIGIN}/api`,
     notes: [
       'Use hostname "localhost" (not 127.0.0.1): zmp-sdk storage and the web refresh cookie both depend on it.',
-      'Miniapp routes come from apps/miniapp/src/components/app.tsx (41 paths + "*" catch-all = 42 <Route>s; /order/:code is listed twice here for the ctv variant).',
+      'Miniapp routes come from apps/miniapp/src/components/app.tsx (40 paths + "*" catch-all = 41 <Route>s; /order/:code is listed twice here for the ctv variant).',
       'Web routes come from apps/web/src/app/** (page.tsx files + robots/sitemap + not-found).',
       'Query variants: /admin?tab=<tab> for every admin tab, /admin?tab=orders&recycling=attention|all.',
     ],

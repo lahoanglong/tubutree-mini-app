@@ -119,6 +119,8 @@ model AttendanceSession {
   checkinLng      Float
   checkinIp       String
   lastHeartbeatAt DateTime            @default(now())
+  outOfRangeCount Int                 @default(0) // số heartbeat ngoài vùng LIÊN TIẾP; heartbeat hợp lệ reset về 0 (C-056)
+  outOfRangeSince DateTime? // nhịp ngoài vùng đầu tiên của chuỗi hiện tại; null = đang trong vùng
   closeReason     SessionCloseReason?
   isLate          Boolean             @default(false) // phiên đầu ca & trễ > grace (Phase D quy tiền)
   createdAt       DateTime            @default(now())
@@ -215,7 +217,9 @@ model PayrollMonth {
 model User {
   id                String          @id @default(cuid())
   zaloId            String?         @unique // openId từ Zalo
+  /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
   zaloAccessToken   String? // mã hóa
+  /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
   zaloRefreshToken  String? // mã hóa
   phone             String?         @unique
   email             String?
@@ -228,11 +232,20 @@ model User {
   tierGraceUntil    DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
   referralCode      String          @unique
   referredById      String?
+  // Điểm Xanh lô STANDARD (có hạn, trần loyalty.max_redeem_pct). == SUM(points_transactions.delta) lot STANDARD.
   pointsBalance     Int             @default(0)
+  // PD-3 (Q-03a): Điểm Xanh lô CONVERTED, quy từ xu (tiền trả trước): không hết hạn, không trần, không
+  // ra tiền. Cột riêng để mọi guard `gte pointsBalance` cũ (vòng quay, đổi voucher...) không chạm tới.
+  // == SUM(delta) lot CONVERTED; CHECK users_points_converted_nonneg (>= 0) chỉ có trong migration SQL.
+  pointsConvertedBalance Int        @default(0)
   walletBalance     Int             @default(0)
   coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
   cashbackPending   Int             @default(0)
   isBlocked         Boolean         @default(false)
+  // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
+  notifyPromo       Boolean         @default(true)
+  notifyGarden      Boolean         @default(true)
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId String?         @unique
   metadata          Json?
   createdAt         DateTime        @default(now())
@@ -244,7 +257,9 @@ model User {
   orders                 Order[]
   pointsTransactions     PointsTransaction[]
   coinTransactions       CoinTransaction[]
-  affiliateLinks         AffiliateLink[]
+  xuPointsConversion     XuPointsConversion?
+  walletTransactions     WalletTransaction[]
+  affiliateLinks        AffiliateLink[]
   commissions            Commission[]
   ctvMilestoneClaims     CtvMilestoneClaim[]
   storefronts            Storefront[]
@@ -281,6 +296,9 @@ model User {
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
 
   @@index([referredById])
+  // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
   @@map("users")
 }
 
@@ -295,6 +313,8 @@ model RefreshToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
+  @@index([createdAt])
   @@map("refresh_tokens")
 }
 
@@ -310,6 +330,7 @@ model MembershipTier {
   /// cho mọi hạng, xem vouchers.service.ts birthdayVouchers()).
   birthdayVoucherAmount Int?
   perks                 Json
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   badgeImageUrl         String?
   sortOrder             Int     @default(0)
   users                 User[]
@@ -350,6 +371,9 @@ model Product {
   affiliateBlocked Boolean               @default(false)
   slug             String                @unique
   name             String
+  // Tên đã gấp dấu (= foldVietnamese(name)) cho tìm không dấu có index — trigger DB
+  // products_name_search_sync tự ghi khi INSERT/UPDATE name; code KHÔNG tự ghi cột này.
+  nameSearch       String                @default("")
   description      String                @db.Text
   shortDesc        String?
   images           String[]
@@ -394,6 +418,8 @@ model Product {
   @@index([categoryIds], type: Gin, map: "products_categoryIds_gin")
   @@index([forSegment], type: Gin, map: "products_forSegment_gin")
   @@index([tags], type: Gin, map: "products_tags_gin")
+  // Tìm không dấu (catalog textMatchSql: "nameSearch" LIKE '%x%') — trigram GIN, cần pg_trgm.
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_nameSearch_trgm_idx")
   @@map("products")
 }
 
@@ -469,7 +495,7 @@ model DealerReward {
   type        DealerRewardType
   title       String
   description String?
-  threshold   Int
+  threshold   BigInt
   period      String              @default("QUARTER")
   isActive    Boolean             @default(true)
   sortOrder   Int                 @default(0)
@@ -502,8 +528,8 @@ model DealerRewardClaim {
   rewardTitle     String
   rewardType      DealerRewardType
   rewardPeriod    String // QUARTER | YEAR tại thời điểm yêu cầu
-  threshold       Int
-  volumeAtClaim   Int // doanh số ĐÃ CHỐT của kỳ lúc gửi yêu cầu
+  threshold       BigInt
+  volumeAtClaim   BigInt // doanh số ĐÃ CHỐT của kỳ lúc gửi yêu cầu
   note            String? // ghi chú của đại lý
   status          DealerRewardClaimStatus @default(PENDING)
   reviewedBy      String? // adminId duyệt/từ chối
@@ -526,7 +552,7 @@ model ReferralTouch {
   referrerUserId String // CTV được công (đã resolve từ referralCode lúc ghi)
   storefrontSlug String? // chỉ set khi đến từ gian hàng CTV (kind=ctv); brand → null
   kind           String   @default("ctv") // ctv | brand
-  expiresAt      DateTime // now + config(affiliate.attribution_days, mặc định 3 ngày)
+  expiresAt      DateTime // now + config(affiliate.attribution_days, mặc định 7 ngày)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -811,6 +837,9 @@ model Order {
   total              Int
   pointsEarned       Int              @default(0)
   pointsUsed         Int              @default(0)
+  // Phần của pointsUsed lấy từ lô CONVERTED (PD-3); phần STANDARD = pointsUsed − pointsUsedConverted.
+  // Cần để hoàn điểm khi huỷ/trả về đúng lô.
+  pointsUsedConverted Int             @default(0)
   paymentMethod      PaymentMethod
   paymentStatus      PaymentStatus
   paymentTxnId       String?
@@ -828,12 +857,13 @@ model Order {
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
   placedForCustomer  Boolean          @default(false)
+  /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
   commission         Int              @default(0)
   source             String? // checkout | buy_now | ctv_assisted | subscription | dealer
   platform           String? // miniapp | web — null cho đơn cũ trước migration này
   paidAt             DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId     String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
-  endCustomerKey     String? // hash SĐT người nhận — CHỈ set khi placedForCustomer = true
+  endCustomerKey     String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
   couponCode         String?
   note               String?
   // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
@@ -851,9 +881,12 @@ model Order {
   /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
   /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
   deliveredAt        DateTime?
+  /// Lúc cron ReviewInviteService nhận đơn để gửi tin mời đánh giá (claim trước khi gửi, null lại nếu gửi lỗi).
+  reviewInvitedAt    DateTime?
   items              OrderItem[]
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
+  customerRefund     OrderCustomerRefund?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -863,8 +896,13 @@ model Order {
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
   // không trùng prefix với [userId, status] ở trên (userId không có trong where của admin).
   @@index([status, createdAt])
+  // Danh sách đơn admin không lọc + đơn mới nhất của dashboard: ORDER BY createdAt DESC LIMIT n.
+  @@index([createdAt])
   @@index([gomdonOrderId])
   @@index([gomdonPartnerCode])
+  // Tìm đơn admin theo mã đơn / mã Gomdon (ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
+  @@index([code(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_code_trgm_idx")
+  @@index([gomdonPartnerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_gomdonPartnerCode_trgm_idx")
   // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
   @@index([hasRecyclingPickup, gomdonStatus])
   @@map("orders")
@@ -901,6 +939,13 @@ model OrderItem {
 // 4.4 Loyalty & Voucher
 // ============================================================
 
+// PD-3: lô của một dòng sổ Điểm Xanh. STANDARD = điểm thưởng thường (users.pointsBalance);
+// CONVERTED = điểm quy từ xu (users.pointsConvertedBalance), luôn expiresAt NULL.
+enum PointsLot {
+  STANDARD
+  CONVERTED
+}
+
 model PointsTransaction {
   id        String    @id @default(cuid())
   userId    String
@@ -910,6 +955,8 @@ model PointsTransaction {
   refType   String?
   refId     String?
   expiresAt DateTime?
+  // CHECK points_transactions_converted_no_expiry (lot <> CONVERTED OR expiresAt IS NULL) chỉ có trong SQL.
+  lot       PointsLot @default(STANDARD)
   createdAt DateTime  @default(now())
 
   @@index([userId])
@@ -922,7 +969,29 @@ model PointsTransaction {
   //    (refId = ngày VN 'YYYY-MM-DD') → tối đa 1 dòng điểm danh/user/ngày.
   //  - "points_transactions_pos_ref_key" ON ("refId") WHERE refType='POS'
   //    (refId = PosPointCredit.id) → 1 lần tích POS chỉ sinh đúng 1 dòng điểm.
+  // PD-3 (20261012100000_pd3_points_lot_schema): *_xu_migration_key (refId) WHERE refType='XU_MIGRATION',
+  // *_referral_unique (reason) WHERE refType='REFERRAL', *_community_reason_key (reason) WHERE
+  // refType='COMMUNITY', *_quest_unique (userId, reason) WHERE refType='QUEST',
+  // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
   @@map("points_transactions")
+}
+
+// PD-3 Q-03a: ảnh chụp lần quy đổi xu → Điểm Xanh (migration 20261012110000_pd3_xu_to_points), một dòng
+// mỗi user có xu lúc quy đổi. PK userId là một trong các lớp chặn quy đổi hai lần; SQL hoàn tác
+// prisma/manual/pd3_xu_to_points_rollback.sql đọc bảng này. CHECK roundingVnd 0..999 chỉ có trong SQL.
+model XuPointsConversion {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id])
+  coinsBefore     Int
+  pointsBefore    Int
+  convertedBefore Int
+  pointsGranted   Int
+  roundingVnd     Int // pointsGranted*1000 − coinsBefore
+  pointsTxId      String
+  coinTxId        String
+  convertedAt     DateTime @default(now())
+
+  @@map("xu_points_conversions")
 }
 
 /// Điểm danh hằng ngày nhận Điểm Xanh ở trang Hạng thành viên (loyalty.service.ts dailyCheckIn).
@@ -1000,6 +1069,43 @@ model CoinTransaction {
   @@map("coin_transactions")
 }
 
+// Sổ cái Ví Tubu (walletBalance — VND thật, rút được). Bất biến: users.walletBalance ==
+// SUM(delta) theo userId; mọi biến động đi qua WalletLedgerService.applyDelta trong cùng
+// transaction với thay đổi số dư. Ghi từ ngày triển khai: mỗi user có số dư <> 0 lúc migrate có
+// đúng 1 dòng OPENING (Q-04, migration 20261010041004_wallet_ledger) — không dựng lại lịch sử cũ.
+enum WalletTxType {
+  OPENING // số dư đầu kỳ khi bắt đầu ghi sổ
+  ORDER_PAY // trả đơn bằng ví
+  ORDER_REFUND // hoàn tiền đơn huỷ/trả về ví
+  COMMISSION_PAYOUT // hoa hồng CTV chuyển vào ví
+  CASHBACK // cashback hết hold chuyển vào ví
+  WITHDRAW // rút về ngân hàng (gross = tiền chuyển + phí)
+  WITHDRAW_REFUND // admin từ chối lệnh rút → hoàn gross
+  XU_CONVERT // đổi ví sang TubuXu
+  MERGE_IN // nhận số dư từ tài khoản khách bị gộp
+  MERGE_OUT // chuyển số dư sang tài khoản được gộp vào
+  ADJUST // điều chỉnh tay của admin
+}
+
+model WalletTransaction {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  delta        Int // VND, có dấu: + vào ví, - ra khỏi ví
+  balanceAfter Int // walletBalance ngay sau dòng này
+  type         WalletTxType
+  refType      String? // ORDER | PAYOUT | CASHBACK | USER | ...
+  // Khoá chống ghi trùng: (userId, type, refId) unique; refId NULL không bị ràng buộc (Postgres
+  // coi NULL là khác nhau) nên chỉ biến động không có tham chiếu (ADJUST tay) mới để NULL.
+  refId        String?
+  reason       String?
+  createdAt    DateTime     @default(now())
+
+  @@unique([userId, type, refId])
+  @@index([userId, createdAt])
+  @@map("wallet_transactions")
+}
+
 enum CouponType {
   PERCENT
   AMOUNT
@@ -1071,6 +1177,7 @@ model AffiliateLink {
   @@map("affiliate_links")
 }
 
+/// @deprecated Chỉ ghi, không đọc (C-108): AffiliateService.trackClick ghi mỗi lượt bấm, không nơi nào đọc lại.
 model AffiliateClick {
   id               String   @id @default(cuid())
   shortCode        String
@@ -1079,6 +1186,7 @@ model AffiliateClick {
   userAgent        String?
   referrer         String?
   clickedAt        DateTime @default(now())
+  /// @deprecated Không nơi nào ghi hoặc đọc (C-108, A7-24).
   convertedOrderId String?
 
   @@index([shortCode])
@@ -1139,6 +1247,10 @@ model Commission {
   // lockCommissionsForOrder/reverseCommissionsForOrder (affiliate.service.ts) updateMany theo
   // orderId trên mỗi chuyển trạng thái đơn — không có index riêng cho orderId trước đây.
   @@index([orderId])
+  // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).
+  @@unique([orderId, affiliateUserId])
+  // Cron duyệt hoa hồng hết hold (approveDueCommissions): status = LOCKED AND lockedAt <= mốc.
+  @@index([status, lockedAt])
   @@map("commissions")
 }
 
@@ -1153,11 +1265,47 @@ model CtvMilestoneClaim {
   milestoneId String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
   monthKey    String // 'YYYY-MM' theo giờ VN
   rewardXu    Int
-  revenue     Int // doanh số đã chốt tại lúc nhận (đối soát)
+  rewardPoints Int     @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
+  revenue     BigInt // doanh số đã chốt tại lúc nhận (đối soát)
   createdAt   DateTime @default(now())
 
   @@unique([userId, milestoneId, monthKey])
   @@map("ctv_milestone_claims")
+}
+
+// Hoàn tiền đơn CTV lên hộ (placedForCustomer): tiền là của khách cuối, KHÔNG BAO GIỜ về ví CTV
+// (C-001 / Q-01). Khách cuối có tài khoản (khớp SĐT) → cộng ví khách, dòng COMPLETED ngay để giữ vết;
+// không có → PENDING chờ admin chuyển khoản lại tay. orderId unique: mỗi đơn hoàn tối đa một lần.
+enum CustomerRefundMethod {
+  WALLET
+  MANUAL_TRANSFER
+}
+
+enum CustomerRefundStatus {
+  PENDING
+  COMPLETED
+}
+
+model OrderCustomerRefund {
+  id             String               @id @default(cuid())
+  orderId        String               @unique
+  order          Order                @relation(fields: [orderId], references: [id])
+  orderCode      String
+  amount         Int
+  phone          String? // SĐT khách cuối dạng nội địa 0xxxxxxxxx (endCustomerKey / snapshot)
+  recipientName  String?
+  customerUserId String? // tài khoản nhận tiền khi method = WALLET
+  method         CustomerRefundMethod
+  status         CustomerRefundStatus
+  reason         String // CANCELLED | RETURNED — trạng thái đơn gây ra lần hoàn
+  completedAt    DateTime?
+  completedBy    String? // adminId xác nhận đã chuyển khoản (MANUAL_TRANSFER)
+  bankRef        String?
+  adminNote      String?
+  createdAt      DateTime             @default(now())
+
+  @@index([status, createdAt])
+  @@map("order_customer_refunds")
 }
 
 enum PayoutStatus {
@@ -1254,6 +1402,8 @@ model CashbackTransaction {
 
   @@unique([provider, merchantOrderId])
   @@index([userId, status])
+  // Cron settle hoàn tiền hết hold: status = CONFIRMED AND confirmedAt <= mốc.
+  @@index([status, confirmedAt])
   @@map("cashback_transactions")
 }
 
@@ -1580,6 +1730,7 @@ model BottleReturn {
 }
 
 // Beta Tester (§6.14.11) — chương trình trải nghiệm sớm + kênh góp ý.
+/// @deprecated Không còn code nào đọc hay ghi: 4 route /beta/* đã gỡ (Q-19). Có dữ liệu khách từ trước nên KHÔNG DROP.
 model BetaTester {
   id       String     @id @default(cuid())
   userId   String     @unique
@@ -1595,6 +1746,8 @@ enum BetaStatus {
   LEFT
 }
 
+/// @deprecated Không còn code nào đọc hay ghi: 4 route /beta/* đã gỡ (Q-19) vì chương trình Beta Tester không có tác dụng.
+/// Có dữ liệu khách từ trước nên KHÔNG DROP; dọn bằng migration riêng khi cần.
 model BetaFeedback {
   id        String   @id @default(cuid())
   userId    String
@@ -1625,6 +1778,9 @@ model FeedPost {
   bestCommentId String?            @unique
   editedAt      DateTime?
   viewCount     Int                @default(0)
+  // Bộ đếm tim phi chuẩn hoá chỉ để SẮP XẾP "Phổ biến" (khỏi đếm cả bảng feed_reactions mỗi lần
+  // tải feed). Cập nhật cùng transaction với thả/bỏ tim; số hiển thị vẫn đếm thật theo trang.
+  likeCount     Int                @default(0)
   createdAt     DateTime           @default(now())
   reactions     FeedReaction[]
   comments      FeedComment[]
@@ -1634,6 +1790,7 @@ model FeedPost {
   @@index([status, createdAt])
   @@index([categoryId, status, createdAt])
   @@index([kind, status, createdAt])
+  @@index([status, isPinned(sort: Desc), likeCount(sort: Desc), createdAt(sort: Desc)])
   @@map("feed_posts")
 }
 
@@ -1797,6 +1954,8 @@ model CommunityEvent {
   startAt      DateTime
   endAt        DateTime
   rewardXu     Int      @default(0)
+  // PD-3: thưởng bằng Điểm Xanh; migration A quy dòng cũ ceil(rewardXu/1000).
+  rewardPoints Int      @default(0)
   status       String   @default("OPEN") // OPEN | CLOSED
   winnerUserId String?
   createdAt    DateTime @default(now())
@@ -2063,7 +2222,11 @@ model NotificationLog {
   error        String?
   sentAt       DateTime @default(now())
 
-  @@index([userId])
+  // Inbox (userId + channel ORDER BY sentAt DESC) và chống nhắc lặp theo user (userId + sentAt) —
+  // prefix userId vẫn phục vụ mọi truy vấn chỉ lọc userId nên không giữ index [userId] riêng.
+  @@index([userId, sentAt])
+  // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
+  @@index([templateCode, sentAt])
   @@map("notification_logs")
 }
 
@@ -2074,13 +2237,21 @@ model NotificationLog {
 model PancakeWebhookEvent {
   id          String    @id @default(cuid())
   eventType   String
+  /// eventType + sha256(payload chuẩn hoá thứ tự key) — Pancake gửi lại y hệt thì trùng key, không lưu/xử lý 2 lần.
+  /// Null ở các dòng nhận trước khi có cột (không backfill: dòng trùng cũ sẽ vỡ unique).
+  dedupeKey   String?   @unique
   rawPayload  Json
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
+  /// RECEIVED | PROCESSING | PROCESSED | FAILED
   status      String
+  /// Số lần worker đã claim (tăng lúc claim, không phải lúc xong) — tiến trình chết giữa chừng vẫn bị tính.
   attempts    Int       @default(0)
+  /// Mốc worker claim PROCESSING — quá hạn thì coi như worker đã chết, được claim lại.
+  claimedAt   DateTime?
   error       String?
 
+  @@index([status, receivedAt])
   @@map("pancake_webhook_events")
 }
 
@@ -2157,8 +2328,11 @@ model Subscription {
   quantity      Int       @default(1)
   intervalWeeks Int // 4 / 6 / 8 / 10
   addressId     String
-  address       Address   @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
+  address       Address   @relation(fields: [addressId], references: [id], onDelete: Restrict)
   status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
+  paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
   lastOrderId   String?
   createdAt     DateTime  @default(now())
@@ -2166,6 +2340,8 @@ model Subscription {
 
   @@index([status, nextRunAt])
   @@index([userId])
+  // Partial unique (userId, variationId, addressId) WHERE status IN ('ACTIVE','PAUSED') chỉ có trong
+  // migration 20261010030000_subscription_open_unique (C-057): Prisma không biểu diễn được, đừng `db push`.
   @@map("subscriptions")
 }
 
@@ -2315,12 +2491,18 @@ model RetentionDailySnapshot {
   ordersCount          Int
   ordersPerBuyerMtd    Decimal
   dauProxyRefreshToken Int
+  /// @deprecated Luôn ghi null (analytics-aggregation.service), không nơi nào đọc giá trị (C-108); chưa có nguồn DAU theo event.
   dauEventBased        Int?
+  /// NS-1 của cohort "đơn đầu tiên rơi vào ngày VN (date − 30 ngày)": số khách trong cohort và số khách có đơn thứ 2
+  /// trong 30 ngày kể từ đơn đầu. NULL = dòng tính trước khi có NS-1 (chưa backfill).
+  ns1CohortSize        Int?
+  ns1RepeatCount       Int?
   computedAt           DateTime @default(now())
 
   @@map("retention_daily_snapshot")
 }
 
+/// @deprecated Chưa từng được ghi hay đọc (C-108): chỉ có TODO ở analytics-aggregation.service.ts. KHÔNG DROP khi chưa quyết định bỏ hẳn.
 model CohortRepeatSnapshot {
   id                      String   @id @default(cuid())
   cohortMonth             DateTime
@@ -2338,6 +2520,7 @@ model CohortRepeatSnapshot {
   @@map("cohort_repeat_snapshot")
 }
 
+/// @deprecated Chưa từng được ghi hay đọc (C-108): chỉ có TODO ở analytics-aggregation.service.ts. KHÔNG DROP khi chưa quyết định bỏ hẳn.
 model FunnelDailySnapshot {
   id          String   @id @default(cuid())
   date        DateTime

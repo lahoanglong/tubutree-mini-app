@@ -25,7 +25,28 @@ export function canWithdraw(
   );
 }
 
-/** Điều kiện được phép đổi Ví → TubuXu: số dương, không vượt số dư ví. */
-export function canConvertToXu(amount: number, wallet: WalletBalance | undefined): boolean {
-  return wallet != null && amount > 0 && amount <= wallet.walletBalance;
+const WALLET_TX_LABELS: Record<string, string> = {
+  OPENING: 'Số dư đầu kỳ',
+  ORDER_PAY: 'Thanh toán đơn hàng',
+  ORDER_REFUND: 'Hoàn tiền đơn hàng',
+  COMMISSION_PAYOUT: 'Hoa hồng CTV về Ví',
+  CASHBACK: 'Hoàn tiền sàn ngoài',
+  WITHDRAW: 'Rút về ngân hàng',
+  WITHDRAW_REFUND: 'Hoàn lệnh rút bị từ chối',
+  XU_CONVERT: 'Đổi sang xu cũ (nay là Điểm Xanh)',
+  MERGE_IN: 'Chuyển từ phiên mua khách',
+  MERGE_OUT: 'Chuyển sang tài khoản chính',
+  ADJUST: 'Điều chỉnh',
+};
+
+/** Nhãn dòng sao kê Ví theo loại biến động; loại BE mới thêm mà bản app cũ chưa biết vẫn hiện được. */
+export function walletTxLabel(type: string): string {
+  return WALLET_TX_LABELS[type] ?? 'Biến động ví';
+}
+
+/** dd/MM HH:mm theo giờ máy — không dùng toLocale* vì ICU mới đổi định dạng ngày "vi-VN". */
+export function formatWalletTxTime(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }

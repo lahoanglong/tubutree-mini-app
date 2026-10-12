@@ -69,26 +69,37 @@ export function WishlistHeart({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        ...(floating
-          ? {
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.9)',
-              boxShadow: 'var(--shadow-sm)',
-            }
-          : { width: 44, height: 44, background: 'transparent' }),
+        // Vùng chạm luôn 44x44; khi nổi trên ảnh thẻ, nút trong suốt này bọc vòng tròn 32px nhìn thấy
+        // (tâm vòng giữ nguyên chỗ cũ: cách mép 8px).
+        width: 44,
+        height: 44,
+        background: 'transparent',
+        ...(floating ? { position: 'absolute', top: 2, right: 2 } : {}),
       }}
     >
-      <Heart
-        size={size}
-        strokeWidth={1.9}
-        color={liked ? 'var(--danger)' : 'var(--neutral-600)'}
-        fill={liked ? 'var(--danger)' : 'none'}
-      />
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          ...(floating
+            ? {
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'var(--color-bg-surface)',
+                boxShadow: 'var(--elevation-1)',
+              }
+            : {}),
+        }}
+      >
+        <Heart
+          size={size}
+          strokeWidth={1.9}
+          color={liked ? 'var(--color-text-danger)' : 'var(--color-text-secondary)'}
+          fill={liked ? 'var(--color-text-danger)' : 'none'}
+        />
+      </span>
     </button>
   );
 }

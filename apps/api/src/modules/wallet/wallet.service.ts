@@ -1,12 +1,14 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, GoneException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { paginated, skipTake } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { applyWalletDelta } from './wallet-ledger.service';
 
 /**
  * Ví Tubu (walletBalance, VND thật) — nhận hoa hồng CTV + cashback Shopee.
- * Hai đường ra: đổi sang TubuXu (×1.2, khuyến khích tiêu trong app) hoặc rút ngân hàng
- * (min wallet.withdraw_min, phí wallet.withdraw_fee). Xem docs spec TubuXu 2026-06-24.
+ * Đường ra: trả đơn hoặc rút ngân hàng (min wallet.withdraw_min, phí wallet.withdraw_fee). Đổi sang
+ * TubuXu đã bỏ ở PD-3 (Q-03).
  */
 @Injectable()
 export class WalletService {
@@ -17,7 +19,7 @@ export class WalletService {
 
   async getWallet(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const [commApproved, commPending, multiplier, withdrawMin, withdrawFee] = await Promise.all([
+    const [commApproved, commPending, withdrawMin, withdrawFee] = await Promise.all([
       this.prisma.commission.aggregate({
         where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
         _sum: { amount: true },
@@ -26,94 +28,44 @@ export class WalletService {
         where: { affiliateUserId: userId, status: { in: ['PENDING', 'LOCKED'] } },
         _sum: { amount: true },
       }),
-      this.config.get<number>('wallet.xu_convert_multiplier', 1.2),
       this.config.get<number>('wallet.withdraw_min', 100000),
       this.config.get<number>('wallet.withdraw_fee', 3000),
     ]);
     return {
-      walletBalance: user.walletBalance, // số dư khả dụng (rút/đổi xu)
-      coinsBalance: user.coinsBalance, // TubuXu (tiêu trong app)
+      walletBalance: user.walletBalance, // số dư khả dụng (rút / trả đơn)
       cashbackPending: user.cashbackPending, // cashback chờ hết hold
       commissionApproved: commApproved._sum.amount ?? 0, // hoa hồng có thể rút
       commissionPending: commPending._sum.amount ?? 0,
-      xuConvertMultiplier: multiplier, // 1.2 → đổi Ví nhận thêm 20% xu
       withdrawMin, // rút tối thiểu
       withdrawFee, // phí chuyển khoản ngân hàng
     };
   }
 
   /**
-   * Đổi Ví → TubuXu (×multiplier). Atomic: trừ ví (gte guard chống overdraft) +
-   * cộng xu + ghi CoinTransaction trong 1 transaction (bất biến coinsBalance == Σdelta).
+   * Sao kê Ví Tubu từ sổ cái wallet_transactions (C-060), mới nhất trước. Chỉ trả mã đơn (để mở
+   * chi tiết đơn); refId khác là id nội bộ (payout, giao dịch cashback, tài khoản khách đã gộp).
    */
+  async getTransactions(userId: string, page: number, limit: number) {
+    const where = { userId };
+    const [rows, total] = await Promise.all([
+      this.prisma.walletTransaction.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...skipTake(page, limit),
+        select: { id: true, delta: true, balanceAfter: true, type: true, refType: true, refId: true, reason: true, createdAt: true },
+      }),
+      this.prisma.walletTransaction.count({ where }),
+    ]);
+    const data = rows.map(({ refType, refId, ...r }) => ({ ...r, orderId: refType === 'ORDER' ? refId : null }));
+    return paginated(data, page, limit, total);
+  }
+
   /**
-   * Đổi Ví (tiền rút được) → TubuXu. MỘT CHIỀU: xu không rút được và không có đường về ví,
-   * nên double-tap là mất vĩnh viễn phần tiền đổi dư. Trước đây đây là endpoint tiền DUY NHẤT
-   * không nhận Idempotency-Key (place-order, withdraw, dealer.placeOrder đều có) — react-query
-   * không tự dedupe và `disabled` chỉ ăn sau khi re-render nên 2 request thật sự lọt được
-   * (P2, docs/2026-09-08-review-progress.md).
-   * Khoá idempotency lưu ở `CoinTransaction.refId` (refType='CONVERT'), có partial unique index
-   * làm guard cứng ở DB — migration 20260911030000_coin_convert_idempotency.
+   * Đổi Ví → xu đã ngừng (PD-3, Q-03): TubuXu gộp vào Điểm Xanh. Route giữ một bản phát hành để
+   * client cũ nhận 410 đọc được; không mở transaction, không trừ ví. Dòng sổ XU_CONVERT cũ giữ nguyên.
    */
-  async convertToXu(userId: string, amountVnd: number, idempotencyKey?: string) {
-    if (!Number.isInteger(amountVnd) || amountVnd <= 0) {
-      throw new BadRequestException('Số tiền đổi không hợp lệ.');
-    }
-    // Chuẩn hoá '' / khoảng trắng → undefined (mirror withdraw): header rỗng do proxy/bug mà
-    // ghi refId='' sẽ khiến lệnh đổi thứ 2 cũng '' đụng unique index → 500 thay vì hoạt động.
-    const key = idempotencyKey?.trim() || undefined;
-    const multiplier = await this.config.get<number>('wallet.xu_convert_multiplier', 1.2);
-    const received = Math.floor(amountVnd * multiplier);
-
-    if (key) {
-      const existing = await this.prisma.coinTransaction.findFirst({
-        where: { refType: 'CONVERT', refId: key },
-      });
-      // Key trùng của user KHÁC (keygen yếu/đụng độ hiếm): KHÔNG trả giao dịch người khác ra
-      // ngoài — bắt client thử lại với key mới. Mirror wallet.withdraw.
-      if (existing && existing.userId !== userId) {
-        throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
-      }
-      if (existing) {
-        // So sánh với giá trị ĐÃ LƯU (không phải request hiện tại): nếu client đổi số tiền rồi
-        // bấm lại CÙNG key (vd sau lỗi mạng), tuyệt đối không được trộn lẫn amountVnd mới với
-        // received cũ — phải từ chối rõ ràng thay vì trả dữ liệu sai lệch.
-        if (existing.delta !== received) {
-          throw new BadRequestException(
-            'Yêu cầu trước đó với số tiền khác đã được xử lý, vui lòng tải lại và thử lại.',
-          );
-        }
-        return { spent: amountVnd, received: existing.delta, multiplier };
-      }
-    }
-
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        const dec = await tx.user.updateMany({
-          where: { id: userId, walletBalance: { gte: amountVnd } },
-          data: { walletBalance: { decrement: amountVnd } },
-        });
-        if (dec.count === 0) throw new BadRequestException('Số dư Ví không đủ.');
-        await tx.user.update({ where: { id: userId }, data: { coinsBalance: { increment: received } } });
-        await tx.coinTransaction.create({
-          data: {
-            userId,
-            delta: received,
-            reason: 'CONVERT_FROM_WALLET',
-            refType: 'CONVERT',
-            ...(key ? { refId: key } : {}),
-          },
-        });
-      });
-    } catch (err) {
-      // Thua race 2 request cùng key: unique index chặn bản ghi thứ 2 → coi như replay, KHÔNG
-      // báo lỗi cho user (giao dịch của bên thắng đã thành công đúng 1 lần).
-      if (key && (err as { code?: string } | null)?.code === 'P2002') {
-        return { spent: amountVnd, received, multiplier };
-      }
-      throw err;
-    }
-    return { spent: amountVnd, received, multiplier };
+  async convertToXu(): Promise<never> {
+    throw new GoneException('Đổi Ví sang xu đã ngừng. Tiền trong Ví Tubu vẫn rút được hoặc trả đơn.');
   }
 
   /**
@@ -171,16 +123,21 @@ export class WalletService {
     let payout: Awaited<ReturnType<typeof this.prisma.payout.create>>;
     try {
       payout = await this.prisma.$transaction(async (tx) => {
-        // Trừ tiền ATOMIC: chỉ trừ nếu số dư còn đủ (where gte) — chống TOCTOU/overdraft
-        // khi 2 lệnh rút chạy đồng thời (check ở trên có thể đã cũ).
-        const dec = await tx.user.updateMany({
-          where: { id: userId, walletBalance: { gte: amount } },
-          data: { walletBalance: { decrement: amount } },
-        });
-        if (dec.count === 0) throw new BadRequestException('Số dư ví không đủ.');
-        return tx.payout.create({
+        const created = await tx.payout.create({
           data: { userId, amount: net, fee, method: 'BANK', bankInfo, status: 'REQUESTED', idempotencyKey: key },
         });
+        // Trừ GROSS dưới khoá dòng user (check ở trên có thể đã cũ khi 2 lệnh rút chạy đồng
+        // thời); không đủ → throw, rollback luôn Payout vừa tạo. refId = payout để lệnh hoàn khi
+        // admin từ chối (WITHDRAW_REFUND) đối chiếu được.
+        await applyWalletDelta(tx, {
+          userId,
+          delta: -amount,
+          type: 'WITHDRAW',
+          refType: 'PAYOUT',
+          refId: created.id,
+          reason: `Rút về ngân hàng (phí ${fee}đ)`,
+        });
+        return created;
       });
     } catch (err) {
       // Race 2 request cùng Idempotency-Key: kẻ thua ăn P2002 trên unique key → trả lại Payout

@@ -68,7 +68,61 @@ describe('VouchersService.grant', () => {
     expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
       baseOpts.userId,
       'WELCOME_VOUCHER',
-      expect.objectContaining({ value: '30000' }),
+      // Mã giảm tiền: số tiền định dạng vi-VN như min_order_note ("giảm 30.000đ", không "giảm 30000đ").
+      expect.objectContaining({ value: '30.000' }),
+    );
+  });
+
+  it('endAt cố định (mã đơn thứ 2 hết hạn cùng cửa sổ 30 ngày) thay cho now + validDays', async () => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+    const endAt = new Date('2026-11-09T03:00:00.000Z');
+
+    await (svc as unknown as { grant(o: GrantOpts & { endAt?: Date }): Promise<boolean> }).grant({
+      ...baseOpts,
+      reason: 'SECOND-ORDER',
+      templateCode: 'SECOND_ORDER_VOUCHER',
+      endAt,
+    });
+
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(data.code).toBe(`SECOND-ORDER-${baseOpts.userId}`.toUpperCase());
+    expect(data.endAt).toEqual(endAt);
+  });
+
+  // C-053 (A1-019): tin WELCOME_VOUCHER không nói đơn tối thiểu 199.000đ → khách mở app thấy mã không dùng được.
+  it('notify kèm min_order_note có đơn tối thiểu (định dạng vi-VN) để mẫu tin nói rõ điều kiện dùng', async () => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+
+    await (svc as unknown as { grant(o: GrantOpts): Promise<boolean> }).grant(baseOpts);
+
+    expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
+      baseOpts.userId,
+      'WELCOME_VOUCHER',
+      expect.objectContaining({ min_order_note: ' cho đơn từ 199.000đ' }),
+    );
+  });
+
+  it.each([undefined, 0])('mã không có đơn tối thiểu (%p) → min_order_note rỗng, không in "đơn từ 0đ"', async (minOrder) => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const svc = new VouchersService(prisma, makeConfig(), notify);
+
+    await (svc as unknown as { grant(o: GrantOpts): Promise<boolean> }).grant({ ...baseOpts, minOrder });
+
+    expect((notify.notify as jest.Mock)).toHaveBeenCalledWith(
+      baseOpts.userId,
+      'WELCOME_VOUCHER',
+      expect.objectContaining({ min_order_note: '' }),
     );
   });
 
@@ -259,5 +313,59 @@ describe('VouchersService.welcomeVouchers — quét hết cửa sổ 24h', () =>
     await new VouchersService(prisma, makeConfig(), notify).welcomeVouchers();
 
     expect(findMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+// C-026: cron 01:00 giờ VN = 18:00 UTC của ngày TRƯỚC. Tính "hôm nay" bằng Date local khi host chạy
+// UTC thì tặng voucher sinh nhật lệch một ngày (và khoá chu kỳ sai tháng ở ranh giới tháng).
+describe('VouchersService — lịch giờ VN, độc lập TZ host (C-026)', () => {
+  function setup() {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    return { svc: new VouchersService(prisma, makeConfig(), notify), prisma };
+  }
+
+  it('birthdayVouchers lúc 01:00 ngày 10/3 giờ VN → lọc đúng tháng 3 ngày 10, không phải ngày 9', async () => {
+    const { svc, prisma } = setup();
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T18:00:00Z'));
+    try {
+      await svc.birthdayVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const args = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0].slice(1);
+    expect(args).toContain(3);
+    expect(args).toContain(10);
+    expect(args).not.toContain(9);
+  });
+
+  it('birthdayVouchers lúc 01:00 ngày 1/1 giờ VN (UTC còn 31/12 năm trước) → khoá chu kỳ theo năm/tháng VN', async () => {
+    const { svc, prisma } = setup();
+    (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mockResolvedValueOnce([{ id: 'u1', tierId: null }]);
+    jest.useFakeTimers().setSystemTime(new Date('2025-12-31T18:00:00Z'));
+    try {
+      await svc.birthdayVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
+    expect(data.scopeMeta.reason).toBe('BIRTHDAY-2026-1');
+  });
+
+  it('winbackVouchers lúc 02:00 ngày 1/10 giờ VN → khoá theo tháng VN (2026-10), không phải 2026-09', async () => {
+    const { svc, prisma } = setup();
+    (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mockResolvedValueOnce([{ userId: 'u1' }]);
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-30T19:00:00Z'));
+    try {
+      await svc.winbackVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    const data = ((prisma as unknown as { coupon: { create: jest.Mock } }).coupon.create).mock.calls[0][0].data;
+    expect(data.scopeMeta.reason).toBe('WINBACK-2026-10');
   });
 });

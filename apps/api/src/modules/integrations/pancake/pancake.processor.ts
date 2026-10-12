@@ -10,6 +10,7 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { mapPancakeStatus } from './pancake-status.map';
 import { isPancakeOrderPaid } from './pancake-payment.util';
+import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
@@ -26,6 +27,11 @@ interface EventData {
  */
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
+
+function isTerminalPancakeStatus(data: Record<string, unknown>): boolean {
+  const status = mapPancakeStatus(data['status'] ?? data['status_name']);
+  return status === 'CANCELLED' || status === 'RETURNED';
+}
 
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
@@ -57,7 +63,26 @@ export class PancakeProcessor extends WorkerHost {
     const event = await this.prisma.pancakeWebhookEvent.findUnique({
       where: { id: job.data.eventId },
     });
-    if (!event || event.status === 'PROCESSED') return;
+    if (!event || event.status === PANCAKE_EVENT_STATUS.PROCESSED) return;
+
+    // Claim nguyên tử: cùng một sự kiện có thể tới worker từ nhiều đường (BullMQ retry/stalled, cron cứu,
+    // Pancake gửi lại khi lần trước chưa xong) — chỉ một worker được chạy handler. Claim PROCESSING quá hạn
+    // = worker trước đã chết giữa chừng, cho claim lại.
+    const claimedAt = new Date();
+    const claim = await this.prisma.pancakeWebhookEvent.updateMany({
+      where: {
+        id: event.id,
+        OR: [
+          { status: { notIn: [PANCAKE_EVENT_STATUS.PROCESSED, PANCAKE_EVENT_STATUS.PROCESSING] } },
+          {
+            status: PANCAKE_EVENT_STATUS.PROCESSING,
+            claimedAt: { lt: new Date(claimedAt.getTime() - PANCAKE_CLAIM_STALE_MINUTES * 60_000) },
+          },
+        ],
+      },
+      data: { status: PANCAKE_EVENT_STATUS.PROCESSING, claimedAt, attempts: { increment: 1 } },
+    });
+    if (claim.count === 0) return;
 
     try {
       const payload = event.rawPayload as unknown as EventData;
@@ -66,14 +91,13 @@ export class PancakeProcessor extends WorkerHost {
       await this.handle(event.eventType, data);
       await this.prisma.pancakeWebhookEvent.update({
         where: { id: event.id },
-        data: { status: 'PROCESSED', processedAt: new Date(), attempts: { increment: 1 } },
+        data: { status: PANCAKE_EVENT_STATUS.PROCESSED, processedAt: new Date(), error: null },
       });
     } catch (err) {
       await this.prisma.pancakeWebhookEvent.update({
         where: { id: event.id },
         data: {
-          status: 'FAILED',
-          attempts: { increment: 1 },
+          status: PANCAKE_EVENT_STATUS.FAILED,
           error: err instanceof Error ? err.message : String(err),
         },
       });
@@ -87,9 +111,18 @@ export class PancakeProcessor extends WorkerHost {
       case 'order':
       case 'order.status_updated':
       case 'order.updated':
-        await this.onStatusUpdated(data);
-        // Đối soát thanh toán: Pancake ghi nhận chuyển khoản (QR) → lật đơn UNPAID→PAID.
-        await this.onPaymentReconcile(data);
+        // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
+        // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
+        // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
+        // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/trả: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
+        // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
+        if (isTerminalPancakeStatus(data)) {
+          await this.onStatusUpdated(data);
+          await this.onPaymentReconcile(data);
+        } else {
+          await this.onPaymentReconcile(data);
+          await this.onStatusUpdated(data);
+        }
         // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
         if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
           await this.onShippingUpdated(data);

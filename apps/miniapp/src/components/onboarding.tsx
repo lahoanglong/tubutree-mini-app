@@ -1,16 +1,24 @@
-import { useState } from 'react';
-import { Box, Text, Button, useSnackbar } from 'zmp-ui';
+import { useEffect, useState } from 'react';
+import { useLocation, useSnackbar } from 'zmp-ui';
+import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Baby, Check, Droplets, Flag, Flower2, Leaf, Package, PawPrint, Recycle, Smile, Sparkles, Sprout, SprayCan, Sun, User, UserRound,
+  Users, Wallet, type LucideIcon,
+} from 'lucide-react';
 import { getMe, completeOnboarding } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { hasPartnerLinkParams, ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
+import { Button } from './ui/button';
+import { Heading, Text } from './ui/text';
 
 interface Q {
   id: string;
   title: string;
   multi: boolean;
-  options: { key: string; label: string; emoji: string }[];
+  options: { key: string; label: string; icon: LucideIcon }[];
 }
 
 const QUESTIONS: Q[] = [
@@ -19,11 +27,11 @@ const QUESTIONS: Q[] = [
     title: 'Bạn quan tâm điều gì nhất?',
     multi: true,
     options: [
-      { key: 'skincare', label: 'Chăm sóc da', emoji: '🧴' },
-      { key: 'mom_baby', label: 'Mẹ & bé', emoji: '🍼' },
-      { key: 'home_clean', label: 'Tẩy rửa nhà cửa', emoji: '🧼' },
-      { key: 'eco', label: 'Sống xanh, tái chế', emoji: '♻️' },
-      { key: 'men', label: 'Cho nam giới', emoji: '🧔' },
+      { key: 'skincare', label: 'Chăm sóc da', icon: Sparkles },
+      { key: 'mom_baby', label: 'Mẹ & bé', icon: Baby },
+      { key: 'home_clean', label: 'Tẩy rửa nhà cửa', icon: SprayCan },
+      { key: 'eco', label: 'Sống xanh, tái chế', icon: Recycle },
+      { key: 'men', label: 'Cho nam giới', icon: User },
     ],
   },
   {
@@ -31,10 +39,10 @@ const QUESTIONS: Q[] = [
     title: 'Làn da của bạn thế nào?',
     multi: false,
     options: [
-      { key: 'sensitive_skin', label: 'Nhạy cảm', emoji: '🌸' },
-      { key: 'oily_skin', label: 'Dầu', emoji: '💧' },
-      { key: 'dry_skin', label: 'Khô', emoji: '🍂' },
-      { key: 'normal_skin', label: 'Thường', emoji: '😊' },
+      { key: 'sensitive_skin', label: 'Nhạy cảm', icon: Flower2 },
+      { key: 'oily_skin', label: 'Dầu', icon: Droplets },
+      { key: 'dry_skin', label: 'Khô', icon: Sun },
+      { key: 'normal_skin', label: 'Thường', icon: Smile },
     ],
   },
   {
@@ -42,10 +50,10 @@ const QUESTIONS: Q[] = [
     title: 'Bạn thường mua sắm cho ai?',
     multi: true,
     options: [
-      { key: 'self', label: 'Bản thân', emoji: '🙋' },
-      { key: 'family', label: 'Gia đình', emoji: '👨‍👩‍👧' },
-      { key: 'baby', label: 'Em bé', emoji: '👶' },
-      { key: 'pet', label: 'Thú cưng', emoji: '🐾' },
+      { key: 'self', label: 'Bản thân', icon: UserRound },
+      { key: 'family', label: 'Gia đình', icon: Users },
+      { key: 'baby', label: 'Em bé', icon: Baby },
+      { key: 'pet', label: 'Thú cưng', icon: PawPrint },
     ],
   },
   {
@@ -53,24 +61,65 @@ const QUESTIONS: Q[] = [
     title: 'Điều gì quan trọng nhất khi chọn sản phẩm?',
     multi: false,
     options: [
-      { key: 'natural', label: 'Thành phần thiên nhiên', emoji: '🌿' },
-      { key: 'price', label: 'Giá tốt', emoji: '💰' },
-      { key: 'vietnamese', label: 'Thương hiệu Việt', emoji: '🇻🇳' },
-      { key: 'packaging', label: 'Bao bì thân thiện', emoji: '📦' },
+      { key: 'natural', label: 'Thành phần thiên nhiên', icon: Leaf },
+      { key: 'price', label: 'Giá tốt', icon: Wallet },
+      { key: 'vietnamese', label: 'Thương hiệu Việt', icon: Flag },
+      { key: 'packaging', label: 'Bao bì thân thiện', icon: Package },
     ],
   },
 ];
 
-export function OnboardingGate() {
-  const { status } = useAuthStore();
-  const [dismissed, setDismissed] = useState(false);
-  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: status === 'authenticated' });
+// Đọc một lần lúc mở app: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn.
+const OPENED_FROM_PARTNER_LINK =
+  typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
 
-  if (status !== 'authenticated' || !meQ.data || meQ.data.onboarded || dismissed) return null;
-  return <Onboarding onDone={() => setDismissed(true)} />;
+async function readSnoozedUntil(): Promise<number | null> {
+  try {
+    const res = await getStorage({ keys: [ONBOARDING_SNOOZE_KEY] });
+    const raw = Number((res as Record<string, unknown>)[ONBOARDING_SNOOZE_KEY]);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
-function Onboarding({ onDone }: { onDone: () => void }) {
+export function OnboardingGate() {
+  const { status } = useAuthStore();
+  const location = useLocation();
+  const [dismissed, setDismissed] = useState(false);
+  // undefined = chưa đọc xong bộ nhớ máy; chưa đọc xong thì không hiện để tránh nháy quiz.
+  const [snoozedUntil, setSnoozedUntil] = useState<number | null | undefined>(undefined);
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: status === 'authenticated' });
+
+  useEffect(() => {
+    let alive = true;
+    void readSnoozedUntil().then((v) => {
+      if (alive) setSnoozedUntil(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (status !== 'authenticated' || !meQ.data || dismissed || snoozedUntil === undefined) return null;
+  const show = shouldShowOnboarding({
+    onboarded: meQ.data.onboarded,
+    pathname: location.pathname,
+    search: location.search,
+    openedFromPartnerLink: OPENED_FROM_PARTNER_LINK,
+    snoozedUntil,
+    now: Date.now(),
+  });
+  if (!show) return null;
+
+  const snooze = () => {
+    setDismissed(true);
+    void setStorage({ data: { [ONBOARDING_SNOOZE_KEY]: String(Date.now() + ONBOARDING_SNOOZE_MS) } }).catch(() => undefined);
+  };
+  return <Onboarding onSnooze={snooze} onDone={() => setDismissed(true)} />;
+}
+
+function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => void }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const [step, setStep] = useState(0); // 0 = welcome, 1..N = questions, N+1 = done
@@ -101,134 +150,158 @@ function Onboarding({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <Box
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Chào mừng đến Tubu Tree"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2000,
-        background: 'linear-gradient(160deg, var(--leaf-600), var(--leaf-700))',
+        zIndex: 'var(--z-onboarding)',
+        background: 'linear-gradient(160deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
         display: 'flex',
         flexDirection: 'column',
         padding: '24px 20px calc(20px + var(--safe-bottom))',
-        color: 'var(--neutral-0)',
+        color: 'var(--color-text-inverse)',
         overflowY: 'auto',
       }}
     >
       {step === 0 && (
-        <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ flex: 1, textAlign: 'center', gap: 12 }}>
-          <Text style={{ fontSize: 72 }}>🌱</Text>
-          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
+          <Sprout size={72} strokeWidth={1.5} aria-hidden />
+          <Heading variant="title-lg" as="h2" tone="inverse">
             Chào mừng đến Tubu Tree!
+          </Heading>
+          <Text variant="body-md" tone="inverse" as="p" style={{ opacity: 0.9 }}>
+            Cho Tubu Tree biết bạn quan tâm điều gì nhé, chỉ mất chưa tới một phút.
           </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
-            Trả lời vài câu hỏi nhanh để chúng mình gợi ý sản phẩm hợp với bạn — và nhận quà chào mừng.
-          </Text>
-          <Button onClick={() => setStep(1)} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
+          <Button variant="secondary" onPress={() => setStep(1)} style={{ marginTop: 16, minWidth: 200 }}>
             Bắt đầu
           </Button>
-          <Text size="xSmall" onClick={onDone} style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
-            Để sau
-          </Text>
-        </Box>
+          <TextButton onClick={onSnooze}>Để sau</TextButton>
+        </div>
       )}
 
       {step >= 1 && step <= total && (() => {
         const q = QUESTIONS[step - 1]!;
         const sel = answers[q.id] ?? [];
         return (
-          <Box style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             {/* Progress */}
-            <Box flex style={{ gap: 6, marginBottom: 24 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
               {QUESTIONS.map((_, i) => (
-                <Box
+                <div
                   key={i}
                   style={{
                     flex: 1,
                     height: 4,
-                    borderRadius: 99,
-                    background: i < step ? 'var(--neutral-0)' : 'rgba(255,255,255,0.3)',
+                    borderRadius: 'var(--radius-pill)',
+                    background: i < step ? 'var(--color-text-inverse)' : 'var(--forest-400)',
                   }}
                 />
               ))}
-            </Box>
+            </div>
 
-            <Text bold style={{ color: 'var(--neutral-0)', fontSize: 22, marginBottom: 4 }}>
+            <Heading variant="title-lg" as="h2" tone="inverse" style={{ marginBottom: 4 }}>
               {q.title}
-            </Text>
-            <Text size="xSmall" style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 20 }}>
+            </Heading>
+            <Text variant="caption" tone="inverse" as="p" style={{ opacity: 0.8, marginBottom: 20 }}>
               {q.multi ? 'Chọn nhiều đáp án' : 'Chọn 1 đáp án'}
             </Text>
 
-            <Box flex flexDirection="column" style={{ gap: 10 }}>
+            <div role={q.multi ? 'group' : 'radiogroup'} aria-label={q.title} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {q.options.map((o) => {
                 const active = sel.includes(o.key);
                 return (
-                  <Box
+                  <button
                     key={o.key}
+                    type="button"
+                    role={q.multi ? 'checkbox' : 'radio'}
+                    aria-checked={active}
                     className="tubu-press"
-                    flex
-                    alignItems="center"
                     onClick={() => toggle(q, o.key)}
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 12,
+                      width: '100%',
+                      minHeight: 44,
                       padding: '14px 16px',
-                      borderRadius: 'var(--radius-lg)',
-                      background: active ? 'var(--neutral-0)' : 'rgba(255,255,255,0.15)',
-                      border: `2px solid ${active ? 'var(--neutral-0)' : 'rgba(255,255,255,0.3)'}`,
+                      font: 'inherit',
+                      textAlign: 'left',
+                      borderRadius: 'var(--radius-card)',
+                      background: active ? 'var(--color-bg-surface)' : 'var(--color-action-primary-bg-pressed)',
+                      border: `2px solid ${active ? 'var(--color-bg-surface)' : 'var(--forest-500)'}`,
+                      color: active ? 'var(--color-action-secondary-fg)' : 'var(--color-text-inverse)',
                     }}
                   >
-                    <Text style={{ fontSize: 24 }}>{o.emoji}</Text>
-                    <Text bold style={{ flex: 1, color: active ? 'var(--leaf-700)' : 'var(--neutral-0)' }}>
+                    <o.icon size={24} strokeWidth={1.75} aria-hidden />
+                    <Text variant="body-md" style={{ flex: 1, fontWeight: 600, color: 'inherit' }}>
                       {o.label}
                     </Text>
-                    {active && <Text style={{ color: 'var(--leaf-700)' }}>✓</Text>}
-                  </Box>
+                    {active && <Check size={20} strokeWidth={2.25} aria-hidden />}
+                  </button>
                 );
               })}
-            </Box>
+            </div>
 
-            <Box style={{ marginTop: 'auto', paddingTop: 20 }}>
+            <div style={{ marginTop: 'auto', paddingTop: 20 }}>
               <Button
+                variant="secondary"
                 fullWidth
-                disabled={sel.length === 0 || (step === total && submit.isPending)}
+                disabled={sel.length === 0}
                 loading={step === total && submit.isPending}
-                onClick={() => {
+                onPress={() => {
                   if (step < total) setStep(step + 1);
                   else submit.mutate();
                 }}
-                style={{ background: 'var(--neutral-0)', color: 'var(--leaf-700)' }}
               >
                 {step < total ? 'Tiếp tục' : 'Hoàn tất'}
               </Button>
-              {step > 1 && (
-                <Text
-                  size="xSmall"
-                  onClick={() => setStep(step - 1)}
-                  style={{ color: 'rgba(255,255,255,0.8)', textAlign: 'center', display: 'block', marginTop: 12 }}
-                >
-                  Quay lại
-                </Text>
-              )}
-            </Box>
-          </Box>
+              {step > 1 && <TextButton onClick={() => setStep(step - 1)} block>Quay lại</TextButton>}
+            </div>
+          </div>
         );
       })()}
 
       {step === finishStep && (
-        <Box flex flexDirection="column" alignItems="center" justifyContent="center" style={{ flex: 1, textAlign: 'center', gap: 12 }}>
-          <Text style={{ fontSize: 72 }}>🎁</Text>
-          <Text bold style={{ color: 'var(--neutral-0)', fontSize: 24 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
+          <Leaf size={72} strokeWidth={1.5} aria-hidden />
+          <Heading variant="title-lg" as="h2" tone="inverse">
             Tuyệt vời!
+          </Heading>
+          <Text variant="body-md" tone="inverse" as="p" style={{ opacity: 0.9 }}>
+            Cảm ơn bạn đã chia sẻ. Chúc bạn mua sắm sống xanh thật vui!
           </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.9)' }}>
-            Chúng mình đã ghi nhận sở thích của bạn và sẽ gợi ý sản phẩm phù hợp hơn. Chúc bạn mua sắm
-            sống xanh thật vui! 🌿
-          </Text>
-          <Button onClick={onDone} style={{ marginTop: 16, background: 'var(--neutral-0)', color: 'var(--leaf-700)', minWidth: 200 }}>
+          <Button variant="secondary" onPress={onDone} style={{ marginTop: 16, minWidth: 200 }}>
             Khám phá ngay
           </Button>
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
+  );
+}
+
+function TextButton({ children, onClick, block }: { children: string; onClick: () => void; block?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        minHeight: 44,
+        padding: '0 16px',
+        marginTop: block ? 8 : 4,
+        width: block ? '100%' : undefined,
+        background: 'none',
+        border: 'none',
+        font: 'inherit',
+        fontSize: 'var(--type-caption-size)',
+        color: 'var(--color-text-inverse)',
+        opacity: 0.8,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
   );
 }

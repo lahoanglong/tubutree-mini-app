@@ -5,6 +5,19 @@ import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import type { ZaloService } from './zalo.service';
 import type { RbacService } from '../staff/rbac/rbac.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để fake Prisma vẫn đo được tiền chuyển giữa hai dòng.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
 
 // applyGrants no-op (identity) cho unit test auth — không đụng DB.
 const mkRbac = () =>
@@ -175,7 +188,6 @@ function makeGuestMergeFixture(opts: {
   guestAddresses?: { id: string; isDefault: boolean }[];
   targetHasDefaultAddress?: boolean;
   guestOrders?: string[];
-  pointsTxnConflict?: boolean; // simulate P2002 khi reassign pointsTransaction
 }) {
   const users = new Map<string, Record<string, unknown>>();
   users.set(opts.guest.id as string, { ...opts.guest });
@@ -208,7 +220,20 @@ function makeGuestMergeFixture(opts: {
   const refreshTokens: { id: string; userId: string; revokedAt: Date | null }[] = [
     { id: 'rt_guest_1', userId: opts.guest.id as string, revokedAt: null },
   ];
-  const ledgerTables = ['pointsTransaction', 'coinTransaction', 'cashbackClick', 'cashbackTransaction'] as const;
+  const plainMoveTables = [
+    'pointsTransaction',
+    'coinTransaction',
+    'cashbackClick',
+    'cashbackTransaction',
+    'returnRequest',
+    'couponRedemption',
+    'subscription',
+    'payout',
+    'flashSalePurchase',
+    'gameProfile',
+    'plantedTree',
+    'gameSpin',
+  ] as const;
   const createdRefreshTokens: unknown[] = [];
 
   function applyUserUpdate(id: string, data: Record<string, unknown>) {
@@ -260,62 +285,7 @@ function makeGuestMergeFixture(opts: {
         return {};
       }),
     },
-    cartItem: {
-      findUnique: jest.fn(
-        async ({ where }: { where: { cartId_variationId: { cartId: string; variationId: string } } }) => {
-          for (const c of carts.values()) {
-            if (c.id !== where.cartId_variationId.cartId) continue;
-            const item = c.items.find((i) => i.variationId === where.cartId_variationId.variationId);
-            if (item) return { ...item };
-          }
-          return null;
-        },
-      ),
-      // update() mô phỏng CẢ 2 việc mergeGuestInto() dùng: đổi quantity (dòng trùng biến thể ở
-      // target) VÀ reparent cartId (dòng không trùng, chuyển thẳng — phải GIỮ NGUYÊN id, xem
-      // comment ở auth.service.ts). Reparent nghĩa là item phải chuyển từ mảng items của cart
-      // cũ sang mảng items của cart mới trong fixture, để lần tra cứu sau (nếu có) thấy đúng.
-      update: jest.fn(
-        async ({ where, data }: { where: { id: string }; data: { quantity?: number; cartId?: string } }) => {
-          for (const c of carts.values()) {
-            const idx = c.items.findIndex((i) => i.id === where.id);
-            if (idx === -1) continue;
-            const item = c.items[idx]!;
-            if (data.quantity !== undefined) item.quantity = data.quantity;
-            if (data.cartId !== undefined && data.cartId !== c.id) {
-              c.items.splice(idx, 1);
-              const dest = [...carts.values()].find((tc) => tc.id === data.cartId);
-              if (!dest) throw new Error('target cart not found');
-              dest.items.push(item);
-            }
-            return { ...item };
-          }
-          throw new Error('cart item not found');
-        },
-      ),
-      delete: jest.fn(async ({ where }: { where: { id: string } }) => {
-        for (const c of carts.values()) {
-          const idx = c.items.findIndex((i) => i.id === where.id);
-          if (idx !== -1) {
-            c.items.splice(idx, 1);
-            return {};
-          }
-        }
-        return {};
-      }),
-      create: jest.fn(
-        async ({ data }: { data: { cartId: string; variationId: string; quantity: number } }) => {
-          for (const c of carts.values()) {
-            if (c.id === data.cartId) {
-              const item = { id: `ci_${++itemSeq}`, variationId: data.variationId, quantity: data.quantity };
-              c.items.push(item);
-              return { ...item };
-            }
-          }
-          throw new Error('cart not found');
-        },
-      ),
-    },
+    cartItem: {},
     address: {
       count: jest.fn(async ({ where }: { where: { userId: string; isDefault: boolean } }) =>
         addresses.filter((a) => a.userId === where.userId && a.isDefault === where.isDefault).length,
@@ -364,18 +334,44 @@ function makeGuestMergeFixture(opts: {
       }),
     },
   };
-  for (const table of ledgerTables) {
-    base[table] = {
-      updateMany: jest.fn(async () => {
-        if (opts.pointsTxnConflict && table === 'pointsTransaction') {
-          const err = new Error('unique violation') as Error & { code?: string };
-          err.code = 'P2002';
-          throw err;
-        }
-        return { count: 1 };
-      }),
-    };
+  for (const table of plainMoveTables) {
+    base[table] = { updateMany: jest.fn(async () => ({ count: 1 })) };
   }
+  (base.gameProfile as Record<string, unknown>).count = jest.fn(async () => 0);
+  const findCart = (id: string) => [...carts.values()].find((c) => c.id === id);
+  (base.cartItem as Record<string, unknown>).updateMany = jest.fn(
+    async ({ where, data }: { where: { cartId: string }; data: { cartId: string } }) => {
+      const from = findCart(where.cartId);
+      const dest = findCart(data.cartId);
+      if (!from || !dest) return { count: 0 };
+      const moved = from.items.splice(0);
+      dest.items.push(...moved);
+      return { count: moved.length };
+    },
+  );
+  // Khoá dòng user (SELECT ... FOR UPDATE) trả số dư hiện tại của dòng đó.
+  base.$queryRaw = jest.fn(async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+    const row = users.get(values[0] as string);
+    return row ? [{ ...row }] : [];
+  });
+  // Chỉ mô phỏng hai câu SQL gộp giỏ (cộng dồn dòng trùng biến thể, xoá dòng trùng của khách);
+  // các câu SQL tập hợp còn lại được kiểm trên Postgres thật ở auth-merge-guest.race-spec.ts.
+  base.$executeRaw = jest.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const sql = strings.join('?');
+    if (sql.includes('UPDATE "cart_items"')) {
+      const [target, guest] = [findCart(values[0] as string), findCart(values[1] as string)];
+      for (const t of target?.items ?? []) {
+        const g = guest?.items.find((i) => i.variationId === t.variationId);
+        if (g) t.quantity += g.quantity;
+      }
+    } else if (sql.includes('DELETE FROM "cart_items"')) {
+      const [guest, target] = [findCart(values[0] as string), findCart(values[1] as string)];
+      if (guest && target) {
+        guest.items = guest.items.filter((g) => !target.items.some((t) => t.variationId === g.variationId));
+      }
+    }
+    return 0;
+  });
   base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
 
   return {
@@ -515,7 +511,9 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       const targetRow = fixture.state.users.get('target1')!;
       expect(targetRow.pointsBalance).toBe(150); // 50+100
       expect(targetRow.walletBalance).toBe(6000); // 1000+5000
-      expect(targetRow.coinsBalance).toBe(25); // 5+20
+      // PD-3 (migration C users_coins_frozen): gộp không ghi cột xu nữa. Số xu trong fixture chỉ để chứng
+      // minh code không chuyển/cộng xu; trên DB thật mọi coinsBalance = 0.
+      expect(targetRow.coinsBalance).toBe(5);
       expect(targetRow.cashbackPending).toBe(200); // 200+0
 
       // Khách bị khoá lại: zaloId đổi (giải phóng guest_dev1), số dư về 0, refresh token thu hồi.
@@ -525,6 +523,15 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       expect(guestRow.pointsBalance).toBe(0);
       expect(guestRow.walletBalance).toBe(0);
       expect(fixture.state.refreshTokens[0]!.revokedAt).toBeInstanceOf(Date);
+      // Ví tiền chuyển qua sổ cái: 1 dòng ra ở khách, 1 dòng vào ở target.
+      expect(applyWalletDelta).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ userId: 'guest1', delta: -5000, type: 'MERGE_OUT', refId: 'target1' }),
+      );
+      expect(applyWalletDelta).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ userId: 'target1', delta: 5000, type: 'MERGE_IN', refId: 'guest1' }),
+      );
     });
 
     it('gộp theo SĐT trùng (target chưa có zaloId — user web cũ) khi chưa ai giữ zaloId đó', async () => {
@@ -540,26 +547,6 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
 
       expect(res.user.id).toBe('web1');
       expect(fixture.state.users.get('web1')!.zaloId).toBe('z-brand-new');
-    });
-
-    it('sổ giao dịch điểm đụng ràng buộc unique riêng (vd điểm danh trùng ngày) → bỏ qua BẢNG đó, KHÔNG chặn phần còn lại của merge (số dư vẫn cộng đúng)', async () => {
-      const fixture = makeGuestMergeFixture({
-        guest: GUEST,
-        target: TARGET,
-        guestOrders: ['order_g1'],
-        pointsTxnConflict: true,
-      });
-      const zalo = {
-        getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'Người Thật' }),
-        resolvePhoneNumber: jest.fn().mockResolvedValue(null),
-      };
-      const svc = makeEnsurePhoneSvc(fixture, zalo);
-
-      const res = await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
-
-      expect(res.user.id).toBe('target1');
-      expect(fixture.state.users.get('target1')!.pointsBalance).toBe(150); // vẫn cộng đúng
-      expect(fixture.state.orders.every((o) => o.userId === 'target1')).toBe(true); // phần còn lại vẫn chạy
     });
   });
 });
@@ -669,5 +656,20 @@ describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () =>
     await expect(svc.loginWithZaloMiniApp('code', 'at')).rejects.toThrow('bị khoá');
     expect(update).not.toHaveBeenCalled();
     expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.toAuthUser — hồ sơ trả về client sau PD-3', () => {
+  it('trả hai lô Điểm Xanh (thường + quy đổi) và không còn trường xu', () => {
+    const { svc } = makeService();
+    const out = svc.toAuthUser({
+      ...USER,
+      pointsBalance: 120,
+      pointsConvertedBalance: 40,
+      walletBalance: 5_000,
+      coinsBalance: 0,
+    } as never);
+    expect(out).toMatchObject({ pointsBalance: 120, pointsConvertedBalance: 40, walletBalance: 5_000 });
+    expect(out).not.toHaveProperty('coinsBalance');
   });
 });

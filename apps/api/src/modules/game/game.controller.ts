@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { IsIn, IsInt, Min } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -15,6 +15,7 @@ import { SeasonPassService } from './season-pass.service';
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
+// 'XU' vẫn nhận ở DTO để GameGardenService trả 410 (PD-3: mở lô bằng xu đã ngừng) thay vì 400.
 class UnlockPlotDto { @IsIn(['SEEDS', 'XU']) currency!: 'SEEDS' | 'XU'; }
 class SeasonPassClaimDto {
   @IsInt() @Min(0) tier!: number;
@@ -68,7 +69,9 @@ export class GameController {
   buySeeds(@CurrentUser('sub') userId: string, @Body() dto: BuySeedsDto) { return this.game.buySeeds(userId, dto.seeds); }
 
   @Post('tree/buy')
-  buyTree(@CurrentUser('sub') userId: string) { return this.game.buyTree(userId); }
+  buyTree(@CurrentUser('sub') userId: string, @Headers('idempotency-key') idempotencyKey?: string) {
+    return this.game.buyTree(userId, idempotencyKey);
+  }
 
   @Get('missions')
   missions(@CurrentUser('sub') userId: string) { return this.game.getMissions(userId); }

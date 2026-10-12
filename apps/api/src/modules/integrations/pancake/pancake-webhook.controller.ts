@@ -4,6 +4,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
+import { addGomdonJob } from '../gomdon/gomdon-queue';
+import { PANCAKE_EVENT_STATUS, PANCAKE_JOB_EVENT, pancakeDedupeKey } from './pancake-webhook-dedupe';
 
 interface PancakeWebhookBody {
   /** Luồng cũ {event,data}. Pancake POS thực tế gửi nguyên object đơn (type='orders'). */
@@ -28,11 +31,12 @@ interface PancakeWebhookBody {
 /**
  * Nhận webhook Pancake (Build Spec §8.4). URL cấu hình trong Pancake:
  *   https://api.tubutree.com/api/webhooks/pancake
- * Quy trình: verify HMAC → lưu raw (RECEIVED) → enqueue → trả 200 ngay (xử lý async).
+ * Quy trình: verify token → lưu raw (RECEIVED, dedupe theo khoá sự kiện) → enqueue → trả 200 ngay (xử lý async).
  */
 @SkipThrottle()
 @Controller('webhooks/pancake')
 export class PancakeWebhookController {
+  private readonly logger = new Logger(PancakeWebhookController.name);
   private readonly secret: string;
 
   constructor(
@@ -62,10 +66,27 @@ export class PancakeWebhookController {
     }
     // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'.
     const eventType = body.event ?? body.type ?? 'order';
-    const event = await this.prisma.pancakeWebhookEvent.create({
-      data: { eventType, rawPayload: body as object, status: 'RECEIVED' },
-    });
-    await this.queue.add('process', { eventId: event.id }, { jobId: event.id });
+    const dedupeKey = pancakeDedupeKey(eventType, body);
+    let eventId: string;
+    try {
+      const event = await this.prisma.pancakeWebhookEvent.create({
+        data: { eventType, dedupeKey, rawPayload: body as object, status: PANCAKE_EVENT_STATUS.RECEIVED },
+      });
+      eventId = event.id;
+    } catch (err) {
+      // Không đọc trước rồi mới ghi: 2 lần gửi song song cùng thấy "chưa có" — để unique chặn.
+      if ((err as { code?: string })?.code !== 'P2002') throw err;
+      const existing = await this.prisma.pancakeWebhookEvent.findUnique({ where: { dedupeKey } });
+      if (!existing) throw err;
+      if (existing.status === PANCAKE_EVENT_STATUS.PROCESSED) return { received: true, duplicate: true };
+      eventId = existing.id; // lần trước chưa xong/lỗi → đẩy lại, worker claim nên không chạy chồng
+    }
+    try {
+      await addGomdonJob(this.queue, PANCAKE_JOB_EVENT, { eventId }, eventId);
+    } catch (err) {
+      // Sự kiện đã lưu RECEIVED — PancakeEventsReconcileService enqueue lại, không cần Pancake gửi lại.
+      this.logger.error(`Enqueue webhook Pancake ${eventId} lỗi: ${err instanceof Error ? err.message : err}`);
+    }
     return { received: true };
   }
 

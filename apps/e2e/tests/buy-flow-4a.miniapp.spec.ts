@@ -3,11 +3,16 @@ import type { Page } from '@playwright/test';
 import { DELIVERED_CODE, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
 import { mockCheckout, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
+import { eventsNamed, flushEvents } from './support/events';
 
 /**
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
  * (docs/superpowers/specs/2026-09-30-buy-flow-redesign-design.md §3-4). API mock toàn bộ.
  */
+/** Thẻ đơn (vỏ không tương tác) chứa nút mở đơn "Đơn <mã>"; "Mua lại" là anh em của nút đó nên phải tìm trong vỏ. */
+const orderCardOf = (page: Page, code: string) =>
+  page.getByTestId('order-card').filter({ has: page.getByRole('button', { name: `Đơn ${code}` }) });
+
 /**
  * Chờ kệ Mua lại ở trạng thái CUỐI (đã gọi /me/purchased-items và skeleton đã biến mất) — nếu không,
  * "kệ vắng mặt" có thể đúng chỉ vì query còn bị tắt (chờ đăng nhập) chứ chưa nhận phản hồi.
@@ -17,24 +22,8 @@ async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
 }
 
-/** Hàng đợi sự kiện chỉ xả khi app bị ẩn (hoặc mỗi 10s) — ép xả để các lô /events tới mock ngay. */
-async function flushEvents(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-}
-
-/** Mọi sự kiện analytics đã tới mock (cần `api.post('/events', ...)`) có tên `eventName`. */
-function eventsNamed(api: MockApi, eventName: string): { eventName: string; props: Record<string, unknown>; notificationId?: string }[] {
-  return api
-    .callsTo('POST', '/events')
-    .flatMap((c) => (c.body as { events: { eventName: string; props: Record<string, unknown>; notificationId?: string }[] }).events)
-    .filter((e) => e.eventName === eventName);
-}
-
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
-  test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm, ở lại trang chủ', async ({ page, api }) => {
+  test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
     mockBuyFlowSession(api);
     await page.goto('/');
 
@@ -53,9 +42,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await page.getByRole('button', { name: 'Thêm vào giỏ (1)' }).click(); // chạm 2
     const call = await added;
     expect(call.body).toEqual({ variationId: 'var-1', quantity: 1, addSource: 'repurchase' });
-    await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
-    await expect(page.getByText('Xem giỏ')).toBeVisible();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
   });
 
   test('Skeleton kệ Mua lại cao xấp xỉ kệ thật (≤ 16px) → dữ liệu về không đẩy nội dung bên dưới', async ({ page, api }) => {
@@ -85,6 +72,42 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     expect(Math.abs(skeletonBox!.height - railBox!.height), `skeleton ${skeletonBox!.height}px vs kệ ${railBox!.height}px`).toBeLessThanOrEqual(16);
     // Hệ quả người dùng thấy: khối bên dưới (nút "Hỏi trợ lý AI") gần như không nhảy vị trí.
     expect(Math.abs(aiAfter!.y - aiBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
+  });
+
+  test('Home: khách cũ đã nhớ loại — "Bán chạy" không xê dịch khi purchased-items về (không nhảy khối "Dành cho bạn")', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    mockBuyFlowSession(api);
+    // "Dành cho bạn" có hàng: khách cũ thấy nó TRÊN "Bán chạy", khách mới thấy dưới → đổi thứ tự sẽ làm "Bán chạy" nhảy.
+    api.get('/products/for-you', [{
+      id: 'prod-fy', slug: 'danh-cho-ban', brand: 'Tubu', name: 'Gợi Ý Riêng Cho Bạn', thumbnail: null,
+      basePrice: 52000, salePrice: null, isFeatured: false, inStock: true, sold: 3,
+    }]);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    api.get('/me/purchased-items', async () => {
+      await gate;
+      return PURCHASED_PAGE;
+    });
+    // Lần mở trước đã ghi nhớ đây là khách cũ (key/dạng khớp use-home-customer-kind.ts; userId của mockBuyFlowSession).
+    await page.addInitScript(() => {
+      localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4a', kind: 'returning' }));
+    });
+    await page.goto('/');
+
+    const forYou = page.getByRole('region', { name: 'Dành cho bạn' });
+    const best = page.getByRole('region', { name: 'Bán chạy' });
+    await expect(forYou).toBeVisible({ timeout: 15_000 });
+    await expect(best).toBeVisible();
+    await expect(page.getByTestId('purchased-rail-loading')).toBeVisible(); // purchased-items vẫn đang chờ
+    const forYouBefore = await forYou.boundingBox();
+    const bestBefore = await best.boundingBox();
+    expect(forYouBefore!.y, 'đúng thứ tự khách cũ ngay từ đầu: "Dành cho bạn" nằm trên "Bán chạy"').toBeLessThan(bestBefore!.y);
+
+    release();
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
+    const bestAfter = await best.boundingBox();
+    expect(Math.abs(bestAfter!.y - bestBefore!.y), '"Bán chạy" bị đẩy khi purchased-items về').toBeLessThanOrEqual(2);
   });
 
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
@@ -169,7 +192,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     mockOrdersTab(api);
     await page.goto('/orders');
 
-    const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+    const card = orderCardOf(page, DELIVERED_CODE);
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.locator('img')).toHaveAttribute('src', THUMB);
     await expect(card.getByText(/3 món/)).toBeVisible();
@@ -190,7 +213,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     api.get('/orders/me/returns', []);
     await page.goto('/orders');
 
-    const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+    const card = orderCardOf(page, DELIVERED_CODE);
     await expect(card).toBeVisible({ timeout: 15_000 });
     const button = card.getByRole('button', { name: 'Mua lại', exact: true });
 
@@ -225,7 +248,10 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     });
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-    await expect(page.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
+    // Trang chủ còn mount trong lúc chuyển cảnh (zmp-ui giữ trang cũ trong TransitionGroup) và dải "kỳ định kỳ kế tiếp"
+    // của nó cũng in tên này → chỉ tìm TRONG trang chứa tab "Định kỳ" (trang Đơn hàng), không tìm trên toàn tài liệu.
+    const ordersPage = page.locator('.zaui-page', { has: page.getByRole('tab', { name: 'Định kỳ' }) });
+    await expect(ordersPage.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
 
     // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
@@ -252,8 +278,11 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const added = api.waitForCall('POST', '/cart/items');
     await addBtn.click();
     await added;
-    await expect(page.getByText('Đã thêm 1 món vào giỏ')).toBeVisible();
+    await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });
     await expect(addBtn).toBeHidden();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(rail).toBeVisible({ timeout: 15_000 });
 
     // Chạm 2: mở lại sheet (target mới) rồi để nguyên — sheet mở lại phải tính thêm ĐÚNG 1 lần.
     await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click();
@@ -442,7 +471,7 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
       await page.screenshot({ path: test.info().outputPath(`home-${width}.png`) });
 
       await page.goto('/orders');
-      const card = page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` });
+      const card = orderCardOf(page, DELIVERED_CODE);
       await expect(card).toBeVisible({ timeout: 15_000 });
       expect(await noHorizontalScroll()).toBe(true);
       await card.getByRole('button', { name: 'Mua lại', exact: true }).click();

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { formatVnd, formatVndShort, formatPoints, formatXu } from '../../utils/format';
+import { formatVnd, formatVndShort, formatPoints } from '../../utils/format';
 
 const SIZE_VARIANT = { sm: 'price-sm', md: 'price-md', lg: 'price-lg', xl: 'price-xl' } as const;
 
@@ -49,8 +49,4 @@ export function Money({ amount, short }: { amount: number; short?: boolean }) {
 
 export function Points({ value }: { value: number }) {
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPoints(value)}</span>;
-}
-
-export function Xu({ value }: { value: number }) {
-  return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatXu(value)}</span>;
 }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Page, Text, Button, useNavigate, useSnackbar } from 'zmp-ui';
+import type { ReactNode } from 'react';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sprout, Recycle, Check, ChevronRight, QrCode as QrCodeIcon, CalendarCheck, Gift, X, Copy } from 'lucide-react';
+import { Sprout, Recycle, Check, CalendarCheck, Gift, Copy, Lock, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
@@ -24,26 +25,49 @@ import {
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
+import { PageHeader } from '../components/ui/page-header';
+import { Heading, Text } from '../components/ui/text';
+import { Card } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Icon } from '../components/ui/icon';
+import { ListRow } from '../components/ui/list-row';
+import { KeyValueRow } from '../components/ui/key-value-row';
+import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { Button } from '../components/ui/button';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
+import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 
-/** Biểu tượng + màu theo hạng (4 hạng §6.6). */
+/**
+ * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
+ * primitive v2 (thang sage → forest → clay): hạng phân biệt nhau theo độ "già" của xanh, không có
+ * token semantic --color-* nào diễn đạt được, và scripts/check-undefined-css-vars.mjs chỉ biết các
+ * token trong design-tokens/tokens.css nên token riêng của trang sẽ bị báo "chưa định nghĩa".
+ */
 const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> = {
-  'Mầm Xanh': { emoji: '🌱', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' },
-  'Lộc Biếc': { emoji: '🌿', color: 'var(--leaf-600)', bg: 'var(--leaf-100)' },
-  'Đại Thụ': { emoji: '🌳', color: 'var(--primary-700)', bg: 'var(--primary-50)' },
-  'Cổ Thụ': { emoji: '🌲', color: 'var(--primary-900)', bg: 'var(--clay-50)' },
+  'Mầm Xanh': { emoji: '🌱', color: 'var(--sage-700)', bg: 'var(--sage-50)' },
+  'Lộc Biếc': { emoji: '🌿', color: 'var(--sage-600)', bg: 'var(--sage-100)' },
+  'Đại Thụ': { emoji: '🌳', color: 'var(--forest-700)', bg: 'var(--forest-50)' },
+  'Cổ Thụ': { emoji: '🌲', color: 'var(--forest-900)', bg: 'var(--clay-50)' },
 };
-const DEFAULT_STYLE = { emoji: '🌱', color: 'var(--leaf-700)', bg: 'var(--leaf-50)' };
+const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%`;
   return `Giảm ${formatVnd(c.value)}`;
+}
+
+/** Giữ giá trị khác null gần nhất: BottomSheet còn chạy hoạt ảnh đóng ~200ms sau khi state về null,
+ * nội dung không được trống đi trong lúc trượt xuống. */
+function useLastNonNull<T>(value: T | null): T | null {
+  const ref = useRef<T | null>(null);
+  if (value !== null) ref.current = value;
+  return value ?? ref.current;
 }
 
 export default function LoyaltyPage() {
@@ -65,7 +89,7 @@ export default function LoyaltyPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   // Khoá đồng bộ chống chạm đúp: `disabled={mut.isPending}` chỉ có hiệu lực sau lần render kế,
   // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần. Đổi quà KHÔNG idempotent (mỗi lần đủ
-  // điểm = 1 voucher mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
+  // điểm = 1 mã giảm giá mới) nên phải chặn ngay tại chỗ; điểm danh thì backend đã unique theo ngày.
   const busyRef = useRef({ checkIn: false, redeem: false });
 
   const refreshPoints = () => {
@@ -101,7 +125,7 @@ export default function LoyaltyPage() {
     onSuccess: (res) => {
       haptic('heavy');
       setConfirmReward(null);
-      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào Kho voucher.`, type: 'success' });
+      openSnackbar({ text: `Đổi thành công! Mã ${res.coupon.code} đã vào mục Mã giảm giá của tôi.`, type: 'success' });
       refreshPoints();
       void qc.invalidateQueries({ queryKey: ['coupons'] });
     },
@@ -125,8 +149,22 @@ export default function LoyaltyPage() {
     redeemMut.mutate(rewardId);
   };
 
+  const copyMemberCode = async () => {
+    const code = memberCardQ.data?.memberCode;
+    if (!code) return;
+    const ok = await copyText(code);
+    haptic('light');
+    if (!ok) {
+      openSnackbar({ text: 'Không sao chép được — hãy đọc mã cho nhân viên.', type: 'error' });
+      return;
+    }
+    setCopiedCode(true);
+    openSnackbar({ text: 'Đã sao chép mã thành viên', type: 'success' });
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   const data = loyaltyQ.data;
-  const style = data?.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const tierStyle = data?.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
   const perks = Array.isArray(data?.tier?.perks) ? (data.tier.perks as string[]) : [];
 
@@ -138,6 +176,10 @@ export default function LoyaltyPage() {
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   // Điểm của đơn mới giao/đang đổi-trả chưa đổi quà được (backend chặn) — nói rõ lý do ngay trên danh mục.
   const lockedNote = data ? lockedPointsNote(data) : null;
+  // Con số khách thấy là tổng hai lô; đổi mã giảm giá chỉ dùng được lô thường (pointsBalance).
+  const lots = data ? pointsSummary(data) : null;
+  const convertedNote = convertedPointsNote(lots?.converted);
+  const rewardCatalog = rewardsQ.data;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -159,845 +201,662 @@ export default function LoyaltyPage() {
     }
   }, [data?.tier, curMin]);
 
+  // sheetReward chỉ để vẽ nội dung lúc sheet trượt xuống; hành động đọc confirmReward (state sống).
+  const sheetReward = useLastNonNull(confirmReward);
+  const sheetCelebrate = useLastNonNull(celebrate);
+
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
+      <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
       {!authed || loyaltyQ.isLoading ? (
-        <Box p={4} style={{ gap: 12 }} flex flexDirection="column">
-          <Skeleton style={{ height: 180, borderRadius: 16 }} />
-          <Skeleton style={{ height: 80, borderRadius: 16 }} />
-        </Box>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Skeleton height={180} radius="var(--radius-card)" />
+          <Skeleton height={80} radius="var(--radius-card)" />
+        </div>
       ) : loyaltyQ.isError ? (
         <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
           {/* Medallion hạng */}
-          <Box p={4}>
-            <Box
-              p={5}
+          <div style={{ padding: 16 }}>
+            <div
               style={{
-                background: style.bg,
-                borderRadius: 'var(--radius-xl)',
+                background: tierStyle.bg,
+                borderRadius: 'var(--radius-sheet)',
+                padding: 20,
                 textAlign: 'center',
-                boxShadow: 'var(--shadow-sm)',
+                boxShadow: 'var(--elevation-1)',
               }}
             >
-              <Text style={{ fontSize: 56, lineHeight: '64px' }}>{style.emoji}</Text>
-              <Text bold size="xLarge" style={{ color: style.color, marginTop: 4 }}>
+              <div aria-hidden style={{ fontSize: 56, lineHeight: '64px' }}>
+                {tierStyle.emoji}
+              </div>
+              <Heading variant="title-lg" as="h2" style={{ color: tierStyle.color, marginTop: 4 }}>
                 {tierName}
+              </Heading>
+              <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(lots?.total ?? 0)} Xanh
               </Text>
-              <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
-                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(data.pointsBalance)} Xanh
-              </Text>
+              {convertedNote && (
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                  {convertedNote}
+                </Text>
+              )}
 
               {next ? (
-                <Box mt={4}>
-                  <Box
+                <div style={{ marginTop: 16 }}>
+                  <div
+                    role="progressbar"
+                    aria-label="Tiến độ lên hạng kế"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress}
                     style={{
                       height: 10,
-                      background: 'var(--neutral-0)',
-                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--color-bg-surface)',
+                      borderRadius: 'var(--radius-pill)',
                       overflow: 'hidden',
                     }}
                   >
-                    <Box
+                    <div
                       style={{
                         height: '100%',
                         width: `${progress}%`,
-                        background: style.color,
-                        borderRadius: 'var(--radius-full)',
-                        transition: 'width var(--dur-slow) var(--ease-out)',
+                        background: tierStyle.color,
+                        borderRadius: 'var(--radius-pill)',
+                        transition: 'width var(--motion-emphasize)',
                       }}
                     />
-                  </Box>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-                    Còn <b>{next.pointsToGo.toLocaleString('vi-VN')}</b> điểm tích từ mua hàng để lên hạng {next.name}
+                  </div>
+                  <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
+                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng để lên hạng {next.name}
                   </Text>
-                </Box>
+                </div>
               ) : (
-                <Text size="xSmall" style={{ color: style.color, marginTop: 8 }}>
+                <Text variant="caption" as="div" style={{ color: tierStyle.color, marginTop: 8 }}>
                   Bạn đang ở hạng cao nhất 🎉
                 </Text>
               )}
 
               {/* Nút mở thẻ thành viên số (mã QR) */}
-              <Box mt={4} flex justifyContent="center">
-                <Box
-                  className="tubu-press"
-                  onClick={() => {
+              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  variant="secondary"
+                  icon={QrCodeIcon}
+                  onPress={() => {
                     haptic('light');
                     setShowMemberCard(true);
                   }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 16px',
-                    background: 'rgba(255, 255, 255, 0.92)',
-                    borderRadius: 'var(--radius-full)',
-                    cursor: 'pointer',
-                    boxShadow: 'var(--shadow-sm)',
-                    border: `1px solid ${style.color}`,
-                  }}
                 >
-                  <QrCodeIcon size={16} color={style.color} />
-                  <Text size="xSmall" bold style={{ color: style.color }}>
-                    Thẻ thành viên số (mã QR)
-                  </Text>
-                </Box>
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh hạt giống ở Vườn Xanh */}
-          {checkInQ.isLoading ? (
-            <Box mx={4} mb={3}>
-              <Skeleton style={{ height: 120, borderRadius: 16 }} />
-            </Box>
-          ) : checkInQ.isError ? (
-            <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-              <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-600)', flex: 1 }}>
-                  Chưa tải được lịch điểm danh: {getErrorMessage(checkInQ.error)}
-                </Text>
-                <Button size="small" variant="secondary" onClick={() => void checkInQ.refetch()}>
-                  Thử lại
+                  Thẻ thành viên số (mã QR)
                 </Button>
-              </Box>
-            </Box>
+              </div>
+            </div>
+          </div>
+
+          {/* Mã giảm giá của tôi — ngay dưới thẻ hạng: khách có mã mà không thấy thì mất lý do quay lại (A1-021). */}
+          <Section
+            title="Mã giảm giá của tôi"
+            action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}
+          >
+            {couponsQ.isLoading ? (
+              <Skeleton height={64} />
+            ) : couponsQ.isError ? (
+              <ErrorState
+                variant="inline"
+                message={`Chưa tải được mã giảm giá: ${getErrorMessage(couponsQ.error)}`}
+                onRetry={() => void couponsQ.refetch()}
+              />
+            ) : couponsQ.data && couponsQ.data.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {couponsQ.data.map((c) => (
+                  <div
+                    key={c.code}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: 12,
+                      background: 'var(--color-promo-bg)',
+                      borderRadius: 'var(--radius-control)',
+                      border: '1px dashed var(--clay-100)',
+                    }}
+                  >
+                    <div>
+                      <Text variant="body-sm" tone="primary" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
+                        {couponLabel(c)}
+                      </Text>
+                      <Text variant="caption" tone="secondary" as="div">
+                        Mã {c.code}
+                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                      </Text>
+                    </div>
+                    <Text variant="caption" tone="tertiary">
+                      HSD {formatDate(c.endAt)}
+                    </Text>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                variant="inline"
+                art="leaf"
+                heading="Chưa có mã giảm giá khả dụng"
+                body="Đổi Điểm Xanh ở mục bên dưới để nhận mã."
+              />
+            )}
+          </Section>
+
+          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh giọt nước ở Vườn Xanh */}
+          {checkInQ.isLoading ? (
+            <div style={{ margin: '0 16px 12px' }}>
+              <Skeleton height={120} radius="var(--radius-card)" />
+            </div>
+          ) : checkInQ.isError ? (
+            <Card style={{ margin: '0 16px 12px' }} padding={16}>
+              <ErrorState
+                variant="inline"
+                message={`Chưa tải được lịch điểm danh: ${getErrorMessage(checkInQ.error)}`}
+                onRetry={() => void checkInQ.refetch()}
+              />
+            </Card>
           ) : checkInQ.data && checkIn ? (
-            <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
-              <Box flex alignItems="center" justifyContent="space-between" mb={3}>
-                <Box flex alignItems="center" style={{ gap: 8 }}>
-                  <Box style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--leaf-50)', display: 'grid', placeItems: 'center' }}>
-                    <CalendarCheck size={18} color="var(--leaf-600)" />
-                  </Box>
-                  <Box>
-                    <Text bold size="small">Điểm danh nhận Điểm Xanh</Text>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
+            <Card style={{ margin: '0 16px 12px' }} padding={16}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                  <IconTile>
+                    <Icon icon={CalendarCheck} tone="brand" />
+                  </IconTile>
+                  <div style={{ minWidth: 0 }}>
+                    <Heading variant="title-sm" as="h2">
+                      Điểm danh nhận Điểm Xanh
+                    </Heading>
+                    <Text variant="caption" tone="tertiary" as="div">
                       Chuỗi: <b>{checkInQ.data.streakDays}</b> ngày liên tiếp {checkInQ.data.streakDays > 0 ? '🔥' : ''}
                     </Text>
-                  </Box>
-                </Box>
+                  </div>
+                </div>
                 <Button
-                  size="small"
                   disabled={!checkIn.canCheckIn || checkInMut.isPending}
                   loading={checkInMut.isPending}
-                  onClick={doCheckIn}
-                  style={{
-                    borderRadius: 'var(--radius-full)',
-                    background: checkIn.canCheckIn ? 'var(--leaf-600)' : 'var(--neutral-200)',
-                    color: checkIn.canCheckIn ? 'var(--neutral-0)' : 'var(--neutral-500)',
-                  }}
+                  onPress={doCheckIn}
+                  style={{ flexShrink: 0 }}
                 >
                   {checkIn.buttonLabel}
                 </Button>
-              </Box>
+              </div>
 
               {/* 7 ngày streak */}
-              <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
                 {checkInQ.data.rewards.map((r) => (
-                  <Box
+                  <div
                     key={r.day}
-                    p={2}
                     style={{
-                      borderRadius: 'var(--radius-md)',
+                      padding: 8,
+                      borderRadius: 'var(--radius-control)',
                       background: r.claimed
-                        ? 'var(--leaf-50)'
+                        ? 'var(--color-bg-subtle)'
                         : r.isToday
-                        ? 'var(--primary-50)'
-                        : 'var(--neutral-100)',
+                        ? 'var(--color-action-secondary-bg)'
+                        : 'var(--color-bg-canvas)',
                       border: r.isToday
-                        ? '1px solid var(--primary-600)'
+                        ? '1px solid var(--color-border-selected)'
                         : r.claimed
-                        ? '1px solid var(--leaf-200)'
+                        ? '1px solid var(--color-action-secondary-border)'
                         : '1px solid transparent',
                     }}
                   >
-                    <Text size="xSmall" style={{ color: 'var(--neutral-500)', fontSize: 10 }}>N{r.day}</Text>
-                    <Text bold size="xSmall" style={{ color: r.claimed ? 'var(--leaf-700)' : 'var(--neutral-800)', marginTop: 2 }}>
-                      +{r.points}
+                    <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
+                      N{r.day}
                     </Text>
-                    <Text style={{ fontSize: 12, marginTop: 2 }}>
-                      {r.claimed ? '✓' : r.day === 7 ? '🎁' : '🌱'}
+                    <Text variant="label" tone={r.claimed ? 'brand' : 'primary'} as="div" style={{ marginTop: 2 }}>
+                      +{formatNumber(r.points)}
                     </Text>
-                  </Box>
+                    <div style={{ marginTop: 2, display: 'flex', justifyContent: 'center' }}>
+                      <Icon
+                        icon={r.claimed ? Check : r.day === 7 ? Gift : Sprout}
+                        size="sm"
+                        tone={r.claimed ? 'brand' : 'muted'}
+                      />
+                    </div>
+                  </div>
                 ))}
-              </Box>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 8, lineHeight: '16px' }}>
+              </div>
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
                 Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
-                vào xét hạng; hạt giống Vườn Xanh điểm danh riêng trong Vườn Cây.
+                vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong Vườn Cây.
               </Text>
-            </Box>
+            </Card>
           ) : null}
 
           {/* Lối tắt tích Điểm & Giọt nước */}
-          <Box px={4} pb={2}>
-            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Box
-                className="tubu-press"
-                onClick={() => navigate('/game')}
-                p={3}
-                style={{
-                  background: 'var(--neutral-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--leaf-200)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <Box flex alignItems="center" justifyContent="space-between">
-                  <Box
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      background: 'var(--leaf-50)',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Sprout size={18} color="var(--leaf-600)" />
-                  </Box>
-                  <ChevronRight size={16} color="var(--neutral-400)" />
-                </Box>
-                <Text size="small" bold style={{ color: 'var(--leaf-800)', marginTop: 4 }}>
-                  Vườn Cây Tubu
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Chăm cây nhận quà
-                </Text>
-              </Box>
-
-              <Box
-                className="tubu-press"
-                onClick={() => navigate('/refill')}
-                p={3}
-                style={{
-                  background: 'var(--neutral-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--primary-200)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <Box flex alignItems="center" justifyContent="space-between">
-                  <Box
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      background: 'var(--primary-50)',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Recycle size={18} color="var(--primary-700)" />
-                  </Box>
-                  <ChevronRight size={16} color="var(--neutral-400)" />
-                </Box>
-                <Text size="small" bold style={{ color: 'var(--primary-800)', marginTop: 4 }}>
-                  Trạm Refill
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>
-                  Đổi vỏ tích nước
-                </Text>
-              </Box>
-            </Box>
-          </Box>
+          <Card style={{ margin: '0 16px 12px' }} padding={16}>
+            <ListRow
+              icon={
+                <IconTile>
+                  <Icon icon={Sprout} tone="brand" />
+                </IconTile>
+              }
+              title="Vườn Cây Tubu"
+              subtitle="Chăm cây nhận quà"
+              trailing="chevron"
+              onPress={() => navigate('/game')}
+            />
+            <ListRow
+              icon={
+                <IconTile>
+                  <Icon icon={Recycle} tone="brand" />
+                </IconTile>
+              }
+              title="Trạm Refill"
+              subtitle="Đổi vỏ tích nước"
+              trailing="chevron"
+              onPress={() => navigate('/refill')}
+              style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+            />
+          </Card>
 
           {/* Quyền lợi hạng */}
           {perks.length > 0 && (
             <Section title="Quyền lợi của bạn">
-              <Box flex flexDirection="column" style={{ gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {perks.map((p, i) => (
-                  <Box key={i} flex alignItems="center" style={{ gap: 8 }}>
-                    <Check size={16} color="var(--leaf-600)" />
-                    <Text size="small">{p}</Text>
-                  </Box>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon icon={Check} size="sm" tone="brand" />
+                    <Text variant="body-sm">{p}</Text>
+                  </div>
                 ))}
-              </Box>
+              </div>
             </Section>
           )}
 
           {/* Bậc thang hạng */}
           <Section title="Các hạng">
-            <Box flex flexDirection="column" style={{ gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {data.tiers.map((t) => {
                 const active = t.name === tierName;
                 const ts = TIER_STYLE[t.name] ?? DEFAULT_STYLE;
                 return (
-                  <Box
+                  <div
                     key={t.id}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
-                    p={3}
                     style={{
-                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 'var(--radius-control)',
                       background: active ? ts.bg : 'transparent',
-                      border: active ? `1px solid ${ts.color}` : '1px solid var(--neutral-100)',
+                      border: active ? `1px solid ${ts.color}` : '1px solid var(--color-border-subtle)',
                     }}
                   >
-                    <Box flex alignItems="center" style={{ gap: 8 }}>
-                      <Text>{ts.emoji}</Text>
-                      <Text size="small" bold={active}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span aria-hidden>{ts.emoji}</span>
+                      <Text variant="body-sm" style={{ fontWeight: active ? 700 : 400 }}>
                         {t.name}
                       </Text>
-                    </Box>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                      từ {t.minPoints.toLocaleString('vi-VN')} điểm tích luỹ · ×{t.multiplier}
+                    </div>
+                    <Text variant="caption" tone="secondary">
+                      từ {formatNumber(t.minPoints)} điểm tích luỹ · ×{t.multiplier}
                     </Text>
-                  </Box>
+                  </div>
                 );
               })}
-            </Box>
+            </div>
           </Section>
 
-          {/* Đổi Điểm Nhận Voucher (Reward Catalog) */}
+          {/* Đổi Điểm Xanh nhận mã giảm giá (Reward Catalog) */}
           <Section
-            title="Đổi Điểm Nhận Voucher"
-            action={rewardsQ.data ? `${rewardsQ.data.rewards.length} ưu đãi` : undefined}
+            title="Đổi Điểm Xanh nhận mã giảm giá"
+            action={rewardCatalog ? `${rewardCatalog.rewards.length} ưu đãi` : undefined}
           >
             {rewardsQ.isLoading ? (
-              <Skeleton style={{ height: 96, borderRadius: 12 }} />
+              <Skeleton height={96} />
             ) : rewardsQ.isError ? (
-              <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
-                <Text size="small" style={{ color: 'var(--neutral-600)', flex: 1 }}>
-                  Chưa tải được danh mục đổi quà: {getErrorMessage(rewardsQ.error)}
-                </Text>
-                <Button size="small" variant="secondary" onClick={() => void rewardsQ.refetch()}>
-                  Thử lại
-                </Button>
-              </Box>
-            ) : rewardsQ.data && rewardsQ.data.rewards.length > 0 ? (
-              <Box flex flexDirection="column" style={{ gap: 10 }}>
+              <ErrorState
+                variant="inline"
+                message={`Chưa tải được danh mục đổi quà: ${getErrorMessage(rewardsQ.error)}`}
+                onRetry={() => void rewardsQ.refetch()}
+              />
+            ) : rewardCatalog && rewardCatalog.rewards.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {lockedNote && (
-                  <Box
-                    p={3}
+                  <div
                     data-testid="loyalty-locked-points"
-                    style={{ background: 'var(--clay-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--neutral-200)' }}
-                  >
-                    <Text size="xSmall" style={{ color: 'var(--neutral-700)', lineHeight: '16px' }}>
-                      🔒 {lockedNote}
-                    </Text>
-                  </Box>
-                )}
-                {rewardsQ.data.rewards.map((r) => (
-                  <Box
-                    key={r.id}
-                    p={3}
                     style={{
-                      background: 'var(--neutral-50)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--neutral-200)',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      padding: 12,
+                      background: 'var(--color-promo-bg)',
+                      borderRadius: 'var(--radius-control)',
+                      border: '1px solid var(--color-border-subtle)',
+                    }}
+                  >
+                    <Icon icon={Lock} size="sm" tone="muted" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <Text variant="caption" tone="secondary">
+                      {lockedNote}
+                    </Text>
+                  </div>
+                )}
+                {convertedNote && (
+                  <Text variant="caption" tone="secondary" as="div">
+                    Điểm không hết hạn chỉ dùng khi thanh toán, không dùng để đổi mã giảm giá.
+                  </Text>
+                )}
+                {rewardCatalog.rewards.map((r) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      padding: 12,
+                      background: 'var(--color-bg-canvas)',
+                      borderRadius: 'var(--radius-control)',
+                      border: '1px solid var(--color-border-subtle)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 8,
                     }}
                   >
-                    <Box flex alignItems="flex-start" justifyContent="space-between">
-                      <Box style={{ flex: 1 }}>
-                        <Box flex alignItems="center" style={{ gap: 6 }}>
-                          <Text bold size="small">{r.title}</Text>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Text variant="body-sm" style={{ fontWeight: 700 }}>
+                            {r.title}
+                          </Text>
                           {r.badge && (
-                            <Box
-                              px={2}
-                              py={0.5}
-                              style={{
-                                background: 'var(--primary-100)',
-                                borderRadius: 'var(--radius-full)',
-                              }}
-                            >
-                              <Text size="xSmall" bold style={{ color: 'var(--primary-700)', fontSize: 10 }}>
-                                {r.badge}
-                              </Text>
-                            </Box>
+                            <Badge tone="brand" size="sm">
+                              {r.badge}
+                            </Badge>
                           )}
-                        </Box>
-                        <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
+                        </div>
+                        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                           {r.description}
                         </Text>
-                      </Box>
-                      <Box style={{ textAlign: 'right', marginLeft: 8 }}>
-                        <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
-                          {formatPoints(r.pointsCost)}
-                        </Text>
-                      </Box>
-                    </Box>
+                      </div>
+                      <Text variant="body-sm" tone="brand" style={{ fontWeight: 700, textAlign: 'right' }}>
+                        {formatPoints(r.pointsCost)}
+                      </Text>
+                    </div>
 
-                    <Box flex alignItems="center" justifyContent="space-between" pt={1} style={{ borderTop: '1px dashed var(--neutral-200)' }}>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        paddingTop: 8,
+                        borderTop: '1px dashed var(--color-border-subtle)',
+                      }}
+                    >
+                      <Text variant="caption" tone="tertiary">
                         HSD 30 ngày sau đổi
                       </Text>
                       <Button
-                        size="small"
                         disabled={!r.canRedeem || redeemMut.isPending}
-                        onClick={() => {
+                        onPress={() => {
                           haptic('light');
                           setConfirmReward(r);
                         }}
-                        style={{
-                          borderRadius: 'var(--radius-full)',
-                          background: r.canRedeem ? 'var(--leaf-600)' : 'var(--neutral-200)',
-                          color: r.canRedeem ? 'var(--neutral-0)' : 'var(--neutral-500)',
-                          padding: '4px 12px',
-                          fontSize: 12,
-                        }}
                       >
-                        {rewardButtonLabel(r, rewardsQ.data!)}
+                        {rewardButtonLabel(r, rewardCatalog)}
                       </Button>
-                    </Box>
-                  </Box>
+                    </div>
+                  </div>
                 ))}
-              </Box>
+              </div>
             ) : (
-              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-                Hiện chưa có ưu đãi nào để đổi.
-              </Text>
-            )}
-          </Section>
-
-          {/* Kho voucher */}
-          <Section
-            title="Kho voucher"
-            action={
-              couponsQ.data && couponsQ.data.length > 0
-                ? `${couponsQ.data.length} mã`
-                : undefined
-            }
-          >
-            {couponsQ.data && couponsQ.data.length > 0 ? (
-              <Box flex flexDirection="column" style={{ gap: 8 }}>
-                {couponsQ.data.map((c) => (
-                  <Box
-                    key={c.code}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
-                    p={3}
-                    style={{
-                      background: 'var(--clay-50)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px dashed var(--clay-200)',
-                    }}
-                  >
-                    <Box>
-                      <Text bold size="small" style={{ color: 'var(--clay-700)' }}>
-                        {couponLabel(c)}
-                      </Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                        Mã {c.code}
-                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-                      </Text>
-                    </Box>
-                    <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                      HSD {new Date(c.endAt).toLocaleDateString('vi-VN')}
-                    </Text>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-                Chưa có voucher khả dụng.
-              </Text>
+              <EmptyState variant="inline" art="box" heading="Hiện chưa có ưu đãi nào để đổi" />
             )}
           </Section>
 
           {/* Lịch sử điểm */}
           <Section title="Lịch sử Điểm Xanh">
             {txnQ.data && txnQ.data.length > 0 ? (
-              <Box flex flexDirection="column" style={{ gap: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {txnQ.data.slice(0, 20).map((t: PointsTxn) => (
-                  <Box
+                  <div
                     key={t.id}
-                    flex
-                    alignItems="center"
-                    justifyContent="space-between"
-                    py={2}
-                    style={{ borderBottom: '1px solid var(--neutral-100)' }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      padding: '8px 0',
+                      borderBottom: '1px solid var(--color-border-subtle)',
+                    }}
                   >
-                    <Box>
-                      <Text size="small">{pointsReasonLabel(t.reason)}</Text>
-                      <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                        {new Date(t.createdAt).toLocaleDateString('vi-VN')}
+                    <div>
+                      <Text variant="body-sm" as="div">
+                        {pointsReasonLabel(t.reason)}
                       </Text>
-                    </Box>
-                    <Text
-                      bold
-                      size="small"
-                      style={{ color: t.delta >= 0 ? 'var(--leaf-600)' : 'var(--danger)' }}
-                    >
+                      <Text variant="caption" tone="tertiary" as="div">
+                        {formatDate(t.createdAt)}
+                        {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
+                      </Text>
+                    </div>
+                    <Text variant="body-sm" tone={t.delta >= 0 ? 'success' : 'danger'} style={{ fontWeight: 700 }}>
                       {t.delta >= 0 ? '+' : ''}
-                      {t.delta}
+                      {formatNumber(t.delta)}
                     </Text>
-                  </Box>
+                  </div>
                 ))}
-              </Box>
+              </div>
             ) : (
-              <Text size="small" style={{ color: 'var(--neutral-400)' }}>
-                Chưa có giao dịch điểm nào.
-              </Text>
+              <EmptyState variant="inline" art="sprout" heading="Chưa có giao dịch điểm nào" />
             )}
           </Section>
 
-          <Box p={4} flex justifyContent="center">
-            <Box
-              className="tubu-press"
-              onClick={() => navigate('/browse')}
-              style={{ cursor: 'pointer', padding: '8px 16px', background: 'var(--leaf-50)', borderRadius: 'var(--radius-full)', border: '1px solid var(--leaf-200)' }}
-            >
-              <Text size="small" bold style={{ color: 'var(--leaf-700)', textAlign: 'center' }}>
-                Mua sắm để tích thêm Điểm Xanh →
-              </Text>
-            </Box>
-          </Box>
+          <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
+            <Button variant="secondary" onPress={() => navigate('/browse')}>
+              Mua sắm để tích thêm Điểm Xanh →
+            </Button>
+          </div>
         </>
       ) : null}
 
-      {/* Modal Thẻ thành viên số (mã QR) */}
-      {showMemberCard && (
-        <Box
+      {/* Thẻ thành viên số (mã QR) */}
+      <BottomSheet
+        open={showMemberCard}
+        onClose={() => setShowMemberCard(false)}
+        title="Thẻ Thành Viên Tubu"
+        footer={
+          <Button fullWidth variant="secondary" onPress={() => setShowMemberCard(false)}>
+            Đóng
+          </Button>
+        }
+      >
+        <div style={{ textAlign: 'center' }}>
+          <Badge size="md" style={{ background: tierStyle.bg, color: tierStyle.color }}>
+            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatPoints(lots?.total ?? 0)} Xanh
+          </Badge>
+        </div>
+
+        {/* Mã QR THẬT của memberCode — đúng chuỗi mà /loyalty/staff/scan-member nhận (khớp chính xác). */}
+        <div
           style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 3000,
-            background: 'rgba(26,26,23,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
+            marginTop: 16,
+            padding: 12,
+            background: 'var(--color-bg-canvas)',
+            borderRadius: 'var(--radius-card)',
+            border: '1px solid var(--color-border-subtle)',
+            textAlign: 'center',
           }}
-          onClick={() => setShowMemberCard(false)}
         >
-          <Box
-            className="tubu-pop"
-            onClick={(e) => e.stopPropagation()}
+          {memberCardQ.isLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <Skeleton width={180} height={180} />
+            </div>
+          ) : memberCardQ.isError || !memberCardQ.data ? (
+            <ErrorState
+              variant="inline"
+              message={`Chưa tải được mã thành viên: ${getErrorMessage(memberCardQ.error)}`}
+              onRetry={() => void memberCardQ.refetch()}
+            />
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <QrCode value={memberCardQ.data.memberCode} size={180} />
+              </div>
+
+              {/* Mã thành viên (gõ tay được nếu không quét) & nút chép */}
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Text
+                  variant="body-lg"
+                  style={{ fontWeight: 700, letterSpacing: '2px', fontFamily: 'monospace' }}
+                >
+                  {memberCardQ.data.memberCode}
+                </Text>
+                <Button variant="ghost" icon={Copy} onPress={copyMemberCode}>
+                  {copiedCode ? 'Đã chép' : 'Chép'}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {memberCardQ.data && (
+          <div
             style={{
-              background: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '24px 20px',
-              maxWidth: 340,
-              width: '100%',
-              boxShadow: 'var(--shadow-md)',
-              position: 'relative',
+              marginTop: 12,
+              padding: 8,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              background: 'var(--color-bg-subtle)',
+              borderRadius: 'var(--radius-control)',
             }}
           >
-            <Box
-              style={{
-                position: 'absolute',
-                top: 14,
-                right: 14,
-                cursor: 'pointer',
-                padding: 4,
-              }}
-              onClick={() => setShowMemberCard(false)}
-            >
-              <X size={20} color="var(--neutral-400)" />
-            </Box>
+            <Icon icon={Lightbulb} size="sm" tone="brand" style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text variant="caption" tone="secondary">
+              {memberCardHint(memberCardQ.data)}
+            </Text>
+          </div>
+        )}
+      </BottomSheet>
 
-            <Box style={{ textAlign: 'center' }}>
-              <Text bold size="normal" style={{ color: 'var(--neutral-900)' }}>
-                Thẻ Thành Viên Tubu
-              </Text>
-              <Box
-                mt={2}
-                px={3}
-                py={1}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: style.bg,
-                  borderRadius: 'var(--radius-full)',
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>{style.emoji}</Text>
-                <Text bold size="xSmall" style={{ color: style.color }}>
-                  Hạng {tierName} · {formatPoints(data?.pointsBalance ?? 0)} Xanh
-                </Text>
-              </Box>
-            </Box>
-
-            {/* Mã QR THẬT của memberCode — đúng chuỗi mà /loyalty/staff/scan-member nhận (khớp chính xác). */}
-            <Box
-              mt={4}
-              p={3}
-              style={{
-                background: 'var(--neutral-50)',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--neutral-200)',
-                textAlign: 'center',
-              }}
-            >
-              {memberCardQ.isLoading ? (
-                <Box flex justifyContent="center">
-                  <Skeleton style={{ width: 180, height: 180, borderRadius: 12 }} />
-                </Box>
-              ) : memberCardQ.isError || !memberCardQ.data ? (
-                <Box flex flexDirection="column" alignItems="center" style={{ gap: 8 }}>
-                  <Text size="xSmall" style={{ color: 'var(--neutral-600)' }}>
-                    Chưa tải được mã thành viên: {getErrorMessage(memberCardQ.error)}
-                  </Text>
-                  <Button size="small" variant="secondary" onClick={() => void memberCardQ.refetch()}>
-                    Thử lại
-                  </Button>
-                </Box>
-              ) : (
-                <>
-                  <Box flex justifyContent="center">
-                    <QrCode value={memberCardQ.data.memberCode} size={180} />
-                  </Box>
-
-                  {/* Mã thành viên (gõ tay được nếu không quét) & nút chép */}
-                  <Box mt={3} flex alignItems="center" justifyContent="center" style={{ gap: 8 }}>
-                    <Text
-                      bold
-                      size="normal"
-                      style={{ letterSpacing: '2px', fontFamily: 'monospace', color: 'var(--neutral-800)' }}
-                    >
-                      {memberCardQ.data.memberCode}
-                    </Text>
-                    <Box
-                      className="tubu-press"
-                      onClick={async () => {
-                        const code = memberCardQ.data?.memberCode;
-                        if (!code) return;
-                        const ok = await copyText(code);
-                        haptic('light');
-                        if (!ok) {
-                          openSnackbar({ text: 'Không sao chép được — hãy đọc mã cho nhân viên.', type: 'error' });
-                          return;
-                        }
-                        setCopiedCode(true);
-                        openSnackbar({ text: 'Đã sao chép mã thành viên', type: 'success' });
-                        setTimeout(() => setCopiedCode(false), 2000);
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: 'var(--radius-full)',
-                        background: copiedCode ? 'var(--leaf-50)' : 'var(--neutral-100)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <Copy size={12} color={copiedCode ? 'var(--leaf-700)' : 'var(--neutral-600)'} />
-                      <Text size="xSmall" style={{ color: copiedCode ? 'var(--leaf-700)' : 'var(--neutral-600)', fontSize: 11 }}>
-                        {copiedCode ? 'Đã chép' : 'Chép'}
-                      </Text>
-                    </Box>
-                  </Box>
-                </>
-              )}
-            </Box>
-
-            {memberCardQ.data && (
-              <Box mt={3} p={2} style={{ background: 'var(--leaf-50)', borderRadius: 'var(--radius-md)' }}>
-                <Text size="xSmall" style={{ color: 'var(--leaf-800)', textAlign: 'center', lineHeight: '16px' }}>
-                  💡 {memberCardHint(memberCardQ.data)}
-                </Text>
-              </Box>
-            )}
-
+      {/* Xác nhận đổi mã giảm giá */}
+      <BottomSheet
+        open={confirmReward !== null}
+        onClose={() => setConfirmReward(null)}
+        title="Xác nhận đổi ưu đãi"
+        footer={
+          <div style={{ display: 'flex', gap: 8 }}>
             <Button
               fullWidth
-              onClick={() => setShowMemberCard(false)}
-              style={{
-                marginTop: 16,
-                background: 'var(--neutral-900)',
-                color: 'var(--neutral-0)',
-                borderRadius: 'var(--radius-full)',
-              }}
+              variant="secondary"
+              disabled={redeemMut.isPending || confirmReward === null}
+              onPress={() => setConfirmReward(null)}
             >
-              Đóng
+              Huỷ
             </Button>
-          </Box>
-        </Box>
-      )}
-
-      {/* Modal Xác nhận đổi voucher */}
-      {confirmReward && (
-        <Box
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 3000,
-            background: 'rgba(26,26,23,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-          }}
-          onClick={() => setConfirmReward(null)}
-        >
-          <Box
-            className="tubu-pop"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '24px 20px',
-              maxWidth: 320,
-              width: '100%',
-              boxShadow: 'var(--shadow-md)',
-              textAlign: 'center',
-            }}
-          >
-            <Box
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--leaf-50)',
-                display: 'grid',
-                placeItems: 'center',
-                margin: '0 auto',
+            <Button
+              fullWidth
+              disabled={redeemMut.isPending || confirmReward === null}
+              loading={redeemMut.isPending}
+              onPress={() => {
+                if (confirmReward) doRedeem(confirmReward.id);
               }}
             >
-              <Gift size={24} color="var(--leaf-600)" />
-            </Box>
-
-            <Text bold size="normal" style={{ marginTop: 12, color: 'var(--neutral-900)' }}>
-              Xác nhận đổi ưu đãi
-            </Text>
-
-            <Box mt={3} p={3} style={{ background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', textAlign: 'left' }}>
-              <Text bold size="small" style={{ color: 'var(--neutral-900)' }}>
-                {confirmReward.title}
+              Đổi ngay
+            </Button>
+          </div>
+        }
+      >
+        {sheetReward && (
+          <>
+            <div style={{ padding: 12, background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-control)' }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 700 }}>
+                {sheetReward.title}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-600)', marginTop: 2 }}>
-                {confirmReward.description}
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                {sheetReward.description}
               </Text>
-              <Box mt={2} pt={2} flex justifyContent="space-between" style={{ borderTop: '1px dashed var(--neutral-200)' }}>
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Điểm cần trừ:</Text>
-                <Text bold size="small" style={{ color: 'var(--leaf-700)' }}>
-                  -{confirmReward.pointsCost} Xanh
-                </Text>
-              </Box>
-              <Box mt={1} flex justifyContent="space-between">
-                <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Điểm còn lại:</Text>
-                <Text bold size="small" style={{ color: 'var(--neutral-800)' }}>
-                  {formatPoints((data?.pointsBalance ?? 0) - confirmReward.pointsCost)} Xanh
-                </Text>
-              </Box>
-            </Box>
-
-            <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 10, lineHeight: '16px' }}>
-              Voucher sau khi đổi sẽ có hạn 30 ngày và xuất hiện ngay trong Kho voucher của bạn.
+              <div style={{ marginTop: 8, paddingTop: 4, borderTop: '1px dashed var(--color-border-subtle)' }}>
+                <KeyValueRow label="Điểm cần trừ:" value={`-${formatPoints(sheetReward.pointsCost)} Xanh`} />
+                <KeyValueRow
+                  label="Điểm còn lại:"
+                  value={`${formatPoints((lots?.total ?? 0) - sheetReward.pointsCost)} Xanh`}
+                />
+              </div>
+            </div>
+            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 10 }}>
+              Mã giảm giá sau khi đổi có hạn 30 ngày và xuất hiện ngay trong mục Mã giảm giá của tôi.
             </Text>
+          </>
+        )}
+      </BottomSheet>
 
-            <Box mt={4} flex style={{ gap: 8 }}>
-              <Button
-                fullWidth
-                variant="secondary"
-                disabled={redeemMut.isPending}
-                onClick={() => setConfirmReward(null)}
-                style={{ borderRadius: 'var(--radius-full)' }}
-              >
-                Huỷ
-              </Button>
-              <Button
-                fullWidth
-                disabled={redeemMut.isPending}
-                loading={redeemMut.isPending}
-                onClick={() => doRedeem(confirmReward.id)}
-                style={{
-                  borderRadius: 'var(--radius-full)',
-                  background: 'var(--leaf-600)',
-                  color: 'var(--neutral-0)',
-                }}
-              >
-                Đổi ngay
-              </Button>
-            </Box>
-          </Box>
-        </Box>
-      )}
-
-      {/* Modal chúc mừng lên hạng (§6.6 #78) */}
-      {celebrate && (
-        <Box
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 3000,
-            background: 'rgba(26,26,23,0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 28,
-          }}
-          onClick={() => setCelebrate(null)}
-        >
-          <Box
-            className="tubu-pop"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--neutral-0)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '28px 24px',
-              textAlign: 'center',
-              maxWidth: 320,
-              width: '100%',
-            }}
-          >
-            <Text style={{ fontSize: 64 }}>{(TIER_STYLE[celebrate] ?? DEFAULT_STYLE).emoji}🎉</Text>
-            <Text className="t-h2" style={{ marginTop: 8, color: style.color }}>
-              Chúc mừng lên hạng {celebrate}!
-            </Text>
-            <Text size="small" style={{ color: 'var(--neutral-600)', marginTop: 6 }}>
-              Bạn vừa mở khoá quyền lợi mới của hạng {celebrate}. Cảm ơn bạn đã đồng hành sống xanh
+      {/* Chúc mừng lên hạng (§6.6 #78) */}
+      <BottomSheet
+        open={celebrate !== null}
+        onClose={() => setCelebrate(null)}
+        title={`Chúc mừng lên hạng ${sheetCelebrate ?? ''}!`}
+        footer={
+          <Button fullWidth onPress={() => setCelebrate(null)}>
+            Tuyệt vời!
+          </Button>
+        }
+      >
+        {sheetCelebrate && (
+          <div style={{ textAlign: 'center' }}>
+            <div aria-hidden style={{ fontSize: 64, lineHeight: '72px' }}>
+              {(TIER_STYLE[sheetCelebrate] ?? DEFAULT_STYLE).emoji}🎉
+            </div>
+            <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
+              Bạn vừa mở khoá quyền lợi mới của hạng {sheetCelebrate}. Cảm ơn bạn đã đồng hành sống xanh
               cùng Tubu 🌿
             </Text>
             {perks.length > 0 && (
-              <Box style={{ textAlign: 'left', marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ textAlign: 'left', marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {perks.slice(0, 4).map((p, i) => (
-                  <Text key={i} size="small" style={{ color: 'var(--neutral-900)' }}>
-                    ✓ {p}
-                  </Text>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon icon={Check} size="sm" tone="brand" />
+                    <Text variant="body-sm">{p}</Text>
+                  </div>
                 ))}
-              </Box>
+              </div>
             )}
-            <Button
-              fullWidth
-              onClick={() => setCelebrate(null)}
-              style={{ marginTop: 18, background: 'var(--leaf-600)' }}
-            >
-              Tuyệt vời!
-            </Button>
-          </Box>
-        </Box>
-      )}
+          </div>
+        )}
+      </BottomSheet>
     </Page>
   );
 }
 
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: string;
-  children: React.ReactNode;
-}) {
+function IconTile({ children }: { children: ReactNode }) {
   return (
-    <Box mx={4} mb={3} p={4} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Box flex alignItems="center" justifyContent="space-between" mb={3}>
-        <Text bold>{title}</Text>
+    <div
+      style={{
+        width: 32,
+        height: 32,
+        flexShrink: 0,
+        borderRadius: 'var(--radius-control)',
+        background: 'var(--color-bg-subtle)',
+        display: 'grid',
+        placeItems: 'center',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Section({ title, action, children }: { title: string; action?: string; children: ReactNode }) {
+  return (
+    <Card style={{ margin: '0 16px 12px' }} padding={16}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        <Heading variant="title-sm" as="h2">
+          {title}
+        </Heading>
         {action && (
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+          <Text variant="caption" tone="tertiary">
             {action}
           </Text>
         )}
-      </Box>
+      </div>
       {children}
-    </Box>
+    </Card>
   );
 }

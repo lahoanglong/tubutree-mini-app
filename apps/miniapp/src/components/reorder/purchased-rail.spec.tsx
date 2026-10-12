@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
@@ -27,10 +27,11 @@ const ITEM = {
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
-function renderRail() {
+function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><PurchasedRail source="home_rail" /></QueryClientProvider>);
+  return { qc, ...render(<QueryClientProvider client={qc}><PurchasedRail source={source} /></QueryClientProvider>) };
 }
+const RAIL_KEY = ['purchased-items', 10];
 
 describe('PurchasedRail', () => {
   beforeEach(() => {
@@ -76,7 +77,7 @@ describe('PurchasedRail', () => {
     expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
   });
 
-  it('2 chạm: "Mua lại" → sheet → "Thêm vào giỏ (1)" → addToCart(repurchase), ở lại trang', async () => {
+  it('"Mua lại" → sheet → "Thêm vào giỏ (1)" → addToCart(repurchase) rồi tự sang /cart (không bắt khách tự tìm giỏ)', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
     mocks.addToCart.mockResolvedValue(CART);
     renderRail();
@@ -84,8 +85,28 @@ describe('PurchasedRail', () => {
     fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'repurchase'));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ action: expect.objectContaining({ text: 'Xem giỏ' }) })));
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('tab Đơn hàng (source=orders_tab) cũng sang /cart sau khi thêm', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.addToCart.mockResolvedValue(CART);
+    renderRail('orders_tab');
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('không thêm được món nào (hết hàng) → ở lại trang, không sang giỏ trống', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.addToCart.mockRejectedValue(new Error('Hết hàng'));
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    fireEvent.click(region.querySelector('button.tubu-btn') as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/cart');
   });
 
   it('chạm thẻ → trang sản phẩm', async () => {
@@ -93,5 +114,50 @@ describe('PurchasedRail', () => {
     renderRail();
     fireEvent.click(await screen.findByRole('button', { name: 'Nước rửa chén · Chanh' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen');
+  });
+
+  describe('làm mới lỗi (React Query v5 giữ dữ liệu cũ, status=error)', () => {
+    it('còn dữ liệu cũ → kệ KHÔNG biến mất: vẫn hiện thẻ cũ + dòng báo nhẹ + "Thử lại"; thử lại xong thì dòng báo mất', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValueOnce({ items: [ITEM], nextCursor: null }).mockRejectedValueOnce(new Error('boom'));
+      const { qc } = renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(within(region).queryByRole('button', { name: /^Thử lại/ })).toBeNull();
+
+      await act(async () => {
+        await qc.refetchQueries({ queryKey: RAIL_KEY });
+      });
+      await waitFor(() => expect(qc.getQueryState(RAIL_KEY)?.status).toBe('error'));
+      const after = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(after).toHaveTextContent('Nước rửa chén · Chanh');
+      expect(await within(after).findByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+
+      mocks.fetchPurchasedItems.mockResolvedValueOnce({ items: [ITEM], nextCursor: null });
+      fireEvent.click(within(after).getByRole('button', { name: 'Thử lại Mua lại' }));
+      await waitFor(() => expect(screen.queryByText('Có chút trục trặc, thử lại nhé')).toBeNull());
+      expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveTextContent('Nước rửa chén · Chanh');
+    });
+
+    it('lỗi ở lần tải đầu (chưa có gì để giữ) → ẩn như cũ; tải lại sau lỗi không chớp khung chờ', async () => {
+      let release: (v: unknown) => void = () => {};
+      mocks.fetchPurchasedItems
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockImplementationOnce(() => new Promise((r) => { release = r; }));
+      const { qc, container } = renderRail();
+      await waitFor(() => expect(qc.getQueryState(RAIL_KEY)?.status).toBe('error'));
+      expect(container).toBeEmptyDOMElement();
+
+      let refetching: Promise<unknown> = Promise.resolve();
+      act(() => {
+        refetching = qc.refetchQueries({ queryKey: RAIL_KEY });
+      });
+      await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalledTimes(2));
+      expect(screen.queryByTestId('purchased-rail-loading')).toBeNull();
+
+      await act(async () => {
+        release({ items: [ITEM], nextCursor: null });
+        await refetching;
+      });
+      expect(await screen.findByRole('region', { name: 'Mua lại' })).toHaveTextContent('Nước rửa chén · Chanh');
+    });
   });
 });

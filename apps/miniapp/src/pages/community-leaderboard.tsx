@@ -1,15 +1,22 @@
-import { Box, Page, Text, Button } from 'zmp-ui';
+import { Page } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy } from 'lucide-react';
+import { Sprout } from 'lucide-react';
 import { getLeaderboard, type LeaderboardEntry } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
 import { levelEmoji } from '../components/community/rank-badge';
 import { vi } from '../i18n/vi';
 
+// Huy chương là nội dung xếp hạng (không phải icon điều hướng) nên giữ emoji.
 const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+const PAGE_BG = { background: 'var(--color-bg-canvas)' } as const;
 
 export default function CommunityLeaderboardPage() {
   const status = useAuthStore((s) => s.status);
@@ -25,12 +32,9 @@ export default function CommunityLeaderboardPage() {
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={3} flex flexDirection="column" style={{ gap: 8 }}>
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} height={56} radius="var(--radius-md)" />
-          ))}
-        </Box>
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.leaderboard} />
+        <BoardSkeleton />
       </Page>
     );
   }
@@ -38,98 +42,96 @@ export default function CommunityLeaderboardPage() {
   // BE yêu cầu JWT cho /feed/leaderboard — chưa đăng nhập thì không có gì để xem.
   if (!authed) {
     return (
-      <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🏆</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.leaderboard} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 40 }}>
-      <Box p={4} flex alignItems="center" style={{ gap: 8, background: 'var(--neutral-0)' }}>
-        <Trophy size={20} color="var(--leaf-700)" />
-        <Text.Title size="small">{vi.community.leaderboard}</Text.Title>
-      </Box>
+    <Page style={{ ...PAGE_BG, paddingBottom: 40 }}>
+      <PageHeader title={vi.community.leaderboard} />
 
-      <Box p={3}>
+      <div style={{ padding: 12 }}>
         {board.isLoading ? (
-          <Box flex flexDirection="column" style={{ gap: 8 }}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <Skeleton key={i} height={56} radius="var(--radius-md)" />
-            ))}
-          </Box>
+          <BoardSkeleton flush />
         ) : board.isError ? (
           <ErrorState message={getErrorMessage(board.error)} onRetry={() => void board.refetch()} />
         ) : !board.data || board.data.length === 0 ? (
           <EmptyState art="leaf" heading={vi.community.emptyHeading} />
         ) : (
           <>
-            <Box flex alignItems="center" px={3} pb={1} style={{ gap: 10 }}>
-              <Text size="xSmall" style={{ width: 28, textAlign: 'center', color: 'var(--neutral-400)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px 4px' }}>
+              <Text variant="caption" tone="tertiary" style={{ width: 28, textAlign: 'center' }}>
                 {vi.community.rank}
               </Text>
-              <Box style={{ width: 36 }} />
-              <Text size="xSmall" style={{ flex: 1, color: 'var(--neutral-400)' }}>
+              <div style={{ width: 36 }} />
+              <Text variant="caption" tone="tertiary" style={{ flex: 1 }}>
                 {vi.community.member}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
+              <Text variant="caption" tone="tertiary">
                 {vi.community.points}
               </Text>
-            </Box>
-            {board.data.map((entry, i) => <LeaderRow key={`${entry.author}-${i}`} rank={i + 1} entry={entry} />)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {board.data.map((entry, i) => (
+                <LeaderRow key={`${entry.author}-${i}`} rank={i + 1} entry={entry} />
+              ))}
+            </div>
           </>
         )}
-      </Box>
+      </div>
     </Page>
+  );
+}
+
+function BoardSkeleton({ flush }: { flush?: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: flush ? 0 : 12 }}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <Skeleton key={i} height={56} radius="var(--radius-card)" />
+      ))}
+    </div>
   );
 }
 
 function LeaderRow({ rank, entry }: { rank: number; entry: LeaderboardEntry }) {
   return (
-    <Box
-      flex
-      alignItems="center"
-      p={3}
-      mb={2}
-      style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-md)', gap: 10 }}
-    >
-      <Text bold style={{ width: 28, textAlign: 'center' }}>
-        {MEDAL[rank] ?? `#${rank}`}
-      </Text>
-      {entry.avatar ? (
-        <img src={entry.avatar} alt="" width={36} height={36} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-      ) : (
-        <Box
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: 'var(--leaf-200)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text size="small">🌱</Text>
-        </Box>
-      )}
-      <Box style={{ flex: 1 }}>
-        <Text size="small" bold>
-          {entry.author}
+    <Card padding={12}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Text variant="body-md" style={{ width: 28, textAlign: 'center', fontWeight: 600 }}>
+          {MEDAL[rank] ?? `#${rank}`}
         </Text>
-        <Text size="xSmall" style={{ color: 'var(--leaf-700)' }}>
-          {levelEmoji(entry.level)} {entry.levelName}
+        {entry.avatar ? (
+          <img src={entry.avatar} alt="" width={36} height={36} style={{ borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'var(--color-action-secondary-bg)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Icon icon={Sprout} size="sm" tone="brand" />
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+            {entry.author}
+          </Text>
+          <Text variant="caption" tone="brand" as="div">
+            {levelEmoji(entry.level)} {entry.levelName}
+          </Text>
+        </div>
+        <Text variant="body-sm" tone="brand" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {entry.reputation} {vi.community.points}
         </Text>
-      </Box>
-      <Text size="small" bold style={{ color: 'var(--primary-700)', whiteSpace: 'nowrap' }}>
-        {entry.reputation} {vi.community.points}
-      </Text>
-    </Box>
+      </div>
+    </Card>
   );
 }

@@ -8,7 +8,7 @@ import { GomdonConfigCard } from './gomdon-config-card';
 import { LoyaltyConfigCard } from './loyalty-config-card';
 import { RecyclingCheckoutSection } from '../recycling-checkout';
 import { RecyclingStatus } from '../recycling-status';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -85,13 +85,17 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
   it('huỷ vận đơn: hỏi xác nhận rồi POST cancel-waybill', async () => {
     const api = mockFetch({ '/gomdon/cancel-waybill': { body: { result: 'CANCELLED', message: 'Đã huỷ vận đơn BE1.' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const native = vi.spyOn(window, 'confirm');
     const { container } = mount(
       <RecyclingPanel order={order({ gomdonStatus: '1', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' })} />,
     );
     click(byText(container, 'button', 'Huỷ vận đơn Gomdon'));
     await flush();
-    expect(confirm).toHaveBeenCalled();
+    expect(confirmDialog()?.textContent).toContain('BE1');
+    expect(api.calls).toHaveLength(0);
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     expect(api.calls[0]!.url).toContain('/admin/orders/o1/gomdon/cancel-waybill');
     expect(container.textContent).toContain('Đã huỷ vận đơn BE1.');
   });
@@ -111,21 +115,24 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
   it('"Đã xử lý tay": hỏi xác nhận — huỷ thì KHÔNG gọi API; đồng ý thì POST mark-handled kèm ghi chú đã trim', async () => {
     const api = mockFetch({ '/gomdon/mark-handled': { body: { result: 'MANUAL_HANDLED', message: 'Đã đánh dấu "Đã xử lý tay".' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<RecyclingPanel order={order({ gomdonStatus: 'NOT_CONFIGURED' })} />);
     const btn = byText(container, 'button', 'Đã xử lý tay') as HTMLButtonElement;
     expect(btn).not.toBeNull();
 
     click(btn);
     await flush();
-    expect(confirm).toHaveBeenCalledTimes(1);
+    answerConfirm(false);
+    await flush();
     expect(api.calls).toHaveLength(0);
 
     typeInto(container.querySelector('input[aria-label="Ghi chú đã xử lý tay"]'), '  đã tạo vận đơn GHN tay  ');
     click(btn);
     await flush();
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(String(confirm.mock.calls[1]![0])).toContain('TB-100');
+    expect(confirmDialog()?.textContent).toContain('TB-100');
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     expect(api.calls).toHaveLength(1);
     expect(api.calls[0]!.url).toContain('/admin/orders/o1/gomdon/mark-handled');
     expect(api.calls[0]!.init?.method).toBe('POST');
@@ -146,12 +153,14 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
         return new Response(JSON.stringify({ message: msg }), { status: 409, headers: { 'Content-Type': 'application/json' } });
       }),
     );
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<RecyclingPanel order={order({ gomdonStatus: 'FAILED' })} />);
     const btn = byText(container, 'button', 'Đã xử lý tay') as HTMLButtonElement;
     click(btn);
     click(btn);
     click(btn);
+    await flush();
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    answerConfirm(true);
     await flush();
     expect(calls).toHaveLength(1);
     expect((byText(container, 'button', /Đang lưu|Đã xử lý tay/) as HTMLButtonElement).disabled).toBe(true);
@@ -214,6 +223,80 @@ describe('ClaimRow (yêu cầu nhận thưởng đại lý)', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
   });
 
+  it('"Đã trao thưởng": hộp thoại xác nhận — huỷ thì KHÔNG gọi API, đồng ý thì POST mark-paid', async () => {
+    const api = mockFetch({
+      '/mark-paid': { body: claim({ status: 'PAID' }) },
+      '/admin/dealer-reward-claims': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const native = vi.spyOn(window, 'confirm');
+    const { container } = mount(<ClaimRow claim={claim({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã trao thưởng'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Tour Phú Quốc');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+    click(byText(container, 'button', 'Đã trao thưởng'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/dealer-reward-claims/c1/mark-paid');
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  // Q-09: từ chối là trạng thái cuối với đại lý, nên admin cần nút mở lại khi từ chối nhầm.
+  it('REJECTED → có nút "Mở lại" (và chỉ nút đó); các trạng thái khác không có', () => {
+    const r = mount(<ClaimRow claim={claim({ status: 'REJECTED', rejectionReason: 'Nhầm kỳ' })} />);
+    expect(r.container.textContent).toContain('Nhầm kỳ');
+    expect(byText(r.container, 'button', 'Mở lại yêu cầu')).not.toBeNull();
+    expect(byText(r.container, 'button', 'Duyệt')).toBeNull();
+    expect(byText(r.container, 'button', 'Từ chối')).toBeNull();
+    for (const status of ['PENDING', 'APPROVED', 'PAID'] as const) {
+      const m = mount(<ClaimRow claim={claim({ status })} />);
+      expect(byText(m.container, 'button', 'Mở lại yêu cầu')).toBeNull();
+    }
+  });
+
+  it('"Mở lại yêu cầu": hộp thoại — huỷ thì KHÔNG gọi API; đồng ý thì POST reopen kèm ghi chú đã trim', async () => {
+    const api = mockFetch({
+      '/reopen': { body: claim({ status: 'PENDING' }) },
+      '/admin/dealer-reward-claims': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<ClaimRow claim={claim({ status: 'REJECTED', rejectionReason: 'Nhầm kỳ' })} />);
+    typeInto(container.querySelector('input[aria-label="Ghi chú / lý do"]'), '  từ chối nhầm, đơn không trả  ');
+    click(byText(container, 'button', 'Mở lại yêu cầu'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Tour Phú Quốc');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+
+    click(byText(container, 'button', 'Mở lại yêu cầu'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/dealer-reward-claims/c1/reopen');
+    expect(api.calls[0]!.init?.method).toBe('POST');
+    expect(api.calls[0]!.init?.body).toBe(JSON.stringify({ note: 'từ chối nhầm, đơn không trả' }));
+  });
+
+  it('mở lại bị API từ chối (admin khác vừa xử lý) → hiện NGUYÊN VĂN message', async () => {
+    const msg = 'Yêu cầu đang ở trạng thái "Đang chờ duyệt" — không thể mở lại.';
+    const api = mockFetch({
+      '/reopen': { status: 400, body: { message: msg } },
+      '/admin/dealer-reward-claims': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<ClaimRow claim={claim({ status: 'REJECTED', rejectionReason: 'x' })} />);
+    click(byText(container, 'button', 'Mở lại yêu cầu'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+  });
+
   it('APPROVED → chỉ còn nút "Đã trao thưởng"; PAID → không còn nút nào', () => {
     const a = mount(<ClaimRow claim={claim({ status: 'APPROVED' })} />);
     expect(a.container.textContent).toContain('Đã duyệt, chờ trao thưởng');
@@ -248,6 +331,13 @@ describe('PosScreen (màn thu ngân)', () => {
     expect(container.textContent).toContain('090****567');
     expect(container.textContent).toContain('Mầm Xanh');
     expect(container.textContent).toContain('120');
+  });
+
+  it('PD-3: khách có điểm quy đổi → quầy thấy tổng hai lô và phần không hết hạn', async () => {
+    const withConverted = { ...member, pointsBalance: 120, pointsConvertedBalance: 30, pointsTotal: 150 };
+    const { container } = await scanned({ '/loyalty/staff/scan-member': { body: { member: withConverted } } });
+    expect(container.textContent).toContain('150');
+    expect(container.textContent).toContain('trong đó 30 điểm không hết hạn');
   });
 
   it('404 khi tra cứu → hiện message BE', async () => {

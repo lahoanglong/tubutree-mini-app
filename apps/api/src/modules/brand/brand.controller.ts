@@ -1,14 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { BrandService } from './brand.service';
-import { PromotionDto, UpdateOwnedBrandDto, UpdatePromotionDto } from './dto/brand.dto';
+import { BrandSalesQueryDto, PromotionDto, UpdateOwnedBrandDto, UpdatePromotionDto } from './dto/brand.dto';
 
 @Controller('brand')
 export class BrandController {
   constructor(private readonly svc: BrandService) {}
 
   @Public()
+  @PublicCache('CATALOG')
   @Get('public/:slug')
   publicView(@Param('slug') slug: string) {
     return this.svc.getPublicBySlug(slug);
@@ -44,9 +46,10 @@ export class BrandController {
   updateOwned(@CurrentUser('sub') uid: string, @Body() dto: UpdateOwnedBrandDto) {
     return this.svc.updateOwnedBrand(uid, dto);
   }
-  @Get('owner/me/promotions')
-  ownedPromos(@CurrentUser('sub') uid: string) {
-    return this.svc.listOwnedPromotions(uid);
+  // Doanh thu nhãn (chỉ đọc, chỉ số tổng hợp, không có thông tin khách) — chỉ chủ nhãn đó.
+  @Get('owner/me/sales')
+  ownedSales(@CurrentUser('sub') uid: string, @Query() q: BrandSalesQueryDto) {
+    return this.svc.getOwnedSales(uid, q.period);
   }
   @Post('owner/me/promotions')
   addOwnedPromo(@CurrentUser('sub') uid: string, @Body() dto: PromotionDto) {

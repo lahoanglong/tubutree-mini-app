@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { startOfVnMonth } from '../../common/vn-time';
 
 /**
  * Refill / đổi vỏ chai (§6.14.6). Khách mang vỏ chai rỗng đến đổi → gửi yêu cầu (PENDING).
@@ -175,8 +176,7 @@ export class RefillService {
   }
 
   private async usedThisMonthTx(client: Prisma.TransactionClient | PrismaService, userId: string): Promise<number> {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = startOfVnMonth();
     const agg = await client.bottleReturn.aggregate({
       where: { userId, status: { in: ['APPROVED', 'PENDING'] }, createdAt: { gte: start } },
       _sum: { quantity: true },

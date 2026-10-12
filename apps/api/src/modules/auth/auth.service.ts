@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 @Injectable()
 export class AuthService {
@@ -157,8 +158,9 @@ export class AuthService {
    *    vừa xác nhận → "nâng cấp" NGAY dòng khách hiện tại (đổi zaloId/tên/avatar, giữ nguyên
    *    id) — giỏ/địa chỉ/điểm/đơn tự động đúng vì vẫn cùng 1 id, không cần gộp, không rủi ro.
    *  - Phiên hiện tại là KHÁCH nhưng zaloId (hoặc SĐT) đó đã thuộc một user THẬT khác có từ
-   *    trước → gộp dữ liệu giá trị/rủi ro cao nhất của khách (giỏ, sổ địa chỉ, số dư điểm/ví/
-   *    xu/cashback + sổ giao dịch, lịch sử đơn) vào user đó rồi trả token của user đó.
+   *    trước → gộp dữ liệu giá trị/rủi ro cao nhất của khách (giỏ, sổ địa chỉ, số dư điểm (cả lô
+   *    quy đổi không hết hạn)/ví/
+   *    cashback + sổ giao dịch, lịch sử đơn) vào user đó rồi trả token của user đó.
    *  - Phiên hiện tại KHÔNG PHẢI khách (đã là Zalo thật) nhưng Zalo trên máy giờ lại là một
    *    danh tính KHÁC — gộp 2 tài khoản THẬT với nhau là quyết định nghiệp vụ lớn (số dư ví
    *    thật, đơn hàng của CẢ HAI bên); không tự quyết trong bản vá khẩn cấp này. An toàn hơn
@@ -193,6 +195,9 @@ export class AuthService {
 
     const existingByZalo = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
     if (existingByZalo) {
+      // Chính dòng khách này vừa được một request song song nâng cấp tại chỗ (currentUser đọc
+      // trước đó nên còn zaloId khách) — gộp vào chính nó sẽ đổi zaloId làm hỏng tài khoản.
+      if (existingByZalo.id === currentUser.id) return this.issueTokens(existingByZalo);
       return this.issueTokens(await this.mergeGuestInto(currentUser, existingByZalo, info, phone));
     }
     if (phone) {
@@ -205,16 +210,25 @@ export class AuthService {
     // Không ai giữ danh tính Zalo này → nâng cấp TẠI CHỖ chính dòng khách hiện tại thay vì
     // tạo user mới rồi gộp — giỏ/địa chỉ/điểm/đơn đã đúng sẵn vì cùng 1 id.
     const checkedPhone = await this.phoneIfFree(phone, currentUser.id);
-    const upgraded = await this.prisma.user.update({
-      where: { id: currentUser.id },
-      data: {
-        zaloId: info.zaloId,
-        fullName: info.name,
-        avatarUrl: info.avatar ?? currentUser.avatarUrl,
-        ...(checkedPhone ? { phone: checkedPhone } : {}),
-      },
-    });
-    return this.issueTokens(upgraded);
+    try {
+      const upgraded = await this.prisma.user.update({
+        where: { id: currentUser.id },
+        data: {
+          zaloId: info.zaloId,
+          fullName: info.name,
+          avatarUrl: info.avatar ?? currentUser.avatarUrl,
+          ...(checkedPhone ? { phone: checkedPhone } : {}),
+        },
+      });
+      return this.issueTokens(upgraded);
+    } catch (err) {
+      // Hai máy khách khác nhau cùng nâng cấp lên một tài khoản Zalo mới cùng lúc: máy thắng đã
+      // giữ zaloId, máy thua gộp vào dòng đó thay vì trả 500.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+      const winner = await this.prisma.user.findUnique({ where: { zaloId: info.zaloId } });
+      if (!winner || winner.id === currentUser.id) throw err;
+      return this.issueTokens(await this.mergeGuestInto(currentUser, winner, info, phone));
+    }
   }
 
   /** Gắn SĐT nếu user chưa có và SĐT còn trống — dùng cho nhánh "đúng danh tính đang có". */
@@ -226,15 +240,23 @@ export class AuthService {
   }
 
   /**
-   * Gộp guest → target (target đã tồn tại từ trước, khác dòng với guest). CHỈ gộp các bảng có
-   * giá trị/rủi ro cao nhất nếu bỏ sót: giỏ hàng, sổ địa chỉ, số dư điểm/ví/xu/cashback (+ sổ
-   * giao dịch, cố gắng theo kiểu best-effort), lịch sử đơn. CHƯA gộp trong bản vá khẩn cấp này:
-   * gameProfile/loyaltyCheckIns/staffProfile/communityProfile/subscriptions/affiliate/dealer/
-   * reviews/feed/... — phần lớn là quan hệ 1-1 (2 bên cùng có 1 dòng) cần một quyết định nghiệp
-   * vụ về "chọn bên nào thắng" mà bản vá khẩn cấp không tự ý quyết; dòng khách VẪN CÒN NGUYÊN
-   * trong DB (không xoá, chỉ đổi zaloId để giải phóng khoá `guest_<deviceId>`) nên không mất dữ
-   * liệu — chỉ tạm thời không truy cập được qua phiên đã hợp nhất. Xem openIssues trong báo cáo
-   * bàn giao P0 để biết danh sách đầy đủ + đề xuất theo dõi.
+   * Gộp guest → target (target đã tồn tại từ trước, khác dòng với guest): giỏ hàng, sổ địa chỉ,
+   * đơn + yêu cầu đổi trả, gói định kỳ, lệnh rút, số dư điểm (cả lô quy đổi)/ví/cashback + sổ giao dịch, lượt
+   * dùng coupon, suất flash sale, điểm danh, đánh giá, yêu thích/nhắc/theo dõi thương hiệu và (khi
+   * target chưa chơi) dữ liệu game.
+   *
+   * Không được "thử rồi bắt P2002" trong interactive transaction: sau lỗi đầu tiên Postgres huỷ
+   * cả transaction (25P02), COMMIT thành ROLLBACK và mọi lần gộp sau lặp lại y hệt → phiên khách
+   * kẹt vĩnh viễn. Vì vậy mọi bảng có unique theo userId được xử lý dòng trùng TRƯỚC bằng câu SQL
+   * tập hợp (đổi khoá / cộng dồn / để lại ở khách), rồi mới chuyển phần còn lại.
+   *
+   * Hai request gộp cùng lúc cho một khách: khoá dòng khách (FOR UPDATE) rồi đọc lại số dư
+   * TRONG transaction; request đến sau thấy zaloId khách đã đổi thì không cộng lần nữa.
+   *
+   * Còn để lại ở dòng khách (quan hệ 1-1 hoặc ít giá trị, chưa có quyết định "bên nào thắng"):
+   * staffProfile/communityProfile/affiliate/commission/dealer/feed/... và dòng trùng khoá với
+   * target ở các bảng trên. Các bảng này không giữ tiền hay luồng đang chạy của khách; dòng khách
+   * không bị xoá nên vẫn tra lại được nếu cần gộp tay.
    */
   private async mergeGuestInto(
     guest: User,
@@ -242,107 +264,213 @@ export class AuthService {
     info: { zaloId: string; name?: string; avatar?: string },
     phone: string | null,
   ): Promise<User> {
+    const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
     return this.prisma.$transaction(async (tx) => {
-      // 1) Giỏ hàng — gộp theo variationId (cộng dồn số lượng dòng trùng thay vì đè), không
-      //    làm mất dòng nào của cả 2 bên. QUAN TRỌNG: dòng KHÔNG trùng biến thể được REPARENT
-      //    (update cartId, GIỮ NGUYÊN id) thay vì xoá-tạo-lại — màn thanh toán có thể đã chọn
-      //    sẵn một tập con `itemIds` (mua 1 phần giỏ) TRƯỚC khi ensurePhone() chạy; nếu đổi id
-      //    thì lựa chọn đó không còn khớp dòng nào sau khi phiên đổi sang target. Chỉ dòng THẬT
-      //    SỰ trùng biến thể với target (hiếm) mới mất id gốc (không thể giữ cả 2 id cho cùng 1
-      //    biến thể — ràng buộc unique [cartId, variationId]).
-      const guestCart = await tx.cart.findUnique({ where: { userId: guest.id }, include: { items: true } });
+      // Khoá theo thứ tự cố định khách → target (target không bao giờ là khách nên không đảo
+      // chiều được). Khoá target còn xếp hàng hai khách khác nhau cùng gộp vào một target để
+      // bước kiểm trùng bên dưới thấy dòng của lần gộp trước.
+      const lockedGuest = await tx.$queryRaw<
+        {
+          zaloId: string | null;
+          pointsBalance: number;
+          pointsConvertedBalance: number;
+          walletBalance: number;
+          cashbackPending: number;
+        }[]
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending"
+          FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${target.id} FOR UPDATE`;
+      const g = lockedGuest[0];
+      if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
+        return tx.user.findUniqueOrThrow({ where: { id: target.id } });
+      }
+      const gid = guest.id;
+      const tid = target.id;
+      const mergedPrefix = `MERGED:${gid}:`;
+
+      // 1) Giỏ hàng — dòng không trùng biến thể được REPARENT (giữ nguyên id, vì màn thanh toán
+      //    có thể đã chọn sẵn `itemIds` trước khi ensurePhone() chạy); dòng trùng biến thể cộng dồn
+      //    vào dòng của target rồi xoá dòng khách (unique [cartId, variationId]).
+      const guestCart = await tx.cart.findUnique({ where: { userId: gid }, select: { id: true } });
       if (guestCart) {
-        const targetCart = await tx.cart.upsert({
-          where: { userId: target.id },
-          create: { userId: target.id },
-          update: {},
-        });
-        for (const item of guestCart.items) {
-          const existing = await tx.cartItem.findUnique({
-            where: { cartId_variationId: { cartId: targetCart.id, variationId: item.variationId } },
-          });
-          if (existing) {
-            // Trùng biến thể: cộng dồn vào dòng của target (giữ id của target), xoá dòng
-            // trùng của khách — không thể giữ cả 2 do ràng buộc unique.
-            await tx.cartItem.update({
-              where: { id: existing.id },
-              data: { quantity: existing.quantity + item.quantity },
-            });
-            await tx.cartItem.delete({ where: { id: item.id } });
-          } else {
-            // Không trùng: chuyển THẲNG dòng của khách sang giỏ target, GIỮ NGUYÊN id.
-            await tx.cartItem.update({ where: { id: item.id }, data: { cartId: targetCart.id } });
-          }
-        }
-        await tx.cart.delete({ where: { id: guestCart.id } }); // giờ đã rỗng (mọi dòng đã reparent/xoá ở trên)
+        const targetCart = await tx.cart.upsert({ where: { userId: tid }, create: { userId: tid }, update: {} });
+        await tx.$executeRaw`
+          UPDATE "cart_items" t SET "quantity" = t."quantity" + g."quantity"
+            FROM "cart_items" g
+           WHERE t."cartId" = ${targetCart.id} AND g."cartId" = ${guestCart.id} AND g."variationId" = t."variationId"`;
+        await tx.$executeRaw`
+          DELETE FROM "cart_items" g
+           WHERE g."cartId" = ${guestCart.id}
+             AND EXISTS (SELECT 1 FROM "cart_items" t WHERE t."cartId" = ${targetCart.id} AND t."variationId" = g."variationId")`;
+        await tx.cartItem.updateMany({ where: { cartId: guestCart.id }, data: { cartId: targetCart.id } });
+        await tx.cart.delete({ where: { id: guestCart.id } });
       }
 
-      // 2) Sổ địa chỉ — chuyển hết; nếu target đã có địa chỉ mặc định thì bỏ cờ mặc định của
-      //    các địa chỉ chuyển sang (tránh 2 địa chỉ mặc định cùng lúc).
-      const targetHasDefault = (await tx.address.count({ where: { userId: target.id, isDefault: true } })) > 0;
+      // 2) Sổ địa chỉ — target đã có địa chỉ mặc định thì bỏ cờ mặc định của địa chỉ chuyển sang.
+      const targetHasDefault = (await tx.address.count({ where: { userId: tid, isDefault: true } })) > 0;
       await tx.address.updateMany({
-        where: { userId: guest.id },
-        data: targetHasDefault ? { userId: target.id, isDefault: false } : { userId: target.id },
+        where: { userId: gid },
+        data: targetHasDefault ? { userId: tid, isDefault: false } : { userId: tid },
       });
 
-      // 3) Lịch sử đơn — chuyển hết (Order.userId là cột thường, không có ràng buộc unique).
-      await tx.order.updateMany({ where: { userId: guest.id }, data: { userId: target.id } });
+      // 3) Đơn, yêu cầu đổi trả, cashback, lượt dùng coupon: không có unique theo userId.
+      //    Chuyển lượt dùng coupon để perUserLimit tính cả lượt đã dùng ở phiên khách.
+      await tx.order.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.returnRequest.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.cashbackClick.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.cashbackTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.couponRedemption.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Gói định kỳ phải theo địa chỉ đã chuyển ở bước 2 (subscriptions.service tạm dừng gói khi
+      // address.userId !== sub.userId); lệnh rút bị từ chối hoàn tiền về payout.userId.
+      await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.payout.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
-      // 4) Sổ giao dịch điểm/xu/cashback — cố migrate NGUYÊN BẢNG theo userId; nếu đụng ràng
-      //    buộc unique RIÊNG của bảng đó (vd 2 dòng điểm danh CHECKIN cùng ngày ở cả guest lẫn
-      //    target) thì bỏ qua CẢ BẢNG đó, giữ nguyên các dòng ở guest — KHÔNG chặn phần còn lại
-      //    của merge. Số dư tổng (bước 5) vẫn đúng vì được cộng trực tiếp trên User, độc lập với
-      //    việc sổ chi tiết lịch sử có chuyển được hết hay không.
-      try {
-        await tx.pointsTransaction.updateMany({ where: { userId: guest.id }, data: { userId: target.id } });
-      } catch (err) {
-        if (!this.isUniqueViolation(err)) throw err;
-      }
-      try {
-        await tx.coinTransaction.updateMany({ where: { userId: guest.id }, data: { userId: target.id } });
-      } catch (err) {
-        if (!this.isUniqueViolation(err)) throw err;
-      }
-      try {
-        await tx.cashbackClick.updateMany({ where: { userId: guest.id }, data: { userId: target.id } });
-      } catch (err) {
-        if (!this.isUniqueViolation(err)) throw err;
-      }
-      try {
-        await tx.cashbackTransaction.updateMany({ where: { userId: guest.id }, data: { userId: target.id } });
-      } catch (err) {
-        if (!this.isUniqueViolation(err)) throw err;
+      // 4) Điểm danh. Chuỗi tính từ dòng loyalty_check_ins có dayKey lớn nhất, nên chỉ chuyển
+      //    ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
+      //    hết) — target không thừa hưởng chuỗi của khách. Ngày trùng/mới hơn ở lại khách (dayKey
+      //    phải giữ định dạng ngày, không gắn tiền tố MERGED được).
+      const movedCheckInDays = (
+        await tx.$queryRaw<{ dayKey: string }[]>`
+          UPDATE "loyalty_check_ins" g SET "userId" = ${tid}
+           WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "loyalty_check_ins" t WHERE t."userId" = ${tid} AND t."dayKey" = g."dayKey")
+             AND g."dayKey" < COALESCE((SELECT max(t."dayKey") FROM "loyalty_check_ins" t WHERE t."userId" = ${tid}), '9999-12-31')
+          RETURNING g."dayKey"`
+      ).map((r) => r.dayKey);
+
+      // 5) Sổ điểm và sổ xu cũ (chỉ còn lịch sử, xu đã quy sang Điểm Xanh). Partial unique theo userId: điểm danh (userId, refId=ngày) WHERE
+      //    refType='CHECKIN' và nhiệm vụ (userId, reason) WHERE refType='QUEST'. Dòng sổ CHECKIN
+      //    chỉ giữ khoá ngày khi dòng điểm danh cùng ngày đã sang target ở bước 4; ngày ở lại khách
+      //    thì dòng sổ đổi khoá thành MERGED:<guestId>:<ngày>. Nếu không, target có dòng sổ ngày D
+      //    mà không có dòng điểm danh ngày D: màn điểm danh báo "chưa điểm danh" nhưng mọi lần bấm
+      //    đều đụng unique sổ. Dòng QUEST trùng với target cũng đổi khoá như vậy. Giữ cả hai lượt
+      //    đã cộng (Q-11), số dư bước 8 vẫn khớp tổng sổ.
+      await tx.$executeRaw`
+        UPDATE "points_transactions" g SET "refId" = ${mergedPrefix}::text || g."refId"
+         WHERE g."userId" = ${gid} AND g."refType" = 'CHECKIN' AND g."refId" IS NOT NULL
+           AND (g."refId" <> ALL(${movedCheckInDays}::text[])
+                OR EXISTS (SELECT 1 FROM "points_transactions" t
+                            WHERE t."userId" = ${tid} AND t."refType" = 'CHECKIN' AND t."refId" = g."refId"))`;
+      await tx.$executeRaw`
+        UPDATE "coin_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
+         WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
+           AND EXISTS (SELECT 1 FROM "coin_transactions" t
+                        WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
+      // PD-3: sổ điểm cũng có partial unique (userId, reason) WHERE refType='QUEST'.
+      await tx.$executeRaw`
+        UPDATE "points_transactions" g SET "reason" = ${mergedPrefix}::text || g."reason"
+         WHERE g."userId" = ${gid} AND g."refType" = 'QUEST'
+           AND EXISTS (SELECT 1 FROM "points_transactions" t
+                        WHERE t."userId" = ${tid} AND t."refType" = 'QUEST' AND t."reason" = g."reason")`;
+      await tx.pointsTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
+
+      // 6) Bảng giới hạn lượt theo user. Flash sale: cộng dồn số đã mua để perUserLimit tính cả
+      //    hai bên. Đánh giá: mỗi user một đánh giá/SP, trùng thì giữ của target.
+      await tx.$executeRaw`
+        UPDATE "flash_sale_purchases" t SET "quantity" = t."quantity" + g."quantity", "updatedAt" = now()
+          FROM "flash_sale_purchases" g
+         WHERE t."userId" = ${tid} AND g."userId" = ${gid} AND g."flashSaleItemId" = t."flashSaleItemId"`;
+      await tx.$executeRaw`
+        DELETE FROM "flash_sale_purchases" g
+         WHERE g."userId" = ${gid}
+           AND EXISTS (SELECT 1 FROM "flash_sale_purchases" t WHERE t."userId" = ${tid} AND t."flashSaleItemId" = g."flashSaleItemId")`;
+      await tx.flashSalePurchase.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      await tx.$executeRaw`
+        UPDATE "reviews" g SET "userId" = ${tid}
+         WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "reviews" t WHERE t."userId" = ${tid} AND t."productId" = g."productId")`;
+
+      // Danh sách theo dõi/nhắc: unique (userId, khoá), trùng thì giữ dòng của target.
+      await tx.$executeRaw`
+        UPDATE "wishlists" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "wishlists" t WHERE t."userId" = ${tid} AND t."productId" = g."productId")`;
+      await tx.$executeRaw`
+        UPDATE "flash_sale_reminders" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "flash_sale_reminders" t
+                            WHERE t."userId" = ${tid} AND t."flashSaleItemId" = g."flashSaleItemId")`;
+      await tx.$executeRaw`
+        UPDATE "brand_follows" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "brand_follows" t WHERE t."userId" = ${tid} AND t."brandId" = g."brandId")`;
+      await tx.$executeRaw`
+        UPDATE "reorder_reminders" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+           AND NOT EXISTS (SELECT 1 FROM "reorder_reminders" t
+                            WHERE t."userId" = ${tid} AND t."variationId" = g."variationId")`;
+
+      // 7) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
+      //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,
+      //    cấp cây, chuỗi tưới) cần quyết định riêng.
+      const targetPlays = (await tx.gameProfile.count({ where: { userId: tid } })) > 0;
+      if (!targetPlays) {
+        await tx.gameProfile.updateMany({ where: { userId: gid }, data: { userId: tid } });
+        await tx.plantedTree.updateMany({ where: { userId: gid }, data: { userId: tid } });
+        await tx.gameSpin.updateMany({ where: { userId: gid }, data: { userId: tid } });
+        await tx.$executeRaw`
+          UPDATE "user_species" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "user_species" t WHERE t."userId" = ${tid} AND t."speciesId" = g."speciesId")`;
+        await tx.$executeRaw`
+          UPDATE "garden_plots" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "garden_plots" t WHERE t."userId" = ${tid} AND t."slot" = g."slot")`;
+        await tx.$executeRaw`
+          UPDATE "game_quiz_attempts" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "game_quiz_attempts" t
+                              WHERE t."userId" = ${tid} AND t."quizId" = g."quizId" AND t."dayKey" IS NOT DISTINCT FROM g."dayKey")`;
+        await tx.$executeRaw`
+          UPDATE "mission_progress" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "mission_progress" t
+                              WHERE t."userId" = ${tid} AND t."missionId" = g."missionId" AND t."cycleKey" = g."cycleKey")`;
+        await tx.$executeRaw`
+          UPDATE "user_season_passes" g SET "userId" = ${tid} WHERE g."userId" = ${gid}
+             AND NOT EXISTS (SELECT 1 FROM "user_season_passes" t WHERE t."userId" = ${tid} AND t."seasonId" = g."seasonId")`;
       }
 
-      // 5) Số dư — cộng dồn vào target; đồng bộ zaloId/tên/SĐT nếu target còn thiếu. Nhánh gộp
-      //    theo SĐT (target là user web cũ, chưa có zaloId) cần gắn ĐÚNG zaloId vừa xác thực —
-      //    nhánh gộp theo zaloId trùng thì target.zaloId đã sẵn bằng info.zaloId (no-op an toàn).
-      const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
+      // 8) Số dư — cộng số dư đọc từ dòng khách ĐÃ KHOÁ ở trên; đồng bộ zaloId/tên/SĐT nếu target
+      //    còn thiếu. Nhánh gộp theo SĐT (target là user web cũ, chưa có zaloId) cần gắn ĐÚNG
+      //    zaloId vừa xác thực. Ví tiền đi qua sổ cái: một dòng MERGE_OUT ở khách, một dòng
+      //    MERGE_IN ở target. Ví khách lỡ âm (dữ liệu cũ) giữ nguyên ở dòng khách: chuyển khoản
+      //    âm sang target có thể bị chặn "không đủ" và làm hỏng cả lần đăng nhập.
+      if (g.walletBalance > 0) {
+        await applyWalletDelta(tx, {
+          userId: gid,
+          delta: -g.walletBalance,
+          type: 'MERGE_OUT',
+          refType: 'USER',
+          refId: tid,
+          reason: 'Gộp phiên khách vào tài khoản Zalo',
+        });
+        await applyWalletDelta(tx, {
+          userId: tid,
+          delta: g.walletBalance,
+          type: 'MERGE_IN',
+          refType: 'USER',
+          refId: gid,
+          reason: 'Nhận số dư từ phiên khách',
+        });
+      }
       const merged = await tx.user.update({
-        where: { id: target.id },
+        where: { id: tid },
         data: {
-          pointsBalance: { increment: guest.pointsBalance },
-          walletBalance: { increment: guest.walletBalance },
-          coinsBalance: { increment: guest.coinsBalance },
-          cashbackPending: { increment: guest.cashbackPending },
+          pointsBalance: { increment: g.pointsBalance },
+          // Dòng sổ lô CONVERTED đã theo pointsTransaction.updateMany ở bước 5, nên số dư lô đi cùng.
+          pointsConvertedBalance: { increment: g.pointsConvertedBalance },
+          // Xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen): không chuyển cột xu.
+          cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
           ...(info.name && !target.fullName ? { fullName: info.name, avatarUrl: info.avatar ?? target.avatarUrl } : {}),
           ...(targetPhone ? { phone: targetPhone } : {}),
         },
       });
 
-      // 6) Khoá phiên khách: thu hồi mọi refresh token còn sống + đổi zaloId để giải phóng
-      //    "guest_<deviceId>" (nếu thiết bị cần fallback khách lần sau, sẽ tạo dòng MỚI —
-      //    không bao giờ tái sử dụng dòng đã gộp). Số dư ở guest xoá về 0 (đã chuyển hết ở
-      //    bước 5, tránh cộng trùng nếu lỡ có đường nào đó còn đọc lại dòng này).
-      await tx.refreshToken.updateMany({ where: { userId: guest.id, revokedAt: null }, data: { revokedAt: new Date() } });
+      // 9) Khoá phiên khách: thu hồi refresh token còn sống, đổi zaloId để giải phóng
+      //    "guest_<deviceId>" (thiết bị cần fallback khách lần sau sẽ tạo dòng MỚI) và đưa số dư
+      //    về 0. zaloId mới cũng là dấu hiệu "đã gộp" cho request song song ở trên.
+      await tx.refreshToken.updateMany({ where: { userId: gid, revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.user.update({
-        where: { id: guest.id },
+        where: { id: gid },
         data: {
           zaloId: `${guest.zaloId}_merged_${Date.now()}`,
           pointsBalance: 0,
-          walletBalance: 0,
-          coinsBalance: 0,
+          pointsConvertedBalance: 0,
           cashbackPending: 0,
         },
       });
@@ -363,12 +491,6 @@ export class AuthService {
       if (existing) return existing;
     }
     throw err;
-  }
-
-  /** Lỗi vi phạm ràng buộc unique của Prisma (P2002) — dùng ở mergeGuestInto() để bỏ qua từng
-   *  bảng đụng ràng buộc riêng thay vì làm hỏng cả giao dịch gộp. */
-  private isUniqueViolation(err: unknown): boolean {
-    return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
   }
 
   /** Trả phone nếu chưa bị tài khoản khác chiếm (phone là @unique) — tránh P2002. */
@@ -503,8 +625,8 @@ export class AuthService {
       tierId: user.tierId,
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
+      pointsConvertedBalance: user.pointsConvertedBalance,
       walletBalance: user.walletBalance,
-      coinsBalance: user.coinsBalance,
     };
   }
 

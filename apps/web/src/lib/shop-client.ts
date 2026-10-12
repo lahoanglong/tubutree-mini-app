@@ -22,6 +22,8 @@ export interface CartSummary {
   freeship: boolean;
   freeshipThreshold: number;
   itemCount: number;
+  /** Dòng có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
+  unavailableItems?: { id: string; productName: string; variationName: string; quantity: number }[];
 }
 export interface AddressDTO {
   id: string;
@@ -48,6 +50,10 @@ export interface CheckoutQuote {
   /** Điểm DÙNG ĐƯỢC ở checkout = số dư − điểm đơn còn có thể bị trả (backend kẹp theo số này). API cũ chưa trả. */
   redeemablePoints?: number;
   lockedPoints?: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn): phần của `pointsUsed` trừ vào lô này, số dư, và số được đề nghị dùng. */
+  pointsUsedConverted?: number;
+  pointsConvertedBalance?: number;
+  redeemableConvertedPoints?: number;
 }
 export interface OrderDTO {
   code: string;
@@ -120,6 +126,8 @@ export const placeOrder = (
     addressId: string;
     paymentMethod: string;
     pointsToUse?: number;
+    /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
+    quotedZeroTotal?: boolean;
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
@@ -138,6 +146,29 @@ export const placeOrder = (
 // Orders
 export const fetchOrders = () =>
   apiFetch<{ data: OrderDTO[]; meta: unknown }>('/orders').then((r) => r.data);
+
+/** GET /orders/:code — API trả nguyên cột của Order kèm ảnh từng dòng; chỉ khai các trường web đang dùng. */
+export interface OrderDetailDTO extends OrderDTO {
+  couponCode?: string | null;
+  /** Số Điểm Xanh đã dùng (đã nằm trong `discount`, không trừ thêm lần nữa). */
+  pointsUsed?: number;
+  note?: string | null;
+  /** Ảnh chụp địa chỉ lúc đặt; đơn đại lý không có địa chỉ khách lẻ, chỉ có `note`. */
+  shippingAddress?: {
+    recipient?: string;
+    phone?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    street?: string;
+    note?: string | null;
+  } | null;
+  shippingPartner?: string | null;
+  shippingCode?: string | null;
+  trackingLink?: string | null;
+  items: (OrderDTO['items'][number] & { thumbnail?: string | null })[];
+}
+export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);
 
 // Thanh toán chuyển khoản (VietQR) — A2-02 = A6-01 (docs/audit-2026-09): web chọn được
 // BANK_TRANSFER nhưng trước đây không có cách nào gọi endpoint này nên khách không bao giờ thấy

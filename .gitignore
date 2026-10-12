@@ -40,8 +40,9 @@ apps/api/uploads/
 coverage/
 .superpowers/
 
-# Agent framework của bên thứ 3 (BMAD) — công cụ dev cục bộ, không thuộc source dự án
+# Agent framework của bên thứ 3 (BMAD, Claude) — công cụ dev cục bộ, không thuộc source dự án
 .agents/
+.claude/
 
 # Playwright (kết quả chạy local, đổi mỗi lần test — không phải nguồn)
 apps/e2e/playwright-report/
@@ -51,3 +52,9 @@ apps/e2e/*.png
 # Môi trường audit cục bộ (dự án con 1, DB tubutree_audit riêng): log, PID, token test, ảnh chụp
 # màn hình — tái tạo được bằng scripts/audit/, không phải nguồn.
 .audit/
+
+# 2026-10 review: ảnh chụp (~90MB) và log đo tải giữ local, không commit
+docs/2026-10-review/screens/
+scripts/loadtest/results/
+scripts/uiux/results/
+scripts/uiux/.probe/

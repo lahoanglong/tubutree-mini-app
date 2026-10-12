@@ -13,6 +13,18 @@ import type { RbacService } from '../staff/rbac/rbac.service';
 import type { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import type { GomdonClient } from '../integrations/gomdon/gomdon.client';
 
+// Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
+// test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
+// (increment walletBalance trên tx) để các mock tx sẵn có vẫn đo được tiền vào ví.
+jest.mock('../wallet/wallet-ledger.service', () => ({
+  applyWalletDelta: jest.fn(
+    async (tx: { user: { update: (a: unknown) => Promise<unknown> } }, input: { userId: string; delta: number }) => {
+      await tx.user.update({ where: { id: input.userId }, data: { walletBalance: { increment: input.delta } } });
+      return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+    },
+  ),
+}));
+
 const config = {} as unknown as SystemConfigService;
 const loyalty = {
   creditOrderPoints: jest.fn().mockResolvedValue(undefined),
@@ -224,6 +236,9 @@ type Order = {
   // khỏi `order` như bản test cũ (orderRow riêng có status hardcode), vì admin.service.ts đọc
   // `order` thật trong tx rồi mới flip, nên 2 giá trị này luôn bằng nhau tại thời điểm gọi.
   status?: string;
+  /** Điểm Xanh đơn đã tiêu (tổng) và phần lô quy đổi trong đó; mặc định 0. */
+  pointsUsed?: number;
+  pointsUsedConverted?: number;
   items: Array<{ variationId: string; quantity: number; flashSaleItemId?: string | null; backorderedQty?: number }>;
 };
 type ReturnReq = { id: string; orderId: string; status: 'REQUESTED' | 'APPROVED' | 'REJECTED' } | null;
@@ -249,7 +264,12 @@ function makeReturnPrisma(opts: {
   };
   // Đơn thường luôn backorderedQty=0 (OrderReversalService đọc field này để chỉ hoàn đúng phần
   // đã giữ) — fixture cũ không khai báo field mới này, chuẩn hoá 1 chỗ thay vì sửa từng literal.
-  const order: Order = { ...rawOrder, items: rawOrder.items.map((i) => ({ backorderedQty: 0, ...i })) };
+  const order: Order = {
+    pointsUsed: 0,
+    pointsUsedConverted: 0,
+    ...rawOrder,
+    items: rawOrder.items.map((i) => ({ backorderedQty: 0, ...i })),
+  };
   const returnUpdateMany = jest.fn().mockResolvedValue({ count: opts.returnUpdateManyCount ?? 1 });
   // reviewReturn giờ dùng order.updateMany (guard status=DELIVERED) + tx.order.findUniqueOrThrow.
   // orderUpdate giữ tên cũ để các test cũ vẫn dùng được như spy duy nhất cho order.update*.
@@ -265,7 +285,8 @@ function makeReturnPrisma(opts: {
   const userUpdate = jest.fn().mockResolvedValue({});
   /** Hoàn kho đi bằng SQL thô — xem catalog/variation-stock.ts. */
   const stockExecuteRaw = jest.fn().mockResolvedValue(1);
-  const coinCreate = jest.fn().mockResolvedValue({});
+  /** Hoàn đơn XU cũ ghi sổ Điểm Xanh qua applyPointsDelta(skipDuplicates) (PD-3). */
+  const pointsInsert = jest.fn().mockResolvedValue([{ id: 'ptx1' }]);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       returnRequest: { updateMany: returnUpdateMany },
@@ -277,7 +298,7 @@ function makeReturnPrisma(opts: {
       },
       user: { update: userUpdate },
       $executeRaw: stockExecuteRaw,
-      coinTransaction: { create: coinCreate },
+      pointsTransaction: { createManyAndReturn: pointsInsert },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     }),
   );
@@ -289,7 +310,7 @@ function makeReturnPrisma(opts: {
     user: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction,
   } as unknown as PrismaService;
-  return { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw, coinCreate, $transaction };
+  return { prisma, returnUpdateMany, orderUpdate, userUpdate, stockExecuteRaw, pointsInsert, $transaction };
 }
 
 describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', () => {
@@ -427,31 +448,89 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     });
   });
 
-  it('APPROVE với XU PAID → hoàn coinsBalance + CoinTransaction, KHÔNG hoàn ví', async () => {
-    const { prisma, userUpdate, coinCreate } = makeReturnPrisma({
+  it('APPROVE với đơn XU cũ PAID → hoàn ceil(total/1000) Điểm Xanh lô CONVERTED, KHÔNG hoàn ví, KHÔNG cộng xu (PD-3)', async () => {
+    const { prisma, userUpdate, pointsInsert } = makeReturnPrisma({
       order: {
         id: 'o1',
         code: 'TUBU1',
         userId: 'u1',
-        total: 120000,
+        total: 120500,
         paymentMethod: 'XU',
         paymentStatus: 'PAID',
         items: [{ variationId: 'v1', quantity: 1 }],
       },
     });
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
-    expect(userUpdate).toHaveBeenCalledWith({
-      where: { id: 'u1' },
-      data: { coinsBalance: { increment: 120000 } },
-    });
-    expect(userUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: { walletBalance: { increment: 120000 } } }),
-    );
-    expect(coinCreate).toHaveBeenCalledWith(
+    expect(pointsInsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ userId: 'u1', delta: 120000, reason: 'ORDER_REFUND:TUBU1', refType: 'ORDER' }),
+        data: [expect.objectContaining({ userId: 'u1', delta: 121, lot: 'CONVERTED', reason: 'ORDER_REFUND_XU:TUBU1', refType: 'ORDER', expiresAt: null })],
+        skipDuplicates: true,
       }),
     );
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { pointsConvertedBalance: { increment: 121 } },
+    });
+    for (const [arg] of userUpdate.mock.calls) {
+      expect(arg.data).not.toHaveProperty('walletBalance');
+      expect(arg.data).not.toHaveProperty('coinsBalance');
+    }
+    // Mẫu RETURN_APPROVED nói "Tiền đã hoàn vào Ví Tubu" — sai với đơn XU (điểm vào Điểm Xanh, không vào Ví).
+    // Khách phải được báo ĐÃ HOÀN BAO NHIÊU Điểm Xanh (spec 6.2), không phải mẫu trung tính "không hoàn gì".
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_POINTS', { order_code: 'TUBU1', points: '121' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', expect.anything());
+  });
+
+  // Review B1 (minor): báo khách đúng thứ thật sự được cộng.
+  it.each([
+    ['COD', 'UNPAID'],
+    ['WALLET', 'PAID'],
+  ] as const)('đơn %s tổng 0đ, không dùng điểm: guard hoàn tiền thắng nhưng KHÔNG có đồng nào vào Ví → mẫu NO_REFUND', async (paymentMethod, paymentStatus) => {
+    const { prisma, userUpdate } = makeReturnPrisma({
+      order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 0, paymentMethod, paymentStatus, items: [{ variationId: 'v1', quantity: 1 }] },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(userUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ data: { walletBalance: expect.anything() } }));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+  });
+
+  it('đơn COD 0đ trả hết bằng 80 điểm quy đổi → báo "đã hoàn 80 Điểm Xanh" (không nói tiền vào Ví)', async () => {
+    const { prisma, pointsInsert } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 0, paymentMethod: 'COD', paymentStatus: 'UNPAID',
+        pointsUsed: 80, pointsUsedConverted: 80, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(pointsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ delta: 80, lot: 'CONVERTED', reason: 'ORDER_REFUND_CONVERTED:TUBU1' })] }),
+    );
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_POINTS', { order_code: 'TUBU1', points: '80' });
+  });
+
+  it('đơn WALLET 500.000đ tiêu 150 điểm (120 quy đổi + 30 thường) → báo Ví VÀ tổng 150 Điểm Xanh', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 500000, paymentMethod: 'WALLET', paymentStatus: 'PAID',
+        pointsUsed: 150, pointsUsedConverted: 120, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_WALLET_POINTS', { order_code: 'TUBU1', points: '150' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
+  });
+
+  it('đơn WALLET chỉ tiêu điểm thường (30) → vẫn báo Ví kèm 30 Điểm Xanh', async () => {
+    const { prisma } = makeReturnPrisma({
+      order: {
+        id: 'o1', code: 'TUBU1', userId: 'u1', total: 200000, paymentMethod: 'WALLET', paymentStatus: 'PAID',
+        pointsUsed: 30, items: [{ variationId: 'v1', quantity: 1 }],
+      },
+    });
+    await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_WALLET_POINTS', { order_code: 'TUBU1', points: '30' });
   });
 
   it('hoàn tiền flip paymentStatus PAID→REFUNDED (nhất quán cancel, không để RETURNED còn PAID)', async () => {
@@ -464,15 +543,15 @@ describe('AdminService.reviewReturn (B3 refund-channel + atomic + B5 restock)', 
     );
   });
 
-  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn xu lần 2, KHÔNG báo "đã hoàn tiền" (A6-06)', async () => {
-    const { prisma, orderUpdate, userUpdate, coinCreate } = makeReturnPrisma({
+  it('paymentStatus flip THUA race (count=0, đã refund nơi khác) → KHÔNG hoàn điểm lần 2, KHÔNG báo "đã hoàn tiền" (A6-06)', async () => {
+    const { prisma, orderUpdate, userUpdate, pointsInsert } = makeReturnPrisma({
       order: { id: 'o1', code: 'TUBU1', userId: 'u1', total: 120000, paymentMethod: 'XU', paymentStatus: 'PAID', items: [{ variationId: 'v1', quantity: 1 }] },
     });
     // status flip count=1 (thắng), paymentStatus flip count=0 (đã REFUNDED bởi path khác).
     orderUpdate.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     await mkAdmin(prisma).reviewReturn('admin1', 'r1', true);
     expect(userUpdate).not.toHaveBeenCalled();
-    expect(coinCreate).not.toHaveBeenCalled();
+    expect(pointsInsert).not.toHaveBeenCalled();
     // Không có khoản hoàn nào thực sự được chi → KHÔNG được nói "đã hoàn tiền" cho khách.
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_APPROVED_NO_REFUND', { order_code: 'TUBU1' });
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'RETURN_APPROVED', expect.anything());
@@ -663,6 +742,66 @@ describe('AdminService.setUserRole', () => {
     const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
     expect(out.role).toBe('CUSTOMER');
   });
+
+  // C-008 (A5N-03, Q-07): cấp DEALER thẳng qua đây trước đây không gán bậc → dealerContext trả tier null
+  // và luồng CREDIT bỏ qua hạn mức công nợ. Gán DEALER bắt buộc kèm bậc tồn tại, ghi metadata.dealerTierId.
+  describe('gán DEALER bắt buộc chọn bậc (C-008)', () => {
+    const customer = { id: 'u1', phone: '0899625240', role: 'CUSTOMER', metadata: { onboardedAt: '2026-09-01', segments: ['home'] } };
+
+    it('thiếu tierId → 400, không đổi role', async () => {
+      const update = jest.fn();
+      const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(customer), update } });
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER')).rejects.toThrow(/bậc đại lý/);
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', '   ')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('tierId không tồn tại → 400, không đổi role', async () => {
+      const update = jest.fn();
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      });
+      await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', 'ghost')).rejects.toThrow(
+        /không tồn tại/,
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('tierId hợp lệ → role DEALER + metadata.dealerTierId, giữ nguyên metadata cũ', async () => {
+      const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'DEALER', fullName: 'X' });
+      const tierFind = jest.fn().mockResolvedValue({ id: 'dealer_l3' });
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: tierFind },
+      });
+      const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', ' dealer_l3 ');
+      expect(tierFind).toHaveBeenCalledWith({ where: { id: 'dealer_l3' } });
+      expect(update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: {
+          role: 'DEALER',
+          metadata: { onboardedAt: '2026-09-01', segments: ['home'], dealerTierId: 'dealer_l3' },
+        },
+        select: { id: true, phone: true, fullName: true, role: true },
+      });
+      expect(out).toMatchObject({ ok: true, role: 'DEALER', previousRole: 'CUSTOMER', dealerTierId: 'dealer_l3' });
+    });
+
+    it('role khác DEALER: tierId bị bỏ qua, metadata không đụng', async () => {
+      const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'AFFILIATE', fullName: 'X' });
+      const tierFind = jest.fn();
+      const prisma = makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue(customer), update },
+        dealerTier: { findUnique: tierFind },
+      });
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'AFFILIATE', 'dealer_l3');
+      expect(tierFind).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE' } }));
+    });
+  });
 });
 
 // Việc 9 (audit round 2): createCoupon() trước đây KHÔNG ghi scopeMeta → coupon scope TIER/
@@ -760,6 +899,26 @@ function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<str
 }
 
 describe('AdminService.updateOrderStatus', () => {
+  // C-024: admin từng đẩy được đơn chuyển khoản chưa ai trả lên DELIVERED → cộng điểm + chốt hoa hồng.
+  it.each(['SHIPPING', 'DELIVERED'] as const)(
+    'đơn BANK_TRANSFER chưa PAID → %s bị từ chối 400, không cộng điểm/hoa hồng',
+    async (to) => {
+      const order = {
+        id: 'o9', code: 'TB-109', userId: 'u9', status: 'CONFIRMED', total: 250000, note: null, items: [],
+        paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID',
+      };
+      const { prisma, txUpdateMany } = makeStatusPrisma(order, order);
+      (prisma as unknown as { dealerCreditLedger: unknown }).dealerCreditLedger = { findFirst: jest.fn().mockResolvedValue(null) };
+
+      const err = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o9', to).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toContain('Đã nhận tiền');
+      expect(txUpdateMany).not.toHaveBeenCalled();
+      expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith('o9');
+      expect(affiliate.lockCommissionsForOrder).not.toHaveBeenCalledWith('o9');
+    },
+  );
+
   it('chuyển DELIVERED → credit điểm và lock hoa hồng', async () => {
     const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000, note: null, items: [] };
     const { prisma } = makeStatusPrisma(order, { ...order, status: 'DELIVERED' });
@@ -816,11 +975,154 @@ describe('AdminService.listOrders with search', () => {
         where: expect.objectContaining({
           OR: expect.arrayContaining([
             expect.objectContaining({ code: { contains: '0901234567', mode: 'insensitive' } }),
-            expect.objectContaining({ user: { phone: { contains: '0901234567' } } }),
           ]),
         }),
       }),
     );
+  });
+
+  // C-027: lọc theo quan hệ `user` sinh LEFT JOIN users + OR xuyên hai bảng → Postgres phải quét cả bảng
+  // orders. Tra trước id khách khớp SĐT/tên (index trigram trên users) rồi lọc orders.userId IN (...)
+  // để mọi nhánh OR đều đi được index.
+  it('tìm ≥ 3 ký tự: tra trước khách khớp SĐT/tên rồi lọc userId IN, không lọc theo quan hệ user', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const userFindMany = jest.fn().mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
+    const prisma = makePrisma({
+      order: { findMany, count },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+
+    await mkAdmin(prisma).listOrders(1, 20, undefined, ' 0901 ');
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [{ phone: { contains: '0901' } }, { fullName: { contains: '0901', mode: 'insensitive' } }],
+        },
+        select: { id: true },
+      }),
+    );
+    const where = findMany.mock.calls[0][0].where;
+    expect(where).toEqual({
+      OR: [
+        { code: { contains: '0901', mode: 'insensitive' } },
+        { gomdonPartnerCode: { contains: '0901', mode: 'insensitive' } },
+        { userId: { in: ['u1', 'u2'] } },
+      ],
+    });
+    expect(count.mock.calls[0][0].where).toEqual(where);
+  });
+
+  it('không khách nào khớp → chỉ còn nhánh mã đơn / mã Gomdon', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, 'TB-123');
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      OR: [
+        { code: { contains: 'TB-123', mode: 'insensitive' } },
+        { gomdonPartnerCode: { contains: 'TB-123', mode: 'insensitive' } },
+      ],
+    });
+  });
+
+  it('quá nhiều khách khớp (tìm quá chung) → giữ lọc theo quan hệ user để không cắt bớt kết quả', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const many = Array.from({ length: 1001 }, (_, i) => ({ id: `u${i}` }));
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue(many) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, 'Nguyễn');
+    expect(findMany.mock.calls[0][0].where.OR).toEqual(
+      expect.arrayContaining([
+        { user: { phone: { contains: 'Nguyễn' } } },
+        { user: { fullName: { contains: 'Nguyễn', mode: 'insensitive' } } },
+      ]),
+    );
+  });
+
+  it('chuỗi tìm < 3 ký tự (trigram không dùng được) → không tra trước, giữ lọc theo quan hệ user', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const userFindMany = jest.fn();
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin(prisma).listOrders(1, 20, undefined, '09');
+    expect(userFindMany).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where.OR).toEqual(
+      expect.arrayContaining([{ user: { phone: { contains: '09' } } }]),
+    );
+  });
+});
+
+// C-024 yêu cầu 3: web admin dựng nút trạng thái + nút "Đã nhận tiền" từ API thay vì tự đoán.
+describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-024)', () => {
+  const row = (o: Record<string, unknown>) => ({
+    id: String(o.code),
+    type: 'RETAIL',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    items: [],
+    user: null,
+    ...o,
+  });
+  const list = async (items: Record<string, unknown>[], debits: { refId: string }[] = []) => {
+    const prisma = makePrisma({
+      order: { findMany: jest.fn().mockResolvedValue(items.map(row)), count: jest.fn().mockResolvedValue(items.length) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(debits) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    const res = (await mkAdmin(prisma).listOrders(1, 20)) as unknown as {
+      data: { code: string; allowedTransitions: string[]; canConfirmPayment: boolean }[];
+    };
+    return Object.fromEntries(res.data.map((o) => [o.code, o])) as Record<
+      string,
+      { allowedTransitions: string[]; canConfirmPayment: boolean }
+    >;
+  };
+
+  it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {
+    const by = await list([{ code: 'A', status: 'PENDING_PAYMENT' }, { code: 'B', status: 'PACKED' }]);
+    expect(by.A).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });
+    expect(by.B).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });
+  });
+
+  it('đã PAID / COD / ZaloPay / đơn huỷ → không có nút Đã nhận tiền; DELIVERED chỉ còn RETURNED', async () => {
+    const by = await list([
+      { code: 'P', status: 'CONFIRMED', paymentStatus: 'PAID' },
+      { code: 'C', status: 'CONFIRMED', paymentMethod: 'COD' },
+      { code: 'Z', status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY' },
+      { code: 'X', status: 'CANCELLED' },
+      { code: 'D', status: 'DELIVERED', paymentStatus: 'PAID' },
+    ]);
+    expect(by.P).toMatchObject({ allowedTransitions: ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED'], canConfirmPayment: false });
+    expect(by.C).toMatchObject({ allowedTransitions: ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED'], canConfirmPayment: false });
+    expect(by.Z).toMatchObject({ canConfirmPayment: false });
+    expect(by.Z?.allowedTransitions).not.toContain('DELIVERED');
+    expect(by.X).toMatchObject({ allowedTransitions: [], canConfirmPayment: false });
+    expect(by.D).toMatchObject({ allowedTransitions: ['RETURNED'], canConfirmPayment: false });
+  });
+
+  it('đơn đại lý: công nợ giao được; trả trước chưa trả bị khoá giao; nút xác nhận đại lý ở panel riêng', async () => {
+    const by = await list(
+      [
+        { code: 'DC', id: 'dc', type: 'DEALER', status: 'CONFIRMED' },
+        { code: 'DP', id: 'dp', type: 'DEALER', status: 'PENDING_PAYMENT' },
+      ],
+      [{ refId: 'dc' }],
+    );
+    expect(by.DC?.allowedTransitions).toContain('DELIVERED');
+    expect(by.DP?.allowedTransitions).not.toContain('SHIPPING');
+    expect(by.DC?.canConfirmPayment).toBe(false);
+    expect(by.DP?.canConfirmPayment).toBe(false);
   });
 });
 
@@ -1001,5 +1303,94 @@ describe('AdminService.listReturnRequests / listDealerApplications — thứ t�
     const d = daPrisma();
     await mkAdmin(d.prisma).listDealerApplications(undefined, 1, 20);
     expect(d.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
+  });
+});
+
+/**
+ * C-024 / Q-06: đơn chuyển khoản lẻ (khách hoặc CTV lên đơn hộ) trước đây không có cách nào ghi nhận
+ * "đã nhận tiền" ngoài webhook Pancake — webhook không tới là đơn kẹt PENDING_PAYMENT mãi.
+ */
+describe('AdminService.confirmOrderPayment', () => {
+  function make(order: Record<string, unknown> | null, outcome = 'PAID') {
+    const prisma = makePrisma({
+      order: {
+        findFirst: jest.fn().mockResolvedValue(order),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
+      },
+    });
+    const orderStatus = {
+      markPaid: jest.fn().mockResolvedValue({ outcome, order: { ...order, paymentStatus: 'PAID' } }),
+    } as unknown as OrderStatusService;
+    const svc = new AdminService(
+      prisma,
+      config,
+      loyalty,
+      affiliate,
+      notifications,
+      new OrderReversalService(flash, coupons),
+      orderStatus,
+      rbac,
+      defaultGomdonOrder,
+      defaultGomdonClient,
+    );
+    return { svc, orderStatus: orderStatus as unknown as { markPaid: jest.Mock } };
+  }
+  const bankOrder = (over: Record<string, unknown> = {}) => ({
+    id: 'o1',
+    code: 'TB-1',
+    type: 'RETAIL',
+    status: 'PENDING_PAYMENT',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    total: 350000,
+    ...over,
+  });
+
+  it('đơn lẻ chuyển khoản → gọi hàm PAID dùng chung với actor ADMIN + mã GD vào ghi chú lịch sử', async () => {
+    const { svc, orderStatus } = make(bankOrder());
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: ' FT999 ', note: 'khớp sao kê' });
+    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', {
+      actorType: 'ADMIN',
+      actorId: 'admin-1',
+      note: 'Admin xác nhận · Mã GD FT999 · khớp sao kê',
+    });
+    expect(res).toMatchObject({ ok: true, alreadyPaid: false });
+    expect(res.order).toMatchObject({ id: 'o1', paymentStatus: 'PAID' });
+  });
+
+  it('bấm lại / admin khác đã bấm → 200 alreadyPaid, không lỗi', async () => {
+    const { svc } = make(bankOrder({ paymentStatus: 'PAID', status: 'CONFIRMED' }), 'ALREADY_PAID');
+    await expect(svc.confirmOrderPayment('admin-2', 'o1')).resolves.toMatchObject({ ok: true, alreadyPaid: true });
+  });
+
+  it('đơn đã huỷ/trả → 400 nhắc hoàn tiền thủ công', async () => {
+    const { svc } = make(bankOrder({ status: 'CANCELLED' }), 'CLOSED');
+    const err = await svc.confirmOrderPayment('admin-1', 'o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toContain('hoàn tiền thủ công');
+  });
+
+  it('đơn đã hoàn tiền (REFUNDED) → 400', async () => {
+    const { svc } = make(bankOrder({ paymentStatus: 'REFUNDED', status: 'CONFIRMED' }), 'NOT_PAYABLE');
+    await expect(svc.confirmOrderPayment('admin-1', 'o1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each(['COD', 'WALLET', 'ZALOPAY'])('đơn %s → 400, không gọi hàm PAID', async (paymentMethod) => {
+    const { svc, orderStatus } = make(bankOrder({ paymentMethod }));
+    await expect(svc.confirmOrderPayment('admin-1', 'o1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
+  it('đơn đại lý → 400 chỉ đường sang xác nhận đơn đại lý (luật ghi công nợ ở đó)', async () => {
+    const { svc, orderStatus } = make(bankOrder({ type: 'DEALER' }));
+    const err = await svc.confirmOrderPayment('admin-1', 'o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toContain('đại lý');
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
+  it('không có đơn → 404', async () => {
+    const { svc } = make(null);
+    await expect(svc.confirmOrderPayment('admin-1', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

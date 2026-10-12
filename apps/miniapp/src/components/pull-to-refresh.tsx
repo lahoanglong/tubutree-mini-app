@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { Leaf } from 'lucide-react';
+import { Icon } from './ui/icon';
 
 /**
  * Pull-to-refresh cho trang zmp-ui (không có API sẵn). PHÒNG THỦ để không xung đột scroll:
@@ -97,16 +99,15 @@ export function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<unknown>
             zIndex: 5,
           }}
         >
-          <span
+          <Icon
+            icon={Leaf}
+            tone="brand"
             style={{
-              fontSize: 18,
               opacity: Math.min(1, pull / THRESHOLD),
               transform: refreshing ? 'none' : `rotate(${pull * 4}deg)`,
             }}
             className={refreshing ? 'ptr-spin' : undefined}
-          >
-            🌿
-          </span>
+          />
         </div>
       )}
     </div>

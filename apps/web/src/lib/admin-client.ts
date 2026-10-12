@@ -19,7 +19,10 @@ export interface AdminUser {
   fullName: string | null;
   phone: string | null;
   role: string;
+  /** Điểm Xanh lô thường (có hạn). Tổng khách thấy = pointsBalance + pointsConvertedBalance. */
   pointsBalance: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi như 0. */
+  pointsConvertedBalance?: number;
   createdAt: string;
 }
 /** Khớp model OrderItem của API (snapshot tên SP/biến thể + đơn giá lúc mua). */
@@ -37,6 +40,23 @@ export interface AdminOrderItem {
   /** Số lượng đang đặt trước (đơn đại lý vượt tồn) — 0 với đơn khác. */
   backorderedQty?: number;
 }
+/** Ảnh chụp địa chỉ giao lúc đặt (Order.shippingAddress). Mọi trường có thể thiếu với đơn cũ / đơn tạo tay. */
+export interface AdminShippingAddress {
+  recipient?: string;
+  phone?: string;
+  street?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+}
+/** Yêu cầu xuất hoá đơn VAT khách gửi lúc thanh toán (Order.invoiceRequest). */
+export interface AdminInvoiceRequest {
+  taxCode?: string;
+  companyName?: string;
+  address?: string;
+  email?: string;
+}
+export type AdminInvoiceStatus = 'NOT_REQUESTED' | 'REQUESTED' | 'ISSUED' | 'FAILED';
 export interface AdminOrder {
   id: string;
   code: string;
@@ -56,6 +76,10 @@ export interface AdminOrder {
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
+  shippingAddress?: AdminShippingAddress | null;
+  invoiceRequest?: AdminInvoiceRequest | null;
+  invoiceStatus?: AdminInvoiceStatus | null;
+  invoiceUrl?: string | null;
   shippingPartner?: string | null;
   shippingCode?: string | null;
   shippingStatus?: string | null;
@@ -77,6 +101,10 @@ export interface AdminOrder {
     fullName: string | null;
   } | null;
   items?: AdminOrderItem[];
+  /** Trạng thái API sẽ nhận ngay lúc này (AdminService.listOrders, cùng luật OrderStatusService.setStatus). */
+  allowedTransitions?: string[];
+  /** true = đơn lẻ chuyển khoản còn UNPAID, chưa huỷ/trả → nút "Đã nhận tiền". */
+  canConfirmPayment?: boolean;
 }
 export interface DashboardStats {
   totalRevenue: number;
@@ -104,6 +132,8 @@ export interface ConfigRow {
   value: unknown;
   description: string | null;
   category: string;
+  /** true = khoá không code nào đọc (GET /admin/config gắn): sửa vô tác dụng, API từ chối ghi. */
+  deprecated?: boolean;
 }
 export interface Page<T> {
   data: T[];
@@ -233,20 +263,67 @@ export const importSoldExternal = (csv: string) =>
 export const listUsers = (page = 1) =>
   apiFetch<Page<AdminUser>>(`/admin/users?page=${page}&limit=20`);
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
-export const setUserRole = (phone: string, role: UserRole) =>
-  apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
+/** tierId bắt buộc khi role = DEALER (BE từ chối nếu thiếu/không tồn tại — C-008); role khác không gửi. */
+export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
+  const tier = role === 'DEALER' ? tierId?.trim() : undefined;
+  return apiFetch<{ ok: boolean; id: string; phone: string | null; fullName: string | null; role: string; previousRole: string }>(
     '/admin/users/role',
-    { method: 'POST', body: { phone, role } },
+    { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
   );
+};
 export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
 export type RecyclingFilter = 'attention' | 'all';
-export const listOrders = (page = 1, status?: string, search?: string, recycling?: RecyclingFilter, limit = 20) =>
+/** pending = đơn VAT chưa xuất xong (REQUESTED/FAILED); issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
+export type InvoiceFilter = 'pending' | 'issued' | 'all';
+export const listOrders = (
+  page = 1,
+  status?: string,
+  search?: string,
+  recycling?: RecyclingFilter,
+  limit = 20,
+  invoice?: InvoiceFilter,
+) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }`,
+    }${invoice ? `&invoice=${invoice}` : ''}`,
+  );
+/** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
+export const countInvoicePending = () =>
+  listOrders(1, undefined, undefined, undefined, 1, 'pending').then((r) => r.meta.total);
+
+// ── Hoá đơn VAT: ghi nhận đã xuất ──
+/** Trùng @MaxLength(500) của IssueInvoiceDto. */
+export const INVOICE_URL_MAX = 500;
+export interface IssueInvoiceResult {
+  ok: boolean;
+  message: string;
+  order: { id: string; code: string; invoiceStatus: AdminInvoiceStatus; invoiceUrl: string | null };
+}
+/** POST /admin/orders/:id/issue-invoice — link tuỳ chọn (chỉ gửi khi có), BE chỉ nhận https. Lỗi 400 hiện NGUYÊN VĂN. */
+export const issueOrderInvoice = (orderId: string, invoiceUrl?: string) =>
+  apiFetch<IssueInvoiceResult>(`/admin/orders/${encodeURIComponent(orderId)}/issue-invoice`, {
+    method: 'POST',
+    body: invoiceUrl?.trim() ? { invoiceUrl: invoiceUrl.trim() } : {},
+  });
+
+// ── Lịch sử đổi trạng thái đơn ──
+export interface AdminOrderStatusHistoryRow {
+  id: string;
+  fromStatus: string;
+  toStatus: string;
+  /** ADMIN | CUSTOMER | MERCHANT | PANCAKE | SYSTEM */
+  actorType: string;
+  actorId: string | null;
+  note: string | null;
+  createdAt: string;
+  actor: { id: string; fullName: string | null; phone: string | null } | null;
+}
+export const getOrderStatusHistory = (orderId: string) =>
+  apiFetch<{ orderCode: string; history: AdminOrderStatusHistoryRow[] }>(
+    `/admin/orders/${encodeURIComponent(orderId)}/status-history`,
   );
 /** Số đơn trong hàng đợi "Cần xử lý thu gom" (đọc meta.total, không tải danh sách). */
 export const countRecyclingAttention = () =>
@@ -297,6 +374,19 @@ export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: st
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
   return apiFetch<ConfirmDealerPaymentResult>(`/admin/dealer-orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+    method: 'POST',
+    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+  });
+};
+
+/**
+ * POST /admin/orders/:id/confirm-payment — "Đã nhận tiền" cho đơn lẻ chuyển khoản (C-024): UNPAID → PAID
+ * (PENDING_PAYMENT → CONFIRMED), idempotent; luật nằm ở AdminService.confirmOrderPayment, lỗi 400 hiện nguyên văn.
+ */
+export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string } = {}) => {
+  const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
+  const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
+  return apiFetch<ConfirmDealerPaymentResult>(`/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
     method: 'POST',
     body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
   });
@@ -730,6 +820,12 @@ export const markDealerRewardClaimPaid = (id: string, note?: string) =>
     method: 'POST',
     body: note?.trim() ? { note: note.trim() } : {},
   });
+/** REJECTED → PENDING khi từ chối nhầm (Q-09); lý do từ chối cũ được BE giữ lại trong ghi chú admin. */
+export const reopenDealerRewardClaim = (id: string, note?: string) =>
+  apiFetch<AdminDealerRewardClaim>(`/admin/dealer-reward-claims/${encodeURIComponent(id)}/reopen`, {
+    method: 'POST',
+    body: note?.trim() ? { note: note.trim() } : {},
+  });
 
 // ── Duyệt yêu cầu rút tiền (P0 A5-08 = A6-05): hoa hồng CTV / Ví Tubu → ngân hàng ──
 export type AdminPayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
@@ -773,6 +869,42 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
     },
   });
 
+// ── Hoàn tiền khách cuối của đơn CTV lên hộ (PA-1 / Q-01): hàng đợi chuyển khoản tay ──
+export type AdminCustomerRefundStatus = 'PENDING' | 'COMPLETED';
+export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
+/** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
+export interface AdminCustomerRefund {
+  id: string;
+  orderId: string;
+  orderCode: string;
+  amount: number;
+  phone: string | null;
+  recipientName: string | null;
+  customerUserId: string | null;
+  method: AdminCustomerRefundMethod;
+  status: AdminCustomerRefundStatus;
+  reason: string;
+  completedAt: string | null;
+  /** adminId xác nhận đã chuyển khoản; BE không kèm tên admin. */
+  completedBy: string | null;
+  bankRef: string | null;
+  adminNote: string | null;
+  createdAt: string;
+}
+export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20) =>
+  apiFetch<Page<AdminCustomerRefund>>(
+    `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`,
+  );
+/** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
+export const markCustomerRefundPaid = (id: string, input: { bankRef?: string; note?: string } = {}) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/mark-paid`, {
+    method: 'POST',
+    body: {
+      ...(input.bankRef?.trim() ? { bankRef: input.bankRef.trim() } : {}),
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    },
+  });
+
 // ── Tích điểm tại quầy (POS) ──
 export interface PosMember {
   id: string;
@@ -782,6 +914,8 @@ export interface PosMember {
   phone: string | null;
   tier: string;
   pointsBalance: number;
+  /** Lô quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi như 0. */
+  pointsConvertedBalance?: number;
 }
 export interface PosCreditResult {
   /** true = hoá đơn này đã được tích trước đó — trả lại kết quả cũ, KHÔNG cộng thêm. */
@@ -830,6 +964,96 @@ export interface RetentionDailyRow {
   ordersPerBuyerMtd: number;
   dauProxyRefreshToken: number;
   dauEventBased: number | null;
+  /** NS-1 của cohort "đơn đầu tiên rơi vào ngày date − 30": số khách và số khách có đơn thứ 2 trong 30 ngày. null = chưa tính. */
+  ns1CohortSize: number | null;
+  ns1RepeatCount: number | null;
 }
 export const getRetentionDaily = (days = 30) =>
   apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);
+
+// ── Ô chọn (khách / sản phẩm / bậc đại lý), duyệt đánh giá, gói định kỳ (C-092) ──
+export interface AdminVariationHit {
+  id: string;
+  name: string;
+  sku: string;
+  /** Giá đang bán (giá khuyến mãi nếu có, không thì giá lẻ). */
+  price: number;
+  stock: number;
+  isActive: boolean;
+}
+export interface AdminProductHit {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string | null;
+  thumbnail: string | null;
+  isActive: boolean;
+  variations: AdminVariationHit[];
+}
+export interface AdminVariationLabel {
+  id: string;
+  name: string;
+  sku: string;
+  productId: string;
+  productName: string;
+}
+/** Ô chọn chỉ tìm khi đủ ký tự này — khớp ngưỡng của BE (ngắn hơn trả mảng rỗng). */
+export const PICKER_MIN_CHARS = 2;
+export const searchAdminProducts = (q: string) =>
+  apiFetch<AdminProductHit[]>(`/admin/products/search?q=${encodeURIComponent(q.trim())}`);
+export const lookupVariations = (ids: string[]) =>
+  ids.length === 0
+    ? Promise.resolve<AdminVariationLabel[]>([])
+    : apiFetch<AdminVariationLabel[]>(`/admin/variations/lookup?ids=${encodeURIComponent(ids.join(','))}`);
+export const searchAdminUsers = (search: string, limit = 8) =>
+  apiFetch<Page<AdminUser>>(`/admin/users?page=1&limit=${limit}&search=${encodeURIComponent(search.trim())}`);
+
+export interface AdminDealerTier {
+  id: string;
+  name: string;
+  minOrderVolume: number;
+  creditLimit: number;
+  paymentTerms: string | null;
+}
+export const listDealerTiers = () => apiFetch<AdminDealerTier[]>('/admin/dealer-tiers');
+
+export type ReviewVisibilityFilter = 'visible' | 'hidden';
+export interface AdminReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  images: string[];
+  videoUrl: string | null;
+  isVisible: boolean;
+  isVerified: boolean;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  product: { id: string; name: string; slug: string };
+}
+export const listAdminReviews = (page = 1, visibility?: ReviewVisibilityFilter, rating?: number, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (visibility) params.set('visibility', visibility);
+  if (rating) params.set('rating', String(rating));
+  return apiFetch<Page<AdminReview>>(`/admin/reviews?${params.toString()}`);
+};
+/** Route của module reviews (không nằm dưới /admin): BE tự tính lại điểm sao của sản phẩm sau khi ẩn/hiện. */
+export const setReviewVisibility = (id: string, isVisible: boolean) =>
+  apiFetch<{ ok: boolean; isVisible: boolean }>(`/reviews/${id}/visibility`, { method: 'POST', body: { isVisible } });
+
+export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+export interface AdminSubscription {
+  id: string;
+  status: SubscriptionStatus;
+  quantity: number;
+  intervalWeeks: number;
+  nextRunAt: string;
+  lastOrderId: string | null;
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  variation: { id: string; name: string; sku: string; product: { id: string; name: string } };
+}
+export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, limit = 20) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (status) params.set('status', status);
+  return apiFetch<Page<AdminSubscription>>(`/admin/subscriptions?${params.toString()}`);
+};

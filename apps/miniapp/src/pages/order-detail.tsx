@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, MessageSquare, Recycle } from 'lucide-react';
+import { RotateCcw, MessageSquare, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { MultiImageUpload } from '../components/image-upload';
-import { formatVnd, addressLine, isRecyclingPickedUp, recyclingPickupView, type RecyclingTone } from '../utils/format';
+import {
+  formatVnd,
+  formatPoints,
+  formatDateTime,
+  addressLine,
+  isRecyclingPickedUp,
+  recyclingPickupView,
+  type RecyclingTone,
+} from '../utils/format';
+import { shippingEventLabel } from '../utils/format-shipping';
 import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex, isReorderable } from '../utils/order-status';
 import {
   openOAChat,
@@ -25,6 +34,7 @@ import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
 import { Badge } from '../components/ui/badge';
+import { Icon, type IconProps } from '../components/ui/icon';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
@@ -59,6 +69,7 @@ export default function OrderDetailPage() {
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const authStatus = useAuthStore((s) => s.status);
+  const meId = useAuthStore((s) => s.user?.id);
 
   // Guard auth: tránh gọi /orders/:code khi chưa silent-login xong (deeplink từ thông báo
   // đơn hàng ngay lúc app vừa mở → 401 hiện lỗi trong khi chỉ cần chờ vài trăm ms là có phiên).
@@ -185,9 +196,15 @@ export default function OrderDetailPage() {
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
   // Đơn thu gom tái chế mà bưu tá đã lấy hàng: BE chặn khách tự huỷ → ẩn nút (liên hệ Zalo OA).
+  // Đơn CTV lên hộ khách đã thanh toán: BE chỉ cho admin huỷ (tiền là của khách cuối) → ẩn nút với CTV.
+  // OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
+  const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
+  const isPaidAssistedByMe =
+    !!assisted.placedForCustomer && o.paymentStatus === 'PAID' && !!meId && assisted.referrerUserId === meId;
   const canCancel =
     (o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED') &&
-    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus));
+    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus)) &&
+    !isPaidAssistedByMe;
   const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
@@ -201,8 +218,10 @@ export default function OrderDetailPage() {
 
       {/* ── Status hero ── */}
       <Box p={4} style={{ background: color.bg }}>
-        <Text size="xSmall" style={{ color: color.fg, opacity: 0.8 }}>
-          {new Date(o.createdAt).toLocaleString('vi-VN')}
+        {/* Không dùng opacity để làm dòng phụ: nó kéo cặp màu trạng thái xuống dưới 4,5:1 (chờ thanh toán 3,84).
+            Thứ bậc đã có từ cỡ xSmall dưới tiêu đề đậm. */}
+        <Text size="xSmall" style={{ color: color.fg }}>
+          {formatDateTime(o.createdAt)}
         </Text>
         <Text.Title size="small" style={{ color: color.fg }}>
           {vi.orderStatus[o.status] ?? o.status}
@@ -277,14 +296,15 @@ export default function OrderDetailPage() {
               <Text
                 size="xSmall"
                 bold
-                className="tubu-press"
-                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-block' }}
+                className="tubu-press tubu-hit-44"
+                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');
                   navigate(`/product/${it.productSlug}`);
                 }}
               >
-                ★ {vi.orders.reviewItem}
+                <Icon icon={Star} size="sm" tone="brand" />
+                {vi.orders.reviewItem}
               </Text>
             )}
           </Box>
@@ -296,9 +316,9 @@ export default function OrderDetailPage() {
         <KeyValueRow label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
         {o.discount > 0 && <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} tone="success" />}
         {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
-            khách tiêu điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
+            khách tiêu Điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
         {o.pointsUsed > 0 && (
-          <KeyValueRow label={vi.orders.pointsUsed} value={`${o.pointsUsed.toLocaleString('vi-VN')} điểm`} />
+          <KeyValueRow label={vi.orders.pointsUsed} value={formatPoints(o.pointsUsed)} />
         )}
         <KeyValueRow
           label={vi.checkout.shippingFee}
@@ -308,8 +328,9 @@ export default function OrderDetailPage() {
         <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
         <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
         {o.pointsEarned > 0 && o.status !== 'CANCELLED' && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4 }}>
-            🌱 {vi.checkout.pointsEarn(o.pointsEarned)}
+          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Icon icon={Leaf} size="sm" tone="brand" />
+            {vi.checkout.pointsEarn(o.pointsEarned)}
           </Text>
         )}
       </Box>
@@ -330,7 +351,7 @@ export default function OrderDetailPage() {
               )}
               {o.shippingStatus && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
-                  {o.shippingStatus}
+                  {shippingEventLabel(o.shippingStatus)}
                 </Text>
               )}
             </Box>
@@ -398,11 +419,11 @@ export default function OrderDetailPage() {
                           fontWeight: i === 0 ? 600 : 400,
                         }}
                       >
-                        {ev.status ?? '—'}
+                        {shippingEventLabel(ev.status) ?? '—'}
                       </Text>
                       {ev.at && (
                         <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {new Date(ev.at).toLocaleString('vi-VN')}
+                          {formatDateTime(ev.at)}
                         </Text>
                       )}
                     </Box>
@@ -540,10 +561,16 @@ export default function OrderDetailPage() {
           if (ret) {
             const label =
               ret.status === 'APPROVED'
-                ? '✅ Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
+                ? 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
                 : ret.status === 'REJECTED'
-                  ? `❌ Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
-                  : '⏳ Yêu cầu đổi/trả đang xử lý (trong 24h)';
+                  ? `Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
+                  : 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
+            const retIcon: { icon: LucideIcon; tone: IconProps['tone'] } =
+              ret.status === 'APPROVED'
+                ? { icon: CheckCircle2, tone: 'brand' }
+                : ret.status === 'REJECTED'
+                  ? { icon: XCircle, tone: 'danger' }
+                  : { icon: Clock, tone: 'muted' };
             const retColor =
               ret.status === 'APPROVED'
                 ? 'var(--color-text-success)'
@@ -552,7 +579,8 @@ export default function OrderDetailPage() {
                   : 'var(--color-text-secondary)';
             return (
               <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-                <Text size="xSmall" style={{ color: retColor }}>
+                <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
                   {label}
                 </Text>
               </Box>

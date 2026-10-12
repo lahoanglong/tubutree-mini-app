@@ -12,9 +12,22 @@ export const CLAIM_STATUS_ORDER: DealerRewardClaimStatus[] = ['PENDING', 'APPROV
 
 export const CLAIM_REWARD_TYPE_LABEL: Record<string, string> = { TOUR: 'Tour', GIFT: 'Quà', OTHER: 'Khác' };
 
-/** Thao tác hợp lệ theo luồng PENDING → APPROVED | REJECTED; APPROVED → PAID (khớp DealerService). */
-export function claimActions(status: DealerRewardClaimStatus): { approve: boolean; reject: boolean; markPaid: boolean } {
-  return { approve: status === 'PENDING', reject: status === 'PENDING', markPaid: status === 'APPROVED' };
+/**
+ * Thao tác hợp lệ theo luồng PENDING → APPROVED | REJECTED; APPROVED → PAID; REJECTED → PENDING (mở lại khi từ chối
+ * nhầm, Q-09). Khớp DealerService.
+ */
+export function claimActions(status: DealerRewardClaimStatus): {
+  approve: boolean;
+  reject: boolean;
+  markPaid: boolean;
+  reopen: boolean;
+} {
+  return {
+    approve: status === 'PENDING',
+    reject: status === 'PENDING',
+    markPaid: status === 'APPROVED',
+    reopen: status === 'REJECTED',
+  };
 }
 
 /** Lý do từ chối bắt buộc (BE @IsNotEmpty @MaxLength(500)); null = hợp lệ. */

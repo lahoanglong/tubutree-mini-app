@@ -100,7 +100,7 @@ export class OrdersService {
   }
 
   /** Chi tiết đơn cho màn khách (GET /orders/:code) — kèm ảnh/tồn kho từng dòng. Các luồng nội bộ
-   * (cancel/repurchase/requestReturn/track) vẫn dùng detail() thô, không tốn thêm truy vấn. */
+   * (cancel/repurchase/requestReturn) vẫn dùng detail() thô, không tốn thêm truy vấn. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
     const [view] = await this.attachItemMedia([order]);
@@ -142,7 +142,7 @@ export class OrdersService {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
-    this.assertCustomerCancellable(order);
+    this.assertCustomerCancellable(order, userId);
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -157,7 +157,7 @@ export class OrdersService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
       const current = await tx.order.findUnique({ where: { id: order.id }, include: { items: true } });
       if (!current || current.status === 'CANCELLED') return false; // request khác đã huỷ trước → không hoàn lần 2
-      this.assertCustomerCancellable(current);
+      this.assertCustomerCancellable(current, userId);
       const res = await tx.order.updateMany({
         where: { id: current.id, status: current.status },
         data: { status: 'CANCELLED' },
@@ -174,7 +174,7 @@ export class OrdersService {
           actorId: userId,
         },
       });
-      // Hoàn ví/xu + restock + release flash quota — logic dùng chung với admin.reviewReturn/
+      // Hoàn ví/Điểm Xanh + restock + release flash quota — logic dùng chung với admin.reviewReturn/
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
@@ -205,10 +205,27 @@ export class OrdersService {
   }
 
   /** Luật khách tự huỷ — dùng cả cho ảnh chụp (kiểm tra sớm) lẫn bản đọc lại trong tx (quyết định). */
-  private assertCustomerCancellable(order: { status: string; hasRecyclingPickup?: boolean | null; gomdonStatus?: string | null }) {
+  private assertCustomerCancellable(
+    order: {
+      status: string;
+      paymentStatus?: string | null;
+      placedForCustomer?: boolean | null;
+      referrerUserId?: string | null;
+      hasRecyclingPickup?: boolean | null;
+      gomdonStatus?: string | null;
+    },
+    actorId: string,
+  ) {
     if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
       throw new BadRequestException(
         'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+      );
+    }
+    // Tiền của đơn lên hộ là của khách cuối: để CTV tự huỷ sau khi khách đã trả thì CTV quyết định
+    // dòng tiền của người khác (C-001/Q-01). Chỉ admin huỷ, hoàn về khách qua OrderReversalService.
+    if (order.placedForCustomer && order.paymentStatus === 'PAID' && order.referrerUserId === actorId) {
+      throw new BadRequestException(
+        'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Vui lòng liên hệ Tubu để admin huỷ và hoàn tiền cho khách.',
       );
     }
     // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không
@@ -282,27 +299,6 @@ export class OrdersService {
     return { ...cart, cart, results };
   }
 
-  async issueInvoice(userId: string, code: string) {
-    const order = await this.detail(userId, code);
-    if (!order.invoiceRequest) {
-      throw new BadRequestException('Đơn này chưa có yêu cầu xuất hóa đơn VAT.');
-    }
-    // Guard theo invoiceStatus hiện tại — trước đây set 'REQUESTED' vô điều kiện nên double-tap,
-    // hoặc gọi lại sau khi webhook ISSUED (pancake.processor.ts onInvoiceIssued) đã phát hành
-    // hóa đơn thật, sẽ âm thầm lật ngược invoiceStatus đã ISSUED về REQUESTED.
-    if (order.invoiceStatus === 'ISSUED') {
-      throw new BadRequestException('Hóa đơn đã được phát hành.');
-    }
-    if (order.invoiceStatus === 'REQUESTED') {
-      return { ok: true, message: 'Yêu cầu phát hành hóa đơn đang được xử lý.' };
-    }
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { invoiceStatus: 'REQUESTED' },
-    });
-    return { ok: true, message: 'Đã gửi yêu cầu phát hành hóa đơn.' };
-  }
-
   /** Yêu cầu đổi/trả (§6.4): chỉ đơn DELIVERED, trong window (config returns.window_days=7),
    * chỉ-lỗi-NSX (user nêu lý do + ảnh). Admin duyệt sau (AdminService.reviewReturn). */
   async requestReturn(userId: string, code: string, dto: { reason: string; images?: string[] }) {
@@ -348,18 +344,6 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
-  }
-
-  /** Force refetch trạng thái từ Pancake (Phase 1: trả trạng thái hiện tại; bổ sung poll khi có key). */
-  async track(userId: string, code: string) {
-    const order = await this.detail(userId, code);
-    return {
-      code: order.code,
-      status: order.status,
-      shippingStatus: order.shippingStatus,
-      shippingCode: order.shippingCode,
-      shippingHistory: order.shippingHistory ?? [],
-    };
   }
 
   /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */

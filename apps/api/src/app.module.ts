@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
@@ -12,6 +12,7 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DataRetentionModule } from './modules/data-retention/data-retention.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
@@ -25,7 +26,6 @@ import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
 import { FaqModule } from './modules/faq/faq.module';
 import { GroupBuyModule } from './modules/groupbuy/groupbuy.module';
 import { RefillModule } from './modules/refill/refill.module';
-import { BetaModule } from './modules/beta/beta.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
@@ -50,12 +50,14 @@ import { CskhModule } from './modules/cskh/cskh.module';
 import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AppThrottlerGuard } from './common/throttle/app-throttler.guard';
+import { throttlerOptions } from './common/throttle/throttle.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
+    ThrottlerModule.forRoot(throttlerOptions),
     PrismaModule,
     QueueModule,
     // Global cross-cutting
@@ -65,6 +67,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CouponsModule,
     NotificationsModule,
     AnalyticsModule,
+    DataRetentionModule,
     // Features
     AuthModule,
     HealthModule,
@@ -79,7 +82,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     AiAdvisorModule,
     GroupBuyModule,
     RefillModule,
-    BetaModule,
     ReviewsModule,
     WishlistModule,
     VouchersModule,
@@ -106,7 +108,7 @@ import { RolesGuard } from './common/guards/roles.guard';
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
   ],
 })
 export class AppModule {}

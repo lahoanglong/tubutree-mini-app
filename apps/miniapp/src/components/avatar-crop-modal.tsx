@@ -1,7 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
-import { Box, Text, Button, Sheet } from 'zmp-ui';
+import { Sheet } from 'zmp-ui';
 import { ZoomIn, ZoomOut, Check, X } from 'lucide-react';
 import { haptic } from '../utils/haptic';
+import { Button } from './ui/button';
+import { Heading, Text } from './ui/text';
 
 export interface AvatarCropModalProps {
   visible: boolean;
@@ -124,13 +126,14 @@ export function AvatarCropModal({
     img.src = imageSrc;
   };
 
+  // Sheet nền tối giữ nguyên có chủ đích: thao tác cắt ảnh nổi trên nền tối, không theo nền sáng của BottomSheet.
   return (
     <Sheet visible={visible} onClose={onClose} autoHeight>
-      <Box p={4} style={{ background: '#121212', color: '#ffffff', textAlign: 'center' }}>
-        <Text bold size="large" style={{ color: '#ffffff', marginBottom: 4 }}>
+      <div style={{ padding: 16, background: 'var(--color-bg-inverse)', color: 'var(--color-text-inverse)', textAlign: 'center' }}>
+        <Heading variant="title-md" as="h2" tone="inverse" style={{ marginBottom: 4 }}>
           Cắt ảnh đại diện
-        </Text>
-        <Text size="xSmall" style={{ color: '#a0a0a0', marginBottom: 16 }}>
+        </Heading>
+        <Text variant="caption" tone="inverse" as="p" style={{ margin: 0, marginBottom: 16, opacity: 0.7 }}>
           Kéo di chuyển hoặc thu phóng để chọn góc mặt đẹp nhất
         </Text>
 
@@ -148,11 +151,11 @@ export function AvatarCropModal({
             margin: '0 auto',
             borderRadius: '50%',
             overflow: 'hidden',
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 0 3px var(--leaf-500)',
+            boxShadow: '0 0 0 9999px var(--color-bg-scrim), 0 0 0 3px var(--color-action-primary-bg)',
             cursor: dragging ? 'grabbing' : 'grab',
             touchAction: 'none',
             userSelect: 'none',
-            background: '#000000',
+            background: 'var(--color-bg-inverse)',
           }}
         >
           <img
@@ -177,13 +180,8 @@ export function AvatarCropModal({
         </div>
 
         {/* Zoom Slider Controls */}
-        <Box
-          flex
-          alignItems="center"
-          justifyContent="center"
-          style={{ gap: 12, marginTop: 24, marginBottom: 16 }}
-        >
-          <ZoomOut size={18} color="#a0a0a0" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 24, marginBottom: 16 }}>
+          <ZoomOut size={18} color="var(--color-text-inverse)" style={{ opacity: 0.7 }} aria-hidden />
           <input
             type="range"
             min={1}
@@ -193,37 +191,32 @@ export function AvatarCropModal({
             onChange={(e) => setZoom(parseFloat(e.target.value))}
             style={{
               width: 180,
-              accentColor: 'var(--leaf-500)',
+              accentColor: 'var(--color-action-primary-bg)',
               cursor: 'pointer',
             }}
           />
-          <ZoomIn size={18} color="#a0a0a0" />
-        </Box>
+          <ZoomIn size={18} color="var(--color-text-inverse)" style={{ opacity: 0.7 }} aria-hidden />
+        </div>
 
         {/* Action Buttons */}
-        <Box flex style={{ gap: 12, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
           <Button
             fullWidth
             variant="secondary"
-            onClick={() => {
+            onPress={() => {
               haptic('light');
               onClose();
             }}
-            style={{ background: 'rgba(255,255,255,0.15)', color: '#ffffff' }}
+            style={{ background: 'var(--stone-700)', color: 'var(--color-text-inverse)' }}
           >
-            <X size={16} style={{ marginRight: 6 }} /> Hủy chọn
+            <X size={16} style={{ marginRight: 6 }} aria-hidden /> Hủy chọn
           </Button>
 
-          <Button
-            fullWidth
-            loading={processing} disabled={processing}
-            onClick={handleConfirm}
-            style={{ background: 'var(--leaf-600)' }}
-          >
-            <Check size={16} style={{ marginRight: 6 }} /> Xác nhận dùng
+          <Button fullWidth loading={processing} icon={Check} onPress={handleConfirm}>
+            Xác nhận dùng
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
     </Sheet>
   );
 }

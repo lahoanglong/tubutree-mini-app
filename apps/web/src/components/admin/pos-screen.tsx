@@ -11,6 +11,7 @@ import {
   type PosMember,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { pointsSummary } from '@/lib/checkout-points';
 import {
   memberCodeError,
   orderTotalError,
@@ -19,7 +20,8 @@ import {
   receiptIdError,
   type PosErrorView,
 } from '@/lib/loyalty-pos';
-import { Field, INPUT_CLASS, Notice } from './ui';
+import { Field, INPUT_CLASS, Notice, TOUCH_H } from './ui';
+import { formatDateTime } from '@/lib/format-date';
 
 function ErrorBox({ err }: { err: PosErrorView }) {
   return (
@@ -40,6 +42,7 @@ export function PosScreen() {
 
   const [code, setCode] = useState('');
   const [member, setMember] = useState<PosMember | null>(null);
+  const memberPoints = member ? pointsSummary(member) : null;
   const [memberCodeUsed, setMemberCodeUsed] = useState('');
   const [lookupErr, setLookupErr] = useState<PosErrorView | null>(null);
 
@@ -130,9 +133,9 @@ export function PosScreen() {
         </Notice>
       )}
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-          <ScanLine className="h-4 w-4 text-green-700" aria-hidden /> 1. Quét thẻ thành viên
+      <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-stone-900">
+          <ScanLine className="h-4 w-4 text-forest-700" aria-hidden /> 1. Quét thẻ thành viên
         </h2>
         <form
           className="mt-2 flex flex-wrap gap-2"
@@ -146,7 +149,7 @@ export function PosScreen() {
             autoFocus
             aria-label="Mã thành viên"
             placeholder="Quét mã QR trên thẻ, hoặc nhập TUBU… / SĐT"
-            className={`${INPUT_CLASS} min-w-[240px] flex-1 font-mono`}
+            className={`${INPUT_CLASS} ${TOUCH_H} min-w-[240px] flex-1 font-mono`}
             value={code}
             maxLength={40}
             onChange={(e) => setCode(e.target.value)}
@@ -155,7 +158,7 @@ export function PosScreen() {
           <button
             type="submit"
             disabled={lookup.isPending || locked || !code.trim()}
-            className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+            className={`${TOUCH_H} rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`}
           >
             {lookup.isPending ? 'Đang tra…' : 'Tra cứu'}
           </button>
@@ -167,25 +170,26 @@ export function PosScreen() {
         )}
 
         {member && (
-          <div className="mt-3 flex items-center gap-3 rounded-md border border-green-200 bg-green-50 p-3" aria-label="Thành viên">
-            <UserRound className="h-8 w-8 shrink-0 text-green-700" aria-hidden />
+          <div className="mt-3 flex items-center gap-3 rounded-control border border-forest-200 bg-forest-50 p-3" aria-label="Thành viên">
+            <UserRound className="h-8 w-8 shrink-0 text-forest-700" aria-hidden />
             <div className="min-w-0 flex-1">
-              <div className="font-semibold text-neutral-900">{member.name}</div>
-              <div className="text-xs text-neutral-600">
+              <div className="font-semibold text-stone-900">{member.name}</div>
+              <div className="text-xs text-stone-600">
                 {member.phone ?? 'Chưa có SĐT'} · Hạng <b>{member.tier}</b> · {member.memberCode}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-bold text-green-700">{member.pointsBalance.toLocaleString('vi-VN')}</div>
-              <div className="text-[11px] text-neutral-500">Điểm Xanh</div>
+              <div className="text-lg font-bold text-forest-700">{(memberPoints?.total ?? 0).toLocaleString('vi-VN')}</div>
+              <div className="text-[11px] text-stone-500">Điểm Xanh</div>
+              {memberPoints?.convertedNote && <div className="text-[11px] text-stone-500">{memberPoints.convertedNote}</div>}
             </div>
           </div>
         )}
       </section>
 
       {member && (
-        <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-900">2. Tích điểm cho hoá đơn</h2>
+        <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <h2 className="font-display text-sm font-semibold text-stone-900">2. Tích điểm cho hoá đơn</h2>
           <form
             className="mt-2 space-y-3"
             onSubmit={(e) => {
@@ -198,7 +202,7 @@ export function PosScreen() {
                 <input
                   aria-label="Tổng tiền hoá đơn"
                   inputMode="numeric"
-                  className={INPUT_CLASS}
+                  className={`${INPUT_CLASS} ${TOUCH_H}`}
                   placeholder="vd 250000"
                   value={total}
                   onChange={(e) => setTotal(e.target.value.replace(/[^\d.,]/g, ''))}
@@ -208,7 +212,7 @@ export function PosScreen() {
               <Field label="Mã hoá đơn POS" hint="In trên hoá đơn. Mỗi hoá đơn chỉ tích 1 lần.">
                 <input
                   aria-label="Mã hoá đơn POS"
-                  className={`${INPUT_CLASS} font-mono`}
+                  className={`${INPUT_CLASS} ${TOUCH_H} font-mono`}
                   placeholder="vd HD-000123"
                   value={receipt}
                   maxLength={64}
@@ -220,20 +224,20 @@ export function PosScreen() {
             <Field label="Ghi chú (tuỳ chọn)">
               <input
                 aria-label="Ghi chú"
-                className={INPUT_CLASS}
+                className={`${INPUT_CLASS} ${TOUCH_H}`}
                 value={note}
                 maxLength={200}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={locked}
               />
             </Field>
-            {formErr && <p role="alert" className="text-sm text-red-600">{formErr}</p>}
+            {formErr && <p role="alert" className="text-sm text-danger-fg">{formErr}</p>}
             {creditErr && <ErrorBox err={creditErr} />}
             {!result && (
               <button
                 type="submit"
                 disabled={locked}
-                className="w-full rounded bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-neutral-300"
+                className="min-h-[44px] w-full rounded-control bg-forest-600 px-4 py-2.5 text-sm font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500"
               >
                 {credit.isPending ? 'Đang tích điểm…' : 'Tích điểm'}
               </button>
@@ -245,20 +249,20 @@ export function PosScreen() {
               {result.replayed ? (
                 <Notice tone="warning">
                   Hoá đơn <b>{result.posTransaction.receiptId}</b> ĐÃ được tích điểm trước đó (
-                  {new Date(result.posTransaction.creditedAt).toLocaleString('vi-VN')}, +{result.posTransaction.pointsEarned} điểm) —
+                  {formatDateTime(result.posTransaction.creditedAt)}, +{result.posTransaction.pointsEarned} điểm) —
                   KHÔNG cộng thêm lần nữa.
                 </Notice>
               ) : (
                 <Notice tone="success">
                   Đã cộng <b>+{result.posTransaction.pointsEarned} Điểm Xanh</b> cho hoá đơn {result.posTransaction.receiptId} (
-                  {formatVnd(result.posTransaction.orderTotal)}). Số dư mới: <b>{result.member.pointsBalance.toLocaleString('vi-VN')}</b>{' '}
+                  {formatVnd(result.posTransaction.orderTotal)}). Số dư mới: <b>{pointsSummary(result.member).total.toLocaleString('vi-VN')}</b>{' '}
                   điểm.
                 </Notice>
               )}
               <button
                 type="button"
                 onClick={nextCustomer}
-                className="flex w-full items-center justify-center gap-2 rounded border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-control border border-stone-450 bg-stone-0 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
               >
                 <RotateCcw className="h-4 w-4" aria-hidden /> Khách tiếp theo
               </button>

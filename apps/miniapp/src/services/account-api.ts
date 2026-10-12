@@ -1,9 +1,21 @@
 import { api } from './api';
+import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
+import { formatNumber } from '../utils/format';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
+  /** Điểm Xanh lô thường (có hạn, trần % khi dùng ở thanh toán). Tổng khách thấy: xem `pointsSummary` (utils/points-lots). */
   pointsBalance: number;
+  /**
+   * Điểm Xanh lô quy đổi từ xu cũ: không hết hạn, dùng ở thanh toán tới 100% giá trị hàng, không đổi quà,
+   * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
+   */
+  pointsConvertedBalance?: number;
+  /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
+  pointsTotal?: number;
+  /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
+  redeemableTotal?: number;
   /**
    * Điểm XÉT HẠNG 12 tháng — CHỈ điểm tích từ đơn online đã giao, trừ phần của đơn bị trả/huỷ
    * (không gồm điểm danh, tích tại quầy, hoàn điểm đã dùng, Vườn Xanh, đánh giá, season pass).
@@ -32,6 +44,8 @@ export interface PointsTxn {
   reason: string;
   refType: string | null;
   expiresAt: string | null;
+  /** Lô của dòng sổ; dòng cũ/API cũ không có → lô thường. */
+  lot?: 'STANDARD' | 'CONVERTED';
   createdAt: string;
 }
 
@@ -46,36 +60,44 @@ export interface CouponDTO {
 
 export interface WalletSummary {
   walletBalance: number;
-  coinsBalance: number;
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
-  xuConvertMultiplier: number;
   withdrawMin: number;
   withdrawFee: number;
 }
 
-export interface CoinTxn {
+/** Một dòng sao kê Ví Tubu (sổ cái wallet_transactions). delta có dấu: + vào ví, − ra khỏi ví. */
+export interface WalletTxn {
   id: string;
   delta: number;
-  reason: string;
-  refType: string | null;
+  balanceAfter: number;
+  type: string;
+  reason: string | null;
+  orderId: string | null;
   createdAt: string;
+}
+
+export interface WalletTxnPage {
+  data: WalletTxn[];
+  meta: { page: number; limit: number; total: number };
 }
 
 export interface ReferralMilestone {
   count: number;
-  bonus: number;
+  bonusPoints: number;
 }
 
-export interface CoinsOverview {
-  coinsBalance: number;
+/** GET /me/referral — thống kê giới thiệu bạn bè, thưởng bằng Điểm Xanh. */
+export interface ReferralOverview {
   referralCode: string;
-  referralEarned: number;
-  referralSuccessCount: number;
-  referralMilestones?: ReferralMilestone[];
-  nextMilestone?: ReferralMilestone | null;
-  transactions: CoinTxn[];
+  successCount: number;
+  earnedPoints: number;
+  milestones: ReferralMilestone[];
+  nextMilestone: ReferralMilestone | null;
+  /** Optional: API cũ chưa trả. */
+  windowDays?: number;
+  minOrderAmount?: number;
 }
 
 export interface BankInfo {
@@ -147,7 +169,7 @@ export interface CheckInReward {
   isToday: boolean;
 }
 
-/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh hạt giống Vườn Xanh). */
+/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh giọt nước Vườn Xanh). */
 export interface CheckInStatusResponse {
   checkedInToday: boolean;
   /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
@@ -183,6 +205,7 @@ export interface MemberCardResponse {
   posCreditEnabled: boolean;
 }
 
+export const getReferral = () => api.get<ReferralOverview>('/me/referral').then((r) => r.data);
 export const getLoyalty = () => api.get<LoyaltyOverview>('/me/loyalty').then((r) => r.data);
 export const getPointsTransactions = () =>
   api.get<PointsTxn[]>('/me/points/transactions').then((r) => r.data);
@@ -202,12 +225,21 @@ export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/memb
 export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
-  if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy voucher';
+  if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
+  if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
   if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';
+  if (reason.startsWith('XU_TO_POINTS')) return 'Chuyển từ xu cũ sang Điểm Xanh';
+  if (reason.startsWith('REFERRAL')) {
+    return reason.includes('REVOKE') ? 'Thu hồi thưởng giới thiệu' : 'Thưởng giới thiệu bạn bè';
+  }
+  if (reason.startsWith('COMMUNITY')) return 'Thưởng cộng đồng';
+  if (reason.startsWith('STOREFRONT_QUEST')) return 'Thưởng nhiệm vụ gian hàng';
+  if (reason.startsWith('CTV_MILESTONE')) return 'Thưởng mốc doanh số CTV';
+  if (reason.startsWith('GAME_BUY_TREE')) return 'Góp quỹ trồng cây';
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
@@ -233,12 +265,12 @@ export function lockedPointsNote(
   const inWindow = locked - ret;
   const parts: string[] = [];
   if (inWindow > 0 && ov.lockedUntil) {
-    parts.push(`${inWindow} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
+    parts.push(`${formatNumber(inWindow)} điểm từ đơn mới giao sẽ dùng được sau ngày ${vnDate(ov.lockedUntil)} (hết hạn đổi/trả hàng)`);
   }
-  if (ret > 0) parts.push(`${ret} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
-  if (parts.length === 0) parts.push(`${locked} điểm từ đơn mới giao chưa dùng được`);
+  if (ret > 0) parts.push(`${formatNumber(ret)} điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong`);
+  if (parts.length === 0) parts.push(`${formatNumber(locked)} điểm từ đơn mới giao chưa dùng được`);
   const usable = ov.redeemablePoints ?? Math.max(0, ov.pointsBalance - locked);
-  return `Đổi quà dùng được ${usable} điểm: ${parts.join('; ')}.`;
+  return `Đổi quà dùng được ${formatNumber(usable)} điểm: ${parts.join('; ')}.`;
 }
 
 /** Nhãn nút đổi quà — không nói "Cần X điểm" khi số dư đủ mà chỉ đang chờ mở khoá điểm. */
@@ -248,7 +280,7 @@ export function rewardButtonLabel(
 ): string {
   if (r.canRedeem) return 'Đổi ngay';
   if (catalog.redeemablePoints !== undefined && catalog.pointsBalance >= r.pointsCost) return 'Chờ mở khoá điểm';
-  return `Cần ${r.pointsCost} điểm`;
+  return `Cần ${formatNumber(r.pointsCost)} điểm`;
 }
 
 /** Nút điểm danh: ghi đúng số điểm của ô hôm nay (ô backend sẽ trả khi bấm). */
@@ -281,23 +313,13 @@ export function memberCardHint(card: Pick<MemberCardResponse, 'posCreditEnabled'
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
+export const getWalletTransactions = (page: number, limit = 20) =>
+  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit } }).then((r) => r.data);
 export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey: string) =>
   api
     .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
       '/wallet/withdraw',
       { amount, bankInfo },
-      { headers: { 'Idempotency-Key': idempotencyKey } },
-    )
-    .then((r) => r.data);
-
-// TubuXu
-export const getCoins = () => api.get<CoinsOverview>('/me/coins').then((r) => r.data);
-/** Doi Vi -> xu kem Idempotency-Key: doi 1 chieu (xu khong rut duoc) nen double-tap khong duoc doi 2 lan. */
-export const convertToXu = (amount: number, idempotencyKey: string) =>
-  api
-    .post<{ spent: number; received: number; multiplier: number }>(
-      '/wallet/convert-xu',
-      { amount },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     .then((r) => r.data);
@@ -310,8 +332,8 @@ export interface NotificationDTO {
   status: 'SENT' | 'FAILED' | 'READ';
   sentAt: string;
 }
-export const getNotifications = () =>
-  api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
+export const getNotifications = async () =>
+  (await takeMeBlock('notifications')) ?? api.get<NotificationDTO[]>('/me/notifications').then((r) => r.data);
 export const markNotificationRead = (id: string) =>
   api.post<{ ok: boolean }>(`/me/notifications/${id}/read`).then((r) => r.data);
 

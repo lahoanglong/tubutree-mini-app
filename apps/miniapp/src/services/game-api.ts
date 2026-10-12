@@ -13,11 +13,13 @@ export interface GameProfile {
   brokenStreakDays?: number;
   streakRepairCost?: number;
   streakRepairable?: boolean;
-  /** Giá các món tiêu xu — BE là nguồn chân lý, FE chỉ hiển thị (không chép cứng). */
+  /** Giá các món tiêu giọt nước/Điểm Xanh — BE là nguồn chân lý, FE chỉ hiển thị (không chép cứng). */
   streakFreezeCost?: number;
-  xuPerSeed?: number;
-  treeXuPrice?: number;
+  /** Điểm Xanh cho 1 lượt góp quỹ trồng cây. */
+  treePointsPrice?: number;
   tankCapacity?: number;
+  /** Điểm Xanh cho 1 lượt quay (game.spin_buy_cost_points). */
+  spinCostPoints?: number;
 }
 export interface CheckInResult {
   seedsEarned: number;
@@ -105,12 +107,22 @@ export const waterTree = (drops: number) =>
     treesPlanted: number;
     reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
   }>('/game/tree/water', { drops }).then((r) => r.data);
-/** Mua nước 💧 bằng TubuXu. */
+/** Mua nước 💧: BE đã ngừng (410), giữ hàm cho đủ API. */
 export const buySeeds = (seeds: number) =>
   api.post<{ seeds: number; cost: number; totalSeeds: number }>('/game/seeds/buy', { seeds }).then((r) => r.data);
-/** Mua 1 cây thật (PlantedTree) bằng TubuXu. */
-export const buyTree = () =>
-  api.post<{ certificateCode: string; treeType: string; cost: number }>('/game/tree/buy').then((r) => r.data);
+/**
+ * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
+ * Mỗi lượt góp là một lần trừ điểm thật, nên kèm Idempotency-Key: gửi lại cùng key (chạm đúp, thử lại sau lỗi mạng
+ * khi server đã xử lý xong) nhận lại đúng kết quả cũ thay vì trừ điểm lần nữa.
+ */
+export const buyTree = (idempotencyKey: string) =>
+  api
+    .post<{ certificateCode: string; treeType: string; cost: number; pointsUsed: number; pointsUsedConverted: number }>(
+      '/game/tree/buy',
+      undefined,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    .then((r) => r.data);
 export const getLeaderboard = () => api.get<LeaderRow[]>('/game/leaderboard').then((r) => r.data);
 export const getMissions = () => api.get<MissionItem[]>('/game/missions').then((r) => r.data);
 /** A1-02: nhận thưởng nhiệm vụ đã đạt điều kiện (idempotent — server chặn nhận trùng). */
@@ -193,11 +205,12 @@ export interface GardenPlot {
 export interface Garden {
   plots: GardenPlot[];
   maxPlots: number;
-  nextUnlock: { slot: number; seedCost: number; xuCost: number } | null;
+  nextUnlock: { slot: number; seedCost: number } | null;
 }
 export const getGarden = () => api.get<Garden>('/game/garden').then((r) => r.data);
-export const unlockPlot = (currency: 'SEEDS' | 'XU') =>
-  api.post<GardenPlot>('/game/garden/unlock', { currency }).then((r) => r.data);
+/** Mở lô đất bằng giọt nước — mở bằng xu cũ đã ngừng (đã gộp vào Điểm Xanh). */
+export const unlockPlot = () =>
+  api.post<GardenPlot>('/game/garden/unlock', { currency: 'SEEDS' }).then((r) => r.data);
 export const waterPlot = (plotId: string, drops: number) =>
   api
     .post<{
@@ -211,7 +224,7 @@ export const waterPlot = (plotId: string, drops: number) =>
     .then((r) => r.data);
 
 export interface SeasonPassReward {
-  type: 'SEEDS' | 'XU';
+  type: 'SEEDS' | 'POINTS';
   amount: number;
 }
 export interface SeasonPassTier {

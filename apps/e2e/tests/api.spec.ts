@@ -24,7 +24,7 @@ test.describe('API E2E Tests - Checkout Flow', () => {
     }
   });
 
-  test('POST /checkout/quote - Trả về lỗi nghiệp vụ khi giỏ hàng trống', async ({ request }) => {
+  test('POST /checkout/quote - Địa chỉ không thuộc user → 400 nghiệp vụ', async ({ request }) => {
     test.skip(!token, 'Bỏ qua: E2E_API_TOKEN chưa được tạo (DB chưa chạy)');
 
     const res = await request.post('checkout/quote', {
@@ -35,17 +35,13 @@ test.describe('API E2E Tests - Checkout Flow', () => {
       },
     });
 
-    // Với JWT hợp lệ: Guard pass → vào business logic.
-    // Giỏ hàng của user test trống → phải trả 400, không phải 500.
-    expect(res.status()).toBeLessThan(500);
-    expect(res.status()).not.toBe(401); // Xác nhận JWT đã được accept
-
-    if (res.status() === 400) {
-      const body = (await res.json()) as { message?: string | string[] };
-      const msg = Array.isArray(body.message) ? body.message.join(' ') : (body.message ?? '');
-      // Backend trả tiếng Việt: "Giỏ hàng trống." (checkout.service.ts)
-      expect(msg.toLowerCase()).toMatch(/tr[oô]ng|empty|address/i);
-    }
+    // JWT hợp lệ (user thật do global-setup seed): Guard pass → compute() từ chối địa chỉ không
+    // thuộc user bằng lỗi nghiệp vụ 400 (checkout.service.ts), không phải 401/500/lỗi khoá ngoại.
+    expect(res.status()).not.toBe(401);
+    expect(res.status()).toBe(400);
+    const body = (await res.json()) as { message?: string | string[] };
+    const msg = Array.isArray(body.message) ? body.message.join(' ') : (body.message ?? '');
+    expect(msg.toLowerCase()).toContain('địa chỉ giao hàng không hợp lệ');
   });
 
   test('POST /checkout/place-order - Idempotency Key chống đặt đơn lặp', async ({ request }) => {

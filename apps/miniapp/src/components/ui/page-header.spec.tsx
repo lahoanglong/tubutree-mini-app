@@ -15,6 +15,10 @@ describe('PageHeader', () => {
     renderWithRouter(<PageHeader title="Giỏ hàng" />);
     expect(screen.getByRole('heading', { name: 'Giỏ hàng' })).toBeInTheDocument();
   });
+  it('title is the page h1 (axe page-has-heading-one, C-114)', () => {
+    renderWithRouter(<PageHeader title="Đơn hàng" />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Đơn hàng' })).toBeInTheDocument();
+  });
   it('renders subtitle and actions when given', () => {
     renderWithRouter(<PageHeader title="Đơn hàng" subtitle="12 đơn" actions={<span>Lọc</span>} />);
     expect(screen.getByText('12 đơn')).toBeInTheDocument();

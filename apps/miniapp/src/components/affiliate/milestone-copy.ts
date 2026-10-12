@@ -1,9 +1,9 @@
-import { formatVnd, formatXu } from '../../utils/format';
+import { formatPoints, formatVnd } from '../../utils/format';
 
 /**
  * Chữ hiển thị cho bậc/mốc thưởng CTV (affiliate.tsx). Tách thuần để test được và để mọi chỗ
  * nói CÙNG một điều với backend (apps/api/src/modules/affiliate/ctv-milestones.ts):
- * - Thưởng mốc là Tubu Xu (coinsBalance) — KHÔNG phải "điểm" (Điểm Xanh) hay tiền rút được.
+ * - Thưởng mốc là Điểm Xanh lô thường (có hạn, chịu trần % khi dùng) — KHÔNG phải tiền rút được.
  * - Bậc CTV không kèm "+X% bonus hoa hồng" — backend không trả khoản đó.
  * - Doanh số tính mốc là doanh số ĐÃ CHỐT (đơn đã giao + hết thời gian giữ đổi/trả).
  */
@@ -19,14 +19,14 @@ export function milestoneStatusText(
   m: { achieved: boolean; claimed: boolean; threshold: number },
   confirmedRevenue: number,
 ): string {
-  if (m.claimed) return 'Đã cộng vào ví Tubu Xu';
+  if (m.claimed) return 'Đã cộng vào Điểm Xanh';
   if (m.achieved) return 'Đã đạt chỉ tiêu 🎉';
   return `Còn thiếu ${formatVnd(Math.max(0, m.threshold - confirmedRevenue))} doanh số đã chốt`;
 }
 
-/** Cột phải bảng 5 bậc: phần thưởng THẬT của bậc là thưởng mốc xu cùng ngưỡng. */
-export function tierRewardLabel(t: { milestoneRewardXu: number | null }): string {
-  return t.milestoneRewardXu ? `Thưởng mốc +${formatXu(t.milestoneRewardXu)}` : 'Bậc khởi đầu';
+/** Cột phải bảng 5 bậc: phần thưởng THẬT của bậc là thưởng mốc Điểm Xanh cùng ngưỡng. */
+export function tierRewardLabel(t: { milestoneRewardPoints: number | null }): string {
+  return t.milestoneRewardPoints ? `Thưởng mốc +${formatPoints(t.milestoneRewardPoints)}` : 'Bậc khởi đầu';
 }
 
 /**

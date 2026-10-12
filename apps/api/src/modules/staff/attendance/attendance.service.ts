@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
-import { vnDateKey } from '../shifts/time.util';
+import { vnDateKey } from '../../../common/vn-time';
 
 const REASON_MSG: Record<VerifyReason, string> = {
   NOT_CONFIGURED: 'Chưa cấu hình chấm công, vui lòng liên hệ quản trị.',
@@ -16,6 +16,16 @@ export interface Coords {
   lng: number;
 }
 
+// Miniapp gửi heartbeat mỗi 3 phút: 3 nhịp liên tiếp ≈ 6–9 phút ngoài vùng mới tự chấm ra.
+const DEFAULT_OUT_MAX_COUNT = 3;
+const DEFAULT_OUT_MAX_MIN = 15;
+
+/** Cấu hình admin nhập tay có thể là 0/âm/chuỗi — 0 nghĩa là "chấm ra ngay", đúng lỗi cần tránh. */
+function positiveInt(v: unknown, fallback: number): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 1 ? n : fallback;
+}
+
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
@@ -25,18 +35,34 @@ export class AttendanceService {
     private readonly config: SystemConfigService,
   ) {}
 
-  private async loadCfg(): Promise<AttnConfig & { graceMin: number; staleMin: number; earlyMin: number }> {
-    const [officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin, earlyMin] = await Promise.all([
-      this.config.get<string[]>('attendance.office_ips', []),
-      this.config.get<number | null>('attendance.office_lat', null),
-      this.config.get<number | null>('attendance.office_lng', null),
-      this.config.get<number>('attendance.radius_m', 150),
-      this.config.get<boolean>('attendance.enforce_ip', true),
-      this.config.get<number>('attendance.late_grace_min', 30),
-      this.config.get<number>('attendance.heartbeat_stale_min', 10),
-      this.config.get<number>('attendance.checkin_early_min', 60),
-    ]);
-    return { officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin, earlyMin };
+  private async loadCfg(): Promise<
+    AttnConfig & { graceMin: number; staleMin: number; earlyMin: number; outMaxCount: number; outMaxMin: number }
+  > {
+    const [officeIps, lat, lng, radiusM, enforceIp, graceMin, staleMin, earlyMin, outMaxCount, outMaxMin] =
+      await Promise.all([
+        this.config.get<string[]>('attendance.office_ips', []),
+        this.config.get<number | null>('attendance.office_lat', null),
+        this.config.get<number | null>('attendance.office_lng', null),
+        this.config.get<number>('attendance.radius_m', 150),
+        this.config.get<boolean>('attendance.enforce_ip', true),
+        this.config.get<number>('attendance.late_grace_min', 30),
+        this.config.get<number>('attendance.heartbeat_stale_min', 10),
+        this.config.get<number>('attendance.checkin_early_min', 60),
+        this.config.get<number>('attendance.out_of_range_max_count', DEFAULT_OUT_MAX_COUNT),
+        this.config.get<number>('attendance.out_of_range_max_min', DEFAULT_OUT_MAX_MIN),
+      ]);
+    return {
+      officeIps,
+      lat,
+      lng,
+      radiusM,
+      enforceIp,
+      graceMin,
+      staleMin,
+      earlyMin,
+      outMaxCount: positiveInt(outMaxCount, DEFAULT_OUT_MAX_COUNT),
+      outMaxMin: positiveInt(outMaxMin, DEFAULT_OUT_MAX_MIN),
+    };
   }
 
   /** Ranh giới ngày VN của "hôm nay" (để khớp workDate @db.Date lưu midnight UTC theo date-key VN). */
@@ -149,7 +175,16 @@ export class AttendanceService {
     return { checkedOut: true };
   }
 
-  /** Heartbeat khi app mở — re-verify; rớt vùng → auto checkout (OUT_OF_RANGE). */
+  /**
+   * Heartbeat khi app mở — re-verify vị trí.
+   *
+   * Ngoài vùng KHÔNG tự chấm ra ngay: GPS trong nhà hay nhảy vài trăm mét một nhịp, và trước đây
+   * một nhịp lệch là phiên đóng OUT_OF_RANGE, nhân viên mất phần giờ công còn lại của ca mà quản lý
+   * lại không có UI chấm bù. Chỉ đóng khi (a) ngoài vùng đủ N nhịp LIÊN TIẾP, hoặc (b) chuỗi ngoài
+   * vùng kéo dài ≥ M phút (heartbeat thưa vì app bị cất vào túi nên N nhịp lâu mới đủ). Một nhịp
+   * hợp lệ xoá cả hai bộ đếm. Giờ ra ghi lùi về nhịp ngoài vùng ĐẦU TIÊN của chuỗi — cùng mốc mà
+   * cách cũ (đóng ngay nhịp đầu) vẫn ghi — nên giờ ngoài vùng không được cộng vào công.
+   */
   async heartbeat(staffId: string, ip: string, body: Coords) {
     const open = await this.prisma.attendanceSession.findFirst({
       where: { staffId, checkoutAt: null },
@@ -158,18 +193,49 @@ export class AttendanceService {
     if (!open) return { open: false };
     const cfg = await this.loadCfg();
     const v = verifyPresence(cfg, ip, body.lat, body.lng);
-    if (!v.ok) {
+    const now = new Date();
+    if (v.ok) {
       await this.prisma.attendanceSession.update({
         where: { id: open.id },
-        data: { checkoutAt: new Date(), closeReason: 'OUT_OF_RANGE' },
+        data: { lastHeartbeatAt: now, outOfRangeCount: 0, outOfRangeSince: null },
       });
-      return { open: false, closed: true, reason: v.reason };
+      return { open: true };
     }
-    await this.prisma.attendanceSession.update({
+
+    // increment là một câu UPDATE nguyên tử: hai heartbeat song song (thử lại mạng, hai thiết bị)
+    // không đọc cùng một giá trị rồi ghi đè nhau làm mất một nhịp.
+    const after = await this.prisma.attendanceSession.update({
       where: { id: open.id },
-      data: { lastHeartbeatAt: new Date() },
+      data: {
+        outOfRangeCount: { increment: 1 },
+        ...(open.outOfRangeSince ? {} : { outOfRangeSince: now }),
+      },
+      select: { outOfRangeCount: true, outOfRangeSince: true },
     });
-    return { open: true };
+    const since = after.outOfRangeSince ?? now;
+    const overCount = after.outOfRangeCount >= cfg.outMaxCount;
+    const overTime = now.getTime() - since.getTime() >= cfg.outMaxMin * 60000;
+    if (!overCount && !overTime) {
+      return {
+        open: true,
+        outOfRange: true,
+        reason: v.reason,
+        missed: after.outOfRangeCount,
+        maxMissed: cfg.outMaxCount,
+      };
+    }
+
+    // checkoutAt: null trong where — phiên đã bị checkout tay/QL đóng song song thì không ghi đè
+    // giờ ra và lý do đóng của lần đóng đó. Không lùi trước giờ checkin (QL có thể đã sửa checkin).
+    const closed = await this.prisma.attendanceSession.updateMany({
+      where: { id: open.id, checkoutAt: null },
+      data: {
+        checkoutAt: new Date(Math.max(since.getTime(), open.checkinAt.getTime())),
+        closeReason: 'OUT_OF_RANGE',
+      },
+    });
+    if (closed.count === 0) return { open: false };
+    return { open: false, closed: true, reason: v.reason };
   }
 
   // ─────────────── Admin ───────────────

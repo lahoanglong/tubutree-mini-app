@@ -75,18 +75,19 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             textAlign: 'center',
           }}
         >
-          <p style={{ fontSize: 16, color: '#1a1a1a', margin: 0 }}>
+          <p style={{ fontSize: 16, color: 'var(--color-text-primary)', margin: 0 }}>
             Đã có lỗi xảy ra — Vui lòng thử lại
           </p>
           <button
             type="button"
             onClick={this.handleRetry}
             style={{
+              minHeight: 44,
               padding: '10px 28px',
-              borderRadius: 8,
+              borderRadius: 'var(--radius-control)',
               border: 'none',
-              background: '#16a34a',
-              color: '#fff',
+              background: 'var(--color-action-primary-bg)',
+              color: 'var(--color-action-primary-fg)',
               fontSize: 15,
               fontWeight: 600,
               cursor: 'pointer',

@@ -1,9 +1,51 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma, type Category } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
+import { foldVietnamese, likeContainsPattern } from './search-text';
+import { CRON_TZ } from '../../common/cron-tz';
+
+/** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
+const TEXT_MATCH_LIMIT = 2000;
+
+/** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
+export const SUGGEST_MIN_CHARS = 2;
+
+/**
+ * SQL lấy id SP khớp từ khoá (không dấu, không phân biệt hoa thường — spec 4b §2): so trên cột
+ * `"nameSearch"` mà trigger DB giữ bằng `foldVietnamese(name)` (migration
+ * 20261010053812_catalog_name_search_index) nên dùng được index trigram, thay vì gấp dấu từng dòng.
+ * Tag vẫn khớp đúng nguyên văn (chữ thường); `@>` thay `= ANY` để đi được GIN `products_tags_gin`.
+ *
+ * An toàn SQL: mọi giá trị đi qua tham số ràng buộc. `ESCAPE '!'` PHẢI là chữ trong câu lệnh
+ * (`${...}` luôn thành tham số) và bằng `LIKE_ESCAPE`. ORDER BY cho phần cắt `LIMIT` ổn định và giữ
+ * lại SP nổi bật/bán chạy khi từ khoá quá chung; điều kiện isActive/approvalStatus lặp lại
+ * `listWhere` để SP ẩn không chiếm chỗ trong phần cắt.
+ */
+export function textMatchSql(raw: string): Prisma.Sql {
+  const tag = raw.toLowerCase();
+  return Prisma.sql`
+    SELECT p.id FROM products p
+    WHERE p."isActive" = true
+      AND p."approvalStatus" = 'APPROVED'
+      AND (p."nameSearch" LIKE ${likeContainsPattern(raw)} ESCAPE '!' OR p.tags @> ARRAY[${tag}]::text[])
+    ORDER BY p."isFeatured" DESC, (p."soldExternal" + p."soldApp") DESC, p.id ASC
+    LIMIT ${TEXT_MATCH_LIMIT}`;
+}
+
+/** Khoảng giá cho filter Prisma; min > max thì đổi chỗ (client không gửi vậy, nhưng không 400). */
+function priceRange(min?: number, max?: number): { gte?: number; lte?: number } | undefined {
+  if (min == null && max == null) return undefined;
+  let lo = min;
+  let hi = max;
+  if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+  return { ...(lo != null ? { gte: lo } : {}), ...(hi != null ? { lte: hi } : {}) };
+}
+
+/** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
+export type CategoryWithCount = Category & { productCount: number };
 
 @Injectable()
 export class CatalogService {
@@ -20,7 +62,7 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
-  private categoriesCache: { value: unknown; expiresAt: number } | null = null;
+  private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
   // Mapper public-safe cho getBySlug() — endpoint /products/:slug là @Public() (không cần đăng
@@ -52,15 +94,65 @@ export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(query: ProductQuery) {
-    const { page, limit, brand, category, segment, q, sort } = query;
-    // P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
-    // khi approvalStatus:'PENDING_REVIEW' (merchant.service.ts createProduct) — và bị REJECTED cũng
-    // không tự tắt isActive (admin.service.ts reviewMerchantProduct chỉ đổi approvalStatus). Trước
-    // đây MỌI truy vấn catalog công khai dưới đây chỉ lọc isActive nên SP chưa duyệt/đã bị từ chối
-    // vẫn hiện & mua được. Đi theo đúng quy ước đã có trong addResellProduct() (merchant.service.ts)
-    // và storefront.service.ts:258 — giữ isActive là cờ vòng đời riêng, gác thêm approvalStatus ở
-    // MỌI nơi công khai thay vì đổi ý nghĩa isActive.
+    const { page, limit, sort } = query;
+    const where = await this.listWhere(query);
+    if (sort === 'best_seller') return this.listBestSellers(where, page, limit);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        // `id` làm tiêu chí phụ: chỉ sắp theo isFeatured/createdAt/giá thì các SP hoà nhau đổi thứ
+        // tự giữa hai lần query → cuộn vô hạn ở Browse hiện trùng hoặc sót SP giữa các trang.
+        orderBy: [this.orderBy(sort), { id: 'asc' }],
+        ...skipTake(page, limit),
+        include: { variations: { where: { isActive: true } } },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+  }
+
+  /**
+   * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
+   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy 3 cột nhỏ của MỌI SP khớp, sắp,
+   * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
+   * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
+   */
+  private async listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
+    const ranked = await this.prisma.product.findMany({
+      where,
+      select: { id: true, soldApp: true, soldExternal: true },
+    });
+    ranked.sort((x, y) => {
+      const diff = y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal);
+      if (diff !== 0) return diff;
+      return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+    });
+    const { skip, take } = skipTake(page, limit);
+    const pageIds = ranked.slice(skip, skip + take).map((r) => r.id);
+    if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
+    const rows = await this.prisma.product.findMany({
+      where: { AND: [where, { id: { in: pageIds } }] },
+      include: { variations: { where: { isActive: true } } },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const items = pageIds
+      .map((id) => byId.get(id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      .map((p) => this.toCard(p));
+    return paginated(items, page, limit, ranked.length);
+  }
+
+  /**
+   * Bộ lọc công khai của catalog — MỘT nơi duy nhất (list + best_seller dùng chung).
+   * P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
+   * khi approvalStatus:'PENDING_REVIEW' và bị REJECTED cũng không tự tắt isActive → mọi truy vấn
+   * công khai gác thêm approvalStatus, giữ isActive là cờ vòng đời riêng.
+   * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
+   */
+  private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
+    const { brand, category, segment, minPrice, maxPrice, inStock, minRating } = query;
     const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED' };
+    const and: Prisma.ProductWhereInput[] = [];
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (brandList.length === 1) {
@@ -71,24 +163,33 @@ export class CatalogService {
     }
     if (category) where.categoryIds = { has: category };
     if (segment) where.forSegment = { has: segment };
-    if (q) {
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { tags: { has: q.toLowerCase() } },
-      ];
-    }
+    const text = await this.textWhere(query.q);
+    if (text) and.push(text);
+    // Giá ĐANG BÁN = salePrice ?? basePrice — đúng giá `ProductTile` hiển thị (standing price).
+    const price = priceRange(minPrice, maxPrice);
+    if (price) and.push({ OR: [{ salePrice: price }, { salePrice: null, basePrice: price }] });
+    // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
+    if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
+    // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
+    if (minRating != null) where.ratingAvg = { gte: minRating };
+    if (and.length > 0) where.AND = and;
+    return where;
+  }
 
-    const orderBy = this.orderBy(sort);
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({
-        where,
-        orderBy,
-        ...skipTake(page, limit),
-        include: { variations: { where: { isActive: true } } },
-      }),
-      this.prisma.product.count({ where }),
-    ]);
-    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+  /**
+   * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
+   * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
+   */
+  private async textWhere(q: string | undefined): Promise<Prisma.ProductWhereInput | undefined> {
+    const raw = (q ?? '').trim();
+    if (!foldVietnamese(raw)) return undefined;
+    try {
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
+      return { id: { in: rows.map((r) => r.id) } };
+    } catch (err) {
+      this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
+      return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] };
+    }
   }
 
   async getBySlug(slug: string) {
@@ -111,7 +212,11 @@ export class CatalogService {
     if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
-    return { ...product, sold: product.soldExternal + product.soldApp };
+    // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
+    // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
+    // (variations đã loại qua publicVariationSelect).
+    const { pancakeId: _pancakeId, ...publicProduct } = product;
+    return { ...publicProduct, sold: product.soldExternal + product.soldApp };
   }
 
   async related(slug: string) {
@@ -246,23 +351,40 @@ export class CatalogService {
     return value;
   }
 
-  async categories() {
+  /**
+   * Đồng bộ Pancake KHÔNG ghi `categoryIds` (chỉ SP seed/đối tác có) → danh mục seed có thể trống
+   * trên prod. Trả thêm `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
+   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng.
+   */
+  async categories(): Promise<CategoryWithCount[]> {
     if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
       return this.categoriesCache.value;
     }
-    const value = await this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
+    const [rows, products] = await Promise.all([
+      this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.prisma.product.findMany({
+        where: { isActive: true, approvalStatus: 'APPROVED' },
+        select: { categoryIds: true },
+      }),
+    ]);
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      for (const id of new Set(p.categoryIds)) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    const value = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
     this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }
 
   async suggest(q: string) {
-    if (!q || q.length < 1) return [];
-    const products = await this.prisma.product.findMany({
-      where: { isActive: true, approvalStatus: 'APPROVED', name: { contains: q, mode: 'insensitive' } },
+    if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return [];
+    const text = await this.textWhere(q);
+    if (!text) return [];
+    return this.prisma.product.findMany({
+      where: { isActive: true, approvalStatus: 'APPROVED', AND: [text] },
       take: 8,
       select: { slug: true, name: true, thumbnail: true, basePrice: true },
     });
-    return products;
   }
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
@@ -361,7 +483,7 @@ export class CatalogService {
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
-  @Cron('0 3 * * *')
+  @Cron('0 3 * * *', { timeZone: CRON_TZ })
   async recomputeSoldCron(): Promise<void> {
     // Nuốt lỗi im lặng ở đây từng khiến hỏng mà không ai biết — số "đã bán" sai cả ngày và
     // không có một dòng log nào để lần ra.

@@ -10,6 +10,8 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useConfirm } from './confirm-dialog';
+import { BTN_WARNING, FIELD_XS } from './ui';
 
 /**
  * Hiện "Xác nhận đã nhận chuyển khoản" khi: đơn ĐẠI LÝ, còn UNPAID, BE xác nhận KHÔNG phải đơn "Ghi công
@@ -40,6 +42,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render lại nút disabled (double-submit ghi 2 dòng lịch sử / 2 thông báo).
   const inFlight = useRef(false);
+  const { confirm, dialog } = useConfirm();
 
   const confirmMut = useMutation({
     mutationFn: () => confirmDealerOrderPayment(order.id, { bankRef, note }),
@@ -59,20 +62,23 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
   if (!canConfirmDealerPayment(order)) {
     // Vừa xác nhận xong: list refetch làm đơn thành PAID → khối ẩn; giữ lại dòng kết quả để admin thấy.
     return msg?.ok ? (
-      <p role="status" className="text-xs text-green-700">
+      <p role="status" className="text-xs text-success-fg">
         {msg.text}
       </p>
     ) : null;
   }
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
     if (inFlight.current || confirmMut.isPending) return;
-    const ok = window.confirm(
-      `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn đại lý ${order.code}?\n\n` +
+    const ok = await confirm({
+      title: 'Xác nhận đã nhận chuyển khoản',
+      message:
+        `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn đại lý ${order.code}?\n\n` +
         `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}, ` +
         'được tính vào doanh số đại lý. Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
-    );
-    if (!ok) return;
+      confirmLabel: 'Đã nhận tiền',
+    });
+    if (!ok || inFlight.current || confirmMut.isPending) return;
     inFlight.current = true;
     setMsg(null);
     confirmMut.mutate();
@@ -80,13 +86,13 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
 
   const busy = confirmMut.isPending;
   return (
-    <section aria-label="Xác nhận thanh toán đơn đại lý" className="rounded border border-amber-200 bg-white p-3">
+    <section aria-label="Xác nhận thanh toán đơn đại lý" className="rounded-card border border-warning-fg bg-stone-0 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Landmark className="h-4 w-4 text-amber-700" aria-hidden />
-        <span className="text-xs font-semibold uppercase text-neutral-600">Đơn đại lý trả trước — chờ chuyển khoản</span>
-        <span className="text-xs font-semibold text-neutral-800">{formatVnd(order.total)}</span>
+        <Landmark className="h-4 w-4 text-warning-fg" aria-hidden />
+        <span className="text-xs font-semibold uppercase text-stone-600">Đơn đại lý trả trước — chờ chuyển khoản</span>
+        <span className="text-xs font-semibold text-stone-800">{formatVnd(order.total)}</span>
       </div>
-      <p className="mt-1 text-xs text-neutral-600">
+      <p className="mt-1 text-xs text-stone-600">
         Đối chiếu sao kê ngân hàng trước khi xác nhận. Mã giao dịch và ghi chú được lưu vào lịch sử đơn để đối soát.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -98,7 +104,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
           value={bankRef}
           onChange={(e) => setBankRef(e.target.value)}
           disabled={busy}
-          className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+          className={`${FIELD_XS} grow basis-40`}
         />
         <input
           type="text"
@@ -108,22 +114,23 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           disabled={busy}
-          className="min-w-0 flex-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+          className={`${FIELD_XS} grow basis-40`}
         />
         <button
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:bg-neutral-300"
+          className={BTN_WARNING}
         >
           {busy ? 'Đang xác nhận…' : 'Xác nhận đã nhận chuyển khoản'}
         </button>
       </div>
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-xs ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}
+      {dialog}
     </section>
   );
 }

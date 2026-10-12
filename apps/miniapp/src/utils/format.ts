@@ -1,6 +1,57 @@
-/** Định dạng VND: 289000 → "289.000đ". */
-export function formatVnd(amount: number): string {
-  return `${amount.toLocaleString('vi-VN')}đ`;
+/**
+ * Số có dấu phân cách nghìn kiểu Việt: 1250000 → "1.250.000". Mọi số tiền/điểm/giọt nước hiển thị
+ * cho khách đi qua đây (trực tiếp hoặc qua formatVnd/formatPoints/formatDrops) — không gọi
+ * toLocaleString rải rác trong pages, nên cùng một con số không còn hiện ba dáng khác nhau.
+ * Rác (null/NaN/vô cực) → "0" thay vì "NaN".
+ */
+export function formatNumber(n: number | null | undefined): string {
+  const v = Number(n ?? 0);
+  // `+ 0` đổi -0 thành 0 (toLocaleString in "-0").
+  return ((Number.isFinite(v) ? v : 0) + 0).toLocaleString('vi-VN');
+}
+
+/** Chữ hiện thay cho giá/số tiền không có: "0đ" nghĩa là miễn phí, không được dùng để che giá thiếu. */
+export const MISSING_AMOUNT = '—';
+
+/** Số tiền hợp lệ, hoặc null khi thiếu (null/undefined/chuỗi rỗng/NaN/vô cực/chuỗi không phải số). */
+function toAmount(v: number | string | null | undefined): number | null {
+  if (v == null || (typeof v === 'string' && v.trim() === '')) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Định dạng VND: 289000 → "289.000đ". 0 là giá hợp lệ ("0đ"); giá thiếu → "—", KHÔNG phải "0đ". */
+export function formatVnd(amount: number | string | null | undefined): string {
+  const v = toAmount(amount);
+  return v === null ? MISSING_AMOUNT : `${formatNumber(v)}đ`;
+}
+
+/** Giọt nước 💧 của Vườn Xanh: 1250 → "1.250💧". */
+export function formatDrops(n: number | null | undefined): string {
+  return `${formatNumber(n)}💧`;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function toValidDate(v: string | number | Date | null | undefined): Date | null {
+  if (v == null || v === '') return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Ngày dd/MM/yyyy theo giờ máy. Tự ghép thay vì toLocaleDateString('vi-VN'): định dạng đó đổi theo
+ * phiên bản ICU của webview (Node 24 trả "15-10"), nên cùng một ngày có thể hiện hai dáng.
+ */
+export function formatDate(v: string | number | Date | null | undefined): string {
+  const d = toValidDate(v);
+  return d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : '—';
+}
+
+/** Giờ + ngày: "07:04 05/10/2026" (bỏ giây). Rỗng/hỏng → "—". */
+export function formatDateTime(v: string | number | Date | null | undefined): string {
+  const d = toValidDate(v);
+  return d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())} ${formatDate(d)}` : '—';
 }
 
 /** "Đã bán" kiểu Shopee: <1 → null (ẩn); <1000 → "Đã bán 12"; ≥1000 → "Đã bán 1,2k+"; ≥1tr → "...tr+". */
@@ -45,18 +96,7 @@ export function formatRatePct(rate: number | string | null | undefined): string 
  */
 export function formatPoints(n: number | null | undefined): string {
   const v = Number(n ?? 0);
-  return `${(Number.isFinite(v) ? v : 0).toLocaleString('vi-VN')} điểm`;
-}
-
-/**
- * Tubu Xu: LUÔN có dấu phân cách nghìn + đơn vị "xu".
- * Trước đây `formatXu` bị định nghĩa lặp độc lập ở 2 nơi (milestone-copy.ts, wallet.tsx) — cùng
- * một công thức nhưng tách rời nên có thể trôi khác nhau theo thời gian. Gộp về MỘT định nghĩa
- * canonical ở đây (audit A4-10), 2 nơi kia import lại thay vì tự định nghĩa.
- */
-export function formatXu(n: number | null | undefined): string {
-  const v = Number(n ?? 0);
-  return `${(Number.isFinite(v) ? v : 0).toLocaleString('vi-VN')} xu`;
+  return `${formatNumber(v)} điểm`;
 }
 
 /**
@@ -64,8 +104,9 @@ export function formatXu(n: number | null | undefined): string {
  * Số lẻ không tròn nghìn thì trả về dạng đầy đủ để không nói sai con số.
  */
 export function formatVndShort(amount: number | null | undefined): string {
-  const v = Number(amount ?? 0);
-  if (!Number.isFinite(v) || v <= 0) return '0đ';
+  const v = toAmount(amount);
+  if (v === null) return MISSING_AMOUNT;
+  if (v <= 0) return '0đ';
   const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
   if (v >= 1_000_000 && v % 100_000 === 0) return `${trim(v / 1_000_000)}tr`;
   if (v >= 1_000 && v % 1_000 === 0) return `${Math.round(v / 1_000)}k`;

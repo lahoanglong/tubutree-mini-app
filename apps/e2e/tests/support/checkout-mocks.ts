@@ -74,22 +74,25 @@ export const CHECKOUT_QUOTE: CheckoutQuote = {
 };
 
 /**
- * Số dư CỐ Ý khác số trong user đăng nhập (200.000đ / 50.000 xu): checkout đọc số dư từ
+ * Số dư CỐ Ý khác số trong user đăng nhập (200.000đ): checkout đọc số dư từ
  * GET /me/wallet, nên nhãn "Ví Tubu (350.000đ)" chứng minh mock đúng route đang được dùng.
  */
 export const CHECKOUT_WALLET: WalletSummary = {
   walletBalance: 350000,
-  coinsBalance: 80000,
   cashbackPending: 0,
   commissionApproved: 0,
   commissionPending: 0,
-  xuConvertMultiplier: 1.2,
   withdrawMin: 100000,
   withdrawFee: 3000,
 };
 
+/**
+ * Khách có 50 điểm thường + 50 điểm quy đổi từ xu cũ (không hết hạn): màn thanh toán gộp thành MỘT số
+ * Điểm Xanh dùng được (100) và ghi riêng phần không hết hạn.
+ */
 export const CHECKOUT_LOYALTY: LoyaltyOverview = {
   pointsBalance: 50,
+  pointsConvertedBalance: 50,
   tierPoints: 50,
   tier: { id: 'tier-1', name: 'Mầm Xanh', multiplier: 1, perks: [] },
   nextTier: { id: 'tier-2', name: 'Lộc Biếc', minPoints: 500, pointsToGo: 450 },
@@ -141,7 +144,7 @@ export const BANK_QR: BankQr = {
 export function mockCheckout(api: MockApi, opts: { recyclingEnabled?: boolean } = {}): void {
   mockSession(
     api,
-    makeUser({ id: 'user-checkout', fullName: 'Nguyễn Văn A', pointsBalance: 50, walletBalance: 200000, coinsBalance: 50000 }),
+    makeUser({ id: 'user-checkout', fullName: 'Nguyễn Văn A', pointsBalance: 50, pointsConvertedBalance: 50, walletBalance: 200000 }),
   );
   api.get('/cart', CHECKOUT_CART);
   api.get('/me/addresses', [CHECKOUT_ADDRESS]);

@@ -3,6 +3,8 @@ import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
@@ -34,13 +36,15 @@ class ReportDto {
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
-class CreateEventDto {
+export class CreateEventDto {
   @IsString() @MaxLength(160) title!: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  @IsOptional() @IsInt() @Min(0) @Max(1000000) rewardXu?: number;
+  // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
+  // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
+  @IsOptional() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -51,24 +55,15 @@ export class CommunityFeedController {
   constructor(private readonly feed: CommunityFeedService) {}
 
   @Get()
-  getFeed(
-    @CurrentUser('sub') userId: string,
-    @Query('category') category?: string,
-    @Query('kind') kind?: string,
-    @Query('sort') sort?: 'new' | 'popular',
-    @Query('cursor') cursor?: string,
-    @Query('q') q?: string,
-    @Query('unanswered') unanswered?: string,
-    @Query('tag') tag?: string,
-  ) {
+  getFeed(@CurrentUser('sub') userId: string, @Query() query: FeedQuery) {
     return this.feed.getFeed(userId, {
-      category,
-      kind,
-      sort,
-      cursor,
-      q,
-      unanswered: unanswered === '1' || unanswered === 'true',
-      tag,
+      category: query.category,
+      kind: query.kind,
+      sort: query.sort === 'popular' ? 'popular' : query.sort === 'new' ? 'new' : undefined,
+      cursor: query.cursor,
+      q: query.q,
+      unanswered: query.unanswered === '1' || query.unanswered === 'true',
+      tag: query.tag,
     });
   }
 
@@ -102,19 +97,9 @@ export class CommunityFeedController {
     return this.feed.listEvents();
   }
 
-  @Get('events/:id')
-  getEvent(@Param('id') id: string) {
-    return this.feed.getEvent(id);
-  }
-
   @Get('events/:id/posts')
-  eventPosts(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-    @Query('cursor') cursor?: string,
-    @Query('take') take?: string,
-  ) {
-    return this.feed.eventPosts(id, userId, take ? Number(take) : undefined, cursor);
+  eventPosts(@CurrentUser('sub') userId: string, @Param('id') id: string, @Query() query: CursorPageQuery) {
+    return this.feed.eventPosts(id, userId, query.take ? Number(query.take) : undefined, query.cursor);
   }
 
   @Roles('ADMIN')
@@ -126,7 +111,7 @@ export class CommunityFeedController {
       coverUrl: dto.coverUrl,
       startAt: new Date(dto.startAt),
       endAt: new Date(dto.endAt),
-      rewardXu: dto.rewardXu,
+      rewardPoints: dto.rewardPoints,
     } as CreateEventInput);
   }
 
@@ -183,13 +168,8 @@ export class CommunityFeedController {
   }
 
   @Get(':id/comments')
-  comments(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-    @Query('cursor') cursor?: string,
-    @Query('take') take?: string,
-  ) {
-    return this.feed.getComments(id, userId, take ? Number(take) : undefined, cursor);
+  comments(@CurrentUser('sub') userId: string, @Param('id') id: string, @Query() query: CursorPageQuery) {
+    return this.feed.getComments(id, userId, query.take ? Number(query.take) : undefined, query.cursor);
   }
 
   @Throttle({ default: { limit: 15, ttl: 60_000 } })

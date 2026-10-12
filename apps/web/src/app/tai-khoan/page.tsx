@@ -4,17 +4,11 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { fetchOrders, formatVnd } from '@/lib/shop-client';
+import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
+import { ui } from '@/lib/guest-ui';
+import { pointsSummary } from '@/lib/checkout-points';
 import { RecyclingStatus } from '@/components/recycling-status';
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING_PAYMENT: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  PACKED: 'Đang đóng gói',
-  SHIPPING: 'Đang giao',
-  DELIVERED: 'Đã giao',
-  RETURNED: 'Đã hoàn',
-  CANCELLED: 'Đã hủy',
-};
+import { formatDate } from '@/lib/format-date';
 
 export default function AccountPage() {
   const { user, status, logout } = useAuth();
@@ -23,7 +17,8 @@ export default function AccountPage() {
   if (status === 'idle' || status === 'loading') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
-        <p className="text-neutral-400">Đang tải…</p>
+        <h1 className="sr-only">Tài khoản</h1>
+        <p className="text-stone-600">Đang tải…</p>
       </main>
     );
   }
@@ -31,73 +26,90 @@ export default function AccountPage() {
   if (status !== 'authenticated' || !user) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
-        <p className="text-neutral-600">Vui lòng đăng nhập để xem tài khoản.</p>
-        <Link href="/dang-nhap" className="mt-4 inline-block rounded-full bg-primary-600 px-6 py-2.5 font-semibold text-white">
+        <h1 className={ui.pageTitle}>Tài khoản</h1>
+        <p className="mt-3 text-stone-700">Vui lòng đăng nhập để xem tài khoản.</p>
+        <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
           Đăng nhập với Zalo
         </Link>
       </main>
     );
   }
 
+  // Điểm Xanh = lô thường + lô quy đổi (tiền trả trước, không hết hạn): cùng một con số với Mini App.
+  const points = pointsSummary(user);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/" className="text-sm text-primary-600">← Trang chủ</Link>
+      <Link href="/" className={ui.backLink}>
+        ← Trang chủ
+      </Link>
+      <h1 className={`mt-1 ${ui.pageTitle}`}>Tài khoản</h1>
 
-      <section className="mt-3 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 p-5 text-white">
+      <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised">
         <div className="text-lg font-bold">{user.fullName ?? 'Khách Tubu'}</div>
-        <div className="mt-1 text-sm text-primary-100">Mã giới thiệu: {user.referralCode}</div>
+        <div className="mt-1 text-sm text-forest-100">Mã giới thiệu: {user.referralCode}</div>
         <div className="mt-3 flex gap-6">
           <div>
-            <div className="text-xl font-bold">{user.pointsBalance}</div>
-            <div className="text-xs text-primary-100">Điểm Xanh</div>
+            <div className="text-xl font-bold">{points.total.toLocaleString('vi-VN')}</div>
+            <div className="text-xs text-forest-100">Điểm Xanh</div>
+            {points.convertedNote && <div className="text-xs text-forest-100">{points.convertedNote}</div>}
           </div>
           <div>
             <div className="text-xl font-bold">{formatVnd(user.walletBalance)}</div>
-            <div className="text-xs text-primary-100">Ví Tubu</div>
+            <div className="text-xs text-forest-100">Ví Tubu</div>
           </div>
         </div>
       </section>
 
       <section className="mt-6">
-        <h2 className="font-semibold">Đơn hàng của tôi</h2>
+        <h2 className={ui.sectionTitle}>Đơn hàng của tôi</h2>
         {ordersQ.isLoading ? (
-          <p className="py-6 text-center text-neutral-400">Đang tải…</p>
+          <p className="py-6 text-center text-stone-600">Đang tải…</p>
         ) : ordersQ.isError ? (
-          <div className="mt-3 rounded-lg border border-neutral-100 bg-white p-6 text-center">
-            <p className="text-sm text-red-600">Không tải được danh sách đơn hàng.</p>
-            <button onClick={() => void ordersQ.refetch()} className="mt-2 text-sm font-medium text-primary-600 underline">
+          <div className={`mt-3 p-6 text-center ${ui.card}`}>
+            <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
+            <button type="button" onClick={() => void ordersQ.refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
               Thử lại
             </button>
           </div>
         ) : ordersQ.data && ordersQ.data.length > 0 ? (
-          <div className="mt-3 space-y-3">
+          <ul className="mt-3 space-y-3">
             {ordersQ.data.map((o) => (
-              <div key={o.code} className="rounded-lg border border-neutral-100 bg-white p-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">#{o.code}</span>
-                  <span className="rounded-full bg-leaf-50 px-2 py-0.5 text-xs text-leaf-700">
-                    {STATUS_LABEL[o.status] ?? o.status}
+              <li key={o.code} className={`p-4 ${ui.card}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-stone-900">#{o.code}</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
+                    {orderStatusLabel(o.status)}
                   </span>
                 </div>
-                <div className="mt-1 text-xs text-neutral-400">
-                  {o.items.length} sản phẩm · {new Date(o.createdAt).toLocaleDateString('vi-VN')}
+                <div className="mt-1 text-xs text-stone-600">
+                  {o.items.length} sản phẩm · {formatDate(o.createdAt)}
                 </div>
-                <div className="mt-1 font-semibold text-clay-700">{formatVnd(o.total)}</div>
+                <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
                 <RecyclingStatus order={o} />
-              </div>
+                {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
+                {canPayAgain(o) ? (
+                  <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
+                    Thanh toán
+                  </Link>
+                ) : (
+                  <Link
+                    href={orderDetailHref(o.code)}
+                    aria-label={`Xem chi tiết đơn ${o.code}`}
+                    className={`${ui.btnText} -ml-2 mt-1 text-forest-700`}
+                  >
+                    Xem chi tiết
+                  </Link>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         ) : (
-          <p className="mt-3 rounded-lg border border-neutral-100 bg-white p-6 text-center text-sm text-neutral-500">
-            Bạn chưa có đơn hàng nào.
-          </p>
+          <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>Bạn chưa có đơn hàng nào.</p>
         )}
       </section>
 
-      <button
-        onClick={() => void logout()}
-        className="mt-6 w-full rounded-md border border-neutral-200 py-2.5 text-sm text-neutral-600 hover:bg-neutral-50"
-      >
+      <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} mt-6 w-full`}>
         Đăng xuất
       </button>
     </main>

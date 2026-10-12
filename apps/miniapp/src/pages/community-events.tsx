@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Page, Text, Button, useNavigate } from 'zmp-ui';
+import { Page, useNavigate } from 'zmp-ui';
 import {
   useQuery,
   useInfiniteQuery,
@@ -7,25 +7,62 @@ import {
   type UseInfiniteQueryResult,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { PartyPopper, ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Gift } from 'lucide-react';
 import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedPage } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { Heading, Text } from '../components/ui/text';
 import PostCard from '../components/community/post-card';
 import PostComposer from '../components/community/post-composer';
+import { formatDate, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
-
-/** "10/07/2026" — đủ dùng cho hạn sự kiện, không cần giờ phút. */
-function formatEventDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 /** Sự kiện đã qua endAt → không nhận bài dự thi nữa. */
 function isEventEnded(event: Pick<CommunityEvent, 'endAt'>): boolean {
   return new Date(event.endAt).getTime() < Date.now();
+}
+
+const PAGE_BG = { background: 'var(--color-bg-canvas)' } as const;
+
+function CardSkeletons({ height, gap }: { height: number; gap: number }) {
+  return (
+    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap }}>
+      {Array.from({ length: 3 }, (_, i) => (
+        <Skeleton key={i} height={height} radius="var(--radius-card)" />
+      ))}
+    </div>
+  );
+}
+
+/** Hạn kết thúc + thưởng + nhãn đã kết thúc, dùng chung cho thẻ danh sách và trang chi tiết. */
+function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefix?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+      <Text variant="caption" tone="tertiary">
+        {vi.community.eventEnds}: {formatDate(event.endAt)}
+      </Text>
+      {event.rewardPoints > 0 && (
+        <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {rewardPrefix}
+          <Icon icon={Gift} size="sm" tone="brand" />
+          {formatPoints(event.rewardPoints)}
+        </Text>
+      )}
+      {isEventEnded(event) && (
+        <Badge tone="neutral" size="sm">
+          {vi.community.eventEnded}
+        </Badge>
+      )}
+    </div>
+  );
 }
 
 export default function CommunityEventsPage() {
@@ -48,36 +85,25 @@ export default function CommunityEventsPage() {
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   if (status === 'loading') {
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} height={140} radius="var(--radius-lg)" />
-          ))}
-        </Box>
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.events} />
+        <CardSkeletons height={140} gap={12} />
       </Page>
     );
   }
 
   if (!authed) {
     return (
-      <Page className="page">
-        <Box style={{ textAlign: 'center', padding: 48 }}>
-          <Text style={{ fontSize: 48 }}>🎉</Text>
-          <Text style={{ marginTop: 8 }}>{vi.community.loginToView}</Text>
-          <Button style={{ marginTop: 12, background: 'var(--leaf-600)' }} onClick={() => void login()}>
-            {vi.auth.loginCta}
-          </Button>
-        </Box>
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.events} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 40 }}>
-      <Box p={4} flex alignItems="center" style={{ gap: 8, background: 'var(--neutral-0)' }}>
-        <PartyPopper size={20} color="var(--leaf-700)" />
-        <Text.Title size="small">{vi.community.events}</Text.Title>
-      </Box>
+    <Page style={{ ...PAGE_BG, paddingBottom: 40 }}>
+      <PageHeader title={vi.community.events} />
 
       {selected ? (
         <EventEntries
@@ -116,13 +142,7 @@ function EventsList({
   onSelect: (event: CommunityEvent) => void;
 }) {
   if (eventsQ.isLoading) {
-    return (
-      <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
-        {Array.from({ length: 3 }, (_, i) => (
-          <Skeleton key={i} height={140} radius="var(--radius-lg)" />
-        ))}
-      </Box>
-    );
+    return <CardSkeletons height={140} gap={12} />;
   }
   if (eventsQ.isError) {
     return <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
@@ -131,7 +151,7 @@ function EventsList({
     return <EmptyState art="leaf" heading={vi.community.noEvents} />;
   }
   return (
-    <Box p={3} flex flexDirection="column" style={{ gap: 12 }}>
+    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {eventsQ.data.map((event) => (
         <EventCard
           key={event.id}
@@ -142,17 +162,24 @@ function EventsList({
           }}
         />
       ))}
-    </Box>
+    </div>
   );
 }
 
 function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => void }) {
-  const ended = isEventEnded(event);
   return (
-    <Box
+    <div
+      role="button"
+      {...rowKeyboardProps()}
       onClick={onClick}
       className="tubu-press"
-      style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', cursor: 'pointer' }}
+      style={{
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--elevation-1)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+      }}
     >
       {event.coverUrl && (
         <img
@@ -162,14 +189,17 @@ function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => v
           style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
         />
       )}
-      <Box p={3}>
-        <Text bold>{event.title}</Text>
+      <div style={{ padding: 12 }}>
+        <Text variant="body-lg" as="div" style={{ fontWeight: 600 }}>
+          {event.title}
+        </Text>
         {event.description && (
           <Text
-            size="small"
+            variant="body-sm"
+            tone="secondary"
+            as="div"
             style={{
               marginTop: 4,
-              color: 'var(--neutral-600)',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
@@ -179,27 +209,9 @@ function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => v
             {event.description}
           </Text>
         )}
-        <Box flex alignItems="center" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            {vi.community.eventEnds}: {formatEventDate(event.endAt)}
-          </Text>
-          {event.rewardXu > 0 && (
-            <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-              🎁 {event.rewardXu} TubuXu
-            </Text>
-          )}
-          {ended && (
-            <Text
-              size="xSmall"
-              bold
-              style={{ color: 'var(--neutral-500)', background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', padding: '2px 8px' }}
-            >
-              {vi.community.eventEnded}
-            </Text>
-          )}
-        </Box>
-      </Box>
-    </Box>
+        <EventMeta event={event} />
+      </div>
+    </div>
   );
 }
 
@@ -218,24 +230,28 @@ function EventEntries({
   const ended = isEventEnded(event);
   const entries = entriesQ.data?.pages.flatMap((pg) => pg.posts) ?? [];
   return (
-    <Box>
-      <Box px={3} pt={3}>
-        <Box
-          role="button"
-          className="tubu-press"
-          onClick={() => {
+    <div>
+      <div style={{ padding: '12px 12px 0' }}>
+        <Button
+          variant="ghost"
+          icon={ChevronLeft}
+          onPress={() => {
             haptic('light');
             onBack();
           }}
-          flex
-          alignItems="center"
-          style={{ gap: 4, color: 'var(--leaf-700)' }}
         >
-          <ChevronLeft size={16} />
-          <Text size="small">{vi.community.events}</Text>
-        </Box>
+          {vi.community.events}
+        </Button>
 
-        <Box mt={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+        <div
+          style={{
+            marginTop: 12,
+            background: 'var(--color-bg-surface)',
+            borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--elevation-1)',
+            overflow: 'hidden',
+          }}
+        >
           {event.coverUrl && (
             <img
               src={event.coverUrl}
@@ -244,51 +260,31 @@ function EventEntries({
               style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }}
             />
           )}
-          <Box p={3}>
-            <Text bold size="large">
-              {event.title}
-            </Text>
+          <div style={{ padding: 12 }}>
+            <Heading variant="title-md">{event.title}</Heading>
             {event.description && (
-              <Text size="small" style={{ marginTop: 6, color: 'var(--neutral-600)' }}>
+              <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
                 {event.description}
               </Text>
             )}
-            <Box flex alignItems="center" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-                {vi.community.eventEnds}: {formatEventDate(event.endAt)}
-              </Text>
-              {event.rewardXu > 0 && (
-                <Text size="xSmall" bold style={{ color: 'var(--primary-700)' }}>
-                  {vi.community.eventReward}: 🎁 {event.rewardXu} TubuXu
-                </Text>
-              )}
-              {ended && (
-                <Text
-                  size="xSmall"
-                  bold
-                  style={{ color: 'var(--neutral-500)', background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', padding: '2px 8px' }}
-                >
-                  {vi.community.eventEnded}
-                </Text>
-              )}
-            </Box>
-            <Button fullWidth disabled={ended} style={{ marginTop: 14, background: 'var(--leaf-600)' }} onClick={onJoin}>
+            <EventMeta event={event} rewardPrefix={`${vi.community.eventReward}: `} />
+            <Button fullWidth disabled={ended} onPress={onJoin} style={{ marginTop: 14 }}>
               {vi.community.joinEvent}
             </Button>
-          </Box>
-        </Box>
+          </div>
+        </div>
 
-        <Text bold size="small" style={{ marginTop: 16, marginBottom: 4 }}>
+        <Heading variant="title-sm" as="h2" style={{ marginTop: 16, marginBottom: 4 }}>
           {vi.community.eventEntries}
-        </Text>
-      </Box>
+        </Heading>
+      </div>
 
       {entriesQ.isLoading ? (
-        <Box p={3} flex flexDirection="column" style={{ gap: 8 }}>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} height={100} radius="var(--radius-md)" />
+            <Skeleton key={i} height={100} radius="var(--radius-card)" />
           ))}
-        </Box>
+        </div>
       ) : entriesQ.isError ? (
         <ErrorState message={getErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
       ) : entries.length === 0 ? (
@@ -299,20 +295,14 @@ function EventEntries({
             <PostCard key={post.id} post={post} onClick={() => navigate(`/feed/${post.id}`)} />
           ))}
           {entriesQ.hasNextPage && (
-            <Box p={3}>
-              <Button
-                fullWidth
-                variant="secondary"
-                loading={entriesQ.isFetchingNextPage}
-                disabled={entriesQ.isFetchingNextPage}
-                onClick={() => void entriesQ.fetchNextPage()}
-              >
+            <div style={{ padding: 12 }}>
+              <Button fullWidth variant="secondary" loading={entriesQ.isFetchingNextPage} onPress={() => entriesQ.fetchNextPage()}>
                 Xem thêm bài dự thi
               </Button>
-            </Box>
+            </div>
           )}
         </>
       )}
-    </Box>
+    </div>
   );
 }

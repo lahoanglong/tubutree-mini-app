@@ -8,6 +8,12 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { seedGameQuiz } from './seed-game-quiz';
 import { configSeedUpsertArgs, type ConfigSeed } from '../src/modules/system-config/config-seed';
+import { assertSeedAllowed } from '../src/modules/system-config/seed-guard';
+import {
+  COMMUNITY_CATEGORIES,
+  communityCategoryUpsertArgs,
+  retireCommunityCategoriesArgs,
+} from '../src/modules/feed/community-categories-seed';
 
 const prisma = new PrismaClient();
 
@@ -19,8 +25,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.point_expire_months', value: 12, category: 'loyalty', description: 'Điểm hết hạn sau 12 tháng' },
   { key: 'loyalty.point_expiry_reminder_days', value: 7, category: 'loyalty', description: 'Nhắc trước khi điểm hết hạn (số ngày)' },
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
-  { key: 'loyalty.welcome_voucher_amount', value: 30000, category: 'loyalty', description: 'Voucher đơn đầu' },
-  { key: 'loyalty.welcome_voucher_min_order', value: 199000, category: 'loyalty', description: 'Min order để dùng welcome voucher' },
   // Điểm danh hằng ngày + tích điểm tại quầy (POS) — loyalty.service. createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'loyalty.checkin_points', value: [1, 1, 1, 1, 1, 1, 2], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
   { key: 'loyalty.pos_credit_enabled', value: false, category: 'loyalty', description: 'Bật tích điểm tại quầy (POS) do nhân viên nhập', createOnly: true },
@@ -28,43 +32,69 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.pos_staff_daily_points_cap', value: 3000, category: 'loyalty', description: 'Tổng điểm tối đa một nhân viên được tích POS mỗi ngày', createOnly: true },
   { key: 'loyalty.pos_member_daily_points_cap', value: 1000, category: 'loyalty', description: 'Tổng điểm POS tối đa một thành viên nhận mỗi ngày', createOnly: true },
 
+  // Mã giảm giá tự động (VouchersService) — mặc định trùng đúng giá trị code dùng khi khoá chưa có, seed chỉ để
+  // admin THẤY và sửa được ở tab Cấu hình. createOnly: deploy lại không reset giá trị admin đã chỉnh.
+  { key: 'voucher.welcome_amount', value: 30000, category: 'voucher', description: 'Mã giảm giá chào mừng khách mới (đ)', createOnly: true },
+  { key: 'voucher.welcome_min_order', value: 199000, category: 'voucher', description: 'Đơn tối thiểu (đ) để dùng mã giảm giá chào mừng', createOnly: true },
+  { key: 'voucher.birthday_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá sinh nhật mặc định (đ) cho hạng chưa có mức riêng (mức riêng theo hạng nằm ở bảng hạng thành viên)', createOnly: true },
+  { key: 'voucher.winback_days', value: 60, category: 'voucher', description: 'Khách từng mua nhưng quá số ngày này chưa đặt lại thì nhận mã giảm giá quay lại', createOnly: true },
+  { key: 'voucher.winback_amount', value: 50000, category: 'voucher', description: 'Mã giảm giá quay lại (đ)', createOnly: true },
+  {
+    key: 'voucher.milestones',
+    value: [
+      { spend: 1000000, reward: 30000 },
+      { spend: 3000000, reward: 100000 },
+      { spend: 5000000, reward: 200000 },
+    ],
+    category: 'voucher',
+    description: 'Mốc chi tiêu trong tháng (đ) → mã giảm giá tri ân (đ); khách nhận mốc cao nhất đạt được',
+    createOnly: true,
+  },
+
   // Affiliate
-  { key: 'affiliate.product_rate_source', value: 'variation.affiliateRate', category: 'affiliate', description: 'Rate đọc từ từng variation (import Excel)' },
-  { key: 'affiliate.monthly_tier_thresholds', value: [3000000, 10000000, 30000000, 80000000], category: 'affiliate', description: 'Ngưỡng VND để lên bậc' },
-  { key: 'affiliate.monthly_tier_bonuses', value: [0, 0.01, 0.025, 0.04, 0.06], category: 'affiliate', description: 'Bonus rate tương ứng' },
   { key: 'affiliate.hold_days', value: 20, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
-  { key: 'affiliate.last_click_window_days', value: 30, category: 'affiliate', description: 'Cookie/tracking window' },
+  // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
   { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
-  { key: 'affiliate.tubu_wallet_multiplier', value: 1.5, category: 'affiliate', description: 'Hệ số chuyển sang Ví Tubu' },
-  { key: 'affiliate.kyc_required_above', value: 2000000, category: 'affiliate', description: 'KYC khi rút > X/tháng' },
 
   // Cashback
   { key: 'cashback.merchant_user_share', value: 0.7, category: 'cashback', description: 'User nhận 70% commission' },
-  { key: 'cashback.merchant_tubu_share', value: 0.3, category: 'cashback', description: 'Tubu giữ 30%' },
   { key: 'cashback.hold_days', value: 30, category: 'cashback', description: 'Hold sau khi AT confirm' },
-  { key: 'cashback.min_withdraw_bank', value: 50000, category: 'cashback', description: 'Min rút STK (chung wallet với CTV)' },
-  { key: 'cashback.tubu_wallet_multiplier', value: 1.5, category: 'cashback', description: 'x1.5 khi chuyển Ví Tubu' },
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
-  // TubuXu (tiền tệ tiêu trong app) — Ví đổi sang xu ×1.2; rút Ví min 100k, phí 3k.
-  { key: 'wallet.xu_convert_multiplier', value: 1.2, category: 'wallet', description: 'Đổi Ví → TubuXu nhận thêm 20%' },
+  // Rút Ví về ngân hàng: tối thiểu 100k, phí 3k (xu đã gộp vào Điểm Xanh, Ví không còn đổi sang xu).
   { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
   { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
-  { key: 'coins.referrer_reward', value: 5000, category: 'coins', description: 'Xu thưởng người giới thiệu (mỗi bạn có cashback đầu)' },
-  { key: 'coins.referee_reward', value: 5000, category: 'coins', description: 'Xu thưởng người được mời' },
+  // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
+  // pd3_points_config_keys chép giá trị DB cũ bằng CEIL(xu/1000); seed không đè.
+  { key: 'referral.referrer_reward_points', value: 5, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
+  { key: 'referral.window_days', value: 30, category: 'referral', description: 'Đơn thứ 2 phải đặt trong số ngày này kể từ đơn đầu thì người mời mới được thưởng Điểm Xanh', createOnly: true },
+  { key: 'referral.min_order_amount', value: 200000, category: 'referral', description: 'Chỉ đơn có tổng tiền từ mức này mới được tính là đơn đầu/đơn thứ 2 của chương trình giới thiệu', createOnly: true },
+  // Q-17: liên hệ hiển thị ở trang Về Tubu Tree (GET /config/public). Để trống thì miniapp ẩn dòng đó.
+  { key: 'support.hotline', value: '0899 149 229', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
+  { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
+  { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
   {
-    key: 'coins.referral_milestones',
+    key: 'referral.milestones_points',
     value: [
-      { count: 3, bonus: 20000 },
-      { count: 5, bonus: 40000 },
-      { count: 10, bonus: 100000 },
+      { count: 3, bonusPoints: 20 },
+      { count: 5, bonusPoints: 40 },
+      { count: 10, bonusPoints: 100 },
     ],
-    category: 'coins',
-    description: 'Mốc số bạn giới thiệu thành công → thưởng thêm xu (1 lần/mốc)',
+    category: 'referral',
+    description: 'Mốc số bạn giới thiệu thành công → thưởng thêm Điểm Xanh (1 lần/mốc)',
+    createOnly: true,
   },
-  { key: 'game.xu_per_seed', value: 1, category: 'game', description: 'Giá mua nước: xu / 1 giọt' },
-  { key: 'game.tree_xu_price', value: 50000, category: 'game', description: 'Giá mua 1 cây thật bằng xu' },
+  // Thưởng cộng đồng bằng Điểm Xanh (PD-3, OQ-6): đăng bài 1 điểm ≤ 1/ngày, trả lời tắt (0), hay nhất 1 điểm ≤ 3/ngày.
+  { key: 'community.post_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng khi bài cộng đồng được đăng (0 = tắt)', createOnly: true },
+  { key: 'community.daily_post_reward_cap', value: 1, category: 'community', description: 'Số bài được thưởng tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
+  { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
+  { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
+  // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
+  { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
@@ -83,24 +113,24 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'flashsale.default_per_user_limit', value: 5, category: 'flashsale', description: 'Giới hạn mua mặc định/user/item flash' },
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
 
+  // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
+  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; không áp đơn đại lý', createOnly: true },
+
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
-  { key: 'dealer.kyc_required', value: true, category: 'dealer', description: 'Bắt buộc CCCD khi đăng ký' },
   // Hạn gửi yêu cầu nhận thưởng mốc sau khi kỳ kết thúc (dealer.service). createOnly: không ghi đè giá trị admin.
   { key: 'dealer.reward_claim_grace_days', value: 30, category: 'dealer', description: 'Số ngày sau khi kỳ (quý/năm) kết thúc mà đại lý vẫn được gửi yêu cầu nhận thưởng mốc đã đạt trong kỳ đó', createOnly: true },
 
   // Game
-  { key: 'game.daily_checkin_seeds', value: 1, category: 'game', description: 'Hạt giống/ngày' },
-  { key: 'game.daily_checkin_points', value: 2, category: 'game', description: 'Điểm Xanh/ngày' },
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
   { key: 'game.spin_buy_cost_points', value: 10, category: 'game', description: 'Điểm Xanh đổi 1 lượt quay' },
   { key: 'game.spin_buy_daily_limit', value: 5, category: 'game', description: 'Max mua lượt/ngày' },
   { key: 'game.quiz_daily_count', value: 5, category: 'game', description: 'Số quiz/ngày' },
-  { key: 'game.quiz_correct_points', value: 3, category: 'game', description: 'Điểm/câu đúng' },
   { key: 'game.daily_login_seeds', value: 10, category: 'game', description: '💧 khi mở app/check-in' },
   { key: 'game.tank_capacity', value: 500, category: 'game', description: 'Sức chứa bình nước (💧)' },
   { key: 'game.tree_default_target', value: 600, category: 'game', description: '💧 cần để thu hoạch cây mặc định' },
-  { key: 'game.harvest_coupon_daily_cap', value: 3, category: 'game', description: 'Trần số coupon thu hoạch/ngày/user — chống farm xu→coupon (P0-1)' },
+  { key: 'game.harvest_coupon_daily_cap', value: 3, category: 'game', description: 'Trần số coupon thu hoạch/ngày/user — chống farm nước→coupon (P0-1)' },
+  { key: 'game.harvest_coupon_min_order', value: 199000, category: 'game', description: 'Đơn tối thiểu (đ) để dùng coupon thu hoạch (lô nhà + lô phụ); không bao giờ thấp hơn giá trị coupon', createOnly: true },
   { key: 'game.dew_seeds', value: 15, category: 'game', description: '💧 giọt sương sáng/ngày' },
   { key: 'game.streak_freeze_cost', value: 80, category: 'game', description: '💧 mua 1 vé giữ lửa (streak-freeze)' },
   { key: 'game.streak_repair_cost', value: 150, category: 'game', description: 'Giá 💧 hồi sinh chuỗi đã mất' },
@@ -108,17 +138,16 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.streak_repair_cooldown_days', value: 30, category: 'game', description: 'Số ngày giữa 2 lần hồi sinh chuỗi' },
   { key: 'game.max_plots', value: 5, category: 'game', description: 'Số lô đất tối đa/user (gồm lô nhà)' },
   { key: 'game.plot_unlock_seed_base', value: 100, category: 'game', description: '💧 mở lô đất (giá = base × số thứ tự lô)' },
-  { key: 'game.plot_unlock_xu_base', value: 200, category: 'game', description: 'Xu mở lô đất (giá = base × số thứ tự lô)' },
   { key: 'game.plot_target', value: 600, category: 'game', description: '💧 cần để thu hoạch 1 cây ở lô phụ' },
   { key: 'seasonpass.checkin_xp', value: 10, category: 'game', description: 'XP season pass mỗi lần điểm danh' },
   {
     key: 'seasonpass.tiers',
     value: [
-      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'XU', amount: 5000 } },
-      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'XU', amount: 8000 } },
-      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'XU', amount: 12000 } },
-      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'XU', amount: 20000 } },
-      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'XU', amount: 30000 } },
+      { xp: 30, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'POINTS', amount: 5 } },
+      { xp: 70, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'POINTS', amount: 8 } },
+      { xp: 120, free: { type: 'SEEDS', amount: 40 }, premium: { type: 'POINTS', amount: 12 } },
+      { xp: 200, free: { type: 'SEEDS', amount: 60 }, premium: { type: 'POINTS', amount: 20 } },
+      { xp: 300, free: { type: 'SEEDS', amount: 80 }, premium: { type: 'POINTS', amount: 30 } },
     ],
     category: 'game',
     description: 'Bậc Season Pass',
@@ -129,7 +158,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.max_open_per_user', value: 3, category: 'groupbuy', description: 'Trần số nhóm mua chung OPEN cùng lúc/user — chống spam mở nhóm (P0-2)' },
   { key: 'refill.seeds_per_bottle', value: 50, category: 'refill', description: '💧 thưởng cho mỗi vỏ chai đổi' },
   { key: 'refill.monthly_cap_bottles', value: 20, category: 'refill', description: 'Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)' },
-  { key: 'beta.features', value: [], category: 'beta', description: 'Danh sách tính năng beta hiển thị cho người tham gia (mảng {key,title,desc})' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
@@ -153,6 +181,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Shipping
   { key: 'shipping.free_threshold', value: 200000, category: 'shipping', description: 'Đơn ≥ 200k được freeship' },
   { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 200k' },
+  // null = chưa đặt: app ẩn dòng "Giao dự kiến" thay vì hứa số ngày chủ shop chưa chốt. Khoá phải CÓ dòng để admin
+  // bật được từ tab Cấu hình (tab chỉ liệt kê dòng đã tồn tại). createOnly: deploy lại không xoá số admin đã đặt.
+  { key: 'shipping.eta_min_days', value: Prisma.JsonNull, category: 'shipping', description: 'Giao dự kiến: số ngày tối thiểu (0-60). Để null thì app ẩn dòng "Giao dự kiến"', createOnly: true },
+  { key: 'shipping.eta_max_days', value: Prisma.JsonNull, category: 'shipping', description: 'Giao dự kiến: số ngày tối đa (0-60, không nhỏ hơn mức tối thiểu). Để null thì app ẩn dòng "Giao dự kiến"', createOnly: true },
   { key: 'shipping.tier_freeship_overrides', value: { LOC_BIEC: 99000, DAI_THU: 0, CO_THU: 0 }, category: 'shipping', description: 'Hạng được freeship trước ngưỡng' },
   // Gomdon (thu gom tái chế): createOnly — admin sửa kho/cân nặng/công tắc, deploy chạy lại seed KHÔNG
   // được reset. Tài khoản Gomdon (phone/password) KHÔNG nằm ở đây: đặt qua env GOMDON_PHONE/
@@ -183,22 +215,10 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   },
 
   // Return
-  { key: 'return.allow_manufacturer_defect_only', value: true, category: 'return', description: 'Chỉ đổi khi lỗi NSX' },
   // Khoá code đọc là 'returns.window_days' (orders.service + affiliate.service). Bản cũ seed nhầm
   // 'return.window_days' = 15 (không ai đọc) → hiệu lực thật luôn là mặc định 7, khớp chính sách đang
   // công bố trên app ("đổi/trả trong 7 ngày"). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'returns.window_days', value: 7, category: 'return', description: 'Số ngày từ khi giao (DELIVERED) được yêu cầu đổi/trả', createOnly: true },
-  { key: 'return.shipping_paid_by_tubu_if_defect', value: true, category: 'return', description: 'Tubu trả phí ship hoàn nếu lỗi NSX' },
-  { key: 'return.affiliate_commission_reverse_window_days', value: 20, category: 'return', description: 'Trừ ngược hoa hồng nếu hoàn trong X ngày' },
-
-  // Payment
-  { key: 'payment.enabled_methods', value: ['COD', 'ZALOPAY', 'BANK_TRANSFER', 'VNPAY'], category: 'payment', description: 'Phương thức bật' },
-  { key: 'payment.cod_max_amount', value: 5000000, category: 'payment', description: 'Max đơn cho COD' },
-
-  // Eco / Tree planting
-  { key: 'eco.real_tree_partner', value: 'PanNature - Rừng Xanh Lên', category: 'eco', description: 'Đối tác trồng cây — nature.org.vn' },
-  { key: 'eco.real_tree_cost_each', value: 50000, category: 'eco', description: 'Chi phí 1 cây thật (VND)' },
-  { key: 'eco.real_tree_monthly_budget', value: 5000000, category: 'eco', description: 'Trần ngân sách trồng cây/tháng' },
 
   // Remarketing — nhắc giỏ bỏ quên + voucher sắp hết hạn (cron RemarketingService).
   { key: 'remarketing.cart_abandon_min_hours', value: 6, category: 'remarketing', description: 'Giỏ bỏ quên ít nhất N giờ mới nhắc' },
@@ -212,9 +232,6 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // trước khi hết cửa sổ 30 ngày (thay vì trễ 21 ngày như trước).
   { key: 'reorder.default_cycle_days', value: 30, category: 'reorder', description: 'Số ngày chu kỳ tiêu dùng mặc định (mọi SKU) dùng để tính hạn nhắc mua lại', createOnly: true },
   { key: 'reorder.remind_ratio', value: 0.8, category: 'reorder', description: 'Tỉ lệ của chu kỳ tại đó gửi nhắc (0.8 × cycle_days = ngày nhắc)', createOnly: true },
-
-  // RBAC nhân sự (Phase A) — SĐT admin thật cấp qua hub/DB; giữ rỗng để không cấp nhầm.
-  { key: 'rbac.admin_phones', value: [], category: 'rbac', description: 'Danh sách SĐT admin gán sẵn (tham chiếu; grant thực nằm ở role_grants)' },
 
   // Chấm công (Phase C) — nhập IP/toạ độ công ty thật qua hub/DB trước khi dùng.
   { key: 'attendance.office_ips', value: [], category: 'attendance', description: 'Danh sách IP/CIDR nội bộ được phép checkin' },
@@ -230,6 +247,15 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // ghi "→ auto checkout" khiến admin tưởng đang bật chống gian lận.
   { key: 'attendance.heartbeat_stale_min', value: 10, category: 'attendance', description: 'Ngưỡng coi heartbeat là cũ (hiện CHƯA dùng để tự checkout)' },
   { key: 'attendance.enforce_ip', value: true, category: 'attendance', description: 'Bật kiểm IP (tắt nếu chưa có IP tĩnh)' },
+  // C-056: GPS nhảy một nhịp không được tự chấm ra. createOnly: admin chỉnh theo độ ổn định GPS thực tế
+  // của văn phòng, deploy lại không được reset.
+  { key: 'attendance.out_of_range_max_count', value: 3, category: 'attendance', description: 'Tự checkout (OUT_OF_RANGE) sau X heartbeat ngoài vùng LIÊN TIẾP (miniapp gửi 3 phút/nhịp; tối thiểu 1)', createOnly: true },
+  { key: 'attendance.out_of_range_max_min', value: 15, category: 'attendance', description: 'Hoặc tự checkout khi chuỗi ngoài vùng kéo dài quá X phút (heartbeat thưa vì app bị cất đi)', createOnly: true },
+  // Job dọn log theo lô (data-retention.service.ts, C-046/Q-21). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'retention.analytics_events_days', value: 395, category: 'retention', description: 'Giữ analytics_events thô bao nhiêu ngày (13 tháng; sàn 90)', createOnly: true },
+  { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
+  { key: 'retention.webhook_events_days', value: 90, category: 'retention', description: 'Giữ log webhook Pancake/Gomdon/tin nhắn OA bao nhiêu ngày (sàn 14)', createOnly: true },
+  { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
 ];
 
 const TIERS = [
@@ -240,7 +266,7 @@ const TIERS = [
     minSpending: null,
     pointMultiplier: new Prisma.Decimal(1),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1x'],
+    perks: ['Tích Điểm Xanh x1'],
     birthdayVoucherAmount: null,
     sortOrder: 0,
   },
@@ -251,7 +277,7 @@ const TIERS = [
     minSpending: 5000000,
     pointMultiplier: new Prisma.Decimal(1.2),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1.2x', 'Freeship đơn ≥ 99k', 'Voucher sinh nhật 50k'],
+    perks: ['Tích Điểm Xanh x1.2', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
     birthdayVoucherAmount: 50000,
     sortOrder: 1,
   },
@@ -262,7 +288,7 @@ const TIERS = [
     minSpending: 20000000,
     pointMultiplier: new Prisma.Decimal(1.5),
     discountPct: new Prisma.Decimal(0),
-    perks: ['Tích điểm 1.5x', 'Freeship toàn shop', 'Ưu tiên hotline', 'Beta tester', 'Voucher sinh nhật 150k + 1 sample'],
+    perks: ['Tích Điểm Xanh x1.5', 'Freeship toàn shop', 'Mã giảm giá sinh nhật 150k'],
     birthdayVoucherAmount: 150000,
     sortOrder: 2,
   },
@@ -273,7 +299,7 @@ const TIERS = [
     minSpending: 50000000,
     pointMultiplier: new Prisma.Decimal(2),
     discountPct: new Prisma.Decimal(0.05),
-    perks: ['Tích điểm 2x', 'Freeship + giảm 5% mọi đơn', 'Quà sinh nhật cá nhân hóa', 'Voucher sinh nhật 300k + hộp quà'],
+    perks: ['Tích Điểm Xanh x2', 'Freeship + giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
     birthdayVoucherAmount: 300000,
     sortOrder: 3,
   },
@@ -636,9 +662,12 @@ const PRODUCTS: SeedProduct[] = [
 ];
 
 const NOTIFICATION_TEMPLATES = [
+  // ORDER_CONFIRMED/ORDER_SHIPPING mang kênh ZNS nhưng chưa có zaloTemplateId (cần Zalo duyệt mẫu, không tự điền được):
+  // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
   { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
-  { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công. Điểm Xanh đã được cộng!' },
+  // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
+  { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
@@ -652,17 +681,28 @@ const NOTIFICATION_TEMPLATES = [
   // thật dù đã DELIVERED, hoặc đã được hoàn bởi một đường khác trước đó) — KHÔNG được nói "đã hoàn
   // tiền" trong trường hợp này. createOnly: thêm sau lần seed đầu, không ghi đè nếu admin đã sửa.
   { id: 'nt-return-ok-no-refund', code: 'RETURN_APPROVED_NO_REFUND', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.', createOnly: true },
-  { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿 Đổi sang TubuXu để nhận thêm 20% nhé!' },
+  // PD-3: đơn XU cũ và phần điểm quy đổi hoàn bằng Điểm Xanh (không vào Ví); {{points}} là tổng điểm khách nhận lại.
+  // Cùng mã/nội dung với migration 20261012140000_pd3_review_b1_return_templates.
+  { id: 'nt-return-ok-points', code: 'RETURN_APPROVED_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Đã hoàn {{points}} Điểm Xanh vào tài khoản của bạn 🌿', createOnly: true },
+  { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
+  { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
   { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
-  { id: 'nt-sub-pause', code: 'SUBSCRIPTION_PAUSED', channel: 'INAPP', bodyTemplate: 'Lịch đặt định kỳ tạm dừng (sản phẩm hết hàng hoặc địa chỉ không hợp lệ). Vui lòng kiểm tra lại.' },
+  // Mọi nhánh tạm dừng (SP ngừng bán, địa chỉ hỏng, Ví Tubu không đủ — C-015) đều truyền {{reason}}. Prod nhận lời này
+  // và mẫu chuyển khoản dưới qua migration 20261010191000_subscription_second_order_templates_fix.
+  { id: 'nt-sub-pause', code: 'SUBSCRIPTION_PAUSED', channel: 'INAPP', bodyTemplate: 'Lịch đặt định kỳ đã tạm dừng: {{reason}}. Vui lòng kiểm tra lại rồi bật lại lịch nhé 🌿' },
+  // Gói trả bằng chuyển khoản (C-015, Q-13): đơn kỳ chờ tiền, quá hạn thì cron huỷ đơn như đơn trả trước thường.
+  { id: 'nt-sub-order-awaiting-payment', code: 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo, vui lòng chuyển khoản {{amount}}đ trong {{hours}} giờ để Tubu giao hàng. Quá hạn đơn kỳ này sẽ tự huỷ, lịch vẫn giữ cho kỳ sau 🌿' },
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
   { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿' },
-  { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 🎁' },
+  { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
+  // C-017: cùng mã/nội dung với migration 20261010190500_order_review_invite_second_order (lời sửa ở 20261010191000).
+  { id: 'nt-second-order', code: 'SECOND_ORDER_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng cho lần mua tiếp theo trước {{expires}} 🌿', createOnly: true },
+  { id: 'nt-review-request', code: 'REVIEW_REQUEST', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã đến tay bạn. Bạn thấy {{product}} thế nào? Viết đánh giá để giúp người mua sau, lần đầu đánh giá mỗi sản phẩm được cộng Điểm Xanh 🌿', createOnly: true },
   { id: 'nt-milestone', code: 'MILESTONE_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu! Tặng voucher tri ân {{code}} giảm {{value}}đ, dùng trước {{expires}} 🌿' },
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
@@ -684,13 +724,21 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-dealer-credit-confirmed', code: 'DEALER_CREDIT_PAYMENT_CONFIRMED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
-  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng.' },
+  // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration
+  // 20261012160000_pd3_xu_converted_notice, nơi tạo luôn thông báo cho từng user đã quy đổi.
+  { id: 'nt-xu-converted', code: 'XU_CONVERTED', channel: 'INAPP', bodyTemplate: '{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.', createOnly: true },
+  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm Điểm Xanh thưởng.' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
-  { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
+  { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
+  // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
+  // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
+  { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
+  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể rút ngay trong mục CTV.', createOnly: true },
+  { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
   // A1-03 (docs/audit-2026-09/01-ia-navigation.md): báo admin khi khách gửi yêu cầu xoá tài khoản
   // (UsersService.requestAccountDeletion) — mirror nt-dealer-credit-reported (chỉ gửi ADMIN).
   { id: 'nt-account-deletion-requested', code: 'ACCOUNT_DELETION_REQUESTED', channel: 'INAPP', bodyTemplate: '🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý.', createOnly: true },
@@ -702,7 +750,7 @@ const QUIZZES = [
   { id: 'q3', question: 'Vùng nguyên liệu của Pơ Lang ở đâu?', options: ['Đắk Lắk', 'Hà Nội', 'Cà Mau', 'Huế'], correct: 0, rewardPts: 3, brand: 'Pơ Lang' },
   { id: 'q4', question: 'Chứng nhận hữu cơ quốc tế phổ biến là?', options: ['ISO', 'USDA Organic', 'CE', 'FDA'], correct: 1, rewardPts: 3 },
   { id: 'q5', question: '"Sống xanh An Lành" là slogan của?', options: ['Tubu Tree', 'Shopee', 'Lazada', 'Tiki'], correct: 0, rewardPts: 3 },
-  { id: 'q6', question: 'Cây thật được trồng qua đối tác nào?', options: ['PanNature', 'WWF', 'GreenID', 'IUCN'], correct: 0, rewardPts: 3 },
+  { id: 'q6', question: 'Khi thu hoạch cây ảo, giọt nước bạn đã tưới được góp vào đâu?', options: ['Hồ nước chung của cộng đồng', 'Ví Tubu của bạn', 'Kho hàng của đại lý', 'Quỹ khuyến mãi'], correct: 0, rewardPts: 3 },
 ];
 
 const MISSIONS = [
@@ -719,6 +767,7 @@ const CASHBACK_MERCHANTS = [
 ];
 
 async function main() {
+  assertSeedAllowed(process.env);
   console.log('🌱 Seeding SystemConfig...');
   for (const cfg of SYSTEM_CONFIGS) {
     // Key createOnly (admin sở hữu giá trị) chỉ tạo khi chưa có — xem config-seed.ts.
@@ -842,15 +891,15 @@ async function main() {
   console.log('🌱 Seeding Nature Quiz questions...');
   await seedGameQuiz(prisma);
 
-  // Vườn Xanh 2.0 Phase 2 — mốc cộng đồng cây thật đang mở.
+  // Vườn Xanh 2.0 Phase 2 — mốc cộng đồng góp quỹ trồng cây đang mở.
   console.log('🌳 Seeding Community Goal...');
   await prisma.communityGoal.upsert({
     where: { id: 'cg-cangio-2026' },
     update: {},
     create: {
       id: 'cg-cangio-2026',
-      title: 'Cùng Tubu phủ xanh Cần Giờ',
-      region: 'Rừng ngập mặn Cần Giờ, TP.HCM',
+      title: 'Cùng Tubu góp quỹ trồng cây',
+      region: 'Cộng đồng Tubu',
       targetDrops: 100000,
       currentDrops: 0,
       treesToPlant: 200,
@@ -880,20 +929,14 @@ async function main() {
     },
   });
 
-  // Cộng đồng Vườn Tubu Pha 1a — 6 danh mục Q&A cố định.
+  // Cộng đồng Vườn Tubu — danh mục Q&A theo ngành hàng thật (C-073). Danh mục cây cảnh của bản đầu chỉ bị ẩn,
+  // không xoá: bài đã đăng giữ nguyên chỗ (xem community-categories-seed.ts).
   console.log('🌱 Seeding Community Categories...');
-  const COMMUNITY_CATEGORIES = [
-    { slug: 'cham-soc', name: 'Chăm sóc cây', icon: '🌱', order: 1 },
-    { slug: 'sau-benh', name: 'Sâu bệnh', icon: '🐛', order: 2 },
-    { slug: 'phoi-canh', name: 'Phối cảnh / décor', icon: '🪴', order: 3 },
-    { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿', order: 4 },
-    { slug: 'hoi-mua-gi', name: 'Hỏi mua gì', icon: '🛒', order: 5 },
-    { slug: 'meo-hay', name: 'Mẹo hay', icon: '💡', order: 6 },
-  ];
   for (const c of COMMUNITY_CATEGORIES) {
-    await prisma.communityCategory.upsert({ where: { slug: c.slug }, update: { name: c.name, icon: c.icon, order: c.order }, create: c });
+    await prisma.communityCategory.upsert(communityCategoryUpsertArgs(c));
   }
-  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories`);
+  const retired = await prisma.communityCategory.updateMany(retireCommunityCategoriesArgs());
+  console.log(`Seeded ${COMMUNITY_CATEGORIES.length} community categories (${retired.count} danh mục cũ đã ẩn)`);
 
   console.log('✅ Seed done.');
 }

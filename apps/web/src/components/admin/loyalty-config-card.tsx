@@ -113,16 +113,17 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const weekTotal = form.checkin.reduce((s, v) => s + (Number.isFinite(Number(v)) ? Number(v) : 0), 0);
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+    <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Gift className="h-4 w-4 text-green-700" aria-hidden />
-          <h3 className="text-sm font-semibold text-neutral-900">Điểm Xanh — điểm danh & tích điểm tại quầy</h3>
+          <Gift className="h-4 w-4 text-forest-700" aria-hidden />
+          <h2 className="font-display text-sm font-semibold text-stone-900">Điểm Xanh — điểm danh & tích điểm tại quầy</h2>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
           <input
             type="checkbox"
             role="switch"
+            className="accent-forest-600"
             aria-checked={posEnabled}
             checked={posEnabled}
             disabled={saveToggle.isPending || !rows}
@@ -152,10 +153,10 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         }}
       >
         <div>
-          <div className="text-xs font-semibold uppercase text-neutral-500">Điểm danh 7 ngày (điểm mỗi ngày, 0–100)</div>
+          <div className="text-xs font-semibold uppercase text-stone-500">Điểm danh 7 ngày (điểm mỗi ngày, 0–100)</div>
           <div className="mt-1 grid grid-cols-7 gap-1.5">
             {form.checkin.map((v, i) => (
-              <label key={i} className="text-center text-[11px] text-neutral-500">
+              <label key={i} className="text-center text-[11px] text-stone-500">
                 N{i + 1}
                 <input
                   aria-label={`Điểm ngày ${i + 1}`}
@@ -170,7 +171,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
               </label>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-neutral-500">
+          <p className="mt-1 text-[11px] text-stone-500">
             Tổng {weekTotal} điểm/tuần mỗi khách. Điểm điểm danh & tại quầy KHÔNG tính vào xét hạng.
           </p>
         </div>
@@ -208,18 +209,18 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
           <button
             type="submit"
             disabled={saveNumbers.isPending || !rows}
-            className="rounded bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:bg-neutral-300"
+            className="min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500 sm:min-h-[36px]"
           >
             {saveNumbers.isPending ? 'Đang lưu…' : 'Lưu tham số tích điểm'}
           </button>
-          <Link href="/admin/pos" className="text-sm font-medium text-green-700 underline">
+          <Link href="/admin/pos" className="inline-flex min-h-[44px] items-center text-sm font-medium text-forest-700 underline sm:min-h-0">
             Mở màn thu ngân →
           </Link>
         </div>
       </form>
 
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}

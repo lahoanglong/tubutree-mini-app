@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 /**
  * Vườn Xanh 2.0 Phase 2 — hồ giọt nước cộng đồng (mô hình Ant Forest gom batch).
  * Khi user thu hoạch cây ảo, 💧 đã tưới góp vào mốc ACTIVE; đủ targetDrops → fulfil
- * (cam kết trồng treesToPlant cây thật ở vùng có tên; PanNature trồng thật để sau — gate).
+ * (ghi nhận treesToPlant cây vào quỹ trồng cây của vùng có tên; việc trồng thật để sau — gate).
  * An toàn: tăng hồ + đóng góp cá nhân nguyên tử; fulfil có count-guard chống chốt 2 lần.
  */
 @Injectable()
@@ -69,7 +69,7 @@ export class GameCommunityService {
 
   /**
    * Chốt mốc: ACTIVE → FULFILLING (count-guard chống double) → DONE.
-   * PanNature trồng batch thật để sau (gate). Trả true nếu chính lần này chốt.
+   * Việc trồng batch thật để sau (gate). Trả true nếu chính lần này chốt.
    */
   async fulfil(goalId: string): Promise<boolean> {
     const guard = await this.prisma.communityGoal.updateMany({

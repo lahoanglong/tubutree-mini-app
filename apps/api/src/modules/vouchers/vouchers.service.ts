@@ -1,8 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CRON_TZ } from '../../common/cron-tz';
+import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
+
+/**
+ * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
+ * `guest_<deviceId>` (cả dòng guest đã gộp `guest_..._merged_...`) — tạo vô hạn chỉ bằng deviceId
+ * mới nên không được nhận voucher chào mừng/sinh nhật/winback. SĐT chỉ được ghi từ phoneToken Zalo
+ * (auth.service) nên có SĐT = đã xác thực, kể cả khi dòng vẫn mang zaloId guest.
+ */
+const REAL_USER_WHERE: Prisma.UserWhereInput = {
+  OR: [
+    { phone: { not: null } },
+    { AND: [{ zaloId: { not: null } }, { NOT: { zaloId: { startsWith: 'guest_' } } }] },
+  ],
+};
+/** Bản SQL của REAL_USER_WHERE, bảng users phải có alias `u`. `left()` thay LIKE vì `_` là ký tự đại diện. */
+const REAL_USER_SQL = Prisma.sql`(u.phone IS NOT NULL OR (u."zaloId" IS NOT NULL AND left(u."zaloId", 6) <> 'guest_'))`;
+
+export type CronBatchResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { granted: number; scanned: number };
 
 /**
  * Voucher tự động (Build Spec §6.6): welcome / birthday / win-back / milestone.
@@ -15,8 +35,17 @@ export class VouchersService {
   private static readonly WELCOME_PAGE = 200;
   /** Trần an toàn: 200 × 25 = 5.000 user/giờ, đủ cho mọi chiến dịch thực tế. */
   private static readonly WELCOME_MAX_PAGES = 25;
+  /** Kích thước lô keyset cho birthday/winback (quét đến hết, không có trần số trang). */
+  private static readonly BATCH_PAGE = 500;
+  /** Cửa sổ NS-1 (analytics-aggregation NS1_WINDOW_DAYS): đơn thứ 2 tính trong 30 ngày kể từ đơn đầu. */
+  private static readonly NS1_WINDOW_DAYS = 30;
+  private static readonly SECOND_ORDER_PAGE = 200;
+  /** Trần mỗi lượt 200 × 25 = 5.000 khách; phần dư lượt ngày mai lấy tiếp (mã đã cấp bị loại khỏi truy vấn). */
+  private static readonly SECOND_ORDER_MAX_PAGES = 25;
+  private static readonly SECOND_ORDER_LOCK = 'cron:vouchers.second_order';
 
   private readonly logger = new Logger(VouchersService.name);
+  private secondOrderRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -32,6 +61,8 @@ export class VouchersService {
     value: number;
     minOrder?: number;
     validDays: number;
+    /** Hạn cố định thay cho now + validDays. */
+    endAt?: Date;
     templateCode: string;
   }): Promise<boolean> {
     // Code DETERMINISTIC theo (reason, full userId) → dựa vào coupon.code @unique
@@ -42,7 +73,7 @@ export class VouchersService {
     if (existed) return false;
 
     const now = new Date();
-    const endAt = new Date(now.getTime() + opts.validDays * 864e5);
+    const endAt = opts.endAt ?? new Date(now.getTime() + opts.validDays * 864e5);
     try {
       await this.prisma.coupon.create({
         data: {
@@ -68,8 +99,11 @@ export class VouchersService {
     await this.notifications
       .notify(opts.userId, opts.templateCode, {
         code,
-        value: String(opts.value),
-        expires: endAt.toLocaleDateString('vi-VN'),
+        // Chỉ mã giảm tiền mới đọc như số tiền; giá trị % để nguyên.
+        value: opts.type === 'AMOUNT' ? opts.value.toLocaleString('vi-VN') : String(opts.value),
+        // Cả cụm câu (không chỉ con số) để mã không có đơn tối thiểu không in "cho đơn từ 0đ".
+        min_order_note: opts.minOrder ? ` cho đơn từ ${opts.minOrder.toLocaleString('vi-VN')}đ` : '',
+        expires: formatVnDate(endAt),
       })
       .catch(() => undefined);
     return true;
@@ -82,7 +116,7 @@ export class VouchersService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi cấp/notify từng user đã
    * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
   async welcomeVouchers(): Promise<void> {
     try {
       const since = new Date(Date.now() - 24 * 3600 * 1000);
@@ -103,7 +137,7 @@ export class VouchersService {
         const users = await this.prisma.user.findMany({
           // "chưa có đơn" (đúng như doc-comment) — trước đây thiếu filter `orders: { none: {} }`
           // nên user đã đặt đơn trong 24h đầu vẫn bị cấp voucher chào mừng, sai business rule.
-          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} } },
+          where: { createdAt: { gte: since }, role: 'CUSTOMER', orders: { none: {} }, ...REAL_USER_WHERE },
           orderBy: { id: 'asc' }, // khoá cursor ổn định (createdAt có thể trùng nhau hàng loạt)
           take: VouchersService.WELCOME_PAGE,
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -129,31 +163,38 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 1 * * *')
+  @Cron('0 1 * * *', { timeZone: CRON_TZ })
   async birthdayVouchers(): Promise<void> {
     try {
-      const today = new Date();
-      const mm = today.getMonth() + 1;
-      const dd = today.getDate();
-      // Lọc theo tháng/ngày của dob (Postgres EXTRACT qua raw). Lấy kèm tierId để cấp ĐÚNG mức
-      // hạng đã hứa (P0 A3-05: trước đây mọi hạng cùng nhận 1 mức, dù seed hứa Lộc Biếc 50k/
-      // Đại Thụ 150k/Cổ Thụ 300k — xem prisma/seed.ts TIERS[].perks).
-      const users = await this.prisma.$queryRaw<{ id: string; tierId: string | null }[]>`
-        SELECT id, "tierId" FROM users
-        WHERE dob IS NOT NULL
-          AND EXTRACT(MONTH FROM dob) = ${mm}
-          AND EXTRACT(DAY FROM dob) = ${dd}
-        LIMIT 500`;
+      const { year, month: mm, day: dd } = vnDateParts();
       const defaultValue = await this.config.get<number>('voucher.birthday_amount', 50000);
       // Mức riêng theo hạng (birthdayVoucherAmount null = hạng chưa có/không hứa mức riêng →
       // dùng mặc định chung, không phải 0 — không tự ý cắt quyền lợi hạng cơ bản đang có).
       const tiers = await this.prisma.membershipTier.findMany({ select: { id: true, birthdayVoucherAmount: true } });
       const amountByTier = new Map(tiers.map((t) => [t.id, t.birthdayVoucherAmount]));
-      const reason = `BIRTHDAY-${today.getFullYear()}-${mm}`;
+      const reason = `BIRTHDAY-${year}-${mm}`;
       let granted = 0;
-      for (const u of users) {
-        const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
-        if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+      // Keyset theo id: trước đây một lần `LIMIT 500` không ORDER BY — ngày có > 500 người cùng
+      // sinh nhật thì phần dư không bao giờ được cấp (Postgres trả tập tuỳ ý, mỗi lần chạy như
+      // nhau). Chạy lại/2 instance song song vẫn an toàn nhờ code coupon tất định trong grant().
+      let cursor = '';
+      for (;;) {
+        // Lấy kèm tierId để cấp ĐÚNG mức hạng đã hứa (P0 A3-05 — xem prisma/seed.ts TIERS[].perks).
+        const users = await this.prisma.$queryRaw<{ id: string; tierId: string | null }[]>`
+          SELECT u.id, u."tierId" FROM users u
+          WHERE u.dob IS NOT NULL
+            AND EXTRACT(MONTH FROM u.dob) = ${mm}
+            AND EXTRACT(DAY FROM u.dob) = ${dd}
+            AND ${REAL_USER_SQL}
+            AND u.id > ${cursor}
+          ORDER BY u.id
+          LIMIT ${VouchersService.BATCH_PAGE}`;
+        for (const u of users) {
+          const value = (u.tierId ? amountByTier.get(u.tierId) : null) ?? defaultValue;
+          if (await this.grant({ userId: u.id, reason, type: 'AMOUNT', value, validDays: 30, templateCode: 'BIRTHDAY_VOUCHER' })) granted++;
+        }
+        if (users.length < VouchersService.BATCH_PAGE) break;
+        cursor = users[users.length - 1]!.id;
       }
       if (granted) this.logger.log(`Birthday vouchers granted: ${granted}`);
     } catch (err) {
@@ -167,22 +208,31 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 2 * * *')
+  @Cron('0 2 * * *', { timeZone: CRON_TZ })
   async winbackVouchers(): Promise<void> {
     try {
       const days = await this.config.get<number>('voucher.winback_days', 60);
       const cutoff = new Date(Date.now() - days * 864e5);
-      const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
-        SELECT "userId", MAX("createdAt") AS last
-        FROM orders
-        GROUP BY "userId"
-        HAVING MAX("createdAt") < ${cutoff}
-        LIMIT 500`;
       const value = await this.config.get<number>('voucher.winback_amount', 50000);
-      const reason = `WINBACK-${new Date().toISOString().slice(0, 7)}`;
+      const reason = `WINBACK-${vnMonthKey()}`;
       let granted = 0;
-      for (const r of rows) {
-        if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+      // Keyset theo userId, cùng lý do với birthdayVouchers (LIMIT 500 không ORDER BY bỏ sót).
+      let cursor = '';
+      for (;;) {
+        const rows = await this.prisma.$queryRaw<{ userId: string }[]>`
+          SELECT o."userId"
+          FROM orders o
+          JOIN users u ON u.id = o."userId"
+          WHERE ${REAL_USER_SQL} AND o."userId" > ${cursor}
+          GROUP BY o."userId"
+          HAVING MAX(o."createdAt") < ${cutoff}
+          ORDER BY o."userId"
+          LIMIT ${VouchersService.BATCH_PAGE}`;
+        for (const r of rows) {
+          if (await this.grant({ userId: r.userId, reason, type: 'AMOUNT', value, validDays: 21, templateCode: 'WINBACK_VOUCHER' })) granted++;
+        }
+        if (rows.length < VouchersService.BATCH_PAGE) break;
+        cursor = rows[rows.length - 1]!.userId;
       }
       if (granted) this.logger.log(`Win-back vouchers granted: ${granted}`);
     } catch (err) {
@@ -197,7 +247,7 @@ export class VouchersService {
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — $queryRaw lỗi ném ra ngoài là
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
-  @Cron('0 5 * * *')
+  @Cron('0 5 * * *', { timeZone: CRON_TZ })
   async milestoneVouchers(): Promise<void> {
     try {
       const milestones = await this.config.get<{ spend: number; reward: number }[]>('voucher.milestones', [
@@ -242,5 +292,100 @@ export class VouchersService {
     } catch (err) {
       this.logger.error(`milestoneVouchers lỗi: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  /**
+   * Đơn thứ 2 (C-017, north-star NS-1 "đơn thứ 2 trong 30 ngày kể từ đơn đầu"): khách thật có đúng một đơn (không tính
+   * đơn huỷ), đơn đó đã giao được `voucher.second_order_delay_days` ngày → mã giảm giá hạn tới hết cửa sổ 30 ngày.
+   * Mỗi khách một mã cả đời (code tất định `SECOND-ORDER-<userId>`). Còn dưới `voucher.second_order_min_remaining_days`
+   * ngày thì bỏ, vì mã sắp hết hạn chỉ làm phiền. Tin đi qua NotificationsService nên khách tắt "Khuyến mãi" không nhận
+   * tin (SECOND_ORDER_VOUCHER là nhóm PROMO), mã vẫn nằm trong kho voucher.
+   *
+   * Không xét: đơn lên hộ (userId là CTV), đơn đại lý, đơn sinh từ gói định kỳ và khách còn gói định kỳ (đơn kế tiếp
+   * đã tự có, giảm giá chỉ là chi phí).
+   */
+  @Cron('0 10 * * *', { timeZone: CRON_TZ })
+  async secondOrderVouchers(): Promise<CronBatchResult> {
+    if (this.secondOrderRunning) return { skipped: 'RUNNING' };
+    this.secondOrderRunning = true;
+    try {
+      // Khoá advisory theo transaction giữ suốt lượt (nhiều instance cùng lịch thì chỉ một chạy); việc cấp chạy trên
+      // kết nối khác nên mã đã cấp vẫn giữ khi lượt bị ngắt giữa chừng. Code coupon @unique vẫn là chốt cuối.
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(hashtext(${VouchersService.SECOND_ORDER_LOCK})) AS "locked"`;
+          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          return this.grantSecondOrderBatches();
+        },
+        { maxWait: 10_000, timeout: 10 * 60_000 },
+      );
+    } catch (err) {
+      this.logger.error(`secondOrderVouchers lỗi: ${err instanceof Error ? err.message : err}`);
+      return { skipped: 'ERROR' };
+    } finally {
+      this.secondOrderRunning = false;
+    }
+  }
+
+  private async grantSecondOrderBatches(): Promise<{ granted: number; scanned: number }> {
+    const value = await this.config.get<number>('voucher.second_order_amount', 30000);
+    const minOrder = await this.config.get<number>('voucher.second_order_min_order', 199000);
+    const delayDays = await this.config.get<number>('voucher.second_order_delay_days', 3);
+    const minRemainingDays = await this.config.get<number>('voucher.second_order_min_remaining_days', 3);
+    const now = Date.now();
+    const deliveredBefore = new Date(now - delayDays * 864e5);
+    const createdAfter = new Date(now - (VouchersService.NS1_WINDOW_DAYS - minRemainingDays) * 864e5);
+
+    let granted = 0;
+    let scanned = 0;
+    let cursor = '';
+    for (let page = 0; page < VouchersService.SECOND_ORDER_MAX_PAGES; page++) {
+      const rows = await this.prisma.$queryRaw<{ userId: string; firstAt: Date }[]>`
+        SELECT o."userId", o."createdAt" AS "firstAt"
+        FROM orders o
+        JOIN users u ON u.id = o."userId"
+        WHERE o.status::text = 'DELIVERED'
+          AND o.type::text = 'RETAIL'
+          AND o."placedForCustomer" = false
+          AND o."subscriptionId" IS NULL
+          AND o."createdAt" >= ${createdAfter}
+          AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}
+          AND u.role::text = 'CUSTOMER'
+          AND ${REAL_USER_SQL}
+          AND o."userId" > ${cursor}
+          AND NOT EXISTS (
+            SELECT 1 FROM orders o2
+            WHERE o2."userId" = o."userId" AND o2.id <> o.id AND o2.status::text <> 'CANCELLED')
+          AND NOT EXISTS (
+            SELECT 1 FROM subscriptions s
+            WHERE s."userId" = o."userId" AND s.status IN ('ACTIVE', 'PAUSED'))
+          AND NOT EXISTS (
+            SELECT 1 FROM coupons c WHERE c.code = upper('SECOND-ORDER-' || o."userId"))
+        ORDER BY o."userId"
+        LIMIT ${VouchersService.SECOND_ORDER_PAGE}`;
+      scanned += rows.length;
+      for (const r of rows) {
+        const endAt = new Date(new Date(r.firstAt).getTime() + VouchersService.NS1_WINDOW_DAYS * 864e5);
+        const ok = await this.grant({
+          userId: r.userId,
+          reason: 'SECOND-ORDER',
+          type: 'AMOUNT',
+          value,
+          minOrder,
+          validDays: VouchersService.NS1_WINDOW_DAYS,
+          endAt,
+          templateCode: 'SECOND_ORDER_VOUCHER',
+        }).catch((err: unknown) => {
+          this.logger.error(`Cấp mã đơn thứ 2 lỗi (user=${r.userId}): ${err instanceof Error ? err.message : err}`);
+          return false;
+        });
+        if (ok) granted++;
+      }
+      if (rows.length < VouchersService.SECOND_ORDER_PAGE) break;
+      cursor = rows[rows.length - 1]!.userId;
+    }
+    if (granted) this.logger.log(`Second-order vouchers granted: ${granted}/${scanned}`);
+    return { granted, scanned };
   }
 }

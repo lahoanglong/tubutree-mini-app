@@ -34,3 +34,18 @@ export const updateOwnedPromotion = (id: string, dto: { title?: string; subtitle
   api.patch(`/brand/owner/me/promotions/${id}`, dto).then((r) => r.data);
 export const deleteOwnedPromotion = (id: string) =>
   api.delete(`/brand/owner/me/promotions/${id}`).then((r) => r.data);
+
+export type BrandSalesPeriod = '7d' | '30d' | '90d' | 'month' | 'prev_month';
+/** Chỉ số tổng hợp của nhãn — máy chủ không trả thông tin khách (Q-18). Doanh thu là giá bán hàng của nhãn, chưa trừ mã giảm giá toàn đơn, chưa gồm phí vận chuyển. */
+export interface BrandSales {
+  period: BrandSalesPeriod;
+  from: string;
+  to: string;
+  orderCount: number;
+  unitsSold: number;
+  revenue: number;
+  delivered: { orderCount: number; revenue: number };
+  topProducts: { productId: string; name: string; slug: string; quantity: number; revenue: number }[];
+}
+export const getOwnedBrandSales = (period: BrandSalesPeriod) =>
+  api.get('/brand/owner/me/sales', { params: { period } }).then((r) => r.data as BrandSales);

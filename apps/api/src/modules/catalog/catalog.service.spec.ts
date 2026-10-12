@@ -1,6 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '@prisma/client';
+import { LIKE_ESCAPE } from './search-text';
 
 const card = (id: string) => ({
   id,
@@ -82,6 +84,36 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
   });
 });
 
+describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)', () => {
+  it('product trả về không có pancakeId', async () => {
+    const findUnique = jest.fn().mockResolvedValue({
+      id: 'p1',
+      pancakeId: 'pk-123',
+      slug: 'tinh-dau',
+      isActive: true,
+      approvalStatus: 'APPROVED',
+      soldExternal: 1,
+      soldApp: 2,
+      variations: [{ id: 'v1', sku: 'S1' }],
+      reviews: [],
+    });
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect(JSON.stringify(r)).not.toContain('pancakeId');
+    expect(JSON.stringify(r)).not.toContain('pk-123');
+    expect(r.sold).toBe(3);
+    expect(r.variations[0]).toMatchObject({ id: 'v1', sku: 'S1' });
+  });
+
+  it('select biến thể công khai không chọn pancakeId', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null);
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
+    const arg = findUnique.mock.calls[0]![0] as { include: { variations: { select: object } } };
+    expect(arg.include.variations.select).not.toHaveProperty('pancakeId');
+  });
+});
+
 describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọc approvalStatus=APPROVED', () => {
   it('related(): where lọc approvalStatus APPROVED', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -141,7 +173,7 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
 
   it('suggest(): where lọc approvalStatus APPROVED', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { product: { findMany } } as unknown as PrismaService;
+    const prisma = { product: { findMany }, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService;
     await new CatalogService(prisma).suggest('tinh dau');
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ isActive: true, approvalStatus: 'APPROVED' }) }),
@@ -417,3 +449,304 @@ describe('CatalogService.list (Multi-brand filtering)', () => {
   });
 });
 
+describe('CatalogService.list — bộ lọc dự án 4b', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = {
+      product: { findMany, count },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, count };
+  }
+  const argsOf = (findMany: jest.Mock) => findMany.mock.calls[0][0];
+
+  it('khoảng giá lọc theo GIÁ ĐANG BÁN (salePrice nếu có, không thì basePrice) — đúng giá thẻ SP hiển thị', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, minPrice: 100000, maxPrice: 200000 });
+    const range = { gte: 100000, lte: 200000 };
+    expect(argsOf(findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
+  });
+
+  it('chỉ minPrice → chỉ gte; min > max → tự đổi chỗ', async () => {
+    const a = setup();
+    await a.svc.list({ page: 1, limit: 20, minPrice: 500000 });
+    expect(argsOf(a.findMany).where.AND).toEqual([{ OR: [{ salePrice: { gte: 500000 } }, { salePrice: null, basePrice: { gte: 500000 } }] }]);
+    const b = setup();
+    await b.svc.list({ page: 1, limit: 20, minPrice: 300000, maxPrice: 100000 });
+    const range = { gte: 100000, lte: 300000 };
+    expect(argsOf(b.findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
+  });
+
+  it('inStock → còn ít nhất 1 phân loại ĐANG BÁN có tồn > 0 (cùng quy tắc với inStock của thẻ)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, inStock: true });
+    expect(argsOf(findMany).where.variations).toEqual({ some: { isActive: true, stock: { gt: 0 } } });
+  });
+
+  it('inStock=false → không lọc tồn kho', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, inStock: false });
+    expect(argsOf(findMany).where.variations).toBeUndefined();
+  });
+
+  it('minRating → ratingAvg >= minRating', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, minRating: 4 });
+    expect(argsOf(findMany).where.ratingAvg).toEqual({ gte: 4 });
+  });
+
+  it('không truyền tham số mới → where như trước (không AND/variations/ratingAvg)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, brand: 'Tubu' });
+    expect(argsOf(findMany).where).toEqual({ isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu' });
+  });
+
+  it('mọi kiểu sắp xếp (trừ best_seller) có id tăng dần làm tiêu chí phụ → phân trang không trùng/sót khi hoà', async () => {
+    const a = setup();
+    await a.svc.list({ page: 1, limit: 20 });
+    expect(argsOf(a.findMany).orderBy).toEqual([{ isFeatured: 'desc' }, { id: 'asc' }]);
+    const b = setup();
+    await b.svc.list({ page: 1, limit: 20, sort: 'newest' });
+    expect(argsOf(b.findMany).orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('count dùng đúng where của findMany', async () => {
+    const { svc, findMany, count } = setup();
+    await svc.list({ page: 1, limit: 20, minRating: 4, inStock: true });
+    expect(count).toHaveBeenCalledWith({ where: argsOf(findMany).where });
+  });
+});
+
+describe('CatalogService — tìm không dấu (dự án 4b)', () => {
+  function setup(queryRaw: jest.Mock) {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const prisma = {
+      product: { findMany, count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      $queryRaw: queryRaw,
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany };
+  }
+  const sqlOf = (queryRaw: jest.Mock) => {
+    const [query] = queryRaw.mock.calls[0] as [Prisma.Sql];
+    return { sql: query.strings.join('?'), values: query.values };
+  };
+
+  it('q → SQL so cột nameSearch (đã gấp dấu, có index) với từ khoá gấp ở TS; where lọc theo id tìm được (AND, không đè OR khác)', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: ' Nước rửa ' });
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([{ id: { in: ['p1', 'p2'] } }]);
+    expect(findMany.mock.calls[0][0].where.OR).toBeUndefined();
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).toContain('p."nameSearch" LIKE ?');
+    expect(sql).not.toContain('translate(');
+    expect(sql).toContain('p.tags @> ARRAY[?]::text[]');
+    expect(LIKE_ESCAPE).toBe('!');
+    expect(sql).toContain("ESCAPE '!'");
+    expect(values).toEqual(expect.arrayContaining(['%nuoc rua%', 'nước rửa']));
+  });
+
+  it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: "x'; DROP TABLE products;--" });
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).not.toContain('DROP');
+    expect(values).toContain('%x\'; drop table products;--%');
+  });
+
+  it('% và _ trong từ khoá được escape (không thành ký tự đại diện)', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: '50%' });
+    expect(sqlOf(queryRaw).values).toContain('%50!%%');
+  });
+
+  it('SQL cắt ứng viên có thứ tự xác định (ORDER BY) + trần TEXT_MATCH_LIMIT, và chỉ xét SP đang bán đã duyệt', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nuoc' });
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).toMatch(/ORDER BY[^]*p\.id[^]*LIMIT/);
+    expect(sql).toContain('"isActive" = true');
+    expect(sql).toContain("\"approvalStatus\" = 'APPROVED'");
+    expect(values[values.length - 1]).toBe(2000);
+  });
+
+  it('khoảng trắng không ngắt (NBSP) trong từ khoá được gấp thành khoảng trắng thường trước khi vào SQL', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
+    const { values } = sqlOf(queryRaw);
+    expect(values).toContain('%nuoc rua%');
+  });
+
+  it('SQL gấp dấu lỗi → lùi về contains như trước (mất tìm không dấu nhưng không sập trang)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const queryRaw = jest.fn().mockRejectedValue(new Error('column p.nameSearch does not exist'));
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'Nước rửa' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ name: { contains: 'Nước rửa', mode: 'insensitive' } }, { tags: { has: 'nước rửa' } }] },
+    ]);
+  });
+
+  it('q chỉ có khoảng trắng → coi như không tìm (không gọi SQL)', async () => {
+    const queryRaw = jest.fn();
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: '   ' });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where.AND).toBeUndefined();
+  });
+
+  it('không có q → không gọi SQL, where như trước', async () => {
+    const queryRaw = jest.fn();
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20 });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+  });
+
+  it('q kết hợp khoảng giá → cả hai nằm trong AND', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'nuoc', maxPrice: 100000 });
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { id: { in: ['p1'] } },
+      { OR: [{ salePrice: { lte: 100000 } }, { salePrice: null, basePrice: { lte: 100000 } }] },
+    ]);
+  });
+
+  it('suggest dùng cùng cách khớp; giữ shape {slug,name,thumbnail,basePrice}, tối đa 8; q rỗng → []', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.suggest('nuoc rua');
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
+      take: 8,
+      select: { slug: true, name: true, thumbnail: true, basePrice: true },
+    });
+    await expect(svc.suggest('  ')).resolves.toEqual([]);
+  });
+
+  it('suggest: từ khoá dưới 2 ký tự sau gấp dấu → [] không gọi SQL', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await expect(svc.suggest('a')).resolves.toEqual([]);
+    await expect(svc.suggest(' Ư ')).resolves.toEqual([]);
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('CatalogService.list — best_seller (dự án 4b)', () => {
+  const RANKED = [
+    { id: 'c', soldApp: 0, soldExternal: 15 },
+    { id: 'a', soldApp: 5, soldExternal: 10 },
+    { id: 'b', soldApp: 20, soldExternal: 0 },
+    { id: 'd', soldApp: 0, soldExternal: 0 },
+  ];
+  function setup(pageRows: ReturnType<typeof card>[]) {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValueOnce(pageRows);
+    const $transaction = jest.fn();
+    const prisma = { product: { findMany, count: jest.fn() }, $transaction } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, $transaction };
+  }
+
+  it('xếp theo soldApp + soldExternal giảm dần, hoà thì id tăng dần; giữ thứ tự dù DB trả lộn xộn', async () => {
+    const { svc, findMany } = setup([card('a'), card('b')]);
+    const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['b', 'a']);
+    expect(r.meta).toEqual({ page: 1, limit: 2, total: 4 });
+    expect(findMany.mock.calls[0][0]).toEqual({
+      where: { isActive: true, approvalStatus: 'APPROVED' },
+      select: { id: true, soldApp: true, soldExternal: true },
+    });
+    expect(findMany.mock.calls[1][0]).toEqual({
+      where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
+      include: { variations: { where: { isActive: true } } },
+    });
+  });
+
+  it('trang 2 nối tiếp đúng thứ tự, không trùng trang 1', async () => {
+    const { svc, findMany } = setup([card('d'), card('c')]);
+    const r = await svc.list({ page: 2, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['c', 'd']);
+    expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['c', 'd'] } });
+  });
+
+  it('trang vượt quá → data rỗng, total vẫn đúng, không gọi truy vấn thứ 2', async () => {
+    const { svc, findMany } = setup([]);
+    const r = await svc.list({ page: 9, limit: 2, sort: 'best_seller' });
+    expect(r).toEqual({ data: [], meta: { page: 9, limit: 2, total: 4 } });
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('giữ bộ lọc ở cả hai bước (vd brand + inStock); không dùng $transaction/count', async () => {
+    const { svc, findMany, $transaction } = setup([card('b')]);
+    await svc.list({ page: 1, limit: 1, sort: 'best_seller', brand: 'Tubu', inStock: true });
+    const where = { isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu', variations: { some: { isActive: true, stock: { gt: 0 } } } };
+    expect(findMany.mock.calls[0][0].where).toEqual(where);
+    expect(findMany.mock.calls[1][0].where.AND[0]).toEqual(where);
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it('hoà điểm (kể cả khi tổng bằng nhau nhưng soldApp/soldExternal khác nhau) → id tăng dần, không phụ thuộc thứ tự DB trả', async () => {
+    const tied = [
+      { id: 'z', soldApp: 3, soldExternal: 7 },
+      { id: 'm', soldApp: 10, soldExternal: 0 },
+      { id: 'k', soldApp: 0, soldExternal: 10 },
+      { id: 'a', soldApp: 1, soldExternal: 0 },
+    ];
+    const findMany = jest.fn().mockResolvedValueOnce(tied).mockResolvedValueOnce([card('k'), card('m')]);
+    const prisma = { product: { findMany }, $transaction: jest.fn() } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['k', 'm'] } });
+    expect(r.data.map((c) => c.id)).toEqual(['k', 'm']);
+  });
+
+  it('SP bị ẩn giữa hai bước → bỏ khỏi trang, không lỗi', async () => {
+    const { svc } = setup([card('b')]); // 'a' vừa bị tắt
+    const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(r.data.map((c) => c.id)).toEqual(['b']);
+  });
+});
+
+describe('CatalogService.categories — productCount (dự án 4b)', () => {
+  const CAT = (id: string, sortOrder: number) => ({ id, parentId: null, name: id, slug: id, image: null, sortOrder });
+
+  function setup() {
+    const categoryFindMany = jest.fn().mockResolvedValue([CAT('cat-a', 1), CAT('cat-b', 2)]);
+    const productFindMany = jest.fn().mockResolvedValue([
+      { categoryIds: ['cat-a'] },
+      { categoryIds: ['cat-a', 'cat-a'] }, // trùng id trong 1 SP → vẫn đếm 1
+      { categoryIds: [] },
+    ]);
+    const prisma = { category: { findMany: categoryFindMany }, product: { findMany: productFindMany } } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), categoryFindMany, productFindMany };
+  }
+
+  it('mỗi danh mục kèm số SP đang bán (active + APPROVED); danh mục trống → 0; giữ thứ tự sortOrder', async () => {
+    const { svc, productFindMany } = setup();
+    await expect(svc.categories()).resolves.toEqual([
+      { ...CAT('cat-a', 1), productCount: 2 },
+      { ...CAT('cat-b', 2), productCount: 0 },
+    ]);
+    expect(productFindMany).toHaveBeenCalledWith({
+      where: { isActive: true, approvalStatus: 'APPROVED' },
+      select: { categoryIds: true },
+    });
+  });
+
+  it('cache 60s vẫn áp dụng cho cả hai truy vấn', async () => {
+    const { svc, categoryFindMany, productFindMany } = setup();
+    await svc.categories();
+    await svc.categories();
+    expect(categoryFindMany).toHaveBeenCalledTimes(1);
+    expect(productFindMany).toHaveBeenCalledTimes(1);
+  });
+});

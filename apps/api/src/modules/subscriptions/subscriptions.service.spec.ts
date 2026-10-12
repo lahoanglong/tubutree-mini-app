@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -5,6 +6,8 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { WalletLedgerService } from '../wallet/wallet-ledger.service';
+import { formatVnDate } from '../../common/vn-time';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -14,6 +17,9 @@ const config = {} as unknown as SystemConfigService;
 const pricing = {} as unknown as PricingService;
 const loyalty = {} as unknown as LoyaltyService;
 const notifications = {} as unknown as NotificationsService;
+const walletLedger = (applyDelta: jest.Mock = jest.fn()) => ({ applyDelta }) as unknown as WalletLedgerService;
+/** Ngày bắt đầu sau hôm nay: create() không sinh đơn đầu ngay, các ca dưới chỉ xét phần tạo gói. */
+const LATER = new Date(Date.now() + 7 * 3600e3 + 3 * 864e5).toISOString().slice(0, 10);
 
 /** Mock mới cho mỗi test — record/recordBestEffort là jest.fn() để assert riêng từng test. */
 function makeAnalytics() {
@@ -23,12 +29,12 @@ function makeAnalytics() {
   } as unknown as AnalyticsEventsService;
 }
 
-function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock } = {}) {
+function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock; open?: unknown } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
-    variation: { findUnique: jest.fn().mockResolvedValue(opts.variation ?? { id: 'v1', isActive: true }) },
+    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
-    subscription: { create },
+    subscription: { create, findFirst: jest.fn().mockResolvedValue(opts.open ?? null) },
     // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
     // callback với chính prisma mock (đủ subscription.create cho test).
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
@@ -43,13 +49,14 @@ function makeService(opts: { variation?: unknown; address?: unknown; create?: je
       notifications,
       { enqueuePush: jest.fn() } as unknown as PancakeOrderService,
       analytics,
+      walletLedger(),
     ),
     create,
     analytics,
   };
 }
 
-const dto = (over = {}) => ({ variationId: 'v1', quantity: 2, intervalWeeks: 4, addressId: 'a1', ...over });
+const dto = (over = {}) => ({ variationId: 'v1', quantity: 2, intervalWeeks: 4, addressId: 'a1', startDate: LATER, ...over });
 
 describe('SubscriptionsService.create', () => {
   it('từ chối chu kỳ không hợp lệ (5 tuần)', async () => {
@@ -57,9 +64,22 @@ describe('SubscriptionsService.create', () => {
     await expect(svc.create('u1', dto({ intervalWeeks: 5 }))).rejects.toThrow('4/6/8/10');
   });
 
-  it('từ chối sản phẩm ngừng bán', async () => {
-    const { svc } = makeService({ variation: { id: 'v1', isActive: false } });
+  it('từ chối sản phẩm không tồn tại', async () => {
+    const { svc } = makeService({ variation: null });
     await expect(svc.create('u1', dto())).rejects.toThrow('không khả dụng');
+  });
+
+  it('từ chối SP ngừng bán / SP cha ngừng bán / chưa duyệt / bị từ chối → PRODUCT_DISCONTINUED (C-007)', async () => {
+    for (const variation of [
+      { id: 'v1', isActive: false, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: false, approvalStatus: 'APPROVED' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'PENDING_REVIEW' } },
+      { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'REJECTED' } },
+    ]) {
+      const { svc, create } = makeService({ variation });
+      await expect(svc.create('u1', dto())).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
+      expect(create).not.toHaveBeenCalled();
+    }
   });
 
   it('từ chối địa chỉ của người khác', async () => {
@@ -67,15 +87,20 @@ describe('SubscriptionsService.create', () => {
     await expect(svc.create('u1', dto())).rejects.toThrow('Địa chỉ không hợp lệ');
   });
 
-  it('tạo lịch ACTIVE với nextRunAt ≈ +intervalWeeks', async () => {
+  it('hẹn ngày bắt đầu → lịch ACTIVE, kỳ đầu 0h ngày đó giờ Việt Nam, mặc định trả COD (C-015)', async () => {
     const { svc, create } = makeService();
     await svc.create('u1', dto({ intervalWeeks: 6 }));
     const data = create.mock.calls[0][0].data;
-    const days = (new Date(data.nextRunAt).getTime() - Date.now()) / 864e5;
-    expect(days).toBeGreaterThan(6 * 7 - 1);
-    expect(days).toBeLessThan(6 * 7 + 1);
+    expect(new Date(data.nextRunAt).toISOString()).toBe(new Date(`${LATER}T00:00:00+07:00`).toISOString());
     expect(data.quantity).toBe(2);
     expect(data.intervalWeeks).toBe(6);
+    expect(data.paymentMethod).toBe('COD');
+  });
+
+  it('từ chối phương thức trả không hỗ trợ cho gói định kỳ (ZALOPAY) (C-015)', async () => {
+    const { svc, create } = makeService();
+    await expect(svc.create('u1', dto({ paymentMethod: 'ZALOPAY' as never }))).rejects.toThrow('Ví Tubu');
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('phát subscription_changed action=created trong cùng transaction', async () => {
@@ -97,6 +122,32 @@ describe('SubscriptionsService.create', () => {
       }),
     );
   });
+
+  it('gửi lại y hệt khi đã có gói ACTIVE cùng SP + địa chỉ → trả gói cũ, không tạo (C-057)', async () => {
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6, paymentMethod: 'COD' };
+    const { svc, create } = makeService({ open });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).resolves.toBe(open);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đã có gói ACTIVE y hệt nhưng khác cách trả → 409, không âm thầm bỏ cách trả khách chọn (review)', async () => {
+    const open = { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 6, paymentMethod: 'COD' };
+    const { svc, create } = makeService({ open });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6, paymentMethod: 'WALLET' }))).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'SUBSCRIPTION_DUPLICATE', subscriptionId: 's0' },
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đã có gói cùng SP + địa chỉ nhưng khác chu kỳ → 409 SUBSCRIPTION_DUPLICATE (C-057)', async () => {
+    const { svc, create } = makeService({ open: { id: 's0', status: 'ACTIVE', quantity: 2, intervalWeeks: 4 } });
+    await expect(svc.create('u1', dto({ intervalWeeks: 6 }))).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'SUBSCRIPTION_DUPLICATE', subscriptionId: 's0' },
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
 });
 
 describe('SubscriptionsService.processDue (claim chống double-order)', () => {
@@ -108,13 +159,18 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       tiers?: Tier[];
       stockCount?: number;
       variationInactive?: boolean;
+      discontinuedInTx?: boolean;
       addressInvalid?: boolean;
+      paymentMethod?: 'COD' | 'WALLET' | 'BANK_TRANSFER';
+      lockedStatus?: string;
+      applyDelta?: jest.Mock;
+      quantity?: number;
     } = {},
   ) {
-    const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4 }];
+    const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, nextRunAt: new Date(Date.now() - 60_000) }];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
-    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
-    const subUpdate = jest.fn().mockResolvedValue({});
+    const orderCreate = jest.fn().mockImplementation((args) => Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }));
+    const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: 4 });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const prisma = {
@@ -123,15 +179,31 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         updateMany,
         update: subUpdate,
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data })),
       },
       variation: {
         findUnique: jest.fn().mockResolvedValue(
           opts.variationInactive
-            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } }
-            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P' } },
+            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
+            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
         ),
+        // Kiểm lại SP còn bán trong tx (cart/sellable.ts).
+        findMany: jest.fn().mockResolvedValue(opts.discontinuedInTx ? [] : [{ id: 'v1' }]),
       },
       $executeRaw: stockExecuteRaw,
+      // Khoá dòng gói (SELECT ... FOR UPDATE) trong tx sinh đơn: số lượng/địa chỉ/cách trả đọc từ đây.
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          id: 's1',
+          userId: 'u1',
+          variationId: 'v1',
+          quantity: opts.quantity ?? 1,
+          addressId: 'a1',
+          status: opts.lockedStatus ?? 'ACTIVE',
+          paymentMethod: opts.paymentMethod ?? 'COD',
+        },
+      ]),
       address: {
         findUnique: jest.fn().mockResolvedValue(
           opts.addressInvalid
@@ -159,8 +231,10 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const enqueuePush = jest.fn().mockResolvedValue(undefined);
     const pancake = { enqueuePush } as unknown as PancakeOrderService;
     const analytics = makeAnalytics();
+    const applyDelta = opts.applyDelta ?? jest.fn().mockResolvedValue({ applied: true, balanceAfter: 0, entryId: 'w1' });
     return {
-      svc: new SubscriptionsService(prisma, cfg, pr, ly, nt, pancake, analytics),
+      svc: new SubscriptionsService(prisma, cfg, pr, ly, nt, pancake, analytics, walletLedger(applyDelta)),
+      applyDelta,
       updateMany,
       orderCreate,
       stockExecuteRaw,
@@ -206,6 +280,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.source).toBe('subscription');
     expect(data.platform).toBe('system');
     expect(data.subscriptionId).toBe('s1');
+    expect(data.code).toMatch(/^TUBUSUB\d{10}$/);
   });
 
   it('instance khác đã claim (count=0) → KHÔNG tạo đơn trùng', async () => {
@@ -251,10 +326,10 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
   });
 
   it('SP ngừng bán → tạm dừng lịch + phát subscription_changed action=order_failed reason=inactive_product', async () => {
-    const { svc, analytics, subUpdate, orderCreate } = makeProcess(1, { variationInactive: true });
+    const { svc, analytics, updateMany, orderCreate } = makeProcess(1, { variationInactive: true });
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(subUpdate).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
     expect(analytics.recordBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'subscription_changed',
@@ -265,11 +340,20 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     );
   });
 
+  it('SP bị gỡ sau khi tính giá kỳ (kiểm lại trong tx) → không giữ kho, không đơn, tạm dừng lịch + báo khách (C-007)', async () => {
+    const { svc, updateMany, orderCreate, stockExecuteRaw, notify } = makeProcess(1, { discontinuedInTx: true });
+    await svc.processDue();
+    expect(stockExecuteRaw).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', expect.anything());
+  });
+
   it('địa chỉ không hợp lệ → tạm dừng lịch + phát subscription_changed action=order_failed reason=invalid_address', async () => {
-    const { svc, analytics, subUpdate, orderCreate } = makeProcess(1, { addressInvalid: true });
+    const { svc, analytics, updateMany, orderCreate } = makeProcess(1, { addressInvalid: true });
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(subUpdate).toHaveBeenCalledWith({ where: { id: 's1' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
     expect(analytics.recordBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'subscription_changed',
@@ -302,6 +386,109 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.total).toBe(data.subtotal - data.discount + data.shippingFee);
   });
 
+  describe('thanh toán đơn kỳ (C-015, Q-13)', () => {
+    it('COD → đơn CONFIRMED chưa trả, idempotencyKey theo (gói, kỳ), không đụng ví', async () => {
+      const { svc, orderCreate, applyDelta } = makeProcess(1);
+      await svc.processDue();
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data).toEqual(expect.objectContaining({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' }));
+      expect(data.idempotencyKey).toMatch(/^subscription:s1:/);
+      expect(applyDelta).not.toHaveBeenCalled();
+    });
+
+    it('Ví Tubu → đơn PAID, trừ ví qua sổ cái ORDER_PAY refId = id đơn trong cùng tx', async () => {
+      const { svc, orderCreate, applyDelta } = makeProcess(1, { paymentMethod: 'WALLET' });
+      await svc.processDue();
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data).toEqual(expect.objectContaining({ status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID' }));
+      expect(data.paidAt).toBeInstanceOf(Date);
+      expect(applyDelta).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ userId: 'u1', delta: -data.total, type: 'ORDER_PAY', refType: 'ORDER', refId: 'o1' }),
+      );
+    });
+
+    it('Ví Tubu thiếu → tạm dừng gói + báo khách lý do Ví Tubu, không đẩy Pancake', async () => {
+      const applyDelta = jest.fn().mockRejectedValue(new BadRequestException('Số dư ví không đủ.'));
+      const { svc, updateMany, notify, enqueuePush, analytics } = makeProcess(1, { paymentMethod: 'WALLET', applyDelta });
+      await svc.processDue();
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('Ví Tubu') });
+      expect(enqueuePush).not.toHaveBeenCalled();
+      expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+        expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'insufficient_wallet' }) }),
+      );
+    });
+
+    // Bước claim đã dời nextRunAt sang kỳ kế; bật lại lịch (setStatus) giữ ngày đó, nên tin phải nói thật là kỳ này
+    // không giao và ngày của kỳ kế tiếp, không để khách tưởng bật lại là có đơn ngay.
+    it('tạm dừng vì Ví Tubu thiếu → tin nói rõ kỳ này không giao + ngày kỳ kế tiếp (review)', async () => {
+      const applyDelta = jest.fn().mockRejectedValue(new BadRequestException('Số dư ví không đủ.'));
+      const { svc, notify, updateMany } = makeProcess(1, { paymentMethod: 'WALLET', applyDelta });
+      await svc.processDue();
+      const claimedNext = updateMany.mock.calls[0][0].data.nextRunAt as Date;
+      const vnDate = formatVnDate(claimedNext);
+      const reason = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_PAUSED')![2].reason as string;
+      expect(reason).toContain('kỳ này không giao');
+      expect(reason).toContain(vnDate);
+    });
+
+    it('chuyển khoản → đơn PENDING_PAYMENT chưa trả + báo khách chuyển khoản trong hạn', async () => {
+      const { svc, orderCreate, notify, applyDelta } = makeProcess(1, { paymentMethod: 'BANK_TRANSFER' });
+      await svc.processDue();
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data).toEqual(
+        expect.objectContaining({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paidAt: null }),
+      );
+      expect(applyDelta).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledWith(
+        'u1',
+        'SUBSCRIPTION_ORDER_AWAITING_PAYMENT',
+        expect.objectContaining({ order_code: data.code, hours: '24' }),
+      );
+    });
+
+    // Checkout chặn COD > 5.000.000đ; đơn kỳ không qua checkout nên phải tự chặn, không thì tạo gói số lượng lớn
+    // là lách được hạn mức COD (đơn đầu giao ngay giữ kho + đẩy Pancake).
+    it('COD vượt hạn mức 5.000.000đ → không giữ kho, không đơn, tạm dừng gói + báo lý do (review)', async () => {
+      const { svc, orderCreate, stockExecuteRaw, updateMany, notify, analytics } = makeProcess(1, { quantity: 60 });
+      await svc.processDue();
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 's1', status: 'ACTIVE' }, data: expect.objectContaining({ status: 'PAUSED' }) }),
+      );
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('5.000.000đ') });
+      expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+        expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'cod_limit' }) }),
+      );
+    });
+
+    it('COD vượt hạn mức ở đơn đầu giao ngay → 400, không tạo gói lẫn đơn (review)', async () => {
+      const { svc, orderCreate, stockExecuteRaw } = makeProcess(1, { quantity: 60 });
+      await expect(
+        svc.create('u1', { variationId: 'v1', quantity: 60, intervalWeeks: 4, addressId: 'a1' }),
+      ).rejects.toThrow('hạn mức');
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('Ví Tubu / chuyển khoản không bị hạn mức COD', async () => {
+      for (const paymentMethod of ['WALLET', 'BANK_TRANSFER'] as const) {
+        const { svc, orderCreate } = makeProcess(1, { quantity: 60, paymentMethod });
+        await svc.processDue();
+        expect(orderCreate).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('khách tạm dừng gói giữa lúc claim và lúc khoá dòng → không sinh đơn', async () => {
+      const { svc, orderCreate, stockExecuteRaw } = makeProcess(1, { lockedStatus: 'PAUSED' });
+      await svc.processDue();
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+  });
+
   // P1-4 (docs/2026-09-08-review-progress.md): đơn Subscribe & Save do cron tạo KHÔNG được đẩy
   // sang Pancake ở bất kỳ đường nào — kho vật lý không bao giờ thấy đơn, không webhook nào khớp
   // được, đơn kẹt CONFIRMED vĩnh viễn dù đã trừ kho và đã báo khách "đơn định kỳ đang tới".
@@ -323,6 +510,30 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
 
 });
 
+describe('SubscriptionsService — trần số lượng 999 như giỏ hàng (review)', () => {
+  it('create số lượng 1000 → 400, không ghi gì', async () => {
+    const { svc, create } = makeService();
+    await expect(svc.create('u1', dto({ quantity: 1000 }))).rejects.toThrow('Số lượng');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('update số lượng 1000 → 400 trước khi mở transaction', async () => {
+    const $transaction = jest.fn();
+    const svc = new SubscriptionsService(
+      { $transaction } as unknown as PrismaService,
+      config,
+      pricing,
+      loyalty,
+      notifications,
+      pancakeStub(),
+      makeAnalytics(),
+      walletLedger(),
+    );
+    await expect(svc.update('u1', 's1', { quantity: 1000 })).rejects.toThrow('Số lượng');
+    expect($transaction).not.toHaveBeenCalled();
+  });
+});
+
 describe('SubscriptionsService.effectiveDiscountPct', () => {
   const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
 
@@ -342,6 +553,7 @@ describe('SubscriptionsService.effectiveDiscountPct', () => {
       notifications,
       { enqueuePush: jest.fn() } as unknown as PancakeOrderService,
       makeAnalytics(),
+      walletLedger(),
     );
   }
 
@@ -372,7 +584,7 @@ describe('SubscriptionsService.skipCycle', () => {
         update,
       },
     } as unknown as PrismaService;
-    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics());
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
     return { svc, update };
   }
 
@@ -414,7 +626,7 @@ describe('SubscriptionsService.setStatus', () => {
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const analytics = makeAnalytics();
-    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics);
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics, walletLedger());
     return { svc, update, analytics };
   }
 
@@ -491,8 +703,22 @@ describe('SubscriptionsService.list', () => {
       get: async <T>(k: string, fb?: T): Promise<T> =>
         k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
     } as unknown as SystemConfigService;
-    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics());
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
+  });
+
+  it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { subscription: { findMany } } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, {} as SystemConfigService, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    await svc.list('u1');
+    expect(findMany).toHaveBeenLastCalledWith({
+      where: { userId: 'u1', status: { not: 'CANCELLED' } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+    await svc.list('u1', { take: 9999, cursor: 's7' });
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200, cursor: { id: 's7' }, skip: 1 }));
   });
 });

@@ -22,7 +22,7 @@ describe('pointsReasonLabel', () => {
     ['DAILY_CHECKIN:DAY_3', 'Điểm danh hằng ngày'],
     ['DAILY_CHECKIN', 'Điểm danh hằng ngày'],
     ['POS_OFFLINE_ORDER:HD-001', 'Tích điểm mua tại cửa hàng'],
-    ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy voucher'],
+    ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy mã giảm giá'],
     ['ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
     ['ORDER_REDEEM:TB123', 'Dùng điểm khi thanh toán'],
     ['ORDER_REVERSED:TB123', 'Hoàn ngược điểm (hủy/trả)'],
@@ -31,6 +31,20 @@ describe('pointsReasonLabel', () => {
     ['GAME_SPIN_WIN:p1', 'Phần thưởng Vườn Xanh'],
     ['SEASONPASS:s1:3:FREE', 'Phần thưởng Vườn Xanh'],
     ['REVIEW:ca-phe', 'Đánh giá sản phẩm'],
+    // PD-3: xu đã gộp vào Điểm Xanh — mọi dòng sổ mới của lô quy đổi và nguồn thưởng cũ đều có nhãn riêng.
+    ['XU_TO_POINTS:123456', 'Chuyển từ xu cũ sang Điểm Xanh'],
+    ['ORDER_REDEEM_CONVERTED:TB123', 'Dùng điểm khi thanh toán'],
+    ['ORDER_REFUND_CONVERTED:TB123', 'Hoàn điểm đơn huỷ/trả'],
+    ['ORDER_REFUND_XU:TB123', 'Hoàn điểm đơn huỷ/trả'],
+    ['REFERRAL_ORDER2:u1', 'Thưởng giới thiệu bạn bè'],
+    ['REFERRAL_MILESTONE:u1:3', 'Thưởng giới thiệu bạn bè'],
+    ['REFERRAL_ORDER2_REVOKE:u1', 'Thu hồi thưởng giới thiệu'],
+    ['REFERRAL_MILESTONE_REVOKE:u1:3#1', 'Thu hồi thưởng giới thiệu'],
+    ['COMMUNITY_POST:p1', 'Thưởng cộng đồng'],
+    ['COMMUNITY_EVENT_WIN:e1:u1', 'Thưởng cộng đồng'],
+    ['STOREFRONT_QUEST:PROFILE', 'Thưởng nhiệm vụ gian hàng'],
+    ['CTV_MILESTONE:m1:2026-10', 'Thưởng mốc doanh số CTV'],
+    ['GAME_BUY_TREE:TUBU-ABC', 'Góp quỹ trồng cây'],
   ])('%s → %s', (reason, label) => {
     expect(pointsReasonLabel(reason)).toBe(label);
   });
@@ -154,6 +168,14 @@ describe('lockedPointsNote', () => {
     expect(note).toContain('40');
   });
 
+  it('số từ nghìn trở lên có dấu phân cách, cùng kiểu với số dư trên trang (C-083)', () => {
+    const note = lockedPointsNote(
+      overview({ pointsBalance: 5_000, lockedPoints: 1_250, lockedReturnPoints: 0, lockedUntil: '2026-10-03T17:30:00.000Z', redeemablePoints: 3_750 }),
+    );
+    expect(note).toContain('1.250 điểm từ đơn mới giao');
+    expect(note).toContain('dùng được 3.750 điểm');
+  });
+
   it('điểm của đơn đang chờ xử lý đổi/trả → không hứa ngày cụ thể', () => {
     const note = lockedPointsNote(
       overview({ pointsBalance: 100, lockedPoints: 30, lockedReturnPoints: 30, lockedUntil: null, redeemablePoints: 70 }),
@@ -170,6 +192,9 @@ describe('rewardButtonLabel', () => {
   });
   it('số dư chưa đủ → "Cần X điểm"', () => {
     expect(rewardButtonLabel(r, { pointsBalance: 20 })).toBe('Cần 50 điểm');
+  });
+  it('quà đắt có dấu nghìn: "Cần 5.000 điểm"', () => {
+    expect(rewardButtonLabel({ pointsCost: 5_000, canRedeem: false }, { pointsBalance: 20 })).toBe('Cần 5.000 điểm');
   });
   it('số dư đủ nhưng điểm đang khoá (đơn mới giao) → không nói "Cần X điểm" sai sự thật', () => {
     expect(rewardButtonLabel(r, { pointsBalance: 100, redeemablePoints: 40 })).toBe('Chờ mở khoá điểm');

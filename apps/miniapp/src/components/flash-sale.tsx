@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Box, Text, useNavigate } from 'zmp-ui';
+import { useMemo, type CSSProperties, type MouseEvent } from 'react';
+import { useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchActiveFlashSales,
@@ -13,6 +13,40 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
+import { HomeBlockError } from './home/home-block-error';
+import { useBlockQuery } from './home/use-block-query';
+import { Badge } from './ui/badge';
+import { PriceTag } from './ui/price-tag';
+import { ProgressBar } from './ui/progress-bar';
+import { ScrollRow } from './ui/scroll-row';
+import { Heading, Text } from './ui/text';
+
+const CARD_STYLE: CSSProperties = {
+  flex: '0 0 132px',
+  background: 'var(--color-bg-surface)',
+  borderRadius: 'var(--radius-card)',
+  overflow: 'hidden',
+  boxShadow: 'var(--elevation-1)',
+};
+
+const DISCOUNT_BADGE_STYLE: CSSProperties = {
+  position: 'absolute',
+  top: 6,
+  left: 6,
+  background: 'var(--color-flash-solid-bg)',
+  color: 'var(--color-flash-solid-fg)',
+};
+
+/** Tên SP tối đa 2 dòng; minHeight bằng đúng 2 dòng caption để thẻ 1 dòng và 2 dòng cao bằng nhau. */
+const NAME_CLAMP_STYLE: CSSProperties = {
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+  minHeight: 40,
+};
+
+const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
 
 /**
  * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
@@ -20,12 +54,14 @@ import { useAuthStore } from '../store/auth';
 export function FlashSale() {
   const navigate = useNavigate();
 
-  const q = useQuery({
-    queryKey: ['flash-sales', 'active'],
-    queryFn: fetchActiveFlashSales,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-  });
+  const q = useBlockQuery(
+    useQuery({
+      queryKey: ['flash-sales', 'active'],
+      queryFn: fetchActiveFlashSales,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    }),
+  );
 
   const items = q.data ?? [];
 
@@ -36,38 +72,30 @@ export function FlashSale() {
 
   const timeLeft = useCountdown(soonestEndAt);
 
-  if (q.isLoading || items.length === 0) return null;
+  if (q.isLoading) return null;
+  if (items.length === 0) {
+    return q.isError ? (
+      <HomeBlockError title={vi.flashSale.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />
+    ) : null;
+  }
 
   return (
-    <Box mt={4}>
-      <Box px={4} flex alignItems="center" justifyContent="space-between" mb={2}>
-        <Text.Title className="t-h2" size="small" style={{ color: 'var(--clay-700)' }}>
+    <div style={{ marginTop: 16 }}>
+      <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
           {vi.flashSale.sectionTitle}
-        </Text.Title>
-        <Text
-          size="xSmall"
-          bold
-          aria-label={vi.flashSale.endsIn(timeLeft)}
-          style={{
-            color: 'var(--clay-700)',
-            background: 'var(--clay-50)',
-            padding: '2px 10px',
-            borderRadius: 'var(--radius-full)',
-          }}
-        >
-          {vi.flashSale.endsIn(timeLeft)}
-        </Text>
-      </Box>
+        </Heading>
+        <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
+          <Badge tone="promo">{vi.flashSale.endsIn(timeLeft)}</Badge>
+        </span>
+      </div>
 
-      <Box
-        px={4}
-        style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
-      >
+      <ScrollRow label={vi.flashSale.sectionName} style={CARD_ROW_STYLE}>
         {items.map((item) => {
           const pct = item.retailPrice > 0 ? Math.round((1 - item.flashPrice / item.retailPrice) * 100) : 0;
           const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
           return (
-            <Box
+            <div
               key={item.itemId}
               className="tubu-press"
               onClick={() => {
@@ -77,15 +105,9 @@ export function FlashSale() {
                 // không badge, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
                 navigate(`/product/${item.productSlug}`, { state: { variationId: item.variationId } });
               }}
-              style={{
-                flex: '0 0 132px',
-                background: 'var(--neutral-0)',
-                borderRadius: 'var(--radius-lg)',
-                overflow: 'hidden',
-                boxShadow: 'var(--shadow-sm)',
-              }}
+              style={CARD_STYLE}
             >
-              <Box style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--neutral-100)' }}>
+              <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
                 {item.thumbnail && (
                   <img
                     src={item.thumbnail}
@@ -94,68 +116,32 @@ export function FlashSale() {
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
                 )}
-                <Text
-                  size="xSmall"
-                  bold
-                  style={{
-                    position: 'absolute',
-                    top: 6,
-                    left: 6,
-                    background: 'var(--clay-500)',
-                    color: 'var(--neutral-0)',
-                    padding: '1px 6px',
-                    borderRadius: 'var(--radius-full)',
-                  }}
-                >
+                <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
                   -{pct}%
-                </Text>
-              </Box>
-              <Box p={2}>
-                <Text
-                  size="xSmall"
-                  style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    minHeight: 32,
-                  }}
-                >
+                </Badge>
+              </div>
+              <div style={{ padding: 8 }}>
+                <Text variant="caption" style={NAME_CLAMP_STYLE}>
                   {item.productName}
                 </Text>
-                <Text bold size="small" style={{ color: 'var(--primary-700)', marginTop: 2 }}>
-                  {formatVnd(item.flashPrice)}
-                </Text>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', textDecoration: 'line-through' }}>
+                <div style={{ marginTop: 2 }}>
+                  <PriceTag value={item.flashPrice} flash={{ price: item.flashPrice }} size="sm" />
+                </div>
+                <Text variant="caption" tone="tertiary" as="div" style={{ textDecoration: 'line-through' }}>
                   {formatVnd(item.retailPrice)}
                 </Text>
-                <Box
-                  mt={1}
-                  style={{
-                    height: 4,
-                    borderRadius: 'var(--radius-full)',
-                    background: 'var(--neutral-100)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Box
-                    style={{
-                      height: '100%',
-                      width: `${Math.min(100, soldPct)}%`,
-                      background: 'var(--clay-500)',
-                      borderRadius: 'var(--radius-full)',
-                    }}
-                  />
-                </Box>
-                <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+                <div style={{ marginTop: 4 }}>
+                  <ProgressBar value={soldPct} max={100} tone="flash" />
+                </div>
+                <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                   {vi.flashSale.soldPct(soldPct)}
                 </Text>
-              </Box>
-            </Box>
+              </div>
+            </div>
           );
         })}
-      </Box>
-    </Box>
+      </ScrollRow>
+    </div>
   );
 }
 
@@ -175,18 +161,8 @@ function UpcomingFlashCard({
   const pct = item.retailPrice > 0 ? Math.round((1 - item.flashPrice / item.retailPrice) * 100) : 0;
 
   return (
-    <Box
-      className="tubu-press"
-      onClick={onOpen}
-      style={{
-        flex: '0 0 132px',
-        background: 'var(--neutral-0)',
-        borderRadius: 'var(--radius-lg)',
-        overflow: 'hidden',
-        boxShadow: 'var(--shadow-sm)',
-      }}
-    >
-      <Box style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--neutral-100)' }}>
+    <div className="tubu-press" onClick={onOpen} style={CARD_STYLE}>
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
         {item.thumbnail && (
           <img
             src={item.thumbnail}
@@ -195,65 +171,47 @@ function UpcomingFlashCard({
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         )}
-        <Text
-          size="xSmall"
-          bold
-          style={{
-            position: 'absolute',
-            top: 6,
-            left: 6,
-            background: 'var(--clay-500)',
-            color: 'var(--neutral-0)',
-            padding: '1px 6px',
-            borderRadius: 'var(--radius-full)',
-          }}
-        >
+        <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
           -{pct}%
-        </Text>
-      </Box>
-      <Box p={2}>
-        <Text
-          size="xSmall"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            minHeight: 32,
-          }}
-        >
+        </Badge>
+      </div>
+      <div style={{ padding: 8 }}>
+        <Text variant="caption" style={NAME_CLAMP_STYLE}>
           {item.productName}
         </Text>
-        <Text bold size="small" style={{ color: 'var(--primary-700)', marginTop: 2 }}>
-          {formatVnd(item.flashPrice)}
-        </Text>
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+        <div style={{ marginTop: 2 }}>
+          <PriceTag value={item.flashPrice} flash={{ price: item.flashPrice }} size="sm" />
+        </div>
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
           {vi.flashSale.startsIn(startsIn)}
         </Text>
-        <Box
-          mt={2}
+        <div
           role="button"
           className="tubu-press"
-          onClick={(e: React.MouseEvent) => {
+          onClick={(e: MouseEvent) => {
             e.stopPropagation();
             if (pending) return;
             onToggleRemind();
           }}
           style={{
+            marginTop: 8,
             textAlign: 'center',
-            padding: '6px 0',
-            borderRadius: 'var(--radius-full)',
-            fontSize: 12,
+            minHeight: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-pill)',
+            fontSize: 'var(--type-label-size)',
             fontWeight: 600,
             opacity: pending ? 0.6 : 1,
-            background: item.reminded ? 'var(--leaf-50)' : 'var(--primary-600)',
-            color: item.reminded ? 'var(--leaf-700)' : 'var(--neutral-0)',
+            background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
+            color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
           }}
         >
           {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -294,17 +252,14 @@ export function UpcomingFlashSales() {
   if (!authed || q.isLoading || items.length === 0) return null;
 
   return (
-    <Box mt={4}>
-      <Box px={4} mb={2}>
-        <Text.Title className="t-h2" size="small" style={{ color: 'var(--clay-700)' }}>
+    <div style={{ marginTop: 16 }}>
+      <div style={{ padding: '0 16px', marginBottom: 8 }}>
+        <Heading variant="title-sm" as="h2" style={{ color: 'var(--color-promo-fg)' }}>
           {vi.flashSale.upcomingTitle}
-        </Text.Title>
-      </Box>
+        </Heading>
+      </div>
 
-      <Box
-        px={4}
-        style={{ display: 'flex', gap: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
-      >
+      <ScrollRow label="Sắp diễn ra" style={CARD_ROW_STYLE}>
         {items.map((item) => (
           <UpcomingFlashCard
             key={item.itemId}
@@ -320,7 +275,7 @@ export function UpcomingFlashSales() {
             }}
           />
         ))}
-      </Box>
-    </Box>
+      </ScrollRow>
+    </div>
   );
 }

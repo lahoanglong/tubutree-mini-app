@@ -39,8 +39,8 @@
 - Vào **Vườn Xanh**: cây đang lớn theo lượng 💧, **bình nước**, **chuỗi điểm danh (streak) + vé giữ lửa**.
 - **Điểm danh hôm nay** → +💧 + giọt sương. Trả lời **quiz thiên nhiên** ("Bạn có biết") → +💧 + giải thích.
 - **Tưới cây** → cây tiến gần mốc thu hoạch; **Vòng quay** nhận thưởng (điểm/voucher/💧).
-- Chỉ **Mốc cộng đồng "Phủ xanh Cần Giờ"** (góp 💧 → cây thật qua PanNature), **Sổ tay loài cây VN**, **mùa Hè Xanh + BXH mùa**, **tặng nước cho bạn**.
-- 👉 *Wow*: gamification có chiều sâu + gắn CSR trồng cây thật — khác biệt lớn so với app bán hàng thường.
+- Chỉ **Mốc cộng đồng "Phủ xanh Cần Giờ"** (góp 💧 → góp quỹ trồng cây), **Sổ tay loài cây VN**, **mùa Hè Xanh + BXH mùa**, **tặng nước cho bạn**.
+- 👉 *Wow*: gamification có chiều sâu + gắn câu chuyện góp quỹ trồng cây — khác biệt lớn so với app bán hàng thường.
 
 ## 6. ⭐ Hạng thành viên "Lá xanh" (1 phút) — WOW PHỤ
 - Vào **Hạng thành viên**: huy hiệu hạng (🌱 Mầm Xanh → 🌿 Lộc Biếc → 🌳 Đại Thụ → 🌲 Cổ Thụ), **thanh tiến độ lên hạng kế**, **quyền lợi từng hạng**, **kho voucher**, **lịch sử điểm**.
@@ -57,7 +57,7 @@
 ---
 
 ## Câu chốt
-> *"Một Mini App đi trọn vòng: mua sắm đa thương hiệu → tích điểm/lên hạng → chơi Vườn Xanh trồng cây thật. Vừa bán hàng, vừa giữ chân, vừa kể câu chuyện sống xanh."*
+> *"Một Mini App đi trọn vòng: mua sắm đa thương hiệu → tích Điểm Xanh/lên hạng → chơi Vườn Xanh góp quỹ trồng cây. Vừa bán hàng, vừa giữ chân, vừa kể câu chuyện sống xanh."*
 
 ## Ghi chú kỹ thuật cho người demo
 - Ảnh sản phẩm hiện là ảnh demo (picsum theo slug) cho **dữ liệu mẫu**; khi sync Pancake thật, ảnh/giá/tồn lấy từ Pancake.

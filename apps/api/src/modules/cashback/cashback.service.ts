@@ -4,10 +4,11 @@ import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { CoinsService } from '../wallet/coins.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
+import { CRON_TZ } from '../../common/cron-tz';
 
 /**
  * Cashback sàn ngoài (Build Spec §9, §15 cashback.*). Provider-agnostic: I/O vendor nằm ở
@@ -24,7 +25,6 @@ export class CashbackService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
-    private readonly coins: CoinsService,
     private readonly notifications: NotificationsService,
     private readonly registry: CashbackProviderRegistry,
   ) {}
@@ -96,14 +96,13 @@ export class CashbackService {
       where: { provider, merchantOrderId: event.merchantOrderId },
     });
 
-    let result: { becameConfirmed: boolean; confirmedUserId: string | null };
     if (existing) {
-      result = await this.applyToExisting(existing, event, status, userReward);
+      await this.applyToExisting(existing, event, status, userReward);
     } else {
       // Atomic create + cộng pending. @@unique([provider, merchantOrderId]) → sự kiện thứ 2 song
       // song ném P2002.
       try {
-        result = await this.createTransaction(click, provider, event, status, userReward);
+        await this.createTransaction(click, provider, event, status, userReward);
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           // Kẻ thua race: KHÔNG bỏ qua sự kiện (sẽ mất credit nếu event này là CONFIRMED) — đọc
@@ -120,22 +119,13 @@ export class CashbackService {
             return { ok: false };
           }
           this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — áp dụng như update.`);
-          result = await this.applyToExisting(winner, event, status, userReward);
+          await this.applyToExisting(winner, event, status, userReward);
         } else {
           throw err;
         }
       }
     }
 
-    // Thưởng xu giới thiệu khi referee có cashback CONFIRMED (ngoài tx tài chính; idempotent qua
-    // unique index). Lỗi thưởng KHÔNG làm hỏng ingest (.catch).
-    if (result.becameConfirmed && result.confirmedUserId) {
-      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
-        this.logger.error(
-          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
-        ),
-      );
-    }
     return { ok: true };
   }
 
@@ -217,17 +207,7 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    const result = await this.applyToExisting(existing, synthetic, status, existing.userReward);
-    // Đường postback thưởng xu giới thiệu khi giao dịch chuyển sang CONFIRMED (xem ingest) —
-    // duyệt tay mà bỏ bước này thì cùng một giao dịch, đi lối admin thì người giới thiệu KHÔNG
-    // nhận xu, đi lối postback thì có. Mà duyệt tay chính là lối dành cho giao dịch bị treo.
-    if (result.becameConfirmed && result.confirmedUserId) {
-      await this.coins.grantReferralCoins(result.confirmedUserId).catch((err) =>
-        this.logger.error(
-          `Thưởng xu giới thiệu lỗi (referee=${result.confirmedUserId}): ${err instanceof Error ? err.message : err}`,
-        ),
-      );
-    }
+    await this.applyToExisting(existing, synthetic, status, existing.userReward);
     this.logger.warn(
       `Admin ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );
@@ -240,17 +220,17 @@ export class CashbackService {
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
-  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+  ): Promise<void> {
     // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
     // (không claw-back được tiền đã về Ví).
-    if (existing.status === 'PAID') return { becameConfirmed: false, confirmedUserId: null };
+    if (existing.status === 'PAID') return;
 
     // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
     // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy
     // count=0 → bỏ qua.
     const wasConfirmed = existing.status === 'CONFIRMED';
     const nowConfirmed = status === 'CONFIRMED';
-    const applied = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const moved = await tx.cashbackTransaction.updateMany({
         where: { id: existing.id, status: existing.status },
         data: {
@@ -266,7 +246,7 @@ export class CashbackService {
             : { orderAmount: event.orderAmount, commission: event.commission, userReward }),
         },
       });
-      if (moved.count === 0) return false;
+      if (moved.count === 0) return;
       if (nowConfirmed && !wasConfirmed) {
         await tx.user.update({
           where: { id: existing.userId },
@@ -278,12 +258,7 @@ export class CashbackService {
           data: { cashbackPending: { decrement: existing.userReward } },
         });
       }
-      return true;
     });
-    if (applied && nowConfirmed && !wasConfirmed) {
-      return { becameConfirmed: true, confirmedUserId: existing.userId };
-    }
-    return { becameConfirmed: false, confirmedUserId: null };
   }
 
   /** Tạo mới 1 giao dịch cashback từ sự kiện đầu tiên nhận được cho (provider, merchantOrderId). */
@@ -293,7 +268,7 @@ export class CashbackService {
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
-  ): Promise<{ becameConfirmed: boolean; confirmedUserId: string | null }> {
+  ): Promise<void> {
     const ops: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.cashbackTransaction.create({
         data: {
@@ -310,8 +285,6 @@ export class CashbackService {
         },
       }),
     ];
-    let becameConfirmed = false;
-    let confirmedUserId: string | null = null;
     if (status === 'CONFIRMED') {
       ops.push(
         this.prisma.user.update({
@@ -319,15 +292,12 @@ export class CashbackService {
           data: { cashbackPending: { increment: userReward } },
         }),
       );
-      becameConfirmed = true;
-      confirmedUserId = click.userId;
     }
     await this.prisma.$transaction(ops);
-    return { becameConfirmed, confirmedUserId };
   }
 
   /** Cron mỗi giờ: cashback CONFIRMED quá hold_days → chuyển pending→Ví (PAID). */
-  @Cron('0 30 * * * *')
+  @Cron('0 30 * * * *', { timeZone: CRON_TZ })
   async settleConfirmed(): Promise<void> {
     try {
       const holdDays = await this.config.get<number>('cashback.hold_days', 30);
@@ -351,11 +321,18 @@ export class CashbackService {
           if (marked.count === 0) return false;
           await t.user.update({
             where: { id: tx.userId },
-            data: {
-              cashbackPending: { decrement: tx.userReward },
-              walletBalance: { increment: tx.userReward },
-            },
+            data: { cashbackPending: { decrement: tx.userReward } },
           });
+          if (tx.userReward > 0) {
+            await applyWalletDelta(t, {
+              userId: tx.userId,
+              delta: tx.userReward,
+              type: 'CASHBACK',
+              refType: 'CASHBACK',
+              refId: tx.id,
+              reason: 'Cashback hết thời gian giữ',
+            });
+          }
           return true;
         });
         if (settled) {
@@ -374,7 +351,7 @@ export class CashbackService {
    * Cron mỗi 6 giờ: đối soát — kéo giao dịch gần đây từ mỗi provider có bật reconcile
    * (isReconcileEnabled) rồi feed qua ingest() (idempotent). Bắt postback rớt.
    */
-  @Cron('0 0 */6 * * *')
+  @Cron('0 0 */6 * * *', { timeZone: CRON_TZ })
   async reconcile(): Promise<void> {
     const lookbackDays = await this.config.get<number>('cashback.reconcile_lookback_days', 45);
     const since = new Date(Date.now() - lookbackDays * 24 * 3600 * 1000);

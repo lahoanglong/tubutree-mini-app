@@ -54,8 +54,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
+      # Cron/Date local theo giờ VN (cron còn có timeZone riêng, xem apps/api/src/common/cron-tz.ts).
+      TZ: Asia/Ho_Chi_Minh
+      # Một instance API; pool mặc định của Prisma theo số CPU nên dễ cạn khi tải bùng nổ (P2028). 20 kết nối nằm
+      # xa dưới max_connections=100 của Postgres, pool_timeout dài hơn để request xếp hàng thay vì lỗi 500.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}?connection_limit=20&pool_timeout=30
       REDIS_URL: redis://redis:6379
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     ports:
       - '127.0.0.1:14001:3001' # aaPanel nginx proxy_pass vào đây cho api.tubutree.com
     depends_on:
@@ -76,6 +81,7 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
         NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
+        NEXT_PUBLIC_SITE_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
     restart: unless-stopped
     mem_limit: 512m
@@ -89,6 +95,8 @@ services:
       # (node fetch http://localhost:3000/) vì vậy luôn "unhealthy" dù app chạy đúng. Ép 0.0.0.0.
       HOSTNAME: '0.0.0.0'
       API_BASE_URL: http://api:3001/api
+      # Cùng giá trị với api: SSR gửi qua header x-throttle-bypass để không bị 429 theo IP máy chủ web.
+      THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     ports:
       - '127.0.0.1:14000:3000' # aaPanel nginx proxy_pass vào đây cho app.tubutree.com
     depends_on:

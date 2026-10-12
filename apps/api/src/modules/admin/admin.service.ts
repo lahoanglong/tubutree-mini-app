@@ -7,15 +7,38 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
+import { allowedNextStatuses } from '../orders/order-transition';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
-import { buildAdminOrderWhere, type RecyclingFilter } from './admin-order-filter';
+import {
+  ADMIN_SEARCH_MIN_TRGM_LENGTH,
+  ADMIN_SEARCH_USER_CAP,
+  buildAdminOrderWhere,
+  type InvoiceFilter,
+  type RecyclingFilter,
+} from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
-import { validateAdminConfigValue } from './admin-config-rules';
+import { isDeadConfigKey } from '../system-config/dead-config-keys';
+import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
+
+/**
+ * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
+ * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
+ */
+function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+  return (
+    o.type !== 'DEALER' &&
+    o.paymentMethod === 'BANK_TRANSFER' &&
+    o.paymentStatus === 'UNPAID' &&
+    o.status !== 'CANCELLED' &&
+    o.status !== 'RETURNED'
+  );
+}
 
 @Injectable()
 export class AdminService {
@@ -107,7 +130,7 @@ export class AdminService {
     // hoàn ví dựa trên paymentStatus cũ (PAID) trong khi DB đã REFUNDED → DOUBLE refund.
     const orderForReturn = await this.prisma.order.findUniqueOrThrow({
       where: { id: req.orderId },
-      select: { id: true, userId: true, code: true },
+      select: { id: true, userId: true, code: true, paymentMethod: true },
     });
     // A6-06 (phần thông báo, docs/audit-2026-09/06-web.md): trước đây LUÔN gửi "Tiền đã hoàn vào
     // Ví Tubu" bất kể reverseFinancials có thực sự chi tiền hay không (vd đơn chưa từng thanh toán
@@ -115,6 +138,9 @@ export class AdminService {
     // đó). moneyRefunded lấy TRỰC TIẾP từ guard hoàn tiền trong CÙNG transaction, không phải suy
     // đoán ở ngoài, nên phản ánh đúng có tiền thực sự được chi hay không.
     let moneyRefunded = false;
+    // Tổng Điểm Xanh khách nhận lại từ đơn này (lô quy đổi + đơn XU cũ hoàn trong tx, cộng phần điểm thường
+    // do reverseOrderPoints hoàn ngay sau commit) — để báo đúng "đã hoàn N Điểm Xanh" (PD-3, spec 6.2).
+    let pointsBack = 0;
     await this.prisma.$transaction(async (tx) => {
       const approved = await tx.returnRequest.updateMany({
         where: { id, status: 'REQUESTED' },
@@ -153,17 +179,25 @@ export class AdminService {
       // Hoàn đúng KÊNH thanh toán + restock + release flash quota — logic dùng chung với
       // orders.service.cancel/OrderStatusService (xem order-reversal.service.ts), tránh
       // 3 bản chép tay lệch nhau (P0-4 trong docs/2026-09-08-review-progress.md).
-      ({ moneyRefunded } = await this.reversal.reverseFinancials(tx, order));
+      const reversed = await this.reversal.reverseFinancials(tx, order);
+      moneyRefunded = reversed.moneyRefunded;
+      const standardUsed = order.pointsUsed - Math.min(order.pointsUsed, order.pointsUsedConverted);
+      pointsBack = reversed.pointsRefunded + standardUsed;
     });
     // Reverse điểm Xanh + commission CTV + notify (idempotent — để ngoài tx an toàn).
     await this.loyalty.reverseOrderPoints(orderForReturn.id);
     await this.affiliate.reverseCommissionsForOrder(orderForReturn.id);
-    // KHÔNG được báo "đã hoàn tiền" nếu thực tế không có khoản hoàn nào được chi (xem comment ở
-    // trên) — dùng template trung tính, chỉ xác nhận đã duyệt trả hàng.
+    // KHÔNG được báo "đã hoàn tiền vào Ví" nếu không có đồng nào vào Ví (xem comment ở trên): moneyRefunded
+    // chỉ true khi Ví thực sự được cộng. Đơn XU cũ hoàn bằng Điểm Xanh nên rơi vào mẫu "đã hoàn N Điểm Xanh".
+    const template = moneyRefunded
+      ? pointsBack > 0 ? 'RETURN_APPROVED_WALLET_POINTS' : 'RETURN_APPROVED'
+      : pointsBack > 0 ? 'RETURN_APPROVED_POINTS' : 'RETURN_APPROVED_NO_REFUND';
     await this.notifications
-      .notify(orderForReturn.userId, moneyRefunded ? 'RETURN_APPROVED' : 'RETURN_APPROVED_NO_REFUND', {
-        order_code: orderForReturn.code,
-      })
+      .notify(
+        orderForReturn.userId,
+        template,
+        pointsBack > 0 ? { order_code: orderForReturn.code, points: String(pointsBack) } : { order_code: orderForReturn.code },
+      )
       .catch(() => undefined);
     return this.withReturnContext(await this.prisma.returnRequest.findUnique({ where: { id } }));
   }
@@ -263,17 +297,154 @@ export class AdminService {
   }
 
   // ── Users & orders ──
-  async listUsers(page: number, limit: number) {
+  async listUsers(page: number, limit: number, search?: string) {
+    const s = search?.trim();
+    const where: Prisma.UserWhereInput | undefined = s
+      ? { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }, { id: s }] }
+      : undefined;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
         select: {
           id: true, zaloId: true, phone: true, fullName: true, role: true,
-          pointsBalance: true, walletBalance: true, tierId: true, createdAt: true,
+          pointsBalance: true, pointsConvertedBalance: true, walletBalance: true, tierId: true, createdAt: true,
         },
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
+
+  /**
+   * Tìm sản phẩm kèm biến thể cho ô chọn của admin (Flash Sale cần Variation ID, Content Kit cần Product ID).
+   * Khớp tên không dấu (cột nameSearch có index trigram), slug hoặc SKU; KHÔNG lọc isActive để admin thấy cả
+   * hàng đang ẩn — cờ isActive đi kèm để ô chọn cảnh báo. Tối đa 20 sản phẩm.
+   */
+  async searchProducts(raw: string) {
+    const q = raw.trim();
+    if (q.length < 2) return [];
+    const folded = foldVietnamese(q);
+    const products = await this.prisma.product.findMany({
+      where: {
+        OR: [
+          { nameSearch: { contains: folded } },
+          { slug: { contains: folded.replace(/ /g, '-') } },
+          { variations: { some: { sku: { contains: q, mode: 'insensitive' } } } },
+        ],
+      },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        brand: true,
+        thumbnail: true,
+        isActive: true,
+        variations: {
+          orderBy: { retailPrice: 'asc' },
+          select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true },
+        },
+      },
+    });
+    return products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      brand: p.brand,
+      thumbnail: p.thumbnail,
+      isActive: p.isActive,
+      variations: p.variations.map((v) => ({
+        id: v.id,
+        name: v.name,
+        sku: v.sku,
+        price: v.salePrice ?? v.retailPrice,
+        stock: v.stock,
+        isActive: v.isActive,
+      })),
+    }));
+  }
+
+  /** Nhãn "Sản phẩm · Biến thể (SKU)" cho các Variation ID đã lưu (vd danh sách mặt hàng của đợt Flash Sale). */
+  async lookupVariations(idsCsv: string) {
+    const ids = [...new Set(idsCsv.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 100);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.variation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, sku: true, productId: true, product: { select: { name: true } } },
+    });
+    return rows.map((v) => ({ id: v.id, name: v.name, sku: v.sku, productId: v.productId, productName: v.product.name }));
+  }
+
+  /** Bậc đại lý để chọn khi duyệt/cấp vai trò DEALER (thay nhập Tier ID). */
+  async listDealerTiers() {
+    const tiers = await this.prisma.dealerTier.findMany({ orderBy: { minOrderVolume: 'asc' } });
+    return tiers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      minOrderVolume: t.minOrderVolume,
+      creditLimit: t.creditLimit,
+      paymentTerms: t.paymentTerms,
+    }));
+  }
+
+  /**
+   * Danh sách đánh giá cho admin duyệt (kể cả đã ẩn). Ẩn/hiện dùng POST /reviews/:id/visibility sẵn có — nó tính
+   * lại điểm sao của sản phẩm, nên không viết lại ở đây.
+   */
+  async listReviews(page: number, limit: number, visibility?: 'visible' | 'hidden', rating?: number) {
+    const where: Prisma.ReviewWhereInput = {
+      ...(visibility ? { isVisible: visibility === 'visible' } : {}),
+      ...(rating ? { rating } : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.review.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          images: true,
+          videoUrl: true,
+          isVisible: true,
+          isVerified: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          product: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+    return paginated(items, page, limit, total);
+  }
+
+  /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
+  async listSubscriptions(page: number, limit: number, status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
+    const where: Prisma.SubscriptionWhereInput = status ? { status } : {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          status: true,
+          quantity: true,
+          intervalWeeks: true,
+          nextRunAt: true,
+          lastOrderId: true,
+          createdAt: true,
+          user: { select: { id: true, fullName: true, phone: true } },
+          variation: { select: { id: true, name: true, sku: true, product: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.prisma.subscription.count({ where }),
     ]);
     return paginated(items, page, limit, total);
   }
@@ -288,6 +459,7 @@ export class AdminService {
     adminId: string,
     phone: string,
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
+    tierId?: string,
   ) {
     const normalized = phone.trim();
     const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
@@ -305,9 +477,26 @@ export class AdminService {
         throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi hạ.');
       }
     }
+    // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
+    // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
+    let data: Prisma.UserUpdateInput = { role };
+    let dealerTierId: string | undefined;
+    if (role === 'DEALER') {
+      dealerTierId = tierId?.trim();
+      if (!dealerTierId) throw new BadRequestException('Cần chọn bậc đại lý khi cấp vai trò DEALER.');
+      const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
+      if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
+      data = {
+        role,
+        metadata: {
+          ...((user.metadata as Record<string, unknown> | null) ?? {}),
+          dealerTierId,
+        } as Prisma.InputJsonObject,
+      };
+    }
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { role },
+      data,
       select: { id: true, phone: true, fullName: true, role: true },
     });
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
@@ -323,8 +512,11 @@ export class AdminService {
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
-    this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}`);
-    return { ok: true, ...updated, previousRole };
+    this.logger.warn(
+      `Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}` +
+        (dealerTierId ? ` (bậc ${dealerTierId})` : ''),
+    );
+    return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
   }
 
   async getDashboardStats() {
@@ -384,14 +576,34 @@ export class AdminService {
     };
   }
 
+  /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
+  private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
+    const s = search?.trim();
+    if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
+    const rows = await this.prisma.user.findMany({
+      where: { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }] },
+      select: { id: true },
+      take: ADMIN_SEARCH_USER_CAP + 1,
+    });
+    return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
+  }
+
   /**
    * Danh sách đơn cho admin. `include` (không `select`) nên trả ĐỦ cột vô hướng của Order — gồm
    * hasRecyclingPickup/recyclingNote/gomdonStatus/gomdonPartnerCode/gomdonCancelStatus/deliveredAt mà
    * web admin cần để hiện thu gom. `recycling='attention'` = hàng đợi "Cần xử lý thu gom"
    * (xem admin-order-filter.ts).
    */
-  async listOrders(page: number, limit: number, status?: string, search?: string, recycling?: RecyclingFilter) {
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling });
+  async listOrders(
+    page: number,
+    limit: number,
+    status?: string,
+    search?: string,
+    recycling?: RecyclingFilter,
+    invoice?: InvoiceFilter,
+  ) {
+    const searchUserIds = await this.findSearchUserIds(search);
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, searchUserIds });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -409,13 +621,24 @@ export class AdminService {
     // nên màn admin không tự phân biệt được với đơn trả trước đang chờ chuyển khoản; không có cờ này thì
     // nút "Xác nhận đã nhận chuyển khoản" hiện cả trên đơn công nợ rồi bấm vào mới bị từ chối.
     const dealerIds = items.filter((o) => o.type === 'DEALER').map((o) => o.id);
-    if (dealerIds.length === 0) return paginated(items, page, limit, total);
-    const debits = await this.prisma.dealerCreditLedger.findMany({
-      where: { refType: 'ORDER', refId: { in: dealerIds } },
-      select: { refId: true },
-    });
+    const debits = dealerIds.length
+      ? await this.prisma.dealerCreditLedger.findMany({
+          where: { refType: 'ORDER', refId: { in: dealerIds } },
+          select: { refId: true },
+        })
+      : [];
     const onCredit = new Set(debits.map((d) => d.refId));
-    const data = items.map((o) => (o.type === 'DEALER' ? { ...o, dealerOnCredit: onCredit.has(o.id) } : o));
+    // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
+    // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
+    const data = items.map((o) => {
+      const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
+      return {
+        ...o,
+        ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
+        allowedTransitions: allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true }),
+        canConfirmPayment: canAdminConfirmRetailPayment(o),
+      };
+    });
     return paginated(data, page, limit, total);
   }
 
@@ -448,6 +671,98 @@ export class AdminService {
       where: { id: updated.id },
       include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
     });
+  }
+
+  /**
+   * Nút "Đã nhận tiền" cho đơn chuyển khoản lẻ (khách tự đặt hoặc CTV lên đơn hộ). Hệ quả PAID đi qua
+   * OrderStatusService.markPaid — cùng guard atomic và cùng hệ quả với đối soát thanh toán — nên bấm lặp
+   * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
+   * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
+   */
+  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, type: true, paymentMethod: true, total: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.type === 'DEALER') {
+      throw new BadRequestException(
+        `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
+      );
+    }
+    if (order.paymentMethod !== 'BANK_TRANSFER') {
+      throw new BadRequestException(`Đơn ${order.code} thanh toán ${order.paymentMethod}, không phải chuyển khoản.`);
+    }
+
+    const bankRef = dto.bankRef?.trim();
+    const adminNote = dto.note?.trim();
+    const { outcome } = await this.orderStatus.markPaid(order.id, {
+      actorType: 'ADMIN',
+      actorId: adminId,
+      note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+    });
+    if (outcome === 'CLOSED') {
+      throw new BadRequestException(
+        `Đơn ${order.code} đã huỷ/trả — nếu đã nhận tiền, cần hoàn tiền thủ công cho khách, không xác nhận thanh toán.`,
+      );
+    }
+    if (outcome === 'NOT_PAYABLE') {
+      throw new BadRequestException(`Đơn ${order.code} đã hoàn tiền hoặc thanh toán lỗi — không thể xác nhận.`);
+    }
+    if (outcome === 'PAID') {
+      this.logger.warn(
+        `Admin ${adminId} xác nhận đã nhận chuyển khoản đơn ${order.code} (${order.total}đ)` + (bankRef ? `, mã GD ${bankRef}` : ''),
+      );
+    }
+    const alreadyPaid = outcome === 'ALREADY_PAID';
+    return {
+      ok: true,
+      alreadyPaid,
+      message: alreadyPaid
+        ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
+        : `Đã xác nhận nhận tiền đơn ${order.code}.`,
+      order: await this.prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+      }),
+    };
+  }
+
+  // ── Hoá đơn VAT (thao tác admin) ──
+
+  /**
+   * "Đã xuất hoá đơn": admin phát hành hoá đơn ở hệ thống hoá đơn điện tử rồi ghi nhận ở đây (kèm link nếu có).
+   * Hệ quả y hệt webhook Pancake `invoice.issued` (pancake.processor.ts onInvoiceIssued): invoiceStatus → ISSUED,
+   * giữ invoiceUrl cũ nếu không có link mới, báo khách INVOICE_ISSUED. Dành cho đơn mà Pancake không tự xuất
+   * (chưa cấu hình, webhook rớt). Guard atomic trên invoiceStatus nên hai admin bấm cùng lúc chỉ một người ghi và
+   * báo khách; đơn đã huỷ/trả không xuất hoá đơn.
+   */
+  async issueOrderInvoice(adminId: string, idOrCode: string, dto: { invoiceUrl?: string } = {}) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, userId: true, status: true, invoiceRequest: true, invoiceStatus: true, invoiceUrl: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hóa đơn VAT.`);
+    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hóa đơn của đơn ${order.code} đã được phát hành.`);
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hóa đơn VAT.`);
+    }
+    const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
+    const res = await this.prisma.order.updateMany({
+      where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
+    });
+    if (res.count === 0) throw new BadRequestException(`Hóa đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hóa đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    await this.notifications
+      .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
+      .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
+    return {
+      ok: true,
+      message: `Đã ghi nhận xuất hóa đơn VAT cho đơn ${order.code}.`,
+      order: { id: order.id, code: order.code, invoiceStatus: 'ISSUED' as const, invoiceUrl: invoiceUrl ?? order.invoiceUrl },
+    };
   }
 
   // ── Vận đơn thu gom Gomdon (thao tác admin) ──
@@ -550,7 +865,9 @@ export class AdminService {
    */
   async getConfig(category?: string) {
     if (category) return redactConfigRows(await this.config.getByCategory(category));
-    return redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    const rows = redactConfigRows(await this.prisma.systemConfig.findMany({ orderBy: { category: 'asc' } }));
+    // Khoá không còn code nào đọc (dead-config-keys.ts): UI hiện nhãn "Không dùng" thay vì để admin sửa vô ích.
+    return rows.map((r) => ({ ...r, deprecated: isDeadConfigKey(r.key) }));
   }
 
   /**
@@ -561,7 +878,9 @@ export class AdminService {
   async setConfig(adminId: string, key: string, value: object | string | number | boolean) {
     const existing = await this.prisma.systemConfig.findUnique({ where: { key }, select: { value: true } });
     const restored = restoreRedactedSecrets(key, value, existing?.value) as object | string | number | boolean;
-    validateAdminConfigValue(key, restored);
+    const partnerKey = configPartnerKey(key);
+    const partner = partnerKey ? await this.prisma.systemConfig.findUnique({ where: { key: partnerKey }, select: { value: true } }) : null;
+    validateAdminConfigValue(key, restored, partner?.value);
     await this.config.set(key, restored, adminId);
     this.logger.warn(`Admin ${adminId} cập nhật cấu hình ${key}.`);
     return { ok: true, key, value: redactValueForKey(key, restored) };

@@ -15,7 +15,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
-    "reconcile:points": "tsx scripts/reconcile-points.ts"
+    "reconcile:points": "tsx scripts/reconcile-points.ts",
+    "reconcile:wallet": "tsx scripts/reconcile-wallet.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

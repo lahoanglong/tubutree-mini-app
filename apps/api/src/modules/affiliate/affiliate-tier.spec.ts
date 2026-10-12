@@ -2,7 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AffiliateService, CTV_MONTHLY_MILESTONES } from './affiliate.service';
 import { CTV_TIERS, milestoneProgressPct, vnMonthBounds } from './ctv-milestones';
-import { CoinsService } from '../wallet/coins.service';
+import { RewardPointsService } from '../wallet/reward-points.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
@@ -11,17 +11,17 @@ import type { AnalyticsEventsService } from '../analytics/analytics-events.servi
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 
-function makeService(prisma: unknown, coins?: unknown) {
+function makeService(prisma: unknown, rewards?: unknown) {
   const pricing = {} as unknown as PricingService;
   const pancake = {} as unknown as PancakeOrderService;
-  const coinsSvc = (coins ?? { grantCoins: jest.fn().mockResolvedValue(undefined) }) as CoinsService;
+  const rewardsSvc = (rewards ?? { grant: jest.fn().mockResolvedValue(true) }) as RewardPointsService;
   // Không test nào ở file này chạm recordTouch/placeOrderForCustomer (chỉ getCtvTiers/
   // getMilestones/claimMilestone) — no-op mặc định, chỉ để đủ tham số bắt buộc thứ 6 (Task 10).
   const analytics = {
     record: jest.fn().mockResolvedValue(undefined),
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
-  return new AffiliateService(prisma as PrismaService, config, pricing, pancake, coinsSvc, analytics);
+  return new AffiliateService(prisma as PrismaService, config, pricing, pancake, rewardsSvc, analytics);
 }
 
 function p2002() {
@@ -90,7 +90,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expectConfirmedWhere(call.where, month.start, month.end);
     });
 
-    it('bảng 5 bậc KHÔNG hứa "+X% bonus" (không có code nào trả bonus) — chỉ nêu thưởng mốc xu thật', async () => {
+    it('bảng 5 bậc KHÔNG hứa "+X% bonus" (không có code nào trả bonus) — chỉ nêu thưởng mốc Điểm Xanh thật', async () => {
       const svc = makeService({
         commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { commissionableTotal: 0 } }) },
       });
@@ -98,12 +98,13 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(res.allTiers).toHaveLength(5);
       for (const t of res.allTiers) expect(t).not.toHaveProperty('bonusPct');
       expect(res.tier).not.toHaveProperty('bonusPct');
-      // Tân binh (0đ) không có mốc; các bậc còn lại khớp đúng mốc thưởng xu cùng ngưỡng.
-      expect(res.allTiers[0]!.milestoneRewardXu).toBeNull();
+      // Tân binh (0đ) không có mốc; các bậc còn lại khớp đúng mốc thưởng Điểm Xanh cùng ngưỡng.
+      expect(res.allTiers[0]!.milestoneRewardPoints).toBeNull();
       for (const t of res.allTiers.slice(1)) {
         const m = CTV_MONTHLY_MILESTONES.find((x) => x.threshold === t.min);
-        expect(t.milestoneRewardXu).toBe(m!.rewardXu);
+        expect(t.milestoneRewardPoints).toBe(m!.rewardPoints);
       }
+      expect(res.allTiers.map((t) => t.milestoneRewardPoints)).toEqual([null, 50, 200, 600, 2000]);
       expect(CTV_TIERS.map((t) => t.min)).toEqual([0, 3_000_000, 10_000_000, 30_000_000, 80_000_000]);
     });
   });
@@ -170,7 +171,6 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { commissionableTotal: revenue } }) },
         ctvMilestoneClaim: { create: claimCreate },
         user: { update: jest.fn() },
-        coinTransaction: { create: jest.fn() },
       };
     }
 
@@ -186,32 +186,35 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect($transaction).not.toHaveBeenCalled();
     });
 
-    it('chưa đạt ngưỡng (theo doanh số ĐÃ CHỐT) → BadRequest, không tạo claim, không cộng xu', async () => {
+    it('chưa đạt ngưỡng (theo doanh số ĐÃ CHỐT) → BadRequest, không tạo claim, không cộng điểm', async () => {
       const tx = txWith(1_000_000);
-      const coins = { grantCoins: jest.fn() };
-      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, coins);
+      const rewards = { grant: jest.fn() };
+      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       await expect(svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP)).rejects.toThrow(
         BadRequestException,
       );
       const month = vnMonthBounds(NOW_SEP);
       expectConfirmedWhere(tx.commission.aggregate.mock.calls[0][0].where, month.start, month.end);
       expect(tx.ctvMilestoneClaim.create).not.toHaveBeenCalled();
-      expect(coins.grantCoins).not.toHaveBeenCalled();
+      expect(rewards.grant).not.toHaveBeenCalled();
     });
 
-    it('đủ điều kiện → ghi claim + cộng TubuXu qua CoinsService.grantCoins CÙNG tx (coinsBalance), KHÔNG đụng walletBalance', async () => {
+    it('đủ điều kiện → ghi claim (rewardPoints, rewardXu 0) + cộng Điểm Xanh qua RewardPointsService.grant CÙNG tx, KHÔNG đụng walletBalance', async () => {
       const tx = txWith(5_000_000);
-      const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) };
-      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, coins);
+      const rewards = { grant: jest.fn().mockResolvedValue(true) };
+      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       const res = await svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP);
 
-      expect(res).toMatchObject({ success: true, rewardXu: 50_000, monthKey: '2026-09' });
+      expect(res).toMatchObject({ success: true, rewardPoints: 50, monthKey: '2026-09' });
+      expect(res).not.toHaveProperty('rewardXu');
+      expect(res.message).toContain('50 Điểm Xanh');
+      expect(res.message).not.toMatch(/xu/i);
       expect(tx.ctvMilestoneClaim.create).toHaveBeenCalledWith({
-        data: { userId: 'ctv-1', milestoneId: 'milestone-3m', monthKey: '2026-09', rewardXu: 50_000, revenue: 5_000_000 },
+        data: { userId: 'ctv-1', milestoneId: 'milestone-3m', monthKey: '2026-09', rewardXu: 0, rewardPoints: 50, revenue: 5_000_000 },
       });
-      expect(coins.grantCoins).toHaveBeenCalledWith(
+      expect(rewards.grant).toHaveBeenCalledWith(
         'ctv-1',
-        50_000,
+        50,
         'CTV_MILESTONE:milestone-3m:2026-09',
         'AFFILIATE_MILESTONE',
         'claim-1',
@@ -223,42 +226,42 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
 
     it('nhận thưởng tháng trước (còn trong hạn) → dùng biên tháng trước', async () => {
       const tx = txWith(3_500_000);
-      const coins = { grantCoins: jest.fn().mockResolvedValue(undefined) };
-      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, coins);
+      const rewards = { grant: jest.fn().mockResolvedValue(true) };
+      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       const res = await svc.claimMilestone('ctv-1', 'milestone-3m', '2026-08', NOW_SEP);
       expect(res.monthKey).toBe('2026-08');
       const prev = vnMonthBounds(NOW_SEP, -1);
       expectConfirmedWhere(tx.commission.aggregate.mock.calls[0][0].where, prev.start, prev.end);
-      expect(coins.grantCoins.mock.calls[0][2]).toBe('CTV_MILESTONE:milestone-3m:2026-08');
+      expect(rewards.grant.mock.calls[0][2]).toBe('CTV_MILESTONE:milestone-3m:2026-08');
     });
 
-    it('claim trùng (unique userId+milestoneId+monthKey → P2002) → BadRequest "đã nhận", không cộng xu', async () => {
+    it('claim trùng (unique userId+milestoneId+monthKey → P2002) → BadRequest "đã nhận", không cộng điểm', async () => {
       const tx = txWith(5_000_000, jest.fn().mockRejectedValue(p2002()));
-      const coins = { grantCoins: jest.fn() };
-      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, coins);
+      const rewards = { grant: jest.fn() };
+      const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       await expect(svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP)).rejects.toThrow(
         'Bạn đã nhận thưởng mốc này rồi.',
       );
-      expect(coins.grantCoins).not.toHaveBeenCalled();
+      expect(rewards.grant).not.toHaveBeenCalled();
     });
 
     /**
      * Mô phỏng Postgres READ COMMITTED + unique index: 2 tx cùng chạy, cả 2 đều đọc "đủ doanh số"
      * trước khi bên nào insert; insert trùng khoá của tx đang bay phải CHỜ tx kia xong — commit
-     * → P2002, rollback → insert được. Mỗi tx chỉ áp ghi khi commit. Dùng CoinsService THẬT để
-     * chứng minh sổ xu (SUM delta) và coinsBalance luôn khớp nhau.
+     * → P2002, rollback → insert được. Mỗi tx chỉ áp ghi khi commit. Dùng RewardPointsService THẬT để
+     * chứng minh sổ điểm (SUM delta) và pointsBalance luôn khớp nhau.
      */
-    it('2 request claim đồng thời → đúng 1 lần cộng xu; ledger == coinsBalance; walletBalance không đổi', async () => {
+    it('2 request claim đồng thời → đúng 1 lần cộng điểm; ledger == pointsBalance; walletBalance không đổi', async () => {
       const committedKeys = new Set<string>();
       const inflight = new Map<string, Promise<boolean>>(); // key → resolve(true nếu commit)
-      const state = { coinsBalance: 0, walletBalance: 0, ledger: [] as number[] };
+      const state = { pointsBalance: 0, walletBalance: 0, ledger: [] as number[] };
       const tick = () => new Promise((r) => setImmediate(r));
 
       const $transaction = async <T>(cb: (tx: unknown) => Promise<T>): Promise<T> => {
         let settle!: (committed: boolean) => void;
         const done = new Promise<boolean>((r) => (settle = r));
         const myKeys: string[] = [];
-        const pending = { coins: 0, wallet: 0, ledger: [] as number[] };
+        const pending = { points: 0, wallet: 0, ledger: [] as number[] };
         const tx = {
           commission: {
             aggregate: async () => {
@@ -281,15 +284,15 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
               return { id: `claim-${key}` };
             },
           },
-          coinTransaction: {
-            create: async ({ data }: { data: { delta: number } }) => {
-              pending.ledger.push(data.delta);
-              return {};
+          pointsTransaction: {
+            createManyAndReturn: async ({ data }: { data: { delta: number }[] }) => {
+              pending.ledger.push(...data.map((d) => d.delta));
+              return data.map((_, i) => ({ id: `ptx-${i}` }));
             },
           },
           user: {
             update: async ({ data }: { data: Record<string, { increment: number }> }) => {
-              if (data.coinsBalance) pending.coins += data.coinsBalance.increment;
+              if (data.pointsBalance) pending.points += data.pointsBalance.increment;
               if (data.walletBalance) pending.wallet += data.walletBalance.increment;
               return {};
             },
@@ -298,7 +301,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         try {
           const out = await cb(tx);
           myKeys.forEach((k) => committedKeys.add(k));
-          state.coinsBalance += pending.coins;
+          state.pointsBalance += pending.points;
           state.walletBalance += pending.wallet;
           state.ledger.push(...pending.ledger);
           return out;
@@ -310,8 +313,8 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       };
 
       const prisma = { $transaction };
-      const coins = new CoinsService(prisma as unknown as PrismaService, config);
-      const svc = makeService(prisma, coins);
+      const rewards = new RewardPointsService(prisma as unknown as PrismaService, config);
+      const svc = makeService(prisma, rewards);
 
       const results = await Promise.allSettled([
         svc.claimMilestone('ctv-1', 'milestone-80m', undefined, NOW_SEP),
@@ -323,8 +326,8 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(ok).toHaveLength(1);
       expect(failed).toHaveLength(1);
       expect(failed[0]!.reason).toBeInstanceOf(BadRequestException);
-      expect(state.coinsBalance).toBe(2_000_000);
-      expect(state.ledger.reduce((s, d) => s + d, 0)).toBe(state.coinsBalance);
+      expect(state.pointsBalance).toBe(2_000);
+      expect(state.ledger.reduce((s, d) => s + d, 0)).toBe(state.pointsBalance);
       expect(state.walletBalance).toBe(0);
     });
   });

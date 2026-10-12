@@ -310,6 +310,9 @@ export const test = base.extend<{ api: MockApi }>({
   api: [
     async ({ page }, use, testInfo) => {
       const api = new MockApi();
+      // Trang chủ thử GET /home + /home/me trước; 404 (như API cũ) làm nó lùi về từng request lẻ — đúng
+      // luồng mà các spec Home/Browse hiện có đã mock. Spec muốn kiểm đường gộp thì api.get('/home', ...).
+      api.allowUnmocked('GET /home', 'GET /home/me');
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
         (url) => !LOCAL_HOSTS.has(url.hostname),
@@ -350,8 +353,8 @@ export function makeUser(over: Partial<AuthUser> & Pick<AuthUser, 'id'>): AuthUs
     phone: '0901234567',
     referralCode: 'E2EREF',
     pointsBalance: 0,
+    pointsConvertedBalance: 0,
     walletBalance: 0,
-    coinsBalance: 0,
     ...over,
   };
 }
@@ -382,6 +385,19 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.get('/orders/active-count', { count: 0 });
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
   api.get('/me/purchased-items', { items: [], nextCursor: null });
+  // Trang Danh mục/Tìm kiếm (dự án 4b) — mọi endpoint nó gọi, mặc định rỗng đúng shape để mở /browse
+  // không rơi vào E2E_UNMOCKED. `/categories` + `/search/suggest` chưa spec nào mock; `/products`
+  // (kể cả tham số lọc mới: sort, minPrice, inStock, rating…) và `/brands` bị spec ghi đè bằng
+  // dữ liệu riêng (đăng ký sau thắng).
+  api.get('/categories', []);
+  api.get('/search/suggest', []);
+  api.get('/brands', []);
+  api.get('/products', { data: [], meta: { page: 1, limit: 30, total: 0 } });
+  // Trang chủ (dự án 4b): dải "Đơn đang giao / kỳ định kỳ" gọi danh sách đơn (chỉ khi badge > 0) và
+  // /me/subscriptions ở MỌI lần mở `/`. Mặc định: không có đơn, không có kỳ. Đăng ký '/orders' ở đây
+  // (literal) không đè '/orders/:code' hay '/orders/active-count' — router ưu tiên mẫu cụ thể hơn.
+  api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
+  api.get('/me/subscriptions', []);
   return user;
 }
 

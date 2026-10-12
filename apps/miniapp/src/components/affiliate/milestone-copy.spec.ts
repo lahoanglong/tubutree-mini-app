@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatXu } from '../../utils/format';
+import { formatPoints } from '../../utils/format';
 import {
   milestoneStatusText,
   monthLabel,
@@ -8,15 +8,15 @@ import {
   tierRewardLabel,
 } from './milestone-copy';
 
-describe('milestone-copy — thưởng mốc CTV là Tubu Xu, không phải điểm', () => {
-  it('formatXu hiển thị đơn vị "xu" (không phải "điểm" của Điểm Xanh)', () => {
-    expect(formatXu(2_000_000)).toMatch(/^2[.,]000[.,]000 xu$/);
-    expect(formatXu(50_000)).not.toContain('điểm');
+describe('milestone-copy — thưởng mốc CTV là Điểm Xanh (PD-3)', () => {
+  it('formatPoints hiển thị đơn vị "điểm", không còn đơn vị xu', () => {
+    expect(formatPoints(2_000)).toMatch(/^2[.,]000 điểm$/);
+    expect(formatPoints(600)).not.toMatch(/xu/i);
   });
 
-  it('trạng thái mốc: đã nhận → ví Tubu Xu; đạt → mời nhận; chưa đạt → còn thiếu doanh số ĐÃ CHỐT', () => {
+  it('trạng thái mốc: đã nhận → cộng vào Điểm Xanh; đạt → mời nhận; chưa đạt → còn thiếu doanh số ĐÃ CHỐT', () => {
     expect(milestoneStatusText({ achieved: true, claimed: true, threshold: 3_000_000 }, 5_000_000)).toBe(
-      'Đã cộng vào ví Tubu Xu',
+      'Đã cộng vào Điểm Xanh',
     );
     expect(milestoneStatusText({ achieved: true, claimed: false, threshold: 3_000_000 }, 5_000_000)).toContain(
       'Đã đạt',
@@ -25,10 +25,10 @@ describe('milestone-copy — thưởng mốc CTV là Tubu Xu, không phải đi�
     expect(missing).toMatch(/^Còn thiếu 2[.,]000[.,]000đ doanh số đã chốt$/);
   });
 
-  it('bảng bậc không hứa "% bonus" — chỉ nêu thưởng mốc xu có thật', () => {
-    expect(tierRewardLabel({ milestoneRewardXu: 600_000 })).toMatch(/^Thưởng mốc \+600[.,]000 xu$/);
-    expect(tierRewardLabel({ milestoneRewardXu: null })).toBe('Bậc khởi đầu');
-    expect(tierRewardLabel({ milestoneRewardXu: 600_000 })).not.toMatch(/%|bonus/i);
+  it('bảng bậc không hứa "% bonus" — chỉ nêu thưởng mốc Điểm Xanh có thật', () => {
+    expect(tierRewardLabel({ milestoneRewardPoints: 600 })).toBe('Thưởng mốc +600 điểm');
+    expect(tierRewardLabel({ milestoneRewardPoints: null })).toBe('Bậc khởi đầu');
+    expect(tierRewardLabel({ milestoneRewardPoints: 600 })).not.toMatch(/%|bonus|xu/i);
   });
 
   it('giải thích doanh số đã chốt nêu đúng số ngày giữ đổi/trả và không gồm phí ship', () => {

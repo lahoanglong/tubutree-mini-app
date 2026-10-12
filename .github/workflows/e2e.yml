@@ -63,6 +63,11 @@ jobs:
         pnpm --filter @tubutree/api exec prisma generate
         pnpm --filter @tubutree/api exec prisma migrate deploy
 
+    # 7b. Partial unique index (khoá chống cộng tiền/điểm/xu trùng) chỉ có trong migration SQL,
+    #     Prisma schema không biểu diễn được — kiểm DB vừa migrate có đủ, thiếu thì fail CI.
+    - name: Check partial unique indexes
+      run: pnpm --filter @tubutree/api exec tsx prisma/check-partial-indexes.ts
+
     # 8. Build toàn bộ dự án (shared-types cần build trước khi API/web dev import được).
     - name: Build Monorepo
       run: pnpm build

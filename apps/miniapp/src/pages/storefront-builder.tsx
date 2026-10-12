@@ -1,7 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Box, Page, Text, Button, Input, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import type { CSSProperties, ReactNode } from 'react';
+import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp } from 'lucide-react';
+import {
+  Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp, Plus, Check,
+  type LucideIcon,
+} from 'lucide-react';
 import {
   getMyStorefront, createStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
@@ -9,13 +13,47 @@ import {
   type StorefrontEdit, type PickerProduct, type StorefrontCategory,
 } from '../services/storefront-api';
 import { getErrorMessage } from '../services/api';
-import { formatVnd } from '../utils/format';
+import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../utils/storefront-theme';
+import { Badge } from '../components/ui/badge';
+import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { Field } from '../components/ui/form';
+import { Icon, type IconProps } from '../components/ui/icon';
+import { PageHeader } from '../components/ui/page-header';
+import { PriceTag } from '../components/ui/price-tag';
+import { ProgressBar } from '../components/ui/progress-bar';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ImageUpload } from '../components/image-upload';
+
+const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
+const TEMPLATE_HINT =
+  'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';
+const CONFIG_TITLE = 'Cấu hình Subdomain, Kho & VietQR';
+
+/** Thẻ cách mép trang 16px, cách thẻ kế 12px — dùng chung cho mọi khối trong trang. */
+const CARD_MARGIN: CSSProperties = { margin: '0 16px 12px' };
+
+/** Form dài trong sheet: giới hạn chiều cao để sheet không phủ kín tới đỉnh màn hình. */
+const SCROLL_BODY: CSSProperties = { maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' };
+
+/** Mỗi nhánh render có đúng một h1 (PageHeader) và cùng nền. */
+function BuilderShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return (
+    <Page style={{ background: 'var(--color-bg-canvas)', ...style }}>
+      <PageHeader title={vi.storefront.title} />
+      {children}
+    </Page>
+  );
+}
 
 export default function StorefrontBuilderPage() {
   const qc = useQueryClient();
@@ -44,7 +82,11 @@ export default function StorefrontBuilderPage() {
   });
 
   if (sfQ.isLoading) {
-    return <Page className="page"><Box p={4}><Skeleton style={{ height: 120, borderRadius: 16 }} /></Box></Page>;
+    return (
+      <BuilderShell>
+        <div style={{ padding: 16 }}><Skeleton height={120} radius="var(--radius-card)" /></div>
+      </BuilderShell>
+    );
   }
   if (sfQ.isError) {
     // Chỉ 404 = chưa có gian hàng → mời tạo. Lỗi network/500/401 → ErrorState có retry
@@ -52,12 +94,12 @@ export default function StorefrontBuilderPage() {
     const status = (sfQ.error as { response?: { status?: number } })?.response?.status;
     if (status === 404) {
       return (
-        <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-          <Box p={6}>
+        <BuilderShell>
+          <div style={{ padding: 24 }}>
             <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
               ctaLabel={vi.storefront.create} onCta={() => setPickerOpen(true)} ctaLoading={createMut.isPending} />
-          </Box>
-          <Sheet visible={pickerOpen} onClose={() => setPickerOpen(false)} autoHeight>
+          </div>
+          <BottomSheet open={pickerOpen} onClose={() => setPickerOpen(false)} title={TEMPLATE_TITLE} description={TEMPLATE_HINT}>
             <TemplatePickerSheet
               applying={createWithTemplateMut.isPending}
               applyingCategoryId={createWithTemplateMut.variables ?? null}
@@ -65,14 +107,14 @@ export default function StorefrontBuilderPage() {
               onSkip={() => { setPickerOpen(false); createMut.mutate(); }}
               skipLoading={createMut.isPending}
             />
-          </Sheet>
-        </Page>
+          </BottomSheet>
+        </BuilderShell>
       );
     }
     return (
-      <Page className="page" style={{ background: 'var(--neutral-50)' }}>
-        <Box p={6}><ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></Box>
-      </Page>
+      <BuilderShell>
+        <div style={{ padding: 24 }}><ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></div>
+      </BuilderShell>
     );
   }
   return <Builder sf={sfQ.data!} />;
@@ -97,47 +139,56 @@ function TemplatePickerSheet({
   const busy = applying || skipLoading;
 
   return (
-    <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-      <Text bold size="large">Bắt đầu nhanh với 1 mẫu có sẵn</Text>
-      <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 12 }}>
-        Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.
-      </Text>
-      {catQ.isLoading && <Skeleton style={{ height: 120, borderRadius: 16 }} />}
+    <>
+      {catQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
       {catQ.data && (
-        <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {catQ.data.map((c: StorefrontCategory) => (
-            <Box
+            <button
               key={c.id}
-              role="button"
+              type="button"
               aria-label={`Dùng mẫu ${c.name}`}
+              aria-disabled={busy || undefined}
               className="tubu-press"
               onClick={() => !busy && onPick(c.id)}
               style={{
-                border: '1px solid var(--neutral-200)', borderRadius: 'var(--radius-lg)', padding: 12,
-                textAlign: 'center', cursor: busy ? 'default' : 'pointer', opacity: busy && applyingCategoryId !== c.id ? 0.5 : 1,
+                minHeight: 44, padding: 12, textAlign: 'center', cursor: busy ? 'default' : 'pointer',
+                opacity: busy && applyingCategoryId !== c.id ? 0.5 : 1,
+                background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
+                borderRadius: 'var(--radius-card)',
               }}
             >
               {c.image ? (
-                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 10, margin: '0 auto 6px' }} />
+                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-media)', margin: '0 auto 6px', display: 'block' }} />
               ) : (
-                <Box style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--leaf-50)', margin: '0 auto 6px' }} />
+                <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)', margin: '0 auto 6px' }} />
               )}
-              <Text size="small">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
-            </Box>
+              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
+            </button>
           ))}
-        </Box>
+        </div>
       )}
-      <Button
-        variant="secondary"
-        fullWidth
-        disabled={busy}
-        loading={skipLoading}
-        style={{ marginTop: 16 }}
-        onClick={onSkip}
-      >
+      <Button variant="secondary" fullWidth disabled={applying} loading={skipLoading} style={{ marginTop: 16 }} onPress={onSkip}>
         Bỏ qua, tự tạo gian hàng trống
       </Button>
-    </Box>
+    </>
+  );
+}
+
+/** Nút chỉ-icon trong hàng/thẻ: vùng chạm 44px và cho chỉnh tông icon (IconButton của DS chưa có `tone`). */
+function RowIconButton({
+  icon, label, tone = 'muted', onPress,
+}: { icon: LucideIcon; label: string; tone?: NonNullable<IconProps['tone']>; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="tubu-press touch-target"
+      onClick={onPress}
+      style={{ minWidth: 44, minHeight: 44, flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-pill)' }}
+    >
+      <Icon icon={icon} size="sm" tone={tone} />
+    </button>
   );
 }
 
@@ -149,7 +200,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" (1.500 xu) đọc StorefrontItem.note, nhưng builder
+  // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
 
@@ -229,113 +280,77 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   });
 
   return (
-    <Page className="page" style={{ background: 'var(--neutral-50)', paddingBottom: 96 }}>
-      <Box p={4} flex alignItems="center" justifyContent="space-between">
-        <Box>
-          <Box flex alignItems="center" style={{ gap: 6 }}>
-            <Text bold size="large">{sf.title}</Text>
-            {/* Không có badge này thì CTV không biết gian hàng đã đăng hay còn nháp — bấm
-                "Xem trước" ra trang lỗi mà không hiểu vì sao (P0-2 audit mạch lạc CTV). */}
-            <span
-              style={{
-                background: sf.isPublished ? 'var(--success-bg)' : 'var(--neutral-100)',
-                color: sf.isPublished ? 'var(--leaf-700)' : 'var(--neutral-600)',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-full)',
-              }}
-            >
-              {sf.isPublished ? vi.storefront.statusPublished : vi.storefront.statusDraft}
-            </span>
-          </Box>
-          <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>
-            {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
-          </Text>
-        </Box>
-        <Box flex style={{ gap: 6 }}>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => setProfileOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <UserRoundCog size={14} /> {vi.storefront.editProfile}
+    <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
+      <div style={{ padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <Heading variant="title-md" as="h2">{sf.title}</Heading>
+          {/* Không có badge này thì CTV không biết gian hàng đã đăng hay còn nháp — bấm
+              "Xem trước" ra trang lỗi mà không hiểu vì sao (P0-2 audit mạch lạc CTV). */}
+          <Badge tone={sf.isPublished ? 'success' : 'neutral'} size="sm">
+            {sf.isPublished ? vi.storefront.statusPublished : vi.storefront.statusDraft}
+          </Badge>
+        </div>
+        <Text variant="caption" tone="tertiary" as="div">
+          {sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/${sf.slug}`}
+        </Text>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <Button variant="secondary" icon={UserRoundCog} style={{ flex: 1 }} onPress={() => setProfileOpen(true)}>
+            {vi.storefront.editProfile}
           </Button>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => setConfigOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <Settings size={14} /> Cấu hình
+          <Button variant="secondary" icon={Settings} style={{ flex: 1 }} onPress={() => setConfigOpen(true)}>
+            Cấu hình
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
-          "Hoàn thiện hồ sơ gian hàng" (2.000 xu). */}
-      <Box
-        mx={4}
-        mb={3}
+          "Hoàn thiện hồ sơ gian hàng". */}
+      <div
         role="button"
         aria-label={vi.storefront.editProfile}
         className="tubu-press"
         onClick={() => setProfileOpen(true)}
-        style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}
+        {...rowKeyboardProps()}
+        style={{ ...CARD_MARGIN, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', overflow: 'hidden' }}
       >
-        <Box
+        <div
           style={{
             height: 84,
             background: sf.coverUrl
               ? `center/cover no-repeat url(${sf.coverUrl})`
-              : 'linear-gradient(135deg, var(--leaf-100), var(--primary-100))',
+              : 'linear-gradient(135deg, var(--sage-100), var(--forest-100))',
           }}
         />
-        <Box flex alignItems="center" p={3} style={{ gap: 10 }}>
-          <Box
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12 }}>
+          <div
             style={{
               width: 48,
               height: 48,
               borderRadius: '50%',
               flexShrink: 0,
-              border: '2px solid var(--neutral-0)',
+              border: '2px solid var(--color-bg-surface)',
               marginTop: -28,
               background: sf.avatarUrl
                 ? `center/cover no-repeat url(${sf.avatarUrl})`
-                : 'var(--neutral-200)',
+                : 'var(--stone-200)',
             }}
           />
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="small" style={{ color: sf.headerNote ? 'var(--neutral-900)' : 'var(--neutral-400)' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text variant="body-sm" tone={sf.headerNote ? 'primary' : 'tertiary'} as="div">
               {sf.headerNote || vi.storefront.profileHint}
             </Text>
-          </Box>
-          <Pencil size={15} color="var(--neutral-400)" />
-        </Box>
-      </Box>
+          </div>
+          <Icon icon={Pencil} size="sm" tone="muted" />
+        </div>
+      </div>
 
       {sf.collections.map((col) => (
-        <Box key={col.id} mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-          <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 8, gap: 8 }}>
-            <Text bold style={{ flex: 1, minWidth: 0 }}>{col.title}</Text>
-            <Box
-              role="button"
-              aria-label={vi.storefront.renameCollection}
-              className="tubu-press touch-target"
-              onClick={() => setRenaming({ id: col.id, title: col.title })}
-            >
-              <Pencil size={15} color="var(--neutral-400)" />
-            </Box>
-            <Box
-              role="button"
-              aria-label={vi.storefront.deleteCollection}
-              className="tubu-press touch-target"
-              onClick={() => setConfirmDeleteCol(col.id)}
-            >
-              <Trash2 size={15} color="var(--danger)" />
-            </Box>
-          </Box>
+        <Card key={col.id} style={CARD_MARGIN}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+            <Heading variant="title-sm" as="h2" style={{ flex: 1, minWidth: 0 }}>{col.title}</Heading>
+            <RowIconButton icon={Pencil} label={vi.storefront.renameCollection} onPress={() => setRenaming({ id: col.id, title: col.title })} />
+            <RowIconButton icon={Trash2} tone="danger" label={vi.storefront.deleteCollection} onPress={() => setConfirmDeleteCol(col.id)} />
+          </div>
           {col.items.map((it) => {
             const prod = it.product ?? productMap.get(it.productId);
             const name = prod?.name ?? 'Sản phẩm';
@@ -343,198 +358,184 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             const slug = prod?.slug;
 
             return (
-              <Box key={it.id} flex alignItems="center" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="small" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{name}</Text>
-                  <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(price)}</Text>
-                  <Text
-                    size="xSmall"
+              <div key={it.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="body-sm" as="div" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{name}</Text>
+                    <PriceTag value={price} size="sm" />
+                  </div>
+                  <RowIconButton
+                    icon={Pin}
+                    tone={it.isPinned ? 'brand' : 'muted'}
+                    label={it.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu'}
+                    onPress={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}
+                  />
+                  <RowIconButton
+                    icon={it.isHidden ? EyeOff : Eye}
+                    tone={it.isHidden ? 'muted' : 'brand'}
+                    label={it.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm'}
+                    onPress={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}
+                  />
+                  <RowIconButton icon={Trash2} tone="danger" label="Xoá khỏi bộ sưu tập" onPress={() => setConfirmDeleteItemId(it.id)} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <button
+                    type="button"
                     className="tubu-press"
                     onClick={() => setNotingItem({ id: it.id, note: it.note ?? '' })}
                     style={{
-                      color: it.note ? 'var(--neutral-600)' : 'var(--leaf-700)',
-                      fontStyle: it.note ? 'italic' : 'normal',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      marginTop: 2,
+                      flex: 1, minWidth: 0, minHeight: 44, padding: 0, display: 'flex', alignItems: 'center', gap: 4,
+                      border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
                     }}
                   >
-                    <MessageSquarePlus size={13} strokeWidth={2} style={{ flexShrink: 0 }} />
-                    {it.note ? `“${it.note}”` : vi.storefront.itemNoteEmpty}
-                  </Text>
-                </Box>
-                {slug && (
-                  <Text
-                    size="xSmall"
-                    bold
-                    className="tubu-press"
-                    style={{ color: 'var(--primary-700)' }}
-                    onClick={() => setContentKitSlug(slug)}
-                  >
-                    {vi.contentKit.entryLabel}
-                  </Text>
-                )}
-                <Box
-                  role="button"
-                  aria-label={it.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu'}
-                  className="tubu-press"
-                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  onClick={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}
-                >
-                  <Pin size={15} color={it.isPinned ? 'var(--primary-700)' : 'var(--neutral-400)'} strokeWidth={2} />
-                </Box>
-                <Box
-                  role="button"
-                  aria-label={it.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm'}
-                  className="tubu-press"
-                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  onClick={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}
-                >
-                  {it.isHidden ? <EyeOff size={16} color="var(--neutral-400)" /> : <Eye size={16} color="var(--leaf-700)" />}
-                </Box>
-                <Box
-                  role="button"
-                  aria-label="Xoá khỏi bộ sưu tập"
-                  className="tubu-press"
-                  style={{ minWidth: 36, minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  onClick={() => setConfirmDeleteItemId(it.id)}
-                >
-                  <Trash2 size={15} color="var(--danger)" />
-                </Box>
-              </Box>
+                    <Icon icon={MessageSquarePlus} size="sm" tone={it.note ? 'muted' : 'brand'} style={{ flexShrink: 0 }} />
+                    <Text variant="caption" tone={it.note ? 'secondary' : 'brand'} style={{ fontStyle: it.note ? 'italic' : 'normal' }}>
+                      {it.note ? `“${it.note}”` : vi.storefront.itemNoteEmpty}
+                    </Text>
+                  </button>
+                  {slug && (
+                    <Button variant="ghost" onPress={() => setContentKitSlug(slug)}>
+                      {vi.contentKit.entryLabel}
+                    </Button>
+                  )}
+                </div>
+              </div>
             );
           })}
-          <Button size="small" variant="secondary" style={{ marginTop: 8 }} onClick={() => setPickerCol(col.id)}>+ {vi.storefront.addProduct}</Button>
-        </Box>
+          <Button variant="secondary" icon={Plus} style={{ marginTop: 8 }} onPress={() => setPickerCol(col.id)}>
+            {vi.storefront.addProduct}
+          </Button>
+        </Card>
       ))}
 
-      <Box mx={4} mb={3}>
-        <Box flex style={{ gap: 8 }}>
-          <Input
-            value={newColTitle}
-            placeholder={vi.storefront.collectionNamePlaceholder}
-            onChange={(e) => setNewColTitle(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <Button
-            variant="secondary"
-            disabled={!newColTitle.trim() || newColMut.isPending}
-            loading={newColMut.isPending}
-            onClick={() => newColMut.mutate(newColTitle.trim())}
-          >
-            + {vi.storefront.addCollection}
-          </Button>
-        </Box>
-      </Box>
+      <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <Input
+          value={newColTitle}
+          placeholder={vi.storefront.collectionNamePlaceholder}
+          onChange={(e) => setNewColTitle(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <Button
+          variant="secondary"
+          icon={Plus}
+          disabled={!newColTitle.trim()}
+          loading={newColMut.isPending}
+          onPress={() => newColMut.mutate(newColTitle.trim())}
+        >
+          {vi.storefront.addCollection}
+        </Button>
+      </div>
 
       <StatsSection />
       <QuestSection />
 
+      <StickyActionBar
+        secondary={
+          <Button
+            variant="secondary"
+            style={{ flex: 1 }}
+            onPress={() => {
+              // Trang /s/:slug chỉ trả gian hàng ĐÃ ĐĂNG. Trước đây bấm "Xem trước" lúc còn nháp
+              // là rơi thẳng vào màn lỗi "Gian hàng không tồn tại hoặc chưa đăng".
+              if (!sf.isPublished) {
+                openSnackbar({ text: vi.storefront.previewNeedsPublish, type: 'warning' });
+                return;
+              }
+              navigate(`/s/${sf.slug}`);
+            }}
+          >
+            {vi.storefront.preview}
+          </Button>
+        }
+        primary={
+          <Button fullWidth loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
+            {vi.storefront.publish}
+          </Button>
+        }
+      />
 
-      <Box style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: 12, background: 'var(--neutral-50)', display: 'flex', gap: 8 }}>
-        <Button
-          variant="secondary"
-          style={{ flex: 1 }}
-          onClick={() => {
-            // Trang /s/:slug chỉ trả gian hàng ĐÃ ĐĂNG. Trước đây bấm "Xem trước" lúc còn nháp
-            // là rơi thẳng vào màn lỗi "Gian hàng không tồn tại hoặc chưa đăng".
-            if (!sf.isPublished) {
-              openSnackbar({ text: vi.storefront.previewNeedsPublish, type: 'warning' });
-              return;
-            }
-            navigate(`/s/${sf.slug}`);
-          }}
-        >
-          {vi.storefront.preview}
-        </Button>
-        <Button style={{ flex: 1, background: 'var(--primary-600)' }} loading={publishMut.isPending} disabled={publishMut.isPending} onClick={() => publishMut.mutate()}>{vi.storefront.publish}</Button>
-      </Box>
-
-      <Sheet visible={!!pickerCol} onClose={() => setPickerCol(null)} autoHeight>
+      <BottomSheet open={!!pickerCol} onClose={() => setPickerCol(null)} title={vi.storefront.addProduct}>
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
-      </Sheet>
+      </BottomSheet>
 
-      <Sheet visible={!!renaming} onClose={() => setRenaming(null)} autoHeight>
+      <BottomSheet open={!!renaming} onClose={() => setRenaming(null)} title={vi.storefront.renameCollection}>
         {renaming && (
-          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Text bold size="large" style={{ marginBottom: 12 }}>{vi.storefront.renameCollection}</Text>
+          <>
             <Input
               value={renaming.title}
               onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
             />
             <Button
               fullWidth
-              disabled={!renaming.title.trim() || renameColMut.isPending}
+              disabled={!renaming.title.trim()}
               loading={renameColMut.isPending}
-              onClick={() => renameColMut.mutate({ id: renaming.id, title: renaming.title.trim() })}
-              style={{ marginTop: 12, background: 'var(--primary-600)' }}
+              onPress={() => renameColMut.mutate({ id: renaming.id, title: renaming.title.trim() })}
+              style={{ marginTop: 12 }}
             >
               {vi.common.save}
             </Button>
-          </Box>
+          </>
         )}
-      </Sheet>
+      </BottomSheet>
 
-      <Sheet visible={!!confirmDeleteCol} onClose={() => setConfirmDeleteCol(null)} autoHeight>
-        <Box p={5} style={{ textAlign: 'center', paddingBottom: 'calc(20px + var(--safe-bottom))' }}>
-          <Text bold size="large">{vi.storefront.deleteCollectionConfirm}</Text>
-          <Box flex style={{ gap: 8, marginTop: 16 }}>
-            <Button variant="secondary" style={{ flex: 1 }} onClick={() => setConfirmDeleteCol(null)}>
-              {vi.common.cancel}
-            </Button>
-            <Button
-              style={{ flex: 1, background: 'var(--danger)' }}
-              loading={deleteColMut.isPending} disabled={deleteColMut.isPending}
-              onClick={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
-            >
-              {vi.storefront.deleteCollection}
-            </Button>
-          </Box>
-        </Box>
-      </Sheet>
+      <BottomSheet open={!!confirmDeleteCol} onClose={() => setConfirmDeleteCol(null)} title={vi.storefront.deleteCollectionConfirm}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <Button variant="secondary" style={{ flex: 1 }} onPress={() => setConfirmDeleteCol(null)}>
+            {vi.common.cancel}
+          </Button>
+          <Button
+            variant="danger"
+            style={{ flex: 1 }}
+            loading={deleteColMut.isPending}
+            onPress={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
+          >
+            {vi.storefront.deleteCollection}
+          </Button>
+        </div>
+      </BottomSheet>
 
-      <Sheet visible={configOpen} onClose={() => setConfigOpen(false)} autoHeight>
-        <MerchantConfigSheet sf={sf} onClose={() => setConfigOpen(false)} onSaved={() => void refresh()} />
-      </Sheet>
+      <BottomSheet open={configOpen} onClose={() => setConfigOpen(false)} title={CONFIG_TITLE}>
+        <MerchantConfigSheet sf={sf} onSaved={() => void refresh()} onClose={() => setConfigOpen(false)} />
+      </BottomSheet>
 
-      <Sheet visible={profileOpen} onClose={() => setProfileOpen(false)} autoHeight>
+      <BottomSheet open={profileOpen} onClose={() => setProfileOpen(false)} title={vi.storefront.profileTitle} description={vi.storefront.profileHint}>
         {profileOpen && (
           <ProfileSheet sf={sf} onClose={() => setProfileOpen(false)} onSaved={() => void refresh()} />
         )}
-      </Sheet>
+      </BottomSheet>
 
-      <Sheet visible={!!notingItem} onClose={() => setNotingItem(null)} autoHeight>
+      <BottomSheet
+        open={!!notingItem}
+        onClose={() => setNotingItem(null)}
+        title={vi.storefront.itemNote}
+        description="Lời thật của bạn thuyết phục hơn mọi mô tả sản phẩm — khách thấy ngay dưới tên món."
+      >
         {notingItem && (
-          <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-            <Text bold size="large">{vi.storefront.itemNote}</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 12 }}>
-              Lời thật của bạn thuyết phục hơn mọi mô tả sản phẩm — khách thấy ngay dưới tên món.
-            </Text>
+          <>
             <Input.TextArea
               value={notingItem.note}
               maxLength={200}
               placeholder={vi.storefront.itemNotePlaceholder}
               onChange={(e) => setNotingItem({ ...notingItem, note: e.target.value })}
             />
-            <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+            <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 4 }}>
               {notingItem.note.length}/200
             </Text>
-            <Box flex style={{ gap: 8, marginTop: 16 }}>
-              <Button variant="secondary" style={{ flex: 1 }} onClick={() => setNotingItem(null)}>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <Button variant="secondary" style={{ flex: 1 }} onPress={() => setNotingItem(null)}>
                 Huỷ
               </Button>
               <Button
-                style={{ flex: 1, background: 'var(--primary-600)' }}
-                loading={noteMut.isPending} disabled={noteMut.isPending}
-                onClick={() => noteMut.mutate({ id: notingItem.id, note: notingItem.note.trim() })}
+                style={{ flex: 1 }}
+                loading={noteMut.isPending}
+                onPress={() => noteMut.mutate({ id: notingItem.id, note: notingItem.note.trim() })}
               >
                 Lưu
               </Button>
-            </Box>
-          </Box>
+            </div>
+          </>
         )}
-      </Sheet>
+      </BottomSheet>
 
       <ContentKitSheet
         visible={!!contentKitSlug}
@@ -543,25 +544,31 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       />
 
       {/* Xác nhận xoá sản phẩm khỏi gian hàng (thao tác không hoàn tác) */}
-      <Sheet visible={!!confirmDeleteItemId} onClose={() => setConfirmDeleteItemId(null)} autoHeight>
-        <Box p={5} style={{ textAlign: 'center' }}>
-          <Text.Title size="small">Xoá sản phẩm này khỏi gian hàng?</Text.Title>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
-            <Button fullWidth variant="secondary" onClick={() => setConfirmDeleteItemId(null)}>
-              Huỷ
-            </Button>
-            <Button
-              fullWidth
-              loading={delItemMut.isPending} disabled={delItemMut.isPending}
-              onClick={() => delItemMut.mutate(confirmDeleteItemId!)}
-              style={{ background: 'var(--danger)' }}
-            >
-              Xoá
-            </Button>
-          </Box>
-        </Box>
-      </Sheet>
-    </Page>
+      <BottomSheet open={!!confirmDeleteItemId} onClose={() => setConfirmDeleteItemId(null)} title="Xoá sản phẩm này khỏi gian hàng?">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+          <Button fullWidth variant="secondary" onPress={() => setConfirmDeleteItemId(null)}>
+            Huỷ
+          </Button>
+          <Button
+            fullWidth
+            variant="danger"
+            loading={delItemMut.isPending}
+            onPress={() => delItemMut.mutate(confirmDeleteItemId!)}
+          >
+            Xoá
+          </Button>
+        </div>
+      </BottomSheet>
+    </BuilderShell>
+  );
+}
+
+function StatBox({ value, label, tone }: { value: string; label: string; tone?: 'brand' }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: 10, textAlign: 'center' }}>
+      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{value}</Text>
+      <Text variant="caption" tone="tertiary" as="div">{label}</Text>
+    </div>
   );
 }
 
@@ -572,40 +579,31 @@ function StatsSection() {
   if (!data) return null;
 
   return (
-    <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Box flex alignItems="center" style={{ gap: 6, marginBottom: 10 }}>
-        <TrendingUp size={18} color="var(--primary-700)" strokeWidth={2} />
-        <Text bold>Thống kê 30 ngày</Text>
-      </Box>
-      <Box flex style={{ gap: 8, marginBottom: 12 }}>
-        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
-          <Text bold size="large">{data.orders30d}</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Đơn (7 ngày: {data.orders7d})</Text>
-        </Box>
-        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
-          <Text bold size="large">{formatVnd(data.revenue30d)}</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Doanh thu</Text>
-        </Box>
-        <Box style={{ flex: 1, background: 'var(--neutral-50)', borderRadius: 'var(--radius-md)', padding: 10, textAlign: 'center' }}>
-          <Text bold size="large" style={{ color: 'var(--leaf-700)' }}>{formatVnd(data.commission30d)}</Text>
-          <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>Hoa hồng</Text>
-        </Box>
-      </Box>
+    <Card style={CARD_MARGIN}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <Icon icon={TrendingUp} size="md" tone="brand" />
+        <Heading variant="title-sm" as="h2">Thống kê 30 ngày</Heading>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <StatBox value={String(data.orders30d)} label={`Đơn (7 ngày: ${data.orders7d})`} />
+        <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
+        <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" tone="brand" />
+      </div>
       {data.byProduct.length === 0 ? (
-        <Text size="xSmall" style={{ color: 'var(--neutral-400)' }}>Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
+        <Text variant="caption" tone="tertiary" as="div">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
       ) : (
         data.byProduct.slice(0, 5).map((p) => (
-          <Box key={p.productSlug || p.productName} flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderTop: '1px solid var(--neutral-100)' }}>
-            <Text size="small" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.productName}</Text>
-            <Text size="xSmall" style={{ color: 'var(--neutral-500)', whiteSpace: 'nowrap', marginLeft: 8 }}>{p.qty} món · {formatVnd(p.revenue)}</Text>
-          </Box>
+          <div key={p.productSlug || p.productName} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
+            <Text variant="body-sm" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.productName}</Text>
+            <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{p.qty} món · {formatVnd(p.revenue)}</Text>
+          </div>
         ))
       )}
-    </Box>
+    </Card>
   );
 }
 
-/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng TubuXu. */
+/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng Điểm Xanh. */
 function QuestSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -614,7 +612,7 @@ function QuestSection() {
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: `+${r.rewardXu.toLocaleString('vi-VN')} TubuXu 🎉`, type: 'success' });
+      openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -624,52 +622,51 @@ function QuestSection() {
   if (!data) return null;
 
   return (
-    <Box mx={4} mb={3} p={3} style={{ background: 'var(--neutral-0)', borderRadius: 'var(--radius-lg)' }}>
-      <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 4 }}>
-        <Box flex alignItems="center" style={{ gap: 6 }}>
-          <Target size={18} color="var(--primary-700)" strokeWidth={2} />
-          <Text bold>Hành trình gian hàng</Text>
-        </Box>
-        <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{data.level}/{data.levelMax}</Text>
-      </Box>
-      <Text size="xSmall" style={{ color: 'var(--leaf-700)', marginBottom: 10 }}>
-        Đã nhận {data.totalEarnedXu.toLocaleString('vi-VN')} TubuXu
+    <Card style={CARD_MARGIN}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon icon={Target} size="md" tone="brand" />
+          <Heading variant="title-sm" as="h2">Hành trình gian hàng</Heading>
+        </div>
+        <Text variant="caption" tone="tertiary">{data.level}/{data.levelMax}</Text>
+      </div>
+      <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 10 }}>
+        Đã nhận {formatPoints(data.totalEarnedPoints)}
       </Text>
       {data.quests.map((q) => {
         // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
         const pct = q.goal > 0 ? Math.min(100, Math.round((q.progress / q.goal) * 100)) : 100;
         return (
-        <Box key={q.code} style={{ padding: '8px 0', borderTop: '1px solid var(--neutral-100)' }}>
-          <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 8 }}>
-            <Box style={{ flex: 1 }}>
-              <Text size="small" style={{ opacity: q.claimed ? 0.6 : 1 }}>
-                {q.claimed ? '✓ ' : ''}{q.title}
-              </Text>
-              <Text size="xSmall" style={{ color: 'var(--neutral-500)' }}>{q.hint}</Text>
-            </Box>
-            {q.claimed ? (
-              <Text size="xSmall" style={{ color: 'var(--leaf-700)', whiteSpace: 'nowrap' }}>Đã nhận</Text>
-            ) : q.done ? (
-              <Button
-                size="small"
-                style={{ background: 'var(--primary-600)', whiteSpace: 'nowrap' }}
-                loading={claimMut.isPending && claimMut.variables === q.code} disabled={claimMut.isPending}
-                onClick={() => claimMut.mutate(q.code)}
-              >
-                +{q.rewardXu.toLocaleString('vi-VN')} xu
-              </Button>
-            ) : (
-              <Text size="xSmall" style={{ color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
-            )}
-          </Box>
-          {/* thanh tiến trình mảnh */}
-          <Box style={{ height: 4, background: 'var(--neutral-100)', borderRadius: 'var(--radius-full)', marginTop: 6, overflow: 'hidden' }}>
-            <Box style={{ height: '100%', width: `${pct}%`, background: q.done ? 'var(--leaf-600)' : 'var(--primary-400)' }} />
-          </Box>
-        </Box>
+          <div key={q.code} style={{ padding: '8px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="body-sm" as="div" style={{ opacity: q.claimed ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {q.claimed && <Icon icon={Check} size="sm" tone="brand" />}
+                  {q.title}
+                </Text>
+                <Text variant="caption" tone="tertiary" as="div">{q.hint}</Text>
+              </div>
+              {q.claimed ? (
+                <Badge tone="success" size="sm">Đã nhận</Badge>
+              ) : q.done ? (
+                <Button
+                  loading={claimMut.isPending && claimMut.variables === q.code}
+                  disabled={claimMut.isPending && claimMut.variables !== q.code}
+                  onPress={() => claimMut.mutate(q.code)}
+                >
+                  +{formatPoints(q.rewardPoints)}
+                </Button>
+              ) : (
+                <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
+              )}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <ProgressBar value={pct} max={100} />
+            </div>
+          </div>
         );
       })}
-    </Box>
+    </Card>
   );
 }
 
@@ -682,38 +679,48 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
     onSuccess: () => { haptic('light'); onAdded(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const products = listQ.data ?? [];
 
   return (
-    <Box p={4} style={{ paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
-      <Text bold size="large" style={{ marginBottom: 12 }}>{vi.storefront.addProduct}</Text>
+    <>
       <Input placeholder={vi.storefront.pickerSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
-      <Box mt={3} style={{ maxHeight: 360, overflowY: 'auto' }}>
-        {listQ.isError ? <ErrorState message={getErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} /> :
-          (listQ.data ?? []).map((p) => (
-            <Box key={p.id} flex alignItems="center" style={{ gap: 8, padding: '8px 0', borderBottom: '1px solid var(--neutral-100)' }}>
-              <Box style={{ flex: 1 }}>
-                <Text size="small">{p.name}</Text>
-                <Box flex alignItems="center" style={{ gap: 6 }}>
-                  <Text size="xSmall" style={{ color: 'var(--primary-700)' }}>{formatVnd(p.salePrice ?? p.basePrice)}</Text>
-                  {p.maxAffiliateRate > 0 && (
-                    <Text size="xSmall" style={{ color: 'var(--leaf-700)', background: 'var(--leaf-50)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>
-                      +{p.maxAffiliateRate}% {vi.storefront.commission}
-                    </Text>
-                  )}
-                </Box>
-              </Box>
-              <Button size="small" style={{ background: 'var(--primary-600)' }} onClick={() => addMut.mutate(p)}>+ Thêm</Button>
-            </Box>
-          ))}
-      </Box>
-      <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onClick={onClose}>Xong</Button>
-    </Box>
+      <div style={{ marginTop: 12, maxHeight: 360, overflowY: 'auto' }}>
+        {listQ.isError ? <ErrorState message={getErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} variant="inline" /> :
+          listQ.isLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Skeleton height={44} />
+              <Skeleton height={44} />
+              <Skeleton height={44} />
+            </div>
+          ) : products.length === 0 ? (
+            <EmptyState art="search" heading={vi.ctvOrder.noProductsFound} variant="inline" />
+          ) : (
+            products.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text variant="body-sm" as="div">{p.name}</Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <PriceTag value={p.salePrice ?? p.basePrice} size="sm" />
+                    {p.maxAffiliateRate > 0 && (
+                      <Badge tone="success" size="sm">
+                        +{p.maxAffiliateRate}% {vi.storefront.commission}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Button icon={Plus} onPress={() => addMut.mutate(p)}>Thêm</Button>
+              </div>
+            ))
+          )}
+      </div>
+      <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onPress={onClose}>Xong</Button>
+    </>
   );
 }
 
 /**
  * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
- * "Hoàn thiện hồ sơ gian hàng" (2.000 xu) nhưng trước đây không có màn nào nhập được.
+ * "Hoàn thiện hồ sơ gian hàng" nhưng trước đây không có màn nào nhập được.
  */
 function ProfileSheet({
   sf,
@@ -751,45 +758,60 @@ function ProfileSheet({
   const complete = !!(avatarUrl.trim() && coverUrl.trim() && headerNote.trim());
 
   return (
-    <Box p={4} style={{ maxHeight: '80vh', overflowY: 'auto', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
-      <Text.Title size="small">{vi.storefront.profileTitle}</Text.Title>
-      <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 2, marginBottom: 14 }}>
-        {vi.storefront.profileHint}
-      </Text>
-
+    <div style={SCROLL_BODY}>
       {/* Ảnh đại diện nhỏ nên nén mạnh hơn ảnh bìa — cả hai đi kèm mọi lượt xem gian hàng. */}
       <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
       <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
 
-      <Text size="xSmall" bold style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
+      <Text variant="label" as="div" style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
       <Input.TextArea
         value={headerNote}
         maxLength={200}
         placeholder={vi.storefront.headerNotePlaceholder}
         onChange={(e) => setHeaderNote(e.target.value)}
       />
-      <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 4 }}>
+      <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 4 }}>
         {headerNote.length}/200
       </Text>
 
       {!complete && (
-        <Text size="xSmall" style={{ color: 'var(--neutral-500)', marginTop: 10 }}>
+        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 10 }}>
           Đủ cả ba mục sẽ hoàn thành nhiệm vụ “{vi.storefront.profileTitle.toLowerCase()}”.
         </Text>
       )}
 
-      <Button
-        fullWidth
-        loading={saveMut.isPending} disabled={saveMut.isPending}
-        onClick={() => saveMut.mutate()}
-        style={{ marginTop: 16, background: 'var(--primary-600)' }}
-      >
+      <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()} style={{ marginTop: 16 }}>
         Lưu hồ sơ
       </Button>
-      <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onClick={onClose}>
+      <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onPress={onClose}>
         Đóng
       </Button>
-    </Box>
+    </div>
+  );
+}
+
+/** Ô chọn màu: hình tròn 32px nhưng vùng chạm 44px, là nút thật có trạng thái chọn. */
+function ThemeSwatch({ code, label, selected, onPress }: { code: string; label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={selected}
+      className="tubu-press"
+      onClick={onPress}
+      style={{ minWidth: 44, minHeight: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <span
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          backgroundColor: code,
+          border: selected ? '3px solid var(--color-text-primary)' : '2px solid var(--color-bg-surface)',
+          boxShadow: 'var(--elevation-1)',
+        }}
+      />
+    </button>
   );
 }
 
@@ -806,7 +828,7 @@ function MerchantConfigSheet({
   const [form, setForm] = useState({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
-    themeColor: sf.themeColor ?? '#16a34a',
+    themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
     bankName: sf.bankName ?? '',
     bankBin: sf.bankBin ?? '',
     bankAccountNo: sf.bankAccountNo ?? '',
@@ -839,116 +861,99 @@ function MerchantConfigSheet({
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const PRESET_COLORS = [
-    { code: '#16a34a', label: 'Xanh lá' },
-    { code: '#0d9488', label: 'Ngọc' },
-    { code: '#2563eb', label: 'Xanh dương' },
-    { code: '#7c3aed', label: 'Tím' },
-    { code: '#ea580c', label: 'Đất nung' },
-  ];
-
   return (
-    <Box p={4} style={{ maxHeight: '80vh', overflowY: 'auto', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
-      <Text.Title size="small" style={{ marginBottom: 16 }}>
-        Cấu hình Subdomain, Kho & VietQR
-      </Text.Title>
-
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Box>
-          <Text size="xSmall" bold style={{ marginBottom: 4 }}>Tên gian hàng</Text>
+    <div style={SCROLL_BODY}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Field label="Tên gian hàng">
           <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </Box>
+        </Field>
 
-        <Box>
-          <Text size="xSmall" bold style={{ marginBottom: 4 }}>Subdomain riêng</Text>
-          <Input
-            placeholder="vd: brand1"
-            value={form.subdomain}
-            onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
-          />
-          <Text size="xxxxSmall" style={{ color: 'var(--neutral-400)', marginTop: 2 }}>
+        <div>
+          <Field label="Subdomain riêng">
+            <Input
+              placeholder="vd: brand1"
+              value={form.subdomain}
+              onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
+            />
+          </Field>
+          <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
             URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}
           </Text>
-        </Box>
+        </div>
 
-        <Box>
-          <Text size="xSmall" bold style={{ marginBottom: 6 }}>Màu sắc thương hiệu</Text>
-          <Box flex style={{ gap: 8 }}>
-            {PRESET_COLORS.map((c) => (
-              <Box
+        <div>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 2 }}>Màu sắc thương hiệu</Text>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {STOREFRONT_THEME_COLORS.map((c) => (
+              <ThemeSwatch
                 key={c.code}
-                onClick={() => setForm({ ...form, themeColor: c.code })}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: c.code,
-                  cursor: 'pointer',
-                  border: form.themeColor === c.code ? '3px solid #000' : '2px solid #fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }}
+                code={c.code}
+                label={c.label}
+                selected={form.themeColor === c.code}
+                onPress={() => setForm({ ...form, themeColor: c.code })}
               />
             ))}
-          </Box>
-        </Box>
+          </div>
+        </div>
 
-        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 12 }}>
-          <Text bold size="small" style={{ marginBottom: 8 }}>Tài khoản nhận tiền (VietQR 0đ phí)</Text>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
+          <Heading variant="title-sm" as="h3" style={{ marginBottom: 8 }}>Tài khoản nhận tiền (VietQR 0đ phí)</Heading>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Input
+              aria-label="Mã BIN ngân hàng"
               placeholder="Mã BIN ngân hàng (vd: 970436 - VCB)"
               value={form.bankBin}
               onChange={(e) => setForm({ ...form, bankBin: e.target.value })}
             />
             <Input
+              aria-label="Tên ngân hàng"
               placeholder="Tên ngân hàng (vd: Vietcombank)"
               value={form.bankName}
               onChange={(e) => setForm({ ...form, bankName: e.target.value })}
             />
             <Input
+              aria-label="Số tài khoản ngân hàng"
               placeholder="Số tài khoản ngân hàng"
               value={form.bankAccountNo}
               onChange={(e) => setForm({ ...form, bankAccountNo: e.target.value })}
             />
             <Input
+              aria-label="Tên chủ tài khoản"
               placeholder="Tên chủ tài khoản (in hoa)"
               value={form.bankAccountName}
               onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })}
             />
-          </Box>
-        </Box>
+          </div>
+        </div>
 
-        <Box style={{ borderTop: '1px solid var(--neutral-100)', paddingTop: 12 }}>
-          <Text bold size="small" style={{ marginBottom: 8 }}>Địa chỉ kho hàng & Hotline</Text>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
+          <Heading variant="title-sm" as="h3" style={{ marginBottom: 8 }}>Địa chỉ kho hàng & Hotline</Heading>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Input
+              aria-label="Địa chỉ kho xuất hàng"
               placeholder="Địa chỉ kho xuất hàng"
               value={form.warehouseAddress}
               onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
             />
             <Input
+              aria-label="Tỉnh / Thành phố"
               placeholder="Tỉnh / Thành phố"
               value={form.warehouseCity}
               onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
             />
             <Input
+              aria-label="Hotline kho liên hệ"
               placeholder="Hotline kho liên hệ"
               value={form.warehousePhone}
               onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
             />
-          </Box>
-        </Box>
+          </div>
+        </div>
 
-        <Button
-          fullWidth
-          style={{ marginTop: 12, background: 'var(--primary-600)' }}
-          loading={saveMut.isPending} disabled={saveMut.isPending}
-          onClick={() => saveMut.mutate()}
-        >
+        <Button fullWidth style={{ marginTop: 12 }} loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
           Lưu cấu hình gian hàng
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
-

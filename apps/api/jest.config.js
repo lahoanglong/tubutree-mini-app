@@ -3,6 +3,7 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: 'src',
+  globalSetup: '<rootDir>/../test/jest-global-utc.js',
   testRegex: '.*\\.spec\\.ts$',
   moduleFileExtensions: ['ts', 'js', 'json'],
   moduleNameMapper: {
