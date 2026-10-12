@@ -290,6 +290,23 @@ describe('GameService.spin', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('bad'));
       });
 
+      it.each([
+        ['SEEDS value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'SEEDS', value: 2.5 }],
+        ['COUPON value lẻ', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 20000.5 }],
+        ['COUPON value vượt cột Int của DB', { id: 'bad', name: 'x', weight: 100, rewardType: 'COUPON', value: 3e9 }],
+      ])('%s không bao giờ được chọn dù là giải đầu và trọng số lớn nhất', async (_label, bad) => {
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const prisma = makePrisma();
+        jest.spyOn(Math, 'random').mockReturnValue(0);
+        const svc = spinWith(prisma, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': [bad, NONE] });
+
+        const res = (await svc.spin('u1')) as { prize: { id: string } };
+
+        expect(res.prize.id).toBe('none');
+        expect(prisma.coupon.create).not.toHaveBeenCalled();
+        expect(prisma.gameProfile.update).not.toHaveBeenCalled();
+      });
+
       it('chỉ còn giải không hợp lệ → "Vòng quay chưa cấu hình", không mở tx, không trừ điểm', async () => {
         jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
         const prisma = makePrisma();

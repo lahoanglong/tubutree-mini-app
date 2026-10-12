@@ -109,6 +109,53 @@ describe('PF-6a giải vòng quay có thưởng âm không bao giờ trừ đi�
     expect(await spinRows(user.id)).toEqual([]);
   });
 
+  /**
+   * Bảng giải đã lưu có value không vừa cột Int của DB (COUPON, SEEDS, NONE) hoặc không nguyên: giải vượt Int khiến mọi lượt
+   * quay trúng nó lỗi 500 (tx rollback); giải lẻ thì DB cắt phần lẻ nên khách thấy 2.5 giọt nhưng nhận 2.
+   */
+  it.each([
+    ['COUPON vượt cột Int', { id: 'big', name: 'Voucher', weight: 100, rewardType: 'COUPON', value: 3e9 }],
+    ['SEEDS vượt cột Int', { id: 'big', name: 'Giọt nước', weight: 100, rewardType: 'SEEDS', value: 3e9 }],
+    ['SEEDS value lẻ', { id: 'frac', name: 'Giọt nước', weight: 100, rewardType: 'SEEDS', value: 2.5 }],
+  ])('bảng đã lưu có giải %s là giải đầu, trọng số lớn nhất: bị bỏ, quay ra giải hợp lệ, không lỗi, không coupon rác', async (_label, bad) => {
+    await setConfig(prisma, KEY, [bad, NONE]);
+    (config as unknown as { cache: Map<string, unknown> }).cache.clear();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    const user = await holder(60);
+    await prisma.gameProfile.create({ data: { userId: user.id, totalSeeds: 10 } });
+
+    const res = await game.spin(user.id);
+
+    expect(res.prize.id).toBe('none');
+    expect(await balance(user.id)).toBe(60 - COST);
+    expect((await prisma.gameProfile.findUniqueOrThrow({ where: { userId: user.id } })).totalSeeds).toBe(10);
+    expect(await prisma.coupon.count({ where: { scopeMeta: { path: ['userId'], equals: user.id } } })).toBe(0);
+  });
+
+  it('bảng đã lưu chỉ có giải COUPON vượt cột Int → "Vòng quay chưa cấu hình", số dư nguyên (không lỗi 500 làm hỏng lượt quay)', async () => {
+    await setConfig(prisma, KEY, [{ id: 'big', name: 'Voucher', weight: 1, rewardType: 'COUPON', value: 3e9 }]);
+    (config as unknown as { cache: Map<string, unknown> }).cache.clear();
+    const user = await holder(60);
+
+    await expect(game.spin(user.id)).rejects.toThrow('Vòng quay chưa cấu hình.');
+
+    expect(await balance(user.id)).toBe(60);
+  });
+
+  it('ghi bảng giải có giải lẻ hoặc vượt cột Int qua SystemConfigService.set bị từ chối', async () => {
+    await setConfig(prisma, KEY, [NONE, WIN5]);
+    (config as unknown as { cache: Map<string, unknown> }).cache.clear();
+
+    await expect(
+      config.set(KEY, [NONE, { id: 'frac', name: 'x', weight: 1, rewardType: 'COUPON', value: 20000.5 }], 'it-admin'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      config.set(KEY, [NONE, { id: 'big', name: 'x', weight: 1, rewardType: 'COUPON', value: 3e9 }], 'it-admin'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect((await prisma.systemConfig.findUniqueOrThrow({ where: { key: KEY } })).value).toEqual([NONE, WIN5]);
+  });
+
   it('giải POINTS dương vẫn cộng điểm có hạn như cũ (không bị chặn nhầm)', async () => {
     await setConfig(prisma, KEY, [WIN5]);
     (config as unknown as { cache: Map<string, unknown> }).cache.clear();

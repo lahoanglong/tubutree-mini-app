@@ -33,6 +33,13 @@ describe('spinPrizeProblem', () => {
     expect(spinPrizeProblem({ id: 'n', name: 'Chúc may mắn', weight: 0, rewardType: 'NONE', value: 0 })).toBeNull();
   });
 
+  it('weight được phép lẻ (chỉ là tỉ trọng của pickWeighted); value lớn nhất vừa cột Int của DB vẫn hợp lệ', () => {
+    expect(spinPrizeProblem({ ...ok, weight: 0.5 })).toBeNull();
+    for (const rewardType of ['POINTS', 'COUPON', 'SEEDS', 'NONE']) {
+      expect(spinPrizeProblem({ id: 'x', name: 'x', weight: 1, rewardType, value: 2 ** 31 - 1 })).toBeNull();
+    }
+  });
+
   it.each([
     ['POINTS value âm', { ...ok, value: -5 }, /POINTS/],
     ['POINTS value 0', { ...ok, value: 0 }, /POINTS/],
@@ -41,6 +48,13 @@ describe('spinPrizeProblem', () => {
     ['POINTS value là chuỗi', { ...ok, value: '5' }, /value/],
     ['SEEDS value âm (trừ giọt nước của khách)', { id: 's', name: 'x', weight: 1, rewardType: 'SEEDS', value: -30 }, /value/],
     ['COUPON value âm', { id: 'c', name: 'x', weight: 1, rewardType: 'COUPON', value: -20000 }, /value/],
+    ['SEEDS value lẻ (DB cắt phần lẻ, khách thấy 2.5 nhưng nhận 2)', { id: 's', name: 'x', weight: 1, rewardType: 'SEEDS', value: 2.5 }, /value/],
+    ['COUPON value lẻ', { id: 'c', name: 'x', weight: 1, rewardType: 'COUPON', value: 20000.5 }, /value/],
+    ['NONE value lẻ', { id: 'n', name: 'x', weight: 1, rewardType: 'NONE', value: 0.5 }, /value/],
+    ['COUPON value vượt cột Int của DB (lượt quay trúng giải này lỗi 500 mỗi lần)', { id: 'c', name: 'x', weight: 1, rewardType: 'COUPON', value: 2 ** 31 }, /value/],
+    ['SEEDS value vượt cột Int của DB', { id: 's', name: 'x', weight: 1, rewardType: 'SEEDS', value: 3e9 }, /value/],
+    ['NONE value vượt cột Int của DB', { id: 'n', name: 'x', weight: 1, rewardType: 'NONE', value: 1e12 }, /value/],
+    ['POINTS value vượt cột Int của DB', { ...ok, value: 2 ** 31 }, /POINTS/],
     ['weight âm', { ...ok, weight: -1 }, /weight/],
     ['weight Infinity', { ...ok, weight: Number.POSITIVE_INFINITY }, /weight/],
     ['rewardType lạ', { ...ok, rewardType: 'XU' }, /rewardType/],
