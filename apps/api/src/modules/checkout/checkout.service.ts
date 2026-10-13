@@ -585,6 +585,7 @@ export class CheckoutService {
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
       nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+      userId,
     );
     const nonFlashSubtotal = nonFlash.reduce((s, l) => s + l.total, 0);
     const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)

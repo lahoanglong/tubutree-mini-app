@@ -421,6 +421,7 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
     expect(combo.computeForStorefront).toHaveBeenCalledWith(
       'linh-shop',
       [{ variationId: 'v1', productId: 'prod1', total: 100 }],
+      'u1',
     );
   });
 
@@ -770,9 +771,11 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     const { svc } = build({ cartData: FLASH_CART, combo, validateAndCompute });
     await svc.quote('u1', { addressId: 'addr1', storefrontSlug: 'storeX' } as never);
     // combo nhận ĐÚNG 1 line non-flash (v2), KHÔNG có v1 flash.
-    expect(combo.computeForStorefront).toHaveBeenCalledWith('storeX', [
-      { variationId: 'v2', productId: 'p2', total: 100000 },
-    ]);
+    expect(combo.computeForStorefront).toHaveBeenCalledWith(
+      'storeX',
+      [{ variationId: 'v2', productId: 'p2', total: 100000 }],
+      'u1',
+    );
     // coupon base = 100000 (loại flash 80k), KHÔNG phải 180000.
     expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
   });
