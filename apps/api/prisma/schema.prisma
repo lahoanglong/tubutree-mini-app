@@ -883,6 +883,11 @@ model Order {
   deliveredAt        DateTime?
   /// Lúc cron ReviewInviteService nhận đơn để gửi tin mời đánh giá (claim trước khi gửi, null lại nếu gửi lỗi).
   reviewInvitedAt    DateTime?
+  /// Hàng đợi "Cần xử lý Pancake": lý do mới nhất Pancake báo một việc hệ thống không tự làm được (đang hoàn,
+  /// hoàn một phần, đơn bị xoá, trạng thái mâu thuẫn, đơn Pancake lạ mang mã đơn này...). Null = không có việc.
+  pancakeAttention   String?
+  /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
+  pancakeAttentionAt DateTime?
   items              OrderItem[]
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
@@ -905,6 +910,8 @@ model Order {
   @@index([gomdonPartnerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_gomdonPartnerCode_trgm_idx")
   // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
   @@index([hasRecyclingPickup, gomdonStatus])
+  // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.
+  @@index([pancakeAttentionAt])
   @@map("orders")
 }
 
@@ -2243,7 +2250,7 @@ model PancakeWebhookEvent {
   rawPayload  Json
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
-  /// RECEIVED | PROCESSING | PROCESSED | FAILED
+  /// RECEIVED | PROCESSING | PROCESSED | FAILED | UNMATCHED
   status      String
   /// Số lần worker đã claim (tăng lúc claim, không phải lúc xong) — tiến trình chết giữa chừng vẫn bị tính.
   attempts    Int       @default(0)

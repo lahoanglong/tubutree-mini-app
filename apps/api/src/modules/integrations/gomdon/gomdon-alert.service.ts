@@ -4,6 +4,8 @@ import { NotificationsService } from '../../notifications/notifications.service'
 
 /** Template in-app gửi admin (seed: nt-ops-gomdon). */
 export const GOMDON_ALERT_TEMPLATE = 'OPS_GOMDON_ALERT';
+/** Cùng kênh, lời tin cho việc phía Pancake (seed: nt-ops-pancake) — "Vận đơn thu gom" sai ngữ cảnh với đơn thường. */
+export const PANCAKE_ALERT_TEMPLATE = 'OPS_PANCAKE_ALERT';
 const MAX_RECIPIENTS = 20;
 
 /**
@@ -23,8 +25,9 @@ export class GomdonAlertService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async alert(orderCode: string, message: string): Promise<void> {
-    this.logger.error(`[GOMDON CẦN XỬ LÝ] Đơn ${orderCode}: ${message}`);
+  async alert(orderCode: string, message: string, template: string = GOMDON_ALERT_TEMPLATE): Promise<void> {
+    const source = template === PANCAKE_ALERT_TEMPLATE ? 'PANCAKE' : 'GOMDON';
+    this.logger.error(`[${source} CẦN XỬ LÝ] Đơn ${orderCode}: ${message}`);
     try {
       const admins = await this.prisma.user.findMany({
         where: { role: 'ADMIN' },
@@ -33,7 +36,7 @@ export class GomdonAlertService {
       });
       for (const a of admins) {
         await this.notifications
-          .notify(a.id, GOMDON_ALERT_TEMPLATE, { order_code: orderCode, message })
+          .notify(a.id, template, { order_code: orderCode, message })
           .catch((err) =>
             this.logger.warn(`Gửi báo động Gomdon tới admin ${a.id} lỗi: ${err instanceof Error ? err.message : err}`),
           );

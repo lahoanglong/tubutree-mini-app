@@ -674,6 +674,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
   // Báo động vận hành (chỉ gửi tài khoản ADMIN) — vận đơn thu gom Gomdon cần người xử lý.
   { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
+  { id: 'nt-ops-pancake', code: 'OPS_PANCAKE_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Đơn {{order_code}} cần xử lý (Pancake): {{message}}' },
   { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
   { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },
   // A6-06 (docs/audit-2026-09/06-web.md, phần thông báo): dùng khi admin.reviewReturn duyệt trả

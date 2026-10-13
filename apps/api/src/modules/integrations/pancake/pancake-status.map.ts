@@ -1,36 +1,70 @@
 import type { OrderStatus } from '@tubutree/shared-types';
 
 /**
- * Map trạng thái Pancake → OrderStatus của Tubu.
- * Pancake dùng cả mã số lẫn chuỗi tùy cấu hình; cover các giá trị phổ biến,
- * không khớp → trả null (giữ nguyên trạng thái hiện tại).
+ * Việc cần làm với một trạng thái đơn Pancake:
+ *  - `status`: chuyển đơn Tubu sang trạng thái này (qua OrderStatusService);
+ *  - `returned`: hàng đã hoàn về kho — chưa giao thì huỷ đơn, đã giao thì trả hàng (processor quyết);
+ *  - `attention`: hệ thống không tự xử lý được → đưa vào hàng đợi "Cần xử lý Pancake" cho admin.
  */
-const MAP: Record<string, OrderStatus> = {
-  // numeric codes (Pancake order status thường gặp)
-  '0': 'PENDING_PAYMENT',
-  '1': 'CONFIRMED',
-  '2': 'PACKED',
-  '3': 'SHIPPING',
-  '11': 'SHIPPING',
-  '16': 'DELIVERED',
-  '15': 'DELIVERED',
-  '6': 'CANCELLED',
-  '4': 'RETURNED',
-  // string codes
-  new: 'PENDING_PAYMENT',
-  confirmed: 'CONFIRMED',
-  packed: 'PACKED',
-  shipping: 'SHIPPING',
-  shipped: 'SHIPPING',
-  delivered: 'DELIVERED',
-  completed: 'DELIVERED',
-  cancelled: 'CANCELLED',
-  canceled: 'CANCELLED',
-  returned: 'RETURNED',
+export type PancakeStatusAction =
+  | { kind: 'status'; status: OrderStatus }
+  | { kind: 'returned' }
+  | { kind: 'attention'; reason: string };
+
+const to = (status: OrderStatus): PancakeStatusAction => ({ kind: 'status', status });
+const RETURNED: PancakeStatusAction = { kind: 'returned' };
+const RETURNING: PancakeStatusAction = {
+  kind: 'attention',
+  reason: 'Pancake báo ĐANG HOÀN (giao không thành, hàng đang quay về kho). Liên hệ khách; khi kho nhận lại hàng, Pancake báo "Đã hoàn" thì đơn tự huỷ và hoàn tiền.',
 };
 
-export function mapPancakeStatus(raw: unknown): OrderStatus | null {
+/**
+ * Theo enum `status` của đơn hàng trong Pancake POS Open API (api-docs.pancake.vn — schema "Đơn hàng" và
+ * "Webhook đơn hàng"). Mã không có ở đây → null (giữ nguyên trạng thái).
+ */
+const NUMERIC: Record<string, PancakeStatusAction | null> = {
+  '0': null, // Mới — đơn Tubu đã có trạng thái riêng từ lúc đặt
+  '17': null, // Chờ xác nhận
+  '11': null, // Chờ hàng
+  '20': null, // Đã đặt hàng
+  '1': to('CONFIRMED'), // Đã xác nhận
+  '12': to('PACKED'), // Chờ in
+  '13': to('PACKED'), // Đã in
+  '8': to('PACKED'), // Đang đóng hàng
+  '9': to('PACKED'), // Chờ chuyển hàng
+  '2': to('SHIPPING'), // Đã gửi hàng
+  '3': to('DELIVERED'), // Đã nhận
+  '16': to('DELIVERED'), // Đã thu tiền
+  '4': RETURNING, // Đang hoàn
+  '15': {
+    kind: 'attention',
+    reason: 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.',
+  },
+  '5': RETURNED, // Đã hoàn
+  '6': to('CANCELLED'), // Đã hủy
+  '7': {
+    kind: 'attention',
+    reason: 'Đơn bị XOÁ trên Pancake nên kho sẽ không giao. Xác nhận với kho rồi huỷ đơn (hoàn tiền, hoàn kho) nếu đúng.',
+  },
+};
+
+/** Chuỗi trạng thái (cấu hình/luồng cũ gửi tên thay vì mã số). */
+const NAMED: Record<string, PancakeStatusAction> = {
+  confirmed: to('CONFIRMED'),
+  packed: to('PACKED'),
+  shipping: to('SHIPPING'),
+  shipped: to('SHIPPING'),
+  delivered: to('DELIVERED'),
+  completed: to('DELIVERED'),
+  cancelled: to('CANCELLED'),
+  canceled: to('CANCELLED'),
+  returning: RETURNING,
+  returned: RETURNED,
+};
+
+export function resolvePancakeStatus(raw: unknown): PancakeStatusAction | null {
   if (raw === null || raw === undefined) return null;
   const key = String(raw).trim().toLowerCase();
-  return MAP[key] ?? null;
+  if (Object.prototype.hasOwnProperty.call(NUMERIC, key)) return NUMERIC[key] ?? null;
+  return NAMED[key] ?? null;
 }

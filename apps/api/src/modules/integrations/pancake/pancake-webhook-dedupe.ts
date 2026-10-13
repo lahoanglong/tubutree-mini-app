@@ -5,6 +5,8 @@ export const PANCAKE_EVENT_STATUS = {
   PROCESSING: 'PROCESSING',
   PROCESSED: 'PROCESSED',
   FAILED: 'FAILED',
+  /** Chưa khớp được đơn Tubu (vd webhook tới trước khi lưu pancakeOrderId) — cron đối chiếu lại trong ít lâu. */
+  UNMATCHED: 'UNMATCHED',
 } as const;
 
 /** Worker giữ claim PROCESSING lâu hơn mốc này coi như đã chết (handler thường xong trong vài giây). */
