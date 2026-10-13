@@ -3,12 +3,23 @@ import axios from 'axios';
 /**
  * Gomdon CHẮC CHẮN chưa tạo gì (từ chối rõ ràng, lỗi đăng nhập, request chưa tới được server).
  * Retry tạo đơn là an toàn.
+ *
+ * `transient`: lỗi TẠM (Gomdon quá tải 503/429, mạng chưa tới server, đăng nhập lỗi) — thử lại sau vài phút
+ * nhiều khả năng được, nên được thử lại lâu (cửa sổ cứu hộ) trước khi báo kho tạo vận đơn tay. Ngược lại là
+ * lỗi DỨT KHOÁT (validate dữ liệu, 4xx): thử lại vài lần là đủ, rồi báo người xử lý ngay.
  */
 export class GomdonRejectedError extends Error {
-  constructor(message: string) {
+  readonly transient: boolean;
+
+  constructor(message: string, opts: { transient?: boolean } = {}) {
     super(message);
     this.name = 'GomdonRejectedError';
+    this.transient = opts.transient ?? false;
   }
+}
+
+export function isTransientGomdonRejection(err: unknown): boolean {
+  return err instanceof GomdonRejectedError && err.transient;
 }
 
 /**
@@ -61,12 +72,16 @@ export function looksLikeDuplicateOrder(message: string | undefined | null): boo
   );
 }
 
+/** Gomdon tạm không nhận xử lý (quá tải / giới hạn tần suất) — chắc chắn chưa tạo, thử lại sau là được. */
+const TRANSIENT_HTTP = new Set([429, 503]);
+
 /**
  * Phân loại lỗi HTTP khi TẠO đơn Gomdon (401 được xử lý riêng ở client — đăng nhập lại).
  *  - 4xx kèm thông điệp trùng mã đơn → Duplicate (đã có đơn bên Gomdon — KHÔNG retry, kiểm tra tay).
- *  - 4xx (trừ 401), 503: Gomdon từ chối/không nhận xử lý → Rejected (retry an toàn).
+ *  - 429, 503: Gomdon tạm không nhận → Rejected TẠM (retry lâu).
+ *  - 4xx khác (trừ 401): Gomdon từ chối dữ liệu → Rejected dứt khoát.
  *  - 5xx khác: có thể đã xử lý xong rồi mới lỗi → Ambiguous.
- *  - Không có response: chỉ Rejected khi chắc chắn chưa gửi (ECONNREFUSED/ENOTFOUND…);
+ *  - Không có response: chỉ Rejected (TẠM) khi chắc chắn chưa gửi (ECONNREFUSED/ENOTFOUND…);
  *    timeout/ECONNRESET/socket hang up → Ambiguous.
  */
 export function classifyGomdonCreateError(err: unknown, prefix: string): Error {
@@ -76,10 +91,11 @@ export function classifyGomdonCreateError(err: unknown, prefix: string): Error {
     const msg = `${prefix} (HTTP ${status ?? err.code ?? 'ERR'}): ${detail(err)}`;
     if (status !== undefined) {
       if (status < 500 && looksLikeDuplicateOrder(detail(err))) return new GomdonDuplicateOrderError(msg);
-      if (status < 500 || status === 503) return new GomdonRejectedError(msg);
+      if (TRANSIENT_HTTP.has(status)) return new GomdonRejectedError(msg, { transient: true });
+      if (status < 500) return new GomdonRejectedError(msg);
       return new GomdonAmbiguousError(msg);
     }
-    if (err.code && NOT_SENT_CODES.has(err.code)) return new GomdonRejectedError(msg);
+    if (err.code && NOT_SENT_CODES.has(err.code)) return new GomdonRejectedError(msg, { transient: true });
     return new GomdonAmbiguousError(msg);
   }
   // Lỗi không phải HTTP (bug, lỗi build FormData...) phát sinh TRONG lúc gửi → không chắc.

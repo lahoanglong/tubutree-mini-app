@@ -284,7 +284,7 @@ describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn 
   it('lật PAID cho đơn thu gom → enqueue job tạo vận đơn Gomdon + ghi order_paid', async () => {
     const { svc, gomdonQueue, analytics } = setup({ ...base, hasRecyclingPickup: true });
     await svc.handleCallback(raw, sign(raw));
-    expect(gomdonQueue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(gomdonQueue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
     expect(analytics.record).toHaveBeenCalledTimes(1);
     expect(analytics.record).toHaveBeenCalledWith(
       expect.anything(),

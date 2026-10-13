@@ -2,6 +2,7 @@ import type { Queue } from 'bullmq';
 import { GomdonReconcileService } from './gomdon-reconcile.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { GomdonOrderService } from './gomdon-order.service';
+import type { GomdonClient } from './gomdon.client';
 
 function build() {
   const prisma = {
@@ -13,12 +14,14 @@ function build() {
     enqueueCancel: jest.fn().mockResolvedValue(undefined),
   };
   const eventsQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
+  const client = { probeRejectedLogin: jest.fn().mockResolvedValue(undefined) };
   const svc = new GomdonReconcileService(
     prisma as unknown as PrismaService,
     gomdonOrder as unknown as GomdonOrderService,
     eventsQueue as unknown as Queue,
+    client as unknown as GomdonClient,
   );
-  return { svc, prisma, gomdonOrder, eventsQueue };
+  return { svc, prisma, gomdonOrder, eventsQueue, client };
 }
 
 describe('GomdonReconcileService', () => {
@@ -91,7 +94,8 @@ describe('GomdonReconcileService', () => {
     prisma.order.findMany
       .mockResolvedValueOnce([{ id: 'o1', code: 'TUBU1' }]) // push
       .mockResolvedValueOnce([]) // creating
-      .mockResolvedValueOnce([{ id: 'o3', code: 'TUBU3' }]); // cancel
+      .mockResolvedValueOnce([{ id: 'o3', code: 'TUBU3' }]) // cancel chưa xử lý
+      .mockResolvedValueOnce([]); // cancel FAILED tự thử lại
     await expect(svc.reconcile()).resolves.toBeUndefined();
     expect(gomdonOrder.enqueuePush).toHaveBeenCalledWith('o1');
     expect(gomdonOrder.enqueueCancel).toHaveBeenCalledWith('o3');
@@ -106,5 +110,27 @@ describe('GomdonReconcileService', () => {
     gomdonOrder.enqueuePush.mockRejectedValueOnce(new Error('redis'));
     await svc.redrivePushes();
     expect(gomdonOrder.enqueuePush).toHaveBeenCalledWith('o2');
+  });
+  it('UAT GOMDON-1: huỷ vận đơn FAILED do lỗi tạm, vận đơn còn huỷ được (1/10), trong cửa sổ → cron xếp lại job huỷ', async () => {
+    const { svc, prisma, gomdonOrder } = build();
+    prisma.order.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'o9', code: 'TUBU9' }]);
+    await svc.redriveCancels();
+    const where = prisma.order.findMany.mock.calls[1][0].where;
+    expect(where).toMatchObject({
+      hasRecyclingPickup: true,
+      status: 'CANCELLED',
+      gomdonCancelStatus: 'FAILED',
+      gomdonOrderId: { not: null },
+      gomdonStatus: { in: ['1', '10'] },
+    });
+    expect(where.gomdonCancelRetrySince.gt).toBeInstanceOf(Date);
+    expect(where.updatedAt.lt).toBeInstanceOf(Date);
+    expect(gomdonOrder.enqueueCancel).toHaveBeenCalledWith('o9');
+  });
+
+  it('UAT GOMDON-1: Gomdon đang từ chối tài khoản → cron thử đăng nhập lại thưa thớt (tự bật lại thu gom khi hết lỗi)', async () => {
+    const { svc, client } = build();
+    await svc.reconcile();
+    expect(client.probeRejectedLogin).toHaveBeenCalledWith(GomdonReconcileService.LOGIN_PROBE_MINUTES * 60_000);
   });
 });

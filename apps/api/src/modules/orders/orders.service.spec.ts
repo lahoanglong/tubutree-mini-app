@@ -448,7 +448,7 @@ describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
     const q = queue();
     const { svc } = makeService({ ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77', gomdonStatus: '1' }, { gomdonQueue: q });
     await svc.cancel('u1', 'TUBU1');
-    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('bưu tá Gomdon đã lấy hàng (webhook SHIPPING tới trễ) → KHÔNG cho khách tự huỷ', async () => {

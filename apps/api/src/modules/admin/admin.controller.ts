@@ -367,10 +367,22 @@ export class AdminController {
     return this.admin.markGomdonHandled(adminId, id, dto.note);
   }
 
-  /** Tình trạng tích hợp Gomdon (chỉ boolean — không bao giờ trả tài khoản/mật khẩu). */
+  /** Tình trạng tích hợp Gomdon (chỉ boolean + lần gọi gần nhất — không bao giờ trả tài khoản/mật khẩu). */
   @Get('gomdon/status')
   gomdonStatus() {
     return this.admin.gomdonStatus();
+  }
+
+  /** "Kiểm tra kết nối": đăng nhập Gomdon thật, trả kết quả (không tạo đơn). */
+  @Post('gomdon/check-connection')
+  checkGomdonConnection(@CurrentUser('sub') adminId: string) {
+    return this.admin.checkGomdonConnection(adminId);
+  }
+
+  /** Đánh dấu báo động Gomdon (giao trùng vận đơn, huỷ không được…) đã xử lý. */
+  @Post('gomdon/alerts/:alertId/resolve')
+  resolveGomdonAlert(@CurrentUser('sub') adminId: string, @Param('alertId') alertId: string) {
+    return this.admin.resolveGomdonAlert(adminId, alertId);
   }
 
   /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */

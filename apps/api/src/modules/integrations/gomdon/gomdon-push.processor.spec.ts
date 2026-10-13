@@ -1,6 +1,7 @@
 import { UnrecoverableError, type Job } from 'bullmq';
 import { GomdonPushProcessor } from './gomdon-push.processor';
 import type { GomdonOrderService } from './gomdon-order.service';
+import { GomdonRejectedError } from './gomdon.errors';
 
 function job(name: string, attemptsMade: number, attempts = 5) {
   return { name, data: { orderId: 'o1' }, opts: { attempts }, attemptsMade } as unknown as Job<{ orderId: string }>;
@@ -60,5 +61,22 @@ describe('GomdonPushProcessor', () => {
     await processor.process(job('cancel', 4));
     expect(gomdonOrder.cancelOnGomdon).toHaveBeenLastCalledWith('o1', true);
     expect(gomdonOrder.pushOrder).not.toHaveBeenCalled();
+  });
+  it('UAT GOMDON-1: Gomdon từ chối DỨT KHOÁT (lỗi dữ liệu) → không chờ hết 8 lần, chốt sau vài lần', async () => {
+    const err = new GomdonRejectedError('The source province field is required.');
+    gomdonOrder.pushOrder.mockRejectedValue(err);
+    await expect(processor.process(job('push', 1, 8))).rejects.toBe(err);
+    await expect(processor.process(job('push', 2, 8))).resolves.toBeUndefined();
+    expect(gomdonOrder.markFinalPushFailure).toHaveBeenCalledWith('o1', err);
+  });
+
+  it('UAT GOMDON-1: lỗi TẠM (503/mạng/đăng nhập) → thử đủ số lần của job rồi mới fail-safe', async () => {
+    const err = new GomdonRejectedError('HTTP 503', { transient: true });
+    gomdonOrder.pushOrder.mockRejectedValue(err);
+    await expect(processor.process(job('push', 2, 8))).rejects.toBe(err);
+    await expect(processor.process(job('push', 6, 8))).rejects.toBe(err);
+    expect(gomdonOrder.markFinalPushFailure).not.toHaveBeenCalled();
+    await processor.process(job('push', 7, 8));
+    expect(gomdonOrder.markFinalPushFailure).toHaveBeenCalledWith('o1', err);
   });
 });

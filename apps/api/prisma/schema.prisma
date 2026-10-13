@@ -876,8 +876,16 @@ model Order {
   gomdonStatus       String?
   /// Thời điểm (created_time từ Gomdon) của trạng thái Gomdon đang lưu — chặn webhook tới trễ lùi trạng thái.
   gomdonStatusAt     DateTime?
-  /// Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ: CANCELLED | FAILED | TOO_LATE | NOT_NEEDED (null = chưa xử lý).
+  /// Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ: CANCELLED | FAILED | TOO_LATE | NOT_NEEDED | MANUAL_HANDLED
+  /// (null = chưa xử lý).
   gomdonCancelStatus String?
+  /// Mốc bắt đầu tự thử lại huỷ vận đơn sau lỗi tạm của Gomdon (cron cứu hộ thử lại trong một cửa sổ). null =
+  /// không tự thử lại: chưa lỗi, hoặc Gomdon trả lời dứt khoát (vd "Không tìm thấy đơn hàng").
+  gomdonCancelRetrySince DateTime?
+  /// Số lần tạo lại vận đơn sau khi vận đơn cũ đã huỷ. Gomdon chặn trùng order_customer_id (kể cả vận đơn đã
+  /// huỷ) nên lần tạo lại thứ n gửi `${code}-R${n}` — xem gomdonCustomerId().
+  gomdonAttempt      Int              @default(0)
+  gomdonAlerts       GomdonAlert[]
   /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
   /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
   deliveredAt        DateTime?
@@ -2283,6 +2291,23 @@ model GomdonWebhookEvent {
 // ============================================================
 // 15. SystemConfig — Single source of truth cho tham số nghiệp vụ
 // ============================================================
+
+/// Báo động vận hành Gomdon (vận đơn trùng, huỷ không được, Gomdon báo giao/huỷ bất thường...). Lưu lại để web
+/// admin thấy và giữ đơn trong hàng đợi "Cần xử lý thu gom" tới khi có người đánh dấu đã xử lý — thông báo in-app
+/// chỉ tới tài khoản ADMIN trên mini app và không xem lại được từ web admin.
+model GomdonAlert {
+  id           String    @id @default(cuid())
+  orderId      String
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  message      String
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedById String?
+
+  @@index([orderId, resolvedAt])
+  @@index([resolvedAt, createdAt])
+  @@map("gomdon_alerts")
+}
 
 model SystemConfig {
   key         String   @id

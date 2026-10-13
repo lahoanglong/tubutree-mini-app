@@ -24,6 +24,7 @@ import {
   looksLikeAuthFailure,
   looksLikeDuplicateOrder,
 } from './gomdon.errors';
+import { gomdonHealth, type GomdonHealthSnapshot } from './gomdon-health';
 
 export { GOMDON_CONFIG_KEY };
 
@@ -32,6 +33,19 @@ const TOKEN_MAX_CACHE_MS = 24 * 3600_000;
 /** Đăng nhập lại trước mốc expires_at một khoảng để không gửi request sát giờ hết hạn. */
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60_000;
 const TOKEN_MIN_CACHE_MS = 60_000;
+/**
+ * Gomdon vừa từ chối tài khoản → không đăng nhập lại trong khoảng này (mỗi job tạo/huỷ vận đơn đang thử lại
+ * đều gọi đăng nhập; gõ sai mật khẩu liên tục có thể làm Gomdon khoá tài khoản).
+ */
+const LOGIN_REJECTED_COOLDOWN_MS = 60_000;
+
+/** Lỗi đăng nhập mà Gomdon đã trả lời rõ là TỪ CHỐI tài khoản (khác lỗi mạng/quá tải). */
+class GomdonLoginRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GomdonLoginRejectedError';
+  }
+}
 
 /**
  * Thời gian giữ token theo `data.expires_at` của API đăng nhập (tài liệu: null, hoặc thời điểm kiểu
@@ -55,6 +69,12 @@ export interface GomdonCancelResult {
   message?: string;
 }
 
+export interface GomdonConnectionCheck {
+  ok: boolean;
+  message: string;
+  checkedAt: string;
+}
+
 @Injectable()
 export class GomdonClient {
   private readonly logger = new Logger(GomdonClient.name);
@@ -66,6 +86,7 @@ export class GomdonClient {
   private tokenExpiresAt: number | null = null;
   /** Single-flight: nhiều request cùng 401 chỉ đăng nhập 1 lần, không đá token của nhau. */
   private loginInFlight: Promise<string> | null = null;
+  private readonly health = gomdonHealth;
 
   constructor(private readonly systemConfig: SystemConfigService) {
     this.baseUrl = resolveGomdonBaseUrl();
@@ -84,9 +105,41 @@ export class GomdonClient {
     return hasGomdonCredentials(await this.getConfig());
   }
 
-  /** Cờ tính năng checkout: đã cấu hình VÀ admin bật công tắc. */
+  /** Cờ tính năng checkout: đã cấu hình, admin bật công tắc VÀ Gomdon không đang từ chối tài khoản. */
   async isRecyclingEnabled(): Promise<boolean> {
-    return isGomdonRecyclingEnabled(this.systemConfig);
+    return isGomdonRecyclingEnabled(this.systemConfig, process.env, this.health);
+  }
+
+  getHealth(): GomdonHealthSnapshot {
+    return this.health.snapshot();
+  }
+
+  /** Admin bấm "Kiểm tra kết nối": luôn đăng nhập thật (bỏ token cache và thời gian chờ sau khi bị từ chối). */
+  async checkConnection(): Promise<GomdonConnectionCheck> {
+    const checkedAt = new Date().toISOString();
+    try {
+      await this.assertConfigured();
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err), checkedAt };
+    }
+    this.invalidateToken();
+    try {
+      await this.login({ force: true });
+      return { ok: true, message: 'Đăng nhập Gomdon thành công.', checkedAt };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err), checkedAt };
+    }
+  }
+
+  /**
+   * Cron cứu hộ: tài khoản đang bị từ chối thì thử đăng nhập lại thưa thớt, để lựa chọn thu gom tự bật lại
+   * khi Gomdon mở khoá/khôi phục tài khoản mà không phải khởi động lại API.
+   */
+  async probeRejectedLogin(minIntervalMs: number): Promise<void> {
+    const since = this.health.msSinceCredentialsRejected();
+    if (since == null || since < minIntervalMs) return;
+    this.invalidateToken();
+    await this.login({ force: true }).catch(() => undefined);
   }
 
   private async assertConfigured(): Promise<GomdonConfig> {
@@ -98,7 +151,13 @@ export class GomdonClient {
   }
 
   /** Đăng nhập Gomdon lấy token (POST /api/v2/auth/login). Single-flight. */
-  async login(): Promise<string> {
+  async login(opts: { force?: boolean } = {}): Promise<string> {
+    const since = this.health.msSinceCredentialsRejected();
+    if (!opts.force && since != null && since < LOGIN_REJECTED_COOLDOWN_MS) {
+      throw new GomdonLoginRejectedError(
+        `Gomdon vừa từ chối đăng nhập, chưa thử lại: ${this.health.snapshot().lastError ?? 'sai tài khoản'}`,
+      );
+    }
     if (!this.loginInFlight) {
       this.loginInFlight = this.doLogin().finally(() => {
         this.loginInFlight = null;
@@ -115,26 +174,36 @@ export class GomdonClient {
     formData.append('phone', cfg.phone);
     formData.append('password', cfg.password);
 
+    let res: AxiosResponse<GomdonLoginResponse>;
     try {
-      const res = await this.http.post<GomdonLoginResponse>('/api/v2/auth/login', formData);
-
-      if (!res.data.result || !res.data.data?.access_token) {
-        throw new Error(`Đăng nhập Gomdon thất bại: ${res.data.message ?? 'Không có access_token'}`);
-      }
-
-      const token = res.data.data.access_token;
-      const now = Date.now();
-      this.cachedToken = token;
-      this.tokenExpiresAt = now + tokenCacheMs(res.data.data.expires_at, now);
-      return token;
+      res = await this.http.post<GomdonLoginResponse>('/api/v2/auth/login', formData);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
         const data = err.response?.data as { message?: string } | undefined;
         const errorDetail = data?.message ?? JSON.stringify(err.response?.data ?? err.message);
-        throw new Error(`Đăng nhập Gomdon thất bại (HTTP ${err.response?.status ?? 'ERR'}): ${errorDetail}`);
+        const message = `Đăng nhập Gomdon thất bại (HTTP ${status ?? 'ERR'}): ${errorDetail}`;
+        // Gomdon trả lời 4xx (trừ 429 quá tải) = từ chối tài khoản; không có response / 5xx = lỗi tạm.
+        const rejected = status !== undefined && status >= 400 && status < 500 && status !== 429;
+        this.health.recordError(message, { credentialsRejected: rejected });
+        throw rejected ? new GomdonLoginRejectedError(message) : new Error(message);
       }
+      this.health.recordError(err instanceof Error ? err.message : String(err));
       throw err;
     }
+
+    if (!res.data?.result || !res.data.data?.access_token) {
+      const message = `Đăng nhập Gomdon thất bại: ${res.data?.message ?? 'Không có access_token'}`;
+      this.health.recordError(message, { credentialsRejected: true });
+      throw new GomdonLoginRejectedError(message);
+    }
+
+    const token = res.data.data.access_token;
+    const now = Date.now();
+    this.cachedToken = token;
+    this.tokenExpiresAt = now + tokenCacheMs(res.data.data.expires_at, now);
+    this.health.recordOk();
+    return token;
   }
 
   async getValidToken(): Promise<string> {
@@ -164,8 +233,9 @@ export class GomdonClient {
       await this.assertConfigured();
       token = await this.getValidToken();
     } catch (err) {
-      // Chưa gửi request tạo đơn nào → retry an toàn.
-      throw new GomdonRejectedError(err instanceof Error ? err.message : String(err));
+      // Chưa gửi request tạo đơn nào → retry an toàn. Đăng nhập lỗi (kể cả sai tài khoản) là lỗi TẠM: admin
+      // sửa tài khoản / Gomdon hết sự cố thì đơn đang chờ tự tạo được, không cần kho tạo tay.
+      throw new GomdonRejectedError(err instanceof Error ? err.message : String(err), { transient: true });
     }
 
     const sendRequest = (authToken: string): Promise<AxiosResponse<GomdonCreateOrderResponse>> => {
@@ -185,10 +255,28 @@ export class GomdonClient {
       try {
         return await this.login();
       } catch (err) {
-        throw new GomdonRejectedError(err instanceof Error ? err.message : String(err));
+        throw new GomdonRejectedError(err instanceof Error ? err.message : String(err), { transient: true });
       }
     };
 
+    try {
+      const created = await this.sendCreate(token, sendRequest, reLogin);
+      this.health.recordOk();
+      return created;
+    } catch (err) {
+      if (!(err instanceof GomdonDuplicateOrderError) && (!(err instanceof GomdonRejectedError) || err.transient)) {
+        this.health.recordError(err instanceof Error ? err.message : String(err));
+      }
+      throw err;
+    }
+  }
+
+  private async sendCreate(
+    initialToken: string,
+    sendRequest: (authToken: string) => Promise<AxiosResponse<GomdonCreateOrderResponse>>,
+    reLogin: () => Promise<string>,
+  ): Promise<GomdonCreateOrderResponse> {
+    let token = initialToken;
     let res: AxiosResponse<GomdonCreateOrderResponse>;
     let retriedAuth = false;
     try {
@@ -229,7 +317,10 @@ export class GomdonClient {
           throw new GomdonDuplicateOrderError(`Gomdon báo mã đơn (order_customer_id) đã có đơn: ${detail}`);
         }
         // Lỗi validate/nghiệp vụ của Gomdon trả HTTP 200 + result:false (tài liệu) → chắc chắn chưa tạo.
-        throw new GomdonRejectedError(`Gomdon trả về lỗi tạo đơn: ${detail}`);
+        // Vẫn báo lỗi xác thực sau khi đã đăng nhập lại → lỗi tài khoản (tạm), không phải lỗi dữ liệu đơn.
+        throw new GomdonRejectedError(`Gomdon trả về lỗi tạo đơn: ${detail}`, {
+          transient: looksLikeAuthFailure(res.data?.message),
+        });
       }
     }
     if (!res.data.data) {

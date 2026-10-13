@@ -665,7 +665,7 @@ describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
       q,
     );
     await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
-    expect(q.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(q.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
   });
 
   it('đơn thường (không thu gom) → không enqueue Gomdon; enqueue lỗi không làm hỏng event đã lật PAID', async () => {
@@ -694,7 +694,7 @@ describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
       q,
     );
     await proc.onCancelled({ id: 'p1' });
-    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('đơn đã có vận đơn Gomdon → onShippingUpdated KHÔNG ghi đè shippingCode/Partner/Status (Gomdon là nguồn duy nhất)', async () => {

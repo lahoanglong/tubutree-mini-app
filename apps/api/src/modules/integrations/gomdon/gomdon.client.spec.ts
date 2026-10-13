@@ -4,6 +4,8 @@ import { GomdonClient } from './gomdon.client';
 import { GomdonAmbiguousError, GomdonDuplicateOrderError, GomdonRejectedError } from './gomdon.errors';
 import type { SystemConfigService } from '../../system-config/system-config.service';
 import type { GomdonCreateOrderBody } from './gomdon.types';
+import { gomdonHealth } from './gomdon-health';
+import { GOMDON_RECYCLING_TOGGLE_KEY } from './gomdon-config';
 
 jest.mock('axios');
 
@@ -60,6 +62,7 @@ describe('GomdonClient', () => {
     systemConfig = {
       get: jest.fn().mockResolvedValue({ phone: '0987654321', password: 'secretpassword' }),
     };
+    gomdonHealth.reset();
   });
 
   afterEach(() => {
@@ -263,6 +266,23 @@ describe('GomdonClient', () => {
       expect((err as Error).message).toContain('The source province field is required.');
     });
 
+    it('429/503 → Rejected TẠM; 4xx khác → Rejected dứt khoát', async () => {
+      const c = makeClient();
+      for (const [status, transient] of [
+        [429, true],
+        [503, true],
+        [400, false],
+        [422, false],
+      ] as const) {
+        mockHttp.post.mockReset();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(axiosErr({ status, data: { message: 'x' } }));
+        (c as unknown as { cachedToken: null }).cachedToken = null;
+        const err = await c.createOrder(body).catch((e) => e);
+        expect(err).toBeInstanceOf(GomdonRejectedError);
+        expect((err as GomdonRejectedError).transient).toBe(transient);
+      }
+    });
+
     it('HTTP 4xx → Rejected; 503 → Rejected', async () => {
       for (const status of [400, 422, 429, 503]) {
         const c = makeClient();
@@ -280,6 +300,23 @@ describe('GomdonClient', () => {
         mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(e);
         await expect(c.createOrder(body)).rejects.toBeInstanceOf(GomdonAmbiguousError);
       }
+    });
+
+    it('ECONNREFUSED (request chưa tới server) → Rejected TẠM', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(axiosErr({ code: 'ECONNREFUSED' }));
+      const err = await c.createOrder(body).catch((e) => e);
+      expect(err).toBeInstanceOf(GomdonRejectedError);
+      expect((err as GomdonRejectedError).transient).toBe(true);
+    });
+
+    it('validate result:false → Rejected dứt khoát (không thử lại lâu)', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockResolvedValueOnce({ data: { result: false, message: 'The source province field is required.' } });
+      const err = await c.createOrder(body).catch((e) => e);
+      expect((err as GomdonRejectedError).transient).toBe(false);
     });
 
     it('ECONNREFUSED (request chưa tới server) → Rejected', async () => {
@@ -333,6 +370,69 @@ describe('GomdonClient', () => {
       expect(await c.cancelOrder('55')).toEqual({ ok: false, message: 'Không tìm thấy đơn hàng' });
       mockHttp.post.mockResolvedValueOnce({ data: {} });
       expect((await c.cancelOrder('55')).ok).toBe(false);
+    });
+  });
+  describe('sức khoẻ kết nối (UAT GOMDON-1: sai mật khẩu mà checkout vẫn mời thu gom)', () => {
+    const LOGIN_REJECTED = axiosErr({ status: 401, data: { result: false, message: 'Tài khoản hoặc mật khẩu không đúng', data: null } });
+
+    it('đăng nhập bị từ chối → lỗi tạo đơn là Rejected TẠM (thử lại lâu, chưa báo tạo tay) + ghi nhận tài khoản bị từ chối', async () => {
+      const c = makeClient();
+      mockHttp.post.mockRejectedValueOnce(LOGIN_REJECTED);
+      const err = await c.createOrder(body).catch((e) => e);
+      expect(err).toBeInstanceOf(GomdonRejectedError);
+      expect((err as GomdonRejectedError).transient).toBe(true);
+      expect(c.getHealth()).toMatchObject({ credentialsRejected: true, lastError: expect.stringContaining('mật khẩu') });
+    });
+
+    it('vừa bị từ chối tài khoản → không đăng nhập lại liên tục (chống khoá tài khoản), vẫn Rejected TẠM', async () => {
+      const c = makeClient();
+      mockHttp.post.mockRejectedValueOnce(LOGIN_REJECTED);
+      await c.createOrder(body).catch(() => undefined);
+      const err = await c.createOrder(body).catch((e) => e);
+      expect(err).toBeInstanceOf(GomdonRejectedError);
+      expect((err as GomdonRejectedError).transient).toBe(true);
+      expect(mockHttp.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('tài khoản bị từ chối → tắt lựa chọn thu gom ở checkout; đăng nhập lại được → bật lại', async () => {
+      const c = makeClient();
+      process.env.GOMDON_PHONE = 'p';
+      process.env.GOMDON_PASSWORD = 'x';
+      systemConfig.get.mockImplementation(async (k: string, fb?: unknown) => (k === GOMDON_RECYCLING_TOGGLE_KEY ? true : fb));
+      expect(await c.isRecyclingEnabled()).toBe(true);
+      mockHttp.post.mockRejectedValueOnce(LOGIN_REJECTED);
+      await c.createOrder(body).catch(() => undefined);
+      expect(await c.isRecyclingEnabled()).toBe(false);
+
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+      expect(await c.checkConnection()).toMatchObject({ ok: true });
+      expect(await c.isRecyclingEnabled()).toBe(true);
+    });
+
+    it('lỗi mạng/5xx khi đăng nhập KHÔNG coi là sai tài khoản (không tắt checkout)', async () => {
+      const c = makeClient();
+      mockHttp.post.mockRejectedValueOnce(axiosErr({ code: 'ECONNREFUSED' }));
+      await c.createOrder(body).catch(() => undefined);
+      expect(c.getHealth().credentialsRejected).toBe(false);
+      expect(c.getHealth().lastError).toBeTruthy();
+    });
+
+    it('checkConnection: luôn đăng nhập thật (bỏ token cache) và trả kết quả cho admin', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+      await c.getValidToken();
+      mockHttp.post.mockRejectedValueOnce(LOGIN_REJECTED);
+      const r = await c.checkConnection();
+      expect(r.ok).toBe(false);
+      expect(r.message).toContain('mật khẩu');
+      expect(mockHttp.post).toHaveBeenCalledTimes(2);
+    });
+
+    it('tạo đơn thành công → ghi nhận lần gọi tốt gần nhất', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CREATE_OK);
+      await c.createOrder(body);
+      expect(c.getHealth().lastOkAt).not.toBeNull();
     });
   });
 });
