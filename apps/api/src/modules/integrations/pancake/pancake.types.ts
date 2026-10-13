@@ -42,7 +42,6 @@ export interface PancakeCreateOrderBody {
     ward_id?: string;
     district_id?: string;
     province_id?: string;
-    fb_id?: string;
   };
   items: PancakeCreateOrderItem[];
   shipping_fee: number;

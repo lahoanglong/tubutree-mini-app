@@ -59,6 +59,44 @@ describe('PancakeOrderService.pushOrder', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { pancakeOrderId: 'pk-new' } });
   });
 
+  it('khách Pancake: không gửi Zalo ID vào fb_id (đơn CTV lên hộ có user là CTV), hệ 2 cấp không gửi district_id', async () => {
+    const order = makeOrder({
+      user: { zaloId: 'zalo-of-ctv' },
+      shippingAddress: {
+        recipient: 'Khách cuối', phone: '0900000001', street: '1 Lê Lợi', ward: 'Phường Bến Thành', district: '',
+        province: 'TP. Hồ Chí Minh', provinceCode: '84_VN79', districtCode: '', wardCode: '84_VN7926743',
+      },
+    });
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn().mockResolvedValue({}) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', pancakeId: 'pv1' }]) },
+    } as unknown as PrismaService;
+    const createOrder = jest.fn().mockResolvedValue({ id: 'pk-new' });
+    const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
+    await new PancakeOrderService(prisma, client, { add: jest.fn() } as never).pushOrder('o1');
+    const customer = createOrder.mock.calls[0][0].customer;
+    expect(customer).not.toHaveProperty('fb_id');
+    expect(customer.district_id).toBeUndefined();
+    expect(customer).toMatchObject({ name: 'Khách cuối', phone_number: '0900000001', ward_id: '84_VN7926743', province_id: '84_VN79' });
+  });
+
+  it('địa chỉ hệ cũ 3 cấp (còn mã quận) → vẫn gửi district_id', async () => {
+    const order = makeOrder({
+      shippingAddress: {
+        recipient: 'A', phone: '0900000001', street: 'S', ward: 'W', district: 'D', province: 'P',
+        provinceCode: '101', districtCode: '10101', wardCode: '1010115',
+      },
+    });
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn().mockResolvedValue({}) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const createOrder = jest.fn().mockResolvedValue({ id: 'pk-new' });
+    const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
+    await new PancakeOrderService(prisma, client, { add: jest.fn() } as never).pushOrder('o1');
+    expect(createOrder.mock.calls[0][0].customer.district_id).toBe('10101');
+  });
+
   it('Pancake trả lỗi (client.createOrder throw) → ném tiếp, KHÔNG nuốt lỗi', async () => {
     const order = makeOrder();
     const prisma = {
