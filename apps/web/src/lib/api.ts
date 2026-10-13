@@ -171,10 +171,6 @@ export interface StorefrontDetail {
   coverUrl?: string | null;
   theme?: string | null;
   themeColor?: string | null;
-  bankName?: string | null;
-  bankBin?: string | null;
-  bankAccountNo?: string | null;
-  bankAccountName?: string | null;
   warehouseAddress?: string | null;
   warehouseCity?: string | null;
   warehouseDistrict?: string | null;

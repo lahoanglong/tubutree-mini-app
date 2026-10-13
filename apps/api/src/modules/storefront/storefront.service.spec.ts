@@ -560,6 +560,22 @@ describe('StorefrontService.getPublicList', () => {
 });
 
 describe('StorefrontService.getPublicBySlug', () => {
+  // SELLER-9: route @Public, ai cũng gọi được — STK và họ tên chủ TK của CTV là dữ liệu cá nhân, không
+  // trang công khai nào dùng (thanh toán luôn vào TK Tubu, xem bank-transfer.service).
+  it('không trả thông tin ngân hàng của chủ gian hàng', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctvone1', title: 'Shop', isPublished: true, type: 'MERCHANT', collections: [],
+        bankName: 'Vietcombank', bankBin: '970436', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN CTV MOT',
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctvone1');
+    const json = JSON.stringify(r);
+    for (const leak of ['bankName', 'bankBin', 'bankAccountNo', 'bankAccountName', '0123456789', 'NGUYEN CTV MOT']) {
+      expect(json).not.toContain(leak);
+    }
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);
