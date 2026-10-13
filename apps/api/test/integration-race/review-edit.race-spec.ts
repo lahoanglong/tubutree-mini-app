@@ -76,7 +76,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
     const res = summarize(
       await Promise.allSettled([
         reviews.create(u.id, p.slug, { rating: 5, comment: 'Tuyệt' }),
-        reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://i/a.jpg'] }),
+        reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'] }),
       ]),
     );
     gate.mockRestore();
@@ -129,7 +129,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
       items: { create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
     });
     const video = 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4';
-    const second = await reviews.create(u.id, p.slug, { rating: 2, comment: 'Dùng lâu thấy khác', images: ['https://i/1.jpg', 'https://i/2.jpg'], videoUrl: video });
+    const second = await reviews.create(u.id, p.slug, { rating: 2, comment: 'Dùng lâu thấy khác', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/2.jpg'], videoUrl: video });
     expect(second).toMatchObject({ id: first.id, updated: true });
 
     const { balance, txs, rows } = await ledger(u.id);
@@ -138,7 +138,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
       id: first.id,
       rating: 2,
       comment: 'Dùng lâu thấy khác',
-      images: ['https://i/1.jpg', 'https://i/2.jpg'],
+      images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/2.jpg'],
       videoUrl: video,
       pointsEarned: 5,
       orderId: o.id,
@@ -157,9 +157,9 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   it('xoá rồi viết lại: lần xoá hoàn điểm nên sổ điểm sau cùng đúng bằng MỘT lần thưởng, không farm được', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
-    const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Lần 1', images: ['https://i/1.jpg'] });
+    const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Lần 1', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });
     await reviews.remove(u.id, 'USER', first.id);
-    const again = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Lần 2', images: ['https://i/2.jpg'] });
+    const again = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Lần 2', images: ['https://res.cloudinary.com/x/image/upload/v1/2.jpg'] });
     expect(again).toMatchObject({ updated: false });
 
     const { balance, txs, rows } = await ledger(u.id);
@@ -211,11 +211,11 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
     const { p, v } = await product();
     const { u } = await buyer(v.id);
     expect(await reviews.canReview(u.id, p.slug)).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
-    const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://i/1.jpg'] });
+    const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });
     expect(await reviews.canReview(u.id, p.slug)).toEqual({
       canReview: true,
       reason: null,
-      myReview: { id: first.id, rating: 4, comment: 'Ổn', images: ['https://i/1.jpg'], videoUrl: null },
+      myReview: { id: first.id, rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'], videoUrl: null },
       rewardAvailable: false,
     });
     const stranger = await createUser(prisma);
