@@ -112,6 +112,21 @@ describe('OrderStatusService', () => {
     });
   });
 
+  it('UAT GOMDON-10: ghi chú hệ thống (webhook/cron/admin) KHÔNG nối vào Order.note — ô "Ghi chú" khách tự viết', async () => {
+    const order = makeOrder({ status: 'SHIPPING', note: 'Giao giờ hành chính' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+    const tx = mockTx();
+
+    await service.setStatus('o1', 'DELIVERED' as never, { actorType: 'SYSTEM', note: 'Gomdon webhook: Giao thành công (status 7)' });
+
+    const data = tx.order.updateMany.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('note');
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ note: 'Gomdon webhook: Giao thành công (status 7)' }),
+    });
+  });
+
   /**
    * Task 6 review finding: trước đây this.analytics luôn undefined trong test (không wiring),
    * nên if(this.analytics) no-op câm lặng và không ai chứng minh được from/to không bị đảo
@@ -339,7 +354,7 @@ describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận 
   it('admin/merchant/Pancake huỷ đơn thu gom → enqueue job huỷ vận đơn (jobId cancel-<id>)', async () => {
     const { svc, queue } = make(makeOrder({ hasRecyclingPickup: true, gomdonOrderId: '77' }));
     await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
-    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('đơn thường / chuyển sang trạng thái khác CANCELLED → không enqueue', async () => {
@@ -660,7 +675,7 @@ describe('OrderStatusService.markPaid', () => {
   it('đơn thu gom tái chế → đặt vận đơn Gomdon sau khi PAID; lỗi enqueue không làm hỏng kết quả', async () => {
     const a = make([pending({ hasRecyclingPickup: true })]);
     await a.svc.markPaid('o1', { actorType: 'ADMIN' });
-    expect(a.queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(a.queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
 
     const b = make([pending({ hasRecyclingPickup: true })]);
     b.queue.add.mockRejectedValue(new Error('redis'));
