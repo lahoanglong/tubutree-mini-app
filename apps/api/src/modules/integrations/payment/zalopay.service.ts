@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Injectable,
   Logger,
@@ -17,6 +18,16 @@ import type { Env } from '../../../config/env.validation';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
+import { vnDateKey } from '../../../common/vn-time';
+
+interface ZalopayCreateResponse {
+  return_code?: number;
+  return_message?: string;
+  sub_return_code?: number;
+  sub_return_message?: string;
+  order_url?: string;
+  zp_trans_token?: string;
+}
 
 /**
  * ZaloPay v2 (Build Spec §10.1). Tạo đơn → trả order_url + zp_trans_token cho SDK mini app.
@@ -59,6 +70,14 @@ export class ZalopayService {
     const order = await this.prisma.order.findUnique({ where: { code: orderCode } });
     if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (order.paymentStatus === 'PAID') throw new BadRequestException('Đơn đã thanh toán.');
+    // Đơn COD/chuyển khoản hay đơn đã huỷ mà vẫn tạo được lệnh thì khách trả tiền xong, luồng hoàn tiền
+    // (order-reversal) không coi đó là đơn trả trước nên không hoàn, shipper vẫn thu COD (MONEY-11).
+    if (order.paymentMethod !== 'ZALOPAY') {
+      throw new BadRequestException('Đơn này không chọn thanh toán qua ZaloPay.');
+    }
+    if (order.status !== 'PENDING_PAYMENT') {
+      throw new BadRequestException('Đơn không còn ở trạng thái chờ thanh toán.');
+    }
 
     const appTime = Date.now();
     // Hậu tố ngẫu nhiên phân biệt LẦN THỬ: appTransId chỉ phân giải theo NGÀY (yymmdd_code) nên
@@ -87,10 +106,17 @@ export class ZalopayService {
       mac,
     };
 
-    const { data } = await axios.post(`${this.endpoint}/create`, null, {
+    const { data } = await axios.post<ZalopayCreateResponse>(`${this.endpoint}/create`, null, {
       params: payload,
       timeout: 12000,
     });
+    // return_code 1 = tạo lệnh thành công; còn lại ZaloPay không có giao dịch nào để callback về.
+    if (data?.return_code !== 1) {
+      this.logger.warn(
+        `ZaloPay từ chối tạo lệnh cho đơn ${order.code}: return_code=${data?.return_code} sub_return_code=${data?.sub_return_code} ${data?.sub_return_message ?? data?.return_message ?? ''}`,
+      );
+      throw new BadGatewayException('ZaloPay chưa tạo được lệnh thanh toán, vui lòng thử lại sau.');
+    }
     // Ghi TỪNG lần thử: app_trans_id có tiền tố ngày nên bấm thanh toán lại hôm sau sinh mã
     // khác. Nếu chỉ giữ mã mới nhất ở orders.paymentTxnId thì callback của lần thử cũ (khách
     // hoàn tất giao dịch hôm qua) sẽ không khớp đơn nào → tiền thu rồi mà đơn vẫn UNPAID
@@ -103,7 +129,7 @@ export class ZalopayService {
       where: { id: order.id },
       data: { paymentTxnId: appTransId },
     });
-    return data as { order_url?: string; zp_trans_token?: string; return_code?: number };
+    return data;
   }
 
   /** Webhook ZaloPay: verify MAC key2 → set PAID. */
@@ -203,8 +229,8 @@ export class ZalopayService {
     return timingSafeEqual(ab, bb);
   }
 
+  /** ZaloPay yêu cầu tiền tố app_trans_id là ngày theo GMT+7; theo UTC thì 00:00–06:59 mang ngày hôm trước. */
   private yymmdd(): string {
-    const d = new Date();
-    return `${String(d.getUTCFullYear()).slice(2)}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+    return vnDateKey().slice(2).replace(/-/g, '');
   }
 }
