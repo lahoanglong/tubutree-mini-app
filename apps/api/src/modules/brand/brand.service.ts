@@ -76,6 +76,10 @@ function brandSalesRange(period: BrandSalesPeriod, now: Date): { from: Date; to:
   }
 }
 
+function assertPromotionWindow(startAt: Date, endAt: Date): void {
+  if (!(endAt.getTime() > startAt.getTime())) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+}
+
 @Injectable()
 export class BrandService {
   constructor(private readonly prisma: PrismaService) {}
@@ -284,6 +288,7 @@ export class BrandService {
     dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },
     now: Date = new Date(),
   ) {
+    assertPromotionWindow(new Date(dto.startAt), new Date(dto.endAt));
     const couponCode = await this.resolvePromotionCoupon(dto.couponCode, now);
     return this.prisma.brandPromotion.create({
       data: {
@@ -316,6 +321,11 @@ export class BrandService {
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.startAt === 'string') data.startAt = new Date(dto.startAt);
     if (typeof dto.endAt === 'string') data.endAt = new Date(dto.endAt);
+    if (data.startAt || data.endAt) {
+      const current = await this.prisma.brandPromotion.findUnique({ where: { id }, select: { startAt: true, endAt: true } });
+      if (!current) throw new NotFoundException('Không tìm thấy khuyến mãi.');
+      assertPromotionWindow((data.startAt as Date | undefined) ?? current.startAt, (data.endAt as Date | undefined) ?? current.endAt);
+    }
     if (typeof dto.couponCode === 'string') {
       const wanted = dto.couponCode.trim();
       if (!wanted) {
