@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchNotifyPrefs: vi.fn(),
   saveNotifyPrefs: vi.fn(),
   stored: undefined as string | undefined,
+  storageReads: 0,
   setStorage: vi.fn(),
   applyFontScale: vi.fn(),
   logout: vi.fn(),
@@ -22,10 +23,15 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/settings', search: '', state: null }),
-  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+  // Giống zmp-ui thật: mỗi lần render trả về hàm openSnackbar MỚI (hook không memo).
+  useSnackbar: () => ({ openSnackbar: (opt: unknown) => mocks.openSnackbar(opt), closeSnackbar: vi.fn() }),
 }));
 vi.mock('zmp-sdk/apis', () => ({
-  getStorage: async () => (mocks.stored === undefined ? {} : { tubu_prefs: mocks.stored }),
+  getStorage: () => {
+    mocks.storageReads += 1;
+    if (mocks.storageReads > 40) return new Promise(() => undefined);
+    return Promise.resolve(mocks.stored === undefined ? {} : { tubu_prefs: mocks.stored });
+  },
   setStorage: mocks.setStorage,
 }));
 vi.mock('./settings-notify-prefs', async (importOriginal) => ({
@@ -54,6 +60,7 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.stored = undefined;
+    mocks.storageReads = 0;
     mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
     mocks.saveNotifyPrefs.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
   });
@@ -64,6 +71,15 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
     fireEvent.click(promoSwitch());
     await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false }));
     expect(promoSwitch()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('mở Cài đặt chỉ tải tuỳ chọn thông báo một lần, không lặp khi render lại (BUYERMINI-4)', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByRole('radio', { name: /Lớn/ }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(mocks.storageReads).toBe(1);
   });
 
   it('lưu lỗi → trả công tắc về như cũ và báo lỗi', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { setStorage, getStorage } from 'zmp-sdk/apis';
@@ -40,6 +40,9 @@ async function readStored(): Promise<StoredPrefs | null> {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
+  // useSnackbar của zmp-ui trả hàm mới mỗi lần render; đưa vào dep của effect sẽ lặp tải vô hạn.
+  const openSnackbarRef = useRef(openSnackbar);
+  openSnackbarRef.current = openSnackbar;
   const { logout } = useAuthStore();
   const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
   const [notify, setNotify] = useState<NotifyPrefs | null>(null);
@@ -61,13 +64,13 @@ export default function SettingsPage() {
         }
         if (alive) setNotify(server);
       } catch {
-        if (alive) openSnackbar({ type: 'error', text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.' });
+        if (alive) openSnackbarRef.current({ type: 'error', text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.' });
       }
     })();
     return () => {
       alive = false;
     };
-  }, [openSnackbar]);
+  }, []);
 
   const updateFont = (fontScale: FontScale) => {
     setLocal({ fontScale });
