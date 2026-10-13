@@ -424,7 +424,13 @@ export interface MyReview {
  */
 export const canReviewProduct = (slug: string) =>
   api
-    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | null; myReview?: MyReview | null; rewardAvailable?: boolean }>(
+    .get<{
+      canReview: boolean;
+      reason: 'NOT_PURCHASED' | null;
+      myReview?: MyReview | null;
+      rewardAvailable?: boolean;
+      purchaseCount?: number;
+    }>(
       `/products/${slug}/reviews/can-review`,
     )
     .then((r) => r.data);

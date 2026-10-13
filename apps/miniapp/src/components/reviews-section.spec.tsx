@@ -435,6 +435,40 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
       expect(screen.getByText(/Điểm Xanh/)).toHaveTextContent(EDIT_HINT);
     });
   });
+
+  describe('mua lại nhiều lần (ENGAGE-23)', () => {
+    const REPEAT_EDIT = 'Bạn đã mua sản phẩm này 3 lần. Mỗi sản phẩm chỉ có một đánh giá, nên lưu lại sẽ cập nhật đánh giá cũ của bạn.';
+    const REPEAT_NEW = 'Bạn đã mua sản phẩm này 2 lần. Mỗi sản phẩm chỉ có một đánh giá, nên đánh giá này tính cho mọi lần mua.';
+
+    it('đã có đánh giá và mua từ 2 lần: form sửa nói rõ vì sao chỉ sửa được đánh giá cũ', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, rewardAvailable: false, purchaseCount: 3 });
+      renderSection();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(screen.getByText(REPEAT_EDIT)).toBeInTheDocument();
+      expect(screen.getByText(/Điểm Xanh/)).toHaveTextContent(EDIT_HINT);
+    });
+
+    it('chưa đánh giá nhưng đã mua 2 lần: form viết mới báo đánh giá tính cho mọi lần mua', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: true, purchaseCount: 2 });
+      await openNewForm();
+      expect(screen.getByText(REPEAT_NEW)).toBeInTheDocument();
+    });
+
+    it('mua 1 lần hoặc API cũ chưa trả purchaseCount: không hiện câu nào về số lần mua', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, purchaseCount: 1 });
+      const { unmount } = renderSection();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(screen.queryByText(/đã mua sản phẩm này/)).not.toBeInTheDocument();
+      unmount();
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
+      renderSection();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(screen.queryByText(/đã mua sản phẩm này/)).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe('Stars', () => {
