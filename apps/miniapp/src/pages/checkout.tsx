@@ -543,7 +543,7 @@ export default function CheckoutPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
-        <Input placeholder={vi.checkout.notePlaceholder} value={note} onChange={(e) => setNote(e.target.value)} />
+        <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
       </Box>
 
       {/* ── Thu gom vật liệu tái chế (Eco-Card) — chỉ khi tính năng đang bật ── */}

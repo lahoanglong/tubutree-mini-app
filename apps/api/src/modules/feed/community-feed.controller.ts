@@ -1,6 +1,21 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MaxLength,
+  MinLength,
+  ValidateBy,
+  type ValidationOptions,
+} from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
@@ -10,20 +25,46 @@ import { CommunityFeedService, type CreateEventInput, type CreatePostInput } fro
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
 
-class CreatePostDto {
+/** Khớp MultiImageUpload ở Mini App (max=6). */
+const MAX_POST_IMAGES = 6;
+const IMAGE_URL_MAX = 2048;
+// MultiImageUpload rơi về ảnh nén JPEG base64 (~150-250KB, tối đa cạnh 1200px) khi chưa có Cloudinary.
+const IMAGE_DATA_URL_MAX = 700_000;
+const DATA_IMAGE_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+export function isPostImageRef(v: unknown): boolean {
+  if (typeof v !== 'string') return false;
+  if (/^https?:\/\/\S+$/.test(v)) return v.length <= IMAGE_URL_MAX;
+  return v.length <= IMAGE_DATA_URL_MAX && DATA_IMAGE_RE.test(v);
+}
+
+function IsPostImageRef(options?: ValidationOptions) {
+  return ValidateBy(
+    {
+      name: 'isPostImageRef',
+      validator: {
+        validate: isPostImageRef,
+        defaultMessage: () => 'Ảnh đính kèm phải là link ảnh hoặc ảnh JPEG/PNG/WebP đã nén (tối đa ~500KB).',
+      },
+    },
+    options,
+  );
+}
+
+export class CreatePostDto {
   @IsOptional() @IsIn(KINDS as unknown as string[]) kind?: (typeof KINDS)[number];
   @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
-  @IsOptional() @IsArray() @IsString({ each: true }) productSlugs?: string[];
-  @IsOptional() @IsArray() @IsString({ each: true }) tagSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsPostImageRef({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) productSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }
-class EditPostDto {
+export class EditPostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsOptional() @IsString() @MaxLength(5000) body?: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsPostImageRef({ each: true }) images?: string[];
 }
 class CommentDto {
   @IsString() @MinLength(1) @MaxLength(500) body!: string;

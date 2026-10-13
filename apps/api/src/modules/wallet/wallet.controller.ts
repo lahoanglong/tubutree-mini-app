@@ -1,18 +1,21 @@
 import { Body, Controller, Get, GoneException, Headers, Post, Query } from '@nestjs/common';
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsObject, IsString, Min, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsObject, IsString, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { WalletService } from './wallet.service';
 import { RewardPointsService } from './reward-points.service';
 
 class BankInfoDto {
-  @IsString() @IsNotEmpty() bankName!: string;
-  @IsString() @IsNotEmpty() accountNumber!: string;
-  @IsString() @IsNotEmpty() accountName!: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) bankName!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/[\s.-]/g, '') : value))
+  @IsString()
+  @Matches(/^[0-9A-Za-z]{6,20}$/, { message: 'Số tài khoản phải gồm 6–20 chữ số.' })
+  accountNumber!: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) accountName!: string;
 }
 
-class WithdrawDto {
+export class WithdrawDto {
   @IsInt() @Min(1) amount!: number;
   @IsObject() @ValidateNested() @Type(() => BankInfoDto) bankInfo!: BankInfoDto;
 }

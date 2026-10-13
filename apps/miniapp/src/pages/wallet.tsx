@@ -328,13 +328,13 @@ export default function WalletPage() {
             />
           </Field>
           <Field label="Tên ngân hàng">
-            <Input placeholder="VD: Techcombank" value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
+            <Input placeholder="VD: Techcombank" maxLength={120} value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
           </Field>
           <Field label="Số tài khoản">
-            <Input value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
+            <Input inputMode="numeric" maxLength={24} value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
           </Field>
           <Field label="Chủ tài khoản">
-            <Input placeholder="Tên in trên thẻ" value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
+            <Input placeholder="Tên in trên thẻ" maxLength={120} value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
           </Field>
         </div>
         {amountNum >= min && (
