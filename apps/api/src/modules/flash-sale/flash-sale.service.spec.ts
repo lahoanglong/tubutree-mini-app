@@ -207,6 +207,39 @@ describe('FlashSaleService.restore', () => {
   });
 });
 
+describe('FlashSaleService.createSale (ADMINOPS-16)', () => {
+  const mk = () => ({ flashSale: { create: jest.fn().mockResolvedValue({ id: 's1' }) } }) as any;
+
+  it('đợt đã kết thúc (năm 2020) → 400, không tạo', async () => {
+    const prisma = mk();
+    await expect(
+      new FlashSaleService(prisma, config, notifications).createSale('a1', {
+        title: 'Cũ',
+        startAt: '2020-01-01T00:00:00Z',
+        endAt: '2020-01-02T00:00:00Z',
+      }),
+    ).rejects.toThrow('Thời gian kết thúc phải ở tương lai.');
+    expect(prisma.flashSale.create).not.toHaveBeenCalled();
+  });
+
+  it('ngày không đọc được → 400 nói rõ, không nhầm thành "bắt đầu sau kết thúc"', async () => {
+    const prisma = mk();
+    await expect(
+      new FlashSaleService(prisma, config, notifications).createSale('a1', { title: 'X', startAt: 'abc', endAt: '2099-01-02T00:00:00Z' }),
+    ).rejects.toThrow('Thời gian bắt đầu/kết thúc không hợp lệ.');
+  });
+
+  it('tiêu đề toàn khoảng trắng bị cắt; hợp lệ thì tạo', async () => {
+    const prisma = mk();
+    await new FlashSaleService(prisma, config, notifications).createSale('a1', {
+      title: 'Giờ vàng',
+      startAt: '2099-01-01T00:00:00Z',
+      endAt: '2099-01-02T00:00:00Z',
+    });
+    expect(prisma.flashSale.create).toHaveBeenCalled();
+  });
+});
+
 describe('FlashSaleService.updateSale', () => {
   const mkPrisma = (current: Record<string, unknown>) => ({
     flashSale: {
@@ -219,7 +252,7 @@ describe('FlashSaleService.updateSale', () => {
     const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-02') }) as any;
     await expect(
       new FlashSaleService(prisma, config, notifications).updateSale('s1', { startAt: '2026-07-10', endAt: '2026-07-08' }),
-    ).rejects.toThrow('startAt phải trước endAt.');
+    ).rejects.toThrow('Thời gian bắt đầu phải trước thời gian kết thúc.');
     expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
@@ -227,14 +260,22 @@ describe('FlashSaleService.updateSale', () => {
     const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-05') }) as any;
     await expect(
       new FlashSaleService(prisma, config, notifications).updateSale('s1', { startAt: '2026-07-10' }),
-    ).rejects.toThrow('startAt phải trước endAt.');
+    ).rejects.toThrow('Thời gian bắt đầu phải trước thời gian kết thúc.');
   });
 
   it('window hợp lệ → update thành công', async () => {
-    const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-05') }) as any;
-    const r = await new FlashSaleService(prisma, config, notifications).updateSale('s1', { startAt: '2026-07-02', endAt: '2026-07-08' });
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2099-07-01'), endAt: new Date('2099-07-05') }) as any;
+    const r = await new FlashSaleService(prisma, config, notifications).updateSale('s1', { startAt: '2099-07-02', endAt: '2099-07-08' });
     expect(r).toEqual({ id: 's1' });
     expect(prisma.flashSale.update).toHaveBeenCalled();
+  });
+
+  it('ADMINOPS-16: đổi endAt về quá khứ → 400, không cập nhật', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2020-01-01'), endAt: new Date('2099-01-01') }) as any;
+    await expect(
+      new FlashSaleService(prisma, config, notifications).updateSale('s1', { endAt: '2020-02-01T00:00:00Z' }),
+    ).rejects.toThrow('Thời gian kết thúc phải ở tương lai.');
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
   it('không đổi startAt/endAt (chỉ title/isActive) → KHÔNG cần validate, update thành công', async () => {

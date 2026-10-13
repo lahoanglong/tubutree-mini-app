@@ -1,7 +1,8 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class CreateCourseDto {
-  @IsString() title!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
@@ -9,7 +10,7 @@ export class CreateCourseDto {
 }
 
 export class UpdateCourseDto {
-  @IsOptional() @IsString() title?: string;
+  @IsOptional() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() coverUrl?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
@@ -17,7 +18,7 @@ export class UpdateCourseDto {
 }
 
 export class CreateLessonDto {
-  @IsString() title!: string;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
   @IsIn(['VIDEO', 'ARTICLE']) contentType!: 'VIDEO' | 'ARTICLE';
   @IsOptional() @IsString() videoUrl?: string;
   @IsOptional() @IsString() body?: string;
@@ -25,7 +26,7 @@ export class CreateLessonDto {
 }
 
 export class UpdateLessonDto {
-  @IsOptional() @IsString() title?: string;
+  @IsOptional() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
   @IsOptional() @IsIn(['VIDEO', 'ARTICLE']) contentType?: 'VIDEO' | 'ARTICLE';
   @IsOptional() @IsString() videoUrl?: string;
   @IsOptional() @IsString() body?: string;

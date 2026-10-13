@@ -30,6 +30,15 @@ function isStillDiscounted(it: { flashPrice: number; variation: { salePrice: num
   return it.flashPrice < (it.variation.salePrice ?? it.variation.retailPrice);
 }
 
+/** Khung giờ đợt flash: đọc được, bắt đầu trước kết thúc, và (khi đặt endAt mới) chưa kết thúc. */
+function assertSaleWindow(startAt: Date, endAt: Date, checkEndInFuture = true): void {
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+    throw new BadRequestException('Thời gian bắt đầu/kết thúc không hợp lệ.');
+  }
+  if (!(startAt < endAt)) throw new BadRequestException('Thời gian bắt đầu phải trước thời gian kết thúc.');
+  if (checkEndInFuture && endAt.getTime() <= Date.now()) throw new BadRequestException('Thời gian kết thúc phải ở tương lai.');
+}
+
 @Injectable()
 export class FlashSaleService {
   private readonly logger = new Logger(FlashSaleService.name);
@@ -187,7 +196,7 @@ export class FlashSaleService {
   async createSale(adminId: string, dto: { title: string; startAt: string; endAt: string }) {
     const startAt = new Date(dto.startAt),
       endAt = new Date(dto.endAt);
-    if (!(startAt < endAt)) throw new BadRequestException('startAt phải trước endAt.');
+    assertSaleWindow(startAt, endAt);
     return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
   }
 
@@ -197,7 +206,7 @@ export class FlashSaleService {
       const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id } });
       const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
       const end = dto.endAt ? new Date(dto.endAt) : current.endAt;
-      if (!(start < end)) throw new BadRequestException('startAt phải trước endAt.');
+      assertSaleWindow(start, end, dto.endAt !== undefined);
     }
     return this.prisma.flashSale.update({
       where: { id },
