@@ -86,6 +86,23 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     expect(JSON.parse(String(patch?.init?.body))).toEqual({ isActive: true });
   });
 
+  it('đổi hạn: gửi cuối ngày đã chọn theo giờ Việt Nam và hiện ngày dạng dd/MM/yyyy', async () => {
+    const api = mockFetch({
+      '/admin/coupons/c1': { body: coupon({ endAt: '2027-01-05T16:59:59.000Z' }) },
+      '/admin/coupons': { body: { data: [coupon({ startAt: '2026-01-04T17:00:00.000Z' })], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.textContent).toContain('05/01/2026 – 31/12/2099');
+    typeInto(r.container.querySelector<HTMLInputElement>('input[type="date"]'), '2027-01-05');
+    await flush();
+    const patch = api.calls.find((c) => c.init?.method === 'PATCH');
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ endAt: '2027-01-05T16:59:59.000Z' });
+    expect(r.container.textContent).toContain('Đã đổi hạn mã SUMMER10 đến hết 05/01/2027.');
+  });
+
   it('lỗi từ server khi đổi hạn (ngày kết thúc trước ngày bắt đầu) hiện nguyên văn tiếng Việt', async () => {
     const api = mockFetch({
       '/admin/coupons/c1': { status: 400, body: { message: 'Ngày kết thúc phải sau ngày bắt đầu.' } },

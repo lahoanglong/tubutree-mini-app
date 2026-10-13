@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass } from './ui';
 
@@ -15,7 +16,6 @@ const STATUS_FILTERS: { value: CouponStatusFilter; label: string }[] = [
   { value: 'expired', label: 'Hết hạn' },
 ];
 
-const vnDate = (iso: string) => new Date(iso).toLocaleDateString('vi-VN');
 
 function couponValue(c: AdminCoupon): string {
   if (c.type === 'FREESHIP') return 'Miễn phí ship';
@@ -72,8 +72,8 @@ export function CouponList() {
   const extend = (c: AdminCoupon, dayKey: string) => {
     if (!dayKey) return;
     setMsg(null);
-    const endAt = new Date(`${dayKey}T23:59:59`).toISOString();
-    patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${vnDate(endAt)}.` });
+    const endAt = new Date(`${dayKey}T23:59:59+07:00`).toISOString();
+    patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${formatDate(endAt)}.` });
   };
 
   const total = q.data?.meta.total ?? 0;
@@ -130,7 +130,7 @@ export function CouponList() {
                 {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
               </p>
               <p className="mt-0.5 text-xs text-stone-500">
-                {vnDate(c.startAt)} – {vnDate(c.endAt)} · Đã dùng {c.redeemedCount}
+                {formatDate(c.startAt)} – {formatDate(c.endAt)} · Đã dùng {c.redeemedCount}
                 {c.usageLimit != null ? `/${c.usageLimit}` : ''} lượt · {c.perUserLimit > 0 ? `${c.perUserLimit} lượt/khách` : 'không giới hạn/khách'}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
