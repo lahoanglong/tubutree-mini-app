@@ -35,11 +35,12 @@ test.describe('Web khách (smoke)', () => {
     await expectHealthyPage(page, '/');
   });
 
-  test('sản phẩm không tồn tại: hiện trang not-found, không phải lỗi 500', async ({ page }) => {
+  test('sản phẩm không tồn tại: HTTP 404 thật, noindex, hiện trang not-found', async ({ page }) => {
     const health = watchHealth(page);
     const res = await page.goto('/san-pham/slug-khong-ton-tai-e2e-web');
-    // root loading.tsx làm Next stream 200 trước khi notFound() chạy, nên status không phải 404; xem chú thích ở app/product/[slug]/route.ts.
-    expect(res?.status()).toBeLessThan(500);
+    // Không được có loading.tsx ở gốc: nó làm Next stream 200 trước khi notFound() chạy.
+    expect(res?.status()).toBe(404);
+    await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
     await expect(page.locator('main')).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1, name: 'Không tìm thấy trang' })).toBeVisible();
     expect(health.pageErrors).toEqual([]);
