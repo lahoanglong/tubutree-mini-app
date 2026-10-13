@@ -59,8 +59,13 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
           status: { notIn: ['SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] },
           OR: [{ shippingCode: null }, { shippingPartner: 'BestExpress' }],
         },
+        // Hàng hoàn/mất: vẫn là việc khi đơn đã chốt giao (điểm đã cộng, hoa hồng đã khoá).
         {
-          gomdonStatus: { in: ['2', '6', '8', '9', '10', '11', '12'] },
+          gomdonStatus: { in: ['6', '8', '9', '12'] },
+          status: { notIn: ['CANCELLED', 'RETURNED'] },
+        },
+        {
+          gomdonStatus: { in: ['2', '10', '11'] },
           status: { notIn: ['DELIVERED', 'CANCELLED', 'RETURNED'] },
         },
         // Huỷ vận đơn lỗi: luôn giữ — trừ khi admin đã bấm "Đã xử lý tay".

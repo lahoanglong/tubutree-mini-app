@@ -24,7 +24,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, type InvoiceFilter, type RecyclingFilter } from './admin-order-filter';
+import { ADMIN_ORDER_STATUSES, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -190,6 +190,8 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
   /** pending = đơn VAT chưa xuất xong; issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
+  /** attention = "Cần xử lý Pancake". */
+  @IsOptional() @IsIn(['attention']) pancake?: PancakeFilter;
 }
 
 export class ListUsersQuery extends PaginationQuery {
@@ -234,6 +236,11 @@ export class GomdonRetryDto {
 
 export class GomdonMarkHandledDto {
   /** Ghi chú admin đã xử lý thế nào (vd "đã tạo vận đơn GHN tay") — chỉ vào log vết. */
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+export class ResolvePancakeAttentionDto {
+  /** Ghi chú admin đã xử lý thế nào (vd "đã gọi khách, kho nhận lại hàng") — chỉ vào log vết. */
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
@@ -333,7 +340,17 @@ export class AdminController {
 
   @Get('orders')
   orders(@Query() q: ListOrdersQuery) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice);
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake);
+  }
+
+  /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */
+  @Post('orders/:id/pancake-attention/resolve')
+  resolvePancakeAttention(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') id: string,
+    @Body() dto: ResolvePancakeAttentionDto,
+  ) {
+    return this.admin.resolvePancakeAttention(adminId, id, dto.note);
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */
