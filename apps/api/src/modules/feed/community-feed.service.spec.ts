@@ -279,6 +279,42 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
   });
 });
 
+describe('CommunityFeedService — ảnh trong danh sách (ENGAGE-7)', () => {
+  const blob = (n: number) => `data:image/jpeg;base64,${'A'.repeat(n)}`;
+  const many = [blob(300), blob(301), blob(302)];
+
+  it('danh sách feed chỉ trả ảnh bìa + imageCount, không đẩy cả 6 ảnh base64 xuống mỗi thẻ', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: many })]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]!.images).toEqual([many[0]]);
+    expect(r.posts[0]!.imageCount).toBe(3);
+  });
+
+  it('bài dự thi của sự kiện cũng chỉ trả ảnh bìa', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: many })]);
+    const r = await makeSvc(prisma).eventPosts('ev1', 'u1');
+    expect(r.posts[0]!.images).toEqual([many[0]]);
+    expect(r.posts[0]!.imageCount).toBe(3);
+  });
+
+  it('chi tiết bài trả đủ ảnh', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ images: many }), reactions: [] });
+    const r = await makeSvc(prisma).getPost('u1', 'p1');
+    expect(r.images).toEqual(many);
+    expect(r.imageCount).toBe(3);
+  });
+
+  it('bài không ảnh → images rỗng, imageCount 0', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ images: [] })]);
+    const r = await makeSvc(prisma).getFeed('u1');
+    expect(r.posts[0]).toMatchObject({ images: [], imageCount: 0 });
+  });
+});
+
 describe('CommunityFeedService.getPost', () => {
   it('KHÔNG ghi viewCount trên đường đọc nóng (không màn nào hiển thị con số đó)', async () => {
     const prisma = makePrisma();

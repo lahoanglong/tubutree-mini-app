@@ -368,7 +368,7 @@ export class CommunityFeedService {
     const page = hasMore ? posts.slice(0, take) : posts;
     const counts = await this.countsForPage(page.map((p) => p.id));
     return {
-      posts: page.map((p) => this.toItem(p, userId, counts)),
+      posts: page.map((p) => this.toItem(p, userId, counts, { coverOnly: true })),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -424,14 +424,20 @@ export class CommunityFeedService {
     });
   }
 
-  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts) {
+  /**
+   * `coverOnly` cho danh sách: ảnh bài là base64 nội tuyến (~300KB/ảnh khi chưa có Cloudinary) mà thẻ trong
+   * feed chỉ vẽ ảnh đầu, nên danh sách trả ảnh bìa + `imageCount`, màn chi tiết mới trả đủ.
+   */
+  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts, opts: { coverOnly?: boolean } = {}) {
+    const images = p.images ?? [];
     return {
       id: p.id,
       kind: p.kind,
       status: p.status,
       title: p.title ?? null,
       body: p.body,
-      images: p.images ?? [],
+      images: opts.coverOnly ? images.slice(0, 1) : images,
+      imageCount: images.length,
       meta: p.meta,
       createdAt: p.createdAt,
       author: p.user.fullName ?? 'Bạn Tubu',
@@ -1082,7 +1088,7 @@ export class CommunityFeedService {
     const posts = hasMore ? rows.slice(0, limit) : rows;
     const counts = await this.countsForPage(posts.map((p) => p.id));
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId, counts)),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts, { coverOnly: true })),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
   }

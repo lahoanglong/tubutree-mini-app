@@ -1,29 +1,33 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { IsUploadedImage, PUBLIC_CONTENT_MAX_DATA_URL_LENGTH } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
 
-class CreatePostDto {
+const MAX_POST_IMAGES = 6;
+const POST_IMAGE_OPTIONS = { maxDataUrlLength: PUBLIC_CONTENT_MAX_DATA_URL_LENGTH };
+
+export class CreatePostDto {
   @IsOptional() @IsIn(KINDS as unknown as string[]) kind?: (typeof KINDS)[number];
   @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(POST_IMAGE_OPTIONS, { each: true }) images?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }
-class EditPostDto {
+export class EditPostDto {
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsOptional() @IsString() @MaxLength(5000) body?: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(POST_IMAGE_OPTIONS, { each: true }) images?: string[];
 }
 class CommentDto {
   @IsString() @MinLength(1) @MaxLength(500) body!: string;

@@ -27,6 +27,8 @@ export interface FeedItem {
   title: string | null;
   body: string;
   images: string[];
+  /** Danh sách chỉ trả ảnh bìa; số ảnh thật của bài (chi tiết trả đủ). */
+  imageCount?: number;
   meta: unknown;
   createdAt: string;
   author: string;

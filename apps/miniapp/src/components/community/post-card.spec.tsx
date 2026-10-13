@@ -56,6 +56,21 @@ const renderCard = (post: FeedItem = POST, onClick = vi.fn()) => {
 
 beforeEach(() => vi.clearAllMocks());
 
+describe('PostCard — ảnh bìa (ENGAGE-7)', () => {
+  const withImages = (imageCount: number): FeedItem => ({ ...POST, images: ['https://res.cloudinary.com/demo/a.jpg'], imageCount });
+
+  it('bài nhiều ảnh: hiện ảnh bìa và số ảnh còn lại', () => {
+    const { container } = renderCard(withImages(4));
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(screen.getByText('+3 ảnh nữa')).toBeInTheDocument();
+  });
+
+  it('bài một ảnh: không hiện số ảnh còn lại', () => {
+    renderCard(withImages(1));
+    expect(screen.queryByText(/ảnh nữa/)).toBeNull();
+  });
+});
+
 describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
   it('hiện tác giả, tiêu đề, nội dung, thời gian, danh mục, số like/bình luận', () => {
     renderCard();
