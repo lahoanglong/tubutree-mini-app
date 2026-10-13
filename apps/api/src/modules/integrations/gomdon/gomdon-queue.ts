@@ -1,4 +1,5 @@
 import type { Queue } from 'bullmq';
+import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
 /**
  * Helper enqueue dùng chung cho queue gomdon-push — gọi được từ module KHÔNG import GomdonModule
@@ -25,7 +26,11 @@ export const gomdonCancelJobId = (orderId: string) => `cancel-${orderId}`;
  *  - event: bỏ qua event đã PROCESSED/IGNORED.
  * Job đang waiting/active/delayed thì giữ nguyên — BullMQ tự dedupe.
  */
-export async function addGomdonJob(queue: Queue, name: string, data: object, jobId: string): Promise<void> {
+export function addGomdonJob(queue: Queue, name: string, data: object, jobId: string): Promise<void> {
+  return withQueueTimeout(replaceFinishedAndAdd(queue, name, data, jobId), `${queue.name} ${jobId}`);
+}
+
+async function replaceFinishedAndAdd(queue: Queue, name: string, data: object, jobId: string): Promise<void> {
   try {
     const existing = await queue.getJob(jobId);
     if (existing) {

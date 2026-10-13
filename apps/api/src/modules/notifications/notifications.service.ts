@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
+import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 
@@ -91,13 +92,16 @@ export class NotificationsService {
       // không ai gửi lại). Enqueue job retry qua BullMQ (5 lần, backoff exponential — xem
       // defaultJobOptions trong jobs/queue.module.ts); processor notifications.processor.ts sẽ
       // gọi lại zns.sendTemplate() và lật log này sang SENT nếu thành công.
-      if (!ok) {
-        await this.notificationsQueue?.add('zns-retry', {
-          notificationLogId: log.id,
-          phone: user.phone,
-          templateId: tpl.zaloTemplateId,
-          templateData: data,
-        } satisfies ZnsRetryJobData);
+      if (!ok && this.notificationsQueue) {
+        await withQueueTimeout(
+          this.notificationsQueue.add('zns-retry', {
+            notificationLogId: log.id,
+            phone: user.phone,
+            templateId: tpl.zaloTemplateId,
+            templateData: data,
+          } satisfies ZnsRetryJobData),
+          `${QUEUE_NOTIFICATIONS} ${log.id}`,
+        );
       }
     }
   }
