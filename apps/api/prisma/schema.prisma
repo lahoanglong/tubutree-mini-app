@@ -381,6 +381,8 @@ model Product {
   categoryIds      String[]
   tags             String[]
   isActive         Boolean               @default(true)
+  /// REMOVED = đồng bộ Pancake tự tắt vì sản phẩm không còn trên Pancake (xem Variation.pancakeHold).
+  pancakeHold      String?
   isFeatured       Boolean               @default(false)
   isCombo          Boolean               @default(false)
   ratingAvg        Float                 @default(0) // denormalized từ reviews (cập nhật khi tạo review)
@@ -657,6 +659,10 @@ model Variation {
   /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
   reservedStock Int      @default(0)
   isActive      Boolean  @default(true)
+  /// Lý do đồng bộ Pancake tự tắt biến thể: REMOVED (Pancake xoá / không còn trong danh mục) | NO_PRICE
+  /// (tạo mới mà thiếu giá). NULL = đồng bộ không giữ — isActive=false khi đó là do admin/merchant tắt,
+  /// đồng bộ không được tự bật lại.
+  pancakeHold   String?
   weight        Int?
 
   cartItems          CartItem[]
