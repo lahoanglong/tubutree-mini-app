@@ -37,6 +37,17 @@ const DISCOUNT_BADGE_STYLE: CSSProperties = {
   color: 'var(--color-flash-solid-fg)',
 };
 
+/**
+ * Giá khách thực trả = min(giá flash, giá đang bán), như giỏ hàng và trang sản phẩm. Giá niêm yết hạ sau khi tạo đợt
+ * thì flash không còn rẻ hơn: không hiện % âm hay giá gạch thấp hơn giá bán.
+ */
+function flashDisplay(item: { flashPrice: number; retailPrice: number; salePrice?: number | null }) {
+  const was = item.salePrice ?? item.retailPrice;
+  const price = Math.min(item.flashPrice, was);
+  const pct = was > 0 ? Math.round((1 - price / was) * 100) : 0;
+  return { price, was, pct };
+}
+
 /** Tên SP tối đa 2 dòng; minHeight bằng đúng 2 dòng caption để thẻ 1 dòng và 2 dòng cao bằng nhau. */
 const NAME_CLAMP_STYLE: CSSProperties = {
   display: '-webkit-box',
@@ -92,7 +103,7 @@ export function FlashSale() {
 
       <ScrollRow label={vi.flashSale.sectionName} style={CARD_ROW_STYLE}>
         {items.map((item) => {
-          const pct = item.retailPrice > 0 ? Math.round((1 - item.flashPrice / item.retailPrice) * 100) : 0;
+          const { price, was, pct } = flashDisplay(item);
           const soldPct = item.quota > 0 ? Math.round((item.soldCount / item.quota) * 100) : 0;
           return (
             <div
@@ -116,20 +127,24 @@ export function FlashSale() {
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
                 )}
-                <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
-                  -{pct}%
-                </Badge>
+                {pct > 0 && (
+                  <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
+                    -{pct}%
+                  </Badge>
+                )}
               </div>
               <div style={{ padding: 8 }}>
                 <Text variant="caption" style={NAME_CLAMP_STYLE}>
                   {item.productName}
                 </Text>
                 <div style={{ marginTop: 2 }}>
-                  <PriceTag value={item.flashPrice} flash={{ price: item.flashPrice }} size="sm" />
+                  <PriceTag value={price} flash={{ price }} size="sm" />
                 </div>
-                <Text variant="caption" tone="tertiary" as="div" style={{ textDecoration: 'line-through' }}>
-                  {formatVnd(item.retailPrice)}
-                </Text>
+                {was > price && (
+                  <Text variant="caption" tone="tertiary" as="div" style={{ textDecoration: 'line-through' }}>
+                    {formatVnd(was)}
+                  </Text>
+                )}
                 <div style={{ marginTop: 4 }}>
                   <ProgressBar value={soldPct} max={100} tone="flash" />
                 </div>
@@ -158,7 +173,7 @@ function UpcomingFlashCard({
   onToggleRemind: () => void;
 }) {
   const startsIn = useCountdown(item.startAt);
-  const pct = item.retailPrice > 0 ? Math.round((1 - item.flashPrice / item.retailPrice) * 100) : 0;
+  const { price, pct } = flashDisplay(item);
 
   return (
     <div className="tubu-press" onClick={onOpen} style={CARD_STYLE}>
@@ -171,16 +186,18 @@ function UpcomingFlashCard({
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         )}
-        <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
-          -{pct}%
-        </Badge>
+        {pct > 0 && (
+          <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
+            -{pct}%
+          </Badge>
+        )}
       </div>
       <div style={{ padding: 8 }}>
         <Text variant="caption" style={NAME_CLAMP_STYLE}>
           {item.productName}
         </Text>
         <div style={{ marginTop: 2 }}>
-          <PriceTag value={item.flashPrice} flash={{ price: item.flashPrice }} size="sm" />
+          <PriceTag value={price} flash={{ price }} size="sm" />
         </div>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
           {vi.flashSale.startsIn(startsIn)}

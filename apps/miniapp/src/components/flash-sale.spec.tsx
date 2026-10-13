@@ -195,3 +195,27 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 });
+
+describe('FlashSale — giá hiển thị khớp giá thật (BUYERMINI-12)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
+  });
+
+  it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm, không gạch giá', async () => {
+    mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 85000, retailPrice: 79000 }]);
+    renderFlash();
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByText(/-\s*-?\d+%/)).toBeNull();
+    expect(screen.queryByText('85.000đ')).toBeNull();
+    expect(screen.getAllByText('79.000đ').length).toBeGreaterThan(0);
+  });
+
+  it('có salePrice → % giảm và giá gạch tính theo giá đang bán', async () => {
+    mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 60000, retailPrice: 100000, salePrice: 75000 }]);
+    renderFlash();
+    expect(await screen.findByText('-20%')).toBeInTheDocument();
+    expect(screen.getByText('75.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+  });
+});

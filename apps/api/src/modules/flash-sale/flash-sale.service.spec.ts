@@ -1,3 +1,5 @@
+import 'reflect-metadata';
+import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
 import { FlashSaleService } from './flash-sale.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -49,6 +51,41 @@ describe('FlashSaleService.resolveEffective', () => {
   });
 });
 
+describe('FlashSaleService.resolveEffective — suất còn lại của khách (ENGAGE-4)', () => {
+  const svcWith = (items: unknown[], purchases: unknown[]) => {
+    const purchaseFind = jest.fn().mockResolvedValue(purchases);
+    const prisma = {
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue(items) },
+      flashSalePurchase: { findMany: purchaseFind },
+    } as unknown as PrismaService;
+    return { svc: new FlashSaleService(prisma, config, notifications), purchaseFind };
+  };
+
+  it('có userId → allowance = min(quota − đã bán, perUserLimit − khách đã mua)', async () => {
+    const { svc, purchaseFind } = svcWith(
+      [activeItem({ perUserLimit: 3, quota: 10, soldCount: 3 }), activeItem({ id: 'fi2', variationId: 'v2', perUserLimit: 5, quota: 4, soldCount: 2 })],
+      [{ flashSaleItemId: 'fi1', quantity: 2 }],
+    );
+    const map = await svc.resolveEffective(['v1', 'v2'], NOW, 'u1');
+    expect(purchaseFind).toHaveBeenCalledWith({
+      where: { userId: 'u1', flashSaleItemId: { in: ['fi1', 'fi2'] } },
+      select: { flashSaleItemId: true, quantity: true },
+    });
+    expect(map.get('v1')).toMatchObject({ allowance: 1, perUserLeft: 1, quotaLeft: 7 });
+    expect(map.get('v2')).toMatchObject({ allowance: 2, perUserLeft: 5, quotaLeft: 2 });
+  });
+
+  it('khách đã dùng hết suất → vẫn trả item với allowance 0 (để báo lý do), không có userId → không tra lượt mua', async () => {
+    const { svc } = svcWith([activeItem({ perUserLimit: 1 })], [{ flashSaleItemId: 'fi1', quantity: 1 }]);
+    expect((await svc.resolveEffective(['v1'], NOW, 'u1')).get('v1')).toMatchObject({ allowance: 0 });
+
+    const anon = svcWith([activeItem({ perUserLimit: 1 })], []);
+    const map = await anon.svc.resolveEffective(['v1'], NOW);
+    expect(anon.purchaseFind).not.toHaveBeenCalled();
+    expect(map.get('v1')!.allowance).toBeUndefined();
+  });
+});
+
 describe('FlashSaleService.listActive', () => {
   it('trả item active còn quota kèm giá + endAt', async () => {
     const row = {
@@ -69,6 +106,34 @@ describe('FlashSaleService.listActive', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
     );
+  });
+});
+
+describe('FlashSaleService.listActive / listUpcoming — giá flash không còn thấp hơn giá đang bán (BUYERMINI-12)', () => {
+  const row = (id: string, flashPrice: number, retailPrice: number, salePrice: number | null) => ({
+    id, variationId: `v-${id}`, flashPrice, quota: 10, soldCount: 0,
+    flashSale: { endAt: new Date('2026-07-05T12:00:00Z'), startAt: new Date('2026-07-05T14:00:00Z') },
+    variation: { retailPrice, salePrice, product: { slug: id, name: id, thumbnail: null } },
+    reminders: [],
+  });
+
+  it('listActive bỏ món có flashPrice ≥ giá đang bán (salePrice ?? retailPrice), trả kèm salePrice', async () => {
+    const prisma = {
+      flashSaleItem: {
+        findMany: jest.fn().mockResolvedValue([row('ok', 80000, 100000, null), row('raised', 85000, 79000, null), row('sale', 80000, 100000, 75000), row('saleOk', 70000, 100000, 75000)]),
+      },
+    } as unknown as PrismaService;
+    const list = await new FlashSaleService(prisma, config, notifications).listActive(NOW);
+    expect(list.map((i) => i.itemId)).toEqual(['ok', 'saleOk']);
+    expect(list[1]).toMatchObject({ flashPrice: 70000, retailPrice: 100000, salePrice: 75000 });
+  });
+
+  it('listUpcoming cũng bỏ món đó', async () => {
+    const prisma = {
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([row('ok', 80000, 100000, null), row('raised', 85000, 79000, null)]) },
+    } as unknown as PrismaService;
+    const list = await new FlashSaleService(prisma, config, notifications).listUpcoming('u1', NOW);
+    expect(list.map((i) => i.itemId)).toEqual(['ok']);
   });
 });
 
@@ -213,7 +278,9 @@ describe('FlashSaleService.removeItem', () => {
 
 describe('FlashSaleService.addItem (validate)', () => {
   const base = () => ({
-    flashSale: { findUnique: jest.fn().mockResolvedValue({ id: 's1' }) },
+    flashSale: {
+      findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: new Date('2026-07-05T09:00:00Z'), endAt: new Date('2026-07-05T12:00:00Z') }),
+    },
     variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: null, stock: 10 }) },
     flashSaleItem: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'fi1' }) },
   });
@@ -246,6 +313,26 @@ describe('FlashSaleService.addItem (validate)', () => {
     await expect(new FlashSaleService(prisma, config, notifications).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 }))
       .rejects.toThrow('Sản phẩm đã có trong đợt flash khác.');
   });
+  it('ENGAGE-19: chỉ chặn khi đợt khác của cùng SKU TRÙNG khung giờ với đợt này (không chặn đợt kế tiếp)', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-05T08:00:00Z'));
+    try {
+      const prisma = base() as any;
+      prisma.flashSale.findUnique.mockResolvedValue({
+        id: 's1', startAt: new Date('2026-07-05T20:00:00Z'), endAt: new Date('2026-07-05T21:00:00Z'),
+      });
+      await new FlashSaleService(prisma, config, notifications).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
+      expect(prisma.flashSaleItem.findFirst).toHaveBeenCalledWith({
+        where: {
+          variationId: 'v1',
+          flashSale: { startAt: { lt: new Date('2026-07-05T21:00:00Z') }, endAt: { gt: new Date('2026-07-05T20:00:00Z') } },
+        },
+      });
+      expect(prisma.flashSaleItem.create).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('hợp lệ → tạo item với perUserLimit default', async () => {
     const prisma = base() as any;
     const r = await new FlashSaleService(prisma, config, notifications).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
@@ -333,6 +420,11 @@ describe('FlashSaleService.listUpcoming', () => {
 });
 
 describe('FlashSaleService.notifyStartedFlashSales', () => {
+  it('ENGAGE-19: chạy mỗi phút (trước đây mỗi giờ tròn: sale 20:30 tới 21:00 mới nhắc, sale 20:30–21:00 không ai được nhắc)', () => {
+    const meta = Reflect.getMetadata(SCHEDULE_CRON_OPTIONS, FlashSaleService.prototype.notifyStartedFlashSales);
+    expect(meta).toMatchObject({ cronTime: '* * * * *', timeZone: 'Asia/Ho_Chi_Minh' });
+  });
+
   const now = new Date('2026-07-05T10:00:00Z');
   const reminderRow = (over: Record<string, unknown> = {}) => ({
     id: 'r1', userId: 'u1', notifiedAt: null,

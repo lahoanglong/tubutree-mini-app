@@ -68,6 +68,8 @@ export interface CartLine {
   flashSaleItemId?: string | null;
   flashEndAt?: string | null;
   soldPct?: number | null;
+  /** Có khi số lượng vượt suất giờ vàng khách còn mua được: dòng đang tính giá thường, đây là lý do. */
+  flashLimitNotice?: string | null;
 }
 
 /** Dòng giỏ có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
@@ -307,6 +309,7 @@ export interface FlashSaleActiveItem {
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;
+  salePrice?: number | null;
   soldCount: number;
   quota: number;
   endAt: string;
@@ -322,6 +325,7 @@ export interface UpcomingFlashItem {
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;
+  salePrice?: number | null;
   startAt: string;
   reminded: boolean;
 }

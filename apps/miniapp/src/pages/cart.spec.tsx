@@ -139,3 +139,43 @@ describe('CartPage — vùng chạm >= 44px (C-021)', () => {
     }
   });
 });
+
+describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (ENGAGE-4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('dòng đang chọn có số lượng vượt tồn → nút Thanh toán bị khoá, kèm hướng dẫn giảm số lượng', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 1, total: 150_000 }] }));
+    renderPage();
+    expect(await screen.findByText('Chỉ còn 1 sản phẩm')).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: 'Thanh toán (3)' });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText('Giảm số lượng sản phẩm vượt tồn kho để thanh toán.')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/checkout', expect.anything());
+  });
+
+  it('hết hàng hẳn → báo hết hàng thay vì "Chỉ còn 0 sản phẩm"', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 1, stock: 0 }] }));
+    renderPage();
+    expect(await screen.findByText('Sản phẩm đã hết hàng')).toBeInTheDocument();
+    expect(screen.queryByText('Chỉ còn 0 sản phẩm')).toBeNull();
+  });
+
+  it('đủ tồn → Thanh toán bấm được, không hiện hướng dẫn', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Thanh toán (1)' });
+    expect(btn).not.toBeDisabled();
+    expect(screen.queryByText('Giảm số lượng sản phẩm vượt tồn kho để thanh toán.')).toBeNull();
+  });
+
+  it('dòng vượt suất giờ vàng → hiện lý do tính giá thường do máy chủ trả', async () => {
+    const notice = 'Chỉ còn 1 suất giờ vàng. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.';
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, isFlash: false, flashLimitNotice: notice }] }));
+    renderPage();
+    expect(await screen.findByText(notice)).toBeInTheDocument();
+    expect(screen.getByTestId('flash-limit-notice')).toBeInTheDocument();
+  });
+});

@@ -166,12 +166,14 @@ export default function CartPage() {
   const allSelected = selectedItems.length === summary.items.length;
   const selectedSubtotal = selectedItems.reduce((s, l) => s + l.total, 0);
   const selectedCount = selectedItems.reduce((s, l) => s + l.quantity, 0);
+  // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
+  const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
   const toggleAll = () => {
     haptic('light');
     setDeselected(allSelected ? new Set(summary.items.map((l) => l.id)) : new Set());
   };
   const goCheckout = () => {
-    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 0 || overStockSelected) return;
     // null = cố ý thanh toán toàn giỏ. Luôn ghi nhớ để lần tải lại trang thanh toán không
     // âm thầm chuyển từ "1 món đã chọn" sang "cả giỏ".
     const itemIds = allSelected ? null : selectedItems.map((l) => l.id);
@@ -263,6 +265,7 @@ export default function CartPage() {
           selectedSubtotal={selectedSubtotal}
           selectedCount={selectedCount}
           allSelected={allSelected}
+          overStock={overStockSelected}
           onCheckout={goCheckout}
         />
       )}
@@ -433,7 +436,15 @@ function CartLineRow({
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
             <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
-              {vi.cart.stockLimited(line.stock)}
+              {line.stock > 0 ? vi.cart.stockLimited(line.stock) : vi.cart.outOfStock}
+            </Text>
+          </Box>
+        )}
+        {line.flashLimitNotice && (
+          <Box flex alignItems="flex-start" style={{ gap: 4, marginTop: 2 }}>
+            <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flex: '0 0 auto', marginTop: 2 }} />
+            <Text size="xSmall" data-testid="flash-limit-notice" style={{ color: 'var(--color-text-warning)' }}>
+              {line.flashLimitNotice}
             </Text>
           </Box>
         )}
@@ -551,12 +562,14 @@ function StickySummary({
   selectedSubtotal,
   selectedCount,
   allSelected,
+  overStock,
   onCheckout,
 }: {
   summary: CartSummary;
   selectedSubtotal: number;
   selectedCount: number;
   allSelected: boolean;
+  overStock: boolean;
   onCheckout: () => void;
 }) {
   const threshold = summary.freeshipThreshold;
@@ -610,10 +623,18 @@ function StickySummary({
             value={formatVnd(Math.max(0, selectedSubtotal - discount))}
             emphasis
           />
+          {overStock && (
+            <Box flex alignItems="center" role="status" style={{ gap: 4, marginTop: 4 }}>
+              <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
+              <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+                {vi.cart.overStockBlocked}
+              </Text>
+            </Box>
+          )}
         </>
       }
       primary={
-        <Button fullWidth disabled={selectedCount === 0} onPress={onCheckout}>
+        <Button fullWidth disabled={selectedCount === 0 || overStock} onPress={onCheckout}>
           {vi.cart.checkout(selectedCount)}
         </Button>
       }

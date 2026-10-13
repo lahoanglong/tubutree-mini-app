@@ -101,7 +101,7 @@ describe('CartService guard tồn kho', () => {
       expect.objectContaining({ id: 'ci-off', productName: 'SP off', quantity: 1 }),
     );
     // Giá giờ vàng chỉ tra cho dòng còn bán.
-    expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date));
+    expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date), 'u1');
   });
 
   it('addItem: chặn khi tổng số lượng vượt tồn kho', async () => {
@@ -348,6 +348,63 @@ describe('CartService guard tồn kho', () => {
     expect(l1.isFlash).toBe(true); // vẫn là dòng flash (vẫn tiêu quota)
     expect(l1.flashSaleItemId).toBe('fi1');
     expect(l1.soldPct).toBe(0); // quota=0 → tránh chia 0
+  });
+
+  describe('ENGAGE-4: số lượng vượt suất giờ vàng còn lại của khách → cả dòng tính giá thường, kèm lý do', () => {
+    const cartWith = (quantity: number, flash: Record<string, unknown>) => {
+      const prisma = {
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: 'c1',
+            couponCode: null,
+            items: [
+              {
+                id: 'ci1',
+                variationId: 'v1',
+                quantity,
+                variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 260000, stock: 50, name: 'A', product: { name: 'Mật ong', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+              },
+            ],
+          }),
+        },
+      } as any;
+      const flashSvc = {
+        resolveEffective: jest.fn().mockResolvedValue(
+          new Map([['v1', { flashPrice: 200000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 2, ...flash }]]),
+        ),
+      } as any;
+      return new CartService(prisma, coupons, config, flashSvc, analytics).getCart('u1');
+    };
+
+    it('trong suất (qty 1, còn 1) → giá giờ vàng, không có lý do', async () => {
+      const l = (await cartWith(1, { allowance: 1, perUserLeft: 1, quotaLeft: 1 })).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 200000, isFlash: true, flashSaleItemId: 'fi1', flashLimitNotice: null });
+    });
+
+    it('khách đã mua hết giới hạn/khách → giá thường, không tiêu suất khi đặt', async () => {
+      const c = await cartWith(1, { allowance: 0, perUserLeft: 0, quotaLeft: 1 });
+      expect(c.items[0]).toMatchObject({
+        unitPrice: 260000,
+        total: 260000,
+        isFlash: false,
+        flashSaleItemId: null,
+        flashLimitNotice: 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.',
+      });
+      expect(c.subtotal).toBe(260000);
+    });
+
+    it('qty 3 > suất còn 1 (hết suất chung) → giá thường, báo còn bao nhiêu suất', async () => {
+      const l = (await cartWith(3, { allowance: 1, perUserLeft: 5, quotaLeft: 1 })).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 260000, isFlash: false, flashSaleItemId: null });
+      expect(l.flashLimitNotice).toBe('Chỉ còn 1 suất giờ vàng. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.');
+    });
+
+    it('qty 2 > giới hạn/khách còn 1 → giá thường, báo giới hạn mỗi khách', async () => {
+      const l = (await cartWith(2, { allowance: 1, perUserLeft: 1, quotaLeft: 5 })).items[0]!;
+      expect(l.isFlash).toBe(false);
+      expect(l.flashLimitNotice).toBe('Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 2 sản phẩm với giá thường.');
+    });
   });
 
   it('applyCoupon: validate trên base KHÔNG flash (không phải subtotal đầy đủ)', async () => {
