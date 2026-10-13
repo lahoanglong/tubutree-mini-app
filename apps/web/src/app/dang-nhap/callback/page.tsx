@@ -4,47 +4,64 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { loginFailureMessage, oauthErrorMessage } from '@/lib/login-errors';
+import { loginHref, takeReturnTo } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
+
+interface Failure {
+  message: string;
+  retryHref: string;
+}
 
 function CallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { handleCallback } = useAuth();
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const ran = useRef(false);
 
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
+    // Thất bại thì giữ nơi cần quay lại để "Đăng nhập lại" đưa khách về đúng chỗ sau lần thử kế tiếp.
+    const fail = (message: string, detail?: unknown) => {
+      if (detail !== undefined) console.error('[dang-nhap] đăng nhập thất bại', detail);
+      setFailure({ message, retryHref: loginHref(takeReturnTo()) });
+    };
     const oauthError = params.get('error');
     if (oauthError) {
-      setError(params.get('error_description') || `Zalo từ chối đăng nhập (${oauthError}).`);
+      fail(oauthErrorMessage(oauthError), { error: oauthError, description: params.get('error_description') });
       return;
     }
     const code = params.get('code');
     if (!code) {
-      setError('Thiếu mã đăng nhập từ Zalo.');
+      fail('Zalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.');
       return;
     }
     handleCallback(code, params.get('state'))
-      .then(() => router.replace('/'))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Đăng nhập thất bại.'));
+      .then(() => router.replace(takeReturnTo() ?? '/'))
+      .catch((e) => fail(loginFailureMessage(e), e));
   }, [params, handleCallback, router]);
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 py-10 text-center">
-      {error ? (
+      {failure ? (
         <>
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-danger-bg text-danger-fg shadow-card">
             <AlertCircle className="h-8 w-8" aria-hidden="true" />
           </div>
           <h1 className="mt-4 font-display text-xl font-semibold text-stone-900">Đăng nhập chưa thành công</h1>
           <p role="alert" className={`mt-2 font-medium ${ui.error}`}>
-            {error}
+            {failure.message}
           </p>
-          <a href="/dang-nhap" className={`${ui.btnPrimary} mt-6`}>
-            Thử lại
-          </a>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <a href={failure.retryHref} className={ui.btnPrimary}>
+              Đăng nhập lại
+            </a>
+            <a href="/" className={ui.btnSecondary}>
+              Về trang chủ
+            </a>
+          </div>
         </>
       ) : (
         <>

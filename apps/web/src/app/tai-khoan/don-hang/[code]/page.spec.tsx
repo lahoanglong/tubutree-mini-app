@@ -270,7 +270,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     mocks.auth = { user: null, status: 'anonymous' };
     const { container } = await mount();
     expect(mocks.orderCalls).toEqual([]);
-    expect(container.querySelector('a[href="/dang-nhap"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Ftai-khoan%2Fdon-hang%2FTB-9"]')).not.toBeNull();
     expect(headingProblems(container)).toEqual([]);
   });
 });

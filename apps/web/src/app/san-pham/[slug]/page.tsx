@@ -74,7 +74,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {product.variations.length > 0 && <AddToCart variations={product.variations} />}
+          {product.variations.length > 0 && <AddToCart slug={product.slug} variations={product.variations} />}
         </div>
       </div>
 

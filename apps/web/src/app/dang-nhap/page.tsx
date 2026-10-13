@@ -1,28 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Trees } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
+import { loginFailureMessage } from '@/lib/login-errors';
+import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
-  const { status, startZaloLogin } = useAuth();
+  const params = useSearchParams();
+  const returnTo = safeReturnPath(params.get('returnTo'));
+  const { status, startZaloLogin, zaloLoginConfigured } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // `=== false`: chỉ báo "chưa cấu hình" khi biết chắc; context cũ không có cờ vẫn cho bấm.
+  const unavailable = zaloLoginConfigured === false;
+  const supportQ = useQuery({
+    queryKey: ['public-support'],
+    queryFn: getPublicSupport,
+    staleTime: 5 * 60_000,
+    enabled: unavailable,
+  });
+  const support = supportQ.data ?? DEFAULT_SUPPORT;
 
   useEffect(() => {
-    if (status === 'authenticated') router.replace('/');
-  }, [status, router]);
+    if (status === 'authenticated') router.replace(returnTo ?? '/');
+  }, [status, router, returnTo]);
 
   const onLogin = async () => {
     setError(null);
     setBusy(true);
+    // Ghi (hoặc xoá) trước khi rời trang: callback đọc lại sau vòng chuyển hướng Zalo.
+    rememberReturnTo(returnTo);
     try {
       await startZaloLogin();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không thể đăng nhập.');
+      console.error('[dang-nhap] không bắt đầu được đăng nhập Zalo', e);
+      setError(loginFailureMessage(e));
       setBusy(false);
     }
   };
@@ -37,9 +55,16 @@ export default function LoginPage() {
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
       </p>
 
-      <button type="button" onClick={onLogin} disabled={busy} className={`${ui.btnPrimary} mt-8 w-full`}>
+      <button type="button" onClick={onLogin} disabled={busy || unavailable} className={`${ui.btnPrimary} mt-8 w-full`}>
         {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
       </button>
+
+      {unavailable && (
+        <p role="alert" className={`mt-4 ${ui.error}`}>
+          Đăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline {support.hotline}{' '}
+          để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className={`mt-4 ${ui.error}`}>
@@ -51,5 +76,13 @@ export default function LoginPage() {
         Quay lại trang chủ
       </a>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center text-stone-600">Đang tải…</div>}>
+      <LoginInner />
+    </Suspense>
   );
 }

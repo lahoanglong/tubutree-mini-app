@@ -82,6 +82,18 @@ export interface PublicConfig {
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
+/**
+ * Tồn kho HIỆN TẠI của từng phân loại. Trang chi tiết sản phẩm là bản ISR 5 phút nên tồn kho in sẵn trong HTML có thể
+ * cũ; trình duyệt hỏi lại cái này khi mở trang để nút "Thêm vào giỏ" và giới hạn số lượng theo hàng thật.
+ */
+export async function getProductStock(slug: string): Promise<Record<string, number>> {
+  const p = await apiFetch<{ variations?: { id: string; stock: number }[] }>(
+    `/products/${encodeURIComponent(slug)}`,
+    { auth: false, cache: 'no-store' },
+  );
+  return Object.fromEntries((p.variations ?? []).map((v) => [v.id, v.stock]));
+}
+
 // Cart
 export const getCart = () => apiFetch<CartSummary>('/cart');
 export const addToCart = (variationId: string, quantity: number) =>
