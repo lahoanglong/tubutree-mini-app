@@ -211,9 +211,23 @@ describe('ReviewsService.create', () => {
 
   it('có ảnh → +10 điểm', async () => {
     const prisma = makePrisma();
-    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, images: ['a.jpg'] } as never);
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
+      ...dto,
+      images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'],
+    } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
     expect(ptx.mock.calls[0][0].data.delta).toBe(10);
+  });
+
+  it('MONEY-10: ảnh/video không phải media đã tải lên (lọt qua DTO) → chỉ thưởng như đánh giá chữ (+5)', async () => {
+    const prisma = makePrisma();
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
+      ...dto,
+      images: ['x'],
+      videoUrl: 'https://example.com/not-a-video',
+    } as never);
+    const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
+    expect(ptx.mock.calls[0][0].data.delta).toBe(5);
   });
 
   it('có video (UGC) → +15 điểm + lưu videoUrl', async () => {
@@ -300,7 +314,7 @@ describe('ReviewsService.create', () => {
 
     it.each([
       ['chỉ chữ', {}, 5],
-      ['có ảnh', { images: ['a.jpg'] }, 10],
+      ['có ảnh', { images: ['https://res.cloudinary.com/x/image/upload/v1/a.jpg'] }, 10],
       ['có video', { videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4' }, 15],
     ])('%s → dòng REVIEW:<slug> mang expiresAt do pointsExpiresAt trả; số điểm, reason, refType, refId không đổi', async (_n, extra, points) => {
       const prisma = makePrisma();

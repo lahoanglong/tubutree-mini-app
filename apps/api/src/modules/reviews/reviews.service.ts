@@ -5,6 +5,7 @@ import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
+import { isUploadedReviewMedia } from './review-media';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -122,8 +123,8 @@ export class ReviewsService {
     dto: CreateReviewDto,
   ) {
     // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
-    const hasVideo = !!dto.videoUrl;
-    const hasImages = (dto.images?.length ?? 0) > 0;
+    const hasVideo = isUploadedReviewMedia(dto.videoUrl);
+    const hasImages = (dto.images ?? []).some(isUploadedReviewMedia);
     const rewardPoints = hasVideo ? 15 : hasImages ? 10 : 5;
     // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
     // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.
