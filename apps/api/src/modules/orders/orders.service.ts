@@ -142,6 +142,9 @@ export class OrdersService {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
+    // Huỷ lần hai (double-tap, mạng chậm, bấm lại từ màn cũ): đơn đã huỷ rồi thì trả đúng đơn đó như nhánh `won=false`
+    // bên dưới, không để assertCustomerCancellable báo "đã vào quy trình giao" cho một đơn vừa huỷ thành công.
+    if (order.status === 'CANCELLED') return order;
     this.assertCustomerCancellable(order, userId);
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
