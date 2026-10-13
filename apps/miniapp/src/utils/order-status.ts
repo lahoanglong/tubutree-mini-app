@@ -1,6 +1,8 @@
 /** Màu + thứ tự timeline cho trạng thái đơn (spec §6.4). */
 
 import type { BadgeTone } from '../components/ui/badge';
+import { vi } from '../i18n/vi';
+import { formatNumber } from './format';
 
 /** Cùng nguồn token với Badge's TONE_STYLE (audit A4-08: trước đây map này dùng hex chép tay
  * "gần giống" — SHIPPING `#EAF2FA` gần nhưng KHÁC `--info-bg` thật, CANCELLED `#FAEAEA` tương tự
@@ -38,9 +40,50 @@ export const TIMELINE_STEPS = [
   'DELIVERED',
 ] as const;
 
+/** COD không có bước chờ thanh toán (khách trả khi nhận hàng) nên bỏ bước đó khỏi hành trình. */
+export function timelineStepsFor(paymentMethod?: string | null): readonly string[] {
+  return paymentMethod === 'COD' ? TIMELINE_STEPS.filter((s) => s !== 'PENDING_PAYMENT') : TIMELINE_STEPS;
+}
+
 /** Vị trí hiện tại trên timeline; -1 nếu trạng thái nằm ngoài hành trình chuẩn. */
-export function timelineIndex(status: string): number {
-  return TIMELINE_STEPS.indexOf(status as (typeof TIMELINE_STEPS)[number]);
+export function timelineIndex(status: string, steps: readonly string[] = TIMELINE_STEPS): number {
+  return steps.indexOf(status);
+}
+
+/**
+ * Mốc thời gian đầu trang chi tiết đơn. `createdAt` là giờ ĐẶT; để nó đứng cạnh "Giao thành công" mà không có nhãn
+ * thì khách đọc thành giờ giao. Đơn đã giao có mốc giao thật thì hiện mốc đó.
+ */
+export function orderStamp(o: { status: string; createdAt: string; deliveredAt?: string | null }): { label: string; at: string } {
+  return o.status === 'DELIVERED' && o.deliveredAt
+    ? { label: 'Giao lúc', at: o.deliveredAt }
+    : { label: 'Đặt lúc', at: o.createdAt };
+}
+
+/**
+ * Dòng điểm Xanh của đơn theo trạng thái: chưa giao thì "sẽ nhận", đã giao thì "đã cộng", đã hoàn thì đã thu hồi.
+ * Chỉ nói "khi giao thành công" ở đơn chưa giao.
+ */
+export function orderPointsNote(status: string, pointsEarned: number): { text: string; tone: 'success' | 'muted' } | null {
+  if (pointsEarned <= 0 || status === 'CANCELLED') return null;
+  if (status === 'DELIVERED') return { text: vi.orders.pointsCredited(formatNumber(pointsEarned)), tone: 'success' };
+  if (status === 'RETURNED') return { text: vi.orders.pointsReversed, tone: 'muted' };
+  return { text: vi.checkout.pointsEarn(pointsEarned), tone: 'success' };
+}
+
+/**
+ * Hạn đổi/trả còn mở không — cùng cách tính của API (OrdersService.requestReturn): mốc giao, thiếu thì updatedAt.
+ * Không có mốc nào thì để API quyết định (coi như còn hạn).
+ */
+export function returnWindowState(
+  o: { deliveredAt?: string | null; updatedAt?: string | null },
+  windowDays: number,
+  now: number = Date.now(),
+): { open: boolean; daysLeft: number } {
+  const base = o.deliveredAt ?? o.updatedAt;
+  if (!base) return { open: true, daysLeft: windowDays };
+  const left = (new Date(base).getTime() + windowDays * 864e5 - now) / 864e5;
+  return left > 0 ? { open: true, daysLeft: Math.ceil(left) } : { open: false, daysLeft: 0 };
 }
 
 /** Trạng thái hiện nút "Mua lại" — cùng điều kiện `isDone` của chi tiết đơn (order-detail.tsx). */

@@ -277,7 +277,9 @@ export const vi = {
     viewAllOrders: 'Xem tất cả đơn',
     pointsUsed: 'Điểm Xanh đã dùng',
     reviewItem: 'Đánh giá sản phẩm này',
-    support: 'Cần hỗ trợ? Nhắn Tubu qua Zalo OA',
+    support: 'Cần hỗ trợ?',
+    pointsCredited: (n: string) => `Đã cộng +${n} Điểm Xanh vào tài khoản`,
+    pointsReversed: 'Điểm Xanh của đơn này đã được thu hồi',
   },
 
   nav: {

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   fetchOrder: vi.fn(),
   fetchMyReturns: vi.fn(),
+  getPublicConfig: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -22,6 +23,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchOrder: mocks.fetchOrder,
   fetchOrders: vi.fn(),
+  getPublicConfig: mocks.getPublicConfig,
   fetchMyReturns: mocks.fetchMyReturns,
   cancelOrder: vi.fn(),
   requestReturn: vi.fn(),
@@ -152,6 +154,77 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
   });
 });
 
+describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, hỗ trợ (BUYERMINI-14/15/16/19)', () => {
+  const NOW = Date.now();
+  const daysAgo = (d: number) => new Date(NOW - d * 864e5).toISOString();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn đang giao: "Nhận +N khi giao thành công"; đơn đã hoàn: điểm đã thu hồi', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', pointsEarned: 35 });
+    const first = renderPage();
+    expect(await screen.findByText('Nhận +35 Điểm Xanh khi giao thành công')).toBeInTheDocument();
+    first.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'RETURNED', pointsEarned: 35 });
+    renderPage();
+    expect(await screen.findByText('Điểm Xanh của đơn này đã được thu hồi')).toBeInTheDocument();
+    expect(screen.queryByText(/khi giao thành công/)).toBeNull();
+  });
+
+  it('đơn đã giao ghi "Giao lúc" theo mốc giao; đơn khác ghi "Đặt lúc" theo giờ tạo đơn', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: new Date(2026, 9, 5, 9, 30).toISOString() });
+    const first = renderPage();
+    expect(await screen.findByText('09:30 05/10/2026')).toBeInTheDocument();
+    expect(screen.getByText(/Giao lúc/)).toBeInTheDocument();
+    first.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByText(/Đặt lúc/)).toBeInTheDocument();
+  });
+
+  it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'COD' });
+    const cod = renderPage();
+    await screen.findByText('Hành trình đơn hàng');
+    expect(screen.queryByText('Chờ thanh toán')).toBeNull();
+    expect(screen.getByText('Đã xác nhận')).toBeInTheDocument();
+    cod.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'BANK_TRANSFER' });
+    renderPage();
+    expect(await screen.findByText('Chờ thanh toán')).toBeInTheDocument();
+  });
+
+  it('trong hạn đổi/trả: có nút, icon nằm cùng hàng chữ và câu hướng dẫn theo số ngày cấu hình', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 14 });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Yêu cầu đổi\/trả/ });
+    expect(btn.querySelector('svg')).not.toBeNull();
+    fireEvent.click(btn);
+    expect(await screen.findByText(/Trong 14 ngày từ khi nhận hàng/)).toBeInTheDocument();
+  });
+
+  it('quá hạn đổi/trả: ẩn nút, nói rõ đã quá hạn theo số ngày cấu hình', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
+    renderPage();
+    expect(await screen.findByText(/Đã quá hạn đổi\/trả \(7 ngày/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Yêu cầu đổi\/trả/ })).toBeNull();
+  });
+
+  it('chưa gắn OA vẫn có đường liên hệ thật: gọi hotline', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0899 149 229', email: null, zaloOaName: null } });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
+  });
+});
+
 // Cùng dải với scripts/uiux/static-scan.mjs, thêm ⌛ ⏳ ⭐.
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿\u231A\u231B\u23E9-\u23FF\u2B50]/u;
 
@@ -162,12 +235,12 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
     mocks.fetchMyReturns.mockResolvedValue([]);
   });
 
-  it('lối vào đánh giá và dòng điểm Xanh có icon SVG, không có emoji; chữ giữ nguyên', async () => {
+  it('lối vào đánh giá và dòng điểm Xanh (đơn đã giao) có icon SVG, không có emoji; chữ giữ nguyên', async () => {
     const { container } = renderPage();
     const review = await screen.findByText(/Đánh giá sản phẩm này/);
     expect(review.querySelector('svg')).not.toBeNull();
     expect(review.className).toContain('tubu-hit-44');
-    const points = screen.getByText(/Nhận \+120 Điểm Xanh khi giao thành công/);
+    const points = screen.getByText(/Đã cộng \+120 Điểm Xanh vào tài khoản/);
     expect(points.querySelector('svg')).not.toBeNull();
     expect(EMOJI.test(container.textContent ?? '')).toBe(false);
   });

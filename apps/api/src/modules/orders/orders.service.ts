@@ -221,7 +221,7 @@ export class OrdersService {
   ) {
     if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
       throw new BadRequestException(
-        'Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+        'Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.',
       );
     }
     // Tiền của đơn lên hộ là của khách cuối: để CTV tự huỷ sau khi khách đã trả thì CTV quyết định
@@ -235,7 +235,7 @@ export class OrdersService {
     // cho khách tự huỷ nữa (huỷ vận đơn bằng API không còn được, hàng đã rời kho).
     if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
       throw new BadRequestException(
-        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ Zalo OA để được hỗ trợ.',
+        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.',
       );
     }
   }
