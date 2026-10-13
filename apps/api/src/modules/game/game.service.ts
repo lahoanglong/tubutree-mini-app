@@ -10,6 +10,7 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
+import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -54,15 +55,7 @@ export class GameService {
 
   // ── Profile ────────────────────────────────────────
   async ensureProfile(userId: string) {
-    const target = await this.config.get<number>('game.tree_default_target', 600);
-    const existing = await this.prisma.gameProfile.findUnique({ where: { userId } });
-    if (existing) return existing;
-    return this.prisma.gameProfile.create({
-      data: {
-        userId,
-        ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
-      },
-    });
+    return ensureGameProfile(this.prisma, this.config, userId);
   }
 
   async getProfile(userId: string) {

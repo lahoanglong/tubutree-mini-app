@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { SeasonPassService } from './season-pass.service';
-import { DEFAULT_TREE_TYPE } from './game.constants';
+import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
 
@@ -24,13 +24,8 @@ export class GameEconomyService {
     return new Date(Date.parse(key) - 7 * 3600 * 1000);
   }
 
-  private async ensure(userId: string) {
-    const target = await this.config.get<number>('game.tree_default_target', 600);
-    const existing = await this.prisma.gameProfile.findUnique({ where: { userId } });
-    if (existing) return existing;
-    return this.prisma.gameProfile.create({
-      data: { userId, ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object },
-    });
+  private ensure(userId: string) {
+    return ensureGameProfile(this.prisma, this.config, userId);
   }
 
   async checkIn(userId: string) {
