@@ -9,6 +9,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from '../../modules/auth/auth.controller';
 import { AuthService } from '../../modules/auth/auth.service';
 import { JwtStrategy } from '../../modules/auth/strategies/jwt.strategy';
+import { SessionStateService } from '../../modules/auth/session-state.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
@@ -71,6 +72,7 @@ async function bootApp(bypassToken: string): Promise<{ app: INestApplication; ba
         },
       },
       { provide: PrismaService, useValue: {} },
+      { provide: SessionStateService, useValue: { get: async () => ({ role: 'CUSTOMER', isBlocked: false }) } },
       { provide: APP_GUARD, useClass: JwtAuthGuard },
       { provide: APP_GUARD, useClass: AppThrottlerGuard },
     ],

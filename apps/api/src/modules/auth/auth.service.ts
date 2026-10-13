@@ -9,6 +9,7 @@ import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { roleClaims } from './session-state.service';
 
 @Injectable()
 export class AuthService {
@@ -609,8 +610,7 @@ export class AuthService {
   private async issueTokens(user: User): Promise<LoginResponse> {
     // Chặn TẬP TRUNG ở đây (dùng chung cho login guest/zalo-mini-app/zalo-oauth VÀ refresh):
     // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
-    // hoàn toàn việc khoá. Access token đang có (TTL ngắn) vẫn còn hiệu lực tới khi hết hạn —
-    // đây là giới hạn chấp nhận được của JWT stateless, không phải bug.
+    // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
     if (user.isBlocked) {
       throw new UnauthorizedException('Tài khoản đã bị khoá.');
     }
@@ -622,8 +622,7 @@ export class AuthService {
       sub: user.id,
       role: user.role,
       zaloId: user.zaloId ?? undefined,
-      affiliateEnabled: user.role === 'AFFILIATE' || user.role === 'ADMIN',
-      dealerEnabled: user.role === 'DEALER',
+      ...roleClaims(user.role),
     };
 
     const accessToken = await this.jwt.signAsync(payload, {

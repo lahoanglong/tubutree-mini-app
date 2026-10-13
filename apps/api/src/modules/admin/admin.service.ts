@@ -310,6 +310,7 @@ export class AdminService {
         select: {
           id: true, zaloId: true, phone: true, fullName: true, role: true,
           pointsBalance: true, pointsConvertedBalance: true, walletBalance: true, tierId: true, createdAt: true,
+          isBlocked: true, blockedAt: true, blockedReason: true,
         },
       }),
       this.prisma.user.count({ where }),

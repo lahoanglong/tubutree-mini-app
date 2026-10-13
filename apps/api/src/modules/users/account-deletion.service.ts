@@ -49,8 +49,8 @@ const vnd = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ
  * Cố ý GIỮ: lệnh rút (Payout.bankInfo) và hoàn tiền đơn (OrderCustomerRefund) vì là chứng từ chi tiền
  * phải đối soát được; MST/tên công ty/địa chỉ trong yêu cầu hoá đơn vì hoá đơn VAT đã/sẽ xuất phải lưu
  * theo luật kế toán (chỉ bỏ email liên hệ).
- * Access token đã cấp vẫn dùng được tới hết hạn (JWT_ACCESS_TTL, mặc định 15 phút) vì JwtStrategy không
- * tra DB; refresh token bị thu hồi và isBlocked chặn cấp token mới.
+ * isBlocked làm JwtStrategy từ chối access token đã cấp (trễ tối đa SessionStateService.TTL_MS) và chặn
+ * cấp token mới; refresh token bị thu hồi.
  */
 @Injectable()
 export class AccountDeletionService {

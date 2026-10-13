@@ -49,6 +49,12 @@ export class RbacService {
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN') {
     const normalized = phone.trim();
     return this.prisma.$transaction(async (tx) => {
+      // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
+      // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
+      const user = await tx.user.findUnique({ where: { phone: normalized } });
+      if (user && user.id === adminId) {
+        throw new BadRequestException('Không thể tự cấp quyền cho chính mình — nhờ một quản trị viên khác thực hiện.');
+      }
       const existing = await tx.roleGrant.findFirst({
         where: { phone: normalized, role, revokedAt: null },
         select: { id: true },
@@ -67,7 +73,6 @@ export class RbacService {
         }
       }
       // Áp ngay nếu user đã tồn tại
-      const user = await tx.user.findUnique({ where: { phone: normalized } });
       let applied = false;
       if (user) {
         const updated = await this.applyGrants(user, tx);
