@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from './client-api';
+import type { GomdonAlertView } from './recycling';
 
 export interface DealerApp {
   id: string;
@@ -92,8 +93,10 @@ export interface AdminOrder {
   /** Mã Gomdon "1".."12" hoặc trạng thái nội bộ (AWAITING_PAYMENT/CREATING/NEEDS_MANUAL_CHECK/FAILED/NOT_CONFIGURED). */
   gomdonStatus?: string | null;
   gomdonStatusAt?: string | null;
-  /** CANCELLED | FAILED | TOO_LATE | NOT_NEEDED — kết quả huỷ vận đơn khi đơn bị huỷ. */
+  /** CANCELLED | FAILED | TOO_LATE | NOT_NEEDED | MANUAL_HANDLED — kết quả huỷ vận đơn khi đơn bị huỷ. */
   gomdonCancelStatus?: string | null;
+  /** Báo động Gomdon chưa xử lý (mới nhất trước, tối đa 10). */
+  gomdonAlerts?: GomdonAlertView[];
   deliveredAt?: string | null;
   user?: {
     id: string;
@@ -437,8 +440,29 @@ export interface GomdonIntegrationStatus {
   webhookSecretSet: boolean;
   recyclingToggle: boolean;
   recyclingEnabled: boolean;
+  /** Lần gọi Gomdon gần nhất của API (từ lúc khởi động). Bản API cũ không có. */
+  connection?: GomdonConnectionHealth;
+}
+export interface GomdonConnectionHealth {
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  /** Gomdon từ chối tài khoản → API tự ẩn lựa chọn thu gom ở checkout. */
+  credentialsRejected: boolean;
+  credentialsRejectedAt: string | null;
 }
 export const getGomdonStatus = () => apiFetch<GomdonIntegrationStatus>('/admin/gomdon/status');
+export interface GomdonConnectionCheck {
+  ok: boolean;
+  message: string;
+  checkedAt: string;
+}
+/** Đăng nhập Gomdon thật để kiểm tra tài khoản (không tạo đơn). */
+export const checkGomdonConnection = () =>
+  apiFetch<GomdonConnectionCheck>('/admin/gomdon/check-connection', { method: 'POST' });
+/** Đánh dấu một báo động Gomdon đã xử lý. */
+export const resolveGomdonAlert = (alertId: string) =>
+  apiFetch<{ ok: true }>(`/admin/gomdon/alerts/${encodeURIComponent(alertId)}/resolve`, { method: 'POST' });
 export const updateOrderStatus = (id: string, status: string, note?: string) =>
   apiFetch<AdminOrder>(`/admin/orders/${id}/status`, {
     method: 'PUT',

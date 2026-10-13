@@ -245,3 +245,33 @@ describe('recyclingPickupView — lời hứa trung thực cho khách (giống m
     expect(recyclingPickupView({ status: 'CONFIRMED', paymentMethod: 'COD', gomdonStatus: 'FAILED' }).title).toBe('CSKH sẽ liên hệ hẹn thu gom');
   });
 });
+
+describe('UAT GOMDON-2/9: báo động đang mở và huỷ vận đơn đã xử lý tay', () => {
+  const alert = { id: 'a1', message: 'Gomdon CÓ vận đơn BE1 — kiểm tra ngay tránh giao trùng 2 vận đơn.', createdAt: '2026-10-13T00:00:00.000Z' };
+
+  it('báo động chưa xử lý → luôn trong hàng đợi, kể cả vận đơn trông bình thường / hàng đã rời kho / đã xử lý tay', () => {
+    expect(needsRecyclingAttention({ ...base, gomdonStatus: '1', gomdonAlerts: [alert] })).toBe(true);
+    expect(needsRecyclingAttention({ ...base, status: 'SHIPPING', gomdonStatus: 'FAILED', gomdonAlerts: [alert] })).toBe(true);
+    expect(needsRecyclingAttention({ ...base, status: 'DELIVERED', gomdonStatus: '7', gomdonAlerts: [alert] })).toBe(true);
+    expect(needsRecyclingAttention({ ...base, gomdonStatus: 'MANUAL_HANDLED', gomdonAlerts: [alert] })).toBe(true);
+    expect(needsRecyclingAttention({ ...base, gomdonStatus: '1', gomdonAlerts: [] })).toBe(false);
+    expect(needsRecyclingAttention({ ...base, hasRecyclingPickup: false, gomdonAlerts: [alert] })).toBe(false);
+  });
+
+  it('huỷ vận đơn đã xử lý tay (MANUAL_HANDLED) → nhãn trung tính, rời hàng đợi, không còn nút huỷ', () => {
+    expect(gomdonCancelLabel('MANUAL_HANDLED')).toEqual({ label: 'Đã xử lý huỷ tay', tone: 'neutral' });
+    const o = { ...base, status: 'CANCELLED', gomdonStatus: '1', gomdonOrderId: 'g1', gomdonCancelStatus: 'MANUAL_HANDLED' };
+    expect(needsRecyclingAttention(o)).toBe(false);
+    expect(gomdonAdminActions(o).canCancel).toBe(false);
+    expect(gomdonAdminActions(o).canMarkHandled).toBe(false);
+  });
+
+  it('đơn đã huỷ mà huỷ vận đơn lỗi / quá muộn → cho "Đã xử lý tay" (CSKH đã huỷ trên cổng Gomdon)', () => {
+    for (const c of ['FAILED', 'TOO_LATE']) {
+      const o = { ...base, status: 'CANCELLED', gomdonStatus: '1', gomdonOrderId: 'g1', gomdonCancelStatus: c };
+      expect(gomdonAdminActions(o).canMarkHandled).toBe(true);
+    }
+    expect(gomdonAdminActions({ ...base, status: 'RETURNED', gomdonStatus: '3', gomdonCancelStatus: 'TOO_LATE' }).canMarkHandled).toBe(true);
+    expect(gomdonAdminActions({ ...base, status: 'CANCELLED', gomdonStatus: '1', gomdonCancelStatus: 'CANCELLED' }).canMarkHandled).toBe(false);
+  });
+});
