@@ -99,6 +99,8 @@ export interface ProductDetail {
   salePrice: number | null;
   certifications: string[];
   variations: VariationDetail[];
+  ratingAvg?: number;
+  reviewCount?: number;
 }
 interface Page<T> {
   data: T[];
