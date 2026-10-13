@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { apiFetch, hasSessionMarker, setSessionMarker, clearSessionMarker, setAccessToken } from './client-api';
+import {
+  apiFetch,
+  hasSessionMarker,
+  setSessionMarker,
+  clearSessionMarker,
+  setAccessToken,
+  refreshSession,
+  restoreSession,
+} from './client-api';
 
 function jsonRes(status: number, body: unknown = {}): Response {
   return {
@@ -96,5 +104,74 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
       .mockResolvedValueOnce(jsonRes(401, { message: 'token chết' }));
     await expect(apiFetch('/me')).rejects.toThrow();
     expect(hasSessionMarker()).toBe(false);
+  });
+
+  // BUYERWEB-2: trước đây MỌI lỗi refresh (mất mạng, 502/503 khi API khởi động lại, 429) đều xoá cờ
+  // phiên — cookie refresh vẫn sống nhưng web không bao giờ thử lại, khách phải đăng nhập Zalo lần nữa.
+  it.each([
+    ['mất mạng', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['API đang khởi động lại (503)', () => Promise.resolve(jsonRes(503, { message: 'unavailable' }))],
+    ['bị giới hạn tốc độ (429)', () => Promise.resolve(jsonRes(429, { message: 'too many' }))],
+  ])('refresh lỗi tạm thời (%s) → GIỮ cờ phiên', async (_label, refreshRes) => {
+    setSessionMarker();
+    fetchMock.mockResolvedValueOnce(jsonRes(401, { message: 'hết hạn' })).mockImplementationOnce(refreshRes);
+    await expect(apiFetch('/me')).rejects.toThrow();
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it.each([400, 401, 403])('refresh trả %i (phiên chết thật) → xoá cờ phiên', async (status) => {
+    setSessionMarker();
+    fetchMock.mockResolvedValueOnce(jsonRes(status, { message: 'chết' }));
+    await expect(refreshSession()).resolves.toEqual({ kind: 'dead' });
+    expect(hasSessionMarker()).toBe(false);
+  });
+
+  // BUYERWEB-3: hai tab cùng refresh một cookie từng bị BE coi là token bị đánh cắp. Khoá Web Locks
+  // xếp hàng các tab: tab sau gửi cookie tab trước vừa xoay, không còn hai request cùng một token.
+  it('refresh chạy trong khoá Web Locks dùng chung giữa các tab', async () => {
+    setSessionMarker();
+    const request = vi.fn((_name: string, cb: () => Promise<unknown>) => cb());
+    vi.stubGlobal('navigator', { locks: { request } });
+    fetchMock.mockResolvedValueOnce(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    await expect(refreshSession()).resolves.toMatchObject({ kind: 'ok' });
+    expect(request).toHaveBeenCalledWith('tubu_web_refresh', expect.any(Function));
+  });
+
+  it('nhiều lời gọi refresh trong cùng một tab → chỉ một request', async () => {
+    setSessionMarker();
+    let resolve!: (r: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolve = r)));
+    const all = Promise.all([refreshSession(), refreshSession(), refreshSession()]);
+    resolve(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    const out = await all;
+    expect(out.every((o) => o.kind === 'ok')).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('khôi phục phiên lúc mở trang: lỗi tạm thời thì thử lại có giãn cách rồi vào được', async () => {
+    setSessionMarker();
+    const sleep = vi.fn(async () => undefined);
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(503))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    await expect(restoreSession([1000, 3000], sleep)).resolves.toMatchObject({ kind: 'ok', data: { user: { id: 'u1' } } });
+    expect(sleep.mock.calls).toEqual([[1000], [3000]]);
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('khôi phục phiên: hết lượt thử vẫn lỗi tạm thời → trả transient, GIỮ cờ để lần sau thử tiếp', async () => {
+    setSessionMarker();
+    fetchMock.mockResolvedValue(jsonRes(502));
+    await expect(restoreSession([1, 1], async () => undefined)).resolves.toEqual({ kind: 'transient' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('khôi phục phiên: 401 → dừng ngay, không thử lại', async () => {
+    setSessionMarker();
+    fetchMock.mockResolvedValue(jsonRes(401));
+    await expect(restoreSession([1, 1], async () => undefined)).resolves.toEqual({ kind: 'dead' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

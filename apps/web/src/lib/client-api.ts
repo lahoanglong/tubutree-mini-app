@@ -16,7 +16,6 @@ const BASE =
 const SESSION_MARKER = 'tubu_web_session';
 
 let accessToken: string | null = null;
-let refreshPromise: Promise<string | null> | null = null;
 
 export function setAccessToken(t: string | null): void {
   accessToken = t;
@@ -44,7 +43,7 @@ export function setSessionMarker(): void {
   }
 }
 
-/** Xoá cờ khi phiên chết (refresh 401) hoặc đăng xuất — chặn vòng lặp thử lại vô hạn. */
+/** Xoá cờ khi phiên chết (refresh 400/401/403) hoặc đăng xuất — chặn vòng lặp thử lại vô hạn. */
 export function clearSessionMarker(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -57,25 +56,80 @@ export function clearSessionMarker(): void {
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */
 const WEB_CLIENT_HEADER = { 'x-client': 'web' } as const;
 
-async function rawRefresh(): Promise<string | null> {
-  if (!hasSessionMarker()) return null;
+/** Kết quả một lượt refresh: 'dead' = phiên chết thật (đã xoá cờ); 'transient' = lỗi tạm, cờ còn nguyên. */
+export type RefreshOutcome =
+  | { kind: 'ok'; data: { accessToken: string; user?: unknown } }
+  | { kind: 'dead' }
+  | { kind: 'transient' };
+
+// Khoá Web Locks dùng chung mọi tab cùng origin: các tab mở cùng lúc (khôi phục trình duyệt, mở nhiều
+// sản phẩm ở tab mới) refresh lần lượt, tab sau gửi cookie tab trước vừa xoay thay vì cùng một token.
+const REFRESH_LOCK = 'tubu_web_refresh';
+
+function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  if (!locks || typeof locks.request !== 'function') return fn();
+  return locks.request(REFRESH_LOCK, fn) as Promise<T>;
+}
+
+async function doRefresh(): Promise<RefreshOutcome> {
+  let res: Response;
   try {
-    const res = await fetch(`${BASE}/auth/refresh`, {
+    res = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...WEB_CLIENT_HEADER },
       body: '{}',
     });
-    if (!res.ok) throw new Error('refresh failed');
-    const data = (await res.json()) as { accessToken: string };
-    accessToken = data.accessToken;
-    setSessionMarker();
-    return data.accessToken;
   } catch {
+    return { kind: 'transient' };
+  }
+  // 400 = không còn cookie (BE đã xoá), 401/403 = token chết/bị thu hồi/tài khoản bị khoá. Mất mạng, 5xx,
+  // 429 thì cookie vẫn có thể còn sống: giữ cờ để lần sau còn khôi phục được.
+  if (res.status === 400 || res.status === 401 || res.status === 403) {
     accessToken = null;
     clearSessionMarker();
-    return null;
+    return { kind: 'dead' };
   }
+  if (!res.ok) return { kind: 'transient' };
+  try {
+    const data = (await res.json()) as { accessToken: string; user?: unknown };
+    accessToken = data.accessToken;
+    setSessionMarker();
+    return { kind: 'ok', data };
+  } catch {
+    return { kind: 'transient' };
+  }
+}
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/** Một lượt refresh bằng cookie, gộp các lời gọi trùng trong tab và xếp hàng giữa các tab. */
+export function refreshSession(): Promise<RefreshOutcome> {
+  if (!hasSessionMarker()) return Promise.resolve({ kind: 'dead' });
+  refreshInFlight ??= withRefreshLock(doRefresh).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Khôi phục phiên lúc mở trang: lỗi tạm thời thì thử lại sau từng khoảng trong `retryDelays`. */
+export async function restoreSession(
+  retryDelays: readonly number[] = [1000, 3000],
+  sleep: (ms: number) => Promise<void> = sleepMs,
+): Promise<RefreshOutcome> {
+  for (let attempt = 0; ; attempt++) {
+    const out = await refreshSession();
+    if (out.kind !== 'transient' || attempt >= retryDelays.length) return out;
+    await sleep(retryDelays[attempt]!);
+  }
+}
+
+async function rawRefresh(): Promise<string | null> {
+  const out = await refreshSession();
+  return out.kind === 'ok' ? out.data.accessToken : null;
 }
 
 export class ApiError extends Error {
@@ -126,10 +180,7 @@ export async function apiFetch<T>(
   // dùng, hết hạn) sẽ vô tình refresh + retry bằng phiên khác đang lưu trong cookie, âm thầm
   // đổi session hiện tại thay vì trả lỗi 401 gốc.
   if (res.status === 401 && !_retried && opts.auth !== false && hasSessionMarker()) {
-    refreshPromise ??= rawRefresh().finally(() => {
-      refreshPromise = null;
-    });
-    const newToken = await refreshPromise;
+    const newToken = await rawRefresh();
     if (newToken) return apiFetch<T>(path, opts, true);
   }
 
