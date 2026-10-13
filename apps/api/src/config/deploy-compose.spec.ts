@@ -13,7 +13,7 @@ function services(compose: string): Record<string, string> {
   const re = /^ {2}([a-z][\w-]*):\s*$/gm;
   const heads = [...block.matchAll(re)];
   heads.forEach((m, i) => {
-    out[m[1]] = block.slice(m.index, heads[i + 1]?.index ?? block.length);
+    out[m[1] ?? ''] = block.slice(m.index, heads[i + 1]?.index ?? block.length);
   });
   return out;
 }
@@ -27,7 +27,7 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
   });
 
   it('Redis chạy maxmemory-policy noeviction (BullMQ mất job âm thầm nếu Redis tự xoá key)', () => {
-    const command = /\n {4}command: (.*)\n/.exec(svc.redis)?.[1] ?? '';
+    const command = /\n {4}command: (.*)\n/.exec(svc.redis ?? '')?.[1] ?? '';
     expect(command).toMatch(/'--maxmemory-policy',\s*'noeviction'/);
     expect(command).not.toMatch(/allkeys-|volatile-/);
   });

@@ -35,5 +35,7 @@ COPY --from=builder /app ./
 WORKDIR /app/apps/api
 EXPOSE 3001
 
-# Áp migration (idempotent) rồi khởi động API.
+# Áp migration (idempotent) rồi khởi động API. Deploy chuẩn (tools/deploy/deploy.sh) đã migrate
+# bằng image mới trước khi thay container, nên ở đây thường là "No pending migrations"; giữ lại làm
+# lưới an toàn khi container được dựng theo đường khác (restore DB cũ, chạy tay `up -d`).
 CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]

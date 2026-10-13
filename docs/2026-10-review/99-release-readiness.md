@@ -216,8 +216,9 @@ Quy trình `cb92dc8` đã dùng: `git bundle` lên VPS, `pg_dump` backup trướ
 
 **7.2 Deploy**
 1. Đưa mã lên VPS (`git bundle`, `git merge --ff-only`).
-2. **Chạy migration thành bước riêng**: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm exec prisma migrate deploy`. Lỗi thì dừng ở đây; container cũ vẫn đang chạy.
-3. `docker compose -f docker-compose.vietnix.yml up -d --build` cho API rồi web, cách nhau không quá vài phút.
+2. **Build, migrate bằng image mới, rồi mới thay container**: `bash tools/deploy/deploy.sh` (mặc định `docker-compose.vietnix.yml`). Script chạy `build api web` → `run --rm --no-deps api pnpm exec prisma migrate deploy` → `up -d --no-build api` (chờ healthy) → `up -d --no-build web`. Migration lỗi thì script dừng ở bước migrate; container cũ vẫn đang chạy.
+   Không chạy `run --rm ... migrate deploy` **trước** khi build: `docker compose run` dùng image đang có, tức thư mục migrations của bản CŨ, nên luôn báo "No pending migrations" và migration mới chỉ chạy trong CMD của container mới sau khi container cũ đã bị thay (bản cũ của bước này mắc đúng lỗi đó, UAT PLATFORM-6).
+3. (Gộp vào bước 2.) Web lên ngay sau API, cách nhau không quá vài phút.
 4. Smoke test: `/api/health`, `/api/config/public` (có hotline/email), đăng nhập, `POST /checkout/quote` có điểm hai lô, `GET /admin/customer-refunds`, log khởi động của các cron.
 5. Miniapp: `zmp deploy -t -e` lên kênh test, quét QR UAT trên Zalo thật. Chỉ nộp production sau UAT.
 
