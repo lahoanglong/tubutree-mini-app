@@ -94,6 +94,9 @@ export interface AdminOrder {
   gomdonStatusAt?: string | null;
   /** CANCELLED | FAILED | TOO_LATE | NOT_NEEDED — kết quả huỷ vận đơn khi đơn bị huỷ. */
   gomdonCancelStatus?: string | null;
+  /** Lý do đơn nằm trong hàng đợi "Cần xử lý Pancake" (webhook mâu thuẫn / bị chặn); null = không cần xử lý. */
+  pancakeAttention?: string | null;
+  pancakeAttentionAt?: string | null;
   deliveredAt?: string | null;
   user?: {
     id: string;
@@ -277,6 +280,8 @@ export const getDashboardStats = () =>
 export type RecyclingFilter = 'attention' | 'all';
 /** pending = đơn VAT chưa xuất xong (REQUESTED/FAILED); issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
 export type InvoiceFilter = 'pending' | 'issued' | 'all';
+/** attention = hàng đợi "Cần xử lý Pancake". */
+export type PancakeFilter = 'attention';
 export const listOrders = (
   page = 1,
   status?: string,
@@ -284,11 +289,12 @@ export const listOrders = (
   recycling?: RecyclingFilter,
   limit = 20,
   invoice?: InvoiceFilter,
+  pancake?: PancakeFilter,
 ) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }${invoice ? `&invoice=${invoice}` : ''}`,
+    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}`,
   );
 /** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
 export const countInvoicePending = () =>
@@ -328,6 +334,20 @@ export const getOrderStatusHistory = (orderId: string) =>
 /** Số đơn trong hàng đợi "Cần xử lý thu gom" (đọc meta.total, không tải danh sách). */
 export const countRecyclingAttention = () =>
   listOrders(1, undefined, undefined, 'attention', 1).then((r) => r.meta.total);
+
+/** Số đơn trong hàng đợi "Cần xử lý Pancake" (đọc meta.total, không tải danh sách). */
+export const countPancakeAttention = () =>
+  listOrders(1, undefined, undefined, undefined, 1, undefined, 'attention').then((r) => r.meta.total);
+/** Trùng @MaxLength(500) của ResolvePancakeAttentionDto. */
+export const PANCAKE_RESOLVE_NOTE_MAX = 500;
+/** POST /admin/orders/:id/pancake-attention/resolve — đơn rời hàng đợi "Cần xử lý Pancake". Ghi chú rỗng → body {}. */
+export const resolvePancakeAttention = (orderId: string, note: string) => {
+  const trimmed = note.trim().slice(0, PANCAKE_RESOLVE_NOTE_MAX);
+  return apiFetch<{ ok: boolean; message: string }>(
+    `/admin/orders/${encodeURIComponent(orderId)}/pancake-attention/resolve`,
+    { method: 'POST', body: trimmed ? { note: trimmed } : {} },
+  );
+};
 
 // ── Vận đơn thu gom Gomdon (thao tác admin) ──
 export interface GomdonActionResult {
