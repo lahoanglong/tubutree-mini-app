@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FaqService } from '../faq/faq.service';
 import { LlmClient, type ChatMessage } from './llm.client';
+import { productQueryTokens, rankProducts } from './product-match';
 
 export interface ProductSuggestion {
   id: string;
@@ -20,6 +21,9 @@ interface FaqContext {
   answer: string;
 }
 
+const MAX_SUGGESTIONS = 5;
+// Ứng viên lấy từ DB trước khi xếp hạng: đủ rộng để sản phẩm khớp nhiều từ nhất không bị cắt bởi thứ tự nổi bật.
+const SUGGEST_CANDIDATES = 100;
 const MAX_HISTORY = 6;
 // Chặn phình token: chỉ nạp tối đa 20 FAQ (đã sắp theo sortOrder) vào system prompt.
 const MAX_FAQ_IN_PROMPT = 20;
@@ -70,25 +74,21 @@ export class AiAdvisorService {
     }
   }
 
-  /** RAG: tìm tối đa 5 sản phẩm ACTIVE khớp bất kỳ token nào trong câu hỏi (theo tên). */
+  /**
+   * RAG: tối đa 5 sản phẩm ACTIVE khớp câu hỏi. Tra trên `nameSearch` (tên đã bỏ dấu, cùng cột với GET /products?q=)
+   * nên gõ không dấu vẫn tìm được; từ đệm bị bỏ, sản phẩm chỉ khớp một từ chung bị loại, còn lại xếp theo số từ khớp.
+   * DB chỉ lọc thô (chứa chuỗi con) và lấy ứng viên theo độ nổi bật; việc khớp nguyên từ + xếp hạng làm ở rankProducts.
+   */
   private async suggestProducts(query: string): Promise<ProductSuggestion[]> {
-    const tokens = Array.from(
-      new Set(
-        query
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-          .split(/\s+/)
-          .filter((t) => t.length >= 3),
-      ),
-    ).slice(0, 8);
+    const tokens = productQueryTokens(query);
     if (tokens.length === 0) return [];
-    const products = await this.prisma.product.findMany({
-      where: { isActive: true, OR: tokens.map((t) => ({ name: { contains: t, mode: 'insensitive' as const } })) },
-      take: 5,
+    const candidates = await this.prisma.product.findMany({
+      where: { isActive: true, OR: tokens.map((t) => ({ nameSearch: { contains: t } })) },
+      take: SUGGEST_CANDIDATES,
       orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
       select: { id: true, name: true, slug: true, brand: true, shortDesc: true, thumbnail: true, basePrice: true, salePrice: true },
     });
-    return products;
+    return rankProducts(tokens, candidates, MAX_SUGGESTIONS);
   }
 
   private systemPrompt(products: ProductSuggestion[], faqs: FaqContext[] = []): string {
