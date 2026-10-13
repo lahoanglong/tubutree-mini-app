@@ -431,6 +431,16 @@ export default function CheckoutPage() {
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
+        {cart.data?.couponCode && (quote.data?.couponNotice ?? cart.data.couponNotice) && (
+          <Text
+            size="xSmall"
+            role="status"
+            data-testid="coupon-notice"
+            style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
+          >
+            {quote.data?.couponNotice ?? cart.data.couponNotice}
+          </Text>
+        )}
       </Box>
 
       {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}

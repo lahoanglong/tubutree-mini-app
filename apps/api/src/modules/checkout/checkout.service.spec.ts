@@ -439,7 +439,7 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
       const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
       // coupon được tính trên 80 (sau combo), KHÔNG phải 100
-      expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80);
+      expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80, [{ productId: 'prod1', total: 80 }]);
       const data = orderCreate.mock.calls[0][0].data;
       // discount = combo 20 + coupon 24 = 44 (≤ subtotal); total = 100 - 44 = 56
       expect(data.discount).toBe(44);
@@ -725,7 +725,7 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
 
   it('subset < minOrder coupon → BỎ coupon (không redeem, order.couponCode=null)', async () => {
     // Coupon áp được trên full cart, nhưng subset 300đ < minOrder → validateAndCompute THROW.
-    const validateAndCompute = jest.fn().mockRejectedValue(new Error('Đơn tối thiểu chưa đạt'));
+    const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu chưa đạt'));
     const { svc, orderCreate, coupons } = build({
       cartData: { ...TWO_ITEM_CART, couponCode: 'GIAM50', discount: 50 },
       validateAndCompute,
@@ -774,7 +774,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       { variationId: 'v2', productId: 'p2', total: 100000 },
     ]);
     // coupon base = 100000 (loại flash 80k), KHÔNG phải 180000.
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000);
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
   });
 
   it('placeOrder gọi consumeQuota(tx) cho line flash + đóng dấu flashSaleItemId lên OrderItem', async () => {
@@ -1047,7 +1047,7 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     );
     const data = orderCreate.mock.calls[0][0].data;
 
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000, [{ productId: 'p1', total: 450000 }]); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
     expect(data.pointsUsed).toBe(76);
     expect(data.shippingFee).toBe(0);
     // discount field gộp cả 4 nguồn: combo 50.000 + coupon 45.000 + điểm 76.000 + hạng 20.250 = 191.250
@@ -1238,5 +1238,53 @@ describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0�
       expect(orderCreate).not.toHaveBeenCalled();
       expect(prisma.order.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'existing' }, include: { items: true } });
     });
+  });
+});
+
+describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên phần hàng được tính thì KHÔNG tiêu lượt', () => {
+  // Giỏ: 1 hàng thường 89k + 2 hàng flash 39k. Mã UAT50K minOrder 150k: đạt trên cả giỏ (167k) nhưng
+  // không đạt trên phần không flash (89k) → giỏ giữ mã với giảm 0đ.
+  const FLASH_MIX = {
+    items: [
+      { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'N', variationName: 'VN', unitPrice: 89000, quantity: 1, total: 89000, isFlash: false, flashSaleItemId: null },
+      { id: 'i2', variationId: 'v2', productId: 'p2', productName: 'F', variationName: 'VF', unitPrice: 39000, quantity: 2, total: 78000, isFlash: true, flashSaleItemId: 'fi2' },
+    ],
+    subtotal: 167000, discount: 0, freeship: false, couponCode: 'UAT50K',
+  };
+  const notMet = () => jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.'));
+
+  it('đặt TOÀN giỏ: không redeem, đơn không gắn mã, không giảm', async () => {
+    const { svc, orderCreate, coupons } = build({ cartData: FLASH_MIX, validateAndCompute: notMet() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.couponCode).toBeNull();
+    expect(data.discount).toBe(0);
+  });
+
+  it('quote: giảm 0 + couponNotice giải thích vì sao mã chưa áp', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: notMet() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toContain('150.000đ');
+    expect(q.couponNotice).toContain('giờ vàng');
+  });
+
+  it('lỗi hạ tầng khi kiểm mã (không phải BadRequest) → báo lỗi, không âm thầm đặt đơn bỏ mã', async () => {
+    const { svc, orderCreate } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new Error('db timeout')) });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('db timeout');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('mã áp được → couponApplied true, couponNotice null', async () => {
+    const { svc } = build({
+      cartData: { ...FLASH_MIX, items: [FLASH_MIX.items[0]], subtotal: 89000 },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 20000, freeship: false }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(20000);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
   });
 });

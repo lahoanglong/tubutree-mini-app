@@ -6,21 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
-
-/**
- * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
- * `guest_<deviceId>` (cả dòng guest đã gộp `guest_..._merged_...`) — tạo vô hạn chỉ bằng deviceId
- * mới nên không được nhận voucher chào mừng/sinh nhật/winback. SĐT chỉ được ghi từ phoneToken Zalo
- * (auth.service) nên có SĐT = đã xác thực, kể cả khi dòng vẫn mang zaloId guest.
- */
-const REAL_USER_WHERE: Prisma.UserWhereInput = {
-  OR: [
-    { phone: { not: null } },
-    { AND: [{ zaloId: { not: null } }, { NOT: { zaloId: { startsWith: 'guest_' } } }] },
-  ],
-};
-/** Bản SQL của REAL_USER_WHERE, bảng users phải có alias `u`. `left()` thay LIKE vì `_` là ký tự đại diện. */
-const REAL_USER_SQL = Prisma.sql`(u.phone IS NOT NULL OR (u."zaloId" IS NOT NULL AND left(u."zaloId", 6) <> 'guest_'))`;
+import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 
 export type CronBatchResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { granted: number; scanned: number };
 

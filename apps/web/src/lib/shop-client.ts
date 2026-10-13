@@ -17,6 +17,8 @@ export interface CartLine {
 export interface CartSummary {
   items: CartLine[];
   couponCode: string | null;
+  /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại — câu giải thích từ server. */
+  couponNotice?: string | null;
   subtotal: number;
   discount: number;
   freeship: boolean;
@@ -41,6 +43,8 @@ export interface AddressDTO {
 export interface CheckoutQuote {
   subtotal: number;
   discount: number;
+  /** Mã trong giỏ chưa áp cho đơn này (không giảm, không tiêu lượt). */
+  couponNotice?: string | null;
   pointsUsed: number;
   pointsDiscount: number;
   shippingFee: number;

@@ -189,7 +189,7 @@ export default function CartPage() {
                 <span>-{formatVnd(cart.discount)}</span>
               </div>
             )}
-            <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} />
+            <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} notice={cart.couponNotice} />
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
               <span>{formatVnd(cart.subtotal - cart.discount)}</span>

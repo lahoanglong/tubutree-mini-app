@@ -435,6 +435,35 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
   });
 });
 
+describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.slug = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getWallet.mockResolvedValue({ balance: 0 });
+    mocks.getLoyalty.mockResolvedValue(null);
+  });
+
+  it('báo giá có couponNotice → hiện câu giải thích dưới chip mã, không hiện dòng giảm', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này (hàng giờ vàng không được tính vào điều kiện của mã): Đơn tối thiểu 150.000đ để dùng mã này.';
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'UAT50K', couponNotice: notice });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: notice });
+    renderPage();
+    const el = await screen.findByTestId('coupon-notice');
+    expect(el.textContent).toBe(notice);
+    expect(screen.getByText('UAT50K')).toBeTruthy();
+  });
+
+  it('mã áp bình thường → không có câu giải thích', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });
+    renderPage();
+    await screen.findByText('SALE');
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+  });
+});
+
 describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

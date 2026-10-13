@@ -13,7 +13,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { isCouponEligible } from '../coupons/coupon-scope';
+import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
+import { isRealUser } from '../../common/real-user';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
@@ -592,7 +593,11 @@ export class LoyaltyService {
     // Trước đây loop từng coupon gọi count() → 1 + N query khi user có nhiều voucher khả dụng.
     // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
     // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
-    const filtered = coupons.filter((c) => isCouponEligible(c, user));
+    // Mã đã tắt và mã công khai giới hạn theo người (với tài khoản khách) cũng bị validateAndCompute từ chối.
+    const realUser = isRealUser(user);
+    const filtered = coupons.filter(
+      (c) => c.isActive !== false && isCouponEligible(c, user) && (realUser || !requiresRealUser(c)),
+    );
 
     const ids = filtered.map((c) => c.id);
     const grouped = ids.length

@@ -21,11 +21,14 @@ function coupon(over: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(c: unknown, counts: number[] = [0, 0]) {
+const REAL_USER = { id: 'u1', tierId: null, phone: '0912345678', zaloId: 'z1' };
+
+function makeService(c: unknown, counts: number[] = [0, 0], user: unknown = REAL_USER) {
   let i = 0;
   const prisma = {
     coupon: { findUnique: jest.fn().mockResolvedValue(c) },
     couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[i++] ?? 0)) },
+    user: { findUnique: jest.fn().mockResolvedValue(user) },
   } as unknown as PrismaService;
   return new CouponsService(prisma);
 }
@@ -73,6 +76,68 @@ describe('CouponsService.validateAndCompute', () => {
   it('hết tổng lượt (usageLimit) → lỗi', async () => {
     const svc = makeService(coupon({ usageLimit: 100 }), [0, 100]); // user 0, tổng 100
     await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt sử dụng');
+  });
+});
+
+describe('CouponsService.validateAndCompute — chống lạm dụng mã (UAT p6)', () => {
+  it('ADMINOPS-7: mã khách gõ có khoảng trắng/chữ thường vẫn tra theo mã chuẩn hoá (HOA, bỏ khoảng trắng)', async () => {
+    const findUnique = jest.fn().mockResolvedValue(coupon({ code: 'SUMMER10' }));
+    const prisma = {
+      coupon: { findUnique },
+      couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+      user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
+    } as unknown as PrismaService;
+    const r = await new CouponsService(prisma).validateAndCompute('  summer10 ', 'u1', 100000);
+    expect(findUnique).toHaveBeenCalledWith({ where: { code: 'SUMMER10' } });
+    expect(r.code).toBe('SUMMER10');
+  });
+
+  it('ADMINOPS-8: mã đã bị admin tắt (isActive=false) → báo ngừng áp dụng', async () => {
+    const svc = makeService(coupon({ isActive: false }));
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('Mã giảm giá đã ngừng áp dụng.');
+  });
+
+  it('MONEY-16: mã công khai giới hạn theo người + tài khoản khách (guest_, chưa SĐT) → yêu cầu đăng nhập Zalo', async () => {
+    const svc = makeService(coupon({ scope: 'PUBLIC', perUserLimit: 1 }), [0, 0], {
+      id: 'u1', tierId: null, phone: null, zaloId: 'guest_dev1',
+    });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('đăng nhập Zalo');
+  });
+
+  it('MONEY-16: mã công khai KHÔNG giới hạn theo người (perUserLimit 0) → khách vẫn dùng được', async () => {
+    const svc = makeService(coupon({ scope: 'PUBLIC', perUserLimit: 0 }), [0, 0], {
+      id: 'u1', tierId: null, phone: null, zaloId: 'guest_dev1',
+    });
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).resolves.toMatchObject({ discount: 10000 });
+  });
+
+  it('MONEY-4: mã gắn sản phẩm (applyTo.productIds) + giỏ không có sản phẩm đó → từ chối', async () => {
+    const svc = makeService(coupon({ type: 'AMOUNT', value: 49350, applyTo: { productIds: ['pG'] } }));
+    await expect(
+      svc.validateAndCompute('SALE', 'u1', 395000, [{ productId: 'pX', total: 395000 }]),
+    ).rejects.toThrow('chỉ áp dụng');
+  });
+
+  it('MONEY-4: mã gắn sản phẩm mà caller không đưa dòng giỏ → từ chối (không tính trên tổng giỏ)', async () => {
+    const svc = makeService(coupon({ type: 'AMOUNT', value: 49350, applyTo: { productIds: ['pG'] } }));
+    await expect(svc.validateAndCompute('SALE', 'u1', 395000)).rejects.toThrow('chỉ áp dụng');
+  });
+
+  it('MONEY-4: mã gắn sản phẩm → minOrder và mức giảm tính trên đúng dòng sản phẩm đó', async () => {
+    const svc = makeService(
+      coupon({ type: 'AMOUNT', value: 49350, minOrder: 279650, applyTo: { productIds: ['pG'] } }),
+    );
+    await expect(
+      svc.validateAndCompute('SALE', 'u1', 600000, [
+        { productId: 'pX', total: 400000 },
+        { productId: 'pG', total: 200000 },
+      ]),
+    ).rejects.toThrow('tối thiểu');
+    const r = await svc.validateAndCompute('SALE', 'u1', 729000, [
+      { productId: 'pX', total: 400000 },
+      { productId: 'pG', total: 329000 },
+    ]);
+    expect(r.discount).toBe(49350);
   });
 });
 

@@ -19,6 +19,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { couponNotAppliedNotice } from '../coupons/coupon-notice';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -99,6 +100,8 @@ export class CheckoutService {
     return {
       subtotal: cart.subtotal,
       discount: computed.discount,
+      couponApplied: computed.couponApplied,
+      couponNotice: computed.couponNotice,
       comboDiscount: computed.comboDiscount,
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
@@ -589,27 +592,24 @@ export class CheckoutService {
     let discount = 0; // coupon (sau combo)
     let freeship = false;
     let couponApplied = false; // coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true
+    let couponNotice: string | null = null;
     if (cart.couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo);
+        const couponLines = nonFlash.map((l) => ({
+          productId: l.productId,
+          total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
+        }));
+        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         freeship = r.freeship;
         couponApplied = true;
-      } catch {
-        if (subset) {
-          // Subset không đạt điều kiện coupon (vd < minOrder của mã) → BỎ coupon: không giảm,
-          // KHÔNG redeem (tránh tiêu lượt dùng coupon của khách mà không được giảm).
-          discount = 0;
-          freeship = false;
-          couponApplied = false;
-        } else {
-          // Full cart (hành vi cũ giữ nguyên): coupon không còn hợp lệ trên base sau-combo (vd
-          // combo kéo xuống dưới minOrder) → GIỮ theo cart.discount đã validate trên gross, kẹp
-          // vào phần còn lại; vẫn redeem theo cart.couponCode (khớp bước redeem placeOrder).
-          discount = Math.min(cart.discount, goodsAfterCombo);
-          freeship = cart.freeship;
-          couponApplied = true;
-        }
+      } catch (err) {
+        // Mã không đạt điều kiện trên phần hàng được tính (đã loại flash, trừ combo; hoặc tập con đã
+        // chọn) → KHÔNG giảm và KHÔNG redeem, kể cả khi đặt toàn giỏ: trước đây toàn giỏ rơi về
+        // cart.discount (0đ khi flash kéo phần còn lại dưới minOrder) mà vẫn redeem → đốt mất mã một lần
+        // của khách cho đơn không được giảm đồng nào (MONEY-3). Lỗi hạ tầng thì báo lỗi, không âm thầm bỏ mã.
+        if (!(err instanceof BadRequestException)) throw err;
+        couponNotice = couponNotAppliedNotice(err.message, flashSubtotal > 0, combo.total > 0);
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
@@ -664,6 +664,7 @@ export class CheckoutService {
       computed: {
         discount,
         couponApplied,
+        couponNotice,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
         tierDiscount,

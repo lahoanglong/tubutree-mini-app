@@ -1,11 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CouponsService } from '../coupons/coupons.service';
+import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
+import { couponNotAppliedNotice } from '../coupons/coupon-notice';
+
+/** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
+function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
+  return lines.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
+}
 
 @Injectable()
 export class CartService {
@@ -84,9 +90,10 @@ export class CartService {
     let discount = 0;
     let freeship = false;
     let couponCode = cart.couponCode;
+    let couponNotice: string | null = null;
     if (couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase);
+        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase, couponLinesOf(lines));
         // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
         // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
         // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
@@ -102,9 +109,10 @@ export class CartService {
         // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
         // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
         try {
-          await this.coupons.validateAndCompute(couponCode, userId, subtotal);
+          await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
           discount = 0;
           freeship = false;
+          couponNotice = couponNotAppliedNotice(err.message, true);
         } catch (err2) {
           if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
@@ -119,6 +127,7 @@ export class CartService {
     return {
       items: lines,
       couponCode,
+      couponNotice,
       subtotal,
       discount,
       freeship,
@@ -213,8 +222,9 @@ export class CartService {
     const cart = await this.getCart(userId);
     // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
     const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
-    await this.coupons.validateAndCompute(code, userId, couponBase);
-    await this.prisma.cart.update({ where: { userId }, data: { couponCode: code } });
+    const normalized = normalizeCouponCode(code);
+    await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId);
   }
 

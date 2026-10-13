@@ -23,14 +23,17 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   /** Giữ phản hồi của applyCoupon/checkoutQuote cho tới khi test cho chạy, để quan sát trạng thái "đang tính". */
   gate: null as Promise<void> | null,
+  /** Server giữ mã nhưng chưa áp cho đơn (MONEY-3). */
+  couponNotice: null as string | null,
 }));
 const SUBTOTAL = 300000;
-const discountOf = () => (state.couponCode ? 90000 : 0);
+const discountOf = () => (state.couponCode && !state.couponNotice ? 90000 : 0);
 const cartNow = () => ({
   items: [
     { id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết', variationName: '500ml', slug: 'dau-goi', thumbnail: null, unitPrice: 150000, quantity: 2, stock: 5, total: SUBTOTAL },
   ],
   couponCode: state.couponCode,
+  couponNotice: state.couponNotice,
   subtotal: SUBTOTAL,
   discount: discountOf(),
   freeship: false,
@@ -70,7 +73,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       };
     }
     return {
-      subtotal: SUBTOTAL, discount: discountOf(), pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
+      subtotal: SUBTOTAL, discount: discountOf(), couponNotice: state.couponNotice, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
       total: SUBTOTAL - discountOf() + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     };
   },
@@ -108,6 +111,7 @@ beforeEach(() => {
   state.zeroQuote = false;
   state.coupons = [COUPON];
   state.gate = null;
+  state.couponNotice = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -171,6 +175,14 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(container.textContent).toContain('330.000đ');
     expect(container.textContent).not.toContain('Giảm giá (');
     expect(input(container)).not.toBeNull();
+  });
+
+  it('MONEY-3: giỏ giữ mã nhưng chưa áp cho đơn → hiện câu giải thích của server dưới mã, không có dòng giảm giá', async () => {
+    state.couponCode = 'UAT50K';
+    state.couponNotice = 'Mã chưa được áp dụng cho đơn này (hàng giờ vàng không được tính vào điều kiện của mã): Đơn tối thiểu 150.000đ để dùng mã này.';
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(state.couponNotice);
+    expect(container.textContent).not.toContain('Giảm giá (');
   });
 
   it('mã đòi đơn tối thiểu cao hơn tạm tính bị khoá và nói rõ lý do', async () => {

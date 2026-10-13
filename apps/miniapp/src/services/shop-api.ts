@@ -86,6 +86,8 @@ export interface CartSummary {
   /** API cũ chưa có trường này → coi như rỗng. */
   unavailableItems?: UnavailableCartLine[];
   couponCode: string | null;
+  /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại (vd hàng giờ vàng không tính vào điều kiện). */
+  couponNotice?: string | null;
   subtotal: number;
   discount: number;
   freeship: boolean;
@@ -97,6 +99,8 @@ export interface CartSummary {
 export interface CheckoutQuote {
   subtotal: number;
   discount: number;
+  /** Mã trong giỏ chưa được áp cho đơn này (không giảm, không tiêu lượt) — câu giải thích cho khách. */
+  couponNotice?: string | null;
   comboDiscount: number;
   pointsUsed: number;
   /** Phần của `pointsUsed` lấy từ lô quy đổi (không hết hạn). Optional: API cũ chưa trả. */

@@ -170,6 +170,7 @@ describe('CartService guard tồn kho', () => {
     expect(result).toEqual({
       items: [],
       couponCode: null,
+      couponNotice: null,
       subtotal: 0,
       discount: 0,
       freeship: false,
@@ -306,7 +307,7 @@ describe('CartService guard tồn kho', () => {
     expect(l1.flashSaleItemId).toBe('fi1');
     expect(l2.isFlash).toBe(false);
     // coupon base = tổng line KHÔNG flash = v2 (2×50000)=100000, KHÔNG gồm v1
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000);
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
   });
 
   it('flash line: flashPrice > standing → charge theo standing (không cao hơn giá bán); soldPct quota=0 → 0', async () => {
@@ -381,10 +382,11 @@ describe('CartService guard tồn kho', () => {
         .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
     } as any;
     const couponsSvc = { validateAndCompute } as any;
-    await new CartService(prisma, couponsSvc, config, flashSvc, analytics).applyCoupon('u1', 'SAVE');
+    await new CartService(prisma, couponsSvc, config, flashSvc, analytics).applyCoupon('u1', ' save ');
     // subtotal đầy đủ = v1(80000)+v2(100000)=180000; base KHÔNG flash = v2 = 100000
-    expect(validateAndCompute).toHaveBeenCalledWith('SAVE', 'u1', 100000);
-    expect(validateAndCompute).not.toHaveBeenCalledWith('SAVE', 'u1', 180000);
+    expect(validateAndCompute).toHaveBeenCalledWith('SAVE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
+    expect(validateAndCompute).not.toHaveBeenCalledWith('SAVE', 'u1', 180000, expect.anything());
+    // Lưu mã đã chuẩn hoá (ADMINOPS-7) — giỏ/đơn luôn mang đúng Coupon.code.
     expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SAVE' } });
   });
 
@@ -431,6 +433,10 @@ describe('CartService guard tồn kho', () => {
     expect(cart.couponCode).toBe('SALE'); // GIỮ mã (flash chỉ tạm thời kéo base xuống)
     expect(cart.discount).toBe(0);
     expect(update).not.toHaveBeenCalled(); // KHÔNG null hoá coupon
+    // MONEY-3: giỏ nói rõ mã đang giữ nhưng CHƯA áp (vì hàng giờ vàng không được tính).
+    expect(cart.couponNotice).toContain('Mã chưa được áp dụng');
+    expect(cart.couponNotice).toContain('giờ vàng');
+    expect(cart.couponNotice).toContain('minOrder');
   });
 
   it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
