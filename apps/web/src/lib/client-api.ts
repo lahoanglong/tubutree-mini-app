@@ -80,19 +80,23 @@ async function rawRefresh(): Promise<string | null> {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Mã lỗi nghiệp vụ ổn định trong body (vd TOTAL_CHANGED, ADDRESS_OUTDATED); null nếu API không gửi. */
+  code: string | null;
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
-async function parseError(res: Response): Promise<string> {
+async function parseError(res: Response): Promise<{ message: string; code: string | null }> {
+  const fallback = 'Có lỗi xảy ra. Vui lòng thử lại.';
   try {
-    const data = (await res.json()) as { message?: string | string[] };
+    const data = (await res.json()) as { message?: string | string[]; code?: unknown };
     const m = Array.isArray(data.message) ? data.message[0] : data.message;
-    return m ?? 'Có lỗi xảy ra. Vui lòng thử lại.';
+    return { message: m ?? fallback, code: typeof data.code === 'string' ? data.code : null };
   } catch {
-    return 'Có lỗi xảy ra. Vui lòng thử lại.';
+    return { message: fallback, code: null };
   }
 }
 
@@ -133,7 +137,10 @@ export async function apiFetch<T>(
     if (newToken) return apiFetch<T>(path, opts, true);
   }
 
-  if (!res.ok) throw new ApiError(await parseError(res), res.status);
+  if (!res.ok) {
+    const { message, code } = await parseError(res);
+    throw new ApiError(message, res.status, code);
+  }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }

@@ -64,6 +64,17 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
     expect(lastCall(fetchMock).headers['x-client']).toBe('web');
   });
 
+  it('lỗi 4xx giữ cả message lẫn mã nghiệp vụ (code) để trang phân nhánh mà không so chuỗi', async () => {
+    fetchMock.mockResolvedValue(jsonRes(400, { message: 'Tổng tiền đơn vừa thay đổi…', code: 'TOTAL_CHANGED' }));
+    await expect(apiFetch('/checkout/place-order')).rejects.toMatchObject({
+      status: 400,
+      message: 'Tổng tiền đơn vừa thay đổi…',
+      code: 'TOTAL_CHANGED',
+    });
+    fetchMock.mockResolvedValue(jsonRes(400, { message: ['phone must match'] }));
+    await expect(apiFetch('/me/addresses')).rejects.toMatchObject({ message: 'phone must match', code: null });
+  });
+
   it('401 mà chưa từng đăng nhập (không có cờ) → không gọi refresh, ném lỗi luôn', async () => {
     fetchMock.mockResolvedValue(jsonRes(401, { message: 'Unauthorized' }));
     await expect(apiFetch('/me')).rejects.toThrow();
