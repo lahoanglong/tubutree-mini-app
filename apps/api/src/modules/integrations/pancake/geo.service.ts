@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PancakeClient } from './pancake.client';
 
 /** DTO địa giới rút gọn cho FE. `code` = mã gửi Pancake khi đặt đơn. */
@@ -7,18 +7,26 @@ export interface GeoOption {
   name: string;
 }
 
+type CacheEntry = { at: number; data: GeoOption[] };
+
+const PROVINCES_UNAVAILABLE = 'Chưa tải được danh sách tỉnh/thành, vui lòng thử lại sau ít phút.';
+const COMMUNES_UNAVAILABLE = 'Chưa tải được danh sách phường/xã, vui lòng thử lại sau ít phút.';
+
 /**
  * Tra cứu địa giới (Tỉnh → Phường/Xã) PROXY từ Pancake, cache in-memory.
  * Location gần như tĩnh → cache lâu (24h) để FE mở form địa chỉ không gọi Pancake mỗi lần.
  * Trả mã ĐÚNG hệ Pancake ("84_VN*") nên đặt đơn không lỗi location.
+ *
+ * Chỉ cache danh sách CÓ dữ liệu: một lần Pancake trả rỗng/lỗi mà bị cache 24h là cả ngày không ai tạo được
+ * địa chỉ (nên không đặt được đơn đầu). Hết hạn mà lần làm mới lỗi thì phục vụ tiếp bản tốt gần nhất.
  */
 @Injectable()
 export class GeoService {
   private static readonly TTL_MS = 24 * 60 * 60 * 1000;
   private readonly logger = new Logger(GeoService.name);
-  private provincesCache: { at: number; data: GeoOption[] } | null = null;
+  private provincesCache: CacheEntry | null = null;
   private provincesInflight: Promise<GeoOption[]> | null = null;
-  private readonly communesCache = new Map<string, { at: number; data: GeoOption[] }>();
+  private readonly communesCache = new Map<string, CacheEntry>();
   // Dedup request đang bay cùng tham số → cold cache không bắn N lần lên Pancake (thundering herd).
   private readonly communesInflight = new Map<string, Promise<GeoOption[]>>();
 
@@ -29,21 +37,25 @@ export class GeoService {
       return this.provincesCache.data;
     }
     if (this.provincesInflight) return this.provincesInflight;
-    this.provincesInflight = (async () => {
-      const list = await this.pancake.fetchProvinces();
-      // Dùng new_id (hệ 2 cấp) làm code; bỏ tỉnh thiếu new_id.
-      const withNewId = list.filter((p) => p.new_id);
-      if (withNewId.length < list.length) {
-        this.logger.warn(
-          `Bỏ ${list.length - withNewId.length}/${list.length} tỉnh thiếu new_id (Pancake geo) — sẽ không hiện trong picker.`,
-        );
-      }
-      const data = withNewId
-        .map((p) => ({ code: p.new_id as string, name: p.name }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-      this.provincesCache = { at: Date.now(), data };
-      return data;
-    })().finally(() => {
+    this.provincesInflight = this.refresh(
+      'tỉnh/thành',
+      async () => {
+        const list = await this.pancake.fetchProvinces();
+        // Dùng new_id (hệ 2 cấp) làm code; bỏ tỉnh thiếu new_id.
+        const withNewId = list.filter((p) => p.new_id);
+        if (withNewId.length < list.length) {
+          this.logger.warn(
+            `Bỏ ${list.length - withNewId.length}/${list.length} tỉnh thiếu new_id (Pancake geo) — sẽ không hiện trong picker.`,
+          );
+        }
+        return withNewId.map((p) => ({ code: p.new_id as string, name: p.name }));
+      },
+      this.provincesCache,
+      (entry) => {
+        this.provincesCache = entry;
+      },
+      PROVINCES_UNAVAILABLE,
+    ).finally(() => {
       this.provincesInflight = null;
     });
     return this.provincesInflight;
@@ -58,17 +70,42 @@ export class GeoService {
     if (cached && Date.now() - cached.at < GeoService.TTL_MS) return cached.data;
     const inflight = this.communesInflight.get(provinceCode);
     if (inflight) return inflight;
-    const p = (async () => {
-      const list = await this.pancake.fetchCommunes(provinceCode);
-      const data = list
-        .map((c) => ({ code: c.id, name: c.name }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-      this.communesCache.set(provinceCode, { at: Date.now(), data });
-      return data;
-    })().finally(() => {
+    const p = this.refresh(
+      `phường/xã của ${provinceCode}`,
+      async () => (await this.pancake.fetchCommunes(provinceCode)).map((c) => ({ code: c.id, name: c.name })),
+      cached ?? null,
+      (entry) => this.communesCache.set(provinceCode, entry),
+      COMMUNES_UNAVAILABLE,
+    ).finally(() => {
       this.communesInflight.delete(provinceCode);
     });
     this.communesInflight.set(provinceCode, p);
     return p;
+  }
+
+  private async refresh(
+    what: string,
+    load: () => Promise<GeoOption[]>,
+    stale: CacheEntry | null,
+    store: (entry: CacheEntry) => void,
+    unavailable: string,
+  ): Promise<GeoOption[]> {
+    let reason: string;
+    try {
+      const data = (await load()).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+      if (data.length > 0) {
+        store({ at: Date.now(), data });
+        return data;
+      }
+      reason = 'danh sách rỗng';
+    } catch (err) {
+      reason = err instanceof Error ? err.message : String(err);
+    }
+    if (stale) {
+      this.logger.warn(`Làm mới ${what} từ Pancake lỗi (${reason}) — dùng tiếp bản đã cache.`);
+      return stale.data;
+    }
+    this.logger.error(`Không tải được ${what} từ Pancake: ${reason}`);
+    throw new ServiceUnavailableException(unavailable);
   }
 }

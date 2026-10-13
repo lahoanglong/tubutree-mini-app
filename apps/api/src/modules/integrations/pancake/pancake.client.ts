@@ -12,6 +12,17 @@ import type {
 } from './pancake.types';
 
 /**
+ * Pancake có thể trả HTTP 200 kèm `success:false` (hạn mức, lỗi phía họ) — đọc thành `[]` thì GeoService coi là
+ * "không có tỉnh nào" và khách không tạo được địa chỉ. Ném lỗi để phía trên giữ bản cache tốt hoặc báo thử lại.
+ */
+function geoList<T>(res: PancakeGeoResponse<T> | null | undefined, what: string): T[] {
+  if (!res || res.success === false || !Array.isArray(res.data)) {
+    throw new ServiceUnavailableException(`Pancake không trả danh sách ${what}.`);
+  }
+  return res.data;
+}
+
+/**
  * HTTP client cho Pancake POS. Gate bằng config: nếu chưa có PANCAKE_API_KEY/SHOP_ID,
  * `isConfigured()` = false → các service gọi sẽ skip gracefully (dev dùng seed mẫu).
  */
@@ -56,7 +67,7 @@ export class PancakeClient {
     const { data } = await this.http.get<PancakeGeoResponse<PancakeProvinceDTO>>('/geo/provinces', {
       params: { api_key: this.apiKey },
     });
-    return data.data ?? [];
+    return geoList(data, 'tỉnh/thành');
   }
 
   /**
@@ -68,7 +79,7 @@ export class PancakeClient {
     const { data } = await this.http.get<PancakeGeoResponse<PancakeCommuneDTO>>('/geo/communes', {
       params: { api_key: this.apiKey, province_id: provinceNewId },
     });
-    return data.data ?? [];
+    return geoList(data, 'phường/xã');
   }
 
   async createOrder(body: PancakeCreateOrderBody): Promise<PancakeCreateOrderResponse> {

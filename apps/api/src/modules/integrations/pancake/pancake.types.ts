@@ -82,4 +82,5 @@ export interface PancakeCommuneDTO {
 }
 export interface PancakeGeoResponse<T> {
   data?: T[];
+  success?: boolean;
 }
