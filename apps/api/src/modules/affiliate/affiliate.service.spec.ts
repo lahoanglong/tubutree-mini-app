@@ -155,6 +155,53 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 });
 
+describe('AffiliateService.createCommissionForOrder — tính trên giá khách thực trả (SELLER-6)', () => {
+  it('mã giảm/điểm/giảm hạng nằm ở Order.discount được phân bổ xuống dòng: 10% của 387.000, không phải của 430.000', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    // subtotal 430.000, mã XANH10 giảm 43.000, ship 0 → khách trả 387.000.
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 430000, discount: 43000, shippingFee: 0, total: 387000,
+      items: [{ variationId: 'v1', total: 430000 }],
+    };
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 10 }], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(38700);
+    expect(data.commissionableTotal).toBe(387000);
+  });
+
+  it('phí ship không tính vào nền; phần giảm chia theo tỉ lệ giá trị dòng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    // Hàng 300.000 (200k + 100k), giảm 60.000, ship 20.000 → hàng thực trả 240.000 (hệ số 0,8).
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 300000, discount: 60000, shippingFee: 20000, total: 260000,
+      items: [
+        { variationId: 'v1', total: 200000 },
+        { variationId: 'v2', total: 100000 },
+      ],
+    };
+    const prisma = prismaWith(order, [
+      { id: 'v1', affiliateRate: 10 },
+      { id: 'v2', affiliateRate: 5 },
+    ], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(16000 + 4000);
+    expect(data.commissionableTotal).toBe(240000);
+  });
+
+  it('đơn 0đ tiền hàng (điểm/mã phủ hết) → không có hoa hồng', async () => {
+    const create = jest.fn();
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 100000, discount: 100000, shippingFee: 0, total: 0,
+      items: [{ variationId: 'v1', total: 100000 }],
+    };
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 10 }], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
   function makePrisma(order: unknown) {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
@@ -1046,7 +1093,7 @@ describe('AffiliateService analytics', () => {
   it('productCommissionBreakdown nhóm theo sản phẩm', async () => {
     const prisma = {
       commission: { findMany: jest.fn().mockResolvedValue([
-        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
+        { id: 'c1', orderId: 'o1', order: { id: 'o1', total: 150000, shippingFee: 0, items: [
           { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
           { productName: 'Xà phòng', variationId: 'v2', total: 50000 },
         ] } },
@@ -1066,7 +1113,7 @@ describe('AffiliateService analytics', () => {
   it('productCommissionBreakdown: 1 đơn có 2 item CÙNG sản phẩm → orders=1, hoa hồng cộng dồn', async () => {
     const prisma = {
       commission: { findMany: jest.fn().mockResolvedValue([
-        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
+        { id: 'c1', orderId: 'o1', order: { id: 'o1', total: 180000, shippingFee: 20000, items: [
           { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
           { productName: 'Dầu gội', variationId: 'v1', total: 60000 },
         ] } },
@@ -1080,6 +1127,19 @@ describe('AffiliateService analytics', () => {
     const dau = r.find((x) => x.productName === 'Dầu gội');
     expect(dau?.orders).toBe(1); // 2 item cùng đơn → 1 đơn
     expect(dau?.commission).toBe(16000); // floor(100000*10/100) + floor(60000*10/100)
+  });
+
+  it('productCommissionBreakdown khớp số hoa hồng thật: tính trên giá thực trả sau mã/điểm (SELLER-6)', async () => {
+    const prisma = {
+      commission: { findMany: jest.fn().mockResolvedValue([
+        { id: 'c1', orderId: 'o1', order: { id: 'o1', total: 387000, shippingFee: 0, items: [
+          { productName: 'Fuwa 5L', variationId: 'v1', total: 430000 },
+        ] } },
+      ]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', affiliateRate: '10' }]) },
+    } as unknown as PrismaService;
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).productCommissionBreakdown('u1');
+    expect(r[0]?.commission).toBe(38700);
   });
 });
 
