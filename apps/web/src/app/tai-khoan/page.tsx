@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ChevronRight, MapPin } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatVnd } from '@/lib/shop-client';
@@ -56,6 +57,16 @@ export default function AccountPage() {
           </div>
         </div>
       </section>
+
+      <nav aria-label="Quản lý tài khoản" className="mt-4">
+        <Link href="/tai-khoan/dia-chi" className={`${ui.card} flex min-h-11 items-center justify-between gap-3 p-4 text-sm font-semibold text-stone-900 hover:bg-stone-50`}>
+          <span className="inline-flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-forest-600" aria-hidden="true" />
+            Sổ địa chỉ
+          </span>
+          <ChevronRight className="h-4 w-4 text-stone-600" aria-hidden="true" />
+        </Link>
+      </nav>
 
       <OrdersSection />
 

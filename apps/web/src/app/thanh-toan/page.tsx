@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
+import { AddressForm } from '@/components/address-form';
+import { addressToForm } from '@/lib/address-form';
 import {
   getCart,
   getAddresses,
   createAddress,
+  updateAddress,
   checkoutQuote,
   placeOrder,
   getPublicConfig,
@@ -22,18 +24,14 @@ import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer, zeroTotalNote } from '@/lib/checkout-points';
 import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { BankTransferPanel } from './bank-transfer-panel';
 
-const VN_PHONE = /^(0|\+84)\d{9}$/;
-// Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
-// chỉ 3 field text còn lại (mirror miniapp address-section.tsx).
-const EMPTY = { recipient: '', phone: '', street: '' };
-type Form = typeof EMPTY;
-
+const NOTE_MAX = 300;
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
@@ -43,6 +41,7 @@ export default function CheckoutPage() {
   const qc = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
+  const [note, setNote] = useState('');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
 
@@ -110,6 +109,7 @@ export default function CheckoutPage() {
         {
           addressId: addressId!,
           paymentMethod: zeroNote ? 'COD' : payment,
+          ...(note.trim() ? { note: note.trim() } : {}),
           // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
           // tạo đơn COD có tiền phải trả mà khách không chọn.
           ...(zeroNote ? { quotedZeroTotal: true } : {}),
@@ -204,6 +204,10 @@ export default function CheckoutPage() {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 setAddressId(a.id);
               }}
+              onUpdated={() => {
+                void qc.invalidateQueries({ queryKey: ['addresses'] });
+                void qc.invalidateQueries({ queryKey: ['quote'] });
+              }}
             />
           </section>
 
@@ -230,6 +234,26 @@ export default function CheckoutPage() {
                 ))}
               </div>
             )}
+          </section>
+
+          <section className={`p-4 ${ui.card}`}>
+            <h2 className={ui.sectionTitle}>Ghi chú cho đơn hàng</h2>
+            <label className="mt-2 block">
+              <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                maxLength={NOTE_MAX}
+                rows={3}
+                placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
+                disabled={place.isPending}
+                aria-describedby="order-note-count"
+                className={`${ui.field} mt-1 py-2`}
+              />
+            </label>
+            <p id="order-note-count" className="mt-1 text-xs text-stone-600">
+              {note.length}/{NOTE_MAX} ký tự
+            </p>
           </section>
 
           {recyclingEnabled && (
@@ -267,7 +291,10 @@ export default function CheckoutPage() {
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
-          <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
+          <Row
+            label="Phí vận chuyển"
+            value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+          />
           {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} disabled={place.isPending} />}
           {usablePoints > 0 && (
             <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
@@ -291,7 +318,7 @@ export default function CheckoutPage() {
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span>{quote ? formatVnd(quote.total) : '…'}</span>
+            <span>{quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính'}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
@@ -322,9 +349,18 @@ export default function CheckoutPage() {
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
           {place.isError && (
-            <p role="alert" className={`mt-2 ${ui.error}`}>
-              {place.error instanceof Error ? place.error.message : 'Đặt hàng thất bại.'}
-            </p>
+            <div role="alert" className={`mt-2 ${ui.error}`}>
+              <p>{place.error instanceof Error ? place.error.message : 'Đặt hàng thất bại.'}</p>
+              {place.error instanceof NetworkError && (
+                <p className="mt-1 text-stone-700">
+                  Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
+                  <Link href="/tai-khoan" className="font-semibold text-forest-700 underline">
+                    Đơn của tôi
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -346,153 +382,97 @@ function AddressPicker({
   selectedId,
   onSelect,
   onCreated,
+  onUpdated,
 }: {
   addresses: AddressDTO[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
+  onUpdated: (a: AddressDTO) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<Form>(EMPTY);
-  const [geo, setGeo] = useState<GeoValue>(EMPTY_GEO);
-  const [err, setErr] = useState<string | null>(null);
-
-  const create = useMutation({
-    mutationFn: () =>
-      createAddress({
-        recipient: form.recipient.trim(),
-        phone: form.phone.replace(/\s/g, ''),
-        street: form.street.trim(),
-        province: geo.province,
-        ward: geo.ward,
-        district: '', // hệ 2 cấp (Pancake) — không còn quận/huyện
-        provinceCode: geo.provinceCode,
-        wardCode: geo.wardCode,
-        districtCode: '',
-      }),
-    onSuccess: (a) => {
-      setAdding(false);
-      setForm(EMPTY);
-      setGeo(EMPTY_GEO);
-      onCreated(a);
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
-  });
-
-  const valid = useMemo(
-    () =>
-      Object.values(form).every((v) => v.trim()) &&
-      VN_PHONE.test(form.phone.replace(/\s/g, '')) &&
-      !!geo.provinceCode &&
-      !!geo.wardCode,
-    [form, geo],
-  );
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="mt-2 space-y-2">
-      {addresses.map((a) => (
-        <label key={a.id} className={`${optionClass(selectedId === a.id)} items-start`}>
-          <input
-            type="radio"
-            name="addr"
-            checked={selectedId === a.id}
-            onChange={() => onSelect(a.id)}
-            className="mt-1 h-4 w-4 accent-forest-600"
+      {addresses.map((a) =>
+        editingId === a.id ? (
+          <AddressForm
+            key={a.id}
+            title="Sửa địa chỉ"
+            submitLabel="Lưu thay đổi"
+            initial={addressToForm(a)}
+            onSubmit={async (payload) => {
+              const saved = await updateAddress(a.id, payload);
+              setEditingId(null);
+              onUpdated(saved);
+            }}
+            onCancel={() => setEditingId(null)}
           />
-          <span>
-            <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
-            <br />
-            <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
-          </span>
-        </label>
-      ))}
-
-      {adding ? (
-        <div className="space-y-2 rounded-control border border-stone-300 p-3">
-          <TextField
-            label={LABEL.recipient}
-            autoComplete="name"
-            value={form.recipient}
-            onChange={(v) => setForm((f) => ({ ...f, recipient: v }))}
-          />
-          <TextField
-            label={LABEL.phone}
-            autoComplete="tel"
-            inputMode="tel"
-            value={form.phone}
-            onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
-          />
-          <GeoPicker value={geo} onChange={setGeo} />
-          <TextField
-            label={LABEL.street}
-            autoComplete="street-address"
-            value={form.street}
-            onChange={(v) => setForm((f) => ({ ...f, street: v }))}
-          />
-          {err && (
-            <p role="alert" className="text-xs text-danger-fg">
-              {err}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setAdding(false)} className={ui.btnSecondary}>
-              Hủy
-            </button>
+        ) : (
+          <div key={a.id} className="flex items-start gap-1">
+            <label className={`${optionClass(selectedId === a.id)} min-w-0 flex-1 items-start`}>
+              <input
+                type="radio"
+                name="addr"
+                checked={selectedId === a.id}
+                onChange={() => onSelect(a.id)}
+                className="mt-1 h-4 w-4 accent-forest-600"
+              />
+              <span className="min-w-0 break-words">
+                <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
+                <br />
+                <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+              </span>
+            </label>
             <button
               type="button"
-              onClick={() => create.mutate()}
-              disabled={!valid || create.isPending}
-              className={`${ui.btnPrimary} flex-1`}
+              onClick={() => {
+                setAdding(false);
+                setEditingId(a.id);
+              }}
+              aria-label={`Sửa địa chỉ của ${a.recipient}`}
+              className={ui.btnText}
             >
-              Lưu địa chỉ
+              Sửa
             </button>
           </div>
-        </div>
+        ),
+      )}
+
+      {adding ? (
+        <AddressForm
+          title="Thêm địa chỉ mới"
+          submitLabel="Lưu địa chỉ"
+          onSubmit={async (payload) => {
+            const created = await createAddress(payload);
+            setAdding(false);
+            onCreated(created);
+          }}
+          onCancel={() => setAdding(false)}
+        />
       ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
-        >
-          + Thêm địa chỉ mới
-        </button>
+        <div className="flex flex-wrap items-center gap-x-4">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingId(null);
+              setAdding(true);
+            }}
+            className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
+          >
+            + Thêm địa chỉ mới
+          </button>
+          {addresses.length > 0 && (
+            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-stone-700 hover:underline">
+              Quản lý sổ địa chỉ
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );
 }
-
-function TextField({
-  label,
-  value,
-  onChange,
-  autoComplete,
-  inputMode,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  autoComplete?: string;
-  inputMode?: 'tel';
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-stone-700">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        className={`${ui.field} mt-1`}
-      />
-    </label>
-  );
-}
-
-const LABEL: Record<keyof Form, string> = {
-  recipient: 'Người nhận',
-  phone: 'Số điện thoại',
-  street: 'Số nhà, đường',
-};
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (

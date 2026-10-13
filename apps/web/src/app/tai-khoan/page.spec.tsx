@@ -116,6 +116,13 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
     expect(container.textContent).not.toContain('Bạn chưa có đơn hàng nào');
   });
 
+  it('có lối vào Sổ địa chỉ (BUYERWEB-14)', async () => {
+    const { container } = await mount();
+    const link = container.querySelector<HTMLAnchorElement>('nav[aria-label="Quản lý tài khoản"] a');
+    expect(link?.getAttribute('href')).toBe('/tai-khoan/dia-chi');
+    expect(link?.textContent).toContain('Sổ địa chỉ');
+  });
+
   it('tab đang chọn có aria-pressed; trang vẫn đúng một h1, nút đủ tên và vùng chạm', async () => {
     const { container } = await mount();
     const pressed = Array.from(container.querySelectorAll('[role="group"] button')).map((b) => b.getAttribute('aria-pressed'));

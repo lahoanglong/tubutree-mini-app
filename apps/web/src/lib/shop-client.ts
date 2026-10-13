@@ -122,6 +122,10 @@ export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method
 export const getAddresses = () => apiFetch<AddressDTO[]>('/me/addresses');
 export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
   apiFetch<AddressDTO>('/me/addresses', { method: 'POST', body: data });
+export const updateAddress = (id: string, data: Partial<Omit<AddressDTO, 'id'>>) =>
+  apiFetch<AddressDTO>(`/me/addresses/${encodeURIComponent(id)}`, { method: 'PATCH', body: data });
+export const deleteAddress = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/me/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 /** Ghi "chạm" giới thiệu để attribution sống qua cả lúc mất phiên (BE giữ 3 ngày). */
 export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
