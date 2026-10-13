@@ -107,7 +107,33 @@ describe('PancakeSyncService.syncProducts', () => {
       wishlist: { findMany: jest.fn().mockResolvedValue([]) },
     });
     await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).syncProducts();
-    expect(notifyPriceDrop).toHaveBeenCalledWith('existing', 'Tinh dầu');
+    expect(notifyPriceDrop).toHaveBeenCalledWith('existing', 'Tinh dầu', { oldPrice: 2000, newPrice: 1000 });
+  });
+
+  it('nhiều biến thể cùng giảm → báo mức giảm theo % sâu nhất, kèm giá cũ/mới của biến thể đó (ENGAGE-18)', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ retailPrice: 1100, salePrice: null }) // 1100 → 1000: ~9%
+      .mockResolvedValueOnce({ retailPrice: 2000, salePrice: null }); // 2000 → 1000: 50%
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'existing', slug: 's', brand: 'b' }),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+      },
+      variation: { upsert: jest.fn().mockResolvedValue({}), findUnique },
+      wishlist: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const p2 = {
+      id: 'a',
+      name: 'Tinh dầu',
+      variations: [
+        { id: 'v1', sku: 's1', retail_price: 1000, remain_quantity: 5, fields: {}, images: [] },
+        { id: 'v2', sku: 's2', retail_price: 1000, remain_quantity: 5, fields: {}, images: [] },
+      ],
+    };
+    await new PancakeSyncService(prisma, makeClient([[p2]]), lifecycle).syncProducts();
+    expect(notifyPriceDrop).toHaveBeenCalledWith('existing', 'Tinh dầu', { oldPrice: 2000, newPrice: 1000 });
   });
 
   it('giá KHÔNG giảm (tăng/bằng) → không báo', async () => {

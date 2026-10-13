@@ -98,6 +98,8 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
+  { key: 'wishlist.price_drop_min_pct', value: 0.05, category: 'wishlist', description: 'Giảm dưới mức này (phân số, 0.05 = 5%) thì không báo user đã yêu thích sản phẩm' },
+  { key: 'wishlist.price_drop_cooldown_days', value: 7, category: 'wishlist', description: 'Số ngày tối thiểu giữa hai thông báo giảm giá cùng sản phẩm cho một user (0 = tắt)' },
   { key: 'subscribe.stock_retry_days', value: 3, category: 'subscribe', description: 'Số đêm cron thử lại kỳ định kỳ khi hết hàng/lỗi tạm thời trước khi bỏ kỳ (0 = không thử lại)' },
   {
     key: 'subscribe.discount_tiers',
@@ -688,7 +690,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
-  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
+  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },
   { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
   // Mọi nhánh tạm dừng (SP ngừng bán, địa chỉ hỏng, Ví Tubu không đủ — C-015) đều truyền {{reason}}. Prod nhận lời này
   // và mẫu chuyển khoản dưới qua migration 20261010191000_subscription_second_order_templates_fix.

@@ -164,7 +164,8 @@ export class PancakeSyncService implements OnModuleInit {
           },
         });
 
-    let priceDropped = false;
+    // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.
+    let bestDrop: { oldPrice: number; newPrice: number } | null = null;
     for (const v of p.variations ?? []) {
       // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
       const prev = await this.prisma.variation.findUnique({
@@ -174,7 +175,9 @@ export class PancakeSyncService implements OnModuleInit {
       const newEff = v.sale_price ?? v.retail_price ?? 0;
       if (prev) {
         const oldEff = prev.salePrice ?? prev.retailPrice;
-        if (newEff > 0 && newEff < oldEff) priceDropped = true;
+        if (newEff > 0 && newEff < oldEff && (!bestDrop || (oldEff - newEff) / oldEff > (bestDrop.oldPrice - bestDrop.newPrice) / bestDrop.oldPrice)) {
+          bestDrop = { oldPrice: oldEff, newPrice: newEff };
+        }
       }
       await this.prisma.variation.upsert({
         where: { pancakeId: v.id },
@@ -209,8 +212,8 @@ export class PancakeSyncService implements OnModuleInit {
     }
 
     // Giá giảm → báo cho user đã wishlist (không chặn sync nếu notify lỗi).
-    if (priceDropped) {
-      await this.lifecycle.notifyWishlistPriceDrop(product.id, product.name).catch(() => undefined);
+    if (bestDrop) {
+      await this.lifecycle.notifyWishlistPriceDrop(product.id, product.name, bestDrop).catch(() => undefined);
     }
   }
 

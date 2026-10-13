@@ -169,13 +169,25 @@ describe('LifecycleService.sendReorderReminders — FIX 2 (A2-07=A3-03=A6-31): c
 });
 
 describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
-  function setupWishlist(users: string[], slug: string | null = 'tinh-dau-tram') {
+  function setupWishlist(
+    users: string[],
+    slug: string | null = 'tinh-dau-tram',
+    opts: { recentlyAlerted?: string[]; cfg?: Record<string, unknown> } = {},
+  ) {
     const findMany = jest.fn().mockResolvedValue(users.map((userId) => ({ userId })));
     const product = { findUnique: jest.fn().mockResolvedValue(slug === null ? null : { slug }) };
-    const prisma = { wishlist: { findMany }, product } as unknown as PrismaService;
+    const logFindMany = jest.fn().mockResolvedValue((opts.recentlyAlerted ?? []).map((userId) => ({ userId })));
+    const prisma = {
+      wishlist: { findMany },
+      product,
+      notificationLog: { findMany: logFindMany },
+    } as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const notifications = { notify } as unknown as NotificationsService;
-    return { svc: new LifecycleService(prisma, config, notifications), notify };
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k in (opts.cfg ?? {}) ? (opts.cfg![k] as T) : (fb as T)),
+    } as unknown as SystemConfigService;
+    return { svc: new LifecycleService(prisma, cfg, notifications), notify, findMany, logFindMany };
   }
 
   it('báo cho tất cả user đã wishlist sản phẩm', async () => {
@@ -183,19 +195,85 @@ describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
     await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm');
     expect(notify).toHaveBeenCalledTimes(2);
     // C-085: kèm product_slug để nút trong thông báo mở đúng sản phẩm.
-    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm', product_slug: 'tinh-dau-tram' });
-    expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm', product_slug: 'tinh-dau-tram' });
+    const data = { product: 'Tinh dầu tràm', product_slug: 'tinh-dau-tram', product_id: 'p1', price_note: '' };
+    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', data);
+    expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', data);
   });
 
   it('không tìm thấy slug → vẫn báo, chỉ thiếu product_slug', async () => {
     const { svc, notify } = setupWishlist(['u1'], null);
     await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm');
-    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm' });
+    expect(notify).toHaveBeenCalledWith('u1', 'PRICE_DROP_ALERT', { product: 'Tinh dầu tràm', product_id: 'p1', price_note: '' });
   });
 
   it('không ai wishlist → không báo', async () => {
     const { svc, notify } = setupWishlist([]);
     await svc.notifyWishlistPriceDrop('p1', 'X');
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  // ENGAGE-18: thông báo chỉ nói "đang giảm giá", giảm 1đ cũng gửi, giá dao động thì nhắc lặp.
+  describe('giá cũ/mới, ngưỡng giảm tối thiểu và cooldown (ENGAGE-18)', () => {
+    it('có giá → nội dung ghi giá cũ và giá mới', async () => {
+      const { svc, notify } = setupWishlist(['u1']);
+      await svc.notifyWishlistPriceDrop('p1', 'Tinh dầu tràm', { oldPrice: 120_000, newPrice: 99_000 });
+      expect(notify).toHaveBeenCalledWith(
+        'u1',
+        'PRICE_DROP_ALERT',
+        expect.objectContaining({ price_note: ' từ 120.000đ xuống 99.000đ' }),
+      );
+    });
+
+    it('giảm dưới ngưỡng (mặc định 5%) → không báo và không đọc wishlist', async () => {
+      const { svc, notify, findMany } = setupWishlist(['u1']);
+      await svc.notifyWishlistPriceDrop('p1', 'X', { oldPrice: 100_000, newPrice: 99_000 });
+      expect(notify).not.toHaveBeenCalled();
+      expect(findMany).not.toHaveBeenCalled();
+    });
+
+    it('giảm đúng ngưỡng 5% → báo', async () => {
+      const { svc, notify } = setupWishlist(['u1']);
+      await svc.notifyWishlistPriceDrop('p1', 'X', { oldPrice: 100_000, newPrice: 95_000 });
+      expect(notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('ngưỡng đổi bằng wishlist.price_drop_min_pct', async () => {
+      const { svc, notify } = setupWishlist(['u1'], 'x', { cfg: { 'wishlist.price_drop_min_pct': 0.2 } });
+      await svc.notifyWishlistPriceDrop('p1', 'X', { oldPrice: 100_000, newPrice: 90_000 });
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('giá mới không thấp hơn giá cũ → không báo', async () => {
+      const { svc, notify } = setupWishlist(['u1']);
+      await svc.notifyWishlistPriceDrop('p1', 'X', { oldPrice: 90_000, newPrice: 100_000 });
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('user đã được báo sản phẩm này trong cooldown → bỏ qua, người khác vẫn được báo', async () => {
+      const { svc, notify, logFindMany } = setupWishlist(['u1', 'u2'], 'x', { recentlyAlerted: ['u1'] });
+      await svc.notifyWishlistPriceDrop('p1', 'X');
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith('u2', 'PRICE_DROP_ALERT', expect.anything());
+      const where = logFindMany.mock.calls[0][0].where;
+      expect(where.templateCode).toBe('PRICE_DROP_ALERT');
+      expect(where.userId).toEqual({ in: ['u1', 'u2'] });
+      expect(where.payload).toEqual({ path: ['data', 'product_id'], equals: 'p1' });
+      const days = (Date.now() - where.sentAt.gte.getTime()) / 864e5;
+      expect(days).toBeGreaterThan(6.99);
+      expect(days).toBeLessThan(7.01);
+    });
+
+    it('wishlist.price_drop_cooldown_days = 0 → tắt cooldown, không truy vấn log', async () => {
+      const { svc, notify, logFindMany } = setupWishlist(['u1'], 'x', { cfg: { 'wishlist.price_drop_cooldown_days': 0 } });
+      await svc.notifyWishlistPriceDrop('p1', 'X');
+      expect(logFindMany).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('tất cả đều đang trong cooldown → không báo ai', async () => {
+      const { svc, notify } = setupWishlist(['u1'], 'x', { recentlyAlerted: ['u1'] });
+      await svc.notifyWishlistPriceDrop('p1', 'X');
+      expect(notify).not.toHaveBeenCalled();
+    });
   });
 });
