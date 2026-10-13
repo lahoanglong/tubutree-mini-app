@@ -84,15 +84,156 @@ describe('RefillService.returnBottles', () => {
 });
 
 describe('RefillService.approveReturn', () => {
-  it('duyệt đơn PENDING → chuyển APPROVED + cộng 💧 + tạo notificationLog', async () => {
+  it('duyệt đơn PENDING → chuyển APPROVED + cộng 💧', async () => {
     const prisma = makePrisma();
     const svc = new RefillService(prisma, makeConfig(), makeNotifications());
-    const r = await svc.approveReturn('br1');
+    const r = await svc.approveReturn('br1', 'staff1');
     expect(r.status).toBe('APPROVED');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     const up = (prisma.gameProfile.upsert as jest.Mock).mock.calls[0][0];
     expect(up.where).toEqual({ userId: 'u1' });
     expect(up.update.totalSeeds).toEqual({ increment: 150 });
+  });
+
+  // ENGAGE-13: duyệt không ghi ai duyệt và không có chỗ nhập số vỏ thực nhận.
+  describe('nhân viên đối chiếu số vỏ thực nhận (ENGAGE-13)', () => {
+    const approvedData = (prisma: PrismaService) =>
+      (prisma.bottleReturn.updateMany as jest.Mock).mock.calls[0][0].data as Record<string, unknown>;
+
+    it('ghi người duyệt và thời điểm duyệt', async () => {
+      const prisma = makePrisma();
+      await new RefillService(prisma, makeConfig(), makeNotifications()).approveReturn('br1', 'staff1');
+      expect(approvedData(prisma)).toMatchObject({ status: 'APPROVED', reviewedBy: 'staff1', reviewedAt: expect.any(Date) });
+    });
+
+    it('không nhập số thực nhận → nhận đủ số khách khai (tương thích bản app cũ), không có declaredQuantity', async () => {
+      const prisma = makePrisma();
+      await new RefillService(prisma, makeConfig(), makeNotifications()).approveReturn('br1', 'staff1');
+      const data = approvedData(prisma);
+      expect(data).not.toHaveProperty('quantity');
+      expect(data).not.toHaveProperty('seedsAwarded');
+      expect(data).not.toHaveProperty('declaredQuantity');
+    });
+
+    it('nhận ít hơn khai (khai 3, nhận 2) → quantity = 2, giữ số khai ở declaredQuantity, 💧 theo 2 vỏ', async () => {
+      const prisma = makePrisma();
+      await new RefillService(prisma, makeConfig(), makeNotifications()).approveReturn('br1', 'staff1', 2);
+      expect(approvedData(prisma)).toMatchObject({ quantity: 2, declaredQuantity: 3, seedsAwarded: 100 });
+      const up = (prisma.gameProfile.upsert as jest.Mock).mock.calls[0][0];
+      expect(up.update.totalSeeds).toEqual({ increment: 100 });
+    });
+
+    it('nhập nhiều hơn khai → kẹp về số khai, không thưởng quá', async () => {
+      const prisma = makePrisma();
+      await new RefillService(prisma, makeConfig(), makeNotifications()).approveReturn('br1', 'staff1', 9);
+      expect(approvedData(prisma)).not.toHaveProperty('quantity');
+      expect(approvedData(prisma)).not.toHaveProperty('declaredQuantity');
+      const up = (prisma.gameProfile.upsert as jest.Mock).mock.calls[0][0];
+      expect(up.update.totalSeeds).toEqual({ increment: 150 });
+    });
+
+    it.each([0, -1, 1.5])('số thực nhận %s không hợp lệ → 400, không cộng 💧 (không nhận được vỏ nào thì dùng Từ chối)', async (bad) => {
+      const prisma = makePrisma();
+      await expect(
+        new RefillService(prisma, makeConfig(), makeNotifications()).approveReturn('br1', 'staff1', bad),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.gameProfile.upsert).not.toHaveBeenCalled();
+    });
+
+    it('báo khách qua mẫu REFILL_APPROVED với số vỏ ghi nhận, 💧 và ghi chú khi số nhận khác số khai', async () => {
+      const prisma = makePrisma();
+      const notifications = makeNotifications();
+      await new RefillService(prisma, makeConfig(), notifications).approveReturn('br1', 'staff1', 2);
+      expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFILL_APPROVED', {
+        quantity: '2',
+        seeds: '100',
+        note: ' (bạn khai 3 vỏ)',
+      });
+    });
+
+    it('nhận đủ → ghi chú rỗng', async () => {
+      const notifications = makeNotifications();
+      await new RefillService(makePrisma(), makeConfig(), notifications).approveReturn('br1', 'staff1');
+      expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFILL_APPROVED', { quantity: '3', seeds: '150', note: '' });
+    });
+
+    it('gửi thông báo lỗi vẫn không làm hỏng việc duyệt đã commit', async () => {
+      const notifications = { notify: jest.fn().mockRejectedValue(new Error('down')) } as unknown as NotificationsService;
+      await expect(
+        new RefillService(makePrisma(), makeConfig(), notifications).approveReturn('br1', 'staff1'),
+      ).resolves.toMatchObject({ ok: true, status: 'APPROVED' });
+    });
+  });
+});
+
+describe('RefillService.rejectReturn (ENGAGE-13)', () => {
+  it('ghi người từ chối, thời điểm và lý do; báo khách kèm lý do qua mẫu REFILL_REJECTED', async () => {
+    const prisma = makePrisma();
+    const notifications = makeNotifications();
+    await new RefillService(prisma, makeConfig(), notifications).rejectReturn('br1', 'staff1', 'Vỏ chai chưa rửa sạch');
+    const data = (prisma.bottleReturn.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      status: 'REJECTED', reviewedBy: 'staff1', reviewedAt: expect.any(Date), rejectionReason: 'Vỏ chai chưa rửa sạch',
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFILL_REJECTED', {
+      quantity: '3',
+      reason: ': Vỏ chai chưa rửa sạch',
+    });
+  });
+
+  it('không nêu lý do → rejectionReason null và câu báo không có đoạn lý do', async () => {
+    const prisma = makePrisma();
+    const notifications = makeNotifications();
+    await new RefillService(prisma, makeConfig(), notifications).rejectReturn('br1', 'staff1');
+    expect((prisma.bottleReturn.updateMany as jest.Mock).mock.calls[0][0].data.rejectionReason).toBeNull();
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFILL_REJECTED', { quantity: '3', reason: '' });
+  });
+});
+
+describe('RefillService.listPending (ENGAGE-13)', () => {
+  it('cũ nhất trước (yêu cầu cũ không bị đẩy ra ngoài khi > 100 hàng chờ), tối đa 100/trang', async () => {
+    const prisma = makePrisma();
+    await new RefillService(prisma, makeConfig(), makeNotifications()).listPending();
+    const arg = (prisma.bottleReturn.findMany as jest.Mock).mock.calls[0][0];
+    expect(arg.where).toEqual({ status: 'PENDING' });
+    expect(arg.orderBy).toEqual([{ createdAt: 'asc' }, { id: 'asc' }]);
+    expect(arg.take).toBe(100);
+    expect(arg).not.toHaveProperty('cursor');
+  });
+
+  it('có cursor → trang kế sau dòng cuối của trang trước', async () => {
+    const prisma = makePrisma();
+    await new RefillService(prisma, makeConfig(), makeNotifications()).listPending({ cursor: 'br9', take: 30 });
+    const arg = (prisma.bottleReturn.findMany as jest.Mock).mock.calls[0][0];
+    expect(arg.cursor).toEqual({ id: 'br9' });
+    expect(arg.skip).toBe(1);
+    expect(arg.take).toBe(30);
+  });
+
+  it('take > 100 bị kẹp về 100; take không hợp lệ (0) dùng mặc định 100', async () => {
+    const prisma = makePrisma();
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+    await svc.listPending({ take: 5000 });
+    await svc.listPending({ take: 0 });
+    const takes = (prisma.bottleReturn.findMany as jest.Mock).mock.calls.map((c) => c[0].take);
+    expect(takes).toEqual([100, 100]);
+  });
+});
+
+describe('RefillService.getSummary — điểm nhận vỏ (ENGAGE-13)', () => {
+  it('trả địa chỉ/giờ/SĐT điểm nhận từ SystemConfig', async () => {
+    const cfg = makeConfig({
+      'refill.pickup_address': ' 12 Nguyễn Huệ, Q1 ',
+      'refill.pickup_hours': '8h–20h hằng ngày',
+      'refill.pickup_phone': '0899 149 229',
+    });
+    const r = await new RefillService(makePrisma(), cfg, makeNotifications()).getSummary('u1');
+    expect(r.pickup).toEqual({ address: '12 Nguyễn Huệ, Q1', hours: '8h–20h hằng ngày', phone: '0899 149 229' });
+  });
+
+  it('chưa cấu hình / để trống / sai kiểu → null từng trường (UI tự ẩn)', async () => {
+    const r = await new RefillService(makePrisma(), makeConfig({ 'refill.pickup_address': '   ', 'refill.pickup_hours': 5 }), makeNotifications()).getSummary('u1');
+    expect(r.pickup).toEqual({ address: null, hours: null, phone: null });
   });
 });
 

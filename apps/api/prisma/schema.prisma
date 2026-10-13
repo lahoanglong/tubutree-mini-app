@@ -1719,10 +1719,15 @@ model BottleReturn {
   id           String       @id @default(cuid())
   userId       String
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quantity     Int // số vỏ chai đổi lần này
+  quantity     Int // số vỏ chai đổi lần này; khi duyệt = số vỏ nhân viên THỰC NHẬN (≤ số khách khai)
   seedsAwarded Int // 💧 đã thưởng (khi APPROVED)
   status       RefillStatus @default(PENDING)
   createdAt    DateTime     @default(now())
+  // Chỉ có khi nhân viên duyệt số vỏ ít hơn khách khai: số khách khai ban đầu, để đối soát.
+  declaredQuantity Int?
+  reviewedBy       String? // userId nhân viên/admin duyệt hoặc từ chối
+  reviewedAt       DateTime?
+  rejectionReason  String?
 
   @@index([userId, createdAt])
   @@index([status])
