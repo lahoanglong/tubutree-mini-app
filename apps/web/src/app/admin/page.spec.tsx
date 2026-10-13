@@ -133,6 +133,8 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     }),
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
     createCoupon: (...args: unknown[]) => mocks.createCoupon(...args),
+    listCoupons: async () => ({ data: [], meta: { total: 0, page: 1, limit: 20 } }),
+    updateCoupon: vi.fn(),
     getConfig: async () => {
       if (mocks.configFails) throw new Error('boom');
       return mocks.config;
@@ -642,7 +644,7 @@ describe('admin/page — tab Voucher', () => {
 
   it('ô nhập cao 44px ở điện thoại với viền đủ tương phản, co được trong hàng flex để không tràn ngang', async () => {
     const { container } = await openCoupons();
-    const inputs = [...container.querySelectorAll('input, select')];
+    const inputs = [...container.querySelector('[data-testid="coupon-create-form"]')!.querySelectorAll('input, select')];
     expect(inputs).toHaveLength(9);
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
@@ -674,6 +676,17 @@ describe('admin/page — tab Voucher', () => {
     await flush();
     const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Mã đã tồn tại')!;
     expect(bad.className).toContain('text-danger-fg');
+  });
+
+  it('ADMINOPS-7: ô Mã tự đổi chữ HOA và bỏ khoảng trắng (khách luôn gửi mã dạng HOA)', async () => {
+    const { container } = await openCoupons();
+    const codeInput = container.querySelector<HTMLInputElement>('input[placeholder^="Mã"]')!;
+    typeInto(codeInput, ' summer 10 ');
+    expect(codeInput.value).toBe('SUMMER10');
+    mocks.createCoupon.mockResolvedValueOnce({});
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!.click());
+    await flush();
+    expect(mocks.createCoupon).toHaveBeenCalledWith(expect.objectContaining({ code: 'SUMMER10' }));
   });
 });
 

@@ -17,6 +17,13 @@ import {
 } from './admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
+const asBodyDto = (metatype: new () => object, value: Record<string, unknown>) =>
+  new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }).transform(value, {
+    type: 'body',
+    metatype,
+    data: undefined,
+  });
+
 // Kiểm chứng 2 finding tồn đọng từ Phase 1 (đã sửa ở admin.controller.ts):
 // 1) perUserLimit: @Min(0) — 0 vẫn hợp lệ (= không giới hạn, nhất quán coupons.service.ts).
 // 2) value: @MaxIfPercent(100) — chặn admin nhập PERCENT > 100% nhưng KHÔNG áp cho AMOUNT.
@@ -116,6 +123,40 @@ describe('CreateCouponDto — code/startAt/endAt validation (Bug 2)', () => {
   it('startAt/endAt là ISO date string hợp lệ → PASS', async () => {
     const errors = await validate(makeDto({}));
     expect(errors.some((e) => e.property === 'startAt' || e.property === 'endAt')).toBe(false);
+  });
+});
+
+describe('CreateCouponDto — chuẩn hoá mã + chặn số vô lý (ADMINOPS-7/8)', () => {
+  const base = {
+    code: 'SALE10',
+    type: 'AMOUNT',
+    value: 10000,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+    scope: 'PUBLIC',
+  };
+  const run = (over: Record<string, unknown>) => asBodyDto(CreateCouponDto, { ...base, ...over });
+
+  it('mã chữ thường + khoảng trắng hai đầu → tự chuẩn hoá HOA, bỏ khoảng trắng', async () => {
+    const dto = (await run({ code: '  summer10 ' })) as CreateCouponDto;
+    expect(dto.code).toBe('SUMMER10');
+  });
+
+  it('mã có khoảng trắng ở giữa / ký tự lạ → 400 tiếng Việt', async () => {
+    await expect(run({ code: 'sale 50' })).rejects.toMatchObject({ response: { message: expect.arrayContaining([expect.stringContaining('Mã chỉ gồm')]) } });
+    await expect(run({ code: 'GIẢM50' })).rejects.toBeDefined();
+  });
+
+  it('minOrder/maxDiscount âm, usageLimit âm hoặc 0 → 400', async () => {
+    await expect(run({ minOrder: -5 })).rejects.toBeDefined();
+    await expect(run({ maxDiscount: -100 })).rejects.toBeDefined();
+    await expect(run({ usageLimit: -1 })).rejects.toBeDefined();
+    await expect(run({ usageLimit: 0 })).rejects.toBeDefined();
+  });
+
+  it('AMOUNT 999.999.999đ → 400 (vượt trần 5.000.000đ)', async () => {
+    await expect(run({ value: 999_999_999 })).rejects.toBeDefined();
+    await expect(run({ value: 5_000_000 })).resolves.toBeDefined();
   });
 });
 

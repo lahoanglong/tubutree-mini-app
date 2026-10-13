@@ -845,6 +845,66 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
   });
 });
 
+describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
+  const couponBase = {
+    code: 'SALE10',
+    type: 'PERCENT' as const,
+    value: 10,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+    scope: 'PUBLIC' as const,
+  };
+
+  it('createCoupon: ngày kết thúc trước/bằng ngày bắt đầu → 400, không ghi', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({ coupon: { create } });
+    await expect(
+      mkAdmin(prisma).createCoupon({ ...couponBase, startAt: '2026-12-31T00:00:00.000Z', endAt: '2026-01-01T00:00:00.000Z' }),
+    ).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('createCoupon: trùng mã (P2002) → 409 "Mã ... đã tồn tại"', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const create = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 't' }));
+    const prisma = makePrisma({ coupon: { create } });
+    await expect(mkAdmin(prisma).createCoupon(couponBase)).rejects.toThrow('Mã SALE10 đã tồn tại.');
+  });
+
+  it('listCoupons: trả mã kèm số lượt đã dùng (đếm redemption), lọc theo từ khoá đã chuẩn hoá', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'c1', code: 'SALE10', isActive: true }]);
+    const count = jest.fn().mockResolvedValue(1);
+    const groupBy = jest.fn().mockResolvedValue([{ couponId: 'c1', _count: { _all: 7 } }]);
+    const prisma = makePrisma({ coupon: { findMany, count }, couponRedemption: { groupBy } });
+    const out = await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: ' sale ' });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ code: { contains: 'SALE' } }) }));
+    expect(out.data[0]).toMatchObject({ code: 'SALE10', redeemedCount: 7 });
+    expect(out.meta.total).toBe(1);
+  });
+
+  it('updateCoupon: tắt mã (isActive=false) ghi đúng trường', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-01-01'), endAt: new Date('2026-12-31'), usedCount: 0 });
+    const update = jest.fn().mockResolvedValue({ id: 'c1', isActive: false });
+    const prisma = makePrisma({ coupon: { findUnique, update }, couponRedemption: { count: jest.fn().mockResolvedValue(3) } });
+    await mkAdmin(prisma).updateCoupon('c1', { isActive: false });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isActive: false } });
+  });
+
+  it('updateCoupon: endAt trước startAt → 400; usageLimit nhỏ hơn số lượt đã dùng → 400', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-06-01'), endAt: new Date('2026-12-31'), usedCount: 5 });
+    const update = jest.fn();
+    const prisma = makePrisma({ coupon: { findUnique, update }, couponRedemption: { count: jest.fn().mockResolvedValue(5) } });
+    await expect(mkAdmin(prisma).updateCoupon('c1', { endAt: '2026-05-01T00:00:00.000Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
+    await expect(mkAdmin(prisma).updateCoupon('c1', { usageLimit: 3 })).rejects.toThrow('đã được dùng 5 lượt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('updateCoupon: mã không tồn tại → 404', async () => {
+    const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(mkAdmin(prisma).updateCoupon('nope', { isActive: false })).rejects.toThrow('Không tìm thấy mã giảm giá.');
+  });
+});
+
 describe('AdminService.getDashboardStats', () => {
   it('tổng hợp đúng số lượng đơn, doanh thu và cây trồng', async () => {
     const prisma = makePrisma({

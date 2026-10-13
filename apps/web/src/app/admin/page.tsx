@@ -90,6 +90,7 @@ import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel';
 import { useConfirm } from '@/components/admin/confirm-dialog';
+import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
 import { OrderInvoicePanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
@@ -1272,6 +1273,7 @@ function localDateIso(dayKey: string, endOfDay: boolean, fallbackMs: number): st
 }
 
 function CouponsTab() {
+  const qc = useQueryClient();
   const [f, setF] = useState({
     code: '',
     type: 'PERCENT',
@@ -1303,13 +1305,24 @@ function CouponsTab() {
         endAt: localDateIso(f.endAt, true, Date.now() + 30 * 864e5),
         scope: f.scope as 'PUBLIC',
       }),
-    onSuccess: () => setMsg('Đã tạo voucher!'),
+    onSuccess: () => {
+      setMsg('Đã tạo voucher!');
+      void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
+    },
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
   return (
-    <div className="max-w-md space-y-2">
-      <input placeholder="Mã (vd WELCOME30)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} className={field} />
+    <div className="space-y-6">
+    <div className="max-w-md space-y-2" data-testid="coupon-create-form">
+      <input
+        placeholder="Mã (vd WELCOME30)"
+        aria-label="Mã voucher"
+        value={f.code}
+        // Khách luôn nhập mã dạng HOA không khoảng trắng (Mini App/web tự đổi): lưu đúng dạng đó.
+        onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
+        className={field}
+      />
       <div className="flex gap-2">
         <select aria-label="Loại voucher" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           <option value="PERCENT">% giảm</option>
@@ -1335,6 +1348,8 @@ function CouponsTab() {
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
+    </div>
+    <CouponList />
     </div>
   );
 }

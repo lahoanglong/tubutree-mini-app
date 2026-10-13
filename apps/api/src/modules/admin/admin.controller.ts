@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { Type } from 'class-transformer';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Transform, Type } from 'class-transformer';
 import {
   Allow,
   IsArray,
@@ -12,6 +12,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -111,18 +112,49 @@ class SetConfigDto {
   @Allow() value!: object | string | number | boolean;
 }
 // Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).
+export const COUPON_AMOUNT_MAX = 5_000_000;
+const COUPON_CODE_RE = /^[A-Z0-9_-]{3,40}$/;
+const COUPON_CODE_MSG = 'Mã chỉ gồm chữ in hoa không dấu, số, gạch ngang hoặc gạch dưới (3–40 ký tự, không khoảng trắng).';
+
+/** value <= max khi type=AMOUNT (chặn gõ thừa số 0: mã lộ ra là đơn nào cũng 0đ). */
+function MaxIfAmount(max: number, validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'maxIfAmount',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      constraints: [max],
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const dto = args.object as { type?: string };
+          if (dto.type !== 'AMOUNT') return true;
+          return typeof value === 'number' && value <= max;
+        },
+        defaultMessage(args: ValidationArguments) {
+          return `Mức giảm tối đa ${Number(args.constraints[0]).toLocaleString('vi-VN')}đ cho mã giảm theo số tiền.`;
+        },
+      },
+    });
+  };
+}
+
+// Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).
 export class CreateCouponDto {
-  @IsString() @IsNotEmpty() @MaxLength(64) code!: string;
+  // Khách luôn gửi mã dạng HOA (miniapp/web toUpperCase) → lưu đúng dạng đó (ADMINOPS-7).
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsString() @IsNotEmpty() @MaxLength(64) @Matches(COUPON_CODE_RE, { message: COUPON_CODE_MSG })
+  code!: string;
   @IsIn(['PERCENT', 'AMOUNT', 'FREESHIP']) type!: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
-  @IsInt() @Min(0) @MaxIfPercent(100) value!: number;
-  @IsOptional() @IsInt() minOrder?: number;
-  @IsOptional() @IsInt() maxDiscount?: number;
+  @IsInt() @Min(0) @MaxIfPercent(100) @MaxIfAmount(COUPON_AMOUNT_MAX) value!: number;
+  @IsOptional() @IsInt() @Min(0, { message: 'Đơn tối thiểu không được âm.' }) minOrder?: number;
+  @IsOptional() @IsInt() @Min(0, { message: 'Giảm tối đa không được âm.' }) maxDiscount?: number;
   // Bug 2: trước đây chỉ @IsString() — ngày sai định dạng lọt qua validation, new Date() ra
   // Invalid Date, Prisma serialize RangeError khi ghi startAt/endAt → lọt qua
   // PrismaExceptionFilter (chỉ bắt PrismaClientKnownRequestError) → 500 trần cho admin.
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  @IsOptional() @IsInt() usageLimit?: number;
+  @IsOptional() @IsInt() @Min(1, { message: 'Tổng lượt dùng phải từ 1 trở lên (bỏ trống = không giới hạn).' }) usageLimit?: number;
   // perUserLimit <= 0 = "không giới hạn" (nhất quán với coupons.service.ts / loyalty.service.ts —
   // grep `perUserLimit > 0`). @Min(0) chỉ chặn số âm vô nghĩa, KHÔNG cấm 0.
   @IsOptional() @IsInt() @Min(0) perUserLimit?: number;
@@ -135,6 +167,16 @@ export class CreateCouponDto {
   @IsObject()
   @RequiredScopeMeta()
   scopeMeta?: { tierId?: string; userId?: string };
+}
+export class ListCouponsQuery extends PaginationQuery {
+  @IsOptional() @IsString() @MaxLength(64) q?: string;
+  @IsOptional() @IsIn(['PUBLIC', 'TIER', 'USER_GROUP', 'BIRTHDAY', 'INVITE']) scope?: string;
+  @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
+}
+export class UpdateCouponDto {
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsDateString() endAt?: string;
+  @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
 }
 class ImportDealerPricesDto {
   @IsString() tierId!: string;
@@ -408,9 +450,19 @@ export class AdminController {
     return this.admin.setConfig(adminId, dto.key, dto.value);
   }
 
+  @Get('coupons')
+  listCoupons(@Query() q: ListCouponsQuery) {
+    return this.admin.listCoupons(q);
+  }
+
   @Post('coupons')
   createCoupon(@Body() dto: CreateCouponDto) {
     return this.admin.createCoupon(dto);
+  }
+
+  @Patch('coupons/:id')
+  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
+    return this.admin.updateCoupon(id, dto);
   }
 
   // Import bảng giá đại lý theo bậc (dán CSV "sku,giá" từ Excel hoặc gửi rows JSON).

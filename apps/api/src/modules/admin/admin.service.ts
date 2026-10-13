@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +25,7 @@ import {
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
+import { normalizeCouponCode } from '../coupons/coupons.service';
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -887,7 +888,7 @@ export class AdminService {
   }
 
   // ── Coupons ──
-  createCoupon(data: {
+  async createCoupon(data: {
     code: string;
     type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
     value: number;
@@ -901,23 +902,91 @@ export class AdminService {
     // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
     scopeMeta?: { tierId?: string; userId?: string };
   }) {
-    return this.prisma.coupon.create({
-      data: {
-        code: data.code,
-        type: data.type,
-        value: data.value,
-        minOrder: data.minOrder,
-        maxDiscount: data.maxDiscount,
-        startAt: new Date(data.startAt),
-        endAt: new Date(data.endAt),
-        usageLimit: data.usageLimit,
-        perUserLimit: data.perUserLimit ?? 1,
-        scope: data.scope,
-        // Trước đây KHÔNG ghi scopeMeta → coupon scope TIER/USER_GROUP tạo ra fail-closed ở MỌI
-        // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
-        scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
-      },
-    });
+    const startAt = new Date(data.startAt);
+    const endAt = new Date(data.endAt);
+    if (endAt <= startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+    const code = normalizeCouponCode(data.code);
+    try {
+      return await this.prisma.coupon.create({
+        data: {
+          code,
+          type: data.type,
+          value: data.value,
+          minOrder: data.minOrder,
+          maxDiscount: data.maxDiscount,
+          startAt,
+          endAt,
+          usageLimit: data.usageLimit,
+          perUserLimit: data.perUserLimit ?? 1,
+          scope: data.scope,
+          // Trước đây KHÔNG ghi scopeMeta → coupon scope TIER/USER_GROUP tạo ra fail-closed ở MỌI
+          // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
+          scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(`Mã ${code} đã tồn tại.`);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Danh sách mã cho tab Voucher (ADMINOPS-8). Mặc định ẩn voucher cá nhân sinh tự động (USER_GROUP:
+   * chào mừng/sinh nhật/mua chung/vòng quay — hàng nghìn dòng) trừ khi lọc đúng scope đó.
+   */
+  async listCoupons(q: { page: number; limit: number; q?: string; scope?: string; status?: 'active' | 'inactive' | 'expired' }) {
+    const now = new Date();
+    const keyword = q.q ? normalizeCouponCode(q.q) : '';
+    const where: Prisma.CouponWhereInput = {
+      ...(keyword ? { code: { contains: keyword } } : {}),
+      ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
+      ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
+      ...(q.status === 'inactive' ? { isActive: false } : {}),
+      ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
+    };
+    const { skip, take } = skipTake(q.page, q.limit);
+    const [rows, total] = await Promise.all([
+      this.prisma.coupon.findMany({ where, orderBy: { startAt: 'desc' }, skip, take }),
+      this.prisma.coupon.count({ where }),
+    ]);
+    const ids = rows.map((r) => r.id);
+    const grouped = ids.length
+      ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
+      : [];
+    const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
+    return paginated(
+      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0 })),
+      q.page,
+      q.limit,
+      total,
+    );
+  }
+
+  /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */
+  async updateCoupon(id: string, data: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) throw new NotFoundException('Không tìm thấy mã giảm giá.');
+    const patch: Prisma.CouponUpdateInput = {};
+    if (data.isActive !== undefined) patch.isActive = data.isActive;
+    if (data.endAt !== undefined) {
+      const endAt = new Date(data.endAt);
+      if (endAt <= coupon.startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+      patch.endAt = endAt;
+    }
+    if (data.usageLimit !== undefined) {
+      if (data.usageLimit !== null) {
+        const redeemed = await this.prisma.couponRedemption.count({ where: { couponId: id } });
+        if (data.usageLimit < redeemed) {
+          throw new BadRequestException(`Mã đã được dùng ${redeemed} lượt, tổng lượt không được nhỏ hơn số này.`);
+        }
+      }
+      patch.usageLimit = data.usageLimit;
+    }
+    const updated = await this.prisma.coupon.update({ where: { id }, data: patch });
+    this.logger.warn(`Admin cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
+    return updated;
   }
 
   // ── Import bảng giá đại lý theo bậc (§ back-office "admin Excel giá") ──
