@@ -117,6 +117,17 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'PAUSED'));
   });
 
+  it('hàng nút Sửa/Tạm dừng/Hủy: nút không bị ép chia đều rồi cắt chữ ("Tạm ...") ở 390px, thiếu chỗ thì xuống dòng (ENGAGE-12)', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    renderPanel();
+    const row = (await screen.findByRole('button', { name: 'Tạm dừng' })).parentElement as HTMLElement;
+    expect(row.style.flexWrap).toBe('wrap');
+    for (const name of ['Sửa', 'Tạm dừng', 'Hủy']) {
+      const btn = screen.getByRole('button', { name });
+      expect(btn.style.minWidth).toBe('max-content');
+    }
+  });
+
   it('"Hủy" mở sheet giữ chân; "Bỏ qua kỳ này" gọi skip; "Vẫn hủy" gọi CANCELLED', async () => {
     mocks.getSubscriptions.mockResolvedValue([SUB]);
     mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
