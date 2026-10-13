@@ -338,6 +338,23 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     expect(set).toHaveBeenCalledWith('shipping.eta_max_days', 5, 'admin-1');
   });
 
+  it('ADMINOPS-3: PUT khoá chưa có trong DB và không có luật ghi (gõ sai tên) → 400, KHÔNG tạo khoá mới', async () => {
+    const set = jest.fn();
+    const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue(null) } };
+    await expect(
+      mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'shipping.freeship_threshold_typo', 0),
+    ).rejects.toThrow('Không có khoá cấu hình "shipping.freeship_threshold_typo". Kiểm tra lại tên khoá.');
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('ADMINOPS-3: khoá chưa có dòng nhưng hệ thống biết (có luật ghi: form Tích điểm, Gomdon…) → vẫn ghi được', async () => {
+    const set = jest.fn().mockResolvedValue(undefined);
+    const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue(null) } };
+    await mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'loyalty.pos_credit_enabled', true);
+    await mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'game.spin_voucher_min_order_multiplier', 8);
+    expect(set).toHaveBeenCalledTimes(2);
+  });
+
   it('PUT sai luật khoá có form riêng (checkin_points 6 số) → 400, KHÔNG ghi', async () => {
     const set = jest.fn();
     const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: [1, 1, 1, 1, 1, 1, 2] }) } };

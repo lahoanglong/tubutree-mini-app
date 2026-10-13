@@ -255,3 +255,66 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     await expect(mk().svc.set(key, '30000' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán (ADMINOPS-3)', () => {
+  function mk(existing: unknown = null) {
+    const tx = {
+      systemConfig: {
+        findUnique: jest.fn().mockResolvedValue(existing === null ? null : { value: existing }),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['shipping.flat_fee_below_threshold', 19_000, [-19_000, 1_000_001, 1.5]],
+    ['shipping.free_threshold', 200_000, [-1, 50_000_001]],
+    ['loyalty.vnd_per_point', 10_000, [1, 999, 0, 1_000_001]],
+    ['wallet.withdraw_fee', 3_000, [-100_000, 100_001]],
+    ['wallet.withdraw_min', 100_000, [-1, 100_000_001]],
+    ['affiliate.min_withdraw_bank', 50_000, [-1]],
+    ['referral.min_order_amount', 200_000, [-5]],
+    ['groupbuy.max_open_per_user', 3, [-3, 0, 101]],
+    ['game.max_plots', 5, [0, 100_000]],
+    ['game.spin_voucher_min_order_multiplier', 6, [0, 0.5, 51]],
+  ] as const)('%s: nhận %d, từ chối %j', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(fine);
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    ['payment.bank_account_no', '9984606774', ['abc 12', '', '12345', '1'.repeat(21), 9984606774]],
+    ['payment.bank_bin', '970407', ['', '97040', '9704071', 'abcdef']],
+    ['shipping.tier_freeship_overrides', { LOC_BIEC: 99_000, DAI_THU: 0 }, [{ CO_THU: -50_000 }, { CO_THU: 1.5 }, [1], 'x']],
+    [
+      'subscribe.discount_tiers',
+      [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }],
+      [[{ minActive: 1, pct: 1.5 }], [{ minActive: 0, pct: 0.1 }], [{ minActive: 1, pct: -0.1 }], { pct: 0.1 }],
+    ],
+  ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine as never, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(null);
+      await expect(bad.svc.set(key, v as never, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('hasWriteRule: khoá có luật ghi là khoá hệ thống biết, khoá gõ sai thì không', () => {
+    expect(SystemConfigService.hasWriteRule('shipping.free_threshold')).toBe(true);
+    expect(SystemConfigService.hasWriteRule('payment.bank_bin')).toBe(true);
+    expect(SystemConfigService.hasWriteRule('shipping.freeship_threshold_typo')).toBe(false);
+  });
+});

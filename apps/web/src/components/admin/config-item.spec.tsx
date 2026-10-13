@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ConfigItem } from './config-item';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { ConfigRow } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -40,11 +40,12 @@ function setup(r: ConfigRow) {
 
 describe('ConfigItem (tab Cấu hình)', () => {
   it('khoá đang dùng: sửa JSON rồi Lưu → gửi PUT đúng giá trị đã parse', async () => {
-    const { container, puts, onSaved } = setup(row());
-    typeInto(container.querySelector('input'), '150000');
+    const { container, puts, onSaved } = setup(row({ key: 'game.max_plots', value: 5, category: 'game' }));
+    typeInto(container.querySelector('input'), '6');
     click(byText(container, 'button', 'Lưu'));
     await flush();
-    expect(puts).toEqual([{ key: 'shipping.free_threshold', value: 150000 }]);
+    expect(confirmDialog()).toBeNull();
+    expect(puts).toEqual([{ key: 'game.max_plots', value: 6 }]);
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -74,6 +75,34 @@ describe('ConfigItem (tab Cấu hình)', () => {
     typeInto(container.querySelector('input'), '2');
     click(byText(container, 'button', 'Lưu'));
     await flush();
+    answerConfirm(true);
+    await flush();
     expect(puts).toEqual([{ key: 'shipping.eta_min_days', value: 2 }]);
+  });
+
+  describe('ADMINOPS-3: khoá tiền/điểm/thanh toán hỏi xác nhận "trước → sau" trước khi ghi', () => {
+    it('shipping.free_threshold: hộp xác nhận nêu giá trị cũ và mới; Huỷ thì không gửi', async () => {
+      const { container, puts } = setup(row());
+      typeInto(container.querySelector('input'), '150000');
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      const d = confirmDialog();
+      expect(d?.textContent).toContain('shipping.free_threshold');
+      expect(d?.textContent).toContain('200000 → 150000');
+      answerConfirm(false);
+      await flush();
+      expect(puts).toHaveLength(0);
+    });
+
+    it('payment.bank_account_no: xác nhận rồi mới gửi PUT', async () => {
+      const { container, puts } = setup(row({ key: 'payment.bank_account_no', value: '9984606774', category: 'payment' }));
+      typeInto(container.querySelector('input'), '"1234567890"');
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      expect(puts).toHaveLength(0);
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key: 'payment.bank_account_no', value: '1234567890' }]);
+    });
   });
 });

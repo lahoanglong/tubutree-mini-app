@@ -24,7 +24,7 @@ import {
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
-import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
+import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 
 /**
@@ -878,6 +878,10 @@ export class AdminService {
    */
   async setConfig(adminId: string, key: string, value: object | string | number | boolean) {
     const existing = await this.prisma.systemConfig.findUnique({ where: { key }, select: { value: true } });
+    // Không upsert khoá lạ: khoá gõ sai được tạo mới, không ai đọc, admin tưởng đã đổi cấu hình (ADMINOPS-3).
+    if (!existing && !hasAdminConfigRule(key) && !SystemConfigService.hasWriteRule(key)) {
+      throw new BadRequestException(`Không có khoá cấu hình "${key}". Kiểm tra lại tên khoá.`);
+    }
     const restored = restoreRedactedSecrets(key, value, existing?.value) as object | string | number | boolean;
     const partnerKey = configPartnerKey(key);
     const partner = partnerKey ? await this.prisma.systemConfig.findUnique({ where: { key: partnerKey }, select: { value: true } }) : null;
