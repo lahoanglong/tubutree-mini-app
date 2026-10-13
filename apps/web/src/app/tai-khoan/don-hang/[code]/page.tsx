@@ -12,10 +12,10 @@ import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
   canPayAgain,
+  orderPaymentStatusLabel,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
-  paymentStatusLabel,
   safeHttpUrl,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
@@ -158,7 +158,7 @@ export default function OrderDetailPage() {
             <p className="text-xs text-stone-600">Đã dùng {o.pointsUsed} Điểm Xanh (đã tính trong giảm giá).</p>
           )}
           <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
-          {o.paymentStatus && <Row label="Tình trạng" value={paymentStatusLabel(o.paymentStatus)} />}
+          {o.paymentStatus && <Row label="Tình trạng" value={orderPaymentStatusLabel(o)} />}
         </div>
       </section>
 

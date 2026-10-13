@@ -120,6 +120,7 @@ import {
   PAYMENT_METHOD_LABELS,
 } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
+import { orderPaymentStatusShort } from '@/lib/order-view';
 
 type Tab =
   | 'dashboard'
@@ -789,7 +790,7 @@ function OrdersTab({
                           </div>
                           {o.paymentStatus && (
                             <div className="text-[11px] text-stone-500">
-                              {o.paymentStatus === 'PAID' ? 'Đã TT' : o.paymentStatus}
+                              {orderPaymentStatusShort(o)}
                             </div>
                           )}
                           {o.type === 'DEALER' && (

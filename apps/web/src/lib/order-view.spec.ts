@@ -6,6 +6,8 @@ import {
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
+  orderPaymentStatusLabel,
+  orderPaymentStatusShort,
   paymentStatusLabel,
   safeHttpUrl,
 } from './order-view';
@@ -64,5 +66,23 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(safeHttpUrl('not a url')).toBeNull();
     expect(safeHttpUrl(null)).toBeNull();
     expect(safeHttpUrl('')).toBeNull();
+  });
+});
+
+describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"', () => {
+  it('khách: COD + Đã giao + UNPAID → "Đã thu tiền khi giao"; các trường hợp khác giữ nhãn cũ', () => {
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu tiền khi giao');
+    expect(orderPaymentStatusLabel({ status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' })).toBe('Đã thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
+  });
+
+  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã TT", còn lại giữ mã', () => {
+    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu COD');
+    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('UNPAID');
+    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã TT');
+    expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('REFUNDED');
   });
 });
