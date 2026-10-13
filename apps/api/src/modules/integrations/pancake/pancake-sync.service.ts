@@ -1,10 +1,10 @@
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
-import type { PancakeProductDTO, PancakeVariationDTO } from './pancake.types';
+import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
@@ -22,6 +22,19 @@ const positiveInt = (n: unknown): n is number => typeof n === 'number' && Number
 interface SweepSeen {
   products: Set<string>;
   variations: Set<string>;
+}
+
+/** Pancake báo tổng số trang/bản ghi ở mỗi trang; lấy số lớn nhất từng thấy (danh mục có thể lớn lên giữa lượt). */
+interface SweepExpected {
+  pages?: number;
+  entries?: number;
+}
+
+const nonNegInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
+
+function noteExpected(exp: SweepExpected, res: PancakeProductsResponse): void {
+  if (nonNegInt(res.total_pages)) exp.pages = Math.max(exp.pages ?? 0, res.total_pages);
+  if (nonNegInt(res.total_entries)) exp.entries = Math.max(exp.entries ?? 0, res.total_entries);
 }
 
 /**
@@ -111,15 +124,21 @@ export class PancakeSyncService implements OnModuleInit {
     let count = 0;
     let failed = 0;
     let truncated = false;
+    let pagesWithData = 0;
+    let unnamedRows = 0;
+    const expected: SweepExpected = {};
     const seen: SweepSeen = { products: new Set(), variations: new Set() };
     try {
       for (;;) {
       const res = await this.client.fetchProducts(page, updatedSince);
+      noteExpected(expected, res);
       const products = res.data ?? res.products ?? [];
       if (products.length === 0) break;
+      pagesWithData++;
       for (const p of products) {
         const pid = p.id ?? p.product_id;
         if (pid) seen.products.add(pid);
+        else unnamedRows++;
         for (const v of p.variations ?? []) if (v.id) seen.variations.add(v.id);
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
@@ -142,7 +161,27 @@ export class PancakeSyncService implements OnModuleInit {
         break;
       }
       }
-      if (!updatedSince && !truncated) await this.deactivateMissing(seen);
+      const got = seen.products.size + unnamedRows;
+      if (
+        truncated ||
+        (expected.pages !== undefined && pagesWithData < expected.pages) ||
+        (expected.entries !== undefined && got < expected.entries)
+      ) {
+        // Không dời lastRunAt: lượt 15 phút sau phải đọc lại từ mốc cũ, không bỏ sót các trang chưa tới.
+        throw new ServiceUnavailableException(
+          `Đồng bộ Pancake dừng khi chưa hết danh mục: đọc ${pagesWithData}/${expected.pages ?? '?'} trang, ` +
+            `${got}/${expected.entries ?? '?'} sản phẩm (đã cập nhật ${count}). Không tắt sản phẩm nào; lượt sau sẽ thử lại.`,
+        );
+      }
+      if (!updatedSince) {
+        if (expected.pages === undefined && expected.entries === undefined) {
+          this.logger.error(
+            'Pancake không trả total_pages/total_entries — không chứng minh được đã quét hết danh mục, bỏ qua bước ngừng bán hàng đã xoá.',
+          );
+        } else {
+          await this.deactivateMissing(seen);
+        }
+      }
       this.lastRunAt = startedAt;
       this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
       return count;

@@ -58,6 +58,10 @@ export class PancakeClient {
       `/shops/${this.shopId}/products`,
       { params: { api_key: this.apiKey, page, updated_since: updatedSince } },
     );
+    // Như geo: trang lỗi mà đọc thành rỗng thì vòng phân trang tưởng đã hết danh mục.
+    if (!data || data.success === false || (!Array.isArray(data.data) && !Array.isArray(data.products))) {
+      throw new ServiceUnavailableException(`Pancake không trả danh sách sản phẩm (trang ${page}).`);
+    }
     return data;
   }
 

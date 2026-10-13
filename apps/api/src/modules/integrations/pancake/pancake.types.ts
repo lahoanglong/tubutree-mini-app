@@ -28,9 +28,14 @@ export interface PancakeProductDTO {
 }
 
 export interface PancakeProductsResponse {
+  success?: boolean;
   data?: PancakeProductDTO[];
   products?: PancakeProductDTO[];
   total?: number;
+  page_number?: number;
+  page_size?: number;
+  total_entries?: number;
+  total_pages?: number;
 }
 
 export interface PancakeCreateOrderItem {

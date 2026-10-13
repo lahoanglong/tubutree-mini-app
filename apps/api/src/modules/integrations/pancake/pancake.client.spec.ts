@@ -31,3 +31,24 @@ describe('PancakeClient geo', () => {
     await expect(client.fetchProvinces()).resolves.toEqual([{ id: '101', name: 'Hà Nội', new_id: '84_VN01' }]);
   });
 });
+
+describe('PancakeClient.fetchProducts', () => {
+  it('HTTP 200 kèm success:false → ném lỗi (không trả trang rỗng như thể đã hết danh mục)', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue({ data: { success: false, message: 'rate limited' } }));
+    await expect(client.fetchProducts(2)).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('không có mảng data lẫn products → ném lỗi', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue({ data: { success: true } }));
+    await expect(client.fetchProducts(1)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const empty = makeClient(jest.fn().mockResolvedValue({ data: '' }));
+    await expect(empty.fetchProducts(1)).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('trang hợp lệ (data hoặc products, kể cả rỗng) → trả nguyên phản hồi kèm thông tin phân trang', async () => {
+    const body = { success: true, data: [], page_number: 4, total_pages: 3, total_entries: 60 };
+    await expect(makeClient(jest.fn().mockResolvedValue({ data: body })).fetchProducts(4)).resolves.toEqual(body);
+    const legacy = { products: [{ id: 'a', name: 'A' }] };
+    await expect(makeClient(jest.fn().mockResolvedValue({ data: legacy })).fetchProducts(1)).resolves.toEqual(legacy);
+  });
+});

@@ -1,4 +1,5 @@
 import { PancakeSyncService } from './pancake-sync.service';
+import { PancakeClient as RealPancakeClient } from './pancake.client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { LifecycleService } from '../../lifecycle/lifecycle.service';
@@ -7,16 +8,29 @@ const notifyPriceDrop = jest.fn().mockResolvedValue(undefined);
 const lifecycle = { notifyWishlistPriceDrop: notifyPriceDrop } as unknown as LifecycleService;
 beforeEach(() => notifyPriceDrop.mockClear());
 
+// Pancake POS kèm thông tin phân trang ở mọi trang — mock tính từ các trang có dữ liệu.
 function makeClient(pages: unknown[][], configured = true): PancakeClient {
   let call = 0;
+  const filled = pages.filter((p) => p.length > 0);
   return {
     isConfigured: () => configured,
     fetchProducts: jest.fn(async () => {
       const data = pages[call] ?? [];
       call++;
-      return { data };
+      return { success: true, data, total_pages: filled.length, total_entries: filled.flat().length };
     }),
   } as unknown as PancakeClient;
+}
+
+/** PancakeClient thật, chỉ thay lớp HTTP — để phản hồi thô của Pancake đi qua đúng đường kiểm tra của client. */
+function realClient(bodies: unknown[]): PancakeClient {
+  const config = { get: (k: string) => ({ PANCAKE_API_KEY: 'k', PANCAKE_SHOP_ID: 's', PANCAKE_BASE_URL: 'http://pancake.invalid' })[k] };
+  const client = new RealPancakeClient(config as never);
+  const get = jest.fn();
+  for (const b of bodies) get.mockResolvedValueOnce({ data: b });
+  get.mockResolvedValue({ data: { success: true, data: [] } });
+  (client as unknown as { http: { get: jest.Mock } }).http.get = get;
+  return client;
 }
 
 function makePrisma(over: Record<string, unknown> = {}) {
@@ -307,6 +321,70 @@ describe('PANCAKE-11: hàng bị xoá khỏi Pancake thì ngừng bán trên Tub
     } as unknown as PancakeClient;
     await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts()).rejects.toThrow('timeout');
     expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('quét toàn bộ chỉ tắt hàng khi chứng minh được đã đi hết danh mục', () => {
+    const page = (data: unknown[], extra: Record<string, unknown> = {}) => ({
+      success: true,
+      data,
+      total_pages: 3,
+      total_entries: 3,
+      ...extra,
+    });
+    const p1 = [product('a', [variation('v-a')])];
+    const p2 = [product('b', [variation('v-b')])];
+    const p3 = [product('gone', [variation('v-gone')])];
+    const svc = (prisma: PrismaService, bodies: unknown[]) => new PancakeSyncService(prisma, realClient(bodies), lifecycle);
+
+    it('trang 2/3 trả HTTP 200 kèm success:false → ném lỗi, không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      await expect(svc(prisma, [page(p1), { success: false, message: 'rate limited' }]).syncProducts()).rejects.toThrow();
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('trang 2/3 trả rỗng dù Pancake báo 3 trang → coi là quét dở: ném lỗi, không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      await expect(svc(prisma, [page(p1), page([])]).syncProducts()).rejects.toThrow(/chưa hết danh mục/);
+      expect(mk(prisma).variation.findMany).not.toHaveBeenCalled();
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('đủ số trang nhưng thiếu bản ghi so với total_entries (danh mục xê dịch giữa chừng) → không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      const bodies = [page(p1, { total_entries: 4 }), page(p2, { total_entries: 4 }), page(p3, { total_entries: 4 }), page([])];
+      await expect(svc(prisma, bodies).syncProducts()).rejects.toThrow(/chưa hết danh mục/);
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('lượt sync dở không dời mốc updated_since — lượt 15 phút sau không bỏ sót trang chưa đọc', async () => {
+      const s = svc(makePrisma(), [page(p1), page([])]);
+      const state = s as unknown as { lastRunAt: string | null };
+      state.lastRunAt = '2026-10-13T00:00:00.000Z';
+      await expect(s.syncProducts(state.lastRunAt)).rejects.toThrow(/chưa hết danh mục/);
+      expect(state.lastRunAt).toBe('2026-10-13T00:00:00.000Z');
+    });
+
+    it('đi hết 3/3 trang khớp total_entries → mới tắt hàng không còn trên Pancake', async () => {
+      const prisma = makePrisma({
+        variation: { findMany: jest.fn().mockResolvedValue([...dbVars, { id: 'db-x', pancakeId: 'v-x' }]) },
+        product: { findMany: jest.fn().mockResolvedValue([...dbProds, { id: 'p-x', pancakeId: 'x' }]) },
+      });
+      await svc(prisma, [page(p1), page(p2), page(p3), page([])]).syncProducts();
+      expect(mk(prisma).variation.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['db-x'] }, isActive: true },
+        data: { isActive: false, pancakeHold: 'REMOVED' },
+      });
+    });
+
+    it('Pancake không kèm total_pages/total_entries → không chứng minh được đã hết danh mục: đồng bộ bình thường nhưng không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      const n = await svc(prisma, [{ success: true, data: catalog()[0] }, { success: true, data: [] }]).syncProducts();
+      expect(n).toBe(2);
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('biến thể is_removed → tắt; quay lại (đồng bộ đã giữ) → bật lại; admin tự tắt (pancakeHold NULL) → giữ nguyên', async () => {
