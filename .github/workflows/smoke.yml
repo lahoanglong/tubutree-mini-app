@@ -21,8 +21,8 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 5m
           script: |
-            cd ~/tubutree
-            DC="docker compose -f docker-compose.prod.yml"
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
+            DC="docker compose -f ${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}"
             TOKEN=$($DC exec -T api sh -c "cd /app/apps/api && DEV_ROLE=CUSTOMER pnpm exec tsx scripts/dev-token.ts" | tail -1 | tr -d '\r\n')
             echo "token len: ${#TOKEN}"
             BASE="https://api.tubutree.com/api"
