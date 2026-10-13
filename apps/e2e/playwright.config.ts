@@ -9,11 +9,11 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
  *   API       → PORT trong apps/api/.env (dev local: 3001 — cũng là mặc định mà miniapp
  *               src/services/api.ts và web next.config.mjs gọi tới; CI e2e.yml ghi PORT=3111).
  *               Ghi đè bằng E2E_API_PORT nếu cần.
- *   Web Admin → http://localhost:3112 (Next.js, apps/web/package.json)
+ *   Web Admin / Web Customer → http://localhost:3112 (Next.js, apps/web/package.json)
  *   Mini App  → http://localhost:3113 (Vite / ZMA, apps/miniapp/package.json)
  *
  * Phạm vi chạy:
- *   - Mặc định: cả 3 project (API, Web Admin, Zalo Mini App) + 3 webServer.
+ *   - Mặc định: cả 4 project (API, Web Admin, Web Customer, Zalo Mini App) + 3 webServer.
  *     Cần Docker DB (pnpm dev:infra: Postgres :5434, Redis :6381).
  *   - Chỉ miniapp (E2E_SCOPE=miniapp, hoặc `pnpm --filter @tubutree/e2e test:miniapp`):
  *     chỉ project "Zalo Mini App" + chỉ webServer Vite. Các spec miniapp mock toàn bộ API
@@ -86,6 +86,11 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     // chỉ khớp đúng "admin.spec.ts" nên file spec admin mới thứ 2 bị bỏ sót hoàn toàn (không match
     // project nào cả → CI `playwright test` không chạy, không báo lỗi).
     testMatch: [/.*admin\.spec\.ts/, /.*admin-analytics\.spec\.ts/, /.*admin-customer-refunds\.spec\.ts/],
+  },
+  {
+    name: 'Web Customer',
+    use: { ...devices['Desktop Chrome'], baseURL: WEB_URL },
+    testMatch: /.*\.web\.spec\.ts/,
   },
   {
     name: 'Zalo Mini App',

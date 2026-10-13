@@ -34,7 +34,6 @@ const MIGRATED = [
   'app/error.tsx',
   'app/global-error.tsx',
   'app/not-found.tsx',
-  'app/loading.tsx',
 ];
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`./${rel}`, import.meta.url)), 'utf8');
