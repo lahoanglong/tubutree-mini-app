@@ -39,6 +39,9 @@ export class SystemConfigController {
       hotline,
       supportEmail,
       zaloOaName,
+      groupBuyDiscountPct,
+      groupBuyTargetSize,
+      returnWindowDays,
     ] = await Promise.all([
       this.config.get<number>('shipping.free_threshold', 200000),
       this.config.get<number>('subscribe.discount_pct', 0.12),
@@ -52,6 +55,10 @@ export class SystemConfigController {
       this.config.get<unknown>('support.hotline', '0899 149 229'),
       this.config.get<unknown>('support.email', 'tubutree@gmail.com'),
       this.config.get<unknown>('support.zalo_oa_name', ''),
+      // Mặc định phải khớp GroupBuyService.create và OrdersService.requestReturn (cùng khoá, cùng fallback).
+      this.config.get<number>('groupbuy.discount_pct', 15),
+      this.config.get<number>('groupbuy.target_size', 3),
+      this.config.get<number>('returns.window_days', 7),
     ]);
     return {
       freeshipThreshold,
@@ -63,6 +70,8 @@ export class SystemConfigController {
       cashbackHoldDays,
       recyclingEnabled,
       shippingEta: toShippingEta(etaMinDays, etaMaxDays),
+      groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
+      returnWindowDays,
       support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName) },
     };
   }

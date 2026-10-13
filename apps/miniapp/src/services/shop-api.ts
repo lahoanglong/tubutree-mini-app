@@ -144,6 +144,12 @@ export interface PublicConfig {
   recyclingEnabled?: boolean;
   /** Khoảng ngày giao dự kiến — null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) → ẩn. */
   shippingEta?: ShippingEta | null;
+  /** Mức giảm (% nguyên) và quy mô nhóm mua chung — thiếu khi API cũ → UI không hứa con số. */
+  groupBuy?: { discountPct: number; targetSize: number };
+  /** Số ngày được gửi yêu cầu đổi/trả kể từ khi giao (returns.window_days). */
+  returnWindowDays?: number;
+  /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
+  support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);

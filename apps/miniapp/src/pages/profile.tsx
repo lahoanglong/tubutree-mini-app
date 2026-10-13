@@ -23,6 +23,7 @@ import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
+import { GROUP_BUY_MENU_HINT } from '../utils/group-buy-copy';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -37,7 +38,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
   {
     group: 'Mua sắm',
     items: [
-      { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: 'Tiết kiệm đến 30%' },
+      { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: GROUP_BUY_MENU_HINT },
       { Icon: Recycle, label: 'Trạm Refill & Đổi vỏ', to: '/refill', hint: 'Tích giọt nước xanh' },
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
