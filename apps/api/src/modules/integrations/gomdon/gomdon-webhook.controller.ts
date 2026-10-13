@@ -9,14 +9,19 @@ import {
   Post,
   Query,
   UnauthorizedException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Throttle } from '@nestjs/throttler';
+import { NoFilesInterceptor } from '@nestjs/platform-express';
+import { SkipThrottle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
 import type { Env } from '../../../config/env.validation';
 import type { GomdonWebhookPayload } from './gomdon.types';
 import { GomdonWebhookService } from './gomdon-webhook.service';
+
+/** Payload webhook Gomdon chỉ vài chục trường ngắn — chặn form khổng lồ trước khi kiểm token. */
+const WEBHOOK_FORM_LIMITS = { limits: { fields: 60, fieldSize: 4 * 1024, parts: 60 } };
 
 /**
  * Nhận webhook trạng thái vận đơn Gomdon. Tài liệu Gomdon: webhook do quản trị Gomdon cấu hình giúp (liên
@@ -29,9 +34,16 @@ import { GomdonWebhookService } from './gomdon-webhook.service';
  * vấn DB → lưu event (dedupe) → enqueue → trả 200 ngay. Tài liệu: Gomdon chỉ coi HTTP 200 là thành công,
  * khác 200 thì gửi lại sau 30 giây, tối đa 3 lần rồi BỎ — 401 (sai/thiếu secret) hay API sập quá ~2 phút
  * là mất event vĩnh viễn (Gomdon không có API tra cứu trạng thái để đối soát lại). Fail-closed ở production
- * khi chưa cấu hình secret. Có throttle riêng (không @SkipThrottle) — endpoint public.
+ * khi chưa cấu hình secret.
+ *
+ * KHÔNG throttle (như webhook Pancake): trước đây giới hạn 120 request/phút/IP đếm cả request token đúng,
+ * bưu cục quét hàng loạt là Gomdon bị 429 và bỏ event sau 3 lần gửi lại. Request sai token chỉ tốn một phép
+ * so timingSafeEqual (không chạm DB/queue); secret 32 byte ngẫu nhiên không dò được.
+ *
+ * Nhận cả multipart/form-data (mọi API Gomdon dùng form-data; tài liệu chưa nói Content-Type của webhook) —
+ * chỉ trường chữ, không nhận file. Payload không đọc được → 400 (xem GomdonWebhookService.receive).
  */
-@Throttle({ default: { limit: 120, ttl: 60_000 } })
+@SkipThrottle()
 @Controller('webhooks/gomdon')
 export class GomdonWebhookController {
   private readonly logger = new Logger(GomdonWebhookController.name);
@@ -52,25 +64,29 @@ export class GomdonWebhookController {
   @Public()
   @Post()
   @HttpCode(HttpStatus.OK)
+  @UseInterceptors(NoFilesInterceptor(WEBHOOK_FORM_LIMITS))
   async handle(
     @Body() body: GomdonWebhookPayload,
     @Headers('x-webhook-token') headerToken?: string,
     @Query('token') queryToken?: string,
+    @Headers('content-type') contentType?: string,
   ) {
     this.assertAuthorized(headerToken || queryToken);
-    return this.webhook.receive(body ?? {});
+    return this.webhook.receive(body ?? {}, { contentType });
   }
 
   @Public()
   @Post(':token')
   @HttpCode(HttpStatus.OK)
+  @UseInterceptors(NoFilesInterceptor(WEBHOOK_FORM_LIMITS))
   async handleWithPathToken(
     @Param('token') pathToken: string,
     @Body() body: GomdonWebhookPayload,
     @Headers('x-webhook-token') headerToken?: string,
+    @Headers('content-type') contentType?: string,
   ) {
     this.assertAuthorized(headerToken || pathToken);
-    return this.webhook.receive(body ?? {});
+    return this.webhook.receive(body ?? {}, { contentType });
   }
 
   private assertAuthorized(token?: string): void {
