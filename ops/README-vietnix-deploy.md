@@ -36,6 +36,22 @@ bản ghi A, trỏ về **14.225.207.177** (IP VPS này, KHÔNG phải IP GCP c�
 khi mới tạo — bật proxy cam ngay từ đầu sẽ chặn certbot xác thực HTTP-01 (Cloudflare che IP
 thật). Sau khi có cert xong, bật lại proxy cam nếu muốn (không bắt buộc).
 
+**Trước khi bật ☁ cam cho `api.tubutree.com`:** API giới hạn đăng nhập/refresh theo IP (30 lượt/phút,
+`throttle.config.ts`) và lấy IP từ hop cuối của `X-Forwarded-For` (`trust proxy` = 1). Qua Cloudflare,
+hop đó là IP edge dùng chung cho rất nhiều khách → 429 "thao tác quá nhanh" hàng loạt. Vhost phase2 đã
+có khối `mod_remoteip` (đọc `CF-Connecting-IP` chỉ khi kết nối đến từ dải IP Cloudflare); chỉ bật ☁ cam
+khi đã xác nhận module được nạp và IP thật về tới API:
+
+```bash
+httpd -M 2>/dev/null | grep remoteip || apachectl -M | grep remoteip   # phải thấy remoteip_module
+# Bật ☁ cam, gọi API từ điện thoại (4G), rồi xem IP mà mod_remoteip đã thay (%a) trong log:
+# phải là IP 4G, không phải IP Cloudflare (172.64.x, 104.x, 162.158.x...).
+# (LogFormat "combined" ghi %h; nếu cột đầu vẫn là IP Cloudflare, đổi tạm sang LogFormat có %a để kiểm.)
+tail -n 5 /www/wwwlogs/api.tubutree.com-access_log
+```
+
+Không thấy `remoteip_module` thì giữ ☁ xám.
+
 ## Sau khi DNS đã trỏ đúng (tôi tự làm tiếp, không cần hỏi lại)
 
 ```bash
