@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
 import type { AddressDTO } from '../../services/shop-api';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
 import { addressLine } from '../../utils/format';
+import { isLegacyGeo } from '../../utils/address-memory';
 import { AddressForm } from '../address-form';
 import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 
@@ -18,7 +20,10 @@ interface AddressSectionProps {
 
 export function AddressSection({ addresses, selectedId, onSelect }: AddressSectionProps) {
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const selected = addresses.find((a) => a.id === selectedId) ?? null;
+  const editing = addresses.find((a) => a.id === editingId) ?? null;
 
   return (
     <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
@@ -35,6 +40,53 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
       {addresses.map((a) => (
         <AddressCard key={a.id} address={a} active={selectedId === a.id} onClick={() => onSelect(a.id)} />
       ))}
+
+      {selected && isLegacyGeo(selected) && !editing && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            padding: 12,
+            marginBottom: 8,
+            borderRadius: 'var(--radius-control)',
+            background: 'var(--color-status-warning-bg)',
+          }}
+        >
+          <span style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+            <AlertTriangle size={16} color="var(--color-status-warning-fg)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text variant="body-sm" as="span" style={{ color: 'var(--color-status-warning-fg)' }}>
+              {vi.checkout.addressLegacy}
+            </Text>
+          </span>
+          <Button
+            variant="secondary"
+            onPress={() => {
+              haptic('light');
+              setAdding(false);
+              setEditingId(selected.id);
+            }}
+          >
+            {vi.checkout.addressLegacyCta}
+          </Button>
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ marginTop: 8 }}>
+          <AddressForm
+            initial={editing}
+            onCancel={() => setEditingId(null)}
+            onSaved={(a) => {
+              void queryClient.invalidateQueries({ queryKey: ['addresses'] });
+              void queryClient.invalidateQueries({ queryKey: ['quote'] });
+              onSelect(a.id);
+              setEditingId(null);
+            }}
+          />
+        </div>
+      )}
 
       {adding ? (
         <div style={{ marginTop: 8 }}>
@@ -55,6 +107,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
           className="tubu-press"
           onClick={() => {
             haptic('light');
+            setEditingId(null);
             setAdding(true);
           }}
           style={{
