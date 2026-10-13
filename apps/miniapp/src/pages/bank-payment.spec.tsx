@@ -13,6 +13,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useParams: () => ({ code: 'TT001' }),
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/bank-payment/TT001', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/payment-api', () => ({ getBankQr: mocks.getBankQr }));
@@ -111,6 +112,23 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem đơn hàng' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001', { replace: true });
+  });
+});
+
+// BUYERMINI-17: header tự dựng căn giữa nên dòng phụ chạy dưới nút Quay lại nổi (fixed, x 12→56) và mất chữ đầu.
+describe('Thanh toán chuyển khoản: header chừa chỗ cho nút Quay lại (BUYERMINI-17)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+  });
+
+  it('tiêu đề và dòng hướng dẫn nằm chung khối đã chừa 48px bên trái, không chạy dưới nút Quay lại', async () => {
+    renderPage();
+    const hint = await screen.findByText('Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới');
+    const block = hint.parentElement as HTMLElement;
+    expect(block.contains(screen.getByRole('heading', { level: 1 }))).toBe(true);
+    expect(block.style.paddingLeft).toBe('48px');
+    expect(block.style.textAlign).not.toBe('center');
   });
 });
 

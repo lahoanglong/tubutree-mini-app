@@ -37,6 +37,7 @@ import {
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
+import { ProductThumb } from '../components/ui/product-thumb';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Radio, Checkbox } from '../components/ui/form';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
@@ -338,11 +339,7 @@ export default function CheckoutPage() {
           <Box flex flexDirection="column" style={{ gap: 12 }}>
             {shownItems.map((it) => (
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
-                <img
-                  src={it.thumbnail ?? undefined}
-                  alt={it.productName}
-                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', background: 'var(--color-bg-subtle)', flexShrink: 0 }}
-                />
+                <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
                   {it.variationName && (

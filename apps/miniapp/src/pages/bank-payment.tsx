@@ -10,12 +10,12 @@ import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
 import { Money } from '../components/ui/price-tag';
+import { PageHeader } from '../components/ui/page-header';
 import { SR_ONLY } from '../components/ui/sr-only';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
-// Trang không dùng PageHeader nên tiêu đề đang hiện chữ là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
-// hình dáng vẫn do Text quyết định như trước. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
-const H1_RESET = { margin: 0, font: 'inherit' } as const;
+// Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
+// của h1, hình dáng vẫn do Text quyết định. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
 const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 
 export default function BankPaymentPage() {
@@ -173,14 +173,7 @@ export default function BankPaymentPage() {
   // ── Chờ thanh toán: hiển thị VietQR ──
   return (
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
-      <Box p={3} style={{ background: 'var(--color-bg-surface)', textAlign: 'center' }}>
-        <h1 style={H1_RESET}>
-          <Text bold size="large">Quét QR để chuyển khoản</Text>
-        </h1>
-        <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-          Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới
-        </Text>
-      </Box>
+      <PageHeader title="Quét QR để chuyển khoản" subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới" />
 
       <Box p={2}>
         <Box p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'center' }}>
