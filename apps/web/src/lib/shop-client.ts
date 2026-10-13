@@ -175,7 +175,21 @@ export const fetchOrdersPage = (page: number, filter: OrderListFilter = {}) => {
 };
 
 /** GET /orders/:code — API trả nguyên cột của Order kèm ảnh từng dòng; chỉ khai các trường web đang dùng. */
+export interface ShippingEvent {
+  at?: string | null;
+  status?: string | null;
+  carrier?: string | null;
+  code?: string | null;
+}
 export interface OrderDetailDTO extends OrderDTO {
+  id?: string;
+  /** Hai trường dưới quyết định khách có tự hủy được không (xem canCancelOrder). */
+  placedForCustomer?: boolean | null;
+  referrerUserId?: string | null;
+  deliveredAt?: string | null;
+  /** Mốc hành trình do hãng vận chuyển ghi (Pancake/Gomdon webhook), cũ → mới. */
+  shippingHistory?: ShippingEvent[] | null;
+  shippingStatus?: string | null;
   couponCode?: string | null;
   /** Số Điểm Xanh đã dùng (đã nằm trong `discount`, không trừ thêm lần nữa). */
   pointsUsed?: number;
@@ -196,6 +210,30 @@ export interface OrderDetailDTO extends OrderDTO {
   items: (OrderDTO['items'][number] & { thumbnail?: string | null })[];
 }
 export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);
+
+export const cancelOrder = (code: string) =>
+  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: {} });
+
+export interface RepurchaseResult {
+  results: { orderItemId: string; status: 'added' | 'partial' | 'skipped'; reason?: string; addedQuantity: number }[];
+  /** Giỏ sau khi thêm — cùng dạng GET /cart. */
+  cart: CartSummary;
+}
+/** Thêm lại các dòng của đơn vào giỏ; dòng hết hàng/ngừng bán bị bỏ qua riêng, không làm hỏng cả lượt. */
+export const repurchaseOrder = (code: string) =>
+  apiFetch<RepurchaseResult>(`/orders/${encodeURIComponent(code)}/repurchase`, { method: 'POST', body: {} });
+
+export interface ReturnRequestDTO {
+  id: string;
+  orderId: string;
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  adminNote?: string | null;
+  createdAt: string;
+}
+export const requestReturn = (code: string, reason: string) =>
+  apiFetch<ReturnRequestDTO>(`/orders/${encodeURIComponent(code)}/return-request`, { method: 'POST', body: { reason } });
+export const fetchMyReturns = () => apiFetch<ReturnRequestDTO[]>('/orders/me/returns');
 
 // Thanh toán chuyển khoản (VietQR) — A2-02 = A6-01 (docs/audit-2026-09): web chọn được
 // BANK_TRANSFER nhưng trước đây không có cách nào gọi endpoint này nên khách không bao giờ thấy

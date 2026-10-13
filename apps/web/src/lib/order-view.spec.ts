@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   addressLine,
+  canCancelOrder,
   canPayAgain,
+  isReorderable,
+  ORDER_TABS,
+  timelineIndex,
   orderDetailHref,
   orderStatusLabel,
   orderStatusTone,
@@ -64,5 +68,53 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(safeHttpUrl('not a url')).toBeNull();
     expect(safeHttpUrl(null)).toBeNull();
     expect(safeHttpUrl('')).toBeNull();
+  });
+});
+
+describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', () => {
+  it('chỉ Chờ thanh toán / Đã xác nhận mới hủy được', () => {
+    expect(canCancelOrder({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
+    expect(canCancelOrder({ status: 'CONFIRMED' }, 'u1')).toBe(true);
+    for (const status of ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED']) {
+      expect(canCancelOrder({ status }, 'u1')).toBe(false);
+    }
+  });
+
+  it('đơn CTV lên hộ khách đã trả tiền: CTV không tự hủy; khách cuối hoặc đơn chưa trả thì vẫn hủy', () => {
+    const o = { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'ctv1' };
+    expect(canCancelOrder(o, 'ctv1')).toBe(false);
+    expect(canCancelOrder(o, 'khach')).toBe(true);
+    expect(canCancelOrder({ ...o, paymentStatus: 'UNPAID' }, 'ctv1')).toBe(true);
+  });
+
+  it('thu gom tái chế mà bưu tá đã lấy hàng: không hủy được nữa; chưa lấy (mã 1/2/10) thì vẫn hủy được', () => {
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '3' }, 'u')).toBe(false);
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '1' }, 'u')).toBe(true);
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: false, gomdonStatus: '3' }, 'u')).toBe(true);
+  });
+});
+
+describe('hành trình đơn và mua lại', () => {
+  it('timelineIndex: 5 bước chuẩn, Đã hủy/Đã hoàn nằm ngoài (-1)', () => {
+    expect(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'].map(timelineIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(timelineIndex('CANCELLED')).toBe(-1);
+    expect(timelineIndex('RETURNED')).toBe(-1);
+  });
+
+  it('chỉ đơn đã kết thúc mới mua lại được', () => {
+    expect(['DELIVERED', 'CANCELLED', 'RETURNED'].every(isReorderable)).toBe(true);
+    expect(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'].some(isReorderable)).toBe(false);
+  });
+
+  it('tab lọc đơn: tab Tất cả không có bộ lọc, các tab còn lại khớp status/group của API', () => {
+    expect(ORDER_TABS[0]).toMatchObject({ key: 'all', filter: {} });
+    expect(ORDER_TABS.map((t) => t.filter)).toEqual([
+      {},
+      { status: 'PENDING_PAYMENT' },
+      { group: 'processing' },
+      { status: 'SHIPPING' },
+      { status: 'DELIVERED' },
+      { group: 'closed' },
+    ]);
   });
 });

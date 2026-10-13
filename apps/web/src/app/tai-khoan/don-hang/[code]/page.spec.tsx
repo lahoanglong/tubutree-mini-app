@@ -24,7 +24,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('next/navigation', () => ({ useParams: () => mocks.params }));
+vi.mock('next/navigation', () => ({ useParams: () => mocks.params, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   fetchOrder: async (code: string) => {
@@ -32,6 +32,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     if (mocks.order instanceof Error) throw mocks.order;
     return typeof mocks.order === 'function' ? (mocks.order as () => unknown)() : mocks.order;
   },
+  fetchMyReturns: async () => [],
   getBankQr: async () => {
     mocks.qr.calls += 1;
     return {
