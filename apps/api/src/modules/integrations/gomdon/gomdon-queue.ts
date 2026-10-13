@@ -17,7 +17,7 @@ export const gomdonCancelJobId = (orderId: string) => `cancel-${orderId}`;
 /**
  * Xoá job cũ cùng jobId nếu nó đã KẾT THÚC (completed/failed) rồi add lại.
  *
- * BullMQ giữ hash job sau khi xong (removeOnComplete 1000 / removeOnFail 5000 — jobs/queue.module.ts)
+ * BullMQ giữ hash job sau khi xong (removeOnComplete 1000 / removeOnFail 1000 — jobs/queue.module.ts)
  * và addStandardJob thấy jobId còn tồn tại là KHÔNG enqueue — cron cứu hộ sẽ log "re-enqueue" mãi mà
  * không có gì chạy. Khác pancake-push (chỉ xoá job failed vì pushOrder Pancake không có claim), ở đây
  * xoá cả job completed là AN TOÀN vì mọi handler Gomdon đều idempotent:

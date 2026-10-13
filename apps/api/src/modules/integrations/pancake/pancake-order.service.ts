@@ -54,7 +54,7 @@ export class PancakeOrderService {
    * (checkout gọi + cron reconcile gọi lại) trong lúc job cũ còn active/waiting.
    *
    * Xoá job cũ trước khi add, NHƯNG CHỈ KHI nó đã THẤT BẠI: BullMQ giữ job hash lại sau khi job
-   * xong/thất bại (removeOnComplete 1000, removeOnFail 5000 — xem jobs/queue.module.ts), và
+   * xong/thất bại (removeOnComplete 1000, removeOnFail 1000 — xem jobs/queue.module.ts), và
    * script addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn tại. Không
    * dọn thì đơn đã đẩy hỏng hết 5 lần thử sẽ chặn vĩnh viễn mọi lần enqueue sau — cron cứu hộ
    * 15 phút/lần in log "re-enqueue" mãi mà không có gì chạy.
