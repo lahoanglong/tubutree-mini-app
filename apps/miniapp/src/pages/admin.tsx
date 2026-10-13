@@ -1130,7 +1130,7 @@ function RefillAdminSection() {
                     Vỏ thực nhận
                   </Text>
                   <Text variant="caption" tone="secondary" as="div">
-                    Đếm tại điểm nhận · +{seedsPreview} 💧
+                    Đếm tại điểm nhận · +{seedsPreview} giọt nước
                   </Text>
                 </div>
                 <QuantitySelector

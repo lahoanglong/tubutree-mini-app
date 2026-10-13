@@ -725,11 +725,11 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã từ chối yêu cầu.', type: 'info' }));
     });
 
-    it('nhân viên đếm thiếu vỏ: giảm "Vỏ thực nhận" rồi Duyệt gửi đúng số đếm, 💧 xem trước theo số đó', async () => {
+    it('nhân viên đếm thiếu vỏ: giảm "Vỏ thực nhận" rồi Duyệt gửi đúng số đếm, giọt nước xem trước theo số đó', async () => {
       await openRefill();
-      expect(screen.getByText('Đếm tại điểm nhận · +30 💧')).toBeInTheDocument();
+      expect(screen.getByText('Đếm tại điểm nhận · +30 giọt nước')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
-      expect(screen.getByText('Đếm tại điểm nhận · +20 💧')).toBeInTheDocument();
+      expect(screen.getByText('Đếm tại điểm nhận · +20 giọt nước')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
       await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 2));
     });

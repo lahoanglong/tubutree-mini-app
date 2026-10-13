@@ -61,7 +61,7 @@ export function orderStamp(o: { status: string; createdAt: string; deliveredAt?:
 }
 
 /**
- * Dòng điểm Xanh của đơn theo trạng thái: chưa giao thì "sẽ nhận", đã giao thì "đã cộng", đã hoàn thì đã thu hồi.
+ * Dòng Điểm Xanh của đơn theo trạng thái: chưa giao thì "sẽ nhận", đã giao thì "đã cộng", đã hoàn thì đã thu hồi.
  * Chỉ nói "khi giao thành công" ở đơn chưa giao.
  */
 export function orderPointsNote(status: string, pointsEarned: number): { text: string; tone: 'success' | 'muted' } | null {
