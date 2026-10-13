@@ -22,4 +22,30 @@ describe('SegmentedTabs', () => {
     render(<SegmentedTabs items={[{ key: 'a', label: 'A' }]} value="a" onChange={() => {}} />);
     expect(screen.getByRole('tab', { name: 'A' })).toHaveStyle({ minHeight: '44px' });
   });
+  it('chế độ cuộn: tab không co lại dưới độ rộng chữ (nhãn không chồng nhau ở 390px)', () => {
+    render(<SegmentedTabs items={items} value="all" onChange={() => {}} scroll />);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.style.flex).toBe('0 0 auto');
+    }
+  });
+  it('chế độ chia đều: tab giãn đều và vẫn co được', () => {
+    render(<SegmentedTabs items={items} value="all" onChange={() => {}} />);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.style.flexGrow).toBe('1');
+    }
+  });
+  it('chế độ cuộn: cuộn tab đang chọn vào tầm nhìn khi đổi tab', () => {
+    const scrollIntoView = vi.fn();
+    const original = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const { rerender } = render(<SegmentedTabs items={items} value="all" onChange={() => {}} scroll />);
+      scrollIntoView.mockClear();
+      rerender(<SegmentedTabs items={items} value="pending" onChange={() => {}} scroll />);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+      expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole('tab', { name: /Chờ xử lý/ }));
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
 });
