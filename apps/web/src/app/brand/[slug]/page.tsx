@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { Award, BadgeCheck, Sparkles, Building2, Leaf } from 'lucide-react';
+import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
 import { getBrand, formatVnd, formatSold } from '@/lib/api';
 
 export const revalidate = 300;
@@ -103,9 +104,9 @@ export default async function BrandPage({
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
           <div className="grid grid-cols-2 gap-3">
             {b.products.map((p) => (
-              <a
+              <Link
                 key={p.id}
-                href={`/san-pham/${p.slug}`}
+                href={`/san-pham/${encodeURIComponent(p.slug)}`}
                 className="block overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised"
               >
                 {p.thumbnail ? (
@@ -128,27 +129,7 @@ export default async function BrandPage({
                   </p>
                   {formatSold(p.sold) && <p className="mt-0.5 text-xs text-stone-500">{formatSold(p.sold)}</p>}
                 </div>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {b.dealerRewards.length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
-            <Building2 className="h-4 w-4 text-forest-700" aria-hidden="true" />
-            <span>Chương trình đại lý</span>
-          </h2>
-          <div className="space-y-2">
-            {b.dealerRewards.map((d) => (
-              <div key={d.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
-                <p className="font-semibold text-stone-900">{d.title}</p>
-                {d.description && <p className="text-sm text-stone-600">{d.description}</p>}
-                <p className="mt-1 text-xs text-stone-500">
-                  Đạt doanh số {formatVnd(d.threshold)} / {d.period === 'YEAR' ? 'năm' : 'quý'}
-                </p>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
