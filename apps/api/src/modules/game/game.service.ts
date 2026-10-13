@@ -9,7 +9,8 @@ import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
+import { DEFAULT_TREE_TYPE, harvestCouponMinOrder, spinVoucherMinOrder } from './game.constants';
+import { countReferralSuccesses } from '../wallet/referral-reward';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -139,6 +140,8 @@ export class GameService {
     // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
     // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
     const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
+    const treeTarget = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tree_default_target', 600) : 0;
+    const voucherMinOrder = prize.rewardType === 'COUPON' ? await spinVoucherMinOrder(this.config, prize.value) : 0;
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
@@ -179,16 +182,22 @@ export class GameService {
         // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
         // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
         // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
-        await tx.gameProfile.update({
+        // Upsert: khách quay trước khi từng mở Vườn Xanh chưa có hồ sơ (update ném P2025 → 404 "Không tìm thấy bản ghi").
+        await tx.gameProfile.upsert({
           where: { userId },
-          data: { totalSeeds: { increment: prize.value } },
+          update: { totalSeeds: { increment: prize.value } },
+          create: {
+            userId,
+            totalSeeds: prize.value,
+            ecoImpact: { progress: 0, target: treeTarget, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
+          },
         });
         await tx.gameProfile.updateMany({
           where: { userId, totalSeeds: { gt: tankCap } },
           data: { totalSeeds: tankCap },
         });
       } else if (prize.rewardType === 'COUPON') {
-        rewardRefId = await this.grantCoupon(userId, prize.value, tx);
+        rewardRefId = await this.grantCoupon(userId, prize.value, tx, voucherMinOrder);
       }
 
       await tx.gameSpin.create({
@@ -524,18 +533,21 @@ export class GameService {
     }
   }
 
+  /**
+   * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách: đơn đặt rồi huỷ không còn giữ được thưởng. INVITE_3 dùng đúng
+   * số lượt giới thiệu thành công của chương trình giới thiệu (bạn được mời mua thành công, trừ lượt bị thu hồi), không
+   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1).
+   */
   private async missionMetrics(userId: string) {
     const [profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.prisma.order.count({
-        where: { userId, status: { in: ['DELIVERED', 'CONFIRMED', 'SHIPPING', 'PACKED'] } },
+        where: { userId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
       }),
       this.prisma.review.count({
         where: { userId },
       }),
-      this.prisma.user.count({
-        where: { referredById: userId },
-      }),
+      countReferralSuccesses(this.prisma, userId),
     ]);
     return { streakDays: profile?.streakDays ?? 0, ordersCount, reviewsCount, referralsCount };
   }
@@ -559,6 +571,8 @@ export class GameService {
         ? await this.prisma.missionProgress.findMany({ where: { userId, missionId: { in: missionIds } } })
         : [];
     const claimedKeys = new Set(claims.map((c) => `${c.missionId}:${c.cycleKey}`));
+    // Nhiệm vụ không lặp lại: đã nhận ở chu kỳ nào cũng là đã nhận (dòng cũ có cycleKey khác '0' khi nhiệm vụ từng lặp lại).
+    const claimedOnce = new Set(claims.map((c) => c.missionId));
 
     return missions.map((m) => {
       const targetGoal = m.goal > 0 ? m.goal : 1;
@@ -566,7 +580,7 @@ export class GameService {
       const progress = Math.min(targetGoal, raw);
       const completed = raw >= targetGoal;
       const cycleKey = this.missionCycleKey(m, raw, targetGoal);
-      const claimed = claimedKeys.has(`${m.id}:${cycleKey}`);
+      const claimed = m.isRepeatable ? claimedKeys.has(`${m.id}:${cycleKey}`) : claimedOnce.has(m.id);
 
       return {
         code: m.code,
@@ -601,6 +615,10 @@ export class GameService {
       throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
     }
     const cycleKey = this.missionCycleKey(mission, raw, targetGoal);
+    if (!mission.isRepeatable) {
+      const prior = await this.prisma.missionProgress.findFirst({ where: { userId, missionId: mission.id } });
+      if (prior) throw new BadRequestException('Bạn đã nhận thưởng nhiệm vụ này rồi.');
+    }
     // NGOÀI tx, cùng lý do như spin(); chỉ cần khi nhiệm vụ có thưởng điểm.
     const rewardExpiresAt = mission.rewardPoints > 0 ? await this.rewardPointsExpiresAt() : null;
 

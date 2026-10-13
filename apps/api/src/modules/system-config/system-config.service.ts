@@ -94,6 +94,7 @@ export class SystemConfigService {
     'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
+    'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số (6 = voucher 20.000đ cho đơn từ 120.000đ)' },
     // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
     'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
