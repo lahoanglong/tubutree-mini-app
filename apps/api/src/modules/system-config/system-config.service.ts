@@ -63,6 +63,7 @@ export class SystemConfigService {
     // ngay lúc cộng, số quá lớn làm điểm không bao giờ hết hạn; số lẻ bị các nguồn cộng điểm cắt bỏ phần thập phân.
     'loyalty.point_expire_months': { min: 1, max: 120, note: 'số tháng nguyên (12 = điểm hết hạn sau 12 tháng)', integer: true },
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
+    'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },

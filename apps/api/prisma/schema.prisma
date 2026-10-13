@@ -2334,6 +2334,8 @@ model Subscription {
   // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
   paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
+  // Số lần cron đã thử lại kỳ hiện tại vì hết hàng/lỗi tạm thời (reset về 0 khi ra đơn hoặc khi bỏ kỳ).
+  retryCount    Int       @default(0)
   lastOrderId   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
