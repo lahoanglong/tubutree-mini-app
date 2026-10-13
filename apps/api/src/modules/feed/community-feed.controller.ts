@@ -37,6 +37,9 @@ class ReportDto {
   @IsOptional() @IsString() targetId?: string;
   @IsString() @MaxLength(500) reason!: string;
 }
+class RejectPostDto {
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
+}
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
@@ -209,8 +212,8 @@ export class CommunityFeedController {
 
   @Roles('ADMIN')
   @Post('admin/:id/reject')
-  reject(@Param('id') id: string) {
-    return this.feed.rejectPost(id);
+  reject(@Param('id') id: string, @Body() dto: RejectPostDto) {
+    return this.feed.rejectPost(id, dto?.reason);
   }
 
   @Roles('ADMIN')

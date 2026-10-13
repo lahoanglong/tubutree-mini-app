@@ -54,6 +54,7 @@ const LINK_WHITELIST_DOMAINS = ['tubutree.com', 'zalo.me', 'zaloapp.com'];
  * Từ/cụm từ cấm cơ bản — spam/lừa đảo/cờ bạc/vay nóng phổ biến, đã chuẩn hoá bỏ dấu + thường
  * (so khớp qua stripDiacritics nên cả bản có dấu lẫn không dấu đều dính). Đây là rào chắn SƠ
  * BỘ, không thay thế kiểm duyệt người — mục đích chỉ để hạ auto-PUBLISHED xuống PENDING.
+ * So khớp theo RANH GIỚI TỪ: "sex" không được dính "unisex".
  */
 const BANNED_KEYWORDS = [
   'lua dao',
@@ -64,10 +65,8 @@ const BANNED_KEYWORDS = [
   'vay nong',
   'vay lai',
   'tin dung den',
-  'co bac',
   'da cap',
   'rua tien',
-  'hang gia',
   'hang nhai',
   'khieu dam',
   'sex',
@@ -77,6 +76,19 @@ const BANNED_KEYWORDS = [
   'chiem doat tai san',
   'trung thuong',
 ];
+
+/**
+ * Cụm chỉ bắt khi GÕ ĐÚNG DẤU: bỏ dấu thì trùng với từ đời thường của sàn cây cảnh/nhà cửa — "hàng giả" ~ "hàng gia
+ * dụng/gia đình/gia vị", "cờ bạc" ~ "cỏ bạc hà". Đánh đổi: bản không dấu của hai cụm này không bị hạ cờ.
+ */
+const BANNED_ACCENTED_KEYWORDS = ['hàng giả', 'cờ bạc'];
+
+const WORD_CHAR = '[\\p{L}\\p{N}]';
+function wholeWord(keyword: string): RegExp {
+  return new RegExp(`(?<!${WORD_CHAR})${keyword}(?!${WORD_CHAR})`, 'u');
+}
+const BANNED_FOLDED_PATTERNS = BANNED_KEYWORDS.map(wholeWord);
+const BANNED_ACCENTED_PATTERNS = BANNED_ACCENTED_KEYWORDS.map(wholeWord);
 
 /** Bỏ dấu tiếng Việt + hạ thường, dùng để so khớp BANNED_KEYWORDS không phân biệt dấu. */
 function stripDiacritics(text: string): string {
@@ -98,7 +110,9 @@ function stripDiacritics(text: string): string {
 export function containsBannedContent(text: string): boolean {
   if (!text) return false;
   const normalized = stripDiacritics(text);
-  if (BANNED_KEYWORDS.some((kw) => normalized.includes(kw))) return true;
+  if (BANNED_FOLDED_PATTERNS.some((re) => re.test(normalized))) return true;
+  const accented = text.normalize('NFC').toLowerCase();
+  if (BANNED_ACCENTED_PATTERNS.some((re) => re.test(accented))) return true;
 
   const urlRegex = /https?:\/\/([^\s/"'<>]+)/gi;
   let match: RegExpExecArray | null;
@@ -110,6 +124,15 @@ export function containsBannedContent(text: string): boolean {
     if (!whitelisted) return true;
   }
   return false;
+}
+
+const DEFAULT_REJECT_REASON = 'nội dung chưa phù hợp với nội quy cộng đồng';
+const REJECT_TITLE_PREVIEW = 40;
+
+/** Tên bài trong thông báo: tiêu đề, bài không tiêu đề thì lấy đầu nội dung. */
+function previewTitle(title: string | null, body: string): string {
+  const raw = (title?.trim() || body.trim()).replace(/\s+/g, ' ');
+  return raw.length > REJECT_TITLE_PREVIEW ? `${raw.slice(0, REJECT_TITLE_PREVIEW)}…` : raw;
 }
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
@@ -598,15 +621,26 @@ export class CommunityFeedService {
     return { ok: true };
   }
 
-  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED. */
-  async rejectPost(postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
+  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED và báo tác giả (kèm lý do) để họ biết bài đi đâu. */
+  async rejectPost(postId: string, reason?: string) {
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, title: true, body: true },
+    });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm uy tín + Điểm Xanh thưởng), nên phải đảo điểm y như
     // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    try {
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_REJECTED', {
+        title: previewTitle(post.title, post.body),
+        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+      });
+    } catch (err) {
+      this.logger.warn(`notify(reject) failed ${post.id}: ${(err as Error).message}`);
+    }
     return { ok: true };
   }
 
