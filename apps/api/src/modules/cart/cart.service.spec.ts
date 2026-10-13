@@ -496,6 +496,49 @@ describe('CartService guard tồn kho', () => {
     expect(cart.couponNotice).toContain('minOrder');
   });
 
+  describe('getCart: mã hợp lệ nhưng giảm 0đ (giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu)', () => {
+    const allFlashCart = (validateAndCompute: jest.Mock) => {
+      const prisma = {
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: 'c1',
+            couponCode: 'BDAY50K',
+            items: [
+              {
+                id: 'ci1',
+                variationId: 'v1',
+                quantity: 1,
+                variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 300000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+              },
+            ],
+          }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+      } as any;
+      const flashSvc = {
+        resolveEffective: jest
+          .fn()
+          .mockResolvedValue(new Map([['v1', { flashPrice: 200000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
+      } as any;
+      return new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics).getCart('u1');
+    };
+
+    it('giữ mã, giảm 0đ, kèm couponNotice nói mã chưa được áp', async () => {
+      const cart = await allFlashCart(jest.fn().mockResolvedValue({ discount: 0, freeship: false }));
+      expect(cart.couponCode).toBe('BDAY50K');
+      expect(cart.discount).toBe(0);
+      expect(cart.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+      expect(cart.couponNotice).toContain('giờ vàng');
+    });
+
+    it('mã miễn phí vận chuyển → không có couponNotice', async () => {
+      const cart = await allFlashCart(jest.fn().mockResolvedValue({ discount: 0, freeship: true }));
+      expect(cart.freeship).toBe(true);
+      expect(cart.couponNotice).toBeNull();
+    });
+  });
+
   it('getCart: coupon fail cả trên TOÀN giỏ (hết hạn/hết lượt) → GỠ mã (null)', async () => {
     const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('expired'));
     const update = jest.fn().mockResolvedValue({});

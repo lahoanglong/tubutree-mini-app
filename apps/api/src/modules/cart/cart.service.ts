@@ -6,7 +6,7 @@ import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
-import { couponNotAppliedNotice } from '../coupons/coupon-notice';
+import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
@@ -113,6 +113,9 @@ export class CartService {
         // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
         discount = Math.min(r.discount, couponBase);
         freeship = r.freeship;
+        if (lines.length > 0 && discount === 0 && !freeship) {
+          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash));
+        }
       } catch (err) {
         // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
         // (luôn ném BadRequestException — coupons.service.ts). Lỗi hạ tầng khác (DB timeout,

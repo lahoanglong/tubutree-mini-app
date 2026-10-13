@@ -19,7 +19,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
-import { couponNotAppliedNotice } from '../coupons/coupon-notice';
+import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -603,7 +603,12 @@ export class CheckoutService {
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         freeship = r.freeship;
-        couponApplied = true;
+        // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ
+        // hết) → giảm 0đ. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
+        couponApplied = discount > 0 || freeship;
+        if (!couponApplied) {
+          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, flashSubtotal > 0, combo.total > 0);
+        }
       } catch (err) {
         // Mã không đạt điều kiện trên phần hàng được tính (đã loại flash, trừ combo; hoặc tập con đã
         // chọn) → KHÔNG giảm và KHÔNG redeem, kể cả khi đặt toàn giỏ: trước đây toàn giỏ rơi về

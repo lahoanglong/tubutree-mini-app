@@ -493,7 +493,7 @@ describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
     // Đẩy couponCode vào CART rồi khôi phục để không ảnh hưởng test khác.
     (CART as { couponCode: string | null }).couponCode = 'SALE10';
     try {
-      const { svc, prisma } = build({ stockCount: 1 });
+      const { svc, prisma } = build({ stockCount: 1, validateAndCompute: jest.fn().mockResolvedValue({ discount: 10000, freeship: false }) });
       // Lấy reference tới coupons mock từ instance (đã inject trong build).
       const coupons = (svc as unknown as { coupons: { redeem: jest.Mock } }).coupons;
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
@@ -1287,6 +1287,36 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     });
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.discount).toBe(20000);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
+  });
+
+  // Mã không có đơn tối thiểu (BIRTHDAY/WINBACK, mã admin không đặt minOrder) vẫn "hợp lệ" trên phần
+  // hàng được tính bằng 0đ → giảm 0đ. Không được tính là đã áp, nếu không mã một lần bị đốt cho đơn 0đ giảm.
+  const ALL_FLASH = { ...FLASH_MIX, items: [FLASH_MIX.items[1]], subtotal: 78000 };
+  const zeroDiscount = () => jest.fn().mockResolvedValue({ discount: 0, freeship: false });
+
+  it('giỏ toàn hàng giờ vàng + mã không có đơn tối thiểu → giảm 0đ: không redeem, đơn không gắn mã', async () => {
+    const { svc, orderCreate, coupons } = build({ cartData: ALL_FLASH, validateAndCompute: zeroDiscount() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.couponCode).toBeNull();
+    expect(data.discount).toBe(0);
+  });
+
+  it('quote: mã hợp lệ nhưng giảm 0đ → couponApplied false + couponNotice nói rõ', async () => {
+    const { svc } = build({ cartData: ALL_FLASH, validateAndCompute: zeroDiscount() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+    expect(q.couponNotice).toContain('giờ vàng');
+  });
+
+  it('mã miễn phí vận chuyển (giảm hàng 0đ nhưng freeship) → vẫn tính là đã áp', async () => {
+    const { svc } = build({ cartData: ALL_FLASH, validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.couponApplied).toBe(true);
     expect(q.couponNotice).toBeNull();
   });

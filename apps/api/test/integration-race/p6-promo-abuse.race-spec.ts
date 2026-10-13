@@ -158,6 +158,33 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
     expect((await prisma.coupon.findUniqueOrThrow({ where: { id: c.id } })).usedCount).toBe(0);
   });
 
+  it('MONEY-3: giỏ toàn hàng giờ vàng + mã riêng không có đơn tối thiểu (kiểu BIRTHDAY) → giảm 0đ, KHÔNG tiêu lượt mã', async () => {
+    const u = await realUser();
+    const addr = await address(u.id);
+    const flashP = await product(300_000);
+    await flashItem(flashP.variationId, 200_000, 10, 5);
+    const c = await coupon({ scope: 'USER_GROUP', scopeMeta: { userId: u.id }, value: 50_000, minOrder: null });
+    await cart.addItem(u.id, { variationId: flashP.variationId, quantity: 1 });
+    await prisma.cart.update({ where: { userId: u.id }, data: { couponCode: c.code } });
+
+    const view = await cart.getCart(u.id);
+    expect(view.couponCode).toBe(c.code);
+    expect(view.discount).toBe(0);
+    expect(view.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+
+    const quote = (await checkout.quote(u.id, { addressId: addr.id } as never)) as { discount: number; couponApplied?: boolean; couponNotice?: string | null };
+    expect(quote.discount).toBe(0);
+    expect(quote.couponApplied).toBe(false);
+    expect(quote.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+
+    const order = (await checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD' } as never)) as { id: string };
+    const saved = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(saved.couponCode).toBeNull();
+    expect(saved.discount).toBe(0);
+    expect(await prisma.couponRedemption.count({ where: { couponId: c.id } })).toBe(0);
+    await expect(coupons.validateAndCompute(c.code, u.id, 100_000)).resolves.toMatchObject({ discount: 50_000 });
+  });
+
   it('ENGAGE-4: khách đã mua hết giới hạn/khách → giỏ tính giá thường, đặt đơn được, không tiêu suất flash', async () => {
     const u = await realUser();
     const addr = await address(u.id);
