@@ -24,6 +24,9 @@ export interface AdminUser {
   /** Lô quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi như 0. */
   pointsConvertedBalance?: number;
   createdAt: string;
+  isBlocked?: boolean;
+  blockedAt?: string | null;
+  blockedReason?: string | null;
 }
 /** Khớp model OrderItem của API (snapshot tên SP/biến thể + đơn giá lúc mua). */
 export interface AdminOrderItem {
@@ -260,8 +263,21 @@ export const importSoldExternal = (csv: string) =>
     body: { csv },
   });
 
-export const listUsers = (page = 1) =>
-  apiFetch<Page<AdminUser>>(`/admin/users?page=${page}&limit=20`);
+/** search: SĐT (chứa), tên (không phân biệt hoa thường) hoặc đúng id. */
+export const listUsers = (page = 1, search?: string) => {
+  const q = new URLSearchParams({ page: String(page), limit: '20' });
+  if (search?.trim()) q.set('search', search.trim());
+  return apiFetch<Page<AdminUser>>(`/admin/users?${q.toString()}`);
+};
+type BlockState = { id: string; isBlocked: boolean; blockedAt: string | null; blockedReason: string | null };
+/** Khoá ngay: thu hồi mọi phiên đăng nhập, access token đang có bị từ chối trong vài giây. */
+export const blockUser = (id: string, reason: string) =>
+  apiFetch<BlockState & { revokedSessions: number }>(`/admin/users/${encodeURIComponent(id)}/block`, {
+    method: 'POST',
+    body: { reason },
+  });
+export const unblockUser = (id: string) =>
+  apiFetch<BlockState>(`/admin/users/${encodeURIComponent(id)}/unblock`, { method: 'POST', body: {} });
 export type UserRole = 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
 /** tierId bắt buộc khi role = DEALER (BE từ chối nếu thiếu/không tồn tại — C-008); role khác không gửi. */
 export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
