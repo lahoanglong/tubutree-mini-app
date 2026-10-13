@@ -27,6 +27,7 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
@@ -171,6 +172,7 @@ export default function LoyaltyPage() {
   // Progress lên hạng kế: tính TỪ SÀN ĐIỂM hạng hiện tại → ngưỡng hạng kế (không phải từ 0), theo
   // điểm XÉT HẠNG (điểm danh / tích tại quầy không tính) — xem tierProgressPercent.
   const next = data?.nextTier;
+  const rates = data?.rates;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
@@ -270,13 +272,26 @@ export default function LoyaltyPage() {
                     />
                   </div>
                   <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng để lên hạng {next.name}
+                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
+                    {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
+                    lên hạng {next.name}
                   </Text>
                 </div>
               ) : (
                 <Text variant="caption" as="div" style={{ color: tierStyle.color, marginTop: 8 }}>
                   Bạn đang ở hạng cao nhất 🎉
                 </Text>
+              )}
+
+              {rates && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Text variant="caption" tone="secondary" as="div">
+                    {earnRuleLine(rates, data.tier?.multiplier ?? 1)}
+                  </Text>
+                  <Text variant="caption" tone="secondary" as="div">
+                    {redeemRuleLine(rates)}
+                  </Text>
+                </div>
               )}
 
               {/* Nút mở thẻ thành viên số (mã QR) */}
@@ -498,8 +513,8 @@ export default function LoyaltyPage() {
                         {t.name}
                       </Text>
                     </div>
-                    <Text variant="caption" tone="secondary">
-                      từ {formatNumber(t.minPoints)} điểm tích luỹ · ×{t.multiplier}
+                    <Text variant="caption" tone="secondary" style={{ textAlign: 'right' }}>
+                      {tierThresholdLabel(t, rates)} · ×{t.multiplier}
                     </Text>
                   </div>
                 );

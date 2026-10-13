@@ -718,6 +718,43 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect((ledger.findMany.mock.calls[0]![0].where as { reason: unknown }).reason).toEqual({ startsWith: 'ORDER_DELIVERED:' });
   });
 
+  // ENGAGE-21: trang Điểm Xanh phải giải thích được cách tích/đổi điểm từ chính SystemConfig, không hardcode ở FE.
+  it('getOverview: trả tỷ lệ tích/đổi điểm từ SystemConfig và mốc chi tiêu của từng hạng', async () => {
+    const values: Record<string, number> = {
+      'loyalty.vnd_per_point': 12_000,
+      'loyalty.vnd_per_point_redeem': 1000,
+      'loyalty.max_redeem_pct': 0.3,
+    };
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (values[k] ?? fb) as T } as unknown as SystemConfigService;
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1 },
+          { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 500, minSpending: 5_000_000, pointMultiplier: 1.2 },
+        ]),
+      },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.rates).toEqual({ vndPerPoint: 12_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.3 });
+    expect(ov.tiers.map((t) => t.minSpending)).toEqual([null, 5_000_000]);
+    expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 5_000_000 });
+  });
+
+  it('getOverview: SystemConfig sai kiểu → tỷ lệ rơi về mặc định (10.000đ/điểm, 1.000đ/điểm, 20%)', async () => {
+    const config = { get: async <T>(_k: string, _fb?: T): Promise<T> => 'oops' as unknown as T } as unknown as SystemConfigService;
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.rates).toEqual({ vndPerPoint: 10_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2 });
+  });
+
   it('PD-3 getOverview: trả pointsConvertedBalance, pointsTotal, redeemableTotal; redeemablePoints giữ nghĩa lô STANDARD dùng được', async () => {
     const prisma = {
       user: {

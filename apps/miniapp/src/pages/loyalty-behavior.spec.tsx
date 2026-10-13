@@ -127,6 +127,47 @@ describe('LoyaltyPage — thẻ hạng', () => {
   });
 });
 
+describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (ENGAGE-21)', () => {
+  const RATES = { vndPerPoint: 10_000, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
+
+  it('nói rõ cứ 10.000đ = 1 điểm và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
+    renderPage();
+    expect(await screen.findByText('Cứ 10.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+    expect(screen.getByText('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)')).toBeInTheDocument();
+  });
+
+  it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 10.000đ', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, vndPerPoint: 12_000 } });
+    renderPage();
+    expect(await screen.findByText('Cứ 12.000đ mua hàng = 1 điểm')).toBeInTheDocument();
+  });
+
+  it('dòng "còn X điểm" kèm số tiền mua hàng tương ứng', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
+    renderPage();
+    expect(await screen.findByText(/tương đương khoảng 12,5 triệu mua hàng/)).toBeInTheDocument();
+  });
+
+  it('danh sách hạng quy mốc ra tiền mua hàng 12 tháng', async () => {
+    mocks.getLoyalty.mockResolvedValue({
+      ...LOYALTY,
+      rates: RATES,
+      tiers: [TIERS[0], { ...TIERS[1], minPoints: 500, minSpending: 5_000_000 }],
+    });
+    renderPage();
+    expect(await screen.findByText('từ 5 triệu mua hàng trong 12 tháng · ×1.2')).toBeInTheDocument();
+    expect(screen.getByText('hạng khởi đầu · ×1')).toBeInTheDocument();
+  });
+
+  it('API cũ chưa trả rates → không hiện dòng giải thích, danh sách hạng vẫn theo điểm', async () => {
+    renderPage();
+    await screen.findByText(/Tích điểm ×1/);
+    expect(screen.queryByText(/Cứ .* mua hàng = 1 điểm/)).toBeNull();
+    expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
+  });
+});
+
 describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
   it('chưa điểm danh: nút "Điểm danh +3" bật; chạm đúp chỉ gọi API 1 lần, rồi báo thành công và khoá nút', async () => {
     mocks.getDailyCheckInStatus.mockResolvedValueOnce(CHECK_IN).mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
