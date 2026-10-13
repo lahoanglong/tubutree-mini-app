@@ -13,6 +13,8 @@ export interface GroupBuy {
   status: GroupBuyStatus;
   expiresAt: string;
   joined: boolean;
+  /** Người xem chính là người mở nhóm (API bản cũ không trả → coi như không). */
+  isOwner?: boolean;
 }
 
 export const listGroupBuys = () => api.get<GroupBuy[]>('/group-buy').then((r) => r.data);

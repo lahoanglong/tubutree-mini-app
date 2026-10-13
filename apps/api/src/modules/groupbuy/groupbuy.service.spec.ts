@@ -239,6 +239,49 @@ describe('GroupBuyService.listOpen / expireGroups', () => {
     expect(where.expiresAt).toHaveProperty('gt');
   });
 
+  // ENGAGE-9: listOpen luôn trả joined=false nên người mở nhóm vẫn thấy nút "Tham gia" và bấm ra lỗi "đã tham gia".
+  it('listOpen(userId): joined theo thành viên thật, isOwner cho người mở nhóm', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([
+      { ...group({ id: 'mine', initiatorId: 'u1' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 } },
+      { ...group({ id: 'joined', initiatorId: 'u9' }), product: { name: 'B', slug: 'b', thumbnail: null }, _count: { members: 2 } },
+      { ...group({ id: 'other', initiatorId: 'u9' }), product: { name: 'C', slug: 'c', thumbnail: null }, _count: { members: 2 } },
+    ]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ groupBuyId: 'mine' }, { groupBuyId: 'joined' }]);
+    const r = await new GroupBuyService(prisma, makeConfig()).listOpen('u1');
+    expect(r.map((g) => [g.id, g.joined, g.isOwner])).toEqual([
+      ['mine', true, true],
+      ['joined', true, false],
+      ['other', false, false],
+    ]);
+    expect(prisma.groupBuyMember.findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', groupBuyId: { in: ['mine', 'joined', 'other'] } },
+      select: { groupBuyId: true },
+    });
+  });
+
+  it('listOpen không có user (khách chưa đăng nhập): joined=false, isOwner=false, không truy vấn thành viên', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([
+      { ...group({ initiatorId: 'u1' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 } },
+    ]);
+    const r = await new GroupBuyService(prisma, makeConfig()).listOpen();
+    expect(r[0]).toMatchObject({ joined: false, isOwner: false });
+    expect(prisma.groupBuyMember.findMany).not.toHaveBeenCalled();
+  });
+
+  it('getGroup/create: người mở nhóm có isOwner=true', async () => {
+    const prisma = makePrisma();
+    const svc = new GroupBuyService(prisma, makeConfig());
+    const created = await svc.create('u1', 'prod1');
+    expect(created).toMatchObject({ joined: true, isOwner: true });
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue({
+      ...group({ initiatorId: 'u1' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 }, members: [{ id: 'm' }],
+    });
+    expect(await svc.getGroup('gb1', 'u1')).toMatchObject({ joined: true, isOwner: true });
+    expect(await svc.getGroup('gb1', 'u2')).toMatchObject({ isOwner: false });
+  });
+
   it('expireGroups: đánh dấu OPEN quá hạn → FAILED, trả số lượng', async () => {
     const prisma = makePrisma();
     (prisma.groupBuy.updateMany as jest.Mock).mockResolvedValue({ count: 4 });

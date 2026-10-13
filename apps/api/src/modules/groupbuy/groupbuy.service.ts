@@ -82,6 +82,7 @@ export class GroupBuyService {
       { name: product.name, slug: product.slug, thumbnail: product.thumbnail },
       1,
       true,
+      userId,
     );
   }
 
@@ -213,17 +214,26 @@ export class GroupBuyService {
     const joined = Array.isArray((group as { members?: unknown[] }).members)
       ? (group as { members: unknown[] }).members.length > 0
       : false;
-    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined);
+    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined, userId);
   }
 
-  async listOpen() {
+  /** `userId` (khi đã đăng nhập) để đánh dấu nhóm mình đã tham gia / tự mở; khách thì joined=false. */
+  async listOpen(userId?: string) {
     const groups = await this.prisma.groupBuy.findMany({
       where: { status: 'OPEN', expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
       take: 30,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },
     });
-    return groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, false));
+    const mine = new Set<string>();
+    if (userId && groups.length > 0) {
+      const rows = await this.prisma.groupBuyMember.findMany({
+        where: { userId, groupBuyId: { in: groups.map((g) => g.id) } },
+        select: { groupBuyId: true },
+      });
+      for (const r of rows) mine.add(r.groupBuyId);
+    }
+    return groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), userId));
   }
 
   /** Cron: nhóm OPEN quá hạn → FAILED. Trả số nhóm bị đánh hỏng. */
@@ -240,6 +250,7 @@ export class GroupBuyService {
     product: { name: string; slug: string; thumbnail: string | null },
     memberCount: number,
     joined: boolean,
+    viewerId?: string,
   ) {
     return {
       id: g.id,
@@ -252,6 +263,7 @@ export class GroupBuyService {
       status: g.status,
       expiresAt: g.expiresAt,
       joined,
+      isOwner: viewerId !== undefined && g.initiatorId === viewerId,
     };
   }
 

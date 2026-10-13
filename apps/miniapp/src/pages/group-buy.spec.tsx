@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   login: vi.fn(),
   listGroupBuys: vi.fn(),
+  getGroupBuy: vi.fn(),
   joinGroupBuy: vi.fn(),
+  shareWithFallback: vi.fn(),
+  params: {} as { id?: string },
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
 }));
 
@@ -18,10 +21,16 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
+  useParams: () => mocks.params,
   useLocation: () => ({ pathname: '/group-buy', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/groupbuy-api', () => ({ listGroupBuys: mocks.listGroupBuys, joinGroupBuy: mocks.joinGroupBuy }));
+vi.mock('../services/groupbuy-api', () => ({
+  listGroupBuys: mocks.listGroupBuys,
+  getGroupBuy: mocks.getGroupBuy,
+  joinGroupBuy: mocks.joinGroupBuy,
+}));
+vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
@@ -44,6 +53,7 @@ const GROUP = (id: string, over: Partial<GroupBuy> = {}): GroupBuy => ({
   status: 'OPEN',
   expiresAt: new Date(Date.now() + 2.5 * HOUR).toISOString(),
   joined: false,
+  isOwner: false,
   ...over,
 });
 
@@ -58,6 +68,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.params = {};
   mocks.auth.status = 'authenticated';
   mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
   mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
@@ -207,5 +218,78 @@ describe('GroupBuyPage — tiêu đề, vùng chạm, thanh tiến độ (C-076,
     const open = await screen.findByRole('button', { name: 'Sản phẩm a' });
     fireEvent.click(open);
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-a');
+  });
+});
+
+// ENGAGE-9: người mở nhóm vẫn thấy "Tham gia" (bấm ra lỗi "đã tham gia") và không có cách gửi nhóm cho bạn.
+describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => {
+  it('người mở nhóm thấy "Nhóm của bạn" (khoá) thay vì "Tham gia", kèm nút mời bạn', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+    renderPage();
+    const mine = await screen.findByRole('button', { name: 'Nhóm của bạn' });
+    expect(mine).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Tham gia mua chung/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
+  });
+
+  it('bấm "Mời bạn bè" chia sẻ đường dẫn thẳng tới nhóm qua Zalo, kèm nội dung dán tay dự phòng', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mời bạn bè' }));
+    expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1);
+    const [params, fallback] = mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string];
+    expect(params).toMatchObject({ path: '/group-buy/mine', title: expect.stringContaining('Sản phẩm mine') });
+    expect(params.thumbnail).toBe('https://img.test/mine.jpg');
+    expect(fallback).toContain('Sản phẩm mine');
+  });
+
+  it('thành viên (không phải người mở) cũng mời được bạn; nhóm chưa tham gia thì không có nút mời', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
+    renderPage();
+    await screen.findByText('Sản phẩm a');
+    expect(screen.getAllByRole('button', { name: 'Mời bạn bè' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Đã tham gia' })).toBeDisabled();
+  });
+
+  it('nhóm đã đóng không còn nút mời', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('done', { joined: true, status: 'SUCCESS' })]);
+    renderPage();
+    await screen.findByText('Sản phẩm done');
+    expect(screen.queryByRole('button', { name: 'Mời bạn bè' })).toBeNull();
+  });
+
+  it('mở bằng link /group-buy/:id: nhóm được mời hiện đầu danh sách, không lặp lại ở danh sách chung', async () => {
+    mocks.params = { id: 'b' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('b'));
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b')]);
+    renderPage();
+    expect(await screen.findByText('Bạn được mời vào nhóm này')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('Sản phẩm b')).toHaveLength(1));
+    const names = screen.getAllByText(/^Sản phẩm [ab]$/).map((n) => n.textContent);
+    expect(names).toEqual(['Sản phẩm b', 'Sản phẩm a']);
+    expect(mocks.getGroupBuy).toHaveBeenCalledWith('b');
+  });
+
+  it('link tới nhóm đã hết hạn: báo nhóm đã đóng và không cho tham gia', async () => {
+    mocks.params = { id: 'old' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('old', { status: 'FAILED' }));
+    mocks.listGroupBuys.mockResolvedValue([]);
+    renderPage();
+    const closed = await screen.findByRole('button', { name: 'Nhóm đã hết hạn' });
+    expect(closed).toBeDisabled();
+  });
+
+  it('chưa đăng nhập mở link nhóm: không gọi API chi tiết (cần đăng nhập), vẫn xem được danh sách', async () => {
+    mocks.auth.status = 'anonymous';
+    mocks.params = { id: 'b' };
+    renderPage();
+    await screen.findByText('Sản phẩm a');
+    expect(mocks.getGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('nói rõ cơ chế: đủ người thì nhận mã giảm bằng chênh lệch giá nhóm', async () => {
+    renderPage();
+    const hints = await screen.findAllByText(`Đủ nhóm: nhận mã giảm ${formatVnd(20_000)}, dùng cho đơn từ ${formatVnd(80_000)}`);
+    expect(hints).toHaveLength(2);
   });
 });
