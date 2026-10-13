@@ -88,6 +88,8 @@ export class RefillService {
         seedsAwarded: r.seedsAwarded,
         status: r.status,
         createdAt: r.createdAt,
+        declaredQuantity: r.declaredQuantity,
+        rejectionReason: r.rejectionReason,
       })),
     };
   }

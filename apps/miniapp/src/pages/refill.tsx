@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import { Page, useSnackbar, useNavigate } from 'zmp-ui';
-import { Droplets, Sprout } from 'lucide-react';
+import { Clock, Droplets, MapPin, Phone, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRefillSummary, returnBottles } from '../services/refill-api';
+import { callPhone } from '../services/zmp-bridge';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { ErrorState } from '../components/ui/empty-state';
@@ -13,6 +14,7 @@ import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
+import { SupportContact } from '../components/support-contact';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate } from '../utils/format';
@@ -39,7 +41,7 @@ export default function RefillPage() {
     mutationFn: () => returnBottles(qty, returnKey.current),
     onSuccess: () => {
       haptic('heavy');
-      openSnackbar({ text: 'Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.', type: 'success' });
+      openSnackbar({ text: 'Đã gửi yêu cầu! Mang vỏ chai đến điểm nhận để nhân viên đối chiếu và duyệt.', type: 'success' });
       setQty(1);
       returnKey.current = newIdempotencyKey();
       void queryClient.invalidateQueries({ queryKey: ['refill'] });
@@ -50,6 +52,9 @@ export default function RefillPage() {
   });
 
   const remaining = data?.monthlyRemaining ?? 0;
+  const pendingBottles = (data?.history ?? []).filter((h) => h.status === 'PENDING').reduce((n, h) => n + h.quantity, 0);
+  const pickup = data?.pickup;
+  const hasPickup = Boolean(pickup?.address || pickup?.hours || pickup?.phone);
   const maxQty = Math.max(1, remaining);
   // Không gộp `isPending` vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner.
   const eligible = authed && remaining > 0 && qty >= 1 && qty <= remaining;
@@ -113,6 +118,53 @@ export default function RefillPage() {
             )}
           </Card>
 
+          {/* Điểm nhận vỏ + bước tiếp theo: trước đây chỉ có "đến cửa hàng" không nói đâu, yêu cầu kẹt Chờ duyệt. */}
+          {pendingBottles > 0 && (
+            <Card variant="flat" padding={12}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                Bạn có {pendingBottles} vỏ chai đang chờ duyệt
+              </Text>
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
+                Mang đúng số vỏ đã khai đến điểm nhận bên dưới, nhân viên đối chiếu số vỏ rồi duyệt — 💧 vào Vườn Xanh ngay
+                sau khi duyệt.
+              </Text>
+            </Card>
+          )}
+
+          <Card padding={16}>
+            <Heading variant="title-sm" as="h2">Điểm nhận vỏ</Heading>
+            {hasPickup ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {pickup?.address && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <Icon icon={MapPin} size="sm" tone="brand" />
+                    <Text variant="body-sm">{pickup.address}</Text>
+                  </div>
+                )}
+                {pickup?.hours && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <Icon icon={Clock} size="sm" tone="brand" />
+                    <Text variant="body-sm">{pickup.hours}</Text>
+                  </div>
+                )}
+                {pickup?.phone && (
+                  <div>
+                    <Button variant="secondary" icon={Phone} onPress={() => void callPhone(pickup.phone!)}>
+                      {`Gọi ${pickup.phone}`}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Text variant="caption" tone="secondary" as="div" style={{ margin: '6px 0 10px' }}>
+                  Chưa có địa chỉ điểm nhận trên app — hãy liên hệ Tubu để biết nơi mang vỏ chai đến gần bạn.
+                </Text>
+                <SupportContact />
+              </>
+            )}
+          </Card>
+
           {/* Lịch sử */}
           {data && data.history.length > 0 && (
             <Card padding={16}>
@@ -136,7 +188,15 @@ export default function RefillPage() {
                       borderBottom: '1px solid var(--color-border-subtle)',
                     }}
                   >
-                    <Text variant="body-sm" tone="secondary">{h.quantity} vỏ · {formatDate(h.createdAt)}</Text>
+                    <div style={{ minWidth: 0 }}>
+                      <Text variant="body-sm" tone="secondary" as="div">{h.quantity} vỏ · {formatDate(h.createdAt)}</Text>
+                      {h.status === 'APPROVED' && h.declaredQuantity != null && h.declaredQuantity > h.quantity && (
+                        <Text variant="caption" tone="tertiary" as="div">Nhận {h.quantity}/{h.declaredQuantity} vỏ</Text>
+                      )}
+                      {h.status === 'REJECTED' && h.rejectionReason && (
+                        <Text variant="caption" tone="tertiary" as="div">Lý do: {h.rejectionReason}</Text>
+                      )}
+                    </div>
                     <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
                   </div>
                 );

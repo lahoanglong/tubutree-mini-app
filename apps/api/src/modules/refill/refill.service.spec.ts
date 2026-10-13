@@ -221,6 +221,17 @@ describe('RefillService.listPending (ENGAGE-13)', () => {
 });
 
 describe('RefillService.getSummary — điểm nhận vỏ (ENGAGE-13)', () => {
+  it('lịch sử kèm số khai ban đầu và lý do từ chối để khách hiểu vì sao số vỏ/💧 khác dự kiến', async () => {
+    const prisma = makePrisma();
+    (prisma.bottleReturn.findMany as jest.Mock).mockResolvedValue([
+      { id: 'h1', quantity: 2, seedsAwarded: 100, status: 'APPROVED', createdAt: new Date('2026-03-15'), declaredQuantity: 3, rejectionReason: null },
+      { id: 'h2', quantity: 1, seedsAwarded: 50, status: 'REJECTED', createdAt: new Date('2026-03-14'), declaredQuantity: null, rejectionReason: 'Vỏ chưa rửa sạch' },
+    ]);
+    const r = await new RefillService(prisma, makeConfig(), makeNotifications()).getSummary('u1');
+    expect(r.history[0]).toMatchObject({ id: 'h1', quantity: 2, declaredQuantity: 3, rejectionReason: null });
+    expect(r.history[1]).toMatchObject({ id: 'h2', declaredQuantity: null, rejectionReason: 'Vỏ chưa rửa sạch' });
+  });
+
   it('trả địa chỉ/giờ/SĐT điểm nhận từ SystemConfig', async () => {
     const cfg = makeConfig({
       'refill.pickup_address': ' 12 Nguyễn Huệ, Q1 ',

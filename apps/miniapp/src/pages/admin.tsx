@@ -35,6 +35,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { PageHeader } from '../components/ui/page-header';
+import { QuantitySelector } from '../components/ui/quantity-selector';
 import { SearchField } from '../components/ui/search-field';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
@@ -982,10 +983,11 @@ function RefillAdminSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const [filterText, setFilterText] = useState('');
+  const [received, setReceived] = useState<Record<string, number>>({});
   const pendingQ = useQuery({ queryKey: ['admin-refill-pending'], queryFn: getPendingRefillReturns });
 
   const approveM = useMutation({
-    mutationFn: (id: string) => approveRefillReturn(id),
+    mutationFn: ({ id, receivedQuantity }: { id: string; receivedQuantity: number }) => approveRefillReturn(id, receivedQuantity),
     onSuccess: () => {
       openSnackbar({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' });
       qc.invalidateQueries({ queryKey: ['admin-refill-pending'] });
@@ -1070,7 +1072,10 @@ function RefillAdminSection() {
       {filteredItems.map((r: PendingRefillItem) => {
         const name = r.user.fullName ?? r.user.phone ?? 'Khách hàng';
         // Chỉ yêu cầu đang xử lý có spinner; mọi nút còn lại khoá để không duyệt và từ chối chồng nhau.
-        const approving = approveM.isPending && approveM.variables === r.id;
+        const approving = approveM.isPending && approveM.variables?.id === r.id;
+        const receivedQuantity = Math.min(received[r.id] ?? r.quantity, r.quantity);
+        const seedsPerBottle = r.quantity > 0 ? r.seedsAwarded / r.quantity : 0;
+        const seedsPreview = Math.round(receivedQuantity * seedsPerBottle);
         const rejecting = rejectM.isPending && rejectM.variables === r.id;
         return (
           <Card key={r.id}>
@@ -1090,7 +1095,7 @@ function RefillAdminSection() {
                   aria-label={`Duyệt · ${name}`}
                   loading={approving}
                   disabled={rejectM.isPending || (approveM.isPending && !approving)}
-                  onPress={() => approveM.mutate(r.id)}
+                  onPress={() => approveM.mutate({ id: r.id, receivedQuantity })}
                 >
                   Duyệt
                 </Button>
@@ -1107,6 +1112,36 @@ function RefillAdminSection() {
                 </Button>
               </div>
             </div>
+            {r.quantity > 1 && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--color-border-subtle)',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <Text as="div" style={{ fontWeight: 600 }}>
+                    Vỏ thực nhận
+                  </Text>
+                  <Text variant="caption" tone="secondary" as="div">
+                    Đếm tại điểm nhận · +{seedsPreview} 💧
+                  </Text>
+                </div>
+                <QuantitySelector
+                  size="sm"
+                  value={receivedQuantity}
+                  min={1}
+                  max={r.quantity}
+                  onChange={(n) => setReceived((prev) => ({ ...prev, [r.id]: n }))}
+                />
+              </div>
+            )}
           </Card>
         );
       })}

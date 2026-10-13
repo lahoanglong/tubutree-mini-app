@@ -8,9 +8,21 @@ export interface RefillHistoryItem {
   seedsAwarded: number;
   status: RefillStatus;
   createdAt: string;
+  /** Có khi nhân viên ghi nhận ít vỏ hơn khách khai: số khách khai ban đầu (`quantity` lúc này là số thực nhận). */
+  declaredQuantity?: number | null;
+  rejectionReason?: string | null;
+}
+
+/** Điểm nhận vỏ do admin điền ở Cấu hình hệ thống; trường nào trống thì null. */
+export interface RefillPickupPoint {
+  address: string | null;
+  hours: string | null;
+  phone: string | null;
 }
 
 export interface RefillSummary {
+  /** Optional: API cũ chưa trả. */
+  pickup?: RefillPickupPoint;
   perBottle: number;
   monthlyCap: number;
   monthlyUsed: number;
@@ -51,5 +63,8 @@ export const returnBottles = (quantity: number, idempotencyKey: string) =>
     .then((r) => r.data);
 
 export const getPendingRefillReturns = () => api.get<PendingRefillItem[]>('/refill/admin/pending').then((r) => r.data);
-export const approveRefillReturn = (id: string) => api.post<{ ok: boolean }>(`/refill/admin/${id}/approve`).then((r) => r.data);
-export const rejectRefillReturn = (id: string) => api.post<{ ok: boolean }>(`/refill/admin/${id}/reject`).then((r) => r.data);
+/** `receivedQuantity`: số vỏ nhân viên đếm được tại điểm nhận (≤ số khách khai); bỏ trống = đủ số khai. */
+export const approveRefillReturn = (id: string, receivedQuantity?: number) =>
+  api.post<{ ok: boolean }>(`/refill/admin/${id}/approve`, receivedQuantity === undefined ? {} : { receivedQuantity }).then((r) => r.data);
+export const rejectRefillReturn = (id: string, reason?: string) =>
+  api.post<{ ok: boolean }>(`/refill/admin/${id}/reject`, reason ? { reason } : {}).then((r) => r.data);
