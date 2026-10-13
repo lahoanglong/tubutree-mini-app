@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
   getCart,
@@ -25,6 +25,7 @@ import { ui } from '@/lib/guest-ui';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { BankTransferPanel } from './bank-transfer-panel';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
@@ -38,15 +39,15 @@ const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
 export default function CheckoutPage() {
-  const { status } = useAuth();
+  const phase = useAuthPhase();
   const qc = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
 
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
-  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: status === 'authenticated' });
+  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
+  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
 
   useEffect(() => {
     if (addrQ.data && addressId === null) {
@@ -88,7 +89,7 @@ export default function CheckoutPage() {
     queryKey: ['quote', addressId, ctvSlug, usePoints],
     queryFn: () =>
       checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug),
-    enabled: !!addressId && status === 'authenticated',
+    enabled: !!addressId && phase === 'authenticated',
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -126,25 +127,18 @@ export default function CheckoutPage() {
     },
   });
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-600">Đang tải…</p>
-        </div>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'guest') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để thanh toán.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo="/thanh-toan" />
       </Shell>
     );
   }

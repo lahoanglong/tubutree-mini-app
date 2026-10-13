@@ -3,34 +3,34 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { fetchOrders, formatVnd } from '@/lib/shop-client';
 import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { formatDate } from '@/lib/format-date';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 
 export default function AccountPage() {
-  const { user, status, logout } = useAuth();
-  const ordersQ = useQuery({ queryKey: ['orders'], queryFn: fetchOrders, enabled: status === 'authenticated' });
+  const { user, logout } = useAuth();
+  const phase = useAuthPhase();
+  const ordersQ = useQuery({ queryKey: ['orders'], queryFn: fetchOrders, enabled: phase === 'authenticated' });
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="sr-only">Tài khoản</h1>
-        <p className="text-stone-600">Đang tải…</p>
+        <AuthLoading />
       </main>
     );
   }
 
-  if (status !== 'authenticated' || !user) {
+  if (phase === 'guest' || !user) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-20 text-center">
+      <main className="mx-auto max-w-3xl px-4 py-6">
         <h1 className={ui.pageTitle}>Tài khoản</h1>
-        <p className="mt-3 text-stone-700">Vui lòng đăng nhập để xem tài khoản.</p>
-        <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-          Đăng nhập với Zalo
-        </Link>
+        <LoginRequired message="Đăng nhập để xem tài khoản và đơn hàng của bạn." returnTo="/tai-khoan" />
       </main>
     );
   }

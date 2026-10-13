@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Leaf, ExternalLink } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
   canPayAgain,
+  orderDetailHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
@@ -20,18 +21,19 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
-  const { status } = useAuth();
+  const phase = useAuthPhase();
   const qc = useQueryClient();
   const orderQ = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code),
-    enabled: status === 'authenticated' && !!code,
+    enabled: phase === 'authenticated' && !!code,
     // 404 là câu trả lời dứt khoát (đơn không tồn tại/của người khác): thử lại chỉ làm khách chờ thêm.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   });
@@ -47,23 +49,18 @@ export default function OrderDetailPage() {
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <p className="py-16 text-center text-stone-600">Đang tải…</p>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'guest') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <div className="py-16 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để xem đơn hàng.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <LoginRequired message="Đăng nhập để xem đơn hàng của bạn." returnTo={orderDetailHref(code)} />
       </Shell>
     );
   }

@@ -3,15 +3,16 @@
 import Link from 'next/link';
 import { ShoppingBag, Truck, Leaf } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
 import { CouponBox } from '@/components/coupon-box';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 
 export default function CartPage() {
-  const { status } = useAuth();
+  const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
+  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
 
   const update = useMutation({
     mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
@@ -28,25 +29,18 @@ export default function CartPage() {
   const failedItemId =
     (update.isError ? update.variables?.id : null) ?? (remove.isError ? remove.variables : null);
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-600">Đang tải…</p>
-        </div>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'guest') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để xem giỏ hàng.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <LoginRequired message="Đăng nhập để xem giỏ hàng của bạn." returnTo="/gio-hang" />
       </Shell>
     );
   }
