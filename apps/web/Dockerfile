@@ -5,6 +5,7 @@
 #   docker build -f apps/web/Dockerfile -t tubutree-web \
 #     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.<domain>/api \
 #     --build-arg NEXT_PUBLIC_ZALO_APP_ID=<id> .
+# NEXT_PUBLIC_ZALO_APP_ID bắt buộc: build dừng nếu rỗng (xem bước kiểm tra bên dưới).
 # ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
@@ -25,6 +26,19 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_ZALO_APP_ID=$NEXT_PUBLIC_ZALO_APP_ID
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_STANDALONE=1
+
+# Thiếu App ID thì bundle bị nhúng chuỗi rỗng: build vẫn xanh nhưng mọi nút đăng nhập Zalo trên web đều hỏng. Dừng ở đây
+# để lỗi hiện lúc deploy, không đợi tới khi khách không đăng nhập được. Bản thử không dùng Zalo mới đặt
+# ALLOW_EMPTY_ZALO_APP_ID=1 (khi đó web hiện thông báo "chưa cấu hình" thay cho nút đăng nhập).
+ARG ALLOW_EMPTY_ZALO_APP_ID
+RUN if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ]; then \
+      if [ "$ALLOW_EMPTY_ZALO_APP_ID" = "1" ]; then \
+        echo "CANH BAO: NEXT_PUBLIC_ZALO_APP_ID rong - web se khong dang nhap duoc bang Zalo." >&2; \
+      else \
+        echo "LOI: NEXT_PUBLIC_ZALO_APP_ID rong. Dat secret ZALO_APP_ID (docs/GO-LIVE-KEYS.md muc 2, buoc E) roi build lai; chi bo qua bang ALLOW_EMPTY_ZALO_APP_ID=1 cho ban thu khong dung Zalo." >&2; \
+        exit 1; \
+      fi; \
+    fi
 RUN pnpm --filter @tubutree/web build
 
 # ──────────────────────────────────────────────────────────────

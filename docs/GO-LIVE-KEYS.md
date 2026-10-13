@@ -50,7 +50,7 @@ gh workflow run ops.yml -f action=set-env   # ghi vào VM .env
 ## 2) Zalo Official Account (OA) + ZNS (thông báo)
 
 **Mục tiêu:** lấy `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN`.
-Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và là nền cho đăng nhập web bằng Zalo.
+Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
 
 ### Bước A — Tạo OA
 1. Tạo **Official Account** tại https://oa.zalo.me → loại **Doanh nghiệp** (cần GPKD).
@@ -76,6 +76,20 @@ Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và là nền 
    - `ORDER_SHIPPING` — "Đơn {{order_code}} đang được giao…"
    - (tuỳ nhu cầu: voucher welcome/birthday, nhắc mua lại…)
 7. Mỗi template Zalo duyệt sẽ cấp **Template ID**. Báo lại các Template ID này để map vào hệ thống (cấu hình `system_configs` hoặc `notification_templates`).
+
+### Bước E — Đăng nhập web bằng Zalo (BẮT BUỘC để khách mua được trên web)
+Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập là Zalo OAuth. Thiếu bước này thì mọi khách web không đặt được hàng, dù Mini App vẫn chạy bình thường.
+
+8. Trên https://developers.zalo.me → ứng dụng ở Bước B → **Đăng nhập (Zalo Login)** → bật sản phẩm và thêm **Callback URL**:
+   - `https://app.tubutree.com/dang-nhap/callback`
+   - Web tự dựng `redirect_uri = <origin của trang đang mở>/dang-nhap/callback`, nên **mỗi origin có nút đăng nhập phải khớp một Callback URL đã đăng ký**. Origin chính là `https://app.tubutree.com`.
+   - Gian hàng CTV chạy ở subdomain (`https://<ten-gian-hang>.tubutree.com`) cũng dùng chính mã đăng nhập này. Mình **chưa có bằng chứng** Zalo chấp nhận wildcard hay subdomain tuỳ ý (chưa chạy với Zalo thật). Kiểm ở `docs/2026-10-review/UAT-ZALO.md` mục 12: nếu Zalo từ chối `redirect_uri` ở subdomain thì phải chốt phương án (đăng ký từng subdomain đang bán hàng, hoặc chuyển khách sang `app.tubutree.com` để đăng nhập) trước khi mở link gian hàng CTV cho khách.
+9. Kiểm **trạng thái ứng dụng**: nếu ứng dụng còn ở chế độ phát triển thì thường chỉ tài khoản Zalo đã thêm làm người phát triển/thử nghiệm mới đăng nhập được. Chuyển sang trạng thái công khai trước khi mở cho khách.
+10. `ZALO_APP_ID` phải có **trước khi build web**: web nhúng `NEXT_PUBLIC_ZALO_APP_ID` vào bản dựng (không đọc lúc chạy). Docker build của web **dừng với lỗi** nếu giá trị này rỗng (chỉ bản thử không dùng Zalo mới đặt `ALLOW_EMPTY_ZALO_APP_ID=1` trong `.env` để bỏ qua; khi đó trang đăng nhập hiện thông báo "chưa cấu hình" thay cho nút). Đổi App ID thì phải **build lại web**:
+   ```bash
+   cd ~/tubutree && docker compose -f docker-compose.prod.yml up -d --build web
+   ```
+11. Kiểm sau deploy: mở `https://app.tubutree.com/dang-nhap`, bấm **Đăng nhập với Zalo**, trình duyệt phải sang `oauth.zaloapp.com` với đúng `app_id`, đăng nhập xong quay lại `app.tubutree.com`. Checklist đầy đủ: `docs/2026-10-review/UAT-ZALO.md` mục 12.
 
 ### Đặt vào hệ thống
 ```bash
