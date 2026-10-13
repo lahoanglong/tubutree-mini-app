@@ -82,8 +82,10 @@ bash tools/deploy/deploy.sh
 chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của
 image CŨ ("No pending migrations") và migration mới chỉ chạy trong CMD của container mới, sau khi
 container cũ đã bị thay. Script build trước, migrate bằng image mới, migration lỗi thì dừng khi
-container cũ vẫn phục vụ. Chỉ chạy **một** instance api (cron chạy trong tiến trình api, xem
-`docs/2026-10-review/99-release-readiness.md`); không dùng `--scale api=N`.
+container cũ vẫn phục vụ. Nhiều instance api cùng lúc (scale, hoặc container cũ/mới chồng nhau) thì
+chỉ instance giữ lease trong bảng `cron_leases` chạy @Cron (`src/common/cron-leader`); log có dòng
+`Instance <host:pid:id> chạy cron.` ở đúng một instance. Vẫn giữ một instance cho tới khi đo lại
+P2028 (pool Prisma) với nhiều instance.
 
 ## Backup hằng ngày (bắt buộc trước khi có khách thật)
 
