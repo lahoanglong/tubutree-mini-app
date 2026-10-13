@@ -156,8 +156,23 @@ export const placeOrder = (
   });
 
 // Orders
-export const fetchOrders = () =>
-  apiFetch<{ data: OrderDTO[]; meta: unknown }>('/orders').then((r) => r.data);
+export interface OrderListFilter {
+  status?: string;
+  /** Nhóm trạng thái gộp của API (GET /orders?group=): processing = Đã xác nhận + Đang đóng gói, closed = Đã hủy + Đã hoàn. */
+  group?: 'processing' | 'closed';
+}
+export interface OrdersPage {
+  data: OrderDTO[];
+  meta: { page: number; limit: number; total: number };
+}
+export const ORDERS_PAGE_SIZE = 20;
+/** Một trang đơn (mới nhất trước) kèm tổng số — API mặc định chỉ trả 20 đơn đầu nên danh sách phải tự tải thêm. */
+export const fetchOrdersPage = (page: number, filter: OrderListFilter = {}) => {
+  const qs = new URLSearchParams({ page: String(page), limit: String(ORDERS_PAGE_SIZE) });
+  if (filter.status) qs.set('status', filter.status);
+  if (filter.group) qs.set('group', filter.group);
+  return apiFetch<OrdersPage>(`/orders?${qs.toString()}`);
+};
 
 /** GET /orders/:code — API trả nguyên cột của Order kèm ảnh từng dòng; chỉ khai các trường web đang dùng. */
 export interface OrderDetailDTO extends OrderDTO {

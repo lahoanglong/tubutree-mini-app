@@ -1,21 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { fetchOrders, formatVnd } from '@/lib/shop-client';
-import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
+import { formatVnd } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
-import { RecyclingStatus } from '@/components/recycling-status';
-import { formatDate } from '@/lib/format-date';
 import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { OrdersSection } from './orders-section';
 
 export default function AccountPage() {
   const { user, logout } = useAuth();
   const phase = useAuthPhase();
-  const ordersQ = useQuery({ queryKey: ['orders'], queryFn: fetchOrders, enabled: phase === 'authenticated' });
 
   if (phase === 'loading') {
     return (
@@ -61,53 +57,7 @@ export default function AccountPage() {
         </div>
       </section>
 
-      <section className="mt-6">
-        <h2 className={ui.sectionTitle}>Đơn hàng của tôi</h2>
-        {ordersQ.isLoading ? (
-          <p className="py-6 text-center text-stone-600">Đang tải…</p>
-        ) : ordersQ.isError ? (
-          <div className={`mt-3 p-6 text-center ${ui.card}`}>
-            <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
-            <button type="button" onClick={() => void ordersQ.refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
-              Thử lại
-            </button>
-          </div>
-        ) : ordersQ.data && ordersQ.data.length > 0 ? (
-          <ul className="mt-3 space-y-3">
-            {ordersQ.data.map((o) => (
-              <li key={o.code} className={`p-4 ${ui.card}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-stone-900">#{o.code}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-                    {orderStatusLabel(o.status)}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-stone-600">
-                  {o.items.length} sản phẩm · {formatDate(o.createdAt)}
-                </div>
-                <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
-                <RecyclingStatus order={o} />
-                {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
-                {canPayAgain(o) ? (
-                  <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
-                    Thanh toán
-                  </Link>
-                ) : (
-                  <Link
-                    href={orderDetailHref(o.code)}
-                    aria-label={`Xem chi tiết đơn ${o.code}`}
-                    className={`${ui.btnText} -ml-2 mt-1 text-forest-700`}
-                  >
-                    Xem chi tiết
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>Bạn chưa có đơn hàng nào.</p>
-        )}
-      </section>
+      <OrdersSection />
 
       <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} mt-6 w-full`}>
         Đăng xuất
