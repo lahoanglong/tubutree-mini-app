@@ -86,6 +86,7 @@ import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
+import { NotificationTemplatesTab } from '@/components/admin/notification-templates-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
 import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel';
@@ -138,6 +139,7 @@ type Tab =
   | 'contentKit'
   | 'academy'
   | 'quickReplies'
+  | 'notificationTemplates'
   | 'merchantProducts'
   | 'cashback'
   | 'posCredits'
@@ -166,6 +168,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'contentKit', label: 'Content Kit CTV' },
   { k: 'academy', label: 'Academy' },
   { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
+  { k: 'notificationTemplates', label: 'Mẫu thông báo' },
   { k: 'analytics', label: 'Retention & North-star' },
 ];
 
@@ -279,6 +282,7 @@ export default function AdminPage() {
         {tab === 'contentKit' && <ContentKitTab />}
         {tab === 'academy' && <AcademyTab />}
         {tab === 'quickReplies' && <QuickReplyTab />}
+        {tab === 'notificationTemplates' && <NotificationTemplatesTab />}
         {tab === 'analytics' && <AnalyticsTab />}
       </div>
     </main>

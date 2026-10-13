@@ -701,6 +701,28 @@ export const updateQuickReply = (
 export const deleteQuickReply = (id: string) =>
   apiFetch<{ ok: boolean }>(`/admin/quick-replies/${id}`, { method: 'DELETE' });
 
+// ── Mẫu thông báo (kênh ZNS / trong app, mã mẫu ZNS Zalo đã duyệt) ──
+/** Kênh gửi thật: ZNS chỉ gửi khi template là ZNS và có mã mẫu; còn lại khách chỉ thấy trong app. */
+export type NotificationDelivery = 'ZNS' | 'ZNS_MISSING_TEMPLATE_ID' | 'INAPP';
+export interface AdminNotificationTemplate {
+  id: string;
+  code: string;
+  channel: string;
+  zaloTemplateId: string | null;
+  bodyTemplate: string;
+  delivery: NotificationDelivery;
+  sent30d: { INAPP: number; ZNS: number };
+}
+export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
+export const updateNotificationTemplate = (
+  code: string,
+  body: Partial<{ channel: 'INAPP' | 'ZNS'; zaloTemplateId: string | null; bodyTemplate: string }>,
+) =>
+  apiFetch<{ code: string }>(`/admin/notification-templates/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    body,
+  });
+
 // ── Duyệt sản phẩm đăng bởi đối tác (Multi-tenancy Storefront) ──
 export interface AdminPendingProduct {
   id: string;
