@@ -68,7 +68,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
         district: 'Cầu Giấy',
         ward: 'Dịch Vọng',
         street: '12 Ngõ Thật',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '005',
         wardCode: '00160',
         isDefault: true,

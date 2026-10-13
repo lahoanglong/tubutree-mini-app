@@ -39,6 +39,6 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
     GeoService,
     GomdonAlertService,
   ],
-  exports: [PancakeClient, PancakeSyncService, PancakeOrderService],
+  exports: [PancakeClient, PancakeSyncService, PancakeOrderService, GeoService],
 })
 export class PancakeModule {}

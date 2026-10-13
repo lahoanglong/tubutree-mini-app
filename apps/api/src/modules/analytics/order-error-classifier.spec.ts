@@ -7,6 +7,10 @@ describe('classifyOrderError', () => {
   it('message === PRICE_CHANGED → PRICE_CHANGED', () => {
     expect(classifyOrderError('PRICE_CHANGED')).toBe('PRICE_CHANGED');
   });
+  it('tổng đơn tăng lúc đặt (TOTAL_CHANGED) → PRICE_CHANGED; địa chỉ sai địa giới → ADDRESS_INVALID', () => {
+    expect(classifyOrderError('Tổng tiền đơn vừa thay đổi từ 90đ thành 100đ do giá hoặc phí giao vừa cập nhật.')).toBe('PRICE_CHANGED');
+    expect(classifyOrderError('Phường/xã không thuộc tỉnh/thành đã chọn. Vui lòng chọn lại địa chỉ.')).toBe('ADDRESS_INVALID');
+  });
   it('message chứa "Địa chỉ giao hàng" → ADDRESS_INVALID', () => {
     expect(classifyOrderError('Địa chỉ giao hàng không hợp lệ.')).toBe('ADDRESS_INVALID');
   });

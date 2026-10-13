@@ -133,7 +133,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
         province: 'Ha Noi',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         wardCode: '00001',
       },
     } as never);
@@ -161,7 +161,7 @@ describe('Tạo hoa hồng CTV (real Postgres)', () => {
             province: 'Ha Noi',
             ward: 'Phuong IT',
             street: '1 Duong IT',
-            provinceCode: '01',
+            provinceCode: '84_VN01',
             wardCode: '00001',
           },
         } as never),

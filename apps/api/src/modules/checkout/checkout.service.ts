@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
@@ -19,6 +19,12 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { GeoService } from '../integrations/pancake/geo.service';
+import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+
+/** Mã lỗi ổn định: tổng lúc đặt cao hơn tổng khách đã thấy (giá/phí vừa đổi) — FE báo và tải lại báo giá. */
+export const TOTAL_CHANGED = 'TOTAL_CHANGED';
+export const TOTAL_CHANGED_MESSAGE_PREFIX = 'Tổng tiền đơn vừa thay đổi';
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -53,6 +59,7 @@ export class CheckoutService {
     private readonly combo: ComboService,
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
+    @Optional() private readonly geo?: GeoService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -196,6 +203,15 @@ export class CheckoutService {
       throw new BadRequestException(
         'Số Điểm Xanh hoặc mã giảm giá của bạn vừa thay đổi nên đơn không còn 0đ. Vui lòng tải lại trang thanh toán.',
       );
+    }
+    // Chỉ chặn khi ĐẮT HƠN số khách đã thấy; rẻ hơn (giảm giá vừa áp) thì có lợi cho khách, không hỏi lại.
+    if (dto.expectedTotal != null && computed.total > dto.expectedTotal) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: TOTAL_CHANGED,
+        message: `${TOTAL_CHANGED_MESSAGE_PREFIX} từ ${dto.expectedTotal.toLocaleString('vi-VN')}đ thành ${computed.total.toLocaleString('vi-VN')}đ do giá hoặc phí giao vừa cập nhật. Vui lòng xem lại trước khi đặt.`,
+      });
     }
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
@@ -560,6 +576,14 @@ export class CheckoutService {
         : [];
     if (droppedSelected.length > 0) throw productDiscontinuedError(droppedSelected[0]!.productName);
     const items = subset ? fullCart.items.filter((l) => itemIds!.includes(l.id)) : fullCart.items;
+    // Lưới an toàn cho giá 0đ/âm (dữ liệu đồng bộ lỗi, nhập tay nhầm) — không bao giờ bán hàng miễn phí.
+    const unpriced = items.find((l) => !(l.unitPrice > 0));
+    if (unpriced) {
+      this.logger.error(`Chặn đặt đơn: biến thể ${unpriced.variationId} có đơn giá ${unpriced.unitPrice}.`);
+      throw new BadRequestException(
+        `Sản phẩm "${unpriced.productName}" đang được cập nhật giá, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`,
+      );
+    }
     const subtotal = subset ? items.reduce((s, l) => s + l.total, 0) : fullCart.subtotal;
     const cart = { ...fullCart, items, subtotal };
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -567,6 +591,7 @@ export class CheckoutService {
     if (!address || address.userId !== userId) {
       throw new BadRequestException('Địa chỉ giao hàng không hợp lệ.');
     }
+    await assertDeliverableAddress(this.geo, address);
 
     // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
     // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):

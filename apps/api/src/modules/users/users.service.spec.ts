@@ -121,11 +121,13 @@ function prismaForAddress(opts: {
   return { prisma: base as unknown as PrismaService, updateMany, create, update, txSpy };
 }
 
+const GEO = { provinceCode: '84_VN01', wardCode: '84_VN01_00004' };
+
 describe('UsersService.createAddress', () => {
   it('địa chỉ ĐẦU TIÊN (count=0) → luôn isDefault=true dù dto không gửi, KHÔNG cần updateMany reset (chưa có địa chỉ khác)', async () => {
     const { prisma, updateMany, create } = prismaForAddress({ count: 0 });
     const svc = new UsersService(prisma);
-    await svc.createAddress('u1', { line1: 'A' } as never);
+    await svc.createAddress('u1', { line1: 'A', ...GEO } as never);
     expect(updateMany).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { isDefault: false } });
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ isDefault: true, userId: 'u1' }) });
   });
@@ -133,7 +135,7 @@ describe('UsersService.createAddress', () => {
   it('không phải địa chỉ đầu (count>0) + dto không gửi isDefault → isDefault=false, KHÔNG updateMany', async () => {
     const { prisma, updateMany, create } = prismaForAddress({ count: 2 });
     const svc = new UsersService(prisma);
-    await svc.createAddress('u1', { line1: 'B' } as never);
+    await svc.createAddress('u1', { line1: 'B', ...GEO } as never);
     expect(updateMany).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ isDefault: false }) });
   });
@@ -141,7 +143,7 @@ describe('UsersService.createAddress', () => {
   it('chạy trong transaction Serializable (chống race 2 request cùng đọc count=0)', async () => {
     const { prisma, txSpy } = prismaForAddress({ count: 0 });
     const svc = new UsersService(prisma);
-    await svc.createAddress('u1', { line1: 'A' } as never);
+    await svc.createAddress('u1', { line1: 'A', ...GEO } as never);
     expect(txSpy).toHaveBeenCalledWith({ isolationLevel: 'Serializable' });
   });
 });
@@ -175,6 +177,47 @@ describe('UsersService.updateAddress', () => {
     const svc = new UsersService(prisma);
     await svc.updateAddress('u1', 'a1', { isDefault: true } as never);
     expect(txSpy).toHaveBeenCalledWith({ isolationLevel: 'Serializable' });
+  });
+});
+
+describe('Sổ địa chỉ chỉ nhận địa chỉ gửi được sang Pancake (PANCAKE-16, MONEY-12)', () => {
+  const geoReturning = (r: 'ok' | 'invalid' | 'unknown') => ({ checkWard: jest.fn().mockResolvedValue(r) }) as never;
+
+  it('mã cũ ("00", tỉnh hệ 3 cấp) → 400 ADDRESS_OUTDATED, không ghi DB', async () => {
+    const { prisma, create } = prismaForAddress({});
+    const svc = new UsersService(prisma, undefined, geoReturning('ok'));
+    for (const codes of [{ provinceCode: '00', wardCode: '00' }, { provinceCode: '01', wardCode: '00004' }]) {
+      const err = await svc.createAddress('u1', { line1: 'A', ...codes } as never).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'ADDRESS_OUTDATED' });
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('phường không thuộc tỉnh (theo danh mục Pancake) → 400; Pancake lỗi (unknown) → vẫn lưu', async () => {
+    const bad = prismaForAddress({});
+    await expect(new UsersService(bad.prisma, undefined, geoReturning('invalid')).createAddress('u1', GEO as never)).rejects.toThrow(
+      'Phường/xã không thuộc tỉnh/thành',
+    );
+    expect(bad.create).not.toHaveBeenCalled();
+    const down = prismaForAddress({});
+    await new UsersService(down.prisma, undefined, geoReturning('unknown')).createAddress('u1', GEO as never);
+    expect(down.create).toHaveBeenCalled();
+  });
+
+  it('sửa địa chỉ: đổi tỉnh mà giữ phường cũ → đối chiếu cặp mới; chỉ đặt mặc định thì không bắt sửa địa giới', async () => {
+    const legacy = { id: 'a1', userId: 'u1', provinceCode: '00', wardCode: '00' };
+    const geo = { checkWard: jest.fn().mockResolvedValue('invalid') };
+    const { prisma, update } = prismaForAddress({ findUnique: { ...legacy, provinceCode: '84_VN01', wardCode: '84_VN01_00004' } });
+    await expect(new UsersService(prisma, undefined, geo as never).updateAddress('u1', 'a1', { provinceCode: '84_VN79' } as never)).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(geo.checkWard).toHaveBeenCalledWith('84_VN79', '84_VN01_00004');
+    expect(update).not.toHaveBeenCalled();
+
+    const old = prismaForAddress({ findUnique: legacy });
+    await new UsersService(old.prisma, undefined, geo as never).updateAddress('u1', 'a1', { isDefault: true } as never);
+    expect(old.update).toHaveBeenCalled();
   });
 });
 

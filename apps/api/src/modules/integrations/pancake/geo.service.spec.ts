@@ -4,6 +4,7 @@ import type { PancakeClient } from './pancake.client';
 
 function makeService() {
   const pancake = {
+    isConfigured: jest.fn().mockReturnValue(true),
     fetchProvinces: jest.fn().mockResolvedValue([
       { new_id: '84_VN26', name: 'Lâm Đồng' },
       { new_id: '84_VN01', name: 'Hà Nội' },
@@ -105,5 +106,27 @@ describe('GeoService — Pancake trả rỗng / lỗi không được làm hỏn
   it('Pancake lỗi khi chưa từng có cache → 503 thay vì lỗi 500 thô', async () => {
     const svc = svcWith(jest.fn().mockRejectedValue(new Error('ECONNRESET')));
     await expect(svc.provinces()).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+});
+
+describe('GeoService.checkWard — đối chiếu địa chỉ trước khi lưu/đặt đơn (PANCAKE-16)', () => {
+  it('phường thuộc tỉnh → ok; phường của tỉnh khác / tỉnh lạ / mã cũ "00" → invalid', async () => {
+    const { svc } = makeService();
+    await expect(svc.checkWard('84_VN26', 'c1')).resolves.toBe('ok');
+    await expect(svc.checkWard('84_VN26', '84_VN701_70101')).resolves.toBe('invalid');
+    await expect(svc.checkWard('84_VN99', 'c1')).resolves.toBe('invalid');
+    await expect(svc.checkWard('00', '00')).resolves.toBe('invalid');
+    await expect(svc.checkWard('01', 'c1')).resolves.toBe('invalid');
+    await expect(svc.checkWard('84_VN26', '')).resolves.toBe('invalid');
+  });
+
+  it('Pancake lỗi/chưa cấu hình → unknown (nơi gọi cho qua, không chặn khách vì lỗi bên ngoài)', async () => {
+    const { svc, pancake } = makeService();
+    pancake.fetchProvinces.mockRejectedValue(new Error('ECONNRESET'));
+    await expect(svc.checkWard('84_VN26', 'c1')).resolves.toBe('unknown');
+    pancake.isConfigured.mockReturnValue(false);
+    pancake.fetchProvinces.mockClear();
+    await expect(svc.checkWard('84_VN26', 'c1')).resolves.toBe('unknown');
+    expect(pancake.fetchProvinces).not.toHaveBeenCalled();
   });
 });

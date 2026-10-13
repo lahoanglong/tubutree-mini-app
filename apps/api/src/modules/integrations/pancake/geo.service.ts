@@ -1,5 +1,12 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PancakeClient } from './pancake.client';
+import { isNewGeoCode } from './geo-code';
+
+/**
+ * ok = phường thuộc tỉnh theo danh mục Pancake; invalid = mã cũ (trước sắp xếp địa giới 2025) / tỉnh không có /
+ * phường không thuộc tỉnh; unknown = chưa đối chiếu được (Pancake lỗi/chưa cấu hình) → nơi gọi cho qua.
+ */
+export type WardCheck = 'ok' | 'invalid' | 'unknown';
 
 /** DTO địa giới rút gọn cho FE. `code` = mã gửi Pancake khi đặt đơn. */
 export interface GeoOption {
@@ -81,6 +88,20 @@ export class GeoService {
     });
     this.communesInflight.set(provinceCode, p);
     return p;
+  }
+
+  async checkWard(provinceCode: string | null | undefined, wardCode: string | null | undefined): Promise<WardCheck> {
+    if (!isNewGeoCode(provinceCode) || !wardCode?.trim() || wardCode === '00') return 'invalid';
+    if (!this.pancake.isConfigured()) return 'unknown';
+    let communes: GeoOption[];
+    try {
+      communes = await this.communes(provinceCode as string);
+    } catch (err) {
+      if (err instanceof BadRequestException) return 'invalid';
+      this.logger.warn(`Chưa đối chiếu được phường ${wardCode} / tỉnh ${provinceCode}: ${err instanceof Error ? err.message : err}`);
+      return 'unknown';
+    }
+    return communes.some((c) => c.code === wardCode) ? 'ok' : 'invalid';
   }
 
   private async refresh(
