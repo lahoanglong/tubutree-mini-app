@@ -36,6 +36,9 @@ import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permiss
 import { linkTubuFulfilledVariation } from '../merchant/merchant-pancake-link';
 import { maskPhone } from '../../common/mask-pii';
 
+/** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
+const COUPON_PERCENT_NEEDS_CAP = 50;
+
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
  * Đơn đại lý đi panel riêng (DealerPaymentPanel / confirmDealerOrderPayment).
@@ -1046,6 +1049,11 @@ export class AdminService {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
     if (endAt <= startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+    if (endAt <= new Date()) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
+    if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
+    if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
+      throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
+    }
     const code = normalizeCouponCode(data.code);
     try {
       return await this.prisma.coupon.create({
