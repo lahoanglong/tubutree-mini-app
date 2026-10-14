@@ -177,7 +177,7 @@ describe('OrdersService.cancel', () => {
   });
 
   it('R2-MERCHANT-14: đơn trả về sau khi huỷ không kèm phí sàn đối tác hay cột vận hành Pancake/Gomdon', async () => {
-    const internal = { merchantCommissionPct: '0.1500', endCustomerKey: '0909', pancakeSyncError: 'lỗi', gomdonAttempt: 1 };
+    const internal = { merchantCommissionPct: '0.1500', endCustomerKey: '0909', pancakeSyncError: 'lỗi', gomdonAttempt: 1, recipientSearch: 'nguyen van a' };
     for (const status of ['CONFIRMED', 'CANCELLED']) {
       const { svc } = makeService({ ...baseOrder, ...internal, status });
       const res = (await svc.cancel('u1', 'TUBU1')) as unknown as Record<string, unknown>;
@@ -814,6 +814,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       idempotencyKey: 'idem-1',
       reviewInvitedAt: new Date(),
       autoCancelBlockedAt: new Date(),
+      recipientSearch: 'nguyen van a 12 le loi',
     };
     const { svc } = makeMediaService([{ ...baseOrder, ...internal, items: [] }], []);
     const view = (await svc.detailView('u1', 'TUBU1')) as unknown as Record<string, unknown>;

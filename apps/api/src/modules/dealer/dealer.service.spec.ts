@@ -367,6 +367,31 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
     }
   });
 
+  it('đơn trả cho đại lý (đặt mới, đặt lại cùng key, danh sách) không kèm cột nội bộ: mốc thôi tự huỷ, ghi chú vận hành Pancake, cột tìm kiếm', async () => {
+    const internal = {
+      idempotencyKey: 'idem-3',
+      pancakeOrderId: 'pk-1',
+      pancakeAttention: 'Đơn CHƯA thanh toán — hệ thống thôi tự huỷ vì đã bàn giao vận chuyển.',
+      pancakeAttentionAt: new Date(),
+      autoCancelBlockedAt: new Date(),
+      recipientSearch: 'dai ly it 1 duong it',
+    };
+    const row = { id: 'o1', code: 'TUBU1', total: 100000, items: [], ...internal };
+    const { prisma } = prismaForOrder();
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue(row);
+    (prisma.order as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([row]);
+    const svc = new DealerService(prisma, makeConfig());
+    const dto = { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never;
+    const created = await svc.placeOrder('d1', dto, 'idem-3');
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o1', userId: 'd1' });
+    const replayed = await svc.placeOrder('d1', dto, 'idem-3');
+    const [listed] = await svc.listOrders('d1');
+    for (const res of [created, replayed, listed]) {
+      expect(res).toMatchObject({ id: 'o1', code: 'TUBU1', total: 100000 });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
+    }
+  });
+
   it('key mới → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { prisma, orderCreate } = prismaForOrder();
     await new DealerService(prisma, makeConfig()).placeOrder(

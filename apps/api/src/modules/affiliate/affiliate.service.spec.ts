@@ -573,6 +573,28 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
   });
 
+  it('đơn trả cho CTV (đặt mới, đặt lại cùng key) không kèm cột nội bộ: mốc thôi tự huỷ, ghi chú vận hành Pancake, cột tìm kiếm', async () => {
+    const internal = {
+      idempotencyKey: 'idem-9',
+      pancakeOrderId: 'pk-1',
+      pancakeAttention: 'Đơn CHƯA thanh toán — hệ thống thôi tự huỷ vì đã bàn giao vận chuyển.',
+      autoCancelBlockedAt: new Date(),
+      recipientSearch: 'khach a so 1',
+      endCustomerKey: '0900000000',
+    };
+    const { svc, prisma } = build();
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1', ...internal,
+    });
+    const created = await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-9');
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o1', userId: 'ctv' });
+    const replayed = await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-9');
+    for (const res of [created, replayed]) {
+      expect(res).toMatchObject({ id: 'o1', code: 'TUBU1', total: 100000 });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
+    }
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');

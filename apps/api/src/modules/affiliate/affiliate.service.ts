@@ -34,6 +34,7 @@ import {
 import { CRON_TZ } from '../../common/cron-tz';
 import { VN_OFFSET_MS } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
+import { forBuyer } from '../orders/buyer-order-fields';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -570,9 +571,7 @@ export class AffiliateService {
     // (trước đây endpoint này — khác placeOrder thường — không có bảo vệ double-submit).
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-      if (existing && existing.userId === ctvId) {
-        return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
-      }
+      if (existing && existing.userId === ctvId) return this.orderForCtv(existing.id);
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
     }
     if (!dto.items || dto.items.length === 0) {
@@ -692,7 +691,7 @@ export class AffiliateService {
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+        if (existing) return this.orderForCtv(existing.id);
       }
       throw err;
     }
@@ -705,10 +704,11 @@ export class AffiliateService {
     } catch (err) {
       this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
-    return this.prisma.order.findUniqueOrThrow({
-      where: { id: order.id },
-      include: { items: true },
-    });
+    return this.orderForCtv(order.id);
+  }
+
+  private async orderForCtv(id: string) {
+    return forBuyer(await this.prisma.order.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 
   /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */
