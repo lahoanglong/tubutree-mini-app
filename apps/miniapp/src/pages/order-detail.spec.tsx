@@ -389,6 +389,20 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }));
   });
 
+  it('R3-MONEY-1: đơn đang xử lý đã nhận tiền mà khách trả dư → khối Hoàn tiền hiện khoản trả dư', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    mocks.fetchMyRefunds.mockResolvedValue([
+      {
+        id: 'r9', orderId: 'o1', orderCode: 'TT001', kind: 'OVERPAYMENT', amount: 114_000, method: 'MANUAL_TRANSFER', status: 'PENDING',
+        bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: null,
+        createdAt: '2026-10-14T00:00:00Z', canChooseDestination: true,
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Tiền bạn trả dư: chờ bạn chọn nơi nhận · 114.000đ')).toBeInTheDocument();
+    expect(mocks.fetchMyRefunds).toHaveBeenCalledWith('o1');
+  });
+
   it('đơn chuyển khoản chưa ghi nhận tiền: hiện hạn thanh toán và cảnh báo trước khi huỷ', async () => {
     mocks.fetchOrder.mockResolvedValue({
       ...ORDER,

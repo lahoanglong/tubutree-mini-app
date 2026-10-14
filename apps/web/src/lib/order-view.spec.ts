@@ -84,8 +84,16 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
     const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
     expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Đang hoàn tiền');
     expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }])).toBe('Đang hoàn tiền');
-    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
-    expect(orderPaymentStatusLabel(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
+    // R2-LIFECYCLE-5: đã xong thì nói tiền về đâu.
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền về tài khoản ngân hàng');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe('Đã hoàn tiền vào Ví Tubu');
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'WALLET', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'COMPLETED' },
+      ]),
+    ).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [])).toBe('Đã hoàn tiền');
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' })).toBe('Đã thanh toán');
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
   });

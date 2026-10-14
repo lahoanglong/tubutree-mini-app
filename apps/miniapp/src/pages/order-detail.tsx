@@ -63,6 +63,7 @@ import {
   returnLinesText,
   returnStatusLabel,
   showsPaymentDeadline,
+  showsRefundPanel,
   type RefundBankInput,
   type RefundMethodChoice,
 } from '../utils/refund-rules';
@@ -456,7 +457,7 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {(o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELIVERED') && <OrderRefunds orderId={o.id} />}
+      {showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
 
       {/* ── Vận chuyển (hãng VC + mã vận đơn + tra cứu + hành trình) §6.4 ── */}
       {(o.shippingCode || journey.length > 0) && (

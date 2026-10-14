@@ -1,4 +1,5 @@
 import { formatVnd } from './shop-client';
+import { formatDateTime } from './format-date';
 
 /** Web không dùng shared-types: trạng thái/phương thức là chuỗi API trả về. */
 type PaymentMethod = string;
@@ -131,7 +132,7 @@ export interface MyRefund {
   id: string;
   orderId: string;
   orderCode: string;
-  kind: 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
+  kind: 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT' | 'OVERPAYMENT';
   /** Khoản trả hàng: id yêu cầu trả. API cũ chưa trả. */
   refKey?: string;
   amount: number;
@@ -148,20 +149,27 @@ export interface MyRefund {
 }
 
 /** Một dòng trạng thái khoản hoàn cho khách: đang ở đâu, cần làm gì. */
+const REFUND_LEAD: Record<MyRefund['kind'], string> = {
+  LATE_PAYMENT: 'Tiền về sau khi đơn đã huỷ',
+  OVERPAYMENT: 'Tiền bạn trả dư',
+  RETURN: 'Hoàn tiền trả hàng',
+  CANCEL: 'Hoàn tiền huỷ đơn',
+  END_CUSTOMER: 'Hoàn tiền huỷ đơn',
+};
+
 export function refundStatusText(r: MyRefund): {
   title: string;
   detail: string;
   tone: 'success' | 'warning' | 'muted';
 } {
-  const lead =
-    r.kind === 'LATE_PAYMENT'
-      ? 'Tiền về sau khi đơn đã huỷ'
-      : r.kind === 'RETURN'
-        ? 'Hoàn tiền trả hàng'
-        : 'Hoàn tiền huỷ đơn';
+  const lead = REFUND_LEAD[r.kind] ?? 'Hoàn tiền huỷ đơn';
   if (r.status === 'COMPLETED') {
     return r.method === 'WALLET'
-      ? { title: `${lead}: đã hoàn vào Ví Tubu`, detail: '', tone: 'success' }
+      ? {
+          title: `${lead}: đã hoàn vào Ví Tubu`,
+          detail: r.completedAt ? `Đã cộng vào Ví Tubu lúc ${formatDateTime(r.completedAt)}.` : '',
+          tone: 'success',
+        }
       : {
           title: `${lead}: đã chuyển khoản`,
           detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)}${r.bankRef ? ` · Mã GD ${r.bankRef}` : ''}`,
@@ -187,6 +195,20 @@ export function refundStatusText(r: MyRefund): {
     detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)} trong 1-3 ngày làm việc, miễn phí. Bạn vẫn đổi sang Ví Tubu được tới khi Tubu bắt đầu chuyển.`,
     tone: 'muted',
   };
+}
+
+/**
+ * Chi tiết đơn có thể có khoản hoàn: đơn đã huỷ/trả/giao (hoàn khi huỷ, trả hàng, tiền về muộn), hoặc đơn đã nhận tiền
+ * (khách trả hai lần / chuyển dư thành khoản "Tiền bạn trả dư" ngay cả khi đơn đang giao).
+ */
+export function showsRefundPanel(o: { status: OrderStatus; paymentStatus?: PaymentStatus }): boolean {
+  return (
+    o.status === 'CANCELLED' ||
+    o.status === 'RETURNED' ||
+    o.status === 'DELIVERED' ||
+    o.paymentStatus === 'PAID' ||
+    o.paymentStatus === 'REFUNDED'
+  );
 }
 
 /** Đơn trả trước đang chờ tiền và còn hạn — hiện "Thanh toán trước HH:mm dd/MM/yyyy". */
