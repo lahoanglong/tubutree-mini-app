@@ -468,6 +468,23 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('mã GD FT123');
     expect(scrollRegionProblems(root)).toEqual([]);
   });
+
+  it('đơn bị trả: giải thích phần nộp lại (COD là số tiền mặt đã thu), dòng ghi "(trả hàng)"', async () => {
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      lines: [
+        { orderId: 'o3', orderCode: 'TF3', kind: 'REVERSAL', goodsAmount: 0, shippingFee: 0, commissionAmount: 0, codCollected: 130000, netAmount: -130000, deliveredAt: null },
+      ],
+      total: -130000,
+      upcoming: [],
+      payouts: [],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    expect(root.textContent).toContain('Đơn bị trả: Tubu Tree hoàn tiền cho khách');
+    expect(root.textContent).toContain('TF3(trả hàng)');
+    expect(root.textContent).toContain('−130.000');
+  });
 });
 
 describe('cổng đối tác — tab Quản lý sản phẩm', () => {

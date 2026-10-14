@@ -71,7 +71,8 @@ export function SettlementTab() {
       <Notice>
         Mỗi đơn bạn tự giao: thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của khách. Đơn được đưa vào
         bảng kê sau {s.holdDays} ngày kể từ khi giao (hết hạn đổi/trả). Tubu Tree lập phiếu và chuyển khoản vào tài khoản nhận đối
-        soát của gian hàng; số âm là phần bạn nộp lại Tubu.
+        soát của gian hàng; số âm là phần bạn nộp lại Tubu. Đơn bị trả: Tubu Tree hoàn tiền cho khách, bạn nhận hàng về và nộp
+        lại phần đã nhận cho đơn đó; đơn COD là đúng số tiền mặt bạn đã thu.
       </Notice>
 
       <section className="space-y-2">
