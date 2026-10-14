@@ -509,7 +509,9 @@ describe('cổng đối tác — tab Đối soát', () => {
   it('công thức thực nhận, số âm hiện dấu trừ, phiếu đã chuyển kèm mã giao dịch', async () => {
     const root = await mount();
     await openTab('Đối soát');
-    expect(root.textContent).toContain('thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
+    const selfShip = root.textContent!.slice(root.textContent!.indexOf('Mỗi đơn bạn tự giao'), root.textContent!.indexOf('Chờ lập phiếu'));
+    expect(selfShip).toContain('thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
+    expect(selfShip).toContain('Mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của bạn');
     expect(root.textContent).toContain('sau 7 ngày');
     expect(root.textContent).toContain('Chờ lập phiếu (2 khoản)');
     expect(root.textContent).toContain('−15.000');

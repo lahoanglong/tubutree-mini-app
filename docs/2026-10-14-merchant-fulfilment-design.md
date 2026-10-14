@@ -143,15 +143,27 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
 ## 7. Tiền
 
 - COD trên đơn đối tác: đối tác thu của khách. Trả trước (Ví Tubu): Tubu giữ.
-- Mã giảm, giảm hạng, Điểm Xanh là Tubu tài trợ; combo của gian hàng tính vào giá dòng (`OrderItem.total`).
-- Đơn `DELIVERED` quá `merchant.settlement_hold_days` ngày (mặc định 7 = hạn đổi/trả) thành "có thể đối soát":
+- Mã giảm giá Tubu, giảm hạng, Điểm Xanh áp cho món được trừ vào tiền của gian hàng (chủ dự án chốt, Q8): đơn tự giao và hàng
+  Tubu giao hộ cùng một nền tiền dòng `merchantLineBase` (`merchant-line-base.ts`) = tiền hàng khách thực trả
+  (`order.total − shippingFee`) chia theo `OrderItem.total` (đã trừ combo của gian hàng). Ví Tubu là cách trả, không làm giảm
+  `order.total`. Phí giao giữ như cũ.
+- Đơn `DELIVERED` quá `merchant.settlement_hold_days` ngày (mặc định 7 = hạn đổi/trả), Tubu đã thu tiền (PAID hoặc COD) thành
+  "có thể đối soát":
 
 ```
-goods      = Σ OrderItem.total                      (đã trừ combo)
-commission = round(goods × merchantCommissionPct)
+goods      = Σ merchantLineBase(order)              (= order.total − shippingFee, tối đa Σ OrderItem.total)
+commission = round(goods × merchantCommissionPct)   (mức chốt trên đơn lúc đặt)
 cod        = paymentMethod = COD ? order.total : 0
 net        = goods + shippingFee − commission − cod   (> 0: Tubu trả đối tác, < 0: đối tác nộp lại Tubu)
 ```
+
+  Ví dụ tính tay (race spec `merchant-selfship-paid-base`): A 2 × 100.000, B 1 × 100.000; mã giảm 30.000 + Điểm Xanh 20.000;
+  phí giao 30.000 → khách trả 280.000; phí sàn 10%. goods 250.000 (A 166.667, B 83.333), commission 25.000.
+  COD: 250.000 + 30.000 − 25.000 − 280.000 = −25.000 (gian hàng nộp phí sàn); ví: 255.000. Nền cũ (Σ OrderItem.total) cho COD
+  +20.000 vì Tubu chịu 50.000 giảm giá. Trả 1 × A: −(83.334 − 8.333) = −75.001; trả nốt: −(166.666 + 30.000 − 16.667) =
+  −179.999. Cộng lại: goods, phí giao, phí sàn về 0; net COD = −280.000 (tiền mặt gian hàng giữ, Tubu đã hoàn khách), ví = 0.
+- Phiếu đã lập giữ số đã lưu. Dòng đảo của đơn đã có SALE tính trên tiền hàng đã lưu ở SALE: khớp nền hiện tại thì dùng thẳng,
+  khác (SALE lập theo nền cũ) thì chia số đã lưu theo `OrderItem.total`, nên SALE + mọi dòng đảo vẫn cộng về đúng như trên.
 
 - Đơn bị `RETURNED` (Tubu đã hoàn tiền cho khách, hàng về đối tác) → dòng `REVERSAL`, trừ vào phiếu kế tiếp:
 
@@ -180,10 +192,10 @@ opsFee     = round(paid_i × consignmentFeePct)
 net        = paid_i − commission − opsFee            (shippingFee = cod = 0, không âm)
 ```
 
-  `paid_i` nằm sau một hàm (`consignmentLineBase`) để đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ. Chủ dự án
+  `paid_i` là `merchantLineBase`, cùng hàm với đơn tự giao: đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ. Chủ dự án
   đã chốt: mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của đối tác (đối tác chịu, Tubu không chịu). Ví Tubu là
-  phương thức thanh toán, không phải giảm giá: đơn trả bằng ví giữ nguyên `order.total`, nên không làm giảm `paid_i`. Công thức
-  đơn tự giao chưa đổi (còn chờ chủ dự án).
+  phương thức thanh toán, không phải giảm giá: đơn trả bằng ví giữ nguyên `order.total`, nên không làm giảm `paid_i`. Đơn tự
+  giao cũng theo nền này (đầu mục 7).
 
   Điều kiện một dòng hàng vào bảng kê (lọc trong SQL):
   - Đơn `fulfiller = TUBU`, `DELIVERED`, Tubu đã thu tiền: `paymentStatus = PAID` hoặc `paymentMethod = COD` (cùng luật doanh thu
