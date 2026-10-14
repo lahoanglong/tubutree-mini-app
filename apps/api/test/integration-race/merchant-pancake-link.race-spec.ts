@@ -265,7 +265,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     // Đổi sang mã khác: về chờ duyệt, admin duyệt thì liên kết đúng biến thể mới.
     await merchant.updateProduct(owner.id, p.id, { pancakeCode: ` ${b.code} ` });
     const requested = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
-    expect(requested).toMatchObject({ pancakeLinkCode: b.code, approvalStatus: 'PENDING_REVIEW', fulfilment: 'MERCHANT' });
+    expect(requested).toMatchObject({ pancakeLinkCode: b.code, approvalStatus: 'PENDING_REVIEW', fulfilment: 'MERCHANT', isActive: true });
     const row = (await admin.listPendingMerchantProducts(1, 100)).data.find((r) => r.id === p.id)!;
     expect(row.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: b.product.id } });
     await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
@@ -275,8 +275,10 @@ describe('Merchant Pancake link (real Postgres)', () => {
       prisma.merchantPancakeLink.findFirst({ where: { productId: p.id, unlinkedAt: null } }),
     ]);
     expect(linked.productId).toBe(p.id);
-    expect(mine).toMatchObject({ fulfilment: 'TUBU', approvalStatus: 'APPROVED', pancakeLinkCode: b.code });
+    expect(mine).toMatchObject({ fulfilment: 'TUBU', approvalStatus: 'APPROVED', pancakeLinkCode: b.code, isActive: true });
     expect(open).toMatchObject({ variationId: b.variation.id, originProductId: b.product.id });
+    expect(await prisma.product.findUniqueOrThrow({ where: { id: b.product.id } })).toMatchObject({ isActive: false });
+    expect(linked.isActive).toBe(true);
     // Đã liên kết lại: không đổi/bỏ mã được nữa nếu chưa gỡ.
     await expect(merchant.updateProduct(owner.id, p.id, { pancakeCode: null })).rejects.toThrow('đang được Tubu giao hộ');
     await expect(merchant.updateProduct(owner.id, p.id, { pancakeCode: a.code })).rejects.toThrow('đang được Tubu giao hộ');

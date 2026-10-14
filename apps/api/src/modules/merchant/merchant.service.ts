@@ -595,7 +595,13 @@ export class MerchantService {
     const contentChanged = !sameContent(merged, baseline);
     // Mở bán lại sản phẩm đã gỡ liên kết, hoặc xin mã Pancake khác, thì admin duyệt lại để liên kết biến thể Pancake. Bỏ mã (tự
     // giao) giữ nguyên trạng thái duyệt: nội dung đã được duyệt, giá và tồn do gian hàng tự đặt như mọi sản phẩm tự giao.
-    const relink = awaitingLink && product.approvalStatus === 'APPROVED' && (dto.isActive === true || (codeChanged && !!codeChange));
+    const requestsLink = awaitingLink && codeChanged && !!codeChange;
+    // Duyệt xong là sản phẩm Tubu giao hộ nhận biến thể Pancake (và sản phẩm gốc có thể bị tắt): để sản phẩm còn ẩn từ lúc gỡ liên
+    // kết thì SKU không còn bán ở đâu, nên xin mã mới đồng thời là mở bán lại (sản phẩm vẫn ẩn với khách cho tới khi được duyệt).
+    if (requestsLink && dto.isActive === false) {
+      throw new BadRequestException('Không thể vừa ngừng bán vừa xin mã Pancake mới: đổi mã sẽ gửi sản phẩm đi duyệt và mở bán lại.');
+    }
+    const relink = awaitingLink && product.approvalStatus === 'APPROVED' && (dto.isActive === true || requestsLink);
     const liveEdit = product.approvalStatus === 'APPROVED' && !relink;
     const revertsToLive = liveEdit && contentChanged && sameContent(merged, contentOf(product));
     const startsDraft = liveEdit && contentChanged && !revertsToLive && !draft;
@@ -628,7 +634,7 @@ export class MerchantService {
       await tx.product.update({
         where: { id: product.id },
         data: {
-          isActive: dto.isActive,
+          isActive: requestsLink ? true : dto.isActive,
           ...(tubuFulfilled ? {} : { basePrice, salePrice }),
           // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
           ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),

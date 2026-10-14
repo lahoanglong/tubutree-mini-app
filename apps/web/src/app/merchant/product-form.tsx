@@ -348,7 +348,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
               <input type="radio" name="merchant-edit-code" checked={codeMode === 'change'} onChange={() => setCodeMode('change')} className="mt-0.5 h-4 w-4 accent-forest-600" />
               <span>
                 <span className="block font-semibold text-stone-900">Đổi sang mã Pancake khác</span>
-                Mã mới được Tubu Tree duyệt lại trước khi liên kết.
+                Mã mới được Tubu Tree duyệt lại trước khi liên kết; sản phẩm tự mở bán lại ngay khi duyệt xong.
               </span>
             </label>
             {codeMode === 'change' && (

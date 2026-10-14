@@ -580,6 +580,31 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ mode: 'Tubu giao hộ' }));
     });
 
+    it('sản phẩm đã bị admin gỡ liên kết (isActive=false) xin mã khác → mở bán lại cùng lúc, nếu không duyệt xong vẫn ẩn và SKU không bán ở đâu', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
+    });
+
+    it('sản phẩm bị từ chối rồi ngừng bán xin mã khác → cũng mở bán lại cùng lúc xin mã', async () => {
+      const { svc, productUpdate } = buildEdit({ ...UNLINKED, approvalStatus: 'REJECTED', rejectReason: 'Mã đã có chủ' }, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
+    });
+
+    it('vừa ngừng bán vừa xin mã Pancake mới là yêu cầu mâu thuẫn → 400, không ghi gì', async () => {
+      const { svc, productUpdate, productUpdateMany } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW', isActive: false })).rejects.toThrow('vừa ngừng bán vừa xin mã Pancake mới');
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('bỏ mã (tự giao) không tự mở bán: trạng thái bán do đối tác chọn', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED);
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+      expect(productUpdate.mock.calls[0]![0].data.isActive).toBeUndefined();
+    });
+
     it('mã mới không có trong danh mục hoặc đã có chủ → 400, không ghi gì', async () => {
       const { svc, productUpdate, productUpdateMany, notify } = buildEdit(UNLINKED, null);
       await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-XX' })).rejects.toThrow('Mã biến thể Pancake không có trong danh mục');
