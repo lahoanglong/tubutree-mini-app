@@ -106,7 +106,10 @@ describe('Merchant product edit draft (real Postgres)', () => {
   it('(b) hàng chờ duyệt và số "Việc cần xử lý" đều đếm bản sửa; duyệt xong thì ghi đè nội dung, xoá bản chờ, hàng chờ hết dòng này', async () => {
     const { owner, product } = await liveProduct();
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên đã duyệt' });
-    const inbox = new OpsInboxService(prisma, { countOverdue: async () => 0 } as unknown as MerchantFulfilmentService);
+    const inbox = new OpsInboxService(prisma, {
+      countOverdue: async () => 0,
+      countStoresToSettle: async () => 0,
+    } as unknown as MerchantFulfilmentService);
     const count = async () => (await inbox.counts({ role: 'ADMIN' })).items.find((i) => i.key === 'merchantProducts')!.count;
 
     const pending = await admin.listPendingMerchantProducts(1, 500);
