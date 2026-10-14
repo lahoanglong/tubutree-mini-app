@@ -1,5 +1,5 @@
 import type { OrderDTO } from '@tubutree/shared-types';
-import type { ReturnRequestDTO } from '../../miniapp/src/services/shop-api';
+import type { ReturnEstimateDTO, ReturnRequestDTO } from '../../miniapp/src/services/shop-api';
 import { test, expect, makeOrder, makeUser, mockSession, reply } from './support/mock-api';
 
 /**
@@ -8,9 +8,10 @@ import { test, expect, makeOrder, makeUser, mockSession, reply } from './support
  * Kiểm tra (apps/miniapp/src/pages/order-detail.tsx, route orders.controller.ts):
  * 1. Khách tự huỷ đơn chưa giao (CONFIRMED): nút "Hủy đơn" → sheet xác nhận → POST /orders/:code/cancel
  *    → trạng thái "Đã hủy" + snackbar "Đã hủy đơn cho bạn".
- * 2. Đơn đã giao (DELIVERED): nút "Yêu cầu đổi/trả" → sheet nhập lý do (≥5 ký tự) →
- *    POST /orders/:code/return-request → snackbar thành công → GET /orders/me/returns tải lại →
- *    hiện "⏳ Yêu cầu đổi/trả đang xử lý".
+ * 2. Đơn đã giao (DELIVERED, còn trong hạn đổi/trả): nút "Yêu cầu đổi/trả" → sheet chọn dòng + số lượng, lý do
+ *    chọn sẵn ("Lý do khác" bắt buộc mô tả ≥5 ký tự), nơi nhận tiền hoàn, số tiền dự kiến
+ *    (POST /orders/:code/return-estimate) → POST /orders/:code/return-request → snackbar thành công →
+ *    GET /orders/me/returns tải lại → hiện "Yêu cầu đổi/trả đang xử lý (trong 24h)".
  */
 test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)', () => {
   const ADDRESS: OrderDTO['shippingAddress'] = {
@@ -47,7 +48,8 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     shippingCode: 'GHN999999',
     shippingStatus: 'Đã giao hàng thành công',
     shippingHistory: [{ at: '2026-09-19T10:00:00.000Z', status: 'Đã giao hàng', carrier: 'GHN', code: 'GHN999999' }],
-    deliveredAt: '2026-09-19T10:00:00.000Z',
+    // Hạn đổi/trả tính theo giờ thật của trình duyệt (utils/order-status.ts returnWindowState) nên mốc giao phải gần "bây giờ".
+    deliveredAt: new Date(Date.now() - 864e5).toISOString(),
     shippingAddress: ADDRESS,
   });
 
@@ -135,16 +137,30 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
   });
 
   test('Đơn đã giao (DELIVERED): gửi yêu cầu đổi/trả và hiện trạng thái đang xử lý', async ({ page, api }) => {
+    const line = ORDER_DELIVERED.items[0]!;
     const submitted: ReturnRequestDTO[] = [];
     api.get('/orders/me/returns', () => submitted);
+    const estimate: ReturnEstimateDTO = {
+      isFull: false,
+      goods: line.unitPrice,
+      shipping: 0,
+      refund: line.unitPrice,
+      moneyRefundable: true,
+      pointsUsedBack: 0,
+      lines: [{ orderItemId: line.id, quantity: 1, refundAmount: line.unitPrice }],
+    };
+    api.post('/orders/:code/return-estimate', estimate);
     api.post('/orders/:code/return-request', ({ call }) => {
-      const body = call.body as { reason: string };
+      const body = call.body as { reasonCode: string; reason?: string; items: { orderItemId: string; quantity: number }[] };
       const req: ReturnRequestDTO = {
         id: 'ret-1',
         orderId: ORDER_DELIVERED.id,
-        reason: body.reason,
+        reason: body.reason ?? '',
+        reasonCode: body.reasonCode,
         status: 'REQUESTED',
         adminNote: null,
+        refundMethod: 'WALLET',
+        items: body.items.map((i) => ({ ...i, refundAmount: line.unitPrice })),
         createdAt: '2026-09-20T09:00:00.000Z',
       };
       submitted.push(req);
@@ -155,30 +171,44 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     // Nhãn thật của trạng thái DELIVERED (i18n vi.orderStatus) — không phải chuỗi của hãng VC.
     await expect(page.getByText('Giao thành công', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
-    const openBtn = page.getByRole('button', { name: 'Yêu cầu đổi/trả (lỗi nhà sản xuất)' });
+    const openBtn = page.getByRole('button', { name: 'Yêu cầu đổi/trả' });
     await expect(openBtn).toBeVisible();
     await openBtn.click();
 
-    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Chỉ áp dụng khi lỗi nhà sản xuất' });
-    await expect(sheet.getByText('Chỉ áp dụng khi lỗi nhà sản xuất', { exact: false })).toBeVisible({ timeout: 5_000 });
+    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Chọn đúng sản phẩm và số lượng muốn trả' });
+    await expect(sheet.getByText('Chọn đúng sản phẩm và số lượng muốn trả', { exact: false })).toBeVisible({ timeout: 5_000 });
+    // Đơn một dòng: dòng được chọn sẵn → báo giá hoàn tiền dự kiến chạy ngay.
+    await expect(sheet.getByRole('checkbox', { name: `Trả ${line.productName} ${line.variationName}` })).toBeChecked();
+    await expect(sheet.getByText('Dự kiến hoàn 65.000đ')).toBeVisible({ timeout: 5_000 });
+    expect(api.callsTo('POST', '/orders/:code/return-estimate').at(-1)?.body).toMatchObject({ items: [{ orderItemId: line.id, quantity: 1 }] });
+
     const submit = sheet.getByRole('button', { name: 'Gửi yêu cầu' });
-    const reason = sheet.getByPlaceholder('Mô tả lỗi sản phẩm (tối thiểu 5 ký tự)…');
+    const detail = sheet.getByLabel('Mô tả thêm');
 
-    // < 5 ký tự (sau trim) → nút bị khoá, không gọi API.
-    await reason.fill('  hư ');
-    await expect(submit).toBeDisabled();
+    // "Lý do khác" cần mô tả ≥ 5 ký tự (sau trim) → báo lỗi dưới nút, không gọi API.
+    await sheet.getByRole('button', { name: 'Lý do khác' }).click();
+    await detail.fill('  hư ');
+    await submit.click();
+    await expect(sheet.getByRole('alert')).toHaveText('Mô tả lý do (tối thiểu 5 ký tự).');
+    expect(api.callsTo('POST', '/orders/:code/return-request')).toHaveLength(0);
 
-    await reason.fill('  Chai bị nứt, rò rỉ nước giặt  ');
-    await expect(submit).toBeEnabled();
+    await detail.fill('  Chai bị nứt, rò rỉ nước giặt  ');
     const sent = api.waitForCall('POST', '/orders/:code/return-request');
     await submit.click();
     const call = await sent;
     expect(call.path).toBe(`/orders/${ORDER_DELIVERED.code}/return-request`);
-    expect(call.body).toEqual({ reason: 'Chai bị nứt, rò rỉ nước giặt', images: [] });
+    expect(call.body).toEqual({
+      reasonCode: 'OTHER',
+      reason: 'Chai bị nứt, rò rỉ nước giặt',
+      images: [],
+      items: [{ orderItemId: line.id, quantity: 1 }],
+      refundMethod: 'WALLET',
+    });
 
     await expect(page.getByText('Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.')).toBeVisible({ timeout: 5_000 });
     // invalidate ['my-returns'] → GET /orders/me/returns trả yêu cầu vừa tạo → thay nút bằng trạng thái.
     await expect(page.getByText('Yêu cầu đổi/trả đang xử lý (trong 24h)')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(`Trả: ${line.productName} ×1`)).toBeVisible();
     await expect(openBtn).toHaveCount(0);
     expect(api.callsTo('POST', '/orders/:code/return-request')).toHaveLength(1);
   });

@@ -13,7 +13,7 @@ test.describe('Danh mục — mock mặc định của mockSession', () => {
   test.beforeEach(({ api }) => {
     mockSession(api, makeUser({ id: 'user-browse-defaults' }));
     api.get('/cart', EMPTY_CART);
-    api.allowUnmocked('POST /events', 'POST /affiliate/touch', 'GET /config/public', 'GET /me/coupons', 'GET /affiliate/me');
+    api.allowUnmocked('POST /events', 'POST /affiliate/touch', 'GET /me/coupons', 'GET /affiliate/me');
   });
 
   test('/browse (gốc) mở được, đã gọi /categories và /products', async ({ page, api }) => {

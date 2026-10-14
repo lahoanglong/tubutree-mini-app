@@ -1,6 +1,7 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
 import type { AuthUser, LoginResponse, OrderDTO } from '@tubutree/shared-types';
 import type { MeProfile } from '../../../miniapp/src/services/account-api';
+import type { PublicConfig } from '../../../miniapp/src/services/shop-api';
 
 /**
  * Mock API cho các spec Zalo Mini App (`*.miniapp.spec.ts`) — KHÔNG cần API/DB thật.
@@ -398,7 +399,23 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // (literal) không đè '/orders/:code' hay '/orders/active-count' — router ưu tiên mẫu cụ thể hơn.
   api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
   api.get('/me/subscriptions', []);
+  // Chi tiết đơn (dự án 4a/D2): usePublicConfig (cửa sổ đổi/trả, hotline) và khối "Hoàn tiền" (OrderRefunds)
+  // chạy ở MỌI đơn. Mặc định: config công khai chuẩn, đơn không có khoản hoàn nào.
+  api.get('/config/public', publicConfig());
+  api.get('/orders/me/refunds', []);
   return user;
+}
+
+export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
+  return {
+    freeshipThreshold: 200000,
+    subscribeDiscountPct: 0.12,
+    affiliateWalletMultiplier: 1.5,
+    affiliateMinWithdrawBank: 50000,
+    cashbackHoldDays: 30,
+    recyclingEnabled: false,
+    ...over,
+  };
 }
 
 const NOW_ISO = '2026-09-20T08:00:00.000Z';

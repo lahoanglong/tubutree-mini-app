@@ -136,7 +136,7 @@ export function mockPilotProduct(api: MockApi, opts: { addToCartDelayMs?: number
     if (opts.addToCartDelayMs) await new Promise((r) => setTimeout(r, opts.addToCartDelayMs));
     return PILOT_CART;
   });
-  api.allowUnmocked('GET /me/coupons', 'GET /affiliate/me', 'GET /config/public', 'GET /products/:slug/reviews/can-review');
+  api.allowUnmocked('GET /me/coupons', 'GET /affiliate/me', 'GET /products/:slug/reviews/can-review');
 }
 
 /** Cart có 1 dòng; trang đích (/product/:slug) cũng được mock để điều hướng không dính lỗi 404. */
@@ -149,7 +149,7 @@ export function mockPilotCart(api: MockApi): void {
 export function mockPilotStorefront(api: MockApi): void {
   mockPilotSession(api);
   api.get('/storefront/public/:slug', PILOT_STOREFRONT);
-  api.allowUnmocked('GET /config/public', 'GET /me/coupons');
+  api.allowUnmocked('GET /me/coupons');
 }
 
 /** Đơn ĐÃ GIAO (isDone → hiện nút "Mua lại đơn này"). Repurchase trả về giỏ mới sau `delayMs`. */
@@ -162,5 +162,5 @@ export function mockPilotDeliveredOrder(api: MockApi, opts: { repurchaseDelayMs?
     return PILOT_CART;
   });
   api.get('/cart', PILOT_CART);
-  api.allowUnmocked('GET /config/public', 'GET /me/coupons');
+  api.allowUnmocked('GET /me/coupons');
 }
