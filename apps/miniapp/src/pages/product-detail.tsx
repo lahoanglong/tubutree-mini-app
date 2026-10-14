@@ -56,6 +56,13 @@ const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
 const PDP_TITLE = 'Chi tiết sản phẩm';
 
+/** Phí giao của gian hàng tự giao, như lúc thanh toán tính cho kiện của gian hàng. */
+function merchantShippingLine(fee: number, freeShipFrom: number | null): string {
+  if (fee <= 0) return 'Gian hàng miễn phí giao';
+  const base = `Phí giao ${formatVnd(fee)}`;
+  return freeShipFrom != null ? `${base}, miễn phí cho đơn của gian hàng từ ${formatVnd(freeShipFrom)}` : base;
+}
+
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
@@ -257,6 +264,8 @@ export default function ProductDetailPage() {
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
+  // Hàng gian hàng tự giao (D4): kiện riêng theo phí của gian hàng, không đi định kỳ/mua chung (kho Tubu không giao).
+  const merchant = p.fulfiller?.kind === 'MERCHANT' ? p.fulfiller : null;
 
   const handleAdd = async () => {
     if (status !== 'authenticated') {
@@ -388,8 +397,27 @@ export default function ProductDetailPage() {
           </Text>
         )}
 
+        {merchant && (
+          <Box flex style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+            <Box>
+              <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+                Gian hàng {merchant.name} tự giao
+              </Text>
+              {merchant.shippingFee != null && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}
+                </Text>
+              )}
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                Hàng gian hàng tự giao chưa đặt định kỳ hay mua chung được.
+              </Text>
+            </Box>
+          </Box>
+        )}
+
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {config.isLoaded && (
+        {!merchant && config.isLoaded && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
@@ -471,7 +499,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && (
+        {selected && inStock && !merchant && (
           <Box
             role="button"
             className="tubu-press"
@@ -488,6 +516,8 @@ export default function ProductDetailPage() {
             style={{
               gap: 8,
               marginTop: 12,
+              minHeight: 44,
+              boxSizing: 'border-box',
               padding: '10px 12px',
               borderRadius: 'var(--radius-control)',
               border: '1px dashed var(--color-border-selected)',
@@ -541,43 +571,45 @@ export default function ProductDetailPage() {
       </Box>
 
       {/* ── Mua chung (§6.14.8) ── */}
-      <Box
-        className="tubu-press"
-        p={4}
-        mt={2}
-        // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
-        // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
-        // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
-        onClick={async () => {
-          if (groupBuyMutation.isPending) return;
-          haptic('light');
-          if (status !== 'authenticated') {
-            await login();
-            return;
-          }
-          groupBuyMutation.mutate(p.id);
-        }}
-        style={{
-          background: 'var(--color-bg-surface)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          opacity: groupBuyMutation.isPending ? 0.6 : 1,
-        }}
-      >
-        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
-          <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
+      {!merchant && (
+        <Box
+          className="tubu-press"
+          p={4}
+          mt={2}
+          // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
+          // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
+          // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
+          onClick={async () => {
+            if (groupBuyMutation.isPending) return;
+            haptic('light');
+            if (status !== 'authenticated') {
+              await login();
+              return;
+            }
+            groupBuyMutation.mutate(p.id);
+          }}
+          style={{
+            background: 'var(--color-bg-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            opacity: groupBuyMutation.isPending ? 0.6 : 1,
+          }}
+        >
+          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
+            <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
+            </Text>
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              {groupBuyPitch(config.groupBuy)}
+            </Text>
+          </Box>
+          <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
         </Box>
-        <Box style={{ flex: 1 }}>
-          <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-            {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-            {groupBuyPitch(config.groupBuy)}
-          </Text>
-        </Box>
-        <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
-      </Box>
+      )}
 
       {isAffiliate && (
         <Box

@@ -50,6 +50,15 @@ export interface ProductDetail {
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
   sold?: number;
   variations: VariationDetail[];
+  /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */
+  fulfiller?: ProductFulfiller;
+}
+
+export interface ProductFulfiller {
+  kind: 'TUBU' | 'MERCHANT';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
 }
 
 export interface CartLine {
