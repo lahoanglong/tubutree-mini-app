@@ -265,6 +265,10 @@ export default function ProductDetailPage() {
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
+  // Ngưỡng freeship theo hạng của khách (cùng nguồn với giỏ hàng); khách chưa đăng nhập mới dùng ngưỡng chung. Đang đăng nhập
+  // hoặc giỏ chưa về thì chưa hứa số nào để khỏi hiện ngưỡng chung rồi đổi.
+  const freeshipFrom =
+    status === 'authenticated' ? cart.data?.freeshipThreshold : status === 'loading' || !config.isLoaded ? undefined : config.freeshipThreshold;
   // Hàng gian hàng tự giao (D4): kiện riêng theo phí của gian hàng, không đi định kỳ/mua chung (kho Tubu không giao).
   const merchant = p.fulfiller?.kind === 'MERCHANT' ? p.fulfiller : null;
 
@@ -418,11 +422,11 @@ export default function ProductDetailPage() {
         )}
 
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {!merchant && config.isLoaded && (
+        {!merchant && freeshipFrom != null && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-              Miễn phí vận chuyển cho đơn từ {formatVnd(config.freeshipThreshold)}
+              {freeshipFrom > 0 ? `Miễn phí vận chuyển cho đơn từ ${formatVnd(freeshipFrom)}` : 'Miễn phí vận chuyển cho mọi đơn hàng'}
             </Text>
           </Box>
         )}
