@@ -1,13 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CartService } from './cart.service';
-import { publicFulfiller, type LineFulfiller } from '../checkout/checkout-split';
+import { toPublicCart } from '../checkout/checkout-split';
 import { AddItemDto, ApplyCouponDto, UpdateItemDto } from './dto/cart.dto';
-
-/** Giỏ trả cho khách: nơi giao từng dòng không kèm ID chủ gian hàng (R2-MERCHANT-14). */
-export function toPublicCart<C extends { items: { fulfiller: LineFulfiller }[] }>(cart: C) {
-  return { ...cart, items: cart.items.map((it) => ({ ...it, fulfiller: publicFulfiller(it.fulfiller) })) };
-}
 
 @Controller('cart')
 export class CartController {

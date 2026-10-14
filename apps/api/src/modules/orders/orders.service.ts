@@ -21,6 +21,7 @@ import { notifyMerchantOwner } from './merchant-order-notify';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
+import { toPublicCart } from '../checkout/checkout-split';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
 
 export interface OrderListFilter {
@@ -162,7 +163,7 @@ export class OrdersService {
   }
 
   /** Chi tiết đơn cho màn khách (GET /orders/:code) — kèm ảnh/tồn kho từng dòng. Các luồng nội bộ
-   * (cancel/repurchase/requestReturn) vẫn dùng detail() thô, không tốn thêm truy vấn. */
+   * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
     const [[view], fulfilment, paymentDeadline] = await Promise.all([
@@ -254,6 +255,10 @@ export class OrdersService {
   }
 
   async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {
+    return forBuyer(await this.cancelOrder(userId, code, refundInput));
+  }
+
+  private async cancelOrder(userId: string, code: string, refundInput: RefundDestinationInput) {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
@@ -439,7 +444,7 @@ export class OrdersService {
           : { orderItemId: line.id, status: 'added', addedQuantity: qty },
       );
     }
-    const cart = await this.cart.getCart(userId);
+    const cart = toPublicCart(await this.cart.getCart(userId));
     return { ...cart, cart, results };
   }
 }

@@ -163,6 +163,16 @@ describe('OrdersService.cancel', () => {
     expect(notifications.notify as jest.Mock).not.toHaveBeenCalled();
   });
 
+  it('R2-MERCHANT-14: đơn trả về sau khi huỷ không kèm phí sàn đối tác hay cột vận hành Pancake/Gomdon', async () => {
+    const internal = { merchantCommissionPct: '0.1500', endCustomerKey: '0909', pancakeSyncError: 'lỗi', gomdonAttempt: 1 };
+    for (const status of ['CONFIRMED', 'CANCELLED']) {
+      const { svc } = makeService({ ...baseOrder, ...internal, status });
+      const res = (await svc.cancel('u1', 'TUBU1')) as unknown as Record<string, unknown>;
+      expect(res).toMatchObject({ code: 'TUBU1' });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
+    }
+  });
+
   it('KHÔNG hủy được đơn SHIPPING (đã vào giao)', async () => {
     const { svc, updateMany } = makeService({ ...baseOrder, status: 'SHIPPING' });
     await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow();
@@ -687,7 +697,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
 });
 
 describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-05)', () => {
-  const CART = { items: [{ id: 'ci1' }], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 3 };
+  const CART = { items: [{ id: 'ci1', fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } }], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 3 };
   const variation = (id: string, stock: number, over: { isActive?: boolean; productActive?: boolean; approval?: string } = {}) => ({
     id, stock, isActive: over.isActive ?? true,
     product: { isActive: over.productActive ?? true, approvalStatus: over.approval ?? 'APPROVED' },
@@ -724,6 +734,17 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
       { orderItemId: 'i1', status: 'added', addedQuantity: 2 },
       { orderItemId: 'i2', status: 'added', addedQuantity: 1 },
     ]);
+  });
+
+  it('R2-MERCHANT-14: giỏ trả về sau khi mua lại không kèm ID chủ gian hàng ở nơi giao từng dòng', async () => {
+    const fulfiller = { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Shop Xanh', ownerUserId: 'owner-9' };
+    const withOwner = { ...CART, items: [{ id: 'ci1', fulfiller }] };
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)], addItem: jest.fn().mockResolvedValue(withOwner) });
+    (svc as unknown as { cart: { getCart: jest.Mock } }).cart.getCart.mockResolvedValue(withOwner);
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(JSON.stringify(res)).not.toContain('owner-9');
+    expect(res.items[0]).toMatchObject({ id: 'ci1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Shop Xanh' } });
+    expect(res.cart.items[0]).toEqual(res.items[0]);
   });
 
   it('items: chỉ các dòng được chọn, số lượng theo client', async () => {

@@ -210,6 +210,11 @@ export function publicFulfiller(f: LineFulfiller): PublicLineFulfiller {
   return rest;
 }
 
+/** Giỏ trả cho khách: nơi giao từng dòng không kèm ID chủ gian hàng (R2-MERCHANT-14). */
+export function toPublicCart<C extends { items: { fulfiller: LineFulfiller }[] }>(cart: C) {
+  return { ...cart, items: cart.items.map((it) => ({ ...it, fulfiller: publicFulfiller(it.fulfiller) })) };
+}
+
 /** Câu báo cho khách khi lần đặt có dòng không giao được. */
 export function unavailableLineMessage(productName: string, f: Extract<LineFulfiller, { kind: 'UNAVAILABLE' }>): string {
   if (f.reason === 'STORE_PAUSED') {
