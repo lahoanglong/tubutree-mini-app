@@ -15,6 +15,7 @@ import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 import { OrdersModule } from '../../orders/orders.module';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { PancakeSyncHooksModule } from './pancake-sync-hooks.module';
+import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module';
 
 /**
  * GomdonAlertService (báo ADMIN in-app, template OPS_GOMDON_ALERT) được provide LẠI ở đây thay vì import
@@ -27,6 +28,7 @@ import { PancakeSyncHooksModule } from './pancake-sync-hooks.module';
     LifecycleModule,
     OrdersModule,
     PancakeSyncHooksModule,
+    CronLeaderModule,
   ],
   controllers: [PancakeWebhookController, PancakeController, GeoController],
   providers: [

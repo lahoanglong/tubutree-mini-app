@@ -69,6 +69,35 @@ const prod = (id: string, name = 'Tinh dầu') => ({
   ],
 });
 
+describe('PancakeSyncService — đồng bộ lúc khởi động chỉ trên instance chạy cron (R2-PLATFORM-8)', () => {
+  function leader() {
+    const hooks: (() => void)[] = [];
+    return { onLeadership: jest.fn((fn: () => void) => hooks.push(fn)), become: () => hooks.forEach((h) => h()) };
+  }
+
+  it('chưa giành được lease → không quét; vừa thành leader → quét toàn bộ một lần', async () => {
+    const client = makeClient([[prod('a')]]);
+    const l = leader();
+    const svc = new PancakeSyncService(makePrisma(), client, lifecycle, l as never);
+    svc.onModuleInit();
+    await new Promise((r) => setImmediate(r));
+    expect(client.fetchProducts).not.toHaveBeenCalled();
+    l.become();
+    await new Promise((r) => setImmediate(r));
+    const calls = (client.fetchProducts as jest.Mock).mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    l.become();
+    await new Promise((r) => setImmediate(r));
+    expect(client.fetchProducts).toHaveBeenCalledTimes(calls);
+  });
+
+  it('Pancake chưa cấu hình → không đăng ký gì', () => {
+    const l = leader();
+    new PancakeSyncService(makePrisma(), makeClient([], false), lifecycle, l as never).onModuleInit();
+    expect(l.onLeadership).not.toHaveBeenCalled();
+  });
+});
+
 describe('PancakeSyncService.syncProducts', () => {
   it('chưa cấu hình → trả 0, không fetch', async () => {
     const client = makeClient([], false);
