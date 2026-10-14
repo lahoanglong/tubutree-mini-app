@@ -38,7 +38,7 @@ function OrderItemsPreview({ items }: { items: OrderDTO['items'] }) {
           </div>
           <div className="min-w-0 flex-1 text-sm text-stone-900">
             <span className="line-clamp-2 break-words">{it.productName}</span>
-            {it.variationName ? <span className="text-xs text-stone-600"> · {it.variationName}</span> : null}
+            {it.variationName ? <span className="block text-xs text-stone-600">{it.variationName}</span> : null}
           </div>
           {it.quantity > 1 && <span className="flex-none text-xs text-stone-600">×{it.quantity}</span>}
         </div>
@@ -92,7 +92,7 @@ export function OrdersSection() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             maxLength={100}
-            placeholder="Tìm theo mã đơn hoặc tên sản phẩm"
+            placeholder="Mã đơn hoặc tên sản phẩm"
             className={`${ui.field} pl-9`}
           />
         </div>
