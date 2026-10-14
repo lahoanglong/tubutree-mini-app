@@ -24,10 +24,15 @@ import {
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import {
+  PANCAKE_UNREACHABLE_MESSAGE,
   PancakeHandedOverError,
   PancakeSyncHooks,
+  PancakeUnreachableError,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
+
+/** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
+export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
 import { resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
 import { flagPancakeAttention } from '../integrations/pancake/pancake-attention';
 import { notifyMerchantOwner } from './merchant-order-notify';
@@ -423,8 +428,20 @@ export class OrderStatusService {
   async precheckPancakeCancel(order: Order, asker: 'CUSTOMER' | 'STAFF' | 'SYSTEM'): Promise<PancakeCancelDecision | undefined> {
     if (!this.pancakeHooks) return undefined;
     try {
-      return await this.pancakeHooks.precheckCancel(order);
+      return await this.pancakeHooks.precheckCancel(order, asker === 'SYSTEM' ? 'BACKGROUND' : 'INTERACTIVE');
     } catch (err) {
+      if (err instanceof PancakeUnreachableError) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: PANCAKE_UNREACHABLE,
+          message:
+            asker === 'STAFF'
+              ? `${PANCAKE_UNREACHABLE_MESSAGE} — đơn ${order.code} đã lên kho Pancake nhưng chưa hỏi được Pancake (${err.reason}), CHƯA huỷ, ` +
+                'chưa hoàn tiền. Kiểm tra trạng thái đơn trên Pancake: đã gửi hàng thì xử lý bằng hoàn/trả.'
+              : PANCAKE_UNREACHABLE_MESSAGE,
+        });
+      }
       if (!(err instanceof PancakeHandedOverError)) throw err;
       await this.resyncFromPancake(order, err.pancakeStatus);
       if (asker === 'STAFF') {

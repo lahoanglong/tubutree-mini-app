@@ -28,6 +28,7 @@ import {
   isPancakeHandedOver,
   PANCAKE_ORDER_STATUS,
   PancakeApiError,
+  PancakeCancelRefusedError,
   PancakeOrderDataError,
   pancakeErrorText,
   pancakeOrderHasCode,
@@ -757,6 +758,7 @@ export async function cancelPancakeOrder(
       if (!after) return { kind: 'NOT_FOUND' };
       if (isPancakeHandedOver(after.status)) return { kind: 'HANDED_OVER', status: after.status! };
       if (isPancakeCancelled(after.status)) return { kind: 'CANCELLED', status: after.status ?? null };
+      throw new PancakeCancelRefusedError(err.message, after.status ?? null);
     }
     throw err;
   }

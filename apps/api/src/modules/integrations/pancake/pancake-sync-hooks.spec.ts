@@ -1,4 +1,4 @@
-import { PancakeHandedOverError, PancakeSyncHooks } from './pancake-sync-hooks';
+import { PancakeHandedOverError, PancakeSyncHooks, PancakeUnreachableError } from './pancake-sync-hooks';
 import { PancakeApiError } from './pancake-outbound';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
@@ -24,13 +24,13 @@ const subject = (o: Record<string, unknown>) => ({ id: 'o1', code: 'TUBU1', panc
 describe('PancakeSyncHooks.precheckCancel (D1)', () => {
   it('chưa từng lên Pancake → NONE, không gọi Pancake', async () => {
     const t = setup();
-    expect(await t.hooks.precheckCancel(subject({}))).toEqual({ kind: 'NONE' });
+    expect(await t.hooks.precheckCancel(subject({}), 'INTERACTIVE')).toEqual({ kind: 'NONE' });
     expect(t.client.getOrder).not.toHaveBeenCalled();
   });
 
   it('Pancake chưa gửi hàng → PUT status 6 với timeout ngắn, CONFIRMED', async () => {
     const t = setup();
-    const d = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }));
+    const d = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE');
     expect(d).toEqual({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
     expect(t.client.getOrder).toHaveBeenCalledWith('pk-1', { timeoutMs: PancakeSyncHooks.CANCEL_TIMEOUT_MS });
     expect(t.client.updateOrder).toHaveBeenCalledWith('pk-1', { status: 6 }, { timeoutMs: PancakeSyncHooks.CANCEL_TIMEOUT_MS });
@@ -38,7 +38,7 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
 
   it.each([2, 3, 4, 5, 15, 16])('Pancake ở trạng thái %s (đã bàn giao vận chuyển) → từ chối huỷ', async (status) => {
     const t = setup({}, { getOrder: jest.fn().mockResolvedValue({ id: 'pk-1', status }) });
-    const err = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' })).catch((e: unknown) => e);
+    const err = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PancakeHandedOverError);
     expect((err as Error).message).toBe('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH');
     expect(t.client.updateOrder).not.toHaveBeenCalled();
@@ -46,21 +46,87 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
 
   it('Pancake không còn đơn → CONFIRMED NOT_FOUND', async () => {
     const t = setup({}, { getOrder: jest.fn().mockResolvedValue(null) });
-    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }))).toMatchObject({ kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND' });
+    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE')).toMatchObject({ kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND' });
   });
 
-  it('Pancake không phản hồi → DEFERRED; các lần sau trong 60s đi thẳng đường hoãn (không treo cron)', async () => {
+  it('cron (BACKGROUND): Pancake không phản hồi → DEFERRED; các lần sau trong 60s đi thẳng đường hoãn (không treo cron)', async () => {
     const t = setup({}, { getOrder: jest.fn().mockRejectedValue(new PancakeApiError('timeout of 5000ms exceeded', true)) });
-    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }))).toMatchObject({ kind: 'DEFERRED' });
-    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-2' }))).toMatchObject({ kind: 'DEFERRED', reason: 'Pancake vừa không phản hồi' });
+    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'BACKGROUND')).toMatchObject({ kind: 'DEFERRED' });
+    expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-2' }), 'BACKGROUND')).toMatchObject({
+      kind: 'DEFERRED',
+      reason: 'Pancake vừa không phản hồi',
+    });
     expect(t.client.getOrder).toHaveBeenCalledTimes(1);
+  });
+
+  describe('người bấm huỷ (INTERACTIVE) — không hỏi được Pancake thì từ chối, không huỷ (R3-CANCEL-1, R2-PANCAKE-1)', () => {
+    it.each([
+      ['timeout', new PancakeApiError('timeout of 5000ms exceeded', true)],
+      ['lỗi mạng', new Error('socket hang up')],
+      ['Pancake 401', new PancakeApiError('Pancake trả 401 khi đọc đơn: unauthorized', false)],
+    ])('%s → PancakeUnreachableError "Kho chưa phản hồi…"', async (_label, failure) => {
+      const t = setup({}, { getOrder: jest.fn().mockRejectedValue(failure) });
+      const err = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(PancakeUnreachableError);
+      expect((err as Error).message).toBe('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+      expect(t.client.updateOrder).not.toHaveBeenCalled();
+    });
+
+    it('Pancake chưa cấu hình mà đơn đã lên Pancake → từ chối', async () => {
+      const t = setup({}, { isConfigured: jest.fn().mockReturnValue(false) });
+      await expect(t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE')).rejects.toBeInstanceOf(PancakeUnreachableError);
+    });
+
+    it('đơn chưa lên Pancake → vẫn NONE dù Pancake chưa cấu hình (huỷ bình thường)', async () => {
+      const t = setup({}, { isConfigured: jest.fn().mockReturnValue(false) });
+      expect(await t.hooks.precheckCancel(subject({}), 'INTERACTIVE')).toEqual({ kind: 'NONE' });
+    });
+
+    it('khoảng nghỉ 60s sau một lần timeout (ở đơn khác) KHÔNG áp cho người bấm: vẫn hỏi Pancake và thấy đã gửi hàng', async () => {
+      const getOrder = jest
+        .fn()
+        .mockRejectedValueOnce(new PancakeApiError('timeout of 5000ms exceeded', true))
+        .mockResolvedValue({ id: 'pk-2', status: 2 });
+      const t = setup({}, { getOrder });
+      await expect(t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'BACKGROUND')).resolves.toMatchObject({ kind: 'DEFERRED' });
+      await expect(t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-2' }), 'INTERACTIVE')).rejects.toBeInstanceOf(PancakeHandedOverError);
+      expect(getOrder).toHaveBeenCalledTimes(2);
+      // Cron vẫn giữ khoảng nghỉ của mình.
+      expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-3' }), 'BACKGROUND')).toMatchObject({ reason: 'Pancake vừa không phản hồi' });
+    });
+
+    it('Pancake trả lời "chưa gửi hàng" nhưng từ chối lệnh huỷ → DEFERRED (trạng thái đã biết, job thử lại)', async () => {
+      const t = setup(
+        {},
+        {
+          getOrder: jest.fn().mockResolvedValue({ id: 'pk-1', status: 1 }),
+          updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 400 khi cập nhật đơn: locked', false)),
+        },
+      );
+      expect(await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE')).toMatchObject({ kind: 'DEFERRED' });
+    });
+
+    it('nhiều đơn cùng mã trên Pancake, một đơn đã gửi hàng → từ chối như đã bàn giao', async () => {
+      const t = setup(
+        {},
+        {
+          searchOrders: jest.fn().mockResolvedValue([
+            { id: 1, status: 1, custom_id: 'TUBU1' },
+            { id: 2, status: 2, custom_id: 'TUBU1' },
+          ]),
+        },
+      );
+      await expect(t.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).rejects.toBeInstanceOf(
+        PancakeHandedOverError,
+      );
+    });
   });
 
   it('chỉ có mốc đẩy (chưa rõ id) → tra theo mã; không thấy → NOT_FOUND; thấy → huỷ đơn đó', async () => {
     const a = setup();
-    expect(await a.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }))).toMatchObject({ kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND' });
+    expect(await a.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).toMatchObject({ kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND' });
     const b = setup({}, { searchOrders: jest.fn().mockResolvedValue([{ id: 88, status: 0, custom_id: 'TUBU1' }]) });
-    expect(await b.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }))).toEqual({
+    expect(await b.hooks.precheckCancel(subject({ pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).toEqual({
       kind: 'CONFIRMED',
       cancelStatus: 'CANCELLED',
       pancakeOrderId: '88',
@@ -134,7 +200,7 @@ describe('PancakeSyncHooks.afterPaid', () => {
 describe('PancakeSyncHooks — đơn gian hàng đối tác tự giao (D4) không chạm Pancake', () => {
   it('precheckCancel đơn MERCHANT → NONE, không hỏi Pancake kể cả khi cột Pancake có dấu vết lạ', async () => {
     const t = setup({ fulfiller: 'MERCHANT' });
-    expect(await t.hooks.precheckCancel(subject({ fulfiller: 'MERCHANT', pancakePushClaimedAt: new Date() }))).toEqual({ kind: 'NONE' });
+    expect(await t.hooks.precheckCancel(subject({ fulfiller: 'MERCHANT', pancakePushClaimedAt: new Date() }), 'INTERACTIVE')).toEqual({ kind: 'NONE' });
     expect(t.client.searchOrders).not.toHaveBeenCalled();
     expect(t.client.getOrder).not.toHaveBeenCalled();
   });

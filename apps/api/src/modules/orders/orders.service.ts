@@ -301,7 +301,8 @@ export class OrdersService {
     const destination = parseRefundDestination(refundInput, order.paymentMethod);
     let reversed: ReversalResult | null = null;
     // D1: đơn đã lên Pancake → huỷ bên Pancake TRƯỚC; Pancake đã gửi hàng thì dừng ở đây (đồng bộ trạng thái, báo
-    // khách liên hệ CSKH), không hỏi được Pancake thì vẫn huỷ và để job huỷ thử lại.
+    // khách liên hệ CSKH); không hỏi được Pancake thì cũng dừng ("Kho chưa phản hồi…") — webhook "Đã gửi hàng" có thể
+    // chưa về, huỷ lúc này là hoàn tiền cho hàng đang ở hãng.
     const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, 'CUSTOMER');
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash

@@ -132,7 +132,7 @@ describe('Pancake push race (real Postgres)', () => {
     await sleep(100);
     // Khách huỷ: hỏi Pancake lúc này chưa có đơn → NONE; lật CANCELLED; ghi kết quả.
     const fresh = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
-    const decision = await hooks.precheckCancel(fresh);
+    const decision = await hooks.precheckCancel(fresh, 'INTERACTIVE');
     await prisma.order.update({ where: { id: o.id }, data: { status: 'CANCELLED' } });
     await hooks.afterLocalCancel(o.id, decision);
     release();

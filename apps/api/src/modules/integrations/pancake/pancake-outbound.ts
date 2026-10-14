@@ -15,6 +15,20 @@ export class PancakeApiError extends Error {
   }
 }
 
+/**
+ * Pancake trả lời được nhưng từ chối lệnh huỷ, và lần đọc lại ngay sau đó cho thấy đơn CHƯA bàn giao vận chuyển: khác
+ * hẳn lỗi mất kết nối — trạng thái Pancake đã biết chắc tại thời điểm hỏi.
+ */
+export class PancakeCancelRefusedError extends PancakeApiError {
+  constructor(
+    message: string,
+    readonly pancakeStatus: number | string | null,
+  ) {
+    super(message, false);
+    this.name = 'PancakeCancelRefusedError';
+  }
+}
+
 /** Dữ liệu đơn không đủ để tạo đơn kho (thiếu người nhận...). Thử lại không giúp gì: cần người sửa. */
 export class PancakeOrderDataError extends Error {
   constructor(message: string) {

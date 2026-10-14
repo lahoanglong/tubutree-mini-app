@@ -4,7 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
-import { PancakeHandedOverError } from '../integrations/pancake/pancake-sync-hooks';
+import { PancakeHandedOverError, PancakeUnreachableError } from '../integrations/pancake/pancake-sync-hooks';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -94,6 +94,38 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     expect(prisma.order.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('Hệ thống không tự huỷ được đơn') }) }),
     );
+  });
+
+  describe('không hỏi được Pancake (R3-CANCEL-1, R2-PANCAKE-1)', () => {
+    const unreachable = () => jest.fn().mockRejectedValue(new PancakeUnreachableError('timeout of 5000ms exceeded'));
+
+    it('CSKH/admin huỷ → 409 "Kho chưa phản hồi…" kèm hướng dẫn, KHÔNG lật CANCELLED, KHÔNG hoàn tiền', async () => {
+      const { svc, tx, pancakeHooks } = make(makeOrder(), { precheckCancel: unreachable() });
+      const err = (await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', actorId: 'cskh' }).catch((e: unknown) => e)) as {
+        getStatus(): number;
+        getResponse(): { code: string; message: string };
+      };
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse().code).toBe('PANCAKE_UNREACHABLE');
+      expect(err.getResponse().message).toMatch(/^Kho chưa phản hồi, vui lòng thử lại sau ít phút — đơn TUBU1 .*CHƯA huỷ/);
+      expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1' }), 'INTERACTIVE');
+      expect(tx.order.updateMany).not.toHaveBeenCalled();
+      expect(pancakeHooks.afterLocalCancel).not.toHaveBeenCalled();
+    });
+
+    it('khách tự huỷ → đúng câu "Kho chưa phản hồi, vui lòng thử lại sau ít phút"', async () => {
+      const { svc, pancakeHooks } = make(makeOrder(), { precheckCancel: unreachable() });
+      await expect(svc.precheckPancakeCancel(makeOrder() as never, 'CUSTOMER')).rejects.toThrow(/^Kho chưa phản hồi, vui lòng thử lại sau ít phút$/);
+      expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.anything(), 'INTERACTIVE');
+    });
+
+    it('cron hết hạn thanh toán hỏi ở chế độ BACKGROUND (được hoãn, không treo mẻ)', async () => {
+      const order = makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+      const { svc, pancakeHooks } = make(order, { precheckCancel: jest.fn().mockResolvedValue({ kind: 'DEFERRED', reason: 'timeout' }) });
+      await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true });
+      expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.anything(), 'BACKGROUND');
+      expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', { kind: 'DEFERRED', reason: 'timeout' });
+    });
   });
 
   it('Pancake báo huỷ (actor PANCAKE) → không hỏi/huỷ ngược lại Pancake', async () => {

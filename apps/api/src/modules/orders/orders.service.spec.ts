@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -288,7 +288,20 @@ describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2,
     expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
   });
 
-  it('không hỏi được Pancake (DEFERRED) → vẫn huỷ + hoàn tiền, chuyển quyết định cho job huỷ', async () => {
+  it('không hỏi được Pancake → từ chối "Kho chưa phản hồi…", KHÔNG lật trạng thái, KHÔNG hoàn tiền (R3-CANCEL-1)', async () => {
+    const orderStatus = gate(jest.fn().mockRejectedValue(new ConflictException('Kho chưa phản hồi, vui lòng thử lại sau ít phút')));
+    const { svc, $transaction, row, userUpdate } = makeService(
+      { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { orderStatus },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+    expect($transaction).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(row.status).toBe('CONFIRMED');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('Pancake trả lời chưa gửi hàng nhưng chưa nhận lệnh huỷ (DEFERRED) → huỷ + hoàn tiền, job huỷ thử lại', async () => {
     const deferred = { kind: 'DEFERRED', reason: 'timeout' };
     const orderStatus = gate(jest.fn().mockResolvedValue(deferred));
     const { svc, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
