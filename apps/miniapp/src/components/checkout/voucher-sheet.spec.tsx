@@ -195,3 +195,31 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMINI-3)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const scoped = { code: 'GBUY-CHIA', type: 'AMOUNT', value: 17_250, minOrder: null, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z', products: [{ id: 'p-chia', name: 'Hạt chia Úc' }] };
+  const renderWith = (productIds: string[]) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible onClose={() => {}} subtotal={300_000} productIds={productIds} />
+      </QueryClientProvider>,
+    );
+  };
+
+  it('giỏ không có sản phẩm của mã: ghi rõ mã chỉ áp cho sản phẩm nào và không cho bấm dùng', async () => {
+    mocks.getCoupons.mockResolvedValue([scoped]);
+    renderWith(['p-dau-goi']);
+    expect(await screen.findByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chưa đủ' })).toBeDisabled();
+  });
+
+  it('giỏ có sản phẩm của mã: dùng được như thường', async () => {
+    mocks.getCoupons.mockResolvedValue([scoped]);
+    renderWith(['p-chia']);
+    expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
+    expect(screen.getByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
+  });
+});

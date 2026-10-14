@@ -76,8 +76,8 @@ export default function ProductDetailPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const { status, login } = useAuthStore();
-  // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt).
-  // Hiển thị để user KHÁM PHÁ ưu đãi ngay ở PDP (trước đây phải tự biết mã mới gõ ở giỏ).
+  // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
+  // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
   const couponsQ = useQuery({
     // Cùng queryKey với VoucherSheet ở giỏ/thanh toán → một cache, không gọi 2 lần và
     // không có cảnh "PDP thấy mã, sheet chưa thấy" sau khi nhận mã mới.
@@ -255,6 +255,7 @@ export default function ProductDetailPage() {
   }
 
   const p = product.data;
+  const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
   // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
   const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
@@ -451,9 +452,9 @@ export default function ProductDetailPage() {
         )}
 
         {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
-        {(couponsQ.data?.length ?? 0) > 0 && (
+        {pdpCoupons.length > 0 && (
           <ScrollRow label="Mã giảm giá có thể dùng" style={{ gap: 8, marginTop: 12 }}>
-            {couponsQ.data!.slice(0, 6).map((c) => (
+            {pdpCoupons.slice(0, 6).map((c) => (
               <Box
                 key={c.code}
                 role="button"

@@ -64,6 +64,8 @@ export interface ProductFulfiller {
 export interface CartLine {
   id: string;
   variationId: string;
+  /** API cũ chưa trả. */
+  productId?: string;
   productName: string;
   variationName: string;
   slug: string;
