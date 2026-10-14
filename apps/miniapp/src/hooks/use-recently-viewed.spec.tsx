@@ -12,13 +12,13 @@ describe('useRecentlyViewed', () => {
     const { result } = renderHook(() => useRecentlyViewed());
     expect(result.current).toEqual([]);
     act(() => {
-      recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null, price: 1000 });
+      recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null });
     });
     expect(result.current.map((x) => x.slug)).toEqual(['a']);
   });
 
   it('giữ nguyên tham chiếu mảng khi dữ liệu không đổi (không render lặp)', () => {
-    recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null, price: 1000 });
+    recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null });
     const { result, rerender } = renderHook(() => useRecentlyViewed());
     const first = result.current;
     rerender();
@@ -42,7 +42,7 @@ describe('useRecentlyViewed', () => {
   });
 
   it('clearRecentlyViewed làm hook về [] ngay trong cùng tab', () => {
-    recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null, price: 1000 });
+    recordRecentlyViewed({ slug: 'a', name: 'SP A', thumbnail: null });
     const { result } = renderHook(() => useRecentlyViewed());
     expect(result.current).toHaveLength(1);
     act(() => clearRecentlyViewed());

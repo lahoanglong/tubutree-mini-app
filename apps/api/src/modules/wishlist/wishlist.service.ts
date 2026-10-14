@@ -67,11 +67,16 @@ export class WishlistService {
       select: { id: true, isActive: true },
     });
     if (!product || !product.isActive) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    await this.prisma.wishlist.upsert({
-      where: { userId_productId: { userId, productId } },
-      create: { userId, productId },
-      update: {},
-    });
+    try {
+      await this.prisma.wishlist.upsert({
+        where: { userId_productId: { userId, productId } },
+        create: { userId, productId },
+        update: {},
+      });
+    } catch (err) {
+      // Upsert không nguyên tử: hai request cùng lúc cùng thấy chưa có dòng, request thua nhận P2002 — dòng đã có nên là thành công.
+      if (typeof err !== 'object' || err === null || (err as { code?: string }).code !== 'P2002') throw err;
+    }
     return { ok: true };
   }
 

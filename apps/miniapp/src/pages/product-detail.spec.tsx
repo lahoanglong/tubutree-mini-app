@@ -79,18 +79,18 @@ describe('ProductDetailPage ghi "Đã xem gần đây" (spec 5b.4)', () => {
     mocks.fetchReviews.mockResolvedValue({ data: [], summary: { average: 0, count: 0 } });
   });
 
-  it('mở PDP thành công → localStorage có slug/name/thumbnail/giá đang bán', async () => {
+  it('mở PDP thành công → localStorage có slug/name/thumbnail', async () => {
     mocks.fetchProduct.mockResolvedValue(product('a'));
     renderPdp('a');
     await waitFor(() => expect(stored()).toHaveLength(1));
-    expect(stored()[0]).toMatchObject({ slug: 'a', name: 'Sản phẩm a', thumbnail: 'https://img/thumb.jpg', price: 80000 });
+    expect(stored()[0]).toMatchObject({ slug: 'a', name: 'Sản phẩm a', thumbnail: 'https://img/thumb.jpg' });
   });
 
-  it('SP không có giá sale → ghi giá gốc', async () => {
-    mocks.fetchProduct.mockResolvedValue(product('a', { salePrice: null }));
+  it('không ghi giá: giá lúc xem sẽ lệch giá giờ vàng (R4-BUYER-5)', async () => {
+    mocks.fetchProduct.mockResolvedValue(product('a'));
     renderPdp('a');
     await waitFor(() => expect(stored()).toHaveLength(1));
-    expect(stored()[0]!.price).toBe(100000);
+    expect(stored()[0]).not.toHaveProperty('price');
   });
 
   it('thumbnail null → vẫn ghi (rơi về ảnh đầu); thumbnail undefined + không ảnh → vẫn ghi với null', async () => {

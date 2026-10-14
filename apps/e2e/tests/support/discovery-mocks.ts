@@ -95,9 +95,11 @@ export function catalogHandler(opts: { legacy?: boolean } = {}) {
     const [min, max, rating] = [num('minPrice'), num('maxPrice'), num('minRating')];
     const category = p.get('category');
     const segment = p.get('segment');
+    const slugs = p.has('slugs') ? (p.get('slugs') ?? '').split(',').map((s) => s.trim()).filter(Boolean) : null;
     let rows = CATALOG.filter((x) => {
       const price = x.salePrice ?? x.basePrice;
       return (
+        (slugs === null || slugs.includes(x.slug)) &&
         (!q || foldE2E(x.name).includes(q)) &&
         (brands.length === 0 || brands.includes(x.brand)) &&
         (!category || x.categoryIds.includes(category)) &&

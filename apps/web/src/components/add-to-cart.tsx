@@ -7,6 +7,9 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
+import { variationPricing } from '@/lib/flash-price';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { formatDateTime } from '@/lib/format-date';
 
 interface Variation {
   id: string;
@@ -51,8 +54,10 @@ export default function AddToCart({
   const [success, setSuccess] = useState(false);
   const userPicked = useRef(false);
 
+  const flash = useActiveFlashSales();
   const selected = variations.find((v) => v.id === selectedId);
-  const price = selected?.salePrice ?? selected?.retailPrice ?? 0;
+  const selectedPricing = selected ? variationPricing(selected, flash) : null;
+  const price = selectedPricing?.price ?? 0;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -68,6 +73,15 @@ export default function AddToCart({
   useEffect(() => {
     setQty((q) => Math.min(q, maxQty));
   }, [maxQty]);
+
+  // Khách vào từ thẻ ghi giá Giờ vàng thì mở đúng phân loại đang giảm (cùng cách Mini App), trừ khi khách đã tự chọn hoặc
+  // phân loại đó hết hàng.
+  useEffect(() => {
+    if (userPicked.current || flash.length === 0) return;
+    const onSale = variations.find((v) => v.stock > 0 && variationPricing(v, flash).isFlash);
+    if (onSale && onSale.id !== selectedId) setSelectedId(onSale.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi đợt Giờ vàng vừa về
+  }, [flash]);
 
   // Phân loại mặc định (theo bản ISR) hết hàng thật rồi mà còn phân loại khác → chọn giúp, trừ khi khách đã tự chọn.
   useEffect(() => {
@@ -151,6 +165,7 @@ export default function AddToCart({
             {variations.map((v) => {
               const out = v.stock <= 0;
               const active = v.id === selectedId;
+              const vp = variationPricing(v, flash);
               return (
                 <button
                   key={v.id}
@@ -166,12 +181,20 @@ export default function AddToCart({
                       : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
                   } ${out ? 'opacity-60 line-through' : ''}`}
                 >
-                  {v.name} · {formatVnd(v.salePrice ?? v.retailPrice)}
+                  {v.name} · {formatVnd(vp.price)}
+                  {vp.isFlash && <span className="ml-1.5 text-xs font-bold text-promo-fg">Giờ vàng</span>}
                 </button>
               );
             })}
           </div>
         </div>
+      )}
+
+      {selectedPricing?.isFlash && (
+        <p data-testid="flash-price-note" className="mt-3 text-sm font-medium text-promo-fg">
+          Giá Giờ vàng {formatVnd(selectedPricing.price)}, giá gốc {formatVnd(selectedPricing.originalPrice)}
+          {selectedPricing.endAt ? ` · đến ${formatDateTime(selectedPricing.endAt)}` : ''}
+        </p>
       )}
 
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (

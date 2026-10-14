@@ -152,6 +152,8 @@ export interface OrderDiscountParts {
   discount: number;
   pointsUsed: number;
   couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã nhưng nhận một phần giảm của mã (chỉ đơn đầu của nhóm có `couponCode`). */
+  groupCouponCode?: string | null;
   couponDiscount?: number;
   comboDiscount?: number;
   tierDiscount?: number;
@@ -167,13 +169,14 @@ export function discountRows(o: OrderDiscountParts): { label: string; amount: nu
   const combo = o.comboDiscount ?? 0;
   const tier = o.tierDiscount ?? 0;
   const points = o.pointsDiscount ?? 0;
+  const couponCode = o.couponCode ?? o.groupCouponCode;
   const known = coupon + combo + tier + points;
   if (known === 0) {
     if (o.discount <= 0) return [];
     return [{ label: o.pointsUsed > 0 ? 'Giảm giá (gồm Điểm Xanh)' : 'Giảm giá', amount: o.discount }];
   }
   const rows = [
-    { label: o.couponCode ? `Mã giảm giá (${o.couponCode})` : 'Mã giảm giá', amount: coupon },
+    { label: couponCode ? `Mã giảm giá (${couponCode})` : 'Mã giảm giá', amount: coupon },
     { label: 'Ưu đãi combo', amount: combo },
     { label: 'Ưu đãi hạng thành viên', amount: tier },
     { label: `Điểm Xanh (${formatPoints(o.pointsUsed)})`, amount: points },

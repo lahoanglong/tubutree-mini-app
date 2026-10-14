@@ -560,6 +560,21 @@ describe('CatalogService.list — bộ lọc dự án 4b', () => {
     expect(argsOf(findMany).where.ratingAvg).toEqual({ gte: 4 });
   });
 
+  it('slugs → chỉ các sản phẩm công khai có slug đó (dải "Đã xem gần đây" lấy giá hiện hành), tối đa 20 slug, bỏ khoảng trắng và ô rỗng', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, slugs: ' a , b,,c ' });
+    expect(argsOf(findMany).where).toEqual({ isActive: true, approvalStatus: 'APPROVED', slug: { in: ['a', 'b', 'c'] } });
+    const many = setup();
+    await many.svc.list({ page: 1, limit: 20, slugs: Array.from({ length: 30 }, (_, i) => `s${i}`).join(',') });
+    expect(argsOf(many.findMany).where.slug.in).toHaveLength(20);
+  });
+
+  it('slugs rỗng → không trả sản phẩm nào, không rơi về cả catalog', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, slugs: ' , ' });
+    expect(argsOf(findMany).where.slug).toEqual({ in: [] });
+  });
+
   it('không truyền tham số mới → where như trước (không AND/variations/ratingAvg)', async () => {
     const { svc, findMany } = setup();
     await svc.list({ page: 1, limit: 20, brand: 'Tubu' });

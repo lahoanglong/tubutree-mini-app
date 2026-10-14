@@ -16,10 +16,10 @@ describe('useRecordRecentlyViewed (spec 5b.4: ghi ở PDP mở thành công)', (
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
-  it('có sản phẩm → ghi 1 lần: giá đang bán, ảnh = thumbnail ?? ảnh đầu', () => {
+  it('có sản phẩm → ghi 1 lần: tên, ảnh = thumbnail ?? ảnh đầu, KHÔNG ghi giá (giá đổi theo giờ vàng)', () => {
     renderHook(() => useRecordRecentlyViewed(P('a')));
     expect(mocks.record).toHaveBeenCalledTimes(1);
-    expect(mocks.record).toHaveBeenCalledWith({ slug: 'a', name: 'SP a', thumbnail: 'https://img/1.jpg', price: 80000 });
+    expect(mocks.record).toHaveBeenCalledWith({ slug: 'a', name: 'SP a', thumbnail: 'https://img/1.jpg' });
   });
 
   it('refetch trả object mới cùng slug → không ghi lại; chuyển sang SP khác → ghi SP mới', () => {
@@ -27,14 +27,14 @@ describe('useRecordRecentlyViewed (spec 5b.4: ghi ở PDP mở thành công)', (
     rerender({ p: P('a', { salePrice: null }) });
     expect(mocks.record).toHaveBeenCalledTimes(1);
     rerender({ p: P('b', { salePrice: null, thumbnail: 'https://img/b.jpg' }) });
-    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'b', name: 'SP b', thumbnail: 'https://img/b.jpg', price: 100000 });
+    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'b', name: 'SP b', thumbnail: 'https://img/b.jpg' });
   });
 
   it('SP không có ảnh nào (thumbnail null, images rỗng/thiếu) → vẫn ghi với thumbnail null, không bao giờ undefined', () => {
     renderHook(() => useRecordRecentlyViewed(P('a', { images: [] })));
-    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'a', name: 'SP a', thumbnail: null, price: 80000 });
+    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'a', name: 'SP a', thumbnail: null });
     renderHook(() => useRecordRecentlyViewed(P('c', { thumbnail: undefined, images: undefined })));
-    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'c', name: 'SP c', thumbnail: null, price: 80000 });
+    expect(mocks.record).toHaveBeenLastCalledWith({ slug: 'c', name: 'SP c', thumbnail: null });
   });
 
   it('A → B → quay lại A (cùng component) → ghi lại A để A lên đầu danh sách', () => {

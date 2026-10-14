@@ -2,12 +2,14 @@
  * "Đã xem gần đây" (spec 5b.4): 20 SP mới xem nhất, chỉ lưu ở máy (localStorage), không đồng bộ
  * server. Ghi ở PDP khi mở thành công; đọc ở Trang chủ + trang Danh mục. Storage có thể vắng
  * (chế độ riêng tư, WebView lạ) hoặc ném (hết quota) → mọi đường đọc/ghi đều không được ném.
+ *
+ * KHÔNG lưu giá: giá đổi theo giờ vàng/khuyến mãi nên giá chụp lúc xem sẽ lệch giá thật (R4-BUYER-5). Dải hiển thị hỏi giá hiện
+ * hành theo slug. Mục cũ còn trường `price` vẫn đọc được, trường đó bị bỏ khi đọc/ghi lại.
  */
 export interface RecentlyViewedItem {
   slug: string;
   name: string;
   thumbnail: string | null;
-  price: number;
   viewedAt: number;
 }
 
@@ -37,14 +39,13 @@ function isItem(x: unknown): x is RecentlyViewedItem {
     typeof r.slug === 'string' && r.slug !== '' &&
     typeof r.name === 'string' &&
     (r.thumbnail === null || typeof r.thumbnail === 'string') &&
-    typeof r.price === 'number' && Number.isFinite(r.price) &&
     typeof r.viewedAt === 'number' && Number.isFinite(r.viewedAt)
   );
 }
 
-/** Chỉ giữ đúng 5 trường của spec (PDP có thể truyền cả object sản phẩm dư trường). */
+/** Chỉ giữ đúng 4 trường (PDP có thể truyền cả object sản phẩm dư trường; mục cũ còn `price` thì bỏ giá). */
 function pick(x: RecentlyViewedItem): RecentlyViewedItem {
-  return { slug: x.slug, name: x.name, thumbnail: x.thumbnail, price: x.price, viewedAt: x.viewedAt };
+  return { slug: x.slug, name: x.name, thumbnail: x.thumbnail, viewedAt: x.viewedAt };
 }
 
 export function parseRecentlyViewed(raw: string | null): RecentlyViewedItem[] {
@@ -89,8 +90,8 @@ export function recordRecentlyViewed(
   now: number = Date.now(),
   storage: StorageLike | null = browserStorage(),
 ): RecentlyViewedItem[] {
-  const entry = { slug: item.slug, name: item.name, thumbnail: item.thumbnail, price: item.price, viewedAt: now };
-  // Mục không hợp lệ (slug rỗng, giá NaN…) sẽ bị loại ở lần đọc kế tiếp → không ghi, tránh làm bẩn khoá.
+  const entry = { slug: item.slug, name: item.name, thumbnail: item.thumbnail, viewedAt: now };
+  // Mục không hợp lệ (slug rỗng, thời điểm NaN…) sẽ bị loại ở lần đọc kế tiếp → không ghi, tránh làm bẩn khoá.
   if (!isItem(entry)) return readRecentlyViewed(storage);
   const next = [entry, ...readRecentlyViewed(storage).filter((x) => x.slug !== entry.slug)].slice(0, RECENTLY_VIEWED_MAX);
   if (!storage) return next;

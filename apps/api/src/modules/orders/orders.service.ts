@@ -62,6 +62,11 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   fulfilment?: OrderFulfilmentView;
   /** Các đơn khác cùng lần đặt bị tách theo nơi giao. */
   siblings?: SiblingOrderView[];
+  /**
+   * Mã giảm giá của lần đặt khi chính đơn này không giữ lượt dùng mã (chỉ đơn đầu của nhóm giữ — `couponCode` chỉ có ở đó) nhưng nhận
+   * một phần giảm của mã: để màn chi tiết ghi đúng "Mã giảm giá (XANH10)" thay vì khoản giảm không rõ nguồn. null = không có.
+   */
+  groupCouponCode?: string | null;
   /** Đơn trả trước chờ thanh toán: quá mốc này cron tự huỷ (BUYERMINI-8 — QR và chi tiết đơn ghi rõ hạn). */
   paymentDeadline?: string | null;
   /** Người xem tự huỷ được đơn này không (customerCancelBlock) — app/web chỉ bày nút "Hủy đơn" khi true (R3-CANCEL-2). */
@@ -234,7 +239,8 @@ export class OrdersService {
     fulfiller?: string | null;
     fulfillerStorefrontId?: string | null;
     checkoutGroup?: string | null;
-  }): Promise<{ fulfilment: OrderFulfilmentView; siblings: SiblingOrderView[] }> {
+    couponCode?: string | null;
+  }): Promise<{ fulfilment: OrderFulfilmentView; siblings: SiblingOrderView[]; groupCouponCode: string | null }> {
     const nameOf = async (fulfiller: string | null | undefined, storefrontId: string | null | undefined) => {
       if (fulfiller !== 'MERCHANT' || !storefrontId) return { kind: 'TUBU' as const, name: 'Tubu Tree', phone: null };
       const sf = await this.prisma.storefront.findUnique({
@@ -244,7 +250,7 @@ export class OrdersService {
       return { kind: 'MERCHANT' as const, name: sf?.title ?? 'Gian hàng đối tác', phone: sf?.warehousePhone ?? null };
     };
     const fulfilment = await nameOf(order.fulfiller, order.fulfillerStorefrontId);
-    if (!order.checkoutGroup) return { fulfilment, siblings: [] };
+    if (!order.checkoutGroup) return { fulfilment, siblings: [], groupCouponCode: null };
     const rows = await this.prisma.order.findMany({
       where: { checkoutGroup: order.checkoutGroup, userId: order.userId, code: { not: order.code } },
       select: {
@@ -253,11 +259,13 @@ export class OrdersService {
         total: true,
         fulfiller: true,
         fulfillerStorefront: { select: { title: true } },
+        couponCode: true,
       },
       orderBy: [{ fulfiller: 'asc' }, { code: 'asc' }],
     });
     return {
       fulfilment,
+      groupCouponCode: order.couponCode ? null : (rows.find((r) => r.couponCode)?.couponCode ?? null),
       siblings: rows.map((r) => ({
         code: r.code,
         status: r.status,

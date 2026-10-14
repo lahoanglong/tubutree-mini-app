@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Truck, Leaf } from 'lucide-react';
+import { ShoppingBag, Truck, Leaf, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
@@ -203,7 +203,19 @@ export default function CartPage() {
                         <div className="min-w-0 flex-1">
                           <div className="break-words text-sm font-medium text-stone-900">{it.productName}</div>
                           <div className="break-words text-xs text-stone-600">{it.variationName}</div>
-                          <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-semibold text-stone-900">{formatVnd(it.unitPrice)}</span>
+                            {it.isFlash && (
+                              <span
+                                data-testid="cart-flash-badge"
+                                className="inline-flex items-center gap-0.5 rounded-full bg-promo-bg px-2 py-0.5 text-xs font-bold text-promo-fg"
+                              >
+                                <Zap className="h-3 w-3" aria-hidden="true" />
+                                Giá Giờ vàng
+                              </span>
+                            )}
+                          </div>
+                          {it.flashLimitNotice && <p className="mt-1 text-xs font-medium text-warning-fg">{it.flashLimitNotice}</p>}
                           {soldOut && (
                             <p className="mt-1 text-xs font-semibold text-danger-fg">
                               Hết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại

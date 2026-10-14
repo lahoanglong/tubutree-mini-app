@@ -408,6 +408,15 @@ export default function ProductDetailPage() {
           </Text>
         )}
 
+        {p.fulfiller?.kind === 'TUBU' && (
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
+            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+              Tubu Tree giao hàng
+            </Text>
+          </Box>
+        )}
+
         {merchant && (
           <Box flex style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
@@ -424,7 +433,7 @@ export default function ProductDetailPage() {
                 Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.
               </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                Hàng gian hàng tự giao chưa đặt định kỳ hay mua chung được.
+                Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
               </Text>
             </Box>
           </Box>
@@ -443,7 +452,7 @@ export default function ProductDetailPage() {
 
         {!fromStore && p.partnerOwned && (
           <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 10 }}>
-            Hàng của gian hàng đối tác chỉ bán theo giá lẻ, chưa đặt định kỳ hay mua chung được.
+            Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
           </Text>
         )}
 

@@ -382,7 +382,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
   test('Không có kết quả → EmptyState + "Đã xem gần đây"; "Xoá tìm kiếm & bộ lọc" giữ sắp xếp', async ({ page, api }) => {
     await page.addInitScript(() =>
-      localStorage.setItem('tubu_recently_viewed', JSON.stringify([{ slug: 'xa-phong-thao-moc', name: 'Xà Phòng Thảo Mộc', thumbnail: null, price: 45000, viewedAt: 1 }])),
+      localStorage.setItem('tubu_recently_viewed', JSON.stringify([{ slug: 'xa-phong-thao-moc', name: 'Xà Phòng Thảo Mộc', thumbnail: null, viewedAt: 1 }])),
     );
     mockDiscovery(api);
     await page.goto('/browse?q=zzzz&sort=newest');

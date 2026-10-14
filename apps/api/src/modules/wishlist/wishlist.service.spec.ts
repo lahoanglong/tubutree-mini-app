@@ -112,6 +112,26 @@ describe('WishlistService.add', () => {
     });
   });
 
+  // R4-BUYER-8: hai request thêm cùng lúc cùng thấy chưa có dòng, upsert của request thua nhận P2002 (409 ở FE).
+  it('hai lần thêm đồng thời: request thua nhận P2002 vẫn coi là đã thích (idempotent), không ném 409/500', async () => {
+    const raceLost = Object.assign(new Error('Unique constraint failed on the fields: (`userId`,`productId`)'), { code: 'P2002' });
+    const upsert = jest.fn().mockRejectedValue(raceLost);
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true }) },
+      wishlist: { upsert },
+    } as unknown as PrismaService;
+    await expect(new WishlistService(prisma).add('user1', 'p1')).resolves.toEqual({ ok: true });
+  });
+
+  it('lỗi DB khác P2002 vẫn nổi lên (không nuốt lỗi thật)', async () => {
+    const upsert = jest.fn().mockRejectedValue(Object.assign(new Error('connection lost'), { code: 'P1001' }));
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true }) },
+      wishlist: { upsert },
+    } as unknown as PrismaService;
+    await expect(new WishlistService(prisma).add('user1', 'p1')).rejects.toThrow('connection lost');
+  });
+
   it('sản phẩm không tồn tại → NotFound, không tạo wishlist row rác', async () => {
     const upsert = jest.fn();
     const prisma = {

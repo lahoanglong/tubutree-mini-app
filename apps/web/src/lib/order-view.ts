@@ -1,4 +1,5 @@
 import { isGomdonPickedUp } from './recycling';
+import { formatCount } from './checkout-points';
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -204,4 +205,42 @@ export function canCancelOrder(
   if (o.placedForCustomer && o.paymentStatus === 'PAID' && !!userId && o.referrerUserId === userId) return false;
   if (o.hasRecyclingPickup && isGomdonPickedUp(o.gomdonStatus)) return false;
   return !isCarrierBooked(o);
+}
+
+export interface OrderDiscountParts {
+  discount: number;
+  pointsUsed?: number;
+  couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã nhưng nhận một phần giảm của mã. */
+  groupCouponCode?: string | null;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
+}
+
+/**
+ * Các dòng giảm giá ở tóm tắt tiền của chi tiết đơn, cùng cách tách với Mini App và màn Thanh toán: mã, combo, hạng thành viên, Điểm
+ * Xanh mỗi khoản một dòng (cộng lại = `discount`). Đơn tạo trước khi API lưu từng khoản chỉ có tổng `discount` (đã gồm tiền Điểm
+ * Xanh) nên hiện một dòng và ghi rõ đã gồm điểm.
+ */
+export function discountRows(o: OrderDiscountParts): { label: string; amount: number }[] {
+  const coupon = o.couponDiscount ?? 0;
+  const combo = o.comboDiscount ?? 0;
+  const tier = o.tierDiscount ?? 0;
+  const points = o.pointsDiscount ?? 0;
+  const known = coupon + combo + tier + points;
+  if (known === 0) {
+    if (o.discount <= 0) return [];
+    return [{ label: (o.pointsUsed ?? 0) > 0 ? 'Giảm giá (gồm Điểm Xanh)' : 'Giảm giá', amount: o.discount }];
+  }
+  const code = o.couponCode ?? o.groupCouponCode;
+  const rows = [
+    { label: code ? `Mã giảm giá (${code})` : 'Mã giảm giá', amount: coupon },
+    { label: 'Ưu đãi combo', amount: combo },
+    { label: 'Ưu đãi hạng thành viên', amount: tier },
+    { label: `Điểm Xanh (${formatCount(o.pointsUsed ?? 0)} điểm)`, amount: points },
+    { label: 'Giảm giá khác', amount: o.discount - known },
+  ];
+  return rows.filter((r) => r.amount > 0);
 }

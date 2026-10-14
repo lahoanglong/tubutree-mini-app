@@ -758,6 +758,47 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
   });
 
+  describe('R4-BUYER-6: đơn tách của gian hàng đối tác nêu mã giảm giá của lần đặt', () => {
+    const detailWith = async (order: Record<string, unknown>, siblings: Record<string, unknown>[]) => {
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
+        storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
+        variation: { findMany: jest.fn() },
+      } as unknown as PrismaService;
+      return new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', String(order.code));
+    };
+    const sibling = (over: Record<string, unknown> = {}) => ({
+      code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfiller: 'TUBU', fulfillerStorefront: null, couponCode: null, ...over,
+    });
+
+    it('đơn đối tác không giữ lượt dùng mã (couponCode null) mà đơn đầu của nhóm giữ → trả groupCouponCode để màn khách ghi đúng mã', async () => {
+      const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      const view = await detailWith(order, [sibling({ couponCode: 'XANH10' })]);
+      expect(view.groupCouponCode).toBe('XANH10');
+      expect(view.couponCode).toBeNull();
+    });
+
+    it('đơn giữ mã thì không cần groupCouponCode; nhóm không có mã thì null', async () => {
+      const holder = { ...baseOrder, code: 'TUBU1', items: [], fulfiller: 'TUBU', checkoutGroup: 'TUBU1', couponCode: 'XANH10' };
+      expect((await detailWith(holder, [sibling({ code: 'TUBU2', couponCode: null })])).groupCouponCode).toBeNull();
+      const none = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      expect((await detailWith(none, [sibling()])).groupCouponCode).toBeNull();
+    });
+
+    it('chỉ đọc thêm cột couponCode của đơn cùng nhóm, đơn không tách không truy vấn nhóm', async () => {
+      const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([sibling()]) },
+        storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
+        variation: { findMany: jest.fn() },
+      } as unknown as PrismaService;
+      await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
+      expect((prisma.order.findMany as jest.Mock).mock.calls[0][0].select).toMatchObject({ couponCode: true });
+      const solo = makeMediaService([{ ...baseOrder, items: [] }], []);
+      expect((await solo.svc.detailView('u1', 'TUBU1')).groupCouponCode).toBeNull();
+    });
+  });
+
   it('R2-MERCHANT-14, R3-MERCHANT-1: đơn trả cho khách không kèm phí sàn đối tác, hoa hồng CTV, mã đơn Pancake, khoá chống đặt trùng hay cột vận hành nội bộ', async () => {
     const internal = {
       merchantCommissionPct: '0.1500',

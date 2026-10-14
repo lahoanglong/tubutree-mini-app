@@ -55,17 +55,31 @@ export function checkoutPointsOffer(
 }
 
 /**
- * Ô Điểm Xanh khi giỏ có hàng của gian hàng đối tác (Điểm Xanh chỉ trả cho hàng Tubu): nêu trần điểm của đơn và câu giải thích
- * báo giá trả về; trần 0 (giỏ chỉ hàng đối tác) thì tắt ô. Giỏ chỉ hàng Tubu hoặc API cũ: không đổi gì.
+ * Trần Điểm Xanh của đơn (`quote.pointsMax`, đã gồm số dư dùng được, trần theo giá trị hàng và luật hàng của gian hàng đối tác).
+ * Khách chỉ thấy số thật được trừ sau khi tick, nên trước khi tick ô phải nêu trần khi nó thấp hơn số điểm dùng được:
+ *  - giỏ có hàng của gian hàng đối tác (Điểm Xanh chỉ trả cho hàng Tubu): luôn nêu trần + câu giải thích báo giá trả về;
+ *  - giỏ chỉ hàng Tubu: nêu trần khi nó nhỏ hơn `usable`;
+ *  - trần 0: tắt ô (kèm câu giải thích nếu không có câu của hàng đối tác).
+ * Báo giá chưa có `pointsMax` (đang tải, API cũ): không đổi gì.
  */
-export function partnerPointsState(
+export function pointsCapState(
   quote: { pointsMax?: number; pointsPartnerNote?: string | null } | undefined,
+  usable = 0,
 ): { disabled: boolean; capNote: string | null; partnerNote: string | null } {
   const partnerNote = quote?.pointsPartnerNote ?? null;
-  if (!partnerNote) return { disabled: false, capNote: null, partnerNote: null };
-  const max = clamp(quote?.pointsMax);
-  if (max === 0) return { disabled: true, capNote: null, partnerNote };
-  return { disabled: false, capNote: `Đơn này dùng tối đa ${group(max)} Điểm Xanh`, partnerNote };
+  if (!Number.isFinite(quote?.pointsMax)) return { disabled: partnerNote !== null, capNote: null, partnerNote };
+  const max = clamp(quote!.pointsMax);
+  if (max === 0) {
+    if (partnerNote) return { disabled: true, capNote: null, partnerNote };
+    return usable > 0
+      ? { disabled: true, capNote: 'Đơn này chưa dùng được Điểm Xanh', partnerNote: null }
+      : { disabled: false, capNote: null, partnerNote: null };
+  }
+  if (partnerNote) return { disabled: false, capNote: `Đơn này dùng tối đa ${group(max)} Điểm Xanh`, partnerNote };
+  if (max < usable) {
+    return { disabled: false, capNote: `Đơn này dùng tối đa ${group(max)} Điểm Xanh, tính theo giá trị hàng của đơn`, partnerNote: null };
+  }
+  return { disabled: false, capNote: null, partnerNote: null };
 }
 
 /**

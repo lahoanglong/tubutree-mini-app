@@ -1,12 +1,41 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 
+const IDS_KEY = ['wishlist-ids'];
+
+// Mỗi sản phẩm một hàng đợi: lệnh thêm/bỏ gửi lần lượt đúng thứ tự chạm, nên chạm nhanh không còn hai lệnh "thêm" đua nhau (409).
+const tails = new Map<string, Promise<void>>();
+let inFlight = 0;
+
+function sendToggle(qc: QueryClient, productId: string, want: boolean) {
+  inFlight += 1;
+  const tail: Promise<void> = (tails.get(productId) ?? Promise.resolve())
+    .then(async () => {
+      try {
+        await (want ? addWishlist(productId) : removeWishlist(productId));
+      } catch {
+        // Không hoàn tác từng bước: hết lệnh chờ thì tải lại từ máy chủ, tim về đúng trạng thái thật.
+      }
+    })
+    .then(() => {
+      inFlight -= 1;
+      if (tails.get(productId) === tail) tails.delete(productId);
+      if (inFlight === 0) {
+        void qc.invalidateQueries({ queryKey: IDS_KEY });
+        void qc.invalidateQueries({ queryKey: ['wishlist'] });
+      }
+    });
+  tails.set(productId, tail);
+}
+
 /**
- * Nút tim yêu thích — tự đọc danh sách id đã thích (query dedupe ['wishlist-ids'])
- * và toggle với optimistic update. Ẩn khi chưa đăng nhập? → vẫn hiện, tap sẽ login.
+ * Nút tim yêu thích — tự đọc danh sách id đã thích (query dedupe ['wishlist-ids']).
+ * Mỗi lần chạm đổi tim ngay trên cache theo trạng thái mới nhất (kể cả lần chạm trước chưa có phản hồi), rồi xếp lệnh vào hàng
+ * đợi; chỉ tải lại từ máy chủ khi không còn lệnh nào đang chờ để không ghi đè trạng thái lạc quan giữa chừng.
+ * Chưa đăng nhập → vẫn hiện, chạm sẽ đăng nhập.
  */
 export function WishlistHeart({
   productId,
@@ -22,38 +51,22 @@ export function WishlistHeart({
   const authed = status === 'authenticated';
 
   const idsQ = useQuery({
-    queryKey: ['wishlist-ids'],
+    queryKey: IDS_KEY,
     queryFn: getWishlistIds,
     enabled: authed,
     staleTime: 60_000,
   });
   const liked = idsQ.data?.includes(productId) ?? false;
 
-  const toggle = useMutation({
-    mutationFn: () => (liked ? removeWishlist(productId) : addWishlist(productId)),
-    onMutate: async () => {
-      await qc.cancelQueries({ queryKey: ['wishlist-ids'] });
-      const prev = qc.getQueryData<string[]>(['wishlist-ids']) ?? [];
-      qc.setQueryData<string[]>(
-        ['wishlist-ids'],
-        liked ? prev.filter((id) => id !== productId) : [...prev, productId],
-      );
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['wishlist-ids'], ctx.prev);
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['wishlist-ids'] });
-      void qc.invalidateQueries({ queryKey: ['wishlist'] });
-    },
-  });
-
   const handle = (e: React.MouseEvent) => {
     e.stopPropagation();
     haptic('light');
     if (!authed) return void login();
-    toggle.mutate();
+    void qc.cancelQueries({ queryKey: IDS_KEY });
+    const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
+    const want = !current.includes(productId);
+    qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
+    sendToggle(qc, productId, want);
   };
 
   return (

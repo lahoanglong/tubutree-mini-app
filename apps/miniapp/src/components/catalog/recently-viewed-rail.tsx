@@ -1,6 +1,9 @@
 import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
+import { useQuery } from '@tanstack/react-query';
 import { useRecentlyViewed } from '../../hooks/use-recently-viewed';
+import { fetchActiveFlashSales, fetchProductsBySlugs } from '../../services/shop-api';
+import { tilePricing } from './catalog-pricing';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
 import { PriceTag } from '../ui/price-tag';
@@ -11,12 +14,29 @@ const CARD_WIDTH = 120;
 /**
  * "Đã xem gần đây" (spec 5b.4) — thẻ riêng gọn, KHÔNG dùng ProductTile: dữ liệu lưu ở máy không có
  * đánh giá/id sản phẩm, ProductTile sẽ in "★ Mới" sai và tim yêu thích không có id (plan 4b Ruling 11).
- * Hook đọc đồng bộ từ localStorage nên không có khung chờ và không nhảy bố cục khi mount.
+ * Tên + ảnh đọc đồng bộ từ localStorage nên thẻ hiện ngay và không nhảy bố cục khi mount. GIÁ thì KHÔNG lưu (R4-BUYER-5): hỏi giá hiện
+ * hành theo slug và tính giờ vàng như thẻ ở lưới (tilePricing), nên hai nơi cùng màn hình không bao giờ lệch giá. Chưa có giá (đang tải,
+ * lỗi mạng, API cũ) thì thẻ không hiện giá thay vì hiện giá cũ; sản phẩm đã ẩn/chưa duyệt thì thẻ biến mất.
  */
 export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title?: string }) {
   const navigate = useNavigate();
-  const items = useRecentlyViewed();
+  const stored = useRecentlyViewed();
   const idPrefix = useId();
+  const slugs = stored.map((it) => it.slug);
+  const productsQ = useQuery({
+    queryKey: ['recently-viewed-products', slugs.join(',')],
+    queryFn: () => fetchProductsBySlugs(slugs),
+    enabled: slugs.length > 0,
+    staleTime: 30_000,
+  });
+  const flashQ = useQuery({
+    queryKey: ['flash-sales', 'active'],
+    queryFn: fetchActiveFlashSales,
+    enabled: slugs.length > 0,
+    staleTime: 30_000,
+  });
+  const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
+  const items = productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored;
   if (items.length === 0) return null;
   return (
     <section aria-label={title} style={{ padding: '8px 0 4px' }}>
@@ -29,6 +49,8 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
       <div className="scroll-x" style={{ gap: 10, padding: '4px 16px 12px' }}>
         {items.map((it, i) => {
           const priceId = `${idPrefix}-price-${i}`;
+          const product = live.get(it.slug);
+          const pricing = product ? tilePricing(product, flashQ.data ?? []) : null;
           return (
             <button
               key={it.slug}
@@ -80,8 +102,16 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                 >
                   {it.name}
                 </Text>
-                <div id={priceId}>
-                  <PriceTag value={it.price} size="sm" />
+                <div id={priceId} style={{ minHeight: 22 }}>
+                  {product && pricing && (
+                    <PriceTag
+                      value={pricing.price}
+                      compareAt={pricing.price < product.basePrice ? product.basePrice : null}
+                      flash={pricing.isFlash ? { price: pricing.price } : null}
+                      size="sm"
+                      style={{ flexWrap: 'wrap' }}
+                    />
+                  )}
                 </div>
               </div>
             </button>

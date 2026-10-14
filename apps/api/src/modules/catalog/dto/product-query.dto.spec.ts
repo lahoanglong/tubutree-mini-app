@@ -38,6 +38,11 @@ describe('ProductQuery (dự án 4b)', () => {
     await expect(asQuery({ inStock: 'yes' })).rejects.toThrow();
   });
 
+  it('slugs nhận chuỗi slug cách nhau bằng dấu phẩy, từ chối chuỗi quá dài', async () => {
+    await expect(asQuery({ slugs: 'a,b,c' })).resolves.toMatchObject({ slugs: 'a,b,c' });
+    await expect(asQuery({ slugs: 'x'.repeat(2001) })).rejects.toThrow();
+  });
+
   it('field lạ vẫn bị từ chối — đây là lý do API trước 4b trả 400 cho tham số mới (miniapp phải tự lùi)', async () => {
     await expect(asQuery({ color: 'red' })).rejects.toThrow();
   });

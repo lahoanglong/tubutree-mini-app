@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
 import { Navigate, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
@@ -13,6 +12,7 @@ import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch } from '../services/affiliate-api';
+import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
 import { trackEvent, flushEventQueueOnHide } from '../services/analytics';
@@ -76,26 +76,7 @@ const StaffPage = lazy(() => import('../pages/staff'));
 const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Không retry lỗi 4xx (nghiệp vụ/401) — 401 đã được interceptor tự refresh+retry;
-      // retry thêm chỉ làm tăng churn. Chỉ retry 1 lần cho lỗi mạng/5xx.
-      retry: (failureCount, error) => {
-        const status = isAxiosError(error) ? error.response?.status : undefined;
-        if (status && status >= 400 && status < 500) return false;
-        return failureCount < 1;
-      },
-      refetchOnWindowFocus: false,
-      // Default staleTime ngắn (10s) — money/auth/orders/wallet/notifications cần tươi
-      // ngay sau action (vd thanh toán WALLET trừ tiền; nếu staleTime 60s mà thiếu
-      // invalidate ở 1 nơi nào đó → user thấy số dư cũ).
-      // Catalog/brands/categories chậm-đổi (~15p sync Pancake) nên override staleTime: 60_000
-      // tại từng useQuery để giữ lợi ích cache (xem browse.tsx/home.tsx).
-      staleTime: 10_000,
-    },
-  },
-});
+const queryClient = createQueryClient();
 // Xoá sạch cache (ví, lương, hoa hồng...) khi logout — tránh lộ dữ liệu tài chính của
 // user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung (VD tablet chấm công).
 setLogoutCleanup(() => queryClient.clear());

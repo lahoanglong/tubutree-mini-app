@@ -1,12 +1,8 @@
 import Link from 'next/link';
-import { type ProductCard as P, formatVnd, formatSold } from '@/lib/api';
+import { type ProductCard as P, formatSold } from '@/lib/api';
+import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
 export default function ProductCard({ product }: { product: P }) {
-  const price = product.salePrice ?? product.basePrice;
-  const hasSale = product.salePrice != null && product.salePrice < product.basePrice;
-  const discountPct = hasSale
-    ? Math.round(((product.basePrice - price) / product.basePrice) * 100)
-    : 0;
   // `=== false`: API cũ/nguồn không có cờ thì coi như còn hàng, không dán nhãn nhầm.
   const soldOut = product.inStock === false;
 
@@ -41,11 +37,12 @@ export default function ProductCard({ product }: { product: P }) {
           </div>
         )}
 
-        {/* Sale Badge */}
-        {hasSale && discountPct > 0 && !soldOut && (
-          <div className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card">
-            -{discountPct}%
-          </div>
+        {/* Nhãn giảm giá; giá Giờ vàng được gắn nhãn riêng (giá hiển thị khớp giỏ và đơn). */}
+        {!soldOut && (
+          <CardSaleBadge
+            product={product}
+            className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+          />
         )}
 
         {/* Brand Chip on Image Bottom */}
@@ -60,14 +57,12 @@ export default function ProductCard({ product }: { product: P }) {
           {product.name}
         </h3>
 
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-base font-bold text-stone-900">{formatVnd(price)}</span>
-          {hasSale && (
-            <span className="text-xs text-stone-500 line-through">
-              {formatVnd(product.basePrice)}
-            </span>
-          )}
-        </div>
+        <ProductPriceRow
+          product={product}
+          className="mt-2 flex items-baseline gap-2"
+          priceClassName="text-base font-bold text-stone-900"
+          originalClassName="text-xs text-stone-500 line-through"
+        />
 
         {/* Footer Meta: Sold count & Rating */}
         {/* Sao chỉ hiện khi có đánh giá THẬT. Trước đây mọi sản phẩm đều khoe ★5.0 kể cả khi

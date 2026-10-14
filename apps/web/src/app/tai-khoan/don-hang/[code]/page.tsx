@@ -14,6 +14,7 @@ import {
   addressLine,
   buyerOrderStatusLabel,
   canPayAgain,
+  discountRows,
   orderPaymentStatusLabel,
   orderDetailHref,
   orderStatusLabel,
@@ -197,17 +198,15 @@ export default function OrderDetailPage() {
         <h2 className={ui.sectionTitle}>Thanh toán</h2>
         <div className="mt-2 space-y-1 text-sm">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
-          {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh, nên nhãn trung tính; mã ghi ở dòng riêng. */}
-          {o.discount > 0 && <Row label="Giảm giá" value={`-${formatVnd(o.discount)}`} positive />}
+          {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh: mỗi khoản một dòng, cùng cách tách với Mini App. */}
+          {discountRows(o).map((r) => (
+            <Row key={r.label} label={r.label} value={`-${formatVnd(r.amount)}`} positive />
+          ))}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">
             <span>Tổng cộng</span>
             <span>{formatVnd(o.total)}</span>
           </div>
-          {o.couponCode && <p className="text-xs text-stone-600">Mã giảm giá đã áp dụng: {o.couponCode}</p>}
-          {(o.pointsUsed ?? 0) > 0 && (
-            <p className="text-xs text-stone-600">Đã dùng {o.pointsUsed} Điểm Xanh (đã tính trong giảm giá).</p>
-          )}
           <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
           {o.paymentStatus && <PaymentStatusRow order={o} />}
         </div>

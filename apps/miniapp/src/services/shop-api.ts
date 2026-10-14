@@ -217,6 +217,16 @@ export interface PublicConfig {
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
+/**
+ * Giá và trạng thái HIỆN HÀNH theo slug (dải "Đã xem gần đây" không lưu giá). Sản phẩm đã ẩn hoặc chưa duyệt không có trong kết
+ * quả; tối đa 20 slug một lần.
+ */
+export const fetchProductsBySlugs = async (slugs: string[]): Promise<ProductCard[]> => {
+  const unique = [...new Set(slugs)].slice(0, 20);
+  if (unique.length === 0) return [];
+  const res = await api.get<PageResponse<ProductCard>>('/products', { params: { slugs: unique.join(','), limit: unique.length } });
+  return res.data.data;
+};
 export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
   const homeSlot = homeProductSlot(params);
   if (homeSlot) {
@@ -531,6 +541,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
   /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
   couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */
+  groupCouponCode?: string | null;
   couponDiscount?: number;
   comboDiscount?: number;
   tierDiscount?: number;

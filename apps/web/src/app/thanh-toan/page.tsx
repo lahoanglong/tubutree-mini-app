@@ -23,7 +23,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer, partnerPointsState, zeroTotalNote } from '@/lib/checkout-points';
+import { checkoutPointsOffer, pointsCapState, zeroTotalNote } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -141,7 +141,7 @@ export default function CheckoutPage() {
   // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
   const quote = quoteQ.isError ? undefined : quoteQ.data;
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
-  const partnerPoints = partnerPointsState(quote);
+  const partnerPoints = pointsCapState(quote, usablePoints);
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);

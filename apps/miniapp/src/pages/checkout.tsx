@@ -22,10 +22,10 @@ import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
   isInvoiceValid,
-  partnerPointsState,
   paymentMissingNote,
   paymentUnavailableReason,
   pickPaymentMethod,
+  pointsCapState,
   pointsEarnLabel,
   pointsUseLabel,
   zeroTotalNote,
@@ -37,6 +37,7 @@ import {
   rememberCheckoutSelection,
   type RememberedSelection,
 } from '../utils/checkout-selection';
+import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
@@ -146,7 +147,7 @@ export default function CheckoutPage() {
   });
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
-  const partnerPoints = partnerPointsState(quote.data);
+  const partnerPoints = pointsCapState(quote.data, points.usable);
   const pointsUsable = points.usable > 0 && !partnerPoints.disabled;
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
@@ -640,7 +641,7 @@ export default function CheckoutPage() {
               )}
               {points.convertedNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  {points.convertedNote}
+                  {partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote}
                 </Text>
               )}
               {points.lockNote && (

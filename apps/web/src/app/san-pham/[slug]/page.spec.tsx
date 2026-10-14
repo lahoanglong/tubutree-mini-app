@@ -5,12 +5,13 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 
 // BUYERWEB-17: trang chi tiết chỉ hiện đúng một ảnh. BUYERWEB-16: thiếu JSON-LD Product, canonical, og:image đủ.
 
-const api = vi.hoisted(() => ({ product: null as unknown }));
+const api = vi.hoisted(() => ({ product: null as unknown, flash: [] as unknown[] }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
 vi.mock('@/components/add-to-cart', () => ({ default: () => null }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
 
 import ProductPage, { generateMetadata } from './page';
 
@@ -33,6 +34,7 @@ const mount = async () => {
 
 beforeEach(() => {
   api.product = PRODUCT;
+  api.flash = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -219,5 +221,50 @@ describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán 
     api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
     const c = await mount();
     expect(c.querySelector('[data-testid="pdp-unavailable"]')).toBeNull();
+  });
+});
+
+describe('/san-pham/[slug] — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {
+  const FLASH = {
+    itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000,
+    salePrice: 150000, soldCount: 1, quota: 10, endAt: '2026-10-14T16:00:00.000Z',
+  };
+
+  it('không có đợt Giờ vàng: giá đang bán như cũ, không nhãn', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-price"]')!.textContent).toBe('150.000đ');
+    expect(c.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
+  });
+
+  it('có đợt Giờ vàng: giá Giờ vàng, giá gốc gạch ngang và nhãn "Giờ vàng -40%"', async () => {
+    api.flash = [FLASH];
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-price"]')!.textContent).toBe('120.000đ');
+    expect(c.querySelector('[data-testid="pdp-flash-badge"]')!.textContent).toContain('Giờ vàng -40%');
+    expect(Array.from(c.querySelectorAll('.line-through')).map((e) => e.textContent)).toContain('200.000đ');
+  });
+});
+
+describe('/san-pham/[slug] — hàng của gian hàng đối tác không dùng Điểm Xanh (R4-BUYER-3)', () => {
+  it('Tubu giao hộ hàng của gian hàng đối tác: vẫn ghi Tubu Tree giao và nói rõ giá lẻ, không dùng Điểm Xanh', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-fulfiller"]')!.textContent).toContain('Tubu Tree giao hàng');
+    expect(c.querySelector('[data-testid="pdp-partner-note"]')!.textContent).toBe('Hàng của gian hàng đối tác: chỉ bán theo giá lẻ, không dùng Điểm Xanh.');
+  });
+
+  it('hàng của gian hàng tự giao: có lời báo không dùng Điểm Xanh', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-partner-note"]')!.textContent).toContain('không dùng Điểm Xanh');
+  });
+
+  it('hàng Tubu: không có lời báo; gian hàng tạm nghỉ: chỉ có thông báo tạm nghỉ', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    expect((await mount()).querySelector('[data-testid="pdp-partner-note"]')).toBeNull();
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-partner-note"]')).toBeNull();
+    expect(c.querySelector('[data-testid="pdp-unavailable"]')).not.toBeNull();
   });
 });
