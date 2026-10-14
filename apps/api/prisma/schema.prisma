@@ -993,6 +993,9 @@ model Order {
   pancakeAttention       String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
   pancakeAttentionAt     DateTime?
+  /// Lúc hệ thống thử tự huỷ (hết hạn thanh toán) mà đơn đã bàn giao vận chuyển — D1 không cho huỷ nữa. Cron hết hạn bỏ qua
+  /// đơn này (không thử lại, không nhắc lại mỗi lượt); người vận hành xử lý theo lời nhắc ở "Cần xử lý Pancake".
+  autoCancelBlockedAt    DateTime?
   /// Số tiền chuyển khoản (cộng dồn) Pancake báo đã nhận khi đơn còn chưa đủ tiền — đơn bị huỷ thì hoàn đúng số này.
   pancakePaidReported    Int?
   /// Đẩy đơn sang Pancake (pancake-order.service.ts): WAITING_PAYMENT (trả trước qua cổng, chờ tiền) | PENDING

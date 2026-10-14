@@ -37,8 +37,10 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
+  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
   const pancakeHooks = {
     precheckCancel: jest.fn().mockResolvedValue({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' }),
     afterLocalCancel: jest.fn().mockResolvedValue(undefined),
@@ -53,13 +55,13 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService,
-    { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+    notifications as unknown as NotificationsService,
     { reverseFinancials: jest.fn().mockResolvedValue(undefined) } as unknown as OrderReversalService,
     undefined,
     undefined,
     pancakeHooks as never,
   );
-  return { svc, prisma, tx, pancakeHooks };
+  return { svc, prisma, tx, pancakeHooks, notifications };
 }
 
 describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, SELLER-3, ADMINOPS-2)', () => {
@@ -95,6 +97,37 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     expect(prisma.order.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('Hệ thống không tự huỷ được đơn') }) }),
     );
+  });
+
+  describe('cron hết hạn thanh toán gặp đơn Pancake đã gửi hàng (R4-SYNC-5, R4-SYNC-3c)', () => {
+    const unpaid = () => makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+    const handedOver = () => ({ precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)) });
+    const attention = (m: jest.Mock) =>
+      m.mock.calls.map((c) => c[0].data?.pancakeAttention).filter((a): a is string => typeof a === 'string');
+
+    it('lần đầu → ghi mốc thôi tự huỷ, nhắc "Cần xử lý Pancake" kèm lối ra rõ ràng, báo admin in-app', async () => {
+      const { svc, prisma, notifications } = make(unpaid(), handedOver());
+      await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toThrow();
+      expect(prisma.order.updateMany).toHaveBeenCalledWith({
+        where: { id: 'o1', autoCancelBlockedAt: null },
+        data: { autoCancelBlockedAt: expect.any(Date) },
+      });
+      const [reason] = attention(prisma.order.updateMany);
+      expect(reason).toContain('Hệ thống không tự huỷ được đơn');
+      expect(reason).toContain('"Đã nhận tiền"');
+      expect(reason).toContain('"Đã hoàn"');
+      expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_PANCAKE_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+    });
+
+    it('đã có mốc (lượt cron trước đã nhắc) → không nhắc lại, không báo lại dù admin đã gỡ nhắc', async () => {
+      const { svc, prisma, notifications } = make(unpaid(), handedOver());
+      prisma.order.updateMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => ({
+        count: 'autoCancelBlockedAt' in where ? 0 : 1,
+      }));
+      await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toThrow();
+      expect(attention(prisma.order.updateMany)).toEqual([]);
+      expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), 'OPS_PANCAKE_ALERT', expect.anything());
+    });
   });
 
   describe('không hỏi được Pancake (R3-CANCEL-1, R2-PANCAKE-1)', () => {
