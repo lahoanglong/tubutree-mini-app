@@ -212,4 +212,13 @@ describe('PancakePushReconcileService.reconcile — đơn đại lý còn backor
       }),
     );
   });
+
+  it('không quét đơn đối tác tự giao (D4): đơn đó không bao giờ có pancakeOrderId', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const { svc } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ fulfiller: 'TUBU' }) }),
+    );
+  });
 });

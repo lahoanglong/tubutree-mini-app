@@ -373,7 +373,12 @@ model Address {
 
 model Product {
   id               String                @id @default(cuid())
-  pancakeId        String                @unique
+  /// NULL = không có trên Pancake (sản phẩm đối tác tự giao). Không bao giờ ghi mã giả.
+  pancakeId        String?               @unique
+  /// TUBU = kho Tubu giao qua Pancake (gồm hàng đối tác "Tubu giao hộ"); MERCHANT = đối tác tự giao.
+  fulfilment       FulfilmentMode        @default(TUBU)
+  /// Mã biến thể Pancake đối tác xin liên kết khi tích "Tubu giao hộ" — admin duyệt thì biến thể đó chuyển sang sản phẩm này.
+  pancakeLinkCode  String?
   brand            String
   brandId          String?
   brandRef         Brand?                @relation(fields: [brandId], references: [id])
@@ -596,10 +601,19 @@ model Storefront {
   warehouseDistrict String?
   warehouseWard     String?
   warehousePhone    String?
+  /// Phí giao mỗi kiện của đối tác tự giao (NULL = merchant.default_shipping_fee).
+  shippingFee       Int?
+  /// Kiện của đối tác có tiền hàng từ mức này được miễn phí giao (NULL = không miễn phí).
+  freeShipFrom      Int?
+  /// Phí sàn riêng cho gian hàng (phân số, 0.15 = 15%). NULL = merchant.commission_pct. Chỉ admin đặt.
+  commissionPct     Decimal?               @db.Decimal(5, 4)
   isPublished       Boolean                @default(false)
   publishedAt       DateTime?
   collections       StorefrontCollection[]
   products          Product[]              @relation("StorefrontProducts")
+  fulfilledOrders   Order[]                @relation("OrderFulfiller")
+  attributedOrders  Order[]                @relation("OrderStorefront")
+  merchantPayouts   MerchantPayout[]
   /// Mốc lần cuối nhắc CTV thêm sản phẩm nổi bật còn thiếu vào gian hàng (storefront-reminder.service.ts).
   /// Null = chưa từng nhắc. Chỉ dùng cho guard chống gửi trùng, không phải mốc nghiệp vụ khác.
   lastReminderAt    DateTime?
@@ -646,7 +660,8 @@ model StorefrontItem {
 
 model Variation {
   id            String   @id @default(cuid())
-  pancakeId     String   @unique
+  /// NULL = biến thể không có trên Pancake (sản phẩm đối tác tự giao).
+  pancakeId     String?  @unique
   productId     String
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku           String   @unique
@@ -804,6 +819,11 @@ enum OrderType {
   DEALER
 }
 
+enum FulfilmentMode {
+  TUBU
+  MERCHANT
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -869,6 +889,24 @@ model Order {
   invoiceStatus      InvoiceStatus?   @default(NOT_REQUESTED)
   referrerUserId     String?
   storefrontSlug     String?
+  /// Gian hàng được ghi công, resolve phía server lúc đặt (slug/subdomain/tên miền → id). Lọc đơn của gian hàng theo cột
+  /// này, không theo chuỗi storefrontSlug (subdomain đổi chủ được).
+  storefrontId       String?
+  storefront         Storefront?      @relation("OrderStorefront", fields: [storefrontId], references: [id])
+  /// Nơi giao cả đơn: TUBU (kho Tubu qua Pancake) hoặc MERCHANT (gian hàng fulfillerStorefrontId tự giao).
+  fulfiller          FulfilmentMode   @default(TUBU)
+  fulfillerStorefrontId String?
+  fulfillerStorefront Storefront?     @relation("OrderFulfiller", fields: [fulfillerStorefrontId], references: [id])
+  /// Phí sàn chốt lúc đặt đơn đối tác (phân số). Đối soát đọc số này.
+  merchantCommissionPct Decimal?      @db.Decimal(5, 4)
+  /// Mã đơn đầu của lần đặt bị tách theo nơi giao; mọi đơn cùng lần đặt cùng giá trị. NULL = không tách.
+  checkoutGroup      String?
+  /// Đối tác bấm "Xác nhận" đơn tự giao.
+  merchantAcceptedAt DateTime?
+  /// Lúc đơn tự giao được giao cho đơn vị vận chuyển (đối tác nhập hãng + mã vận đơn).
+  shippedAt          DateTime?
+  /// Lần gần nhất nhắc đối tác đơn quá hạn xử lý.
+  merchantSlaNotifiedAt DateTime?
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
   placedForCustomer  Boolean          @default(false)
@@ -915,6 +953,7 @@ model Order {
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
   customerRefund     OrderCustomerRefund?
+  merchantPayoutLines MerchantPayoutLine[]
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -935,6 +974,9 @@ model Order {
   @@index([hasRecyclingPickup, gomdonStatus])
   // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.
   @@index([pancakeAttentionAt])
+  @@index([fulfillerStorefrontId, status, createdAt])
+  @@index([storefrontId, createdAt])
+  @@index([checkoutGroup])
   @@map("orders")
 }
 
@@ -1352,8 +1394,12 @@ model Payout {
   id              String       @id @default(cuid())
   userId          String
   user            User         @relation(fields: [userId], references: [id])
-  amount          Int // số thực nhận (đã trừ phí)
+  amount          Int // số thực nhận (đã trừ phí và thuế khấu trừ)
   fee             Int          @default(0) // phí chuyển khoản ngân hàng
+  /// Tổng hoa hồng của lệnh trước khấu trừ thuế TNCN. NULL = lệnh cũ trước khi có khấu trừ (amount là toàn bộ).
+  grossAmount     Int?
+  /// Thuế TNCN đã khấu trừ tại nguồn (affiliate.pit_withhold_pct khi grossAmount ≥ affiliate.pit_withhold_threshold).
+  taxWithheld     Int          @default(0)
   method          String
   bankInfo        Json?
   status          PayoutStatus @default(REQUESTED)
@@ -1372,6 +1418,71 @@ model Payout {
 
   @@index([userId])
   @@map("payouts")
+}
+
+enum MerchantPayoutStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum MerchantPayoutLineKind {
+  SALE
+  REVERSAL
+}
+
+/// Phiếu đối soát đơn đối tác tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 7). amount > 0: Tubu chuyển cho
+/// đối tác; amount < 0: đối tác nộp lại Tubu (phí sàn trên đơn COD đối tác đã tự thu).
+model MerchantPayout {
+  id           String               @id @default(cuid())
+  storefrontId String
+  storefront   Storefront           @relation(fields: [storefrontId], references: [id])
+  amount       Int
+  status       MerchantPayoutStatus @default(PENDING)
+  /// Ảnh chụp tài khoản nhận lúc lập phiếu — đối tác đổi TK sau đó không đổi phiếu đã lập.
+  bankInfo     Json?
+  createdBy    String
+  createdAt    DateTime             @default(now())
+  paidAt       DateTime?
+  paidBy       String?
+  bankRef      String?
+  note         String?
+  lines        MerchantPayoutLine[]
+
+  @@index([storefrontId, createdAt])
+  @@index([status, createdAt])
+  @@map("merchant_payouts")
+}
+
+/// Một đơn chỉ được đối soát một lần (SALE) và trừ ngược một lần (REVERSAL): unique (orderId, kind).
+model MerchantPayoutLine {
+  id               String                 @id @default(cuid())
+  payoutId         String
+  payout           MerchantPayout         @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  orderId          String
+  order            Order                  @relation(fields: [orderId], references: [id])
+  orderCode        String
+  kind             MerchantPayoutLineKind
+  goodsAmount      Int
+  shippingFee      Int
+  commissionAmount Int
+  codCollected     Int
+  netAmount        Int
+  createdAt        DateTime               @default(now())
+
+  @@unique([orderId, kind])
+  @@index([payoutId])
+  @@map("merchant_payout_lines")
+}
+
+/// Subdomain/tên miền vừa bị gian hàng nhả: gian hàng KHÁC chỉ dùng lại sau thời gian chờ (SELLER-5) — link cũ khách lưu
+/// không trỏ ngay sang gian hàng của người khác.
+model ReleasedStorefrontIdentifier {
+  value        String   @id
+  storefrontId String
+  releasedAt   DateTime @default(now())
+
+  @@map("released_storefront_identifiers")
 }
 
 // ============================================================

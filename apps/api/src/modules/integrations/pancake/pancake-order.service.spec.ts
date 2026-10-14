@@ -90,7 +90,7 @@ describe('PancakeOrderService.pushOrder', () => {
     });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn().mockResolvedValue({}) },
-      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', pancakeId: 'pv1' }]) },
     } as unknown as PrismaService;
     const createOrder = jest.fn().mockResolvedValue({ id: 'pk-new' });
     const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
@@ -102,7 +102,7 @@ describe('PancakeOrderService.pushOrder', () => {
     const order = makeOrder();
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn() },
-      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', pancakeId: 'pv1' }]) },
     } as unknown as PrismaService;
     const client = {
       isConfigured: jest.fn().mockReturnValue(true),
@@ -110,6 +110,55 @@ describe('PancakeOrderService.pushOrder', () => {
     } as unknown as PancakeClient;
     const svc = new PancakeOrderService(prisma, client, { add: jest.fn() } as never);
     await expect(svc.pushOrder('o1')).rejects.toThrow('Pancake 500');
+  });
+});
+
+describe('PancakeOrderService.pushOrder — chỉ gom dòng isPancakeFulfilledLine (D4)', () => {
+  function setup(order: Record<string, unknown>, variations: unknown[]) {
+    const update = jest.fn().mockResolvedValue({});
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update, updateMany },
+      variation: { findMany: jest.fn().mockResolvedValue(variations) },
+    } as unknown as PrismaService;
+    const createOrder = jest.fn().mockResolvedValue({ id: 'pk-new' });
+    const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
+    return { svc: new PancakeOrderService(prisma, client, { add: jest.fn() } as never), createOrder, update, updateMany };
+  }
+
+  it('đơn chỉ có hàng đối tác tự giao → không gửi Pancake, không gắn cờ (không phải đơn kho Tubu)', async () => {
+    const order = makeOrder({ fulfiller: 'MERCHANT', items: [{ variationId: 'vm', quantity: 1 }] });
+    const { svc, createOrder, updateMany } = setup(order, [{ id: 'vm', pancakeId: null, product: { fulfilment: 'MERCHANT' } }]);
+    await expect(svc.pushOrder('o1')).resolves.toBeNull();
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('mã giả MCH_ còn sót trong DB → không bao giờ tới Pancake; đơn kho Tubu không gửi được thì gắn cờ cần xử lý', async () => {
+    const order = makeOrder({ items: [{ variationId: 'vx', quantity: 1 }] });
+    const { svc, createOrder, updateMany } = setup(order, [{ id: 'vx', pancakeId: 'MCH_1791_abc_VAR', product: { fulfilment: 'TUBU' } }]);
+    await expect(svc.pushOrder('o1')).resolves.toBeNull();
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(updateMany.mock.calls[0][0].data.pancakeAttention).toContain('chưa gửi kho');
+  });
+
+  it('đơn cũ lẫn hàng đối tác → chỉ gửi dòng Pancake, không gửi id nội bộ thay mã Pancake, gắn cờ phần còn lại', async () => {
+    const order = makeOrder({
+      items: [
+        { variationId: 'v1', quantity: 2 },
+        { variationId: 'vm', quantity: 1 },
+        { variationId: 'vgone', quantity: 1 },
+      ],
+    });
+    const { svc, createOrder, updateMany } = setup(order, [
+      { id: 'v1', pancakeId: 'pv1', product: { fulfilment: 'TUBU' } },
+      { id: 'vm', pancakeId: null, product: { fulfilment: 'MERCHANT' } },
+    ]);
+    await expect(svc.pushOrder('o1')).resolves.toBe('pk-new');
+    const items = createOrder.mock.calls[0][0].items as { variation_id: string }[];
+    expect(items.map((i) => i.variation_id)).toEqual(['pv1']);
+    expect(JSON.stringify(createOrder.mock.calls[0][0])).not.toContain('vm');
+    expect(updateMany.mock.calls[0][0].data.pancakeAttention).toContain('2 dòng');
   });
 });
 
@@ -200,9 +249,13 @@ describe('PancakeOrderService - note + tag cho đơn thu gom tái chế (Gomdon)
   async function pushed(overrides: Record<string, unknown>, weights: { id: string; weight: number }[] = [], cfgValue?: unknown) {
     const order = makeOrder(overrides);
     const createOrder = jest.fn().mockResolvedValue({ id: 'pk-x' });
+    const rows = (order.items as { variationId: string }[]).map((it) => {
+      const w = weights.find((x) => x.id === it.variationId);
+      return { id: it.variationId, pancakeId: `p-${it.variationId}`, ...(w ? { weight: w.weight } : {}) };
+    });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order), update: jest.fn() },
-      variation: { findMany: jest.fn().mockResolvedValue(weights) },
+      variation: { findMany: jest.fn().mockResolvedValue(rows) },
     } as unknown as PrismaService;
     const client = { isConfigured: jest.fn().mockReturnValue(true), createOrder } as unknown as PancakeClient;
     const systemConfig = cfgValue === undefined ? undefined : ({ get: jest.fn().mockResolvedValue(cfgValue) } as never);

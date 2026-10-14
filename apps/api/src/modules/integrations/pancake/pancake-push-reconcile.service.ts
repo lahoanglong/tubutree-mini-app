@@ -48,6 +48,8 @@ export class PancakePushReconcileService {
       const stale = await this.prisma.order.findMany({
         where: {
           pancakeOrderId: null,
+          // Đơn đối tác tự giao không đi Pancake (docs/2026-10-14-merchant-fulfilment-design.md mục 9).
+          fulfiller: 'TUBU',
           status: { notIn: ['CANCELLED'] }, // đơn đã hủy không cần đẩy — không tồn tại để giao
           createdAt: { lt: cutoff },
           // Đơn đại lý còn hàng đặt trước (chưa đủ 100%) chỉ được đẩy khi DealerBackorderService lấp đủ

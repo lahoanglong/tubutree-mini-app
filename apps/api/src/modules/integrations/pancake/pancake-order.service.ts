@@ -11,6 +11,7 @@ import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomd
 import { recyclingWeight } from '../gomdon/gomdon-weight';
 import { GOMDON_STATE } from '../gomdon/gomdon-status';
 import { isNewGeoCode } from './geo-code';
+import { isPancakeFulfilledLine } from './pancake-fulfilment';
 
 /** Tag máy đọc được trên đơn Pancake — kho/automation lọc đơn thu gom, không phải đọc note tự do. */
 export const PANCAKE_TAG_RECYCLING = 'RECYCLING';
@@ -100,9 +101,19 @@ export class PancakeOrderService {
       | null;
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: order.items.map((i) => i.variationId) } },
-      select: { id: true, pancakeId: true },
+      select: { id: true, pancakeId: true, product: { select: { fulfilment: true } } },
     });
-    const pancakeByLocal = new Map(variations.map((v) => [v.id, v.pancakeId]));
+    const pancakeByLocal = new Map(
+      variations
+        .filter((v) => isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product?.fulfilment }))
+        .map((v) => [v.id, v.pancakeId as string]),
+    );
+    const pancakeItems = order.items.filter((i) => pancakeByLocal.has(i.variationId));
+    const skipped = order.items.length - pancakeItems.length;
+    if (skipped > 0 && order.fulfiller !== 'MERCHANT') {
+      await this.flagUnpushableLines(order.id, order.code, skipped, pancakeItems.length === 0);
+    }
+    if (pancakeItems.length === 0) return null;
 
     const body: PancakeCreateOrderBody = {
       customer: {
@@ -117,8 +128,8 @@ export class PancakeOrderService {
         // Không gửi fb_id: đó là Facebook ID — Zalo ID ở đây làm Pancake gộp nhầm khách, và đơn CTV lên hộ
         // có user là CTV chứ không phải người nhận.
       },
-      items: order.items.map((i) => ({
-        variation_id: pancakeByLocal.get(i.variationId) ?? i.variationId,
+      items: pancakeItems.map((i) => ({
+        variation_id: pancakeByLocal.get(i.variationId)!,
         quantity: i.quantity,
         discount_each_product: 0,
       })),
@@ -143,6 +154,18 @@ export class PancakeOrderService {
       });
     }
     return pancakeOrderId;
+  }
+
+  /** Dòng không có mã Pancake trên đơn kho Tubu (đơn cũ lẫn hàng đối tác, dữ liệu lỗi): admin xử lý tay qua hàng đợi Pancake. */
+  private async flagUnpushableLines(orderId: string, code: string, count: number, none: boolean): Promise<void> {
+    const reason = none
+      ? `Đơn không có dòng nào có mã Pancake hợp lệ (${count} dòng) — chưa gửi kho, cần xử lý tay.`
+      : `${count} dòng không có mã Pancake (hàng đối tác tự giao hoặc dữ liệu lỗi) — chỉ gửi kho phần còn lại, xử lý tay phần này.`;
+    this.logger.warn(`Đơn ${code}: ${reason}`);
+    await this.prisma.order.updateMany({
+      where: { id: orderId, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
+    });
   }
 
   private buildTags(order: { type: string; hasRecyclingPickup?: boolean; gomdonPartnerCode?: string | null }): string[] {
