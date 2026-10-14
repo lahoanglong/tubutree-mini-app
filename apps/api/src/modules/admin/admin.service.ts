@@ -1143,6 +1143,21 @@ export class AdminService {
     if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
       throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
     }
+    if (data.type === 'AMOUNT' && data.minOrder && data.value >= data.minOrder) {
+      throw new BadRequestException(
+        `Mức giảm ${formatVnd(data.value)} phải nhỏ hơn đơn tối thiểu ${formatVnd(data.minOrder)} — không thì đơn ở mức tối thiểu được giảm hết tiền hàng. ` +
+          'Kiểm tra lại số 0 của hai ô.',
+      );
+    }
+    // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
+    const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
+    if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
+      throw new BadRequestException(`Hạng thành viên "${tierId}" không tồn tại — mã tạo ra sẽ không ai dùng được.`);
+    }
+    const ownerId = data.scope === 'USER_GROUP' ? data.scopeMeta?.userId : undefined;
+    if (ownerId && !(await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } }))) {
+      throw new BadRequestException(`Không tìm thấy người dùng "${ownerId}" — mã cá nhân tạo ra sẽ không ai dùng được.`);
+    }
     const code = normalizeCouponCode(data.code);
     try {
       return await this.prisma.coupon.create({

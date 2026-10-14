@@ -7,6 +7,7 @@ import {
   CART_ABANDON_MAX_HOURS_KEY,
   CART_ABANDON_MIN_HOURS_KEY,
 } from '../lifecycle/remarketing.service';
+import { FLASH_MAX_DISCOUNT_DEFAULT, FLASH_MAX_DISCOUNT_KEY } from '../flash-sale/flash-sale.service';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -113,6 +114,8 @@ type RangePair = {
   max: string;
   /** Đơn vị trong thông báo lỗi. */
   unit: string;
+  /** Phân số (0–1): không bắt số nguyên, khoảng do SystemConfigService.RANGES giữ. */
+  fraction?: boolean;
   /** max phải lớn hơn hẳn min (khoảng [min, max] không được chỉ là một điểm). */
   strict: boolean;
   /** null = "chưa đặt" là giá trị hợp lệ của khoá. */
@@ -131,6 +134,16 @@ const RANGE_PAIRS: RangePair[] = [
     nullable: false,
     defaults: { min: CART_ABANDON_DEFAULT_MIN_HOURS, max: CART_ABANDON_DEFAULT_MAX_HOURS },
   },
+  // Giá flash phải giảm ít nhất min và không quá max so với giá đang bán: min > max thì không thêm được món nào.
+  {
+    min: 'flashsale.min_discount_pct',
+    max: FLASH_MAX_DISCOUNT_KEY,
+    unit: 'mức giảm',
+    fraction: true,
+    strict: false,
+    nullable: false,
+    defaults: { min: 0, max: FLASH_MAX_DISCOUNT_DEFAULT },
+  },
 ];
 
 const PAIR_OF: Record<string, RangePair> = Object.fromEntries(RANGE_PAIRS.flatMap((p) => [[p.min, p], [p.max, p]]));
@@ -144,7 +157,11 @@ export function configPartnerKey(key: string): string | undefined {
 
 function assertAgainstPartner(pair: RangePair, key: string, v: unknown, stored: unknown) {
   if (v === null && pair.nullable) return; // đặt lại "chưa đặt" = ẩn dòng giao dự kiến
-  assertInteger(key, v);
+  if (pair.fraction) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw fail(key, 'phải là số (phân số 0–1).');
+  } else {
+    assertInteger(key, v);
+  }
   const isMax = key === pair.max;
   const partner = typeof stored === 'number' ? stored : isMax ? pair.defaults?.min : pair.defaults?.max;
   if (typeof partner !== 'number') return;

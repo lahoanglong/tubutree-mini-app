@@ -79,6 +79,8 @@ export class SystemConfigService {
     'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
     'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
+    'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
+    'flashsale.max_duration_days': { min: 1, max: 366, note: 'số ngày tối đa của một đợt flash sale', integer: true },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
     'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)', integer: true },

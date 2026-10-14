@@ -116,6 +116,8 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Flash Sale
   { key: 'flashsale.default_per_user_limit', value: 5, category: 'flashsale', description: 'Giới hạn mua mặc định/user/item flash' },
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
+  { key: 'flashsale.max_discount_pct', value: 0.9, category: 'flashsale', description: 'Mức giảm tối đa của giá flash so với giá đang bán (phân số; 0.9 = giá flash ≥ 10% giá bán, 1 = không chặn)', createOnly: true },
+  { key: 'flashsale.max_duration_days', value: 31, category: 'flashsale', description: 'Số ngày tối đa của một đợt flash sale', createOnly: true },
 
   // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
   { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; đơn đại lý dùng orders.dealer_pending_payment_ttl_hours', createOnly: true },
