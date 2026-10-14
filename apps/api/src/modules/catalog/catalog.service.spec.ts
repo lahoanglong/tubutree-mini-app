@@ -84,6 +84,16 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
   });
 });
 
+describe('CatalogService.getBySlug — cờ hàng của gian hàng đối tác (Q8 S2)', () => {
+  it('partnerOwned = sản phẩm thuộc gian hàng (tự giao hoặc Tubu giao hộ) — PDP ẩn đặt định kỳ/mua chung', async () => {
+    const row = (storefrontId: string | null) => ({ id: 'p1', slug: 'mat-ong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, fulfilment: 'TUBU', storefrontId });
+    const partner = { product: { findUnique: jest.fn().mockResolvedValue(row('sf-doi-tac')) } } as unknown as PrismaService;
+    expect((await new CatalogService(partner).getBySlug('mat-ong')).partnerOwned).toBe(true);
+    const tubu = { product: { findUnique: jest.fn().mockResolvedValue(row(null)) } } as unknown as PrismaService;
+    expect((await new CatalogService(tubu).getBySlug('mat-ong')).partnerOwned).toBe(false);
+  });
+});
+
 // R2-ENGAGE-3: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh; PDP là trang vào nhiều nhất và app đọc đánh giá
 // qua GET /products/:slug/reviews, nên PDP không nhúng ảnh đánh giá.
 describe('CatalogService.getBySlug — PDP không nhúng ảnh đánh giá (R2-ENGAGE-3)', () => {
