@@ -1373,20 +1373,61 @@ export interface OpsQueueRow {
   failed: number;
   failedLastHour: number;
 }
+/** Webhook Pancake/Gomdon lỗi hoặc kẹt chưa ai xử lý (màn Sức khoẻ hệ thống — Chạy lại / Đã xử lý). */
+export interface OpsWebhookEvent {
+  id: string;
+  source: 'pancake' | 'gomdon';
+  eventType: string;
+  /** Mã đơn Tubu (hoặc #id đơn Pancake); null khi payload không mang mã nào. */
+  orderRef: string | null;
+  status: string;
+  attempts: number;
+  error: string | null;
+  receivedAt: string;
+}
+export interface OpsAttentionOrder {
+  id: string;
+  code: string;
+  pancakeAttention: string | null;
+  pancakeAttentionAt: string | null;
+}
+export interface OpsGomdonAlert {
+  id: string;
+  message: string;
+  createdAt: string;
+  orderCode: string;
+}
+export interface OpsBacklogOrder {
+  id: string;
+  code: string;
+  createdAt: string;
+  gomdonStatus: string | null;
+  paymentMethod: string;
+}
 export interface OpsHealth {
   generatedAt: string;
-  thresholds: { unsyncedMinutes: number; stuckOrders: number; webhookFailed: number; queueFailed1h: number; repeatHours: number };
+  thresholds: {
+    unsyncedMinutes: number;
+    stuckOrders: number;
+    webhookFailed: number;
+    queueFailed1h: number;
+    repeatHours: number;
+    gomdonBacklogMinutes: number;
+  };
   pancake: {
     configured: boolean;
     lastPushOkAt: string | null;
     lastWebhookAt: string | null;
     lastWebhookProcessedAt: string | null;
     webhookFailed24h: number;
+    webhookFailedOpen: number;
     webhookStuck: number;
+    failedEvents: OpsWebhookEvent[];
     unsynced: number;
     stuck: number;
     stuckOrders: OpsStuckOrder[];
     attention: number;
+    attentionOrders: OpsAttentionOrder[];
     catalog: { lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null; detail: { count?: number; failed?: number } | null };
   };
   gomdon: {
@@ -1395,8 +1436,13 @@ export interface OpsHealth {
     credentialsRejected: boolean;
     lastWebhookAt: string | null;
     webhookFailed24h: number;
+    webhookFailedOpen: number;
+    failedEvents: OpsWebhookEvent[];
     openAlerts: number;
+    alerts: OpsGomdonAlert[];
     attention: number;
+    backlog: number;
+    backlogOrders: OpsBacklogOrder[];
   };
   queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
   problems: { key: string; message: string }[];
@@ -1406,6 +1452,12 @@ export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
 export const runPancakeSync = (withStock = false) =>
   apiFetch<{ synced: number; stockOverwritten: boolean }>(`/admin/pancake/sync${withStock ? '?withStock=1' : ''}`, { method: 'POST' });
 export const recomputeSoldCounts = () => apiFetch<{ updated: number }>('/admin/products/recompute-sold', { method: 'POST' });
+/** "Chạy lại" webhook Pancake/Gomdon lỗi hoặc kẹt — đặt lại số lần thử rồi đưa vào hàng đợi. */
+export const retryOpsWebhookEvent = (source: OpsWebhookEvent['source'], id: string) =>
+  apiFetch<{ ok: true; message: string }>(`/admin/ops/webhook-events/${source}/${encodeURIComponent(id)}/retry`, { method: 'POST' });
+/** "Đã xử lý" — đã sửa tay đơn liên quan, sự kiện rời báo động. */
+export const dismissOpsWebhookEvent = (source: OpsWebhookEvent['source'], id: string) =>
+  apiFetch<{ ok: true; message: string }>(`/admin/ops/webhook-events/${source}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
 
 // ── Chấm công: phiên đang mở + chốt ra ca (ADMINOPS-17) ──
 export interface LiveAttendance {
