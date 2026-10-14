@@ -689,6 +689,32 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(JSON.stringify(r)).not.toContain('sf-doi-tac');
   });
 
+  it('Q8 review vòng 3 S4: combo còn dưới 2 sản phẩm được giảm (bỏ hàng của gian hàng đối tác) → không còn mức giảm combo để hiện; combo đủ 2 sản phẩm vẫn giữ', async () => {
+    const item = (id: string, storefrontId: string | null) => ({
+      id: `i-${id}`, note: null, variationId: null, isHidden: false,
+      product: {
+        id, name: `SP ${id}`, slug: id, thumbnail: null, brand: 'B', basePrice: 100_000, salePrice: null, ratingAvg: 0, reviewCount: 0,
+        isActive: true, affiliateBlocked: false, soldExternal: 0, soldApp: 0, approvalStatus: 'APPROVED', storefrontId, variations: [{ stock: 1 }],
+      },
+    });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctv', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', owner: { referralCode: 'ABCD1234' },
+        collections: [
+          { id: 'c1', title: 'Combo 1 Tubu + 1 đối tác', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, items: [item('p1', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c2', title: 'Combo 2 Tubu', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 15, items: [item('p1', null), item('p2', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c3', title: 'Combo 1 sản phẩm 2 biến thể', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 12, items: [item('p3', null), { ...item('p3', null), id: 'i-p3b' }] },
+        ],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctv');
+    expect(r.collections.map((c) => [c.id, c.kind, c.comboDiscountPct, c.items.length])).toEqual([
+      ['c1', 'COMBO', null, 1],
+      ['c2', 'COMBO', 15, 2],
+      ['c3', 'COMBO', null, 2],
+    ]);
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);
