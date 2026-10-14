@@ -29,6 +29,20 @@ describe('smoke-purchase.yml', () => {
     expect(wf).toMatch(/DELETE "\$B\/cart\/items\//);
     expect(wf).toMatch(/DELETE "\$B\/me\/addresses\//);
   });
+
+  it('địa chỉ thử lấy mã tỉnh/phường theo địa giới mới từ chính API, không gắn cứng mã cũ (R2-PLATFORM-5)', () => {
+    const wf = read('.github/workflows/smoke-purchase.yml');
+    expect(wf).not.toMatch(/"provinceCode":"\d+"/);
+    expect(wf).toContain('$B/geo/provinces');
+    expect(wf).toContain('$B/geo/communes?provinceCode=');
+  });
+
+  it('bước nào không trả 2xx thì job đỏ (dọn dẹp xong mới thoát)', () => {
+    const wf = read('.github/workflows/smoke-purchase.yml');
+    const exit = wf.lastIndexOf('exit 1');
+    expect(exit).toBeGreaterThan(wf.lastIndexOf('DELETE "$B/me/addresses/'));
+    expect(wf).toMatch(/2\?\?\)/);
+  });
 });
 
 describe('ops.yml audit/set-env', () => {

@@ -37,15 +37,32 @@ jobs:
             command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq >/dev/null 2>&1 || true
             VAR=$(curl -s "$B/products/serum-duong-am-visante" | jq -r '.variations[0].id // empty')
             echo "variation: $VAR"
-            step() { printf "%-26s %s\n" "$1" "$2"; }
+            # Bước nào không trả 2xx thì job đỏ — trước đây job luôn xanh dù tạo địa chỉ/báo giá trả 400.
+            FAIL=0
+            step() { printf "%-26s %s\n" "$1" "$2"; case "$2" in 2??) ;; *) FAIL=1; echo "  ^ LỖI";; esac; }
+            [ -n "$VAR" ] || { echo "Không lấy được biến thể sản phẩm thử"; FAIL=1; }
             C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/cart/items" -H "$H_AUTH" -H "$H_JSON" -d "{\"variationId\":\"$VAR\",\"quantity\":2}"); step "POST /cart/items" "$C"; head -c 150 /tmp/b; echo
-            C=$(curl -s -o /tmp/b -w "%{http_code}" "$B/cart" -H "$H_AUTH"); step "GET /cart" "$C"; grep -oE '"itemCount":[0-9]+|"subtotal":[0-9]+' /tmp/b
+            C=$(curl -s -o /tmp/b -w "%{http_code}" "$B/cart" -H "$H_AUTH"); step "GET /cart" "$C"; grep -oE '"itemCount":[0-9]+|"subtotal":[0-9]+' /tmp/b || true
             ITEM=$(jq -r --arg v "$VAR" '.items[]? | select(.variationId == $v) | .id' /tmp/b | head -1)
-            ADDR=$(curl -s -X POST "$B/me/addresses" -H "$H_AUTH" -H "$H_JSON" -d '{"recipient":"Smoke Test","phone":"0900000001","province":"TP HCM","district":"Q1","ward":"Bến Nghé","street":"1 Lê Lợi","provinceCode":"79","districtCode":"760","wardCode":"26734"}')
-            AID=$(echo "$ADDR" | jq -r '.id // empty')
-            step "POST /me/addresses" "id=$AID"
-            C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/checkout/quote" -H "$H_AUTH" -H "$H_JSON" -d "{\"addressId\":\"$AID\"}"); step "POST /checkout/quote" "$C"; grep -oE '"total":[0-9]+|"shippingFee":[0-9]+|"pointsEarned":[0-9]+' /tmp/b
+            # Địa chỉ theo địa giới mới (2 cấp, mã 84_VN...) lấy từ chính danh mục Pancake mà API đang phục vụ: mã cũ
+            # (79/760/26734) bị từ chối 400, còn gắn cứng mã mới thì lệch khi Pancake đổi danh mục.
+            C=$(curl -s -o /tmp/p -w "%{http_code}" "$B/geo/provinces"); step "GET /geo/provinces" "$C"
+            PROV=$(jq -c '([.[] | select(.name | test("Hồ Chí Minh"))][0]) // .[0] // empty' /tmp/p)
+            PCODE=$(echo "$PROV" | jq -r '.code // empty'); PNAME=$(echo "$PROV" | jq -r '.name // empty')
+            C=$(curl -s -o /tmp/w -w "%{http_code}" "$B/geo/communes?provinceCode=$PCODE"); step "GET /geo/communes" "$C"
+            WCODE=$(jq -r '.[0].code // empty' /tmp/w); WNAME=$(jq -r '.[0].name // empty' /tmp/w)
+            BODY=$(jq -nc --arg pc "$PCODE" --arg pn "$PNAME" --arg wc "$WCODE" --arg wn "$WNAME" \
+              '{recipient:"Smoke Test",phone:"0900000001",province:$pn,district:"",ward:$wn,street:"1 Lê Lợi",provinceCode:$pc,districtCode:"",wardCode:$wc}')
+            C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/me/addresses" -H "$H_AUTH" -H "$H_JSON" -d "$BODY"); step "POST /me/addresses" "$C"
+            AID=$(jq -r '.id // empty' /tmp/b)
+            [ -n "$AID" ] || head -c 300 /tmp/b
+            if [ -n "$AID" ]; then
+              C=$(curl -s -o /tmp/b -w "%{http_code}" -X POST "$B/checkout/quote" -H "$H_AUTH" -H "$H_JSON" -d "{\"addressId\":\"$AID\"}"); step "POST /checkout/quote" "$C"; grep -oE '"total":[0-9]+|"shippingFee":[0-9]+|"pointsEarned":[0-9]+' /tmp/b || head -c 300 /tmp/b
+            else
+              step "POST /checkout/quote" "bỏ qua (không có địa chỉ)"
+            fi
             # Dọn: user smoke không giữ giỏ/địa chỉ giữa các lần chạy.
-            [ -n "$ITEM" ] && { C=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/cart/items/$ITEM" -H "$H_AUTH"); step "DELETE /cart/items" "$C"; }
-            [ -n "$AID" ] && { C=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/me/addresses/$AID" -H "$H_AUTH"); step "DELETE /me/addresses" "$C"; }
+            if [ -n "$ITEM" ]; then C=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/cart/items/$ITEM" -H "$H_AUTH"); step "DELETE /cart/items" "$C"; fi
+            if [ -n "$AID" ]; then C=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$B/me/addresses/$AID" -H "$H_AUTH"); step "DELETE /me/addresses" "$C"; fi
+            if [ "$FAIL" != 0 ]; then echo "=== SMOKE LỖI: có bước không trả 2xx (xem ở trên) ==="; exit 1; fi
             echo "=== DONE (không đặt đơn; đã dọn giỏ và địa chỉ smoke) ==="
