@@ -32,7 +32,7 @@ function makeAnalytics() {
 function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock; open?: unknown } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
-    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
+    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', pancakeId: 'pv1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
     subscription: { create, findFirst: jest.fn().mockResolvedValue(opts.open ?? null) },
     // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
@@ -197,8 +197,8 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       variation: {
         findUnique: jest.fn().mockResolvedValue(
           opts.variationInactive
-            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
-            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+            ? { id: 'v1', pancakeId: 'pv1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
+            : { id: 'v1', pancakeId: 'pv1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
         ),
         // Kiểm lại SP còn bán trong tx (cart/sellable.ts).
         findMany: jest.fn().mockResolvedValue(opts.discontinuedInTx ? [] : [{ id: 'v1' }]),

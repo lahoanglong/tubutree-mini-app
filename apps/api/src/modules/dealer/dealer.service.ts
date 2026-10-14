@@ -11,7 +11,7 @@ import {
   assertVariationsSellable,
   isSellableVariation,
   productDiscontinuedError,
-  SELLABLE_VARIATION_WHERE,
+  SELLABLE_PANCAKE_VARIATION_WHERE,
 } from '../cart/sellable';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { notifyAdmins } from '../../common/notify-admins';
@@ -114,7 +114,16 @@ export class DealerService {
     });
     if (pending) throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
     try {
-      return await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+      const created = await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+      await notifyAdmins(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        {
+          template: 'OPS_DEALER_APPLICATION_PENDING',
+          subject: `hồ sơ đại lý ${created.id}`,
+          data: () => ({ business: created.businessName, owner: created.ownerName, phone: created.phone }),
+        },
+      ).catch((e) => this.logger.warn(`Báo admin hồ sơ đại lý ${created.id} lỗi: ${(e as Error).message}`));
+      return created;
     } catch (err) {
       // TOCTOU: findFirst rồi create không transaction — 2 request apply() đồng thời có thể cùng
       // qua check "chưa có đơn PENDING" trước khi request đầu commit. Partial unique index
@@ -145,6 +154,9 @@ export class DealerService {
     return {
       isDealer: user.role === 'DEALER',
       status: application?.status ?? 'NONE',
+      // SELLER-12: hồ sơ bị từ chối phải cho người đăng ký biết vì sao để bổ sung rồi nộp lại.
+      rejectionReason: application?.status === 'REJECTED' ? (application.rejectionReason ?? null) : null,
+      reviewedAt: application?.reviewedAt ?? null,
       tier: tier ? { id: tier.id, name: tier.name, creditLimit: tier.creditLimit } : null,
       currentDebt: creditAgg._sum.delta ?? 0,
     };
@@ -156,7 +168,7 @@ export class DealerService {
     // Cùng điều kiện với placeOrder: FE cho đặt trước cả hàng tồn 0, nên một dòng không bán được mà vẫn
     // lên bảng giá sẽ làm cả đơn bị PRODUCT_DISCONTINUED.
     const variations = await this.prisma.variation.findMany({
-      where: SELLABLE_VARIATION_WHERE,
+      where: SELLABLE_PANCAKE_VARIATION_WHERE,
       include: { product: { select: { name: true, brand: true } } },
     });
     return variations.map((v) => {
@@ -258,7 +270,7 @@ export class DealerService {
           // khi hàng về (xem DealerBackorderService). Huỷ/trả đơn vẫn phải chỉ hoàn đúng phần
           // ĐÃ giữ (`quantity - backorderedQty`) — xem OrderReversalService.
           // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
-          await assertVariationsSellable(tx, items);
+          await assertVariationsSellable(tx, items, { pancakeOnly: true });
           let hasBackorder = false;
           const itemsWithBackorder = [];
           for (const line of items) {

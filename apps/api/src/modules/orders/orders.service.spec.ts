@@ -641,6 +641,31 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     await empty.svc.detailView('u1', 'TUBU1');
     expect(empty.variationFindMany).not.toHaveBeenCalled();
   });
+
+  it('D4: đơn đối tác tự giao → chi tiết đơn nêu gian hàng giao + hotline, và các đơn cùng lần đặt', async () => {
+    const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1' };
+    const siblings = [{ code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfiller: 'TUBU', fulfillerStorefront: null }];
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
+      storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: '0909000111' }) },
+      variation: { findMany: jest.fn() },
+    } as unknown as PrismaService;
+    const view = await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
+    expect(view.fulfilment).toEqual({ kind: 'MERCHANT', name: 'Xanh Shop', phone: '0909000111' });
+    expect(view.siblings).toEqual([{ code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfillerName: 'Tubu Tree' }]);
+    expect((prisma.order.findMany as jest.Mock).mock.calls[0][0].where).toEqual({
+      checkoutGroup: 'TUBU1',
+      userId: 'u1',
+      code: { not: 'TUBU2' },
+    });
+  });
+
+  it('D4: đơn Tubu không tách → nơi giao Tubu Tree, không truy vấn đơn cùng lần đặt', async () => {
+    const withItems = makeMediaService([{ ...baseOrder, items: [] }], []);
+    const view = await withItems.svc.detailView('u1', 'TUBU1');
+    expect(view.fulfilment).toEqual({ kind: 'TUBU', name: 'Tubu Tree', phone: null });
+    expect(view.siblings).toEqual([]);
+  });
 });
 
 describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-05)', () => {

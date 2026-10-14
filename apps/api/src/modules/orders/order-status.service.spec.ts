@@ -112,6 +112,49 @@ describe('OrderStatusService', () => {
     });
   });
 
+  it('D4: patch (hãng + mã vận đơn) ghi trong CÙNG câu lật trạng thái', async () => {
+    const order = makeOrder({ status: 'PACKED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'SHIPPING' });
+    const tx = mockTx();
+    const shippedAt = new Date('2026-10-14T03:00:00Z');
+
+    await service.setStatus('o1', 'SHIPPING' as never, {
+      actorType: 'MERCHANT',
+      patch: { shippingPartner: 'GHTK', shippingCode: 'S123', trackingLink: null, shippedAt },
+    });
+
+    expect(tx.order.updateMany.mock.calls[0][0].data).toEqual({
+      status: 'SHIPPING',
+      shippingPartner: 'GHTK',
+      shippingCode: 'S123',
+      trackingLink: null,
+      shippedAt,
+    });
+  });
+
+  it('D4: khách/admin/hệ thống huỷ đơn đối tác tự giao → báo chủ gian hàng; đối tác tự huỷ thì không báo lại chính họ', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest
+      .fn()
+      .mockResolvedValue({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
+    mockTx();
+
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', note: 'Khách đổi ý' });
+    expect(notifications.notify).toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      reason: 'Khách đổi ý',
+    });
+
+    notifications.notify.mockClear();
+    prisma.order.findFirst.mockResolvedValue(order);
+    mockTx();
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'MERCHANT', note: 'Hết hàng' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+  });
+
   it('UAT GOMDON-10: ghi chú hệ thống (webhook/cron/admin) KHÔNG nối vào Order.note — ô "Ghi chú" khách tự viết', async () => {
     const order = makeOrder({ status: 'SHIPPING', note: 'Giao giờ hành chính' });
     prisma.order.findFirst.mockResolvedValue(order);

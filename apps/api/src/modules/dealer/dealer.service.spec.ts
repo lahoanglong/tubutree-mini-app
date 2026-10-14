@@ -1,7 +1,7 @@
 import { DealerService } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
-import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
+import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -63,7 +63,7 @@ describe('DealerService.pricelist', () => {
     );
     await new DealerService(prisma, makeConfig()).pricelist('d1');
     const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
-    expect(findMany.mock.calls[0]![0].where).toEqual(SELLABLE_VARIATION_WHERE);
+    expect(findMany.mock.calls[0]![0].where).toEqual(SELLABLE_PANCAKE_VARIATION_WHERE);
   });
 });
 

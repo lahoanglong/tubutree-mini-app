@@ -100,6 +100,26 @@ function makeApproveTx(opts: {
 }
 
 describe('AdminService.reviewDealerApplication', () => {
+  // SELLER-12: người đăng ký nhận kết quả, kèm lý do khi bị từ chối.
+  it('duyệt → báo DEALER_APPLICATION_APPROVED kèm tên bậc; từ chối → báo kèm lý do', async () => {
+    (notifications.notify as jest.Mock).mockClear();
+    const { $transaction } = makeApproveTx({});
+    const prisma = makePrisma({
+      dealerApplication: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_APPROVED', expect.objectContaining({ tier: 'Bạc' }));
+
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', false, undefined, 'Thiếu ảnh CCCD');
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_REJECTED', expect.objectContaining({ reason: 'Thiếu ảnh CCCD' }));
+  });
+
   it('đơn không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(null) } });
     await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'x', true, 't1')).rejects.toBeInstanceOf(
@@ -1218,8 +1238,42 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
     expect(res.approvalStatus).toBe('APPROVED');
+  });
+
+  it('D4: duyệt sản phẩm "Tubu giao hộ" → chuyển biến thể Pancake trong cùng transaction, báo đối tác', async () => {
+    (notifications.notify as jest.Mock).mockClear();
+    const product = {
+      id: 'p1',
+      name: 'Mật ong',
+      approvalStatus: 'PENDING_REVIEW',
+      storefrontId: 'sf-a',
+      pancakeLinkCode: 'PK-1',
+      storefront: { ownerUserId: 'owner-1' },
+    };
+    const variationUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue(product),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'APPROVED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      variation: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'var-pk', pancakeId: 'PK-1', name: 'V', retailPrice: 1, salePrice: null, stock: 1, product: { id: 'shell', name: 'S' },
+        }),
+        updateMany: variationUpdateMany,
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(1),
+      },
+    });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+    await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
+    expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1' } });
+    expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_APPROVED', expect.objectContaining({ product_name: 'Mật ong' }));
   });
 
   it('reviewMerchantProduct từ chối REJECTED kèm lý do', async () => {
@@ -1231,6 +1285,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Chưa đủ chứng nhận');
     expect(res.approvalStatus).toBe('REJECTED');
     expect(res.rejectReason).toBe('Chưa đủ chứng nhận');
@@ -1249,6 +1304,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     await expect(mkAdmin(prisma).reviewMerchantProduct('admin-2', 'p1', false)).rejects.toBeInstanceOf(
       BadRequestException,
     );

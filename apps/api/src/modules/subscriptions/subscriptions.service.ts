@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { WalletLedgerService } from '../wallet/wallet-ledger.service';
 import { reserveVariationStock } from '../catalog/variation-stock';
+import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import {
   assertVariationsSellable,
   isProductDiscontinuedError,
@@ -162,10 +163,14 @@ export class SubscriptionsService {
     const firstRunAt = this.parseStartDate(dto.startDate);
     const variation = await this.prisma.variation.findUnique({
       where: { id: dto.variationId },
-      include: { product: { select: { name: true, isActive: true, approvalStatus: true } } },
+      include: { product: { select: { name: true, isActive: true, approvalStatus: true, fulfilment: true } } },
     });
     if (!variation) throw new BadRequestException('Sản phẩm không khả dụng.');
     if (!isSellableVariation(variation)) throw productDiscontinuedError(variation.product.name);
+    // Đơn định kỳ đẩy thẳng kho Tubu (Pancake); hàng đối tác tự giao không đăng ký định kỳ được (D4).
+    if (!isPancakeFulfilledLine({ pancakeId: variation.pancakeId, fulfilment: variation.product.fulfilment })) {
+      throw new BadRequestException('Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ giao định kỳ.');
+    }
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     if (!address || address.userId !== userId) throw new BadRequestException('Địa chỉ không hợp lệ.');
 
@@ -668,7 +673,9 @@ export class SubscriptionsService {
     // Trừ stock ATOMIC (mirror checkout.placeOrder/affiliate.processGroupOrder) TRONG cùng
     // transaction với tạo đơn — không đủ stock → throw, rollback; nextRunAt đã advance ở claim
     // nên không double-charge, chu kỳ sau sẽ thử lại.
-    await assertVariationsSellable(tx, [{ variationId: variation.id, productName: variation.product.name }]);
+    await assertVariationsSellable(tx, [{ variationId: variation.id, productName: variation.product.name }], {
+      pancakeOnly: true,
+    });
     const stockHit = await reserveVariationStock(tx, variation.id, sub.quantity);
     if (!stockHit) {
       throw new SubscriptionOutOfStockError(`Sản phẩm "${variation.product.name}" không đủ tồn kho cho đơn định kỳ.`);

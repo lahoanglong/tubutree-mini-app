@@ -20,8 +20,13 @@ import {
   UnpaidPrepaidTransitionError,
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { notifyMerchantOwner } from './merchant-order-notify';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
+
+export type OrderStatusPatch = Partial<
+  Pick<Order, 'shippingPartner' | 'shippingCode' | 'trackingLink' | 'shippedAt' | 'merchantAcceptedAt'>
+>;
 
 /** Người bấm nhận 400 ngay trên màn hình; chỉ webhook/cron (bị nuốt lỗi êm) mới cần để lại dấu. */
 function isHumanActor(actor: StatusActor | undefined): boolean {
@@ -95,6 +100,10 @@ export class OrderStatusService {
        * lên đơn mà người khác vừa đẩy sang trạng thái khác sau lúc quét — setStatus tự đọc lại nên không tự biết.
        */
       expectedStatus?: OrderStatus;
+      /** Cột ghi cùng câu lật trạng thái (đối tác gửi hàng: hãng + mã vận đơn), không có cửa sổ ghi nửa chừng. */
+      patch?: OrderStatusPatch;
+      /** Biến thêm cho mẫu tin `notifyEvent` (ví dụ lý do đối tác huỷ). */
+      notifyData?: Record<string, string>;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -136,6 +145,7 @@ export class OrderStatusService {
           status: targetStatus,
           // Mốc giao thật — hạn đổi/trả tính từ đây (không dùng updatedAt: ghi gì sau đó cũng đổi nó).
           ...(targetStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
+          ...(opts.patch ?? {}),
           // opts.note chỉ ghi vào order_status_history (dưới): Order.note là ghi chú khách tự viết lúc đặt và
           // hiện nguyên văn trên trang đơn của khách.
         },
@@ -211,11 +221,17 @@ export class OrderStatusService {
     }
     if (targetStatus === 'CANCELLED') {
       await this.enqueueGomdonCancel(order);
+      if (opts.actorType !== 'MERCHANT') {
+        await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
+          order_code: order.code,
+          reason: opts.note ?? 'Không có lý do',
+        });
+      }
     }
 
     // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin
     // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
-    const notifyData: Record<string, string> = { order_code: order.code };
+    const notifyData: Record<string, string> = { ...opts.notifyData, order_code: order.code };
     if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {
       notifyData.points_note = ` Bạn được cộng ${order.pointsEarned} Điểm Xanh.`;
     }
