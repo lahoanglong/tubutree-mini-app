@@ -43,6 +43,7 @@ function makeService(
     executeRaw?: jest.Mock;
     coinCreate?: jest.Mock;
     gomdonQueue?: { getJob: jest.Mock; add: jest.Mock };
+    orderStatus?: { precheckPancakeCancel: jest.Mock; afterPancakeCancel: jest.Mock };
     /**
      * Trạng thái dòng `orders` ĐANG nằm trong DB lúc tx huỷ chạy — lệch ảnh chụp mà detail() đọc
      * trước đó (admin xác nhận chuyển khoản / webhook lật PAID, admin chuyển giao vận…). Mặc định = ảnh chụp.
@@ -97,7 +98,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never, spies.orderStatus as never),
     updateMany,
     userUpdate,
     executeRaw,
@@ -245,6 +246,67 @@ describe('OrdersService.cancel', () => {
   it('chặn xem/hủy đơn của người khác', async () => {
     const { svc } = makeService({ ...baseOrder, userId: 'someone-else' });
     await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow();
+  });
+});
+
+describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2, BUYERWEB-5)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function gate(precheck: jest.Mock = jest.fn().mockResolvedValue({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' })) {
+    return { precheckPancakeCancel: precheck, afterPancakeCancel: jest.fn().mockResolvedValue(undefined) };
+  }
+
+  it('hỏi Pancake TRƯỚC khi lật trạng thái; Pancake huỷ xong → huỷ ở Tubu + ghi kết quả', async () => {
+    const orderStatus = gate();
+    const { svc, $transaction, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(orderStatus.precheckPancakeCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1', pancakeOrderId: 'pk-1' }), true);
+    expect(orderStatus.precheckPancakeCancel.mock.invocationCallOrder[0]).toBeLessThan($transaction.mock.invocationCallOrder[0]!);
+    expect(row.status).toBe('CANCELLED');
+    expect(orderStatus.afterPancakeCancel).toHaveBeenCalledWith('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
+  });
+
+  it('Pancake đã gửi hàng → từ chối "liên hệ CSKH", KHÔNG lật trạng thái, KHÔNG hoàn tiền', async () => {
+    const orderStatus = gate(jest.fn().mockRejectedValue(new BadRequestException('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH')));
+    const { svc, $transaction, row, userUpdate } = makeService(
+      { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { orderStatus },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH');
+    expect($transaction).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(row.status).toBe('CONFIRMED');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('không hỏi được Pancake (DEFERRED) → vẫn huỷ + hoàn tiền, chuyển quyết định cho job huỷ', async () => {
+    const deferred = { kind: 'DEFERRED', reason: 'timeout' };
+    const orderStatus = gate(jest.fn().mockResolvedValue(deferred));
+    const { svc, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(row.status).toBe('CANCELLED');
+    expect(orderStatus.afterPancakeCancel).toHaveBeenCalledWith('o1', deferred);
+  });
+
+  it('đơn đang đóng gói (PACKED, chưa bàn giao) → khách vẫn huỷ được', async () => {
+    const orderStatus = gate(jest.fn().mockResolvedValue({ kind: 'NONE' }));
+    const { svc, row } = makeService({ ...baseOrder, status: 'PACKED' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(row.status).toBe('CANCELLED');
+  });
+
+  it('đơn đại lý PACKED → giữ mốc cũ (đã tính doanh số thưởng), không huỷ', async () => {
+    const orderStatus = gate();
+    const { svc } = makeService({ ...baseOrder, type: 'DEALER', status: 'PACKED' }, { orderStatus });
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã vào quy trình giao');
+    expect(orderStatus.precheckPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('thua race huỷ (đã bị huỷ bởi request khác) → không ghi kết quả Pancake lần hai', async () => {
+    const orderStatus = gate();
+    const { svc } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus, updateMany: jest.fn().mockResolvedValue({ count: 0 }) });
+    await svc.cancel('u1', 'TUBU1');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
   });
 });
 

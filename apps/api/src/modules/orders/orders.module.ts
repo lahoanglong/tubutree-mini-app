@@ -10,9 +10,10 @@ import { CustomerRefundsService } from './customer-refunds.service';
 import { CustomerRefundsAdminController } from './customer-refunds-admin.controller';
 import { CartModule } from '../cart/cart.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
+import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hooks.module';
 
 @Module({
-  imports: [CartModule, FlashSaleModule],
+  imports: [CartModule, FlashSaleModule, PancakeSyncHooksModule],
   controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController],
   providers: [OrdersService, OrderReversalService, OrderStatusService, PurchasedItemsService, CustomerRefundsService, PendingPaymentExpiryCron],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
