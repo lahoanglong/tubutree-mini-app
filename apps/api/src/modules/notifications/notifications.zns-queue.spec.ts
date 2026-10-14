@@ -48,6 +48,12 @@ describe('NotificationsService: ZNS đi qua hàng đợi', () => {
 });
 
 describe('NotificationsService.deliverZns', () => {
+  it('R3-UI-11: mọi lượt gửi của một log mang cùng tracking_id = id log để Zalo đối soát được các lần gửi lại', async () => {
+    const { svc, sendTemplate } = setup();
+    await svc.deliverZns(JOB, false);
+    expect(sendTemplate).toHaveBeenCalledWith('0900000000', 'zt-1', {}, 'log-2');
+  });
+
   it('thành công → SENT, xoá lỗi của lượt trước', async () => {
     const { svc, update } = setup();
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');

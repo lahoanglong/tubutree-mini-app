@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, NetworkError } from './client-api';
-import { loginFailureMessage, oauthErrorMessage } from './login-errors';
+import { isTransientLoginFailure, loginFailureMessage, oauthErrorMessage } from './login-errors';
 
 describe('oauthErrorMessage — lỗi Zalo trả về qua ?error=', () => {
   it('khách bấm từ chối: nói rõ và chỉ cách làm tiếp', () => {
@@ -49,5 +49,22 @@ describe('loginFailureMessage — lỗi khi đổi mã lấy phiên', () => {
 
   it('429: nói rõ đợi rồi thử lại', () => {
     expect(loginFailureMessage(new ApiError('ThrottlerException: Too Many Requests', 429))).toContain('đợi ít phút');
+  });
+});
+
+describe('Zalo tạm bận khi đổi mã (R3-UI-8)', () => {
+  it('503 của API giữ nguyên câu "Zalo đang bận" và được coi là lỗi tạm', () => {
+    const e = new ApiError('Zalo đang bận, vui lòng thử lại sau ít phút.', 503);
+    expect(loginFailureMessage(e)).toBe('Zalo đang bận, vui lòng thử lại sau ít phút.');
+    expect(isTransientLoginFailure(e)).toBe(true);
+  });
+
+  it('mất mạng, 429, 5xx là lỗi tạm; mã sai (401) và lỗi khác thì không', () => {
+    expect(isTransientLoginFailure(new NetworkError(false))).toBe(true);
+    expect(isTransientLoginFailure(new ApiError('x', 429))).toBe(true);
+    expect(isTransientLoginFailure(new ApiError('x', 502))).toBe(true);
+    expect(isTransientLoginFailure(new ApiError('Mã đăng nhập Zalo không hợp lệ.', 401))).toBe(false);
+    expect(isTransientLoginFailure(new Error('x'))).toBe(false);
+    expect(isTransientLoginFailure(null)).toBe(false);
   });
 });

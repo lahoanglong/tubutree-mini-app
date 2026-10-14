@@ -174,6 +174,16 @@ describe('/dang-nhap/callback', () => {
     expect(container.textContent).not.toContain('Failed to fetch');
   });
 
+  it('Zalo tạm bận (503): báo bận, nút chính là "Thử lại" dẫn về đăng nhập', async () => {
+    mocks.search = new URLSearchParams({ code: 'abc', state: 's' });
+    mocks.auth.handleCallback.mockRejectedValue(new ApiError('Zalo đang bận, vui lòng thử lại sau ít phút.', 503));
+    const { container } = mount(<CallbackPage />);
+    await flush();
+    expect(container.textContent).toContain('Zalo đang bận, vui lòng thử lại sau ít phút.');
+    expect(byText(container, 'a', 'Thử lại')?.getAttribute('href')).toBe('/dang-nhap');
+    expect(byText(container, 'a', 'Đăng nhập lại')).toBeNull();
+  });
+
   it('thiếu mã: báo thiếu mã bằng câu dễ hiểu', async () => {
     const { container } = mount(<CallbackPage />);
     await flush();

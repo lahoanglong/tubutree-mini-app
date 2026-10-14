@@ -7,14 +7,12 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
+import { decodeServedImage } from '../../common/served-image';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
 const errCode = (err: unknown): string | undefined =>
   typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
-
-/** Ảnh raster base64 duy nhất được phục vụ qua endpoint ảnh (đã chặn SVG/HTML từ lúc nhận ở IsUploadedImage). */
-const SERVED_DATA_URL_RE = /^data:(image\/(?:png|jpe?g|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
 
 /**
  * Ảnh đánh giá trong danh sách công khai. Ảnh base64 (khi chưa cấu hình Cloudinary) nặng tới ~700 nghìn ký tự/ảnh nên
@@ -124,7 +122,7 @@ export class ReviewsService {
         const review = existing
           ? await this.updateOwn(userId, product, dto)
           : await this.createFirst(userId, product, delivered.id, dto);
-        return { ...review, updated: !!existing };
+        return { ...review, images: review.images.map((img, i) => reviewImageRef(review.id, i, img)), updated: !!existing };
       } catch (err) {
         const lostRace = errCode(err) === (existing ? 'P2025' : 'P2002');
         if (!lostRace) throw err;
@@ -286,9 +284,9 @@ export class ReviewsService {
   async getImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
     const review = await this.prisma.review.findUnique({ where: { id: reviewId }, select: { isVisible: true, images: true } });
     const image = review?.isVisible && Number.isInteger(index) && index >= 0 ? review.images[index] : undefined;
-    const match = image ? SERVED_DATA_URL_RE.exec(image) : null;
-    if (!match) throw new NotFoundException('Không tìm thấy ảnh.');
-    return { mime: match[1]!, data: Buffer.from(match[2]!, 'base64') };
+    const decoded = decodeServedImage(image);
+    if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
+    return decoded;
   }
 
   async remove(userId: string, role: string, id: string) {

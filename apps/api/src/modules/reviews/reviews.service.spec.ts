@@ -30,8 +30,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     order: { findFirst: jest.fn().mockResolvedValue({ id: 'o1' }), count: jest.fn().mockResolvedValue(1) }, // có đơn DELIVERED
     review: {
       findFirst: jest.fn().mockResolvedValue(null), // chưa review
-      create: jest.fn().mockResolvedValue({ id: 'r1' }),
-      update: jest.fn().mockResolvedValue({ id: 'old', rating: 3 }),
+      create: jest.fn().mockResolvedValue({ id: 'r1', images: [] }),
+      update: jest.fn().mockResolvedValue({ id: 'old', rating: 3, images: [] }),
       aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.5 }, _count: 2 }),
     },
     pointsTransaction: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
@@ -73,7 +73,7 @@ describe('ReviewsService.create', () => {
         review: {
           findFirst: jest.fn().mockResolvedValue(existing),
           create: jest.fn(),
-          update: jest.fn().mockResolvedValue({ ...existing, rating: 2, comment: 'đổi ý' }),
+          update: jest.fn().mockResolvedValue({ ...existing, rating: 2, comment: 'đổi ý', images: [] }),
           aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 2 }, _count: 1 }),
         },
       });
@@ -160,7 +160,7 @@ describe('ReviewsService.create', () => {
       const prisma = makePrisma({
         review: {
           findFirst: jest.fn().mockResolvedValueOnce(existing).mockResolvedValue(null),
-          create: jest.fn().mockResolvedValue({ id: 'r-new' }),
+          create: jest.fn().mockResolvedValue({ id: 'r-new', images: [] }),
           update: jest.fn().mockRejectedValue(gone),
           aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
         },
@@ -347,7 +347,7 @@ describe('ReviewsService.create', () => {
     });
 
     it('sửa đánh giá đã có (không thưởng) → không đọc cấu hình hạn, không ghi dòng điểm', async () => {
-      const existing = { id: 'old', userId: 'u1', productId: 'p1', orderId: 'o0', rating: 5, pointsEarned: 15, isVisible: true };
+      const existing = { id: 'old', userId: 'u1', productId: 'p1', orderId: 'o0', rating: 5, pointsEarned: 15, isVisible: true, images: [] };
       const prisma = makePrisma({
         review: {
           findFirst: jest.fn().mockResolvedValue(existing),
@@ -361,7 +361,7 @@ describe('ReviewsService.create', () => {
     });
 
     it('thua race P2002 ở lần tạo rồi chuyển sang sửa: không ghi dòng điểm nào', async () => {
-      const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5 };
+      const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5, images: [] };
       const prisma = makePrisma({
         review: {
           findFirst: jest.fn().mockResolvedValueOnce(null).mockResolvedValue(created),
@@ -376,7 +376,7 @@ describe('ReviewsService.create', () => {
   });
 
   it('race P2002 khi tạo (request kia tạo trước) → không lỗi, chuyển sang sửa đánh giá vừa có, không thưởng lần hai', async () => {
-    const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5 };
+    const created = { id: 'r-first', userId: 'u1', productId: 'p1', pointsEarned: 5, images: [] };
     const prisma = makePrisma({
       review: {
         // lần đọc đầu: chưa có; sau khi tạo đồng thời thua cuộc: đã có
@@ -413,7 +413,7 @@ describe('ReviewsService.create', () => {
   it('tạo xong → ghi engagement_action qua record(tx,...) với ĐÚNG tx (khác instance prisma top-level)', async () => {
     const prisma = makePrisma();
     const tx = {
-      review: { create: jest.fn().mockResolvedValue({ id: 'r1' }) },
+      review: { create: jest.fn().mockResolvedValue({ id: 'r1', images: [] }) },
       pointsTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
       user: { update: jest.fn().mockResolvedValue({}) },
       product: { update: jest.fn().mockResolvedValue({}) },
@@ -480,6 +480,40 @@ describe('ReviewsService.listByProduct — ảnh base64 không nhúng trong JSON
     const list = async (img: string) =>
       (await new ReviewsService(makePrisma({ review: { findMany: jest.fn().mockResolvedValue([row({ images: [img] })]) } }), analytics, loyalty).listByProduct('tinh-dau')).items[0]!.images[0];
     expect(await list(PNG)).not.toBe(await list('data:image/png;base64,AAAA'));
+  });
+});
+
+// R3-UI-10: phản hồi tạo/sửa đánh giá không trả lại nguyên ảnh base64 vừa gửi, cùng cách trả của danh sách.
+describe('ReviewsService.create — phản hồi không nhúng ảnh base64 (R3-UI-10)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  const HTTPS = 'https://res.cloudinary.com/x/a.jpg';
+
+  it('tạo lần đầu: ảnh data URL thành đường dẫn tải ảnh, ảnh https giữ nguyên, phản hồi không chứa base64', async () => {
+    const prisma = makePrisma({
+      review: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'r9', rating: 5, images: [PNG, HTTPS] }),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 5 }, _count: 1 }),
+      },
+    });
+    const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, images: [PNG, HTTPS] } as never);
+    expect(out.images[0]).toMatch(/^\/reviews\/r9\/images\/0\?v=[0-9a-f]{10}$/);
+    expect(out.images[1]).toBe(HTTPS);
+    expect(JSON.stringify(out)).not.toContain('base64');
+  });
+
+  it('sửa đánh giá cũ: cũng trả đường dẫn thay cho base64', async () => {
+    const prisma = makePrisma({
+      review: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'old', userId: 'u1', productId: 'p1', pointsEarned: 5 }),
+        update: jest.fn().mockResolvedValue({ id: 'old', rating: 4, images: [PNG] }),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 }, _count: 1 }),
+      },
+    });
+    const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { ...dto, images: [PNG] } as never);
+    expect(out).toMatchObject({ id: 'old', updated: true });
+    expect(out.images[0]).toMatch(/^\/reviews\/old\/images\/0\?v=[0-9a-f]{10}$/);
+    expect(JSON.stringify(out)).not.toContain('base64');
   });
 });
 

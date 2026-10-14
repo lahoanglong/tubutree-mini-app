@@ -1,7 +1,7 @@
 import type { PrismaService } from '../../prisma/prisma.service';
 import { PassThrough } from 'node:stream';
 import type { Response } from 'express';
-import { csvCell, csvText, orderCsvChunks, streamCsv, userCsvChunks, EXPORT_BATCH } from './admin-export';
+import { csvCell, csvText, orderCsvChunks, ORDER_CSV_HEADERS, streamCsv, userCsvChunks, EXPORT_BATCH } from './admin-export';
 
 /** ADMINOPS-12: file CSV cho kế toán phải có MỌI đơn khớp bộ lọc, không chỉ 20 đơn của trang đang xem. */
 function fakeOrders(n: number) {
@@ -67,6 +67,34 @@ describe('orderCsvChunks', () => {
     expect(csv).toContain(`"'=HYPERLINK(""http://x"")"`);
     expect(csv).toContain('"Khách ""Một"""');
     expect(csv).toContain('"A, B"');
+  });
+});
+
+// R3-UI-3: đơn COD đã giao giữ paymentStatus UNPAID (chốt hoàn tiền một lần) nhưng bưu tá đã thu tiền: CSV phải ghi như giao diện
+// ("Đã thu COD"), không ghi "Chưa thanh toán" làm kế toán đòi lại tiền đã thu.
+describe('cột Trạng thái TT trong CSV đơn hàng (R3-UI-3)', () => {
+  const PAYMENT_STATUS_COL = ORDER_CSV_HEADERS.indexOf('Trạng thái TT');
+  async function statusCell(over: Record<string, unknown>) {
+    const [o] = fakeOrders(1);
+    const { prisma } = cursorPrisma([{ ...o!, ...over }], 'order');
+    const line = (await collect(orderCsvChunks(prisma, {}))).split('\r\n')[1]!;
+    return line.split(',')[PAYMENT_STATUS_COL + 1];
+  }
+
+  // Ô người nhận "A, B" của đơn mẫu có dấu phẩy trong nháy nên lệch một cột khi tách bằng split(',').
+  it('COD đã giao còn UNPAID → "Đã thu COD"', async () => {
+    expect(await statusCell({ paymentMethod: 'COD', status: 'DELIVERED', paymentStatus: 'UNPAID' })).toBe('Đã thu COD');
+  });
+
+  it.each([
+    ['COD chưa giao', { paymentMethod: 'COD', status: 'SHIPPING', paymentStatus: 'UNPAID' }, 'Chưa thanh toán'],
+    ['COD đã giao nhưng đã lật hoàn tiền', { paymentMethod: 'COD', status: 'DELIVERED', paymentStatus: 'REFUNDED' }, 'Đã hoàn tiền'],
+    ['chuyển khoản chưa trả', { paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' }, 'Chưa thanh toán'],
+    ['chuyển khoản đã giao mà chưa trả (không phải COD)', { paymentMethod: 'BANK_TRANSFER', status: 'DELIVERED', paymentStatus: 'UNPAID' }, 'Chưa thanh toán'],
+    ['đã thanh toán', { paymentMethod: 'WALLET', status: 'DELIVERED', paymentStatus: 'PAID' }, 'Đã thanh toán'],
+    ['thanh toán lỗi', { paymentMethod: 'ZALOPAY', status: 'CANCELLED', paymentStatus: 'FAILED' }, 'Thanh toán lỗi'],
+  ])('%s → %s', async (_name, over, expected) => {
+    expect(await statusCell(over)).toBe(expected);
   });
 });
 

@@ -63,6 +63,16 @@ const PAYMENT_STATUS: Record<string, string> = {
   FAILED: 'Thanh toán lỗi',
 };
 
+/**
+ * Trạng thái thanh toán ghi vào CSV, cùng luật với giao diện admin (web/src/lib/order-view.ts, codCollected): đơn COD đã giao
+ * giữ paymentStatus = UNPAID vì order-reversal dùng nó làm chốt hoàn tiền một lần, nhưng bưu tá đã thu tiền mặt nên ghi
+ * "Đã thu COD" chứ không phải "Chưa thanh toán".
+ */
+export function exportPaymentStatus(o: { status: string; paymentMethod: string; paymentStatus: string }): string {
+  if (o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID') return 'Đã thu COD';
+  return PAYMENT_STATUS[o.paymentStatus] ?? o.paymentStatus;
+}
+
 export const ORDER_CSV_HEADERS = [
   'Mã đơn',
   'Ngày đặt',
@@ -131,7 +141,7 @@ function orderRow(o: ExportOrder): string {
     o.type === 'DEALER' ? 'Đại lý' : 'Bán lẻ',
     o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
     PAYMENT_METHOD[o.paymentMethod] ?? o.paymentMethod,
-    PAYMENT_STATUS[o.paymentStatus] ?? o.paymentStatus,
+    exportPaymentStatus(o),
     ORDER_STATUS[o.status] ?? o.status,
     o.subtotal,
     o.discount,

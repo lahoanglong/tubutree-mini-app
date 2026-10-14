@@ -2336,7 +2336,13 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             </Field>
           </div>
           <Field label="Bắt đầu lúc (sửa)">
-            <input type="datetime-local" value={draft.startAt} onChange={(e) => setDraft({ ...draft, startAt: e.target.value })} className={field} />
+            <input
+              type="datetime-local"
+              value={draft.startAt}
+              onChange={(e) => setDraft({ ...draft, startAt: e.target.value })}
+              disabled={!notStarted}
+              className={`${field} disabled:cursor-not-allowed disabled:opacity-60`}
+            />
           </Field>
           <Field label="Kết thúc lúc (sửa)">
             <input type="datetime-local" value={draft.endAt} onChange={(e) => setDraft({ ...draft, endAt: e.target.value })} className={field} />
@@ -2351,6 +2357,11 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           <button onClick={() => setEditing(false)} className={BTN_SECONDARY}>
             Huỷ sửa
           </button>
+          {!notStarted && (
+            <p className="basis-full text-xs text-stone-600">
+              Đợt đã bắt đầu: không đổi được giờ bắt đầu (khách đã thấy giá). Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.
+            </p>
+          )}
         </div>
       )}
       {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}

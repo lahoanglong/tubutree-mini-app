@@ -267,6 +267,7 @@ describe('OrderReturnsService.listForAdmin — kèm đơn, khách, tên dòng tr
       },
       order: { findMany: orderFindMany },
       user: { findMany: userFindMany },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
     } as unknown as PrismaService;
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
@@ -300,6 +301,7 @@ describe('OrderReturnsService.listForAdmin — khoản hoàn thật của từng
       order: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
       orderCustomerRefund: { findMany: refundFindMany },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
     } as unknown as PrismaService;
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
@@ -417,7 +419,10 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
   it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {
     const prisma = {
       storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1' }) },
-      $queryRaw: jest.fn().mockResolvedValue([{ id: 'r1' }]),
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValueOnce([{ id: 'r1' }])
+        .mockResolvedValueOnce([{ id: 'r1', idx: 0, hash: null, url: 'https://cdn.test/r1-a.jpg' }]),
       returnRequest: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -431,7 +436,6 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
             reason: 'Hỏng',
             fullReturn: false,
             shopFault: true,
-            images: ['https://cdn.test/r1-a.jpg'],
             bankName: 'VCB',
             bankAccountNo: '0123456789',
             bankAccountName: 'NGUYEN VAN A',

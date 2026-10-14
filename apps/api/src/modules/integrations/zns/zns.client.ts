@@ -7,6 +7,12 @@ import { maskPhone } from '../../../common/mask-pii';
 import { interpretZnsBody, interpretZnsException, znsFailure, type ZnsSendResult } from './zns-result';
 
 /**
+ * Hạn chờ phản hồi của một lần gọi ZNS. Gọi chạy trong worker nền (không nằm trên đường đặt hàng/thanh toán) nên chờ lâu
+ * không làm khách chậm; hết hạn mà Zalo vẫn xử lý thì lần gửi lại làm khách nhận hai tin xác nhận và tốn phí hai lần.
+ */
+export const ZNS_REQUEST_TIMEOUT_MS = 25_000;
+
+/**
  * Client ZNS (Zalo Notification Service) — Build Spec §11.
  * Lấy OA access token ĐỘNG từ ZaloOaTokenService (token được cron làm mới ~mỗi 6h, lưu DB)
  * → KHÔNG chết sau ~25h như token tĩnh trong env. Chưa cấu hình → thất bại vĩnh viễn (caller vẫn có INAPP).
@@ -28,6 +34,7 @@ export class ZnsClient {
     phone: string,
     templateId: string,
     templateData: Record<string, string>,
+    trackingId?: string,
   ): Promise<ZnsSendResult> {
     const accessToken = await this.tokens.getAccessToken();
     if (!accessToken || !templateId) {
@@ -37,8 +44,8 @@ export class ZnsClient {
     try {
       const res = await axios.post(
         `${this.baseUrl}/message/template`,
-        { phone, template_id: templateId, template_data: templateData },
-        { headers: { access_token: accessToken }, timeout: 10000 },
+        { phone, template_id: templateId, template_data: templateData, ...(trackingId ? { tracking_id: trackingId } : {}) },
+        { headers: { access_token: accessToken }, timeout: ZNS_REQUEST_TIMEOUT_MS },
       );
       const result = interpretZnsBody(res?.data);
       if (!result.ok) this.logger.error(`Gửi ZNS thất bại: ${result.reason} (mã ${result.code ?? 'n/a'})`);

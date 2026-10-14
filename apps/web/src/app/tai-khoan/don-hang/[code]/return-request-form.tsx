@@ -1,9 +1,9 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { requestReturn, type OrderDetailDTO, type ReturnRequestDTO } from '@/lib/shop-client';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { estimateReturn, formatVnd, requestReturn, type OrderDetailDTO, type ReturnRequestDTO } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import {
@@ -68,6 +68,22 @@ export function ReturnRequestForm({
   const showsMoney = o.total > 0 && o.paymentMethod !== 'XU';
   const formError = returnFormError({ lines, reasonCode, reason, refundMethod: 'WALLET', bank });
   const bankError = showsMoney && bankAllowed && method === 'BANK' ? bankDetailsError(bank) : null;
+
+  // Cùng API và cùng chữ với Mini App: số hoàn theo dòng/số lượng đang chọn, chia theo tỉ lệ sau giảm giá và điểm (D3).
+  // Lỗi hay chưa tính được thì bỏ qua số, không chặn việc gửi yêu cầu.
+  const picked = useMemo(
+    () => lines.filter((l) => l.selected && l.quantity > 0).map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
+    [lines],
+  );
+  const estimateQ = useQuery({
+    queryKey: ['return-estimate', o.code, picked, reasonCode],
+    queryFn: () => estimateReturn(o.code, { items: picked, reasonCode: reasonCode ?? undefined }),
+    enabled: showsMoney && picked.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    retry: 0,
+  });
+  const estimated = picked.length > 0 && !estimateQ.isError && estimateQ.data?.moneyRefundable ? estimateQ.data : null;
 
   const submit = useMutation({
     mutationFn: () =>
@@ -219,6 +235,20 @@ export function ReturnRequestForm({
             Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.
           </p>
         ))}
+      {estimated && (
+        <div role="status" aria-live="polite" data-testid="return-estimate" className="rounded-control bg-stone-50 p-3">
+          <p className="text-sm font-semibold text-stone-900">{`Dự kiến hoàn ${formatVnd(estimated.refund)}`}</p>
+          <p className="mt-0.5 text-xs text-stone-600">
+            {[
+              estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
+              estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
+              'Tubu xác nhận số cuối cùng khi duyệt',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+      )}
       <p className="text-xs text-stone-600">
         Số tiền hoàn = giá trị sản phẩm trả sau khi trừ phần giảm giá và điểm đã dùng tương ứng. Phí
         ship chỉ hoàn khi trả cả đơn hoặc lỗi do Tubu.

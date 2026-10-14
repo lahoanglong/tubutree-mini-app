@@ -22,12 +22,49 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
+import { decodeServedImage } from '../../common/served-image';
 
 /** Bộ lọc admin "Chờ nhận hàng về": đã duyệt, chưa bấm "Đã nhận hàng về". */
 export const RETURNS_TO_RECEIVE = 'TO_RECEIVE';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 type RequestWithItems = ReturnRequest & { items: ReturnRequestItem[] };
+/** Yêu cầu trả hàng đã bỏ cột images (ảnh base64 nặng) — danh sách chỉ mang đường dẫn ảnh, xem `imageRefsFor`. */
+type ReturnRow = Omit<ReturnRequest, 'images'> & { items: ReturnRequestItem[]; images?: string[] };
+
+/**
+ * Mọi cột của ReturnRequest trừ `images`, kèm dòng trả. Danh sách (khách, admin, gian hàng) và phản hồi tạo yêu cầu dùng
+ * select này thay cho include: ảnh minh chứng base64 tới 1,5 triệu ký tự/ảnh, một trang admin 100 yêu cầu từng nặng hàng
+ * chục MB. Một spec đối chiếu với Prisma.ReturnRequestScalarFieldEnum để cột mới không bị bỏ sót.
+ */
+export const RETURN_LIST_SELECT = {
+  id: true,
+  orderId: true,
+  userId: true,
+  reason: true,
+  reasonCode: true,
+  status: true,
+  refundMethod: true,
+  bankName: true,
+  bankAccountNo: true,
+  bankAccountName: true,
+  shopFault: true,
+  fullReturn: true,
+  refundAmount: true,
+  shippingRefund: true,
+  pointsRefunded: true,
+  convertedPointsRefunded: true,
+  pointsReversed: true,
+  commissionReversed: true,
+  adminNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  receivedAt: true,
+  receivedBy: true,
+  createdAt: true,
+  items: true,
+} satisfies Prisma.ReturnRequestSelect;
 
 const PANCAKE_ALERT_TEMPLATE = 'OPS_PANCAKE_ALERT';
 
@@ -153,7 +190,8 @@ export class OrderReturnsService {
     }
     const destination = this.destinationFor(order, dto);
 
-    let req: RequestWithItems;
+    const images = dto.images ?? [];
+    let req: Omit<ReturnRow, 'images'>;
     try {
       req = await this.prisma.returnRequest.create({
         data: {
@@ -161,7 +199,7 @@ export class OrderReturnsService {
           userId,
           reason,
           reasonCode,
-          images: dto.images ?? [],
+          images,
           refundMethod: destination.method,
           ...(destination.method === 'BANK'
             ? {
@@ -172,7 +210,7 @@ export class OrderReturnsService {
             : {}),
           items: { create: [...lines].map(([orderItemId, quantity]) => ({ orderItemId, quantity })) },
         },
-        include: { items: true },
+        select: RETURN_LIST_SELECT,
       });
     } catch (err) {
       // Guard thật là unique index partial (orderId WHERE status='REQUESTED'): hai lần gửi song song chỉ một lần tạo.
@@ -188,7 +226,7 @@ export class OrderReturnsService {
       items: [...lines].map(([id, qty]) => `${itemName.get(id) ?? ''} ×${qty}`).join(', '),
       reason,
     });
-    return req;
+    return { ...req, images: images.map((img, i) => returnImageRef(req.id, i, img)) };
   }
 
   /**
@@ -215,13 +253,15 @@ export class OrderReturnsService {
     };
   }
 
-  listMine(userId: string) {
-    return this.prisma.returnRequest.findMany({
+  async listMine(userId: string) {
+    const rows = await this.prisma.returnRequest.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      include: { items: true },
+      select: RETURN_LIST_SELECT,
     });
+    const refs = await this.imageRefsFor(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...r, images: refs.get(r.id) ?? [] }));
   }
 
   // ── Admin ──
@@ -234,7 +274,7 @@ export class OrderReturnsService {
         // Hàng chờ duyệt (REQUESTED) web gửi order=asc — yêu cầu cũ nhất lên đầu, không bị chìm.
         orderBy: { createdAt: order ?? (status === RETURNS_TO_RECEIVE ? 'asc' : 'desc') },
         ...skipTake(page, limit),
-        include: { items: true },
+        select: RETURN_LIST_SELECT,
       }),
       this.prisma.returnRequest.count({ where }),
     ]);
@@ -414,7 +454,8 @@ export class OrderReturnsService {
        ORDER BY (rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL) DESC, rr."createdAt" DESC
        LIMIT 50`;
     if (ids.length === 0) return [];
-    const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } }, include: { items: true } });
+    const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } }, select: RETURN_LIST_SELECT });
+    const refs = await this.imageRefsFor(rows.map((r) => r.id));
     const orders = await this.prisma.order.findMany({
       where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
       select: { id: true, code: true, items: { select: { id: true, productName: true, variationName: true, quantity: true } } },
@@ -445,7 +486,7 @@ export class OrderReturnsService {
           shopFault: r.shopFault,
           orderCode: order?.code ?? '',
           lines,
-          images: r.images,
+          images: refs.get(r.id) ?? [],
         };
       });
   }
@@ -612,12 +653,12 @@ export class OrderReturnsService {
    * Kèm đơn (cả dòng hàng), khách và tên sản phẩm từng dòng trả: admin cần thấy trả món nào, bao nhiêu trước khi duyệt.
    * ReturnRequest không khai quan hệ tới Order/User nên nạp theo lô rồi ghép (hai truy vấn cho cả trang).
    */
-  private async withContext<T extends RequestWithItems>(input: T): Promise<unknown>;
-  private async withContext<T extends RequestWithItems>(input: T[]): Promise<unknown[]>;
-  private async withContext<T extends RequestWithItems>(input: T | T[]): Promise<unknown> {
+  private async withContext<T extends ReturnRow>(input: T): Promise<unknown>;
+  private async withContext<T extends ReturnRow>(input: T[]): Promise<unknown[]>;
+  private async withContext<T extends ReturnRow>(input: T | T[]): Promise<unknown> {
     const rows = Array.isArray(input) ? input : [input];
     if (rows.length === 0) return [];
-    const [orders, users, refunds] = await Promise.all([
+    const [orders, users, refunds, imageRefs] = await Promise.all([
       this.prisma.order.findMany({
         where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
         select: {
@@ -648,6 +689,7 @@ export class OrderReturnsService {
         where: { kind: 'RETURN', refKey: { in: rows.map((r) => r.id) } },
         select: { refKey: true, method: true, status: true, amount: true, bankName: true, bankAccountNo: true, completedAt: true },
       }) ?? Promise.resolve([])),
+      this.imageRefsFor(rows.map((r) => r.id)),
     ]);
     const refundMap = new Map(refunds.map((f) => [f.refKey, f]));
     const orderMap = new Map(orders.map((o) => [o.id, o]));
@@ -657,6 +699,7 @@ export class OrderReturnsService {
       const itemById = new Map((order?.items ?? []).map((i) => [i.id, i]));
       return {
         ...r,
+        images: imageRefs.get(r.id) ?? [],
         reasonLabel: r.reasonCode ? (RETURN_REASONS[r.reasonCode as ReturnReasonCode]?.label ?? r.reasonCode) : null,
         items: r.items.map((it) => ({
           ...it,
@@ -670,6 +713,42 @@ export class OrderReturnsService {
       };
     });
     return Array.isArray(input) ? decorated : decorated[0];
+  }
+
+  /**
+   * Đường dẫn ảnh minh chứng của từng yêu cầu (đích của `returnImageRef`). Mã phiên bản (md5) và URL https tính ngay trong Postgres
+   * nên ảnh base64 không rời DB: danh sách không phải đọc cột images về Node.
+   */
+  private async imageRefsFor(ids: string[]): Promise<Map<string, string[]>> {
+    const refs = new Map<string, string[]>();
+    if (ids.length === 0) return refs;
+    const rows = await this.prisma.$queryRaw<{ id: string; idx: number; hash: string | null; url: string | null }[]>`
+      SELECT rr."id", (t."ord" - 1)::int AS "idx",
+             CASE WHEN left(t."img", 5) = 'data:' THEN md5(rr."id" || ':' || (t."ord" - 1)::text || ':' || t."img") END AS "hash",
+             CASE WHEN left(t."img", 5) <> 'data:' THEN t."img" END AS "url"
+        FROM "return_requests" rr
+        CROSS JOIN LATERAL unnest(rr."images") WITH ORDINALITY AS t("img", "ord")
+       WHERE rr."id" IN (${Prisma.join(ids)})
+       ORDER BY rr."id", t."ord"`;
+    for (const r of rows) {
+      const list = refs.get(r.id) ?? [];
+      list.push(r.hash ? `/returns/${r.id}/images/${r.idx}?v=${r.hash}` : (r.url ?? ''));
+      refs.set(r.id, list);
+    }
+    return refs;
+  }
+
+  /** Byte của ảnh base64 thứ `index` (đích của `returnImageRef`); `version` phải khớp mã của ảnh đang lưu. */
+  async getImage(id: string, index: number, version: unknown): Promise<{ mime: string; data: Buffer }> {
+    const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
+    if (!Number.isInteger(index) || index < 0 || index >= MAX_RETURN_IMAGES) throw notFound();
+    const rows = await this.prisma.$queryRaw<{ img: string | null }[]>`
+      SELECT "images"[${index + 1}::int] AS "img" FROM "return_requests" WHERE "id" = ${id}`;
+    const image = rows[0]?.img;
+    if (!image || !matchesReturnImageVersion(version, id, index, image)) throw notFound();
+    const decoded = decodeServedImage(image);
+    if (!decoded) throw notFound();
+    return decoded;
   }
 
   /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */

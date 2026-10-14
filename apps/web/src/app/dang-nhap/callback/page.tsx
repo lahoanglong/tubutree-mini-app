@@ -4,13 +4,14 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { loginFailureMessage, oauthErrorMessage } from '@/lib/login-errors';
+import { isTransientLoginFailure, loginFailureMessage, oauthErrorMessage } from '@/lib/login-errors';
 import { loginHref, takeReturnTo } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 
 interface Failure {
   message: string;
   retryHref: string;
+  transient: boolean;
 }
 
 function CallbackInner() {
@@ -24,9 +25,9 @@ function CallbackInner() {
     if (ran.current) return;
     ran.current = true;
     // Thất bại thì giữ nơi cần quay lại để "Đăng nhập lại" đưa khách về đúng chỗ sau lần thử kế tiếp.
-    const fail = (message: string, detail?: unknown) => {
+    const fail = (message: string, detail?: unknown, transient = false) => {
       if (detail !== undefined) console.error('[dang-nhap] đăng nhập thất bại', detail);
-      setFailure({ message, retryHref: loginHref(takeReturnTo()) });
+      setFailure({ message, retryHref: loginHref(takeReturnTo()), transient });
     };
     const oauthError = params.get('error');
     if (oauthError) {
@@ -40,7 +41,7 @@ function CallbackInner() {
     }
     handleCallback(code, params.get('state'))
       .then(() => router.replace(takeReturnTo() ?? '/'))
-      .catch((e) => fail(loginFailureMessage(e), e));
+      .catch((e) => fail(loginFailureMessage(e), e, isTransientLoginFailure(e)));
   }, [params, handleCallback, router]);
 
   return (
@@ -56,7 +57,7 @@ function CallbackInner() {
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <a href={failure.retryHref} className={ui.btnPrimary}>
-              Đăng nhập lại
+              {failure.transient ? 'Thử lại' : 'Đăng nhập lại'}
             </a>
             <a href="/" className={ui.btnSecondary}>
               Về trang chủ
