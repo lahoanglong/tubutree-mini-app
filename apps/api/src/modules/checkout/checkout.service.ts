@@ -36,6 +36,7 @@ import {
   PAYMENT_METHOD_NOT_ALLOWED,
   paymentMethodBlockReason,
   TUBU_FULFILLER_NAME,
+  unavailableLineMessage,
   type GroupAmounts,
   type LineFulfiller,
 } from './checkout-split';
@@ -831,10 +832,8 @@ export class CheckoutService {
     // Một kiện cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giảm giá tính trên cả lần đặt ở trên
     // rồi phân bổ về từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng Tubu = một kiện = đúng số tiền như trước.
     const unavailable = cart.items.find((l) => l.fulfiller.kind === 'UNAVAILABLE');
-    if (unavailable) {
-      throw new BadRequestException(
-        `Sản phẩm "${unavailable.productName}" đang được cập nhật thông tin giao hàng, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`,
-      );
+    if (unavailable && unavailable.fulfiller.kind === 'UNAVAILABLE') {
+      throw new BadRequestException(unavailableLineMessage(unavailable.productName, unavailable.fulfiller));
     }
     const groups = groupByFulfiller(cart.items);
     const amounts = allocateGroupAmounts(groups, {

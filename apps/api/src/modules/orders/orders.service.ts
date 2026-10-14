@@ -50,7 +50,36 @@ export interface SiblingOrderView {
   fulfillerName: string;
 }
 
-export type OrderView = Omit<OrderWithItems, 'items'> & {
+/**
+ * Cột của Order chỉ dùng nội bộ: phí sàn đối tác, hoa hồng CTV, khoá khách lên-hộ, trạng thái đẩy/đồng bộ Pancake và Gomdon. Không
+ * trả cho khách (R2-MERCHANT-14).
+ */
+const BUYER_HIDDEN_ORDER_FIELDS = [
+  'merchantCommissionPct',
+  'commission',
+  'endCustomerKey',
+  'merchantSlaNotifiedAt',
+  'pancakeAttention',
+  'pancakeAttentionAt',
+  'pancakePushStatus',
+  'pancakeSyncError',
+  'pancakePushAttempts',
+  'pancakeLastAttemptAt',
+  'pancakePushClaimedAt',
+  'pancakePaymentSynced',
+  'pancakeCancelStatus',
+  'gomdonAttempt',
+  'gomdonCancelRetrySince',
+] as const;
+type BuyerHiddenOrderField = (typeof BUYER_HIDDEN_ORDER_FIELDS)[number];
+
+function forBuyer<T extends object>(order: T): Omit<T, BuyerHiddenOrderField> {
+  const out = { ...order } as Record<string, unknown>;
+  for (const k of BUYER_HIDDEN_ORDER_FIELDS) delete out[k];
+  return out as Omit<T, BuyerHiddenOrderField>;
+}
+
+export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & {
   items: OrderItemView[];
   fulfilment?: OrderFulfilmentView;
   /** Các đơn khác cùng lần đặt bị tách theo nơi giao. */
@@ -221,7 +250,7 @@ export class OrdersService {
         currentPrice: v.salePrice ?? v.retailPrice,
       };
     };
-    return orders.map((o) => ({ ...o, items: o.items.map((it) => ({ ...it, ...media(it.variationId) })) }));
+    return orders.map((o) => ({ ...forBuyer(o), items: o.items.map((it) => ({ ...it, ...media(it.variationId) })) }));
   }
 
   async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {

@@ -50,7 +50,21 @@ export class CartService {
         items: {
           include: {
             variation: {
-              include: { product: { include: { storefront: { select: { title: true, ownerUserId: true, type: true } } } } },
+              include: {
+                product: {
+                  include: {
+                    storefront: {
+                      select: {
+                        title: true,
+                        ownerUserId: true,
+                        type: true,
+                        ordersPausedAt: true,
+                        owner: { select: { role: true, isBlocked: true } },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },

@@ -4,6 +4,8 @@ import {
   fulfillerOf,
   groupByFulfiller,
   paymentMethodBlockReason,
+  publicFulfiller,
+  unavailableLineMessage,
   type LineFulfiller,
   type SplitLine,
 } from './checkout-split';
@@ -28,7 +30,7 @@ describe('fulfillerOf', () => {
         product: {
           fulfilment: 'MERCHANT',
           storefrontId: 'sf-a',
-          storefront: { title: 'Shop A', ownerUserId: 'u-a', type: 'MERCHANT' },
+          storefront: { title: 'Shop A', ownerUserId: 'u-a', type: 'MERCHANT', ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } },
         },
       }),
     ).toEqual(SHOP_A);
@@ -43,13 +45,45 @@ describe('fulfillerOf', () => {
       expect(
         fulfillerOf({
           pancakeId: null,
-          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type } },
+          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type, ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } } },
         }).kind,
       ).toBe('UNAVAILABLE');
     }
     expect(fulfillerOf({ pancakeId: null, product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: null } }).kind).toBe(
       'UNAVAILABLE',
     );
+  });
+
+  const merchantLine = (store: Record<string, unknown>) => ({
+    pancakeId: null,
+    product: {
+      fulfilment: 'MERCHANT',
+      storefrontId: 'sf-a',
+      storefront: { title: 'Shop A', ownerUserId: 'u-a', type: 'MERCHANT', ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false }, ...store },
+    },
+  });
+
+  it('R2-MERCHANT-3: chủ gian hàng bị hạ quyền (không còn vào được Cổng người bán) hoặc bị khoá → UNAVAILABLE kèm lý do, không nhận đơn tự giao', () => {
+    for (const owner of [{ role: 'CUSTOMER', isBlocked: false }, { role: 'STAFF', isBlocked: false }, { role: 'DEALER', isBlocked: true }, null]) {
+      expect(fulfillerOf(merchantLine({ owner }))).toEqual({
+        kind: 'UNAVAILABLE',
+        storefrontId: null,
+        name: 'Shop A',
+        ownerUserId: null,
+        reason: 'STORE_CLOSED',
+      });
+    }
+    for (const role of ['DEALER', 'AFFILIATE', 'ADMIN']) {
+      expect(fulfillerOf(merchantLine({ owner: { role, isBlocked: false } })).kind).toBe('MERCHANT');
+    }
+  });
+
+  it('R2-MERCHANT-13: gian hàng đang tạm nghỉ → UNAVAILABLE lý do STORE_PAUSED', () => {
+    expect(fulfillerOf(merchantLine({ ordersPausedAt: new Date() }))).toMatchObject({
+      kind: 'UNAVAILABLE',
+      name: 'Shop A',
+      reason: 'STORE_PAUSED',
+    });
   });
 
   it('không có đường giao (hàng Tubu thiếu mã, mã giả MCH_, hàng đối tác mất gian hàng) → UNAVAILABLE', () => {
@@ -159,5 +193,20 @@ describe('paymentMethodBlockReason', () => {
     expect(paymentMethodBlockReason([{ fulfiller: SHOP_A }], 'BANK_TRANSFER')).toContain('đối tác tự giao');
     expect(paymentMethodBlockReason([{ fulfiller: TUBU }, { fulfiller: SHOP_A }], 'BANK_TRANSFER')).toContain('nhiều nơi giao');
     expect(paymentMethodBlockReason([{ fulfiller: TUBU }, { fulfiller: SHOP_A }], 'ZALOPAY')).not.toBeNull();
+  });
+});
+
+describe('unavailableLineMessage / publicFulfiller', () => {
+  it('nói rõ gian hàng tạm nghỉ hay đã ngừng bán, không nói chung chung "đang cập nhật"', () => {
+    const base = { kind: 'UNAVAILABLE' as const, storefrontId: null, ownerUserId: null };
+    expect(unavailableLineMessage('Nến thơm', { ...base, name: 'Shop B', reason: 'STORE_PAUSED' })).toBe(
+      'Shop B đang tạm nghỉ, chưa nhận đơn "Nến thơm". Vui lòng bỏ sản phẩm này khỏi đơn hoặc đặt lại sau.',
+    );
+    expect(unavailableLineMessage('Nến thơm', { ...base, name: 'Shop B', reason: 'STORE_CLOSED' })).toContain('đã ngừng bán');
+    expect(unavailableLineMessage('Nến thơm', { ...base, name: '' })).toContain('đang được cập nhật thông tin giao hàng');
+  });
+
+  it('publicFulfiller bỏ ownerUserId', () => {
+    expect(publicFulfiller(SHOP_A)).toEqual({ kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A' });
   });
 });

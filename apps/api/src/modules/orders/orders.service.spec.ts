@@ -656,6 +656,28 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
   });
 
+  it('R2-MERCHANT-14: đơn trả cho khách không kèm phí sàn đối tác, hoa hồng CTV hay cột vận hành Pancake/Gomdon nội bộ', async () => {
+    const internal = {
+      merchantCommissionPct: '0.1500',
+      commission: 12_000,
+      endCustomerKey: '0909',
+      pancakeSyncError: 'lỗi',
+      pancakePushStatus: 'FAILED',
+      pancakePushAttempts: 3,
+      pancakeAttention: 'X',
+      merchantSlaNotifiedAt: new Date(),
+      gomdonAttempt: 1,
+    };
+    const { svc } = makeMediaService([{ ...baseOrder, ...internal, items: [] }], []);
+    const view = (await svc.detailView('u1', 'TUBU1')) as unknown as Record<string, unknown>;
+    const page = (await svc.list('u1', {}, 1, 20)).data[0] as unknown as Record<string, unknown>;
+    for (const k of Object.keys(internal)) {
+      expect(view).not.toHaveProperty(k);
+      expect(page).not.toHaveProperty(k);
+    }
+    expect(view).toMatchObject({ code: baseOrder.code, total: baseOrder.total });
+  });
+
   it('D4: đơn Tubu không tách → nơi giao Tubu Tree, không truy vấn đơn cùng lần đặt', async () => {
     const withItems = makeMediaService([{ ...baseOrder, items: [] }], []);
     const view = await withItems.svc.detailView('u1', 'TUBU1');
