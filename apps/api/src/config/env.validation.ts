@@ -112,6 +112,16 @@ export const envSchema = z.object({
         message: 'PANCAKE_WEBHOOK_SECRET không được rỗng ở production.',
       });
     }
+    // Thiếu khoá Pancake thì app vẫn nhận đơn nhưng không đơn nào tới kho — chặn ngay lúc boot cho lộ ra khi deploy.
+    for (const key of ['PANCAKE_API_KEY', 'PANCAKE_SHOP_ID'] as const) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} không được rỗng ở production (đơn sẽ không bao giờ tới kho Pancake).`,
+        });
+      }
+    }
     if (!env.ACCESSTRADE_WEBHOOK_SECRET) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

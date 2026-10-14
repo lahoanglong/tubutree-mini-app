@@ -63,6 +63,9 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    # Worker BullMQ chờ job đang chạy xong khi tắt (gọi Pancake tối đa 15s): mặc định 10s của Docker sẽ SIGKILL
+    # giữa chừng. Lệnh tạo đơn đã có tra cứu chống trùng, đây chỉ để deploy không cắt ngang lệnh đang gửi.
+    stop_grace_period: 30s
     logging: *default-logging
     mem_limit: 768m
     env_file: .env

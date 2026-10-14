@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService } from './order-reversal.service';
+import { OrderStatusService } from './order-status.service';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
@@ -52,6 +53,9 @@ function statusWhere(filter: OrderListFilter): Prisma.OrderWhereInput {
   return {};
 }
 
+const CUSTOMER_CANCELLABLE: readonly string[] = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'];
+const CUSTOMER_CANCELLABLE_DEALER: readonly string[] = ['PENDING_PAYMENT', 'CONFIRMED'];
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -66,6 +70,8 @@ export class OrdersService {
     private readonly reversal: OrderReversalService,
     // Optional: test/call site cũ dựng tay 7 tham số vẫn chạy (xem order-status.service.ts).
     @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
+    // Optional như trên: huỷ đơn đã lên Pancake phải hỏi/huỷ cả bên Pancake (D1).
+    @Optional() private readonly orderStatus?: OrderStatusService,
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
@@ -146,6 +152,9 @@ export class OrdersService {
     // bên dưới, không để assertCustomerCancellable báo "đã vào quy trình giao" cho một đơn vừa huỷ thành công.
     if (order.status === 'CANCELLED') return order;
     this.assertCustomerCancellable(order, userId);
+    // D1: đơn đã lên Pancake → huỷ bên Pancake TRƯỚC; Pancake đã gửi hàng thì dừng ở đây (đồng bộ trạng thái, báo
+    // khách liên hệ CSKH), không hỏi được Pancake thì vẫn huỷ và để job huỷ thử lại.
+    const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, true);
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -185,6 +194,7 @@ export class OrdersService {
       return true;
     });
     if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+    await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
     // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
     // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy
     // — CTV vẫn giữ hoa hồng PENDING cho đơn khách đã hủy trước khi giao (không tự dọn, dù
@@ -211,6 +221,7 @@ export class OrdersService {
   private assertCustomerCancellable(
     order: {
       status: string;
+      type?: string | null;
       paymentStatus?: string | null;
       placedForCustomer?: boolean | null;
       referrerUserId?: string | null;
@@ -219,7 +230,10 @@ export class OrdersService {
     },
     actorId: string,
   ) {
-    if (order.status !== 'PENDING_PAYMENT' && order.status !== 'CONFIRMED') {
+    // D1: khách huỷ được tới trước khi bàn giao vận chuyển (gồm cả đang đóng gói — Pancake quyết lần cuối). Đơn đại
+    // lý giữ mốc cũ: PACKED đã tính doanh số thưởng (DEALER_SETTLED_STATUSES).
+    const cancellable = order.type === 'DEALER' ? CUSTOMER_CANCELLABLE_DEALER : CUSTOMER_CANCELLABLE;
+    if (!cancellable.includes(order.status)) {
       throw new BadRequestException(
         'Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.',
       );

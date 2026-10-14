@@ -39,12 +39,39 @@ export interface PancakeProductsResponse {
 }
 
 export interface PancakeCreateOrderItem {
+  /** Mã biến thể Pancake (Pancake nhận cả SKU). */
   variation_id: string;
   quantity: number;
+  /** Giảm trên MỖI đơn vị (VND) so với `variation_info.retail_price`. */
   discount_each_product?: number;
+  /**
+   * Open API: không bắt buộc nhưng "nên gửi retail_price để giá dòng đúng" — thiếu thì Pancake lấy giá danh mục của
+   * nó, lệch giá flash/đại lý/khuyến mãi của Tubu.
+   */
+  variation_info?: { retail_price: number; name?: string };
 }
 
+/** Địa chỉ giao theo schema "Đơn hàng" của Pancake POS Open API. */
+export interface PancakeShippingAddress {
+  full_name: string;
+  phone_number: string;
+  /** Địa chỉ chữ. Để trống province_id thì Pancake tự phân tích chữ ra tỉnh/huyện/xã. */
+  address: string;
+  full_address?: string;
+  commune_id?: string;
+  district_id?: string;
+  province_id?: string;
+}
+
+/**
+ * Body tạo/cập nhật đơn. Trường theo schema "Đơn hàng" (docs.pancake.biz/pos/api, openapi.json): bill_*,
+ * shipping_address, custom_id, transfer_money, cod. `customer`/`extension` là dạng cũ app vẫn gửi kèm (webhook
+ * và kho cũ đọc) — Open API không mô tả các trường con của chúng.
+ */
 export interface PancakeCreateOrderBody {
+  bill_full_name?: string;
+  bill_phone_number?: string;
+  shipping_address?: PancakeShippingAddress;
   customer: {
     name: string;
     phone_number: string;
@@ -56,6 +83,12 @@ export interface PancakeCreateOrderBody {
   items: PancakeCreateOrderItem[];
   shipping_fee: number;
   total_discount: number;
+  /** Số tiền khách đã trả trước (Open API: "Số tiền khách chuyển khoản") — Pancake trừ khỏi tiền thu hộ. */
+  transfer_money?: number;
+  /** Tiền thu hộ mong muốn (= tổng đơn − đã trả trước). */
+  cod?: number;
+  /** Khoá ngoài: mã đơn Tubu — dùng để tra lại đơn trên Pancake khi không biết lần tạo trước đã thành công chưa. */
+  custom_id?: string;
   tags?: string[];
   note?: string;
   extension?: {
@@ -64,10 +97,35 @@ export interface PancakeCreateOrderBody {
   };
 }
 
-export interface PancakeCreateOrderResponse {
-  id?: string;
-  order_id?: string;
+/** Cập nhật một phần đơn (PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). */
+export type PancakeUpdateOrderBody = Partial<
+  Pick<PancakeCreateOrderBody, 'transfer_money' | 'cod' | 'note' | 'tags'>
+> & { status?: number };
+
+/** Đơn Pancake đọc về (GET một đơn / danh sách / phản hồi tạo-cập nhật) — chỉ các trường app dùng. */
+export interface PancakeOrderDTO {
+  id?: string | number;
+  status?: number | string;
+  status_name?: string;
+  custom_id?: string | null;
+  note?: string | null;
+  extension?: { external_order_id?: string } | null;
+  inserted_at?: string;
+}
+
+/** Open API mô tả phản hồi là chính object đơn; bản thật hay bọc `{success, data}`. Đọc được cả hai. */
+export interface PancakeCreateOrderResponse extends PancakeOrderDTO {
+  order_id?: string | number;
   success?: boolean;
+  message?: string;
+  error?: string;
+  data?: PancakeOrderDTO & { order_id?: string | number };
+}
+
+export interface PancakeOrderListResponse {
+  success?: boolean;
+  data?: PancakeOrderDTO[];
+  message?: string;
 }
 
 /** Địa giới Pancake (geo). Hệ MỚI 2 cấp: Tỉnh → Phường/Xã (district bỏ). */

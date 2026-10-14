@@ -314,6 +314,42 @@ describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn 
   });
 });
 
+describe('ZalopayService — tiền về thì đơn mới lên kho Pancake (BUYERMINI-3, PANCAKE-1)', () => {
+  function setup(count = 1) {
+    const prisma = withTx({
+      order: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', total: 100000 }),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count }),
+      },
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
+    }) as unknown as PrismaService;
+    const pancakeHooks = { afterPaid: jest.fn().mockResolvedValue(undefined) };
+    const svc = new ZalopayService(
+      prisma,
+      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      makeConfig(true) as never,
+      undefined,
+      undefined,
+      pancakeHooks as never,
+    );
+    return { svc, pancakeHooks };
+  }
+  const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
+
+  it('lật PAID → xếp job Pancake (đẩy đơn đang chờ tiền / báo đã thanh toán)', async () => {
+    const { svc, pancakeHooks } = setup();
+    await svc.handleCallback(raw, sign(raw));
+    expect(pancakeHooks.afterPaid).toHaveBeenCalledWith('o1');
+  });
+
+  it('callback lặp (không lật) → không xếp lại', async () => {
+    const { svc, pancakeHooks } = setup(0);
+    await svc.handleCallback(raw, sign(raw));
+    expect(pancakeHooks.afterPaid).not.toHaveBeenCalled();
+  });
+});
+
 // MONEY-11: lệnh ZaloPay cho đơn đã huỷ/đơn COD khiến khách trả tiền mà luồng hoàn tiền không nhận ra.
 describe('ZalopayService.createPayment — chỉ đơn ZaloPay đang chờ thanh toán', () => {
   const base = {

@@ -97,6 +97,8 @@ export class PendingPaymentExpiryCron {
           }`,
           onlyIfUnpaid: true,
           expectedStatus: 'PENDING_PAYMENT',
+          // D1: đơn chuyển khoản chờ tiền đã lên Pancake (kèm "CHỜ CHUYỂN KHOẢN") — huỷ cả bên Pancake.
+          pancakeGate: true,
         });
         if (res.status === 'CANCELLED') {
           cancelled += 1;

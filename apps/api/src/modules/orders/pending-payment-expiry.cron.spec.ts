@@ -93,6 +93,12 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(res).toMatchObject({ scanned: 2, cancelled: 2, failed: 0 });
   });
 
+  it('đơn chuyển khoản chờ tiền có thể đã lên Pancake → huỷ qua cổng Pancake (D1, PANCAKE-2)', async () => {
+    const { cron, orderStatus } = make({ ttl: 6, orders: [{ id: 'o1', code: 'A' }] });
+    await cron.expireStale(NOW);
+    expect(orderStatus.setStatus).toHaveBeenCalledWith('o1', 'CANCELLED', expect.objectContaining({ pancakeGate: true }));
+  });
+
   it('đơn được trả tiền chen giữa (setStatus trả về đơn không bị huỷ) → không đếm là đã huỷ', async () => {
     const { cron, orderStatus } = make({ orders: [{ id: 'o1', code: 'A' }] });
     orderStatus.setStatus.mockResolvedValueOnce({ id: 'o1', status: 'CONFIRMED' });

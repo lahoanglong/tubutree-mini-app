@@ -25,7 +25,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
 import { CatalogService } from '../catalog/catalog.service';
-import { ADMIN_ORDER_STATUSES, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
+import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -232,8 +232,8 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
   /** pending = đơn VAT chưa xuất xong; issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
-  /** attention = "Cần xử lý Pancake". */
-  @IsOptional() @IsIn(['attention']) pancake?: PancakeFilter;
+  /** attention = "Cần xử lý Pancake"; unsynced = đơn còn trong kho chưa lên Pancake (lỗi / quá hạn). */
+  @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
 }
 
 export class ListUsersQuery extends PaginationQuery {

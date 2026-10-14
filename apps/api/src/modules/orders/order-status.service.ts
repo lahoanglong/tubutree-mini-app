@@ -20,6 +20,13 @@ import {
   UnpaidPrepaidTransitionError,
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import {
+  PancakeHandedOverError,
+  PancakeSyncHooks,
+  type PancakeCancelDecision,
+} from '../integrations/pancake/pancake-sync-hooks';
+import { resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
+import { flagPancakeAttention } from '../integrations/pancake/pancake-attention';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
 
@@ -63,6 +70,8 @@ export class OrderStatusService {
     // Optional (như gomdonQueue ở trên): giữ nguyên các test/call site dựng tay constructor
     // bằng positional args không truyền analytics vẫn chạy được (undefined → bỏ qua ghi event).
     @Optional() private readonly analytics?: AnalyticsEventsService,
+    // Optional như trên. Huỷ đơn đã lên Pancake phải huỷ cả bên Pancake (D1); tiền về thì báo Pancake không thu COD.
+    @Optional() private readonly pancakeHooks?: PancakeSyncHooks,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -95,6 +104,11 @@ export class OrderStatusService {
        * lên đơn mà người khác vừa đẩy sang trạng thái khác sau lúc quét — setStatus tự đọc lại nên không tự biết.
        */
       expectedStatus?: OrderStatus;
+      /**
+       * Huỷ: hỏi Pancake trước (D1) — Pancake đã gửi hàng thì từ chối. Mặc định bật cho người bấm (admin/nhà bán/khách);
+       * cron tự huỷ bật tường minh. Pancake báo huỷ (actor PANCAKE) không bao giờ hỏi lại Pancake.
+       */
+      pancakeGate?: boolean;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -120,6 +134,11 @@ export class OrderStatusService {
         throw err;
       }
     }
+
+    const pancakeDecision =
+      targetStatus === 'CANCELLED' && opts.actorType !== 'PANCAKE' && (opts.pancakeGate ?? isHumanActor(opts.actorType))
+        ? await this.precheckPancakeCancel(order, isHumanActor(opts.actorType))
+        : undefined;
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
@@ -211,6 +230,7 @@ export class OrderStatusService {
     }
     if (targetStatus === 'CANCELLED') {
       await this.enqueueGomdonCancel(order);
+      if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
     }
 
     // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin
@@ -288,6 +308,7 @@ export class OrderStatusService {
           ),
         );
       }
+      await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications
         .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
         .catch(() => undefined);
@@ -315,6 +336,46 @@ export class OrderStatusService {
       this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã ghi chú để admin đẩy tay sau khi nhận tiền.`);
     } catch (err) {
       this.logger.error(`Không ghi được dấu trạng thái bị chặn cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Hỏi Pancake trước khi huỷ (D1). Pancake đã gửi hàng → đồng bộ lại trạng thái theo Pancake rồi từ chối huỷ; cron
+   * (không có người đọc lỗi) thì đưa đơn vào "Cần xử lý Pancake".
+   */
+  async precheckPancakeCancel(order: Order, human: boolean): Promise<PancakeCancelDecision | undefined> {
+    if (!this.pancakeHooks) return undefined;
+    try {
+      return await this.pancakeHooks.precheckCancel(order);
+    } catch (err) {
+      if (!(err instanceof PancakeHandedOverError)) throw err;
+      await this.resyncFromPancake(order, err.pancakeStatus);
+      if (!human) {
+        await flagPancakeAttention(
+          this.prisma,
+          undefined,
+          order,
+          `Hệ thống không tự huỷ được đơn: Pancake báo đã bàn giao vận chuyển (mã ${err.pancakeStatus}). Kiểm tra thanh toán và giao hàng.`,
+          this.logger,
+        );
+      }
+      throw new BadRequestException(err.message);
+    }
+  }
+
+  /** Sau khi đơn đã huỷ ở Tubu bằng đường riêng (khách tự huỷ): ghi kết quả huỷ Pancake / xếp job huỷ. */
+  async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<void> {
+    await this.pancakeHooks?.afterLocalCancel(orderId, decision);
+  }
+
+  /** Áp trạng thái Pancake đang báo (vd Đã gửi hàng → SHIPPING) — best-effort, lỗi chuyển trạng thái chỉ log. */
+  private async resyncFromPancake(order: Order, pancakeStatus: number | string): Promise<void> {
+    const action = resolvePancakeStatus(pancakeStatus);
+    if (action?.kind !== 'status' || action.status === order.status) return;
+    try {
+      await this.setStatus(order.id, action.status, { actorType: 'PANCAKE', note: 'Đồng bộ trạng thái Pancake khi yêu cầu huỷ' });
+    } catch (err) {
+      this.logger.warn(`Không đồng bộ được trạng thái Pancake ${pancakeStatus} cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
     }
   }
 

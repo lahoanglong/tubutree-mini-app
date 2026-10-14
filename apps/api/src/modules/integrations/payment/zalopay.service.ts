@@ -19,6 +19,7 @@ import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
+import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
 
 interface ZalopayCreateResponse {
   return_code?: number;
@@ -52,6 +53,8 @@ export class ZalopayService {
     // @Optional cùng lý do notifications/gomdonQueue ở trên: nhiều test dựng ZalopayService tay
     // không truyền tham số này — AnalyticsModule là @Global() nên app thật luôn wiring được.
     @Optional() private readonly analytics?: AnalyticsEventsService,
+    // Optional như trên: tiền về thì đơn mới được đẩy kho (hoặc báo Pancake "đã thanh toán, không thu COD").
+    @Optional() private readonly pancakeHooks?: PancakeSyncHooks,
   ) {
     this.appId = config.get('ZALOPAY_APP_ID', { infer: true });
     this.key1 = config.get('ZALOPAY_KEY1', { infer: true });
@@ -215,6 +218,7 @@ export class ZalopayService {
             this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
           );
         }
+        await this.pancakeHooks?.afterPaid(order.id);
         await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
       }
     }

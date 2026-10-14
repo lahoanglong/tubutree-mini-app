@@ -111,12 +111,14 @@ export const isReorderable = (status: string): boolean => status === 'DELIVERED'
 
 /**
  * Khách có tự hủy được không — khớp OrdersService.assertCustomerCancellable ở BE (BE vẫn là nơi quyết định, đây chỉ để
- * không bày nút chắc chắn bị từ chối): chỉ Chờ thanh toán/Đã xác nhận; đơn CTV lên hộ khách đã trả tiền chỉ admin hủy;
- * đơn thu gom tái chế mà bưu tá đã lấy hàng thì không hủy được nữa.
+ * không bày nút chắc chắn bị từ chối): tới trước khi bàn giao vận chuyển (Chờ thanh toán/Đã xác nhận/Đang đóng gói; đơn
+ * đại lý chỉ tới Đã xác nhận); đơn CTV lên hộ khách đã trả tiền chỉ admin hủy; đơn thu gom tái chế mà bưu tá đã lấy hàng
+ * thì không hủy được nữa. Kho Pancake đã gửi hàng thì BE từ chối kèm lời "liên hệ CSKH".
  */
 export function canCancelOrder(
   o: {
     status: string;
+    type?: string | null;
     paymentStatus?: string | null;
     placedForCustomer?: boolean | null;
     referrerUserId?: string | null;
@@ -125,7 +127,8 @@ export function canCancelOrder(
   },
   userId: string | null | undefined,
 ): boolean {
-  if (o.status !== 'PENDING_PAYMENT' && o.status !== 'CONFIRMED') return false;
+  const cancellable = o.type === 'DEALER' ? ['PENDING_PAYMENT', 'CONFIRMED'] : ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'];
+  if (!cancellable.includes(o.status)) return false;
   if (o.placedForCustomer && o.paymentStatus === 'PAID' && !!userId && o.referrerUserId === userId) return false;
   if (o.hasRecyclingPickup && isGomdonPickedUp(o.gomdonStatus)) return false;
   return true;

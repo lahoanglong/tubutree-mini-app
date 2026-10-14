@@ -101,6 +101,16 @@ export interface AdminOrder {
   /** Lý do đơn nằm trong hàng đợi "Cần xử lý Pancake" (webhook mâu thuẫn / bị chặn); null = không cần xử lý. */
   pancakeAttention?: string | null;
   pancakeAttentionAt?: string | null;
+  /** Mã đơn bên kho Pancake; null = chưa lên kho. */
+  pancakeOrderId?: string | null;
+  /** WAITING_PAYMENT | WAITING_STOCK | PENDING | PUSHING | SYNCED | FAILED | NOT_CONFIGURED | SKIPPED | STALE (PancakeOrderService). */
+  pancakePushStatus?: string | null;
+  /** Lỗi gần nhất khi đẩy / cập nhật / huỷ đơn bên Pancake. */
+  pancakeSyncError?: string | null;
+  pancakePushAttempts?: number;
+  pancakeLastAttemptAt?: string | null;
+  /** PENDING | CANCELLED | NOT_FOUND | TOO_LATE | FAILED — kết quả huỷ bên Pancake khi đơn bị huỷ. */
+  pancakeCancelStatus?: string | null;
   /** Báo động Gomdon chưa xử lý (mới nhất trước, tối đa 10). */
   gomdonAlerts?: GomdonAlertView[];
   deliveredAt?: string | null;
@@ -299,8 +309,8 @@ export const getDashboardStats = () =>
 export type RecyclingFilter = 'attention' | 'all';
 /** pending = đơn VAT chưa xuất xong (REQUESTED/FAILED); issued = đã phát hành; all = mọi đơn có yêu cầu VAT. */
 export type InvoiceFilter = 'pending' | 'issued' | 'all';
-/** attention = hàng đợi "Cần xử lý Pancake". */
-export type PancakeFilter = 'attention';
+/** attention = hàng đợi "Cần xử lý Pancake"; unsynced = đơn còn trong kho mà chưa lên Pancake. */
+export type PancakeFilter = 'attention' | 'unsynced';
 export const listOrders = (
   page = 1,
   status?: string,
@@ -367,6 +377,10 @@ export const resolvePancakeAttention = (orderId: string, note: string) => {
     { method: 'POST', body: trimmed ? { note: trimmed } : {} },
   );
 };
+
+/** POST /admin/pancake/orders/:id/push — "Đẩy lại Pancake" cho đơn chưa lên kho (API tự chặn đơn huỷ/đã rời kho). */
+export const retryPancakePush = (orderId: string) =>
+  apiFetch<{ ok: boolean; message: string }>(`/admin/pancake/orders/${encodeURIComponent(orderId)}/push`, { method: 'POST' });
 
 // ── Vận đơn thu gom Gomdon (thao tác admin) ──
 export interface GomdonActionResult {

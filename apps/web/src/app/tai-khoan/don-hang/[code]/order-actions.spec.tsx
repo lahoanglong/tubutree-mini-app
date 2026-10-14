@@ -142,7 +142,13 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã vào quy trình giao');
   });
 
-  it.each([['PACKED'], ['SHIPPING']])('đơn %s: không có nút Hủy đơn (vẫn còn dòng hotline)', async (status) => {
+  it('đơn đang đóng gói (chưa bàn giao vận chuyển) vẫn hủy được — D1, BUYERWEB-5', async () => {
+    mocks.order = { ...BASE, status: 'PACKED' };
+    const { container } = await mount();
+    expect(btn(container, 'Hủy đơn')).toBeDefined();
+  });
+
+  it.each([['SHIPPING'], ['DELIVERED']])('đơn %s: không có nút Hủy đơn (vẫn còn dòng hotline)', async (status) => {
     mocks.order = { ...BASE, status };
     const { container } = await mount();
     expect(btn(container, 'Hủy đơn')).toBeUndefined();

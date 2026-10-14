@@ -85,6 +85,7 @@ import {
   PancakeAttentionBadge,
   PancakeAttentionPanel,
 } from '@/components/admin/pancake-attention';
+import { PancakeSyncBadge, PancakeSyncPanel } from '@/components/admin/pancake-sync';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
@@ -196,10 +197,11 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
   const sp = new URLSearchParams(window.location.search);
   const t = sp.get('tab');
   const r = sp.get('recycling');
+  const p = sp.get('pancake');
   return {
     tab: t && TAB_KEYS.has(t) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
-    pancake: sp.get('pancake') === 'attention' ? 'attention' : '',
+    pancake: p === 'attention' || p === 'unsynced' ? p : '',
   };
 }
 
@@ -815,10 +817,29 @@ function OrdersTab({
           <AlertTriangle aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
           Cần xử lý Pancake{pancakeQ.data !== undefined && ` (${pancakeQ.data})`}
         </button>
+        <button
+          type="button"
+          aria-pressed={pancake === 'unsynced'}
+          onClick={() => {
+            setPage(1);
+            setExpandedId(null);
+            onPancakeChange(pancake === 'unsynced' ? '' : 'unsynced');
+          }}
+          className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
+            pancake === 'unsynced' ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-700'
+          }`}
+        >
+          Chưa lên Pancake
+        </button>
         {pancake === 'attention' && (
           <span className="text-xs text-stone-500">
             Pancake báo trạng thái hệ thống không tự áp được: đơn bị xoá, đang hoàn / hoàn một phần, đã nhận tiền khi đơn đã huỷ, báo
             đã giao khi đơn đang do Gomdon giao…
+          </span>
+        )}
+        {pancake === 'unsynced' && (
+          <span className="text-xs text-stone-500">
+            Đơn còn trong kho mà kho Pancake chưa có: đẩy lỗi, quá hạn tự đẩy, Pancake chưa cấu hình, hoặc chưa đẩy sau 15 phút.
           </span>
         )}
       </div>
@@ -873,6 +894,7 @@ function OrdersTab({
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             <RecyclingBadge order={o} />
                             <PancakeAttentionBadge order={o} />
+                            <PancakeSyncBadge order={o} />
                           </div>
                         </td>
                         <td className="px-3 py-3">
@@ -919,6 +941,7 @@ function OrdersTab({
                           <td colSpan={7} className="px-4 py-3">
                             <div className="space-y-3">
                               <PancakeAttentionPanel order={o} />
+                              <PancakeSyncPanel order={o} />
 
                               {/* Order items */}
                               <div>
