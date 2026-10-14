@@ -126,6 +126,37 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     expect(of(after.id)).toMatchObject({ commissionAmount: 30_000, opsFeeAmount: 7_000, netAmount: 63_000 });
   });
 
+  it('gian hàng theo phí sàn mặc định: admin nâng mặc định 15% → 20% sau khi giao, trước khi lập phiếu → đơn đặt trước giữ 15%, đơn đặt sau 20% (Q8 review S1)', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const config = moduleRef.get(SystemConfigService);
+    const s = await shop({ commissionPct: null });
+    await link(s, ago(60));
+    const before = await order(s.v.id, { createdAt: ago(12) });
+    expect(await netOf(s.store.id, before.id)).toEqual([85_000]);
+    try {
+      await config.set('merchant.commission_pct', 0.2, admin.id);
+      const after = await order(s.v.id, { createdAt: new Date(), deliveredAt: ago(8) });
+      const history = await prisma.storefrontTermsHistory.findMany({ where: { storefrontId: s.store.id }, orderBy: { effectiveFrom: 'asc' } });
+      expect(history.map((h) => [Number(h.commissionPct), h.changedById])).toEqual([
+        [0.15, null],
+        [0.2, admin.id],
+      ]);
+
+      // Admin sửa phí giao hộ, gian hàng vẫn theo mặc định: dòng mới lưu 20%, không để trống.
+      await settlement.updateStoreTerms(admin.id, s.store.id, { consignmentFeeFixed: 0 });
+      const latest = await prisma.storefrontTermsHistory.findFirst({ where: { storefrontId: s.store.id }, orderBy: { effectiveFrom: 'desc' } });
+      expect(Number(latest!.commissionPct)).toBe(0.2);
+
+      const payout = await settlement.createPayout(admin.id, s.store.id);
+      const lines = await prisma.merchantPayoutLine.findMany({ where: { payoutId: payout.id } });
+      const of = (id: string) => lines.find((l) => l.orderId === id)!;
+      expect(of(before.id)).toMatchObject({ goodsAmount: 100_000, commissionAmount: 15_000, netAmount: 85_000 });
+      expect(of(after.id)).toMatchObject({ goodsAmount: 100_000, commissionAmount: 20_000, netAmount: 80_000 });
+    } finally {
+      await config.set('merchant.commission_pct', 0.15, admin.id);
+    }
+  });
+
   it('đơn công nợ đại lý (chuyển khoản, chưa trả) chưa đối soát; admin ghi nhận đã trả thì vào bảng kê', async () => {
     const s = await shop({ commissionPct: 0.1 });
     await link(s, ago(60));

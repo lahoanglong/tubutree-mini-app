@@ -37,6 +37,7 @@ function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1'
       findUniqueOrThrow: jest.fn().mockResolvedValue({}),
     },
     storefrontTermsHistory: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), create: jest.fn() },
+    systemConfig: { findUnique: jest.fn().mockResolvedValue(null) },
     orderItem: { findMany: jest.fn().mockResolvedValue([]) },
     returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
@@ -702,7 +703,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(candidates).toContain('lk."storefrontId"');
   });
 
-  it('admin sửa phí: chỉ gian hàng đối tác; ghi mốc gốc khi chưa có lịch sử rồi thêm dòng mới có người sửa', async () => {
+  it('admin sửa phí: chỉ gian hàng đối tác; ghi mốc gốc khi chưa có lịch sử rồi thêm dòng mới có người sửa; phí sàn theo mặc định lưu số đã quy ra (Q8 review S1)', async () => {
     const { svc, prisma } = build();
     prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'CTV' });
     await expect(svc.updateStoreTerms('admin-1', 'sf-x', { consignmentFeePct: 0.01 })).rejects.toThrow(NotFoundException);
@@ -714,9 +715,18 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const rows = prisma.storefrontTermsHistory.create.mock.calls.map((c) => c[0].data);
     expect(rows).toEqual([
       { storefrontId: 'sf-a', ...old, effectiveFrom: new Date(0) },
-      expect.objectContaining({ storefrontId: 'sf-a', commissionPct: null, consignmentFeeFixed: 2_000, changedById: 'admin-1' }),
+      expect.objectContaining({ storefrontId: 'sf-a', commissionPct: 0.15, consignmentFeeFixed: 2_000, changedById: 'admin-1' }),
     ]);
     expect(rows[1].effectiveFrom).toBeInstanceOf(Date);
+
+    // Mặc định đọc thẳng DB trong transaction (bộ nhớ đệm cấu hình có thể cũ), mốc gốc của gian hàng đang theo mặc định cũng
+    // lưu số.
+    prisma.storefrontTermsHistory.create.mockClear();
+    prisma.systemConfig.findUnique.mockResolvedValueOnce({ value: 0.2 });
+    prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'MERCHANT', ...old, commissionPct: null });
+    await svc.updateStoreTerms('admin-1', 'sf-a', { consignmentFeeFixed: 2_000 });
+    expect(prisma.systemConfig.findUnique).toHaveBeenLastCalledWith({ where: { key: 'merchant.commission_pct' }, select: { value: true } });
+    expect(prisma.storefrontTermsHistory.create.mock.calls.map((c) => c[0].data.commissionPct)).toEqual([0.2, 0.2]);
 
     prisma.storefrontTermsHistory.create.mockClear();
     prisma.storefrontTermsHistory.count.mockResolvedValue(2);
