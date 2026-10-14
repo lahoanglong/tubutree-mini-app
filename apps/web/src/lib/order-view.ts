@@ -23,6 +23,26 @@ export type OrderTabKey = (typeof ORDER_TABS)[number]['key'];
 
 export const orderStatusLabel = (status: string): string => STATUS_LABEL[status] ?? status;
 
+interface CarrierFacts {
+  status: string;
+  shippingCode?: string | null;
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+}
+
+/**
+ * Kho đã đặt hãng cho đơn (Pancake gắn mã vận đơn hãng lúc in phiếu) dù đơn chưa chuyển "Đang giao". Mã vận đơn của vận
+ * đơn thu gom Gomdon không tính (bưu tá chưa tới). Cùng mốc CARRIER_WAYBILL của cancelHandover ở BE.
+ */
+export function isCarrierBooked(o: CarrierFacts): boolean {
+  if (o.status !== 'CONFIRMED' && o.status !== 'PACKED') return false;
+  return !!o.shippingCode && o.shippingCode !== o.gomdonOrderId && o.shippingCode !== o.gomdonPartnerCode;
+}
+
+/** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi khớp chip "Đang đóng gói" với lời "đã bàn giao". */
+export const buyerOrderStatusLabel = (o: CarrierFacts): string =>
+  isCarrierBooked(o) ? 'Đã đặt đơn vị vận chuyển' : orderStatusLabel(o.status);
+
 /** Chờ thanh toán là việc khách còn phải làm nên dùng màu cảnh báo; đơn đã hủy/hoàn là trạng thái kết thúc. */
 export function orderStatusTone(status: string): string {
   if (status === 'PENDING_PAYMENT') return 'bg-warning-bg text-warning-fg';
@@ -142,26 +162,28 @@ export const timelineIndex = (status: string): number => (TIMELINE_STEPS as read
 export const isReorderable = (status: string): boolean => status === 'DELIVERED' || status === 'CANCELLED' || status === 'RETURNED';
 
 /**
- * Khách có tự hủy được không — khớp OrdersService.assertCustomerCancellable ở BE (BE vẫn là nơi quyết định, đây chỉ để
- * không bày nút chắc chắn bị từ chối): tới trước khi bàn giao vận chuyển (Chờ thanh toán/Đã xác nhận/Đang đóng gói; đơn
- * đại lý chỉ tới Đã xác nhận); đơn CTV lên hộ khách đã trả tiền chỉ admin hủy; đơn thu gom tái chế mà bưu tá đã lấy hàng
- * thì không hủy được nữa. Kho Pancake đã gửi hàng thì BE từ chối kèm lời "liên hệ CSKH".
+ * Khách có tự hủy được không — chỉ để không bày nút chắc chắn bị từ chối; BE vẫn là nơi quyết định. API trả `canCancel`
+ * tính bằng đúng luật huỷ của khách (OrdersService.customerCancelBlock) thì theo đó; API cũ thì tự xét: tới trước khi
+ * bàn giao vận chuyển (Chờ thanh toán/Đã xác nhận/Đang đóng gói; đơn đại lý chỉ tới Đã xác nhận), kho chưa đặt hãng, đơn
+ * CTV lên hộ khách đã trả tiền chỉ admin hủy, đơn thu gom tái chế mà bưu tá đã lấy hàng thì thôi. Kho Pancake đã gửi
+ * hàng mà chưa báo về thì BE từ chối kèm lời "liên hệ CSKH".
  */
 export function canCancelOrder(
-  o: {
-    status: string;
+  o: CarrierFacts & {
     type?: string | null;
     paymentStatus?: string | null;
     placedForCustomer?: boolean | null;
     referrerUserId?: string | null;
     hasRecyclingPickup?: boolean | null;
     gomdonStatus?: string | null;
+    canCancel?: boolean | null;
   },
   userId: string | null | undefined,
 ): boolean {
   const cancellable = o.type === 'DEALER' ? ['PENDING_PAYMENT', 'CONFIRMED'] : ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'];
   if (!cancellable.includes(o.status)) return false;
+  if (typeof o.canCancel === 'boolean') return o.canCancel;
   if (o.placedForCustomer && o.paymentStatus === 'PAID' && !!userId && o.referrerUserId === userId) return false;
   if (o.hasRecyclingPickup && isGomdonPickedUp(o.gomdonStatus)) return false;
-  return true;
+  return !isCarrierBooked(o);
 }

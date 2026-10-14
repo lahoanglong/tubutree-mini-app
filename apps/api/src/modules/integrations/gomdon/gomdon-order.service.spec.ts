@@ -429,6 +429,18 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
     expect(alerts.alert).toHaveBeenCalled();
   });
 
+  it.each(['8', '9'])(
+    'Gomdon đã báo hoàn hàng về kho/hỏng-mất (%s) → NOT_NEEDED, KHÔNG báo "bưu tá đã lấy hàng — chặn giao" (R3-CANCEL-3)',
+    async (gomdonStatus) => {
+      const { svc, client, alerts, updateMany } = build({ ...cancelled, gomdonStatus });
+      await svc.cancelOnGomdon('o1', false);
+      expect(client.cancelOrder).not.toHaveBeenCalled();
+      expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'NOT_NEEDED' });
+      expect(alerts.alert).not.toHaveBeenCalled();
+      expect(alerts.resolveKinds).toHaveBeenCalledWith('o1', expect.arrayContaining(['CANCEL_NEEDED']));
+    },
+  );
+
   it('đã huỷ xong trước đó → no-op', async () => {
     const { svc, client } = build({ ...cancelled, gomdonCancelStatus: 'CANCELLED' });
     await svc.cancelOnGomdon('o1', false);

@@ -101,6 +101,9 @@ export function gomdonDedupeKey(p: ParsedGomdonEvent, body: GomdonWebhookPayload
 
 const isDead = (status: string) => status === 'CANCELLED' || status === 'RETURNED';
 
+/** Hàng đang/đã quay về kho: việc "xử lý đơn với khách" xong khi đơn được huỷ/trả — báo động tự đóng lúc đó. */
+const GOODS_RETURNING_STATUSES: ReadonlySet<number> = new Set([6, 8]);
+
 const PROBLEM_ADVICE: Record<number, string> = {
   2: 'Vận đơn bị huỷ phía Gomdon trong khi đơn vẫn hiệu lực — tạo lại vận đơn/hẹn thu gom với khách.',
   6: 'Hàng đang chuyển hoàn về kho — xử lý đơn với khách (KHÔNG tự hoàn tiền).',
@@ -428,7 +431,11 @@ export class GomdonWebhookService {
         return;
       }
       // Ghi nhận + báo CSKH. KHÔNG tự huỷ/hoàn tiền/restock — người xử lý quyết định.
-      await this.alerts.alert(order.code, `Gomdon báo "${text}". ${PROBLEM_ADVICE[status] ?? ''}`.trim());
+      await this.alerts.alert(
+        order.code,
+        `Gomdon báo "${text}". ${PROBLEM_ADVICE[status] ?? ''}`.trim(),
+        ...(GOODS_RETURNING_STATUSES.has(status) ? ([GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.GOODS_RETURNED] as const) : []),
+      );
     }
   }
 

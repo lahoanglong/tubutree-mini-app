@@ -7,7 +7,14 @@ import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { PancakeClient } from './pancake.client';
 import { cancelPancakeOrder, mayExistOnPancake, PANCAKE_CANCEL } from './pancake-order.service';
-import { PancakeApiError, pancakeErrorText, pancakeOrderHasCode, isPancakeCancelled } from './pancake-outbound';
+import {
+  PancakeApiError,
+  PancakeCancelRefusedError,
+  pancakeErrorText,
+  pancakeOrderHasCode,
+  isPancakeCancelled,
+  isPancakeHandedOver,
+} from './pancake-outbound';
 import { enqueuePancakeCancel, enqueuePancakePayment } from './pancake-queue';
 import { ATTENTION_CANCEL_PENDING, flagPancakeAttention } from './pancake-attention';
 import { isMerchantFulfilledOrder } from './pancake-fulfilment';
@@ -23,13 +30,37 @@ export class PancakeHandedOverError extends Error {
   }
 }
 
+/** Lời báo người bấm huỷ khi không hỏi được kho Pancake (đơn đã lên Pancake). */
+export const PANCAKE_UNREACHABLE_MESSAGE = 'Kho chưa phản hồi, vui lòng thử lại sau ít phút';
+
+/**
+ * Người bấm huỷ đơn đã lên Pancake mà không hỏi được Pancake (timeout, lỗi mạng, chưa cấu hình): không huỷ — Pancake có
+ * thể đã gửi hàng mà webhook chưa về (D1), huỷ + hoàn tiền lúc này là hoàn tiền cho hàng đang nằm ở hãng.
+ */
+export class PancakeUnreachableError extends Error {
+  constructor(readonly reason: string) {
+    super(PANCAKE_UNREACHABLE_MESSAGE);
+    this.name = 'PancakeUnreachableError';
+  }
+}
+
 export type PancakeCancelDecision =
   /** Không có gì bên Pancake (chưa từng đẩy). */
   | { kind: 'NONE' }
   /** Pancake đã huỷ / không có đơn. */
   | { kind: 'CONFIRMED'; cancelStatus: string; pancakeOrderId: string | null }
-  /** Không hỏi được Pancake (mất kết nối, chưa cấu hình, Pancake từ chối lệnh): huỷ ở Tubu, job thử lại. */
+  /**
+   * Huỷ ở Tubu, job huỷ thử lại. Người bấm: chỉ khi Pancake vừa trả lời và đơn CHƯA bàn giao (Pancake từ chối lệnh
+   * huỷ, hay có nhiều đơn cùng mã). Cron/hệ thống: cả khi không hỏi được Pancake.
+   */
   | { kind: 'DEFERRED'; reason: string };
+
+/**
+ * INTERACTIVE: có người bấm huỷ (khách, CSKH, admin) — hỏi Pancake mỗi lần, không hỏi được thì từ chối
+ * (PancakeUnreachableError). BACKGROUND: cron huỷ hàng loạt — không hỏi được thì vẫn huỷ, Pancake vừa lỗi thì bỏ qua
+ * không hỏi trong một khoảng (không treo cả mẻ).
+ */
+export type PancakeCancelMode = 'INTERACTIVE' | 'BACKGROUND';
 
 type CancelSubject = Pick<Order, 'id' | 'code' | 'pancakeOrderId' | 'pancakePushClaimedAt'> & Partial<Pick<Order, 'fulfiller'>>;
 
@@ -38,16 +69,16 @@ type CancelSubject = Pick<Order, 'id' | 'code' | 'pancakeOrderId' | 'pancakePush
  * PancakeModule để OrdersModule dùng được mà không vòng phụ thuộc (PancakeModule import OrdersModule).
  *
  * Huỷ đơn theo D1: đơn đã (có thể) lên Pancake thì hỏi Pancake TRƯỚC với timeout ngắn. Pancake huỷ được / không
- * có đơn → huỷ ở Tubu. Pancake đã gửi hàng → từ chối (PancakeHandedOverError). Không hỏi được → vẫn huỷ ở Tubu
- * (trạng thái cuối cùng biết được là chưa bàn giao), xếp job huỷ có retry và đưa đơn vào "Cần xử lý Pancake" tới khi
- * Pancake xác nhận.
+ * có đơn → huỷ ở Tubu. Pancake đã gửi hàng → từ chối (PancakeHandedOverError). Không hỏi được → người bấm nhận lời
+ * "thử lại sau" (PancakeUnreachableError); cron vẫn huỷ ở Tubu, xếp job huỷ có retry và đưa đơn vào "Cần xử lý
+ * Pancake" tới khi Pancake xác nhận.
  */
 @Injectable()
 export class PancakeSyncHooks {
   private readonly logger = new Logger(PancakeSyncHooks.name);
   /** Huỷ nằm trên đường request của khách: chờ Pancake tối đa chừng này. */
   static readonly CANCEL_TIMEOUT_MS = 5_000;
-  /** Pancake vừa không trả lời: các lần huỷ trong khoảng này đi thẳng đường hoãn (cron huỷ hàng loạt không treo). */
+  /** Pancake vừa không trả lời: các lần huỷ của cron trong khoảng này đi thẳng đường hoãn (cron huỷ hàng loạt không treo). */
   static readonly UNREACHABLE_BACKOFF_MS = 60_000;
   private unreachableUntil = 0;
 
@@ -58,11 +89,16 @@ export class PancakeSyncHooks {
     @Optional() private readonly alerts?: GomdonAlertService,
   ) {}
 
-  async precheckCancel(order: CancelSubject): Promise<PancakeCancelDecision> {
+  async precheckCancel(order: CancelSubject, mode: PancakeCancelMode): Promise<PancakeCancelDecision> {
     // D4: đơn gian hàng đối tác tự giao không có trên Pancake — mốc huỷ là lúc đối tác báo đã gửi hàng (MerchantFulfilment).
     if (isMerchantFulfilledOrder(order) || !mayExistOnPancake(order)) return { kind: 'NONE' };
-    if (!this.client.isConfigured()) return { kind: 'DEFERRED', reason: 'Pancake chưa được cấu hình' };
-    if (Date.now() < this.unreachableUntil) return { kind: 'DEFERRED', reason: 'Pancake vừa không phản hồi' };
+    const interactive = mode === 'INTERACTIVE';
+    const unreachable = (reason: string): PancakeCancelDecision => {
+      if (interactive) throw new PancakeUnreachableError(reason);
+      return { kind: 'DEFERRED', reason };
+    };
+    if (!this.client.isConfigured()) return unreachable('Pancake chưa được cấu hình');
+    if (!interactive && Date.now() < this.unreachableUntil) return { kind: 'DEFERRED', reason: 'Pancake vừa không phản hồi' };
     const opts = { timeoutMs: PancakeSyncHooks.CANCEL_TIMEOUT_MS };
     try {
       let pancakeOrderId = order.pancakeOrderId;
@@ -71,8 +107,12 @@ export class PancakeSyncHooks {
           (o) => o.id != null && pancakeOrderHasCode(o, order.code) && !isPancakeCancelled(o.status),
         );
         if (found.length === 0) return { kind: 'CONFIRMED', cancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakeOrderId: null };
-        // Nhiều đơn sống cùng mã (đẩy trùng) → để job huỷ xử lý từng đơn và báo admin.
-        if (found.length > 1) return { kind: 'DEFERRED', reason: `Pancake có ${found.length} đơn mang mã ${order.code}` };
+        // Nhiều đơn sống cùng mã (đẩy trùng): một đơn đã gửi hàng là đủ để chặn; còn lại để job huỷ từng đơn và báo admin.
+        if (found.length > 1) {
+          const shipped = found.find((o) => isPancakeHandedOver(o.status));
+          if (shipped) throw new PancakeHandedOverError(shipped.status!);
+          return { kind: 'DEFERRED', reason: `Pancake có ${found.length} đơn mang mã ${order.code}` };
+        }
         pancakeOrderId = String(found[0]!.id);
       }
       const outcome = await cancelPancakeOrder(this.client, pancakeOrderId, opts);
@@ -87,8 +127,15 @@ export class PancakeSyncHooks {
       if (!(err instanceof PancakeApiError) || err.transient) {
         this.unreachableUntil = Date.now() + PancakeSyncHooks.UNREACHABLE_BACKOFF_MS;
       }
-      this.logger.warn(`Không huỷ được ngay đơn ${order.code} trên Pancake: ${pancakeErrorText(err)} — huỷ ở Tubu và thử lại sau.`);
-      return { kind: 'DEFERRED', reason: pancakeErrorText(err) };
+      // Pancake trả lời, đơn chưa bàn giao nhưng không nhận lệnh huỷ: trạng thái đã biết chắc → huỷ ở Tubu, job thử lại.
+      if (err instanceof PancakeCancelRefusedError) {
+        this.logger.warn(`Pancake từ chối lệnh huỷ đơn ${order.code} (trạng thái ${err.pancakeStatus ?? '?'}): ${pancakeErrorText(err)} — huỷ ở Tubu và thử lại sau.`);
+        return { kind: 'DEFERRED', reason: pancakeErrorText(err) };
+      }
+      this.logger.warn(
+        `Không hỏi được Pancake khi huỷ đơn ${order.code}: ${pancakeErrorText(err)} — ${interactive ? 'từ chối huỷ, người bấm thử lại sau' : 'huỷ ở Tubu và thử lại sau'}.`,
+      );
+      return unreachable(pancakeErrorText(err));
     }
   }
 

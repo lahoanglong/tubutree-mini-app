@@ -12,13 +12,14 @@ import {
   formatPoints,
   formatDateTime,
   addressLine,
-  isRecyclingPickedUp,
   recyclingPickupView,
   type RecyclingTone,
 } from '../utils/format';
 import { shippingEventLabel } from '../utils/format-shipping';
 import {
   STATUS_COLOR,
+  buyerStatusLabel,
+  canCustomerCancel,
   isReorderable,
   orderPointsNote,
   orderStamp,
@@ -235,18 +236,9 @@ export default function OrderDetailPage() {
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
   // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
   const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
-  // Đơn thu gom tái chế mà bưu tá đã lấy hàng: BE chặn khách tự huỷ → ẩn nút (liên hệ Zalo OA).
-  // Đơn CTV lên hộ khách đã thanh toán: BE chỉ cho admin huỷ (tiền là của khách cuối) → ẩn nút với CTV.
-  // OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
+  // Đơn CTV lên hộ khách: OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
   const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
-  const isPaidAssistedByMe =
-    !!assisted.placedForCustomer && o.paymentStatus === 'PAID' && !!meId && assisted.referrerUserId === meId;
-  // Khớp OrdersService.assertCustomerCancellable (D1): khách huỷ được tới trước khi bàn giao vận chuyển; đơn đại lý
-  // chỉ tới Đã xác nhận. Kho Pancake đã gửi hàng thì BE từ chối kèm lời "liên hệ CSKH".
-  const canCancel =
-    (o.type === 'DEALER' ? ['PENDING_PAYMENT', 'CONFIRMED'] : ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED']).includes(o.status) &&
-    !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus)) &&
-    !isPaidAssistedByMe;
+  const canCancel = canCustomerCancel({ ...o, ...assisted }, meId);
   const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
@@ -278,7 +270,7 @@ export default function OrderDetailPage() {
           {stamp.label} <span>{formatDateTime(stamp.at)}</span>
         </Text>
         <Text.Title size="small" style={{ color: color.fg }}>
-          {vi.orderStatus[o.status] ?? o.status}
+          {buyerStatusLabel(o)}
         </Text.Title>
         {showsPaymentDeadline(o) && (
           <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>

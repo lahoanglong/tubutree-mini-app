@@ -24,13 +24,19 @@ import {
 } from './order-transition';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import {
+  PANCAKE_UNREACHABLE_MESSAGE,
   PancakeHandedOverError,
   PancakeSyncHooks,
+  PancakeUnreachableError,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
-import { resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
-import { flagPancakeAttention } from '../integrations/pancake/pancake-attention';
+import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
+import { ATTENTION_CANCEL_AFTER_HANDOVER, clearPancakeAttention, flagPancakeAttention } from '../integrations/pancake/pancake-attention';
+import { GOMDON_ALERT_KIND, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { notifyMerchantOwner } from './merchant-order-notify';
+
+/** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
+export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
 
@@ -255,6 +261,12 @@ export class OrderStatusService {
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
       const handover = targetStatus === 'CANCELLED' && !opts.returnedToSender && current.status !== 'CANCELLED' ? cancelHandover(current, handoverOpts) : null;
       if (handover) throw new CancelAfterHandoverError(order.code, current.status as OrderStatus, handover);
+      // Đơn vừa bị huỷ/trả chen giữa mà nguồn khác báo đang giao/đã giao: đúng lỗi như lúc đọc tuần tự, để webhook đưa
+      // vào "Cần xử lý" (hàng có thể đang đi tới khách trong khi tiền đã hoàn) thay vì coi là xong.
+      const closed = current.status === 'CANCELLED' || current.status === 'RETURNED';
+      if (closed && (targetStatus === 'SHIPPING' || targetStatus === 'DELIVERED')) {
+        throw new InvalidOrderTransitionError(current.status as OrderStatus, targetStatus);
+      }
       return current;
     }
 
@@ -278,6 +290,7 @@ export class OrderStatusService {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
     }
+    if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') await this.settleClosedOrderAlerts(order);
     if (targetStatus === 'CANCELLED') {
       await this.enqueueGomdonCancel(order);
       if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
@@ -423,8 +436,20 @@ export class OrderStatusService {
   async precheckPancakeCancel(order: Order, asker: 'CUSTOMER' | 'STAFF' | 'SYSTEM'): Promise<PancakeCancelDecision | undefined> {
     if (!this.pancakeHooks) return undefined;
     try {
-      return await this.pancakeHooks.precheckCancel(order);
+      return await this.pancakeHooks.precheckCancel(order, asker === 'SYSTEM' ? 'BACKGROUND' : 'INTERACTIVE');
     } catch (err) {
+      if (err instanceof PancakeUnreachableError) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: PANCAKE_UNREACHABLE,
+          message:
+            asker === 'STAFF'
+              ? `${PANCAKE_UNREACHABLE_MESSAGE} — đơn ${order.code} đã lên kho Pancake nhưng chưa hỏi được Pancake (${err.reason}), CHƯA huỷ, ` +
+                'chưa hoàn tiền. Kiểm tra trạng thái đơn trên Pancake: đã gửi hàng thì xử lý bằng hoàn/trả.'
+              : PANCAKE_UNREACHABLE_MESSAGE,
+        });
+      }
       if (!(err instanceof PancakeHandedOverError)) throw err;
       await this.resyncFromPancake(order, err.pancakeStatus);
       if (asker === 'STAFF') {
@@ -443,6 +468,19 @@ export class OrderStatusService {
         );
       }
       throw new BadRequestException(err.message);
+    }
+  }
+
+  /**
+   * Đơn vừa huỷ/trả: việc "hàng đang/đã hoàn về kho — xử lý đơn với khách" (Gomdon) và "Pancake báo huỷ sau bàn giao /
+   * đang hoàn" (Pancake) đã có kết cục — đóng để hàng đợi chỉ còn việc thật. Best-effort: đơn đã đổi trạng thái xong.
+   */
+  private async settleClosedOrderAlerts(order: Pick<Order, 'id' | 'code'>): Promise<void> {
+    try {
+      await resolveGomdonAlertKinds(this.prisma, order.id, [GOMDON_ALERT_KIND.GOODS_RETURNED]);
+      await clearPancakeAttention(this.prisma, order.id, [ATTENTION_CANCEL_AFTER_HANDOVER, PANCAKE_RETURNING_PREFIX]);
+    } catch (err) {
+      this.logger.warn(`Không đóng được việc tồn của đơn ${order.code} sau khi huỷ/trả: ${err instanceof Error ? err.message : err}`);
     }
   }
 

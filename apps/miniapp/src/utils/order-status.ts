@@ -2,7 +2,7 @@
 
 import type { BadgeTone } from '../components/ui/badge';
 import { vi } from '../i18n/vi';
-import { formatNumber, formatPoints } from './format';
+import { formatNumber, formatPoints, isRecyclingPickedUp } from './format';
 
 /** Cùng nguồn token với Badge's TONE_STYLE (audit A4-08: trước đây map này dùng hex chép tay
  * "gần giống" — SHIPPING `#EAF2FA` gần nhưng KHÁC `--info-bg` thật, CANCELLED `#FAEAEA` tương tự
@@ -95,6 +95,52 @@ export const REORDERABLE_STATUSES = ['DELIVERED', 'CANCELLED', 'RETURNED'] as co
 
 export function isReorderable(status: string): boolean {
   return (REORDERABLE_STATUSES as readonly string[]).includes(status);
+}
+
+interface CarrierFacts {
+  status: string;
+  shippingCode?: string | null;
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+}
+
+/**
+ * Kho đã đặt hãng cho đơn (Pancake gắn mã vận đơn hãng lúc in phiếu) dù đơn chưa chuyển "Đang giao". Mã của vận đơn thu
+ * gom Gomdon không tính (bưu tá chưa tới). Cùng mốc CARRIER_WAYBILL của cancelHandover ở BE.
+ */
+export function isCarrierBooked(o: CarrierFacts): boolean {
+  if (o.status !== 'CONFIRMED' && o.status !== 'PACKED') return false;
+  return !!o.shippingCode && o.shippingCode !== o.gomdonOrderId && o.shippingCode !== o.gomdonPartnerCode;
+}
+
+/** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi để chip "Đang đóng gói" mâu thuẫn lời "đã bàn giao". */
+export function buyerStatusLabel(o: CarrierFacts): string {
+  return isCarrierBooked(o) ? vi.orders.carrierBooked : (vi.orderStatus[o.status] ?? o.status);
+}
+
+/**
+ * Khách tự huỷ được không — chỉ để không bày nút chắc chắn bị từ chối; BE vẫn quyết. API trả `canCancel` (đúng luật huỷ
+ * của khách ở BE) thì theo đó; API cũ thì tự xét: tới trước khi bàn giao vận chuyển (đơn đại lý chỉ tới Đã xác nhận), kho
+ * chưa đặt hãng, bưu tá thu gom chưa lấy hàng, đơn CTV lên hộ khách đã trả tiền chỉ admin huỷ.
+ */
+export function canCustomerCancel(
+  o: CarrierFacts & {
+    type?: string | null;
+    paymentStatus?: string | null;
+    placedForCustomer?: boolean | null;
+    referrerUserId?: string | null;
+    hasRecyclingPickup?: boolean | null;
+    gomdonStatus?: string | null;
+    canCancel?: boolean | null;
+  },
+  meId: string | null | undefined,
+): boolean {
+  const cancellable = o.type === 'DEALER' ? ['PENDING_PAYMENT', 'CONFIRMED'] : ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'];
+  if (!cancellable.includes(o.status)) return false;
+  if (typeof o.canCancel === 'boolean') return o.canCancel;
+  if (o.placedForCustomer && o.paymentStatus === 'PAID' && !!meId && o.referrerUserId === meId) return false;
+  if (o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus)) return false;
+  return !isCarrierBooked(o);
 }
 
 /** Số MÓN của đơn (tổng số lượng) — trước đây thẻ đơn đếm số dòng (A2-47). */

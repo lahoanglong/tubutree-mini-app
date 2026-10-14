@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
@@ -68,7 +69,8 @@ function setup(
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
     orderCustomerRefund,
-    returnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
+    returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null), create: historyCreate },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
@@ -488,6 +490,51 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
 });
 
 describe('PancakeProcessor.onShippingUpdated', () => {
+  describe('đơn đã huỷ/trả (R3-CANCEL-5)', () => {
+    const cancelled = {
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'CANCELLED',
+      paymentStatus: 'REFUNDED',
+      shippingPartner: null,
+      shippingCode: null,
+      shippingStatus: null,
+      trackingLink: null,
+      shippingHistory: [],
+    };
+    const shipped = { id: 'p1', status: 2, partner: { partner_name: 'GHN', extend_code: 'GHNRCn', partner_status: 'picked' } };
+
+    it('Pancake báo vận đơn MỚI cho đơn đã huỷ → không ghi mã vận đơn lên đơn, đưa vào "Cần xử lý" kèm mã', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, orderUpdate, orderUpdateMany } = setup(cancelled, undefined, alerts);
+      await proc.onShippingUpdated(shipped);
+      expect(orderUpdate).not.toHaveBeenCalled();
+      expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringMatching(/GHN GHNRCn.*đơn đã "Đã huỷ"/)]);
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+    });
+
+    it('cùng mã vận đơn đã có (Pancake "Đã hoàn" kèm thông tin hãng) → vẫn cập nhật dòng vận chuyển như trước, không báo động', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, orderUpdate, orderUpdateMany } = setup({ ...cancelled, shippingPartner: 'GHN', shippingCode: 'GHNRCn' }, undefined, alerts);
+      await proc.onShippingUpdated({ id: 'p1', status: 5, partner: { partner_name: 'GHN', extend_code: 'GHNRCn', partner_status: 'returned' } });
+      expect(orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shippingStatus: 'returned' }) }));
+      expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('đơn bị huỷ chen giữa lúc đọc và lúc ghi vận đơn mới → câu ghi trượt (lọc trạng thái), đưa vào "Cần xử lý"', async () => {
+      const open = { ...cancelled, status: 'PACKED', paymentStatus: 'PAID' };
+      const { proc, prisma, orderUpdate, orderUpdateMany } = setup(open);
+      orderUpdate.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('not found', { code: 'P2025', clientVersion: 'test' }));
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue(cancelled);
+      await proc.onShippingUpdated(shipped);
+      expect(orderUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } } }),
+      );
+      expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('GHNRCn')]);
+    });
+  });
+
   it('nhận payload Pancake POS chuẩn (partner object): cập nhật hãng VC, mã vận đơn, trạng thái và link tracking', async () => {
     const { proc, orderUpdate } = setup({
       id: 'o1',
@@ -514,7 +561,8 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     await proc.onShippingUpdated(payload);
 
     expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: 'o1' },
+      // Vận đơn mới: chỉ ghi khi đơn chưa huỷ/trả (R3-CANCEL-5).
+      where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } },
       data: expect.objectContaining({
         shippingPartner: 'Giao Hàng Nhanh',
         shippingCode: 'GHN123456789',
@@ -555,7 +603,8 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     await proc.onShippingUpdated(payload);
 
     expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: 'o1' },
+      // Vận đơn mới: chỉ ghi khi đơn chưa huỷ/trả (R3-CANCEL-5).
+      where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } },
       data: expect.objectContaining({
         shippingPartner: 'Viettel Post',
         shippingCode: 'VT987654321',
@@ -980,6 +1029,74 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
       expect(attentionFlags(txUpdateMany)).toHaveLength(1);
     }
+  });
+
+  // R3-MONEY-2: "Hoàn một phần" (15) là bước kế tiếp đúng quy trình sau khi admin duyệt trả một phần (đã hoàn tiền).
+  describe('"Hoàn một phần" (15) cho đơn đã duyệt trả trên Tubu (R3-MONEY-2)', () => {
+    const delivered = {
+      ...base,
+      status: 'DELIVERED',
+      pancakeAttention: 'Khách trả một phần đơn (đã duyệt hoàn tiền): DRIP ×1. Tạo phiếu "Hoàn một phần" … bấm "Đã nhận hàng về" khi hàng về kho.',
+    };
+
+    it('chưa bấm "Đã nhận hàng về" → ghi "đã hoàn trên Tubu", KHÔNG bảo hoàn tay, giữ nhắc "Đã nhận hàng về", không báo động lại', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, prisma, txUpdateMany, txExecuteRaw, historyCreate } = setup(delivered, undefined, alerts);
+      (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      const raw = (prisma.$executeRaw as jest.Mock).mock.calls;
+      expect(raw).toHaveLength(1);
+      const [sql, reason] = raw[0] as [TemplateStringsArray, string];
+      expect(sql.join('?')).toContain('"receivedAt" IS NULL');
+      expect(reason).toMatch(/^Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu/);
+      expect(reason).toContain('Đã nhận hàng về');
+      expect(reason).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
+      expect(alerts.alert).not.toHaveBeenCalled();
+      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      expect(txExecuteRaw).not.toHaveBeenCalled();
+      expect(historyCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ fromStatus: 'DELIVERED', toStatus: 'DELIVERED', actorType: 'PANCAKE', note: expect.stringContaining('đã hoàn trên Tubu') }),
+      });
+    });
+
+    it('đã bấm "Đã nhận hàng về" hết → gỡ việc trả hàng khỏi hàng đợi, chỉ ghi lịch sử', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, prisma, orderUpdateMany, historyCreate } = setup(delivered, undefined, alerts);
+      (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: new Date() }]);
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      expect(orderUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'o1', OR: expect.arrayContaining([{ pancakeAttention: { startsWith: 'Khách trả một phần đơn' } }]) as unknown },
+        data: { pancakeAttention: null, pancakeAttentionAt: null },
+      });
+      expect(attentionFlags(orderUpdateMany).filter(Boolean)).toHaveLength(0);
+      expect(alerts.alert).not.toHaveBeenCalled();
+      expect(historyCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('Pancake gửi lại webhook 15 → không ghi lịch sử lần hai', async () => {
+      const { proc, prisma, historyCreate } = setup(delivered);
+      (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: null }]);
+      (prisma.orderStatusHistory.findFirst as jest.Mock).mockResolvedValue({ id: 'h1' });
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      expect(historyCreate).not.toHaveBeenCalled();
+    });
+
+    it('khách có yêu cầu trả CHỜ DUYỆT → bảo duyệt trên Tubu (hệ thống tự hoàn), không bảo hoàn tay', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, prisma, orderUpdateMany } = setup({ ...base, status: 'DELIVERED' }, undefined, alerts);
+      (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'REQUESTED', receivedAt: null }]);
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      const flags = attentionFlags(orderUpdateMany);
+      expect(flags).toEqual([expect.stringContaining('chờ duyệt')]);
+      expect(flags[0]).not.toContain('bằng tay');
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+    });
+
+    it('không có yêu cầu trả nào trên Tubu → giữ lời cũ: kiểm tra hàng và hoàn tay phần bị trả', async () => {
+      const { proc, orderUpdateMany } = setup({ ...base, status: 'DELIVERED' });
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('hoàn tiền/điểm cho phần bị trả bằng tay')]);
+    });
   });
 
   it('webhook tới trễ lùi trong chuỗi giao (đơn đã giao, Pancake báo "Đã gửi hàng") → bỏ qua êm, không vào hàng đợi', async () => {

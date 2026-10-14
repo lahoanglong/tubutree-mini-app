@@ -137,21 +137,88 @@ export function pancakeTags(
 }
 
 export const CUSTOMER_NOTE_MAX = 200;
+export const CUSTOMER_PAYMENT_HINT_HIDDEN = '(đã ẩn nội dung thanh toán)';
+
+/** Mỗi ký tự → một ký tự thường không dấu, giữ nguyên độ dài: vị trí khớp trên bản gấp cũng là vị trí trên chuỗi gốc. */
+function foldKeepLength(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    const base = (ch === 'đ' || ch === 'Đ' ? 'd' : ch.normalize('NFD').charAt(0)).toLowerCase();
+    out += base.length === ch.length ? base : ch;
+  }
+  return out;
+}
+
+const WORD_START = '(?<![\\p{L}\\p{N}_])';
+const WORD_END = '(?![\\p{L}\\p{N}_])';
+const MONEY_WORD = '(?:tien|cod|ho|phi)';
+/**
+ * Cụm khách tự viết kiểu chỉ dẫn thu tiền (trên bản đã gấp không dấu). Cụm dài đứng trước. Tránh từ dễ nhầm với lời dặn
+ * giao hàng: "ck" một mình (= "chồng"), "lấy hộ" (nhờ người nhận hộ), "không lấy." (từ chối nhận), "dùng thử", "đã chuyển"
+ * (chuyển nhà), "đã trả lời", "ngân hàng" (mốc địa chỉ).
+ */
+const PAYMENT_HINT = new RegExp(
+  WORD_START +
+    '(?:' +
+    [
+      `(?:khong|ko|k|kg|hong|hok|khoi|dung|mien)\\s+(?:can\\s+|duoc\\s+|phai\\s+)?thu(?:\\s+${MONEY_WORD})+`,
+      '(?:khong|ko|k|kg|hong|hok|khoi|dung|mien)\\s+(?:can\\s+|duoc\\s+|phai\\s+)?lay(?:\\s+(?:tien|cod|phi))+',
+      '(?:khong|ko|k|kg|hong|hok)\\s+(?:can\\s+|phai\\s+)?thu(?=\\s*(?:[^\\p{L}\\p{N}\\s]|$))',
+      `(?:da|dc)\\s+(?:thanh\\s+toan|chuyen\\s+khoan|chuyen\\s+tien|chuyen\\s+ck|tra\\s+(?:tien|truoc|roi|du|het|bang)|tt|ck|bank(?:ing)?|nop\\s+tien)`,
+      `thu(?:\\s+${MONEY_WORD})+`,
+      'lay(?:\\s+(?:tien|cod|phi))+',
+      'ck\\s+(?:roi|du|truoc)',
+      'thanh\\s+toan',
+      'chuyen\\s+khoan',
+      'tra\\s+truoc',
+      'cod',
+      'zalo\\s*pay',
+      'momo',
+      'vn\\s*pay(?:\\s*qr)?',
+      'shopee\\s*pay',
+      'viettel\\s*(?:pay|money)',
+      '(?:internet\\s+)?banking',
+      '(?:pre)?paid',
+    ].join('|') +
+    ')' +
+    WORD_END,
+  'gu',
+);
+const HIDDEN_RUN = new RegExp(`${CUSTOMER_PAYMENT_HINT_HIDDEN.replace(/[()]/g, '\\$&')}(?:\\s+${CUSTOMER_PAYMENT_HINT_HIDDEN.replace(/[()]/g, '\\$&')})+`, 'g');
+
+/**
+ * Ẩn các cụm khách viết kiểu chỉ dẫn thu tiền ("ĐÃ THANH TOÁN", "KHÔNG THU COD", "đã ck"...): chỉ dẫn thu tiền duy nhất
+ * kho/shipper được thấy là dấu của hệ thống ([THU COD …] / [ĐÃ THANH TOÁN …]) — chiêu ghi chú giả "đã trả" trên đơn COD.
+ */
+function hidePaymentHints(text: string): string {
+  const folded = foldKeepLength(text);
+  let out = '';
+  let last = 0;
+  for (const m of folded.matchAll(PAYMENT_HINT)) {
+    out += text.slice(last, m.index) + CUSTOMER_PAYMENT_HINT_HIDDEN;
+    last = m.index + m[0].length;
+  }
+  return (out + text.slice(last)).replace(HIDDEN_RUN, CUSTOMER_PAYMENT_HINT_HIDDEN);
+}
 
 /**
  * Lời dặn của khách cho kho/shipper, đã làm sạch: một dòng, không có dấu tách " | " hay ngoặc vuông của các dấu hệ
- * thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), cắt CUSTOMER_NOTE_MAX ký tự. Rỗng → null.
+ * thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), không chứa chỉ dẫn thu tiền, cắt CUSTOMER_NOTE_MAX
+ * ký tự. Rỗng → null.
  */
 export function customerDeliveryNote(note: string | null | undefined): string | null {
-  const clean = (note ?? '')
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-    .replace(/\|/g, '/')
-    .replace(/\[/g, '(')
-    .replace(/\]/g, ')')
-    .replace(/order\s*code\s*:/gi, 'Mã đơn:')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const clean = hidePaymentHints(
+    (note ?? '')
+      .normalize('NFC')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .replace(/\|/g, '/')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')')
+      .replace(/order\s*code\s*:/gi, 'Mã đơn:')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
   if (!clean) return null;
   const capped = clean.length > CUSTOMER_NOTE_MAX ? `${clean.slice(0, CUSTOMER_NOTE_MAX - 1).trimEnd()}…` : clean;
   return `Khách dặn: ${capped}`;

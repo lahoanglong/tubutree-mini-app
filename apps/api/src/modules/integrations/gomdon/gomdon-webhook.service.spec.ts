@@ -256,6 +256,12 @@ describe('GomdonWebhookService.processEvent — áp dụng trạng thái', () =>
     expect(ctx.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('lấy hàng không thành công'));
   });
 
+  it.each([6, 8])('hàng đang/đã hoàn về kho (%s) → báo động nhóm GOODS_RETURNED (tự đóng khi đơn được huỷ/trả) (R3-CANCEL-3)', async (status) => {
+    const ctx = build({ orders: [{ status: 'SHIPPING', gomdonStatus: '3' }] });
+    await process(ctx, { order_id: 55, status });
+    expect(ctx.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('xử lý đơn với khách'), 'OPS_GOMDON_ALERT', 'GOODS_RETURNED');
+  });
+
   it('status 2 cho đơn đã CANCELLED (xác nhận huỷ) → gomdonCancelStatus CANCELLED, không báo động', async () => {
     const ctx = build({ orders: [{ status: 'CANCELLED', gomdonStatus: '1' }] });
     await process(ctx, { order_id: 55, status: 2 });

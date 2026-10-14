@@ -226,6 +226,20 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã vào quy trình giao');
   });
 
+  it('R3-CANCEL-2: BE từ chối "đã bàn giao" → tải lại đơn, nút Hủy đơn biến mất, lời BE vẫn còn', async () => {
+    mocks.order = { ...BASE, status: 'PACKED' };
+    mocks.cancel.mockImplementation(async () => {
+      mocks.order = { ...BASE, status: 'PACKED', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false };
+      throw new Error('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.');
+    });
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(12);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã bàn giao');
+    expect(btn(container, 'Hủy đơn')).toBeUndefined();
+  });
+
   it('đơn đang đóng gói (chưa bàn giao vận chuyển) vẫn hủy được — D1, BUYERWEB-5', async () => {
     mocks.order = { ...BASE, status: 'PACKED' };
     const { container } = await mount();
@@ -237,6 +251,20 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     const { container } = await mount();
     expect(btn(container, 'Hủy đơn')).toBeUndefined();
     expect(container.textContent).toContain('Cần hủy hoặc đổi đơn?');
+  });
+
+  it('R3-CANCEL-2: đơn đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút Hủy đơn', async () => {
+    mocks.order = { ...BASE, status: 'PACKED', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false };
+    const { container } = await mount();
+    expect(btn(container, 'Hủy đơn')).toBeUndefined();
+    expect(container.textContent).toContain('Đã đặt đơn vị vận chuyển');
+    expect(container.textContent).toContain('Cần hủy hoặc đổi đơn?');
+  });
+
+  it('R3-CANCEL-2: API báo canCancel=false thì ẩn nút dù trạng thái còn trong mốc hủy', async () => {
+    mocks.order = { ...BASE, status: 'CONFIRMED', canCancel: false };
+    const { container } = await mount();
+    expect(btn(container, 'Hủy đơn')).toBeUndefined();
   });
 
   it('đơn CTV lên hộ khách đã trả tiền: CTV không thấy nút Hủy đơn', async () => {

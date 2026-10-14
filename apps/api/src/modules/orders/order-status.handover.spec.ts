@@ -5,7 +5,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
-import { PancakeHandedOverError } from '../integrations/pancake/pancake-sync-hooks';
+import { PancakeHandedOverError, PancakeUnreachableError } from '../integrations/pancake/pancake-sync-hooks';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -49,7 +49,7 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
   };
   const reversal = { reverseFinancials: jest.fn().mockResolvedValue(undefined) };
   const pancakeHooks = {
-    precheckCancel: jest.fn().mockResolvedValue({ kind: 'DEFERRED', reason: 'Pancake vừa không phản hồi' }),
+    precheckCancel: jest.fn().mockResolvedValue({ kind: 'DEFERRED', reason: 'Pancake trả 400 khi cập nhật đơn' }),
     afterLocalCancel: jest.fn().mockResolvedValue(undefined),
     afterPaid: jest.fn().mockResolvedValue(undefined),
     ...hooks,
@@ -185,11 +185,20 @@ describe('OrderStatusService — D1: không huỷ sau khi bàn giao vận chuy�
     expect(reversal.reverseFinancials).toHaveBeenCalled();
   });
 
-  it('chưa bàn giao (PACKED, chưa mã vận đơn), Pancake không trả lời → vẫn huỷ như trước (trạng thái cuối biết được là chưa giao)', async () => {
+  it('chưa bàn giao (PACKED, chưa mã vận đơn), Pancake trả lời chưa gửi hàng nhưng chưa nhận lệnh huỷ (DEFERRED) → huỷ, job thử lại', async () => {
     const { svc, reversal, pancakeHooks } = make(makeOrder({ status: 'PACKED', shippingCode: null, shippingPartner: null }));
     await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
     expect(pancakeHooks.precheckCancel).toHaveBeenCalled();
     expect(reversal.reverseFinancials).toHaveBeenCalled();
+  });
+
+  it('chưa bàn giao ở Tubu nhưng không hỏi được Pancake (webhook "Đã gửi hàng" có thể chưa về) → từ chối, không hoàn tiền (R3-CANCEL-1)', async () => {
+    const { svc, tx, reversal } = make(makeOrder({ status: 'CONFIRMED', shippingCode: null, shippingPartner: null }), {
+      precheckCancel: jest.fn().mockRejectedValue(new PancakeUnreachableError('timeout of 5000ms exceeded')),
+    });
+    await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+    expect(tx.order.updateMany).not.toHaveBeenCalled();
+    expect(reversal.reverseFinancials).not.toHaveBeenCalled();
   });
 
   it('Pancake báo đã gửi hàng khi admin huỷ → lời báo cho người vận hành, không phải "liên hệ CSKH" (R2-LIFECYCLE-9)', async () => {

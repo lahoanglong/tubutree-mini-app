@@ -19,6 +19,8 @@ export const GOMDON_ALERT_KIND = {
   WAYBILL_NOTE: 'WAYBILL_NOTE',
   /** Đơn đã huỷ còn vận đơn có thể sống: cần huỷ tay. Đóng khi hệ thống huỷ được vận đơn. */
   CANCEL_NEEDED: 'CANCEL_NEEDED',
+  /** Hàng đang/đã hoàn về kho: cần xử lý đơn với khách. Đóng khi đơn đã huỷ/trả (OrderStatusService). */
+  GOODS_RETURNED: 'GOODS_RETURNED',
 } as const;
 export type GomdonAlertKind = (typeof GOMDON_ALERT_KIND)[keyof typeof GOMDON_ALERT_KIND];
 
@@ -60,6 +62,12 @@ export class GomdonAlertService {
             select: { id: true },
           });
           if (open) return false;
+          if (kind === GOMDON_ALERT_KIND.GOODS_RETURNED) {
+            // Đơn đã huỷ/trả (việc với khách đã xong) thì không mở việc mới. Khoá chia sẻ dòng đơn: lần huỷ đang chạy
+            // dở phải commit trước, rồi chính nó đóng báo động này sau commit (OrderStatusService).
+            const [row] = await tx.$queryRaw<{ status: string }[]>`SELECT "status" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
+            if (row && (row.status === 'CANCELLED' || row.status === 'RETURNED')) return false;
+          }
           await tx.gomdonAlert.create({ data: { orderId: order.id, message, ...(kind ? { kind } : {}) } });
           return true;
         });
@@ -107,10 +115,15 @@ export class GomdonAlertService {
 
   /** Hệ thống tự xử lý xong một nhóm việc → đóng báo động đang mở thuộc nhóm đó (người đóng = hệ thống). */
   async resolveKinds(orderId: string, kinds: readonly GomdonAlertKind[]): Promise<number> {
-    const r = await this.prisma.gomdonAlert.updateMany({
-      where: { orderId, resolvedAt: null, kind: { in: [...kinds] } },
-      data: { resolvedAt: new Date(), resolvedById: null },
-    });
-    return r.count;
+    return resolveGomdonAlertKinds(this.prisma, orderId, kinds);
   }
+}
+
+/** Dùng chung cho nơi không inject được GomdonAlertService (OrderStatusService — tránh vòng module). */
+export async function resolveGomdonAlertKinds(prisma: PrismaService, orderId: string, kinds: readonly GomdonAlertKind[]): Promise<number> {
+  const r = await prisma.gomdonAlert.updateMany({
+    where: { orderId, resolvedAt: null, kind: { in: [...kinds] } },
+    data: { resolvedAt: new Date(), resolvedById: null },
+  });
+  return r.count;
 }

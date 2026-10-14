@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buyerStatusLabel,
+  canCustomerCancel,
+  isCarrierBooked,
   isReorderable,
   orderPointsNote,
   orderStamp,
@@ -114,5 +117,40 @@ describe('discountRows (R2-BUYERMINI-8: tách mã giảm giá và Điểm Xanh b
     expect(discountRows({ discount: 98_000, pointsUsed: 60 })).toEqual([{ label: 'Giảm giá (gồm Điểm Xanh)', amount: 98_000 }]);
     expect(discountRows({ discount: 38_000, pointsUsed: 0 })).toEqual([{ label: 'Giảm giá', amount: 38_000 }]);
     expect(discountRows({ discount: 0, pointsUsed: 0 })).toEqual([]);
+  });
+});
+
+// R3-CANCEL-2: đơn "Đang đóng gói" mà kho đã đặt hãng (Pancake gắn mã GHN) vẫn bày nút "Hủy đơn" → bấm là bị từ chối.
+describe('canCustomerCancel / isCarrierBooked / buyerStatusLabel', () => {
+  it('kho đã đặt hãng: không bày nút huỷ, chip "Đã đặt đơn vị vận chuyển"', () => {
+    const o = { status: 'PACKED', shippingCode: 'GHN1933' };
+    expect(isCarrierBooked(o)).toBe(true);
+    expect(canCustomerCancel(o, 'u1')).toBe(false);
+    expect(buyerStatusLabel(o)).toBe('Đã đặt đơn vị vận chuyển');
+  });
+
+  it('mã vận đơn của vận đơn thu gom Gomdon (bưu tá chưa tới) không tính là đã đặt hãng', () => {
+    const o = { status: 'PACKED', shippingCode: 'BE1', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1', gomdonStatus: '1' };
+    expect(isCarrierBooked(o)).toBe(false);
+    expect(canCustomerCancel(o, 'u1')).toBe(true);
+    expect(buyerStatusLabel(o)).toBe('Đang đóng gói');
+  });
+
+  it('API trả canCancel thì theo API; trạng thái đã đóng vẫn ẩn dù cờ cũ còn true', () => {
+    expect(canCustomerCancel({ status: 'CONFIRMED', canCancel: false }, 'u1')).toBe(false);
+    expect(canCustomerCancel({ status: 'PACKED', shippingCode: 'GHN1', canCancel: true }, 'u1')).toBe(true);
+    expect(canCustomerCancel({ status: 'CANCELLED', canCancel: true }, 'u1')).toBe(false);
+  });
+
+  it('luật cũ giữ nguyên khi API chưa trả cờ: đại lý tới Đã xác nhận, CTV lên hộ đã trả, bưu tá đã lấy hàng', () => {
+    expect(canCustomerCancel({ status: 'PACKED', type: 'DEALER' }, 'u1')).toBe(false);
+    expect(canCustomerCancel({ status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'u1' }, 'u1')).toBe(false);
+    expect(canCustomerCancel({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '3' }, 'u1')).toBe(false);
+    expect(canCustomerCancel({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
+  });
+
+  it('đơn đang giao/đã huỷ giữ nhãn gốc dù có mã vận đơn', () => {
+    expect(buyerStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1' })).toBe('Đang giao');
+    expect(buyerStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1' })).toBe('Đã hủy');
   });
 });

@@ -375,6 +375,20 @@ describe('OrderStatusService', () => {
     expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
   });
 
+  it.each(['SHIPPING', 'DELIVERED'])(
+    'thua race vì đơn vừa bị HUỶ, Pancake báo %s → ném InvalidOrderTransitionError như lúc đọc tuần tự (processor gắn "Cần xử lý") (R3-CANCEL-5)',
+    async (target) => {
+      const order = makeOrder({ status: 'PACKED', paymentMethod: 'COD' });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+      mockTx(0);
+      const err = await service.setStatus('o1', target as never, { actorType: 'PANCAKE' }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(InvalidOrderTransitionError);
+      expect(err).toMatchObject({ from: 'CANCELLED', to: target });
+      expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+    },
+  );
+
   it('ném NotFoundException khi không tìm thấy đơn', async () => {
     prisma.order.findFirst.mockResolvedValue(null);
     await expect(service.setStatus('missing', 'CANCELLED' as never)).rejects.toThrow(NotFoundException);

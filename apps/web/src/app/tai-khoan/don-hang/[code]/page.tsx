@@ -12,6 +12,7 @@ import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { fetchMyRefunds, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
+  buyerOrderStatusLabel,
   canPayAgain,
   orderPaymentStatusLabel,
   orderDetailHref,
@@ -112,7 +113,7 @@ export default function OrderDetailPage() {
     <Shell title={`Đơn hàng #${o.code}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-          {orderStatusLabel(o.status)}
+          {buyerOrderStatusLabel(o)}
         </span>
         <span className="text-sm text-stone-600">Đặt lúc {formatDateTime(o.createdAt)}</span>
       </div>

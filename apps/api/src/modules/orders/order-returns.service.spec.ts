@@ -365,6 +365,7 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
       },
       order: { findUnique: jest.fn().mockResolvedValue(order) },
       user: { findUnique: jest.fn().mockResolvedValue(null) },
+      $executeRaw: jest.fn().mockResolvedValue(0),
       $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
     } as unknown as PrismaService;
     const svc = new OrderReturnsService(
@@ -376,7 +377,7 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
       notifications,
     );
     jest.spyOn(svc as unknown as { withContext: (r: unknown) => unknown }, 'withContext').mockImplementation(async (r) => r);
-    return { svc, updateMany, restockReturnedItems };
+    return { svc, prisma, updateMany, restockReturnedItems };
   }
   const merchantOrder = {
     code: 'TUBU1',
@@ -414,6 +415,16 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     await h.svc.markReceived('admin1', 'r1');
     expect(h.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ receivedBy: 'admin1' }) }));
     expect(h.restockReturnedItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('nhận hàng về xong → gỡ việc "Pancake đã nhận phiếu hoàn một phần" khi không còn yêu cầu nào chờ nhận (R3-MONEY-2)', async () => {
+    const h = receiveHarness({ code: 'TUBU1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    await h.svc.markReceived('admin1', 'r1');
+    const raw = (h.prisma.$executeRaw as unknown as jest.Mock).mock.calls;
+    expect(raw).toHaveLength(1);
+    const [sql, ...values] = raw[0] as [TemplateStringsArray, ...unknown[]];
+    expect(sql.join('?')).toMatch(/SET "pancakeAttention" = NULL[\s\S]*NOT EXISTS[\s\S]*"receivedAt" IS NULL/);
+    expect(values).toContain('Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu');
   });
 
   it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {
