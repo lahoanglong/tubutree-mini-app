@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { formatDateTime } from '@/lib/format-date';
+import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_PRIMARY, Notice, ToneBadge } from './ui';
 
@@ -73,6 +74,7 @@ export function UserDetailDrawer({ userId, isAdmin, onClose }: { userId: string;
 
 function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
   const u = d.user;
+  const pts = pointsSummary(u);
   return (
     <div className="space-y-3">
       <Section title="Hồ sơ">
@@ -88,8 +90,8 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
           <dd className="font-medium">{formatVnd(u.walletBalance)}</dd>
           <dt className="text-stone-500">Điểm Xanh</dt>
           <dd>
-            {u.pointsBalance + u.pointsConvertedBalance}
-            {u.pointsConvertedBalance > 0 && <span className="text-xs text-stone-500"> (quy đổi {u.pointsConvertedBalance})</span>}
+            {pts.total}
+            {pts.convertedNote && <span className="text-xs text-stone-500"> ({pts.convertedNote})</span>}
           </dd>
           <dt className="text-stone-500">Tham gia</dt>
           <dd>{formatDateTime(u.createdAt)}</dd>
