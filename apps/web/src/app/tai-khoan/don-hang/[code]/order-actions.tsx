@@ -89,7 +89,11 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
       invalidateBalances(qc);
     },
-    onError: () => setConfirmCancel(false),
+    onError: () => {
+      setConfirmCancel(false);
+      // BE từ chối vì đơn vừa bàn giao vận chuyển (và đã đồng bộ trạng thái mới): tải lại để ẩn nút hủy.
+      void qc.invalidateQueries({ queryKey: ['order', o.code] });
+    },
   });
 
   const repurchase = useMutation({
@@ -102,7 +106,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     },
   });
 
-  const nothingToDo = !canCancel && !canReorder && !showsReturns;
+  // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
+  const nothingToDo = !canCancel && !canReorder && !showsReturns && !cancel.isError;
   if (nothingToDo) return null;
 
   return (

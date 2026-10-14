@@ -767,6 +767,32 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     expect(view).toMatchObject({ code: baseOrder.code, total: baseOrder.total });
   });
 
+  describe('canCancel — nút "Hủy đơn" theo đúng luật huỷ của khách, gồm mốc bàn giao vận chuyển (R3-CANCEL-2)', () => {
+    it.each([
+      ['Đang đóng gói, chưa đặt hãng', { status: 'PACKED' }, true],
+      ['Đang đóng gói, kho đã đặt hãng (Pancake gắn mã GHN)', { status: 'PACKED', shippingCode: 'GHN1933', shippingPartner: 'GHN' }, false],
+      ['Đã xác nhận, gian hàng đã gửi hàng', { status: 'CONFIRMED', shippedAt: new Date() }, false],
+      ['Đang đóng gói, mã vận đơn là của Gomdon (bưu tá chưa tới)', { status: 'PACKED', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1', shippingCode: 'BE1', gomdonStatus: '1' }, true],
+      ['Bưu tá Gomdon đã lấy hàng', { status: 'CONFIRMED', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1', gomdonStatus: '3' }, false],
+      ['Đang giao', { status: 'SHIPPING' }, false],
+      ['Đơn đại lý đang đóng gói', { status: 'PACKED', type: 'DEALER' }, false],
+      ['CTV xem đơn lên hộ khách đã trả', { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'u1' }, false],
+    ])('%s → canCancel=%s (list + chi tiết)', async (_label, over, expected) => {
+      const { svc } = makeMediaService([{ ...baseOrder, ...over, items: [] }], []);
+      expect((await svc.detailView('u1', 'TUBU1')).canCancel).toBe(expected);
+      expect((await svc.list('u1', {}, 1, 20)).data[0]!.canCancel).toBe(expected);
+    });
+
+    it('khớp đúng lần huỷ thật: canCancel=false thì POST huỷ bị từ chối với lời "đã bàn giao"', async () => {
+      const shipped = { ...baseOrder, status: 'PACKED', shippingCode: 'GHN1933', shippingPartner: 'GHN' };
+      const { svc } = makeMediaService([{ ...shipped, items: [] }], []);
+      expect((await svc.detailView('u1', 'TUBU1')).canCancel).toBe(false);
+      const { svc: cancelSvc, updateMany } = makeService(shipped);
+      await expect(cancelSvc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển');
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+  });
+
   it('D4: đơn Tubu không tách → nơi giao Tubu Tree, không truy vấn đơn cùng lần đặt', async () => {
     const withItems = makeMediaService([{ ...baseOrder, items: [] }], []);
     const view = await withItems.svc.detailView('u1', 'TUBU1');

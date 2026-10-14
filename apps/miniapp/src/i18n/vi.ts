@@ -262,6 +262,8 @@ export const vi = {
 
   orders: {
     title: 'Đơn hàng của tôi',
+    /** Đơn chưa "Đang giao" nhưng kho đã đặt hãng (có mã vận đơn) — không tự huỷ được nữa. */
+    carrierBooked: 'Đã đặt đơn vị vận chuyển',
     emptyHeading: 'Bạn chưa có đơn nào',
     emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
     emptyCta: 'Bắt đầu mua',

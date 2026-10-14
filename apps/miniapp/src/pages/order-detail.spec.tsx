@@ -275,6 +275,15 @@ describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuy
     expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
   });
+
+  it('R3-CANCEL-2: đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút "Hủy đơn"', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false,
+    });
+    renderPage();
+    expect(await screen.findByText('Đã đặt đơn vị vận chuyển')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
 });
 
 describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addressLine,
+  buyerOrderStatusLabel,
   canCancelOrder,
   canPayAgain,
   isReorderable,
@@ -121,10 +122,35 @@ describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', (
     expect(canCancelOrder({ ...o, paymentStatus: 'UNPAID' }, 'ctv1')).toBe(true);
   });
 
+  it('kho đã đặt hãng (mã vận đơn không phải của Gomdon): không bày nút hủy — BE từ chối "đã bàn giao" (R3-CANCEL-2)', () => {
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'GHN1933' }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'BE1', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1' }, 'u1')).toBe(true);
+  });
+
+  it('API trả canCancel thì theo API (cùng luật lần huỷ thật); trạng thái đã đóng thì vẫn ẩn dù cờ cũ còn true', () => {
+    expect(canCancelOrder({ status: 'PACKED', canCancel: false }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'GHN1', canCancel: true }, 'u1')).toBe(true);
+    expect(canCancelOrder({ status: 'CANCELLED', canCancel: true }, 'u1')).toBe(false);
+  });
+
   it('thu gom tái chế mà bưu tá đã lấy hàng: không hủy được nữa; chưa lấy (mã 1/2/10) thì vẫn hủy được', () => {
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '3' }, 'u')).toBe(false);
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '1' }, 'u')).toBe(true);
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: false, gomdonStatus: '3' }, 'u')).toBe(true);
+  });
+});
+
+describe('buyerOrderStatusLabel — đơn đã có mã vận đơn hãng (R3-CANCEL-2)', () => {
+  it('Đã xác nhận/Đang đóng gói mà kho đã đặt hãng → "Đã đặt đơn vị vận chuyển"', () => {
+    expect(buyerOrderStatusLabel({ status: 'PACKED', shippingCode: 'GHN1933' })).toBe('Đã đặt đơn vị vận chuyển');
+    expect(buyerOrderStatusLabel({ status: 'CONFIRMED', shippingCode: 'GHN1933' })).toBe('Đã đặt đơn vị vận chuyển');
+  });
+
+  it('mã vận đơn Gomdon (thu gom) hay trạng thái khác giữ nhãn gốc', () => {
+    expect(buyerOrderStatusLabel({ status: 'PACKED' })).toBe('Đang đóng gói');
+    expect(buyerOrderStatusLabel({ status: 'PACKED', shippingCode: 'BE1', gomdonOrderId: 'BE1' })).toBe('Đang đóng gói');
+    expect(buyerOrderStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1933' })).toBe('Đang giao');
+    expect(buyerOrderStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1933' })).toBe('Đã hủy');
   });
 });
 

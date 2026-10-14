@@ -7,9 +7,9 @@ import { Leaf, Search } from 'lucide-react';
 import { fetchOrdersPage, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import {
   ORDER_TABS,
+  buyerOrderStatusLabel,
   canPayAgain,
   orderDetailHref,
-  orderStatusLabel,
   orderStatusTone,
   type OrderTabKey,
 } from '@/lib/order-view';
@@ -144,7 +144,7 @@ export function OrdersSection() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 break-all font-medium text-stone-900">#{o.code}</span>
                   <span className={`flex-none rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-                    {orderStatusLabel(o.status)}
+                    {buyerOrderStatusLabel(o)}
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-stone-600">

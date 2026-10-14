@@ -90,6 +90,11 @@ export interface OrderDTO {
   deliveredAt?: string | null;
   /** Hạn thanh toán của đơn trả trước đang chờ tiền (ISO) — quá hạn đơn tự huỷ. Null với đơn khác. */
   paymentDeadline?: string | null;
+  /**
+   * Khách đang xem tự huỷ được đơn này không — API tính bằng đúng luật huỷ của khách (gồm cả mốc bàn giao vận chuyển: đã
+   * có mã vận đơn hãng, bưu tá đã lấy hàng). API cũ chưa trả.
+   */
+  canCancel?: boolean;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;
