@@ -61,6 +61,8 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
     await setConfig(prisma, 'merchant.commission_pct', 0.15);
     await setConfig(prisma, 'returns.window_days', 7);
+    // Các ca ở đây dùng đơn đặt lùi ngày; mốc bắt đầu đối soát giao hộ (= lúc triển khai) có ca riêng ở spec review.
+    await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
     returns = moduleRef.get(OrderReturnsService);
     status = moduleRef.get(OrderStatusService);
     settlement = moduleRef.get(MerchantFulfilmentService);
@@ -252,7 +254,7 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
     expect((await settlement.statementFor(store.id)).lines).toHaveLength(0);
   });
 
-  it('khoảng liên kết lúc đặt đơn: đơn cũ đã giao trước khi có tính năng vẫn vào bảng kê (bù), đúng gian hàng của lúc đặt; đơn trước liên kết hay đã huỷ thì không', async () => {
+  it('khoảng liên kết lúc đặt đơn: đơn đã giao từ trước mà chưa có dòng vẫn vào bảng kê, đúng gian hàng của lúc đặt; đơn trước liên kết hay đã huỷ thì không', async () => {
     const s1 = await shop({ commissionPct: 0.1 });
     const s2 = await shop();
     const { product, variations: [v] } = await variations(s1.store.id, s1.tag, [100_000]);
