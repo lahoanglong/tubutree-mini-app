@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -180,6 +180,77 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     await flush();
     expect(api.calls[0]!.url).toContain('/admin/orders/o1/confirm-payment');
     expect(container.textContent).toContain('xem mục Hoàn tiền khách');
+  });
+
+  it('R3-MONEY-3: "Ghi nhận tiền về muộn" có ô số tiền thực nhận (mặc định tổng đơn); khách chuyển thiếu thì ghi đúng số đó', async () => {
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, latePayment: true, message: 'Đã ghi khoản hoàn 50.000đ tiền về muộn.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    const amount = container.querySelector('input[name="receivedAmount"]') as HTMLInputElement;
+    expect(amount.value).toBe('450.000');
+    expect(amount.className).toContain('min-h-[44px]');
+    typeInto(amount, '50000');
+    expect(amount.value).toBe('50.000');
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    const text = confirmDialog()?.textContent ?? '';
+    expect(text).toMatch(/đã nhận 50\.000\s?đ chuyển khoản/);
+    expect(text).toMatch(/khoản hoàn 50\.000\s?đ/);
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ amount: 50_000 });
+  });
+
+  it.each([
+    ['0', 'lớn hơn 0'],
+    ['', 'lớn hơn 0'],
+    ['450001', 'không vượt quá tổng đơn 450.000'],
+  ])('R3-MONEY-3: số tiền thực nhận "%s" → báo lỗi ngay, không hỏi xác nhận, không gọi API', async (typed, msg) => {
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    typeInto(container.querySelector('input[name="receivedAmount"]') as HTMLInputElement, typed);
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(msg);
+    expect(api.calls).toHaveLength(0);
+  });
+
+  it('"Đã nhận tiền" đơn còn sống: không có ô số tiền (phải nhận đủ), body không kèm amount', async () => {
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'ok' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    expect(container.querySelector('input[name="receivedAmount"]')).toBeNull();
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({});
+  });
+
+  it('R3-MONEY-7: "Hủy đơn" có ô lý do (khách đọc trong thông báo); nhập thì PUT kèm note', async () => {
+    const api = mockFetch({ '/status': { body: { id: 'o1', status: 'CANCELLED' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order({ canConfirmPayment: false })} />);
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('khách sẽ đọc trong thông báo huỷ đơn');
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, '  Hết hàng nhà cung cấp ');
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'CANCELLED', note: 'Hết hàng nhà cung cấp' });
   });
 
   it('nhân viên (canConfirmPayment=false ở cấp trang) không thấy nút ghi nhận tiền về muộn', () => {

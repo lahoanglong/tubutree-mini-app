@@ -11,6 +11,7 @@ import {
   returnStatusLabel,
   returnFormError,
   showsPaymentDeadline,
+  showsRefundPanel,
   type MyRefund,
   type ReturnLineState,
 } from './refund-rules';
@@ -132,6 +133,46 @@ describe('refundStatusText', () => {
       refundStatusText(r({ kind: 'RETURN', status: 'COMPLETED', bankName: 'VCB', bankAccountNo: '0071000123456', bankRef: 'FT1' })).detail,
     ).toBe('Về VCB ••• 3456 · Mã GD FT1');
     expect(refundStatusText(r({ status: 'COMPLETED', method: 'WALLET' })).title).toBe('Tiền về sau khi đơn đã huỷ: đã hoàn vào Ví Tubu');
+  });
+});
+
+describe('refundStatusText — R3-MONEY-1 / R2-LIFECYCLE-5', () => {
+  const base: MyRefund = {
+    id: 'r1',
+    orderId: 'o1',
+    orderCode: 'TB1',
+    kind: 'OVERPAYMENT',
+    amount: 114_000,
+    method: 'MANUAL_TRANSFER',
+    status: 'PENDING',
+    bankName: null,
+    bankAccountNo: null,
+    bankAccountName: null,
+    bankRef: null,
+    completedAt: null,
+    createdAt: '2026-10-14T00:00:00Z',
+    canChooseDestination: true,
+  };
+  it('khoản tiền trả dư (trả hai lần, chuyển dư) → nói rõ là tiền bạn trả dư, chờ chọn nơi nhận', () => {
+    expect(refundStatusText(base)).toMatchObject({ title: 'Tiền bạn trả dư: chờ bạn chọn nơi nhận', tone: 'warning' });
+  });
+  it('đã hoàn thẳng vào Ví khi huỷ → nói lúc cộng tiền', () => {
+    const s = refundStatusText({ ...base, kind: 'CANCEL', method: 'WALLET', status: 'COMPLETED', completedAt: '2026-10-14T03:05:00Z', canChooseDestination: false });
+    expect(s.title).toBe('Hoàn tiền huỷ đơn: đã hoàn vào Ví Tubu');
+    expect(s.detail).toBe('Đã cộng vào Ví Tubu lúc 10:05 14/10/2026.');
+  });
+});
+
+describe('showsRefundPanel — khối Hoàn tiền ở chi tiết đơn', () => {
+  it('đơn đã huỷ/trả/giao, hoặc đơn đã nhận tiền (có thể có khoản trả dư) → hiện', () => {
+    expect(showsRefundPanel({ status: 'CANCELLED', paymentStatus: 'UNPAID' })).toBe(true);
+    expect(showsRefundPanel({ status: 'RETURNED', paymentStatus: 'REFUNDED' })).toBe(true);
+    expect(showsRefundPanel({ status: 'DELIVERED', paymentStatus: 'UNPAID' })).toBe(true);
+    expect(showsRefundPanel({ status: 'CONFIRMED', paymentStatus: 'PAID' })).toBe(true);
+  });
+  it('đơn chưa trả tiền đang xử lý → không hỏi khoản hoàn', () => {
+    expect(showsRefundPanel({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' })).toBe(false);
+    expect(showsRefundPanel({ status: 'SHIPPING', paymentStatus: 'UNPAID' })).toBe(false);
   });
 });
 

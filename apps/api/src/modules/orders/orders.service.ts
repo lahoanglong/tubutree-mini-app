@@ -13,7 +13,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
-import { announceBankRefund } from './refund-queue';
+import { announceBankRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
 import { cancelHandover, PREPAID_METHODS } from './order-transition';
@@ -368,8 +368,15 @@ export class OrdersService {
     // — CTV vẫn giữ hoa hồng PENDING cho đơn khách đã hủy trước khi giao (không tự dọn, dù
     // không trả được vì payout chỉ rút từ status APPROVED — nhưng làm sai lệch số "chờ duyệt"
     // hiển thị cho CTV vĩnh viễn). Nhất quán với admin/pancake — cả hai đều gọi cặp đôi này.
-    await this.loyalty.reverseOrderPoints(order.id);
+    const standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
     await this.affiliate.reverseCommissionsForOrder(order.id);
+    const receivedBack = await refundReportedUnderpayment(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      order.id,
+    ).catch((err: unknown) => {
+      this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      return 0;
+    });
     // Đơn thu gom tái chế: huỷ luôn vận đơn Gomdon (job có retry). Best-effort — lỗi enqueue chỉ log,
     // cron GomdonReconcileService quét đơn CANCELLED còn vận đơn chưa huỷ và enqueue lại.
     if (order.hasRecyclingPickup && this.gomdonQueue) {
@@ -390,9 +397,12 @@ export class OrdersService {
         { notifyCustomer: false },
       );
     }
-    const pointsBack = (reversed as ReversalResult | null)?.pointsRefunded ?? 0;
+    const pointsBack = ((reversed as ReversalResult | null)?.pointsRefunded ?? 0) + standardPointsBack;
     await this.notifications
-      .notify(userId, 'ORDER_CANCELLED', { order_code: code, refund_note: refundNote(refund, bank, pointsBack) })
+      .notify(userId, 'ORDER_CANCELLED', {
+        order_code: code,
+        refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack),
+      })
       .catch(() => undefined);
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,

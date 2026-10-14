@@ -1301,6 +1301,30 @@ describe('AdminService.confirmOrderPayment', () => {
     });
   });
 
+  it('R3-MONEY-3: khách chỉ chuyển 50.000 cho đơn đã huỷ → khoản hoàn ghi đúng số tiền thực nhận, không phải tổng đơn', async () => {
+    const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT50', amount: 50000 });
+    expect(res.message).toContain('50.000đ');
+    const createMany = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock } }).orderCustomerRefund.createMany;
+    expect(createMany.mock.calls[0][0].data[0]).toMatchObject({ kind: 'LATE_PAYMENT', amount: 50000 });
+  });
+
+  it.each([
+    ['0đ', 0],
+    ['vượt tổng đơn', 350001],
+    ['số lẻ', 1000.5],
+  ])('R3-MONEY-3: số tiền thực nhận %s → 400, không ghi gì', async (_l, amount) => {
+    const { svc, orderStatus } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    await expect(svc.confirmOrderPayment('admin-1', 'TB-1', { amount })).rejects.toThrow('Số tiền thực nhận');
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-3: đơn còn sống mà số thực nhận thiếu → 400, không lật "đã thanh toán"', async () => {
+    const { svc, orderStatus } = make(bankOrder());
+    await expect(svc.confirmOrderPayment('admin-1', 'TB-1', { amount: 200000 })).rejects.toThrow('chưa xác nhận thanh toán được');
+    expect(orderStatus.markPaid).not.toHaveBeenCalled();
+  });
+
   it('đơn đã có khoản tiền về muộn (webhook Pancake ghi trước) → admin bấm không tạo khoản thứ hai (R2-ADMINOPS-3)', async () => {
     const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
     const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock } }).orderCustomerRefund;

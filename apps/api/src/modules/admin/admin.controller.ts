@@ -206,8 +206,10 @@ class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
   status!: 'PENDING_PAYMENT' | 'CONFIRMED' | 'PACKED' | 'SHIPPING' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
 
+  /** Huỷ/trả: khách đọc nguyên văn trong thông báo (customerReason), nên giới hạn độ dài. */
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   note?: string;
 }
 
@@ -215,6 +217,8 @@ export class ConfirmOrderPaymentDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào lịch sử đơn để đối soát. */
   @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** Số tiền thực nhận trên sao kê (đồng) — mặc định tổng đơn. Đơn đã huỷ: khoản hoàn tiền về muộn ghi đúng số này. */
+  @IsOptional() @IsInt() @Min(1) amount?: number;
 }
 
 /**

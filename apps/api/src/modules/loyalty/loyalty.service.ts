@@ -154,7 +154,8 @@ export class LoyaltyService {
    * Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của
    * lockedOrderPoints.
    */
-  async reverseOrderPoints(orderId: string): Promise<void> {
+  /** Trả số Điểm Xanh thường (lô STANDARD) vừa hoàn lại cho khách ở lần gọi này — 0 khi không có hoặc đã đảo trước đó. */
+  async reverseOrderPoints(orderId: string): Promise<number> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     // D3: đơn trả một phần trước đó đã trả lại điểm đã dùng và thu hồi điểm tích theo phần — lần đảo cả đơn chỉ làm
     // phần còn lại. Chỉ đơn đã giao (giờ RETURNED) mới có thể có lần trả một phần.
@@ -168,7 +169,7 @@ export class LoyaltyService {
     // kết nối tx trong lúc chờ SystemConfigService.
     const refundExpiresAt = usedStandard > 0 ? await this.pointsExpiresAt(new Date()) : null;
     try {
-      await this.prisma.$transaction(async (tx) => {
+      return await this.prisma.$transaction(async (tx) => {
         const lockedUser =
           earnedLeft > 0 || usedStandard > 0
             ? await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`
@@ -184,7 +185,7 @@ export class LoyaltyService {
           },
           select: { id: true },
         });
-        if (reversed) return;
+        if (reversed) return 0;
 
         // pointsEarned CHỈ được cộng khi đơn DELIVERED (xem creditOrderPoints).
         // Nếu user hủy đơn CONFIRMED (chưa giao), điểm chưa cộng → KHÔNG trừ.
@@ -244,6 +245,7 @@ export class LoyaltyService {
             this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${earnedLeft} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
           }
         }
+        return usedStandard;
       });
     } catch (err) {
       // Unique partial index (reason, refId) trên points_transactions chặn double-reverse —
@@ -253,7 +255,7 @@ export class LoyaltyService {
         err.code === 'P2002'
       ) {
         this.logger.debug(`reverseOrderPoints idempotent skip order=${order.code}`);
-        return;
+        return 0;
       }
       throw err;
     }

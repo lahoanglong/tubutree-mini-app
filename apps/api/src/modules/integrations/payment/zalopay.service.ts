@@ -20,7 +20,7 @@ import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
 import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
-import { OPS_PAYMENT_TEMPLATE, recordLatePaymentRefund } from '../../orders/refund-queue';
+import { OPS_PAYMENT_TEMPLATE, flagRefundAttention, recordLatePaymentRefund, recordOverpaymentRefund } from '../../orders/refund-queue';
 import { formatVnd } from '../../orders/refund-destination';
 import { notifyAdmins } from '../../../common/notify-admins';
 import type { Order } from '@prisma/client';
@@ -99,6 +99,7 @@ export class ZalopayService {
     if (order.status !== 'PENDING_PAYMENT') {
       throw new BadRequestException('Đơn không còn ở trạng thái chờ thanh toán.');
     }
+    await this.settleOpenAttempts(order.id);
 
     const appTime = Date.now();
     // Hậu tố ngẫu nhiên phân biệt LẦN THỬ: appTransId chỉ phân giải theo NGÀY (yymmdd_code) nên
@@ -151,6 +152,43 @@ export class ZalopayService {
       data: { paymentTxnId: appTransId },
     });
     return data;
+  }
+
+  /**
+   * Trước khi mở lệnh mới: hỏi ZaloPay các lệnh cũ chưa có kết quả của đơn (callback có thể đã thất lạc). Lệnh cũ đã trả thì
+   * ghi nhận luôn và không mở lệnh mới — khách khỏi trả lần hai; lệnh cũ còn đang xử lý thì bảo khách chờ. Không hỏi được
+   * ZaloPay thì vẫn cho mở lệnh: nếu cả hai cùng thành công, lần sau thành khoản hoàn tiền trả dư.
+   */
+  private async settleOpenAttempts(orderId: string): Promise<void> {
+    const open = await this.prisma.paymentAttempt.findMany({
+      where: { orderId, provider: 'ZALOPAY', resolvedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, appTransId: true },
+    });
+    let processing = false;
+    for (const a of open) {
+      let res: ZalopayQueryResponse;
+      try {
+        res = await this.queryOrderStatus(a.appTransId);
+      } catch (err) {
+        this.logger.warn(`Không tra được lệnh ZaloPay cũ ${a.appTransId} trước khi mở lệnh mới: ${err instanceof Error ? err.message : err}`);
+        continue;
+      }
+      if (res.return_code === 1) {
+        await this.applyGatewayPayment(a.appTransId, res.amount, 'query');
+      } else if (res.return_code === 2) {
+        await this.resolveAttempt(a.id);
+      } else if (res.is_processing) {
+        processing = true;
+      }
+    }
+    const now = await this.prisma.order.findUnique({ where: { id: orderId }, select: { paymentStatus: true, status: true } });
+    if (now?.paymentStatus === 'PAID') throw new BadRequestException('Đơn đã thanh toán.');
+    if (now && now.status !== 'PENDING_PAYMENT') throw new BadRequestException('Đơn không còn ở trạng thái chờ thanh toán.');
+    if (processing) {
+      throw new BadRequestException('Lần thanh toán ZaloPay trước của đơn đang được xử lý — vui lòng chờ vài phút rồi xem lại đơn.');
+    }
   }
 
   /**
@@ -218,7 +256,7 @@ export class ZalopayService {
     // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
     // ghi nhận PAID vào đơn đã chết.
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      await this.recordLatePayment(order.id, paidAmount, appTransId);
+      await this.recordUnappliedPayment(order.id, paidAmount, appTransId, attempt?.id);
       await this.resolveAttempt(attempt?.id);
       return;
     }
@@ -245,6 +283,9 @@ export class ZalopayService {
           ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
         },
       });
+      if (r.count > 0 && attempt) {
+        await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { succeededAt: paidAt } });
+      }
       if (r.count > 0 && this.analytics) {
         await this.analytics.record(tx, {
           eventName: 'order_paid',
@@ -269,8 +310,9 @@ export class ZalopayService {
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
     } else {
-      // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
-      await this.recordLatePayment(order.id, paidAmount, appTransId);
+      // Guard thua: callback trùng, lệnh khác của cùng đơn đã trả trước (khách trả hai lần), hoặc khách/cron vừa huỷ đơn
+      // giữa lần đọc và lần lật.
+      await this.recordUnappliedPayment(order.id, paidAmount, appTransId, attempt?.id);
     }
   }
 
@@ -319,24 +361,43 @@ export class ZalopayService {
   }
 
   /**
-   * Tiền về khi đơn đã huỷ/trả: không lật PAID, tạo yêu cầu hoàn tiền (khách chọn Ví hay ngân hàng). Chỉ khi đơn CHƯA
-   * từng nhận khoản này (UNPAID): đơn PAID/REFUNDED nghĩa là callback này là bản ZaloPay gửi lại của lần đã lật PAID
-   * (tiền đó đã nằm trong đơn và đã/sẽ được hoàn theo luồng huỷ/trả) — tạo thêm khoản là hoàn hai lần.
+   * Một giao dịch ZaloPay đã thành công nhưng không lật được đơn sang PAID:
+   * - đơn chưa nhận tiền mà đã huỷ/trả → khoản hoàn LATE_PAYMENT (khách chọn Ví hay ngân hàng);
+   * - đơn đã nhận tiền (PAID/REFUNDED) và chính lệnh này là lệnh đã lật PAID → ZaloPay gửi lại, bỏ qua;
+   * - đơn đã nhận tiền bằng một lệnh KHÁC → khách trả hai lần: khoản hoàn OVERPAYMENT cho lần này (R3-MONEY-1);
+   * - đơn cũ nhiều lệnh, không biết lệnh nào đã lật PAID → "Cần xử lý" để đối soát tay, không tự tạo khoản hoàn.
    */
-  private async recordLatePayment(orderId: string, amount: number, appTransId: string): Promise<void> {
+  private async recordUnappliedPayment(orderId: string, amount: number, appTransId: string, attemptId: string | undefined): Promise<void> {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || (order.status !== 'CANCELLED' && order.status !== 'RETURNED')) return;
-    if (order.paymentStatus !== 'UNPAID') {
-      this.logger.warn(
-        `Callback ZaloPay ${appTransId} cho đơn ${order.code} (${order.status}, ${order.paymentStatus}) — đã ghi nhận tiền trước đó, bỏ qua.`,
-      );
+    if (!order) return;
+    const ctx = { prisma: this.prisma, notifications: this.notifications, logger: this.logger };
+    if (order.paymentStatus === 'UNPAID') {
+      if (order.status !== 'CANCELLED' && order.status !== 'RETURNED') return;
+      await recordLatePaymentRefund(ctx, order, { amount, source: 'ZALOPAY', refKey: appTransId });
       return;
     }
-    await recordLatePaymentRefund({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order, {
-      amount,
-      source: 'ZALOPAY',
-      refKey: appTransId,
+    if (!attemptId) {
+      this.logger.warn(`Callback ZaloPay ${appTransId} cho đơn ${order.code} (${order.status}, ${order.paymentStatus}) — đơn cũ chưa có sổ lần thử, coi là gửi lại.`);
+      return;
+    }
+    const succeeded = await this.prisma.paymentAttempt.findMany({
+      where: { orderId: order.id, succeededAt: { not: null } },
+      select: { id: true, appTransId: true },
     });
+    if (succeeded.some((a) => a.id === attemptId)) {
+      this.logger.log(`Callback ZaloPay ${appTransId} cho đơn ${order.code} là bản gửi lại của lần đã ghi nhận — bỏ qua.`);
+      return;
+    }
+    if (succeeded.length > 0) {
+      await recordOverpaymentRefund(ctx, order, { amount, source: 'ZALOPAY', refKey: appTransId });
+      return;
+    }
+    await flagRefundAttention(
+      ctx,
+      order,
+      `ZaloPay báo lệnh ${appTransId} (${formatVnd(amount)}) đã thanh toán cho đơn đã nhận tiền, nhưng không xác định được lệnh nào đã được ghi nhận — có thể khách trả hai lần. Đối soát giao dịch trên ZaloPay; khách trả hai lần thì hoàn tay phần dư.`,
+      `tiền ZaloPay đơn ${order.code}`,
+    );
   }
 
   /** So sánh MAC chống timing-attack (độ dài khác → false ngay, không ném). */

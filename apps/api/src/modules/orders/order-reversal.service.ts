@@ -10,7 +10,7 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { toLocalPhone } from '../../common/phone';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
-import { createBankRefund } from './refund-queue';
+import { createBankRefund, recordWalletRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
@@ -191,7 +191,17 @@ export class OrderReversalService {
       } else if (refunded.count === 1) {
         // Mặc định và mọi đơn trả bằng Ví: hoàn về Ví Tubu ngay.
         moneyRefunded = await this.refundToWallet(tx, order.userId, order, refundable);
-        if (moneyRefunded) refund = { amount: refundable, to: 'WALLET' };
+        if (moneyRefunded) {
+          refund = { amount: refundable, to: 'WALLET' };
+          const returned = order.status === 'DELIVERED';
+          await recordWalletRefund(tx, {
+            order,
+            kind: returned ? 'RETURN' : 'CANCEL',
+            refKey: opts.returnRequestId,
+            amount: refundable,
+            reason: returned ? 'RETURNED' : 'CANCELLED',
+          });
+        }
       }
     }
 
@@ -314,6 +324,7 @@ export class OrderReversalService {
         result.refund = { amount, to: 'BANK', refundId: row.id };
       } else {
         await this.creditReturnToWallet(tx, order.userId, order, amount, requestId);
+        await recordWalletRefund(tx, { order, kind: 'RETURN', refKey: requestId, amount, reason: 'RETURNED' });
         result.refund = { amount, to: 'WALLET' };
       }
     } else if (amount > 0) {

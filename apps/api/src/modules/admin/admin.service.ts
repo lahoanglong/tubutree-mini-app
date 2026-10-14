@@ -13,6 +13,7 @@ import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.ser
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
@@ -598,8 +599,8 @@ export class AdminService {
       }),
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
         SELECT
-          SUM(r."refundAmount") AS all_refunds,
-          SUM(r."refundAmount") FILTER (
+          SUM(r."refundAmount" + r."shippingRefund") AS all_refunds,
+          SUM(r."refundAmount" + r."shippingRefund") FILTER (
             WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
               AND o."paymentStatus" <> 'REFUNDED'
               AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD' AND o.fulfiller <> 'MERCHANT'))
@@ -799,6 +800,7 @@ export class AdminService {
     try {
       updated = await this.orderStatus.setStatus(before.id, status, {
         note: note ? `Admin: ${note}` : undefined,
+        customerReason: note,
         actorType: 'ADMIN',
         actorId: adminId,
       });
@@ -819,10 +821,10 @@ export class AdminService {
    * hay hai admin bấm cùng lúc chỉ lật một lần; ai bấm, lúc nào, mã giao dịch nằm ở order_status_history.
    * Đơn đại lý đi đường riêng (DealerService.confirmDealerOrderPayment) vì phải loại đơn ghi công nợ.
    */
-  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string } = {}) {
+  async confirmOrderPayment(adminId: string, idOrCode: string, dto: { bankRef?: string; note?: string; amount?: number } = {}) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, type: true, paymentMethod: true, total: true },
+      select: { id: true, code: true, type: true, paymentMethod: true, total: true, status: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (order.type === 'DEALER') {
@@ -834,6 +836,19 @@ export class AdminService {
       throw new BadRequestException(`Đơn ${order.code} thanh toán ${order.paymentMethod}, không phải chuyển khoản.`);
     }
 
+    // Số tiền thực nhận trên sao kê (R3-MONEY-3): khoản hoàn tiền về muộn là đúng số đó, không phải tổng đơn. Đơn còn sống
+    // chỉ xác nhận được khi nhận đủ — chuyển thiếu thì chờ khách chuyển thêm hoặc huỷ đơn.
+    const received = dto.amount ?? order.total;
+    if (!Number.isInteger(received) || received <= 0 || received > order.total) {
+      throw new BadRequestException(
+        `Số tiền thực nhận phải từ 1đ đến tổng đơn ${formatVnd(order.total)}. Khách chuyển dư thì ghi đúng tổng đơn rồi hoàn tay phần dư.`,
+      );
+    }
+    if (received < order.total && order.status !== 'CANCELLED' && order.status !== 'RETURNED') {
+      throw new BadRequestException(
+        `Khách mới chuyển ${formatVnd(received)}/${formatVnd(order.total)} — chưa xác nhận thanh toán được. Liên hệ khách chuyển thêm, hoặc huỷ đơn rồi ghi nhận tiền về muộn để hoàn số đã nhận.`,
+      );
+    }
     const bankRef = dto.bankRef?.trim();
     const adminNote = dto.note?.trim();
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
@@ -849,19 +864,19 @@ export class AdminService {
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         current,
         {
-          amount: order.total,
+          amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
           note: ['Admin ghi nhận tiền về muộn', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );
-      this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${order.total}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));
+      this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${received}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));
       return {
         ok: true,
         alreadyPaid: false,
         latePayment: true,
         message: created
-          ? `Đơn ${order.code} đã huỷ/trả — đã ghi khoản hoàn ${order.total.toLocaleString('vi-VN')}đ tiền về muộn, xem mục Hoàn tiền khách (khách chọn nhận về Ví hay tài khoản ngân hàng).`
+          ? `Đơn ${order.code} đã huỷ/trả — đã ghi khoản hoàn ${formatVnd(received)} tiền về muộn, xem mục Hoàn tiền khách (khách chọn nhận về Ví hay tài khoản ngân hàng).`
           : `Khoản tiền về muộn của đơn ${order.code} đã được ghi trước đó (tự động từ Pancake hoặc admin khác) — không tạo thêm khoản hoàn, xem mục Hoàn tiền khách.`,
         order: await this.prisma.order.findUniqueOrThrow({
           where: { id: order.id },

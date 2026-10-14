@@ -3,6 +3,7 @@ import type { CustomerRefundKind, Order, Prisma, PrismaClient } from '@prisma/cl
 import { notifyAdmins } from '../../common/notify-admins';
 import type { BankDetails } from './refund-destination';
 import { formatVnd, maskedBank } from './refund-destination';
+import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
 
 /** Phần của NotificationsService cần ở đây (khai báo cấu trúc: hàm tự do không kéo DI/vòng module). */
 export interface RefundNotifier {
@@ -43,6 +44,34 @@ export async function createBankRefund(
       bankAccountNo: input.bank?.accountNumber ?? null,
       bankAccountName: input.bank?.accountName ?? null,
     },
+  });
+}
+
+/**
+ * Dòng vết của khoản đã hoàn thẳng vào Ví khi huỷ/trả (R2-LIFECYCLE-5): chi tiết đơn của khách (web, mini app) đọc hàng
+ * này để nói "đã hoàn X vào Ví Tubu" như với khoản chuyển khoản. Không phải việc của admin (method WALLET, COMPLETED).
+ */
+export async function recordWalletRefund(
+  tx: Prisma.TransactionClient,
+  input: { order: Pick<Order, 'id' | 'code' | 'userId'>; kind: 'CANCEL' | 'RETURN'; refKey?: string; amount: number; reason: string },
+): Promise<void> {
+  await tx.orderCustomerRefund.createMany({
+    data: [
+      {
+        orderId: input.order.id,
+        orderCode: input.order.code,
+        kind: input.kind,
+        refKey: input.refKey ?? '',
+        userId: input.order.userId,
+        customerUserId: input.order.userId,
+        amount: input.amount,
+        method: 'WALLET',
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        reason: input.reason,
+      },
+    ],
+    skipDuplicates: true,
   });
 }
 
@@ -131,7 +160,7 @@ export async function recordLatePaymentRefund(
     return created.count === 0 ? ('EXISTS' as const) : ('CREATED' as const);
   });
   if (outcome === 'ADMIN_RECORDED') {
-    await flagManualDuplicate(ctx, order, adminRecordedReason(order, input.amount, input.source));
+    await flagRefundAttention(ctx, order, adminRecordedReason(order, input.amount, input.source));
     return false;
   }
   if (outcome === 'EXISTS') return false;
@@ -150,6 +179,7 @@ export async function recordCumulativeLatePayment(
   ctx: LateCtx,
   order: LateOrder,
   input: { reportedTotal: number; source: 'PANCAKE' },
+  opts: { notifyCustomer?: boolean } = {},
 ): Promise<number> {
   if (!(input.reportedTotal > 0)) return 0;
   if (order.paymentStatus !== 'UNPAID') return 0;
@@ -174,11 +204,154 @@ export async function recordCumulativeLatePayment(
     return created.count > 0 ? amount : 0;
   });
   if (outcome === 'ADMIN_RECORDED') {
-    await flagManualDuplicate(ctx, order, adminRecordedReason(order, input.reportedTotal, input.source));
+    await flagRefundAttention(ctx, order, adminRecordedReason(order, input.reportedTotal, input.source));
     return 0;
   }
-  if (outcome > 0) await announceLatePayment(ctx, order, outcome, input.source);
+  // Số Pancake báo đã nằm trọn trong khoản hoàn: cảnh báo "khách chuyển thiếu" của đơn đã huỷ không còn việc gì.
+  await ctx.prisma.order.updateMany({
+    where: { id: order.id, pancakeAttention: { startsWith: ATTENTION_UNDERPAID } },
+    data: { pancakeAttention: null, pancakeAttentionAt: null },
+  });
+  if (outcome > 0) await announceLatePayment(ctx, order, outcome, input.source, opts.notifyCustomer ?? true);
   return outcome;
+}
+
+/**
+ * Đơn chuyển khoản bị huỷ khi Pancake đã báo khách chuyển một phần (R3-MONEY-5): hoàn ngay số đã nhận (cùng khoá với
+ * webhook Pancake báo lại số đó sau này, nên không thành hai khoản). Mặc định caller báo khách trong chính tin huỷ đơn
+ * (`receivedRefundNote`) — một lần huỷ một tin. Trả số vừa ghi.
+ */
+export async function refundReportedUnderpayment(ctx: LateCtx, orderId: string, opts: { notifyCustomer?: boolean } = {}): Promise<number> {
+  const order = await ctx.prisma.order.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== 'CANCELLED' || order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return 0;
+  const reported = order.pancakePaidReported ?? 0;
+  if (!(reported > 0)) return 0;
+  return recordCumulativeLatePayment(ctx, order, { reportedTotal: reported, source: 'PANCAKE' }, { notifyCustomer: opts.notifyCustomer ?? false });
+}
+
+/** Câu thêm vào tin huỷ khi đã ghi khoản hoàn cho số tiền khách chuyển thiếu. */
+export function receivedRefundNote(amount: number): string {
+  return amount > 0
+    ? ` Tubu đã nhận ${formatVnd(amount)} chuyển khoản của đơn này — vào chi tiết đơn để chọn nhận lại về Ví Tubu (ngay) hoặc tài khoản ngân hàng.`
+    : '';
+}
+
+type OverOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'total'>;
+
+/**
+ * Khách trả thêm cho đơn đã nhận đủ tiền qua ZaloPay (R3-MONEY-1): lệnh thứ hai cũng thành công (callback lần đầu thất lạc,
+ * khách bấm thanh toán lại). Cổng đã xác thực khoản này (MAC, đúng số tiền, lệnh khác lệnh đã lật PAID) nên ghi thẳng khoản
+ * hoàn OVERPAYMENT chờ khách chọn Ví hay ngân hàng, báo khách và admin. Một khoản mỗi lệnh (refKey = kênh + mã lệnh); trả
+ * true khi vừa tạo.
+ */
+export async function recordOverpaymentRefund(
+  ctx: LateCtx,
+  order: OverOrder,
+  input: { amount: number; source: 'ZALOPAY'; refKey: string },
+): Promise<boolean> {
+  if (!(input.amount > 0)) return false;
+  const created = await ctx.prisma.$transaction((tx) =>
+    tx.orderCustomerRefund.createMany({
+      data: [overRow(order, `${input.source}:${input.refKey}`, input.amount, 'PENDING')],
+      skipDuplicates: true,
+    }),
+  );
+  if (created.count === 0) return false;
+  await announceOverpayment(ctx, order, input.amount);
+  return true;
+}
+
+/**
+ * Pancake báo số đã trả vượt tổng đơn đã nhận đủ tiền: CHƯA phải bằng chứng khách chuyển dư — hợp đồng field
+ * prepaid/bank_payment chưa đối chiếu được với payload thật, Tubu tự ghi transfer_money lên chính đơn đó, nhân viên có thể
+ * sửa đơn trên Pancake (thêm món, phụ phí) mà tổng đơn Tubu không đổi. Nên chỉ ghi khoản OVERPAYMENT ở trạng thái
+ * UNVERIFIED: khách không thấy, không chọn nơi nhận được, không được báo; admin đối chiếu sao kê rồi xác nhận
+ * (CustomerRefundsService.verifyOverpayment) hoặc bỏ qua. Như `recordCumulativeLatePayment`, chỉ ghi phần tăng thêm so với
+ * các khoản dư Pancake đã ghi (kể cả khoản đã bỏ qua — báo lại cùng số không đẻ việc mới); khoá dòng đơn, số cộng dồn nằm
+ * trong refKey nên webhook gửi lại là no-op. Trả số vừa ghi.
+ */
+export async function recordCumulativeOverpayment(
+  ctx: LateCtx,
+  order: OverOrder,
+  input: { reportedTotal: number; source: 'PANCAKE' },
+): Promise<number> {
+  const excess = input.reportedTotal - order.total;
+  if (!(excess > 0)) return 0;
+  const prefix = `${input.source}:`;
+  const amount = await ctx.prisma.$transaction(async (tx) => {
+    await lockOrderRow(tx, order.id);
+    const recorded = await tx.orderCustomerRefund.aggregate({
+      where: { orderId: order.id, kind: 'OVERPAYMENT', refKey: { startsWith: prefix } },
+      _sum: { amount: true },
+    });
+    const add = excess - (recorded._sum.amount ?? 0);
+    if (add <= 0) return 0;
+    const created = await tx.orderCustomerRefund.createMany({
+      data: [overRow(order, `${prefix}paid:${input.reportedTotal}`, add, 'UNVERIFIED')],
+      skipDuplicates: true,
+    });
+    return created.count > 0 ? add : 0;
+  });
+  if (amount > 0) await announceUnverifiedOverpayment(ctx, order, amount, input.reportedTotal);
+  return amount;
+}
+
+function overRow(
+  order: OverOrder,
+  refKey: string,
+  amount: number,
+  status: 'PENDING' | 'UNVERIFIED',
+): Prisma.OrderCustomerRefundCreateManyInput {
+  return {
+    orderId: order.id,
+    orderCode: order.code,
+    kind: 'OVERPAYMENT',
+    refKey,
+    userId: order.userId,
+    amount,
+    method: 'MANUAL_TRANSFER',
+    status,
+    reason: order.status,
+  };
+}
+
+async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number) {
+  const amount = formatVnd(rawAmount);
+  ctx.logger.warn(`Khách trả thêm ${amount} qua ZaloPay cho đơn ${order.code} đã nhận đủ tiền — đã tạo khoản hoàn tiền trả dư.`);
+  await ctx.notifications
+    ?.notify(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount })
+    .catch(() => undefined);
+  await notifyAdmins(
+    { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
+    {
+      template: OPS_REFUND_TEMPLATE,
+      subject: `tiền trả dư đơn ${order.code}`,
+      data: () => ({
+        order_code: order.code,
+        message: `ZaloPay xác nhận khách trả thêm ${amount} (một lệnh thanh toán khác) cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", chờ khách chọn nơi nhận.`,
+      }),
+    },
+  ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
+}
+
+async function announceUnverifiedOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number, reportedTotal: number) {
+  const amount = formatVnd(rawAmount);
+  ctx.logger.warn(`Pancake báo đơn ${order.code} đã nhận ${formatVnd(reportedTotal)} (tổng đơn ${formatVnd(order.total)}) — khoản dư ${amount} chờ admin đối soát.`);
+  await notifyAdmins(
+    { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
+    {
+      template: OPS_REFUND_TEMPLATE,
+      subject: `tiền trả dư chờ đối soát đơn ${order.code}`,
+      data: () => ({
+        order_code: order.code,
+        message:
+          `Pancake báo đã nhận ${formatVnd(reportedTotal)} cho đơn đã nhận đủ ${formatVnd(order.total)} — có thể khách chuyển dư ${amount}. ` +
+          'Khách CHƯA được báo. Đối chiếu sao kê: đúng là khách chuyển dư thì ở mục Hoàn tiền khách, bộ lọc "Chờ đối soát", bấm ' +
+          '"Xác nhận tiền dư" (khách được báo để chọn nhận về Ví hay ngân hàng); cùng một lần chuyển hoặc nhân viên sửa đơn trên ' +
+          'Pancake thì bấm "Không phải tiền dư".',
+      }),
+    },
+  ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
 }
 
 async function lockOrderRow(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
@@ -209,12 +382,14 @@ function adminRecordedReason(order: LateOrder, rawAmount: number, source: LateSo
   return `${source === 'ZALOPAY' ? 'ZaloPay' : 'Pancake'} báo nhận ${amount} ${channelOf(source)} cho đơn đã ${order.status === 'RETURNED' ? 'trả' : 'huỷ'}, nhưng admin đã ghi tay khoản tiền về muộn của đơn này — KHÔNG tạo thêm khoản hoàn. Đối soát sao kê: cùng một lần chuyển thì bỏ qua; khách chuyển thêm lần nữa thì hoàn tay phần chênh.`;
 }
 
-async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: number, source: LateSource) {
+async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: number, source: LateSource, notifyCustomer = true) {
   const amount = formatVnd(rawAmount);
   ctx.logger.warn(`Tiền ${source} ${amount} về cho đơn ${order.code} đã ${order.status} — đã tạo yêu cầu hoàn tiền.`);
-  await ctx.notifications
-    ?.notify(order.userId, 'REFUND_LATE_PAYMENT', { order_code: order.code, amount })
-    .catch(() => undefined);
+  if (notifyCustomer) {
+    await ctx.notifications
+      ?.notify(order.userId, 'REFUND_LATE_PAYMENT', { order_code: order.code, amount })
+      .catch(() => undefined);
+  }
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
     {
@@ -229,10 +404,11 @@ async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: nu
 }
 
 /** Ghi vào "Cần xử lý Pancake" (trùng lý do thì thôi — webhook gửi lại không báo lại) và báo admin lần đầu. */
-async function flagManualDuplicate(
+export async function flagRefundAttention(
   ctx: { prisma: Pick<PrismaClient, 'user' | 'order'>; notifications?: RefundNotifier; logger: Pick<Logger, 'warn' | 'log'> },
   order: Pick<Order, 'id' | 'code'>,
   reason: string,
+  subject = `tiền về muộn đơn ${order.code}`,
 ): Promise<void> {
   const r = await ctx.prisma.order.updateMany({
     where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
@@ -242,6 +418,6 @@ async function flagManualDuplicate(
   ctx.logger.warn(`Đơn ${order.code}: ${reason}`);
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
-    { template: OPS_REFUND_TEMPLATE, subject: `tiền về muộn đơn ${order.code}`, data: () => ({ order_code: order.code, message: reason }) },
+    { template: OPS_REFUND_TEMPLATE, subject, data: () => ({ order_code: order.code, message: reason }) },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền về muộn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
 }

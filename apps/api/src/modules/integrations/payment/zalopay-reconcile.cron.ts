@@ -10,9 +10,9 @@ export type ZalopayReconcileResult =
 
 /**
  * Callback ZaloPay có thể thất lạc (mạng, API đang deploy, từng bị 400 vì trường `type`). Khách đã bị trừ tiền mà đơn
- * vẫn "Chờ thanh toán", rồi cron hết hạn tự huỷ. Cron này hỏi ZaloPay trạng thái các lần thử chưa có kết quả của đơn
- * ZaloPay còn chưa nhận tiền (đang chờ, hoặc đã huỷ — tiền về thì thành khoản hoàn) và ghi nhận qua đúng đường của
- * callback (ZalopayService.applyGatewayPayment).
+ * vẫn "Chờ thanh toán", rồi cron hết hạn tự huỷ, hoặc khách bấm thanh toán lại và trả hai lần. Cron này hỏi ZaloPay trạng
+ * thái các lần thử chưa có kết quả của mọi đơn ZaloPay (đang chờ; đã huỷ — tiền về thì thành khoản hoàn; đã nhận tiền bằng
+ * lệnh khác — thành khoản hoàn tiền trả dư) và ghi nhận qua đúng đường của callback (ZalopayService.applyGatewayPayment).
  */
 @Injectable()
 export class ZalopayReconcileCron {
@@ -60,7 +60,8 @@ export class ZalopayReconcileCron {
             { lastQueriedAt: null },
             { lastQueriedAt: { lte: new Date(now.getTime() - ZalopayReconcileCron.REQUERY_GAP_MINUTES * 60_000) } },
           ],
-          order: { paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', status: { in: ['PENDING_PAYMENT', 'CANCELLED'] } },
+          // Cả đơn đã nhận tiền: lệnh khác của đơn cũng thành công là khách trả hai lần (khoản hoàn tiền trả dư).
+          order: { paymentMethod: 'ZALOPAY' },
         },
         select: { id: true, appTransId: true },
         orderBy: { createdAt: 'asc' },

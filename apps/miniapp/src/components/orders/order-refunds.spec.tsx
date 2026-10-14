@@ -71,6 +71,23 @@ describe('OrderRefunds (D2: khách thấy và chọn nơi nhận khoản hoàn)'
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã hoàn 197.000đ vào Ví Tubu.', type: 'success' });
   });
 
+  it('R2-LIFECYCLE-5: đơn huỷ đã hoàn thẳng vào Ví → "đã hoàn vào Ví Tubu" kèm số tiền, không có nút chọn nơi nhận', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([
+      { ...LATE, kind: 'CANCEL', amount: 95_000, method: 'WALLET', status: 'COMPLETED', completedAt: '2026-10-14T03:05:00Z', canChooseDestination: false },
+    ]);
+    renderPanel();
+    expect(await screen.findByText('Hoàn tiền huỷ đơn: đã hoàn vào Ví Tubu · 95.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/^Đã cộng vào Ví Tubu lúc/)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('R3-MONEY-1: tiền trả dư → nói rõ và cho chọn nơi nhận', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([{ ...LATE, kind: 'OVERPAYMENT', amount: 114_000 }]);
+    renderPanel();
+    expect(await screen.findByText('Tiền bạn trả dư: chờ bạn chọn nơi nhận · 114.000đ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chọn nơi nhận tiền' })).toBeInTheDocument();
+  });
+
   it('chọn ngân hàng thiếu số tài khoản → báo lỗi, không gọi API', async () => {
     mocks.fetchMyRefunds.mockResolvedValue([LATE]);
     renderPanel();

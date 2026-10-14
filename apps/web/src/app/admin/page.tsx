@@ -429,7 +429,7 @@ export default function AdminPage() {
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'payouts' && <PayoutAdminTab />}
-          {active === 'customerRefunds' && <CustomerRefundsTab />}
+          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}

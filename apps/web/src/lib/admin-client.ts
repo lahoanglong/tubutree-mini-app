@@ -528,12 +528,12 @@ export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: st
  * POST /admin/orders/:id/confirm-payment — "Đã nhận tiền" cho đơn lẻ chuyển khoản (C-024): UNPAID → PAID
  * (PENDING_PAYMENT → CONFIRMED), idempotent; luật nằm ở AdminService.confirmOrderPayment, lỗi 400 hiện nguyên văn.
  */
-export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string } = {}) => {
+export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string; amount?: number } = {}) => {
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
   return apiFetch<ConfirmDealerPaymentResult>(`/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
     method: 'POST',
-    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.amount !== undefined ? { amount: input.amount } : {}) },
   });
 };
 
@@ -1181,10 +1181,13 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
   });
 
 // ── Hoàn tiền khách: hàng đợi chuyển khoản tay (khách cuối đơn CTV lên hộ, khách chọn ngân hàng khi huỷ/trả, tiền về muộn) ──
-/** PROCESSING: admin đã bấm "Bắt đầu chuyển khoản" — nơi nhận bị khoá, khách không đổi sang Ví được nữa. */
-export type AdminCustomerRefundStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED';
+/**
+ * PROCESSING: admin đã bấm "Bắt đầu chuyển khoản" — nơi nhận bị khoá, khách không đổi sang Ví được nữa.
+ * UNVERIFIED: khoản dư Pancake báo, chờ admin đối chiếu sao kê (khách chưa thấy); DISMISSED: admin xác định không phải tiền dư.
+ */
+export type AdminCustomerRefundStatus = 'UNVERIFIED' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'DISMISSED';
 export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
-export type AdminCustomerRefundKind = 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
+export type AdminCustomerRefundKind = 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT' | 'OVERPAYMENT';
 /** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
 export interface AdminCustomerRefund {
   id: string;
@@ -1198,8 +1201,10 @@ export interface AdminCustomerRefund {
   status: AdminCustomerRefundStatus;
   reason: string;
   completedAt: string | null;
-  /** adminId xác nhận đã chuyển khoản; BE không kèm tên admin. */
+  /** adminId xác nhận đã chuyển khoản. */
   completedBy: string | null;
+  /** Tên admin xác nhận (BE tra từ completedBy); API cũ chưa trả. */
+  completedByName?: string | null;
   bankRef: string | null;
   adminNote: string | null;
   createdAt: string;
@@ -1213,7 +1218,14 @@ export interface AdminCustomerRefund {
   /** adminId đang chuyển khoản (PROCESSING) và lúc bấm; API cũ chưa trả. */
   claimedBy?: string | null;
   claimedAt?: string | null;
+  /** Tên admin đang chuyển khoản — chỉ người này được xác nhận/trả về hàng chờ, admin khác phải tiếp quản kèm lý do. */
+  claimedByName?: string | null;
 }
+/** Admin khác người đang chuyển khoản: tiếp quản tường minh, lý do lưu vào lịch sử đơn (R3-MONEY-4). */
+export interface RefundTakeOver {
+  takeOverReason: string;
+}
+const takeOverBody = (t?: RefundTakeOver) => (t ? { takeOver: true, takeOverReason: t.takeOverReason.trim() } : {});
 export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
   apiFetch<Page<AdminCustomerRefund>>(
     `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${kind ? `&kind=${kind}` : ''}`,
@@ -1226,12 +1238,22 @@ const bankBody = (input: { bankName?: string; accountNumber?: string; accountNam
 export const claimCustomerRefund = (id: string, input: { bankName?: string; accountNumber?: string; accountName?: string } = {}) =>
   apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/claim`, { method: 'POST', body: bankBody(input) });
 /** Chưa chuyển được: PROCESSING -> PENDING, khách lại đổi được nơi nhận. */
-export const releaseCustomerRefund = (id: string) =>
-  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} });
+export const releaseCustomerRefund = (id: string, takeOver?: RefundTakeOver) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/release`, { method: 'POST', body: takeOverBody(takeOver) });
+/** "Xác nhận tiền dư" sau khi đối chiếu sao kê: UNVERIFIED -> PENDING với số dư thực nhận; khách được báo để chọn nơi nhận. */
+export const verifyCustomerRefund = (id: string, input: { amount: number; note?: string }) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/verify`, {
+    method: 'POST',
+    body: { amount: input.amount, ...(input.note?.trim() ? { note: input.note.trim() } : {}) },
+  });
+/** "Không phải tiền dư": UNVERIFIED -> DISMISSED kèm lý do; khách không được báo. */
+export const dismissCustomerRefund = (id: string, reason: string) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: { reason: reason.trim() } });
 /** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
 export const markCustomerRefundPaid = (
   id: string,
   input: { bankRef?: string; note?: string; bankName?: string; accountNumber?: string; accountName?: string } = {},
+  takeOver?: RefundTakeOver,
 ) =>
   apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/mark-paid`, {
     method: 'POST',
@@ -1241,6 +1263,7 @@ export const markCustomerRefundPaid = (
       ...(input.accountNumber?.trim()
         ? { bankName: input.bankName?.trim() ?? '', accountNumber: input.accountNumber.trim(), accountName: input.accountName?.trim() ?? '' }
         : {}),
+      ...takeOverBody(takeOver),
     },
   });
 

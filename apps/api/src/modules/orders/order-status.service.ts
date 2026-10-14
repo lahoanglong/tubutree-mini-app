@@ -31,8 +31,14 @@ import {
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
-import { ATTENTION_CANCEL_AFTER_HANDOVER, clearPancakeAttention, flagPancakeAttention } from '../integrations/pancake/pancake-attention';
+import {
+  ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_UNDERPAID,
+  clearPancakeAttention,
+  flagPancakeAttention,
+} from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
+import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
@@ -132,6 +138,8 @@ export class OrderStatusService {
        * của D1 nên được huỷ dù đơn đã bàn giao vận chuyển. Mọi đường huỷ khác bị chặn sau mốc bàn giao.
        */
       returnedToSender?: boolean;
+      /** Lý do người vận hành nhập khi huỷ/trả — khách đọc nguyên văn trong tin báo (ghi chú nội bộ ở `note`). */
+      customerReason?: string;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -286,12 +294,26 @@ export class OrderStatusService {
           `Xét thưởng giới thiệu cho đơn ${order.code} lỗi: ${e instanceof Error ? e.message : String(e)}`,
         );
       });
-    } else if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
-      await this.loyalty.reverseOrderPoints(order.id);
-      await this.affiliate.reverseCommissionsForOrder(order.id);
     }
-    if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') await this.settleClosedOrderAlerts(order);
+    let standardPointsBack = 0;
+    let receivedBack = 0;
+    if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
+      standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+      await this.settleClosedOrderAlerts(order);
+    }
+    // Tin huỷ mặc định (ORDER_CANCELLED) mang refund_note nên nói luôn khoản hoàn số tiền khách chuyển thiếu; mẫu tin khác
+    // (tự huỷ quá hạn) không có chỗ đó nên khoản hoàn tự báo khách bằng tin riêng.
+    const noteCarriesRefund = !opts.notifyEvent && opts.notifyData?.refund_note === undefined;
     if (targetStatus === 'CANCELLED') {
+      receivedBack = await refundReportedUnderpayment(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        order.id,
+        { notifyCustomer: !noteCarriesRefund },
+      ).catch((err: unknown) => {
+        this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+        return 0;
+      });
       await this.enqueueGomdonCancel(order);
       if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
       if (opts.actorType !== 'MERCHANT') {
@@ -311,7 +333,11 @@ export class OrderStatusService {
     // Admin/hệ thống/Pancake huỷ hoặc trả đơn đã trả tiền: khách được báo số tiền hoàn và nơi tiền về (R2-LIFECYCLE-5).
     if ((targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && notifyData.refund_note === undefined) {
       const r = reversed as ReversalResult | null;
-      notifyData.refund_note = refundNote(r?.refund ?? null, null, r?.pointsRefunded ?? 0);
+      const reason = opts.customerReason?.trim();
+      notifyData.refund_note =
+        (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +
+        refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
+        (noteCarriesRefund ? receivedRefundNote(receivedBack) : '');
     }
     await this.notifications
       .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)
@@ -383,6 +409,7 @@ export class OrderStatusService {
       });
       if (!won) continue;
 
+      await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications

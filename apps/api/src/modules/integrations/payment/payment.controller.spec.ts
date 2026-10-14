@@ -26,7 +26,7 @@ describe('POST /webhooks/zalopay qua ValidationPipe toàn cục', () => {
   beforeAll(async () => {
     const prisma: Record<string, unknown> = {
       order: { findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(order), updateMany },
-      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(attempt), updateMany: attemptUpdateMany },
+      paymentAttempt: { findUnique: jest.fn().mockResolvedValue(attempt), updateMany: attemptUpdateMany, update: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((cb: (tx: unknown) => unknown): unknown => cb(prisma)),
     };
     const config = {

@@ -20,7 +20,7 @@ describe('ZalopayReconcileCron', () => {
     return { cron, findMany, update, zalopay };
   }
 
-  it('chỉ hỏi lần thử chưa có kết quả của đơn ZaloPay chưa nhận tiền (đang chờ hoặc đã huỷ), trong cửa sổ 48 giờ', async () => {
+  it('hỏi lần thử chưa có kết quả của mọi đơn ZaloPay (kể cả đơn đã nhận tiền bằng lệnh khác — khách trả hai lần), trong cửa sổ 48 giờ', async () => {
     const { cron, findMany } = setup([], jest.fn());
     await cron.reconcile(now);
     const where = findMany.mock.calls[0][0].where;
@@ -29,7 +29,7 @@ describe('ZalopayReconcileCron', () => {
         provider: 'ZALOPAY',
         resolvedAt: null,
         createdAt: { gte: new Date('2026-10-12T10:00:00Z'), lte: new Date('2026-10-14T09:57:00Z') },
-        order: { paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', status: { in: ['PENDING_PAYMENT', 'CANCELLED'] } },
+        order: { paymentMethod: 'ZALOPAY' },
       }),
     );
   });

@@ -29,7 +29,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
-import { showsPaymentDeadline } from '@/lib/refund-rules';
+import { showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
 import { OrderTimeline } from './order-timeline';
 
 export default function OrderDetailPage() {
@@ -165,7 +165,7 @@ export default function OrderDetailPage() {
 
       <OrderTimeline status={o.status} />
       <OrderActions order={o} userId={user?.id} />
-      {o.id && (o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELIVERED') && <OrderRefunds orderId={o.id} />}
+      {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
 
       <section className={`mt-4 p-4 ${ui.card}`}>
         <h2 className={ui.sectionTitle}>Sản phẩm</h2>

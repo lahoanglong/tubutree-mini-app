@@ -1,20 +1,44 @@
 import type { AdminCustomerRefund, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
 import { ApiError } from './client-api';
+import { formatVnd } from './shop-client';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
 export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
 
 export const CUSTOMER_REFUND_FILTERS: { status: AdminCustomerRefundStatus; label: string }[] = [
+  { status: 'UNVERIFIED', label: 'Chờ đối soát' },
   { status: 'PENDING', label: 'Chờ chuyển khoản' },
   { status: 'PROCESSING', label: 'Đang chuyển khoản' },
   { status: 'COMPLETED', label: 'Đã chuyển' },
+  { status: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
 export const CUSTOMER_REFUND_EMPTY: Record<AdminCustomerRefundStatus, string> = {
+  UNVERIFIED: 'Không có khoản tiền dư nào chờ đối soát.',
   PENDING: 'Không có khoản hoàn nào đang chờ chuyển khoản.',
   PROCESSING: 'Không có khoản hoàn nào đang được chuyển khoản.',
   COMPLETED: 'Chưa có khoản hoàn nào đã xử lý.',
+  DISMISSED: 'Chưa có khoản nào được đánh dấu không phải tiền dư.',
 };
+
+/** Lý do tối thiểu khi bỏ qua khoản chờ đối soát — khớp CustomerRefundsService.dismissOverpayment. */
+export const DISMISS_REASON_MIN = 5;
+
+/** Số dư thực nhận trên sao kê: 1đ..số Pancake báo dư (khớp CustomerRefundsService.verifyOverpayment). */
+export function overpaidAmountError(n: number | null, reported: number): string | null {
+  if (n == null || n <= 0) return 'Nhập số tiền dư thực nhận trên sao kê (lớn hơn 0đ).';
+  if (n > reported) return `Số tiền dư thực nhận không vượt quá ${formatVnd(reported)} (số Pancake báo dư).`;
+  return null;
+}
+
+/** Lỗi "Xác nhận tiền dư" / "Không phải tiền dư": 400 nghiệp vụ hiện nguyên câu API, lỗi khác nói rõ chưa chắc đã ghi được. */
+export function overpaymentFailure(e: unknown): string {
+  if (e instanceof ApiError && e.status === 400 && e.message) return e.message;
+  if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+    return 'Phiên đăng nhập đã hết hạn hoặc bạn không có quyền xử lý khoản này. Đăng nhập lại bằng tài khoản quản trị rồi thử lại.';
+  }
+  return 'Chưa rõ thao tác đã được ghi nhận chưa (lỗi mạng hoặc máy chủ). Thử lại; nếu đã ghi nhận, danh sách sẽ tự cập nhật.';
+}
 
 /** Bộ lọc loại khoản; chuỗi rỗng = mọi loại. */
 export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label: string }[] = [
@@ -22,6 +46,7 @@ export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label:
   { kind: 'CANCEL', label: 'Huỷ đơn' },
   { kind: 'RETURN', label: 'Trả hàng' },
   { kind: 'LATE_PAYMENT', label: 'Tiền về muộn' },
+  { kind: 'OVERPAYMENT', label: 'Tiền trả dư' },
   { kind: 'END_CUSTOMER', label: 'Đơn CTV lên hộ' },
 ];
 
@@ -45,11 +70,33 @@ export const refundReasonLabel = (reason: string) => REASON_LABEL[reason] ?? rea
  */
 export const needsClaim = (r: Pick<AdminCustomerRefund, 'userId'>) => r.userId !== null;
 
+/** Lý do tiếp quản tối thiểu — khớp CustomerRefundsService.claimGuard. */
+export const TAKE_OVER_REASON_MIN = 5;
+
+/**
+ * Khoản đang chuyển khoản do admin KHÁC giữ (R3-MONEY-4): chỉ người đó được xác nhận/trả về hàng chờ, người xem phải
+ * tiếp quản kèm lý do. null khi không phải (chưa ai giữ, chính mình giữ, hoặc không biết mình là ai — API vẫn chặn).
+ */
+export function takeOverFrom(
+  r: Pick<AdminCustomerRefund, 'status' | 'claimedBy' | 'claimedByName' | 'claimedAt'>,
+  meId: string | undefined,
+): { holder: string; since: string | null } | null {
+  if (r.status !== 'PROCESSING' || !r.claimedBy || !meId || r.claimedBy === meId) return null;
+  return { holder: r.claimedByName || 'một quản trị viên khác', since: r.claimedAt ?? null };
+}
+
+/** "bởi bạn" / "bởi Admin An" sau "Bắt đầu chuyển lúc …"; rỗng khi không biết ai. */
+export function claimHolderSuffix(r: Pick<AdminCustomerRefund, 'claimedBy' | 'claimedByName'>, meId: string | undefined): string {
+  if (!r.claimedBy) return '';
+  if (meId && r.claimedBy === meId) return ' bởi bạn';
+  return r.claimedByName ? ` bởi ${r.claimedByName}` : '';
+}
+
 /**
  * WALLET chỉ là dòng vết (tiền đã vào ví khách lúc huỷ/trả) nên không có thao tác; chỉ MANUAL_TRANSFER cần
  * admin chuyển khoản tay, khớp điều kiện của CustomerRefundsService.markPaid.
  */
-export type CustomerRefundView = 'WALLET' | 'PENDING' | 'PROCESSING' | 'COMPLETED';
+export type CustomerRefundView = 'WALLET' | AdminCustomerRefundStatus;
 export const customerRefundView = (r: Pick<AdminCustomerRefund, 'method' | 'status'>): CustomerRefundView =>
   r.method === 'WALLET' ? 'WALLET' : r.status;
 
@@ -64,7 +111,8 @@ export const CUSTOMER_REFUND_STALE_HINT =
   'Khoản này có thể đã được ghi nhận, kể cả từ lần bấm trước bị lỗi mạng. Mở bộ lọc "Đã chuyển" để kiểm tra trước khi chuyển khoản lại.';
 
 /** Câu API khi khoản đã đổi trạng thái giữa chừng (khách vừa chọn Ví, admin khác vừa nhận/xác nhận). */
-const STALE_PATTERN = /không còn chờ|vừa được xử lý|vừa thay đổi|về Ví Tubu|đã được xác nhận chuyển khoản|quản trị viên khác|không còn ở trạng thái/i;
+const STALE_PATTERN =
+  /không còn chờ|vừa được xử lý|vừa thay đổi|về Ví Tubu|đã được xác nhận chuyển khoản|quản trị viên khác|không còn ở trạng thái|đang (?:được|do) .+ chuyển khoản/i;
 /** Câu nghiệp vụ của API (không phải lỗi DTO) — hiện nguyên văn, giữ hộp để admin sửa. */
 const BUSINESS_PATTERN = /chưa có tài khoản nhận|Bắt đầu chuyển khoản/i;
 

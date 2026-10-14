@@ -154,7 +154,9 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
       const { row } = await bankRefund(80_000);
       const s = summarize(await Promise.allSettled([refunds.claim(a1.id, row.id), refunds.claim(a2.id, row.id)]));
       expect(s.fulfilled).toHaveLength(1);
-      expect(s.errors.join()).toContain('một quản trị viên khác');
+      const holder = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } });
+      const holderName = holder.claimedBy === a1.id ? a1.fullName : a2.fullName;
+      expect(s.errors.join()).toContain(`Khoản này đang được ${holderName} chuyển khoản.`);
     });
   });
 

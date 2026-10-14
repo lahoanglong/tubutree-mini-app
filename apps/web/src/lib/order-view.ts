@@ -103,7 +103,7 @@ const codCollected = (o: PaymentView): boolean =>
 
 /**
  * Tình trạng thanh toán hiển thị cho khách. Đơn đã lật REFUNDED nhưng còn khoản chuyển khoản Tubu chưa chuyển xong thì là
- * "Đang hoàn tiền" — "Đã hoàn tiền" chỉ khi mọi khoản đã xong (BUYERWEB-4).
+ * "Đang hoàn tiền" — "Đã hoàn tiền" chỉ khi mọi khoản đã xong (BUYERWEB-4), kèm nơi tiền về khi mọi khoản cùng một nơi.
  */
 export const orderPaymentStatusLabel = (
   o: PaymentView,
@@ -112,6 +112,10 @@ export const orderPaymentStatusLabel = (
   if (codCollected(o)) return 'Đã thu tiền khi giao';
   if (o.paymentStatus === 'REFUNDED' && refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && r.status !== 'COMPLETED')) {
     return 'Đang hoàn tiền';
+  }
+  if (o.paymentStatus === 'REFUNDED' && refunds?.length) {
+    if (refunds.every((r) => r.method === 'WALLET')) return 'Đã hoàn tiền vào Ví Tubu';
+    if (refunds.every((r) => r.method === 'MANUAL_TRANSFER')) return 'Đã hoàn tiền về tài khoản ngân hàng';
   }
   return paymentStatusLabel(o.paymentStatus);
 };

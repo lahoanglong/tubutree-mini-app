@@ -29,7 +29,7 @@ type MockTx = {
   user: { update: jest.Mock };
   coinTransaction: { create: jest.Mock; findMany: jest.Mock };
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
-  orderCustomerRefund: { create: jest.Mock };
+  orderCustomerRefund: { create: jest.Mock; createMany: jest.Mock };
   returnRequest: { findMany: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
@@ -66,7 +66,7 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
       // PD-3: hoàn đơn XU cũ ghi lô CONVERTED bằng INSERT ... ON CONFLICT DO NOTHING (points-ledger.ts).
       createManyAndReturn: jest.fn().mockResolvedValue([{ id: 'ptx' }]),
     },
-    orderCustomerRefund: { create: jest.fn().mockResolvedValue({ id: 'cr1' }) },
+    orderCustomerRefund: { create: jest.fn().mockResolvedValue({ id: 'cr1' }), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     // D3: đơn đã giao chưa có lần trả một phần nào.
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -143,6 +143,36 @@ describe('OrderReversalService', () => {
     expect(tx.$executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);
     expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
     expect(flashSale.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('hoàn thẳng vào Ví → ghi dòng vết khoản hoàn (WALLET, COMPLETED) để chi tiết đơn của khách nói đã hoàn bao nhiêu, về đâu', async () => {
+    const order = makeOrder({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'CONFIRMED' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          orderId: 'o1',
+          kind: 'CANCEL',
+          refKey: '',
+          userId: 'u1',
+          customerUserId: 'u1',
+          amount: 150000,
+          method: 'WALLET',
+          status: 'COMPLETED',
+          reason: 'CANCELLED',
+        }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it('đơn chưa trả tiền → không ghi dòng vết khoản hoàn nào', async () => {
+    const order = makeOrder({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
   });
 
   // PD-3 (spec 6.2, OQ-8): đơn XU cũ huỷ/trả sau gộp → hoàn ceil(total/1000) Điểm Xanh lô quy đổi.

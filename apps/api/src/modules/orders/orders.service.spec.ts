@@ -77,6 +77,8 @@ function makeService(
   /** Đọc lại đơn TRONG tx (sau khoá) — trả dòng DB hiện tại, không phải ảnh chụp. */
   const txFindUnique = jest.fn(async () => ({ ...row }));
   const historyCreate = jest.fn().mockResolvedValue({});
+  /** Dòng vết khoản đã hoàn vào Ví (chi tiết đơn của khách đọc lại). */
+  const refundTrace = jest.fn().mockResolvedValue({ count: 1 });
   // $transaction giờ là CALLBACK form (flip-status + hoàn ví/xu + restock ATOMIC). Forward tx ops vào cùng mock.
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -87,6 +89,7 @@ function makeService(
       $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
       pointsTransaction: { createManyAndReturn: pointsInsert },
+      orderCustomerRefund: { createMany: refundTrace },
     }),
   );
   const prisma = {
@@ -143,6 +146,16 @@ describe('OrdersService.cancel', () => {
     expect((loyalty.reverseOrderPoints as jest.Mock)).toHaveBeenCalledWith('o1');
     expect((affiliate.reverseCommissionsForOrder as jest.Mock)).toHaveBeenCalledWith('o1');
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-7: khách tự huỷ đơn đã trả có dùng Điểm Xanh → tin huỷ nói cả số tiền vào Ví lẫn số điểm thường được hoàn', async () => {
+    (loyalty.reverseOrderPoints as jest.Mock).mockResolvedValueOnce(19);
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID', total: 95000 });
+    await svc.cancel('u1', 'TUBU1');
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      refund_note: ' Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
+    });
   });
 
   it('đơn dùng coupon → hoàn coupon (release) khi hủy, không bị đốt vĩnh viễn', async () => {
