@@ -21,6 +21,8 @@ import {
 import { RefundDestinationPicker } from './refund-destination-picker';
 
 const REASON_MAX = 500;
+const STEPPER_BTN =
+  'inline-flex h-11 w-11 items-center justify-center rounded-control border border-stone-450 bg-stone-0 text-stone-800 transition hover:bg-stone-50 active:scale-95 disabled:text-stone-400 disabled:active:scale-100';
 
 function initialLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): ReturnLineState[] {
   const items = order.items.filter((it): it is typeof it & { id: string } => !!it.id);
@@ -139,7 +141,7 @@ export function ReturnRequestForm({
                     aria-label={`Giảm số lượng ${l.productName}`}
                     disabled={l.quantity <= 1}
                     onClick={() => setLine(l.orderItemId, { quantity: l.quantity - 1 })}
-                    className={`${ui.btnSecondary} h-11 w-11 px-0`}
+                    className={STEPPER_BTN}
                   >
                     <Minus className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -154,7 +156,7 @@ export function ReturnRequestForm({
                     aria-label={`Tăng số lượng ${l.productName}`}
                     disabled={l.quantity >= l.remaining}
                     onClick={() => setLine(l.orderItemId, { quantity: l.quantity + 1 })}
-                    className={`${ui.btnSecondary} h-11 w-11 px-0`}
+                    className={STEPPER_BTN}
                   >
                     <Plus className="h-4 w-4" aria-hidden="true" />
                   </button>
