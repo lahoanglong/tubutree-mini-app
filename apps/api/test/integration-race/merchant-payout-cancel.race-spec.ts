@@ -301,4 +301,27 @@ describe('Huỷ phiếu đối soát giữ dấu vết và báo gian hàng (real
     const list = await settlement.listPayouts(s.store.id);
     expect(list.data.find((p) => p.id === old.id)).toMatchObject({ status: 'CANCELLED', lines: [] });
   });
+
+  it('gian hàng có từ 10 phiếu huỷ kiểu cũ (cancelledAt NULL sau backfill) vẫn thấy phiếu vừa bị huỷ', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const s = await shop();
+    const legacy = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        prisma.merchantPayout.create({
+          data: { storefrontId: s.store.id, amount: 10_000 + i, status: 'CANCELLED', createdBy: admin.id, cancelledBy: admin.id, createdAt: ago(40 + i) },
+        }),
+      ),
+    );
+    await delivered(s);
+    const payout = await settlement.createPayout(admin.id, s.store.id);
+    await settlement.cancelPayout(admin.id, payout.id, 'Sai số tài khoản');
+
+    const mine = await settlement.myStatement(s.owner.id);
+    const cancelled = mine.payouts.filter((p) => p.status === 'CANCELLED');
+    expect(cancelled.find((p) => p.id === payout.id)).toMatchObject({ cancelReason: 'Sai số tài khoản', cancelledLineCount: 1 });
+    expect(cancelled).toHaveLength(10);
+    // Phiếu cũ không có mốc huỷ thì xếp theo ngày lập, mới trước.
+    const shownLegacy = cancelled.filter((p) => p.id !== payout.id).map((p) => p.id);
+    expect(shownLegacy).toEqual(legacy.slice(0, 9).map((p) => p.id));
+  });
 });
