@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Leaf, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { getProduct, formatVnd } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
+import ProductGallery from '@/components/product-gallery';
+import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
+import { SITE_URL } from '@/lib/site';
 import { ui } from '@/lib/guest-ui';
 
 export const revalidate = 300;
@@ -17,11 +20,16 @@ export async function generateMetadata({
   const product = await getProduct(slug);
   if (!product) return { title: 'Không tìm thấy sản phẩm — Tubu Tree' };
   const title = `${product.name} — ${product.brand} | Tubu Tree`;
-  const description = product.shortDesc ?? product.description.slice(0, 160);
+  const description = plainText(product.shortDesc ?? product.description).slice(0, 160);
+  const path = `/san-pham/${encodeURIComponent(product.slug)}`;
+  const images = galleryImages(product).slice(0, 4);
   return {
     title,
     description,
-    openGraph: { title, description, images: product.thumbnail ? [product.thumbnail] : [] },
+    // Canonical không kèm ?ref=/utm: link CTV chia sẻ là cùng một trang, không được tính là bản trùng.
+    alternates: { canonical: path },
+    openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: path, title, description, images },
+    twitter: { card: images.length > 0 ? 'summary_large_image' : 'summary', title, description, images },
   };
 }
 
@@ -31,6 +39,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound();
 
   const price = product.salePrice ?? product.basePrice;
+  const images = galleryImages(product);
+  const description = plainText(product.description);
+  const shortDesc = plainText(product.shortDesc);
+  const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -38,30 +50,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         ← Về trang chủ
       </Link>
       <div className="mt-2 grid gap-8 md:grid-cols-2">
-        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sheet border border-stone-200 bg-forest-50 text-forest-600 shadow-card">
-          {product.thumbnail ? (
-            // Ảnh LCP của trang: tải sớm và ưu tiên cao thay vì để trình duyệt đoán. Chưa dùng
-            // next/image vì ảnh sản phẩm đến từ host tuỳ ý (Pancake/Cloudinary/…) — bật
-            // optimizer cho mọi host là biến nó thành proxy ảnh mở; cần chốt danh sách host
-            // trước khi chuyển.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.thumbnail}
-              alt={product.name}
-              className="h-full w-full object-cover"
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-            />
-          ) : (
-            <Leaf className="h-20 w-20 stroke-[1.5] text-forest-600" aria-hidden="true" />
-          )}
-        </div>
+        <ProductGallery images={images} name={product.name} />
         <div>
           <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
           <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
-          {product.shortDesc && <p className="mt-3 text-stone-600">{product.shortDesc}</p>}
+          {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 
           {product.certifications.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -74,16 +68,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {product.variations.length > 0 && <AddToCart variations={product.variations} />}
+          {product.variations.length > 0 && <AddToCart slug={product.slug} variations={product.variations} />}
         </div>
       </div>
 
-      {product.description && (
+      {description && (
         <section className="mt-8">
           <h2 className={ui.sectionTitle}>Mô tả sản phẩm</h2>
-          <p className="mt-2 whitespace-pre-line text-stone-700">{product.description}</p>
+          <p className="mt-2 whitespace-pre-line break-words text-stone-700">{description}</p>
         </section>
       )}
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>
   );
 }

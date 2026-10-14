@@ -66,7 +66,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
   }),
   getPublicConfig: async () => ({ recyclingEnabled: true }),
-  fetchOrders: async () => shop.orders,
+  fetchOrdersPage: async () => ({
+    data: shop.orders,
+    meta: { page: 1, limit: 20, total: (shop.orders as unknown[]).length },
+  }),
+  getProductStock: async () => ({}),
   addToCart: vi.fn(),
   placeOrder: async () => ({
     code: 'TB-9', status: 'PENDING_PAYMENT', subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000,

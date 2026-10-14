@@ -86,6 +86,20 @@ Dùng tài khoản A có sẵn một ít Điểm Xanh (tặng từ admin hoặc 
 
 - [ ] `/about` mục "Câu hỏi thường gặp" và `/academy` đang chờ anh nhập nội dung. Nếu để trống thì mở hai màn này chỉ thấy trạng thái rỗng; ghi lại màn có đẹp không để quyết định có cần chữ mặc định hay không.
 
+## 12. Đăng nhập web bằng Zalo (trình duyệt, không phải Mini App)
+
+Web khách chỉ đăng nhập bằng Zalo OAuth, nên mục này chặn ngày mở bán. Cần đã làm Bước E của `docs/GO-LIVE-KEYS.md` mục 2 (đăng ký Callback URL `https://app.tubutree.com/dang-nhap/callback`) và web đã build lại sau khi có `ZALO_APP_ID`. Thử trên điện thoại (Safari iPhone, Chrome Android) và một máy tính.
+
+- [ ] Mở `https://app.tubutree.com/dang-nhap`. Kỳ vọng: có nút "Đăng nhập với Zalo". Nếu thấy thông báo "chưa cấu hình" thì bản dựng thiếu `ZALO_APP_ID`: báo mình, đừng thử tiếp.
+- [ ] Bấm nút, đăng nhập Zalo, cho phép. Kỳ vọng: về lại `app.tubutree.com` và đã đăng nhập (thấy tên ở đầu trang), không dừng ở trang trắng hay lỗi.
+- [ ] Chưa đăng nhập, mở thẳng `https://app.tubutree.com/gio-hang` rồi bấm đăng nhập. Kỳ vọng: sau khi đăng nhập quay về đúng `/gio-hang`, không về trang chủ.
+- [ ] Chưa đăng nhập, ở trang một sản phẩm bấm "Thêm vào giỏ" rồi đăng nhập. Kỳ vọng: quay về trang sản phẩm đó và sản phẩm đã nằm trong giỏ.
+- [ ] Bấm "Từ chối/Huỷ" ở màn cấp quyền Zalo. Kỳ vọng: về trang đăng nhập với câu giải thích tiếng Việt (bạn đã từ chối cấp quyền), có nút thử lại, không hiện mã lỗi tiếng Anh.
+- [ ] Đóng hẳn tab/trình duyệt rồi mở lại `app.tubutree.com`: vẫn đăng nhập.
+- [ ] Đặt một đơn COD hoàn chỉnh trên web bằng tài khoản vừa đăng nhập (chọn địa chỉ, ghi chú đơn, đặt hàng). Kỳ vọng: đơn hiện ở `/tai-khoan`, mở chi tiết đơn thấy hành trình, nút Hủy đơn khi đơn còn Chờ thanh toán/Đã xác nhận.
+- [ ] **Gian hàng CTV (subdomain):** mở `https://<ten-gian-hang>.tubutree.com/` (một gian hàng đã đăng), thêm sản phẩm rồi bấm đăng nhập. Ghi lại một trong hai: (a) đăng nhập xong về lại đúng subdomain; (b) Zalo báo lỗi `redirect_uri`/callback không hợp lệ. Trường hợp (b) thì gửi mình ảnh màn lỗi: cần chốt phương án trước khi phát link gian hàng CTV cho khách (xem Bước E, mục 8).
+- [ ] Kiểm tra bản dựng: sau lần deploy kế tiếp, xác nhận bước build web **không** báo lỗi về `NEXT_PUBLIC_ZALO_APP_ID`. (Nếu quên đặt `ZALO_APP_ID`, build dừng ngay với dòng "LOI: NEXT_PUBLIC_ZALO_APP_ID rong".)
+
 ## Kết quả
 
 Khi xong, gửi mình danh sách mục lỗi kèm ảnh và máy. Mình sẽ phân loại: lỗi chặn phát hành, lỗi nhỏ, hay hành vi đã biết. Chỉ sau khi hết lỗi chặn mới nộp bản production và mở cho khách. Các mục hoãn có chủ ý (PA-1 yêu cầu 5, "Ví trả một phần đơn") làm sau UAT, không nằm trong tờ này.

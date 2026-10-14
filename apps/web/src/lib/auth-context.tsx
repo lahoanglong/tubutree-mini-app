@@ -42,6 +42,11 @@ interface AuthState {
    * server không đọc được localStorage (lệch hydrate).
    */
   initialized: boolean;
+  /**
+   * false khi bản build này không có NEXT_PUBLIC_ZALO_APP_ID: nút "Đăng nhập với Zalo" không thể hoạt động,
+   * trang đăng nhập phải nói thẳng thay vì để khách bấm rồi gặp lỗi kỹ thuật.
+   */
+  zaloLoginConfigured: boolean;
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
@@ -175,7 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [qc]);
 
   return (
-    <AuthContext.Provider value={{ user, status, initialized, startZaloLogin, handleCallback, logout }}>
+    <AuthContext.Provider
+      value={{ user, status, initialized, zaloLoginConfigured: !!ZALO_APP_ID, startZaloLogin, handleCallback, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

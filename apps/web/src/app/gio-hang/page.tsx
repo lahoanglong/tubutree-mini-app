@@ -3,15 +3,16 @@
 import Link from 'next/link';
 import { ShoppingBag, Truck, Leaf } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
 import { CouponBox } from '@/components/coupon-box';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 
 export default function CartPage() {
-  const { status } = useAuth();
+  const phase = useAuthPhase();
   const qc = useQueryClient();
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
+  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
 
   const update = useMutation({
     mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
@@ -28,31 +29,26 @@ export default function CartPage() {
   const failedItemId =
     (update.isError ? update.variables?.id : null) ?? (remove.isError ? remove.variables : null);
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-600">Đang tải…</p>
-        </div>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'guest') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để xem giỏ hàng.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <LoginRequired message="Đăng nhập để xem giỏ hàng của bạn." returnTo="/gio-hang" />
       </Shell>
     );
   }
 
   const cart = cartQ.data;
   const remainingFreeship = cart ? Math.max(0, cart.freeshipThreshold - cart.subtotal) : 0;
+  // Checkout sẽ từ chối dòng hết hàng/vượt tồn: chặn từ giỏ để khách biết phải sửa gì thay vì gặp lỗi ở bước sau.
+  const stockBlocked = !!cart?.items.some((it) => it.stock <= 0 || it.quantity > it.stock);
 
   return (
     <Shell>
@@ -66,7 +62,7 @@ export default function CartPage() {
           <ul className="mt-2 space-y-1">
             {cart.unavailableItems!.map((it) => (
               <li key={it.id} className="flex items-center justify-between gap-2">
-                <span className="line-through">
+                <span className="min-w-0 break-words line-through">
                   {it.productName}
                   {it.variationName ? ` · ${it.variationName}` : ''} × {it.quantity}
                 </span>
@@ -105,8 +101,8 @@ export default function CartPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="min-w-0 md:col-span-2">
             {!cart.freeship && remainingFreeship > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-card border border-forest-200 bg-forest-50 px-4 py-3 text-sm text-forest-800">
                 <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
@@ -116,65 +112,81 @@ export default function CartPage() {
               </div>
             )}
             <div className={`divide-y divide-stone-200 ${ui.card}`}>
-              {cart.items.map((it) => (
-                <div key={it.id} className="flex gap-3 p-3">
-                  <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
-                    {it.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
-                    ) : (
-                      <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-stone-900">{it.productName}</div>
-                    <div className="text-xs text-stone-600">{it.variationName}</div>
-                    <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2">
-                      <div className="flex items-center rounded-control border border-stone-450 text-sm">
+              {cart.items.map((it) => {
+                // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
+                const soldOut = it.stock <= 0;
+                const atMax = !soldOut && it.quantity >= it.stock;
+                const busy = busyItemId === it.id;
+                return (
+                  <div key={it.id} className="flex gap-3 p-3">
+                    <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
+                      {it.thumbnail ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
+                      ) : (
+                        <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words text-sm font-medium text-stone-900">{it.productName}</div>
+                      <div className="break-words text-xs text-stone-600">{it.variationName}</div>
+                      <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
+                      {soldOut && (
+                        <p className="mt-1 text-xs font-semibold text-danger-fg">Hết hàng — hãy xóa khỏi giỏ để tiếp tục thanh toán</p>
+                      )}
+                      {!soldOut && atMax && (
+                        <p className="mt-1 text-xs font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
+                      )}
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2">
+                        {!soldOut && (
+                          <div className="flex items-center rounded-control border border-stone-450 text-sm">
+                            <button
+                              type="button"
+                              onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                              disabled={busy}
+                              aria-label={`Giảm số lượng ${it.productName}`}
+                              className="h-11 w-11 text-lg disabled:opacity-40"
+                            >
+                              −
+                            </button>
+                            <span className="w-7 text-center text-stone-900" aria-live="polite">
+                              {it.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
+                              disabled={busy || atMax}
+                              aria-label={`Tăng số lượng ${it.productName}`}
+                              className="h-11 w-11 text-lg disabled:opacity-40"
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
                         <button
                           type="button"
-                          onClick={() => update.mutate({ id: it.id, q: Math.max(1, it.quantity - 1) })}
-                          disabled={busyItemId === it.id}
-                          aria-label={`Giảm số lượng ${it.productName}`}
-                          className="h-11 w-11 text-lg disabled:opacity-40"
+                          onClick={() => remove.mutate(it.id)}
+                          disabled={busy}
+                          aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
+                          className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 ${
+                            soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
+                          }`}
                         >
-                          −
-                        </button>
-                        <span className="w-7 text-center text-stone-900" aria-live="polite">
-                          {it.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => update.mutate({ id: it.id, q: Math.min(it.stock, it.quantity + 1) })}
-                          disabled={busyItemId === it.id}
-                          aria-label={`Tăng số lượng ${it.productName}`}
-                          className="h-11 w-11 text-lg disabled:opacity-40"
-                        >
-                          +
+                          Xóa
                         </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => remove.mutate(it.id)}
-                        disabled={busyItemId === it.id}
-                        aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
-                        className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40"
-                      >
-                        Xóa
-                      </button>
+                      {failedItemId === it.id && (
+                        <p role="alert" className="mt-1 text-xs text-danger-fg">
+                          {(update.error ?? remove.error) instanceof Error
+                            ? (update.error ?? remove.error)?.message
+                            : 'Cập nhật giỏ hàng thất bại.'}
+                        </p>
+                      )}
                     </div>
-                    {failedItemId === it.id && (
-                      <p role="alert" className="mt-1 text-xs text-danger-fg">
-                        {(update.error ?? remove.error) instanceof Error
-                          ? (update.error ?? remove.error)?.message
-                          : 'Cập nhật giỏ hàng thất bại.'}
-                      </p>
-                    )}
+                    <div className="flex-none font-semibold text-stone-900">{formatVnd(it.total)}</div>
                   </div>
-                  <div className="flex-none font-semibold text-stone-900">{formatVnd(it.total)}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -194,9 +206,20 @@ export default function CartPage() {
               <span>Tổng</span>
               <span>{formatVnd(cart.subtotal - cart.discount)}</span>
             </div>
-            <Link href="/thanh-toan" className={`${ui.btnPrimary} mt-4 w-full`}>
-              Thanh toán ({cart.itemCount})
-            </Link>
+            {stockBlocked ? (
+              <>
+                <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  Thanh toán ({cart.itemCount})
+                </button>
+                <p role="alert" className="mt-2 text-xs text-danger-fg">
+                  Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa hoặc giảm số lượng rồi thanh toán.
+                </p>
+              </>
+            ) : (
+              <Link href="/thanh-toan" className={`${ui.btnPrimary} mt-4 w-full`}>
+                Thanh toán ({cart.itemCount})
+              </Link>
+            )}
           </div>
         </div>
       )}

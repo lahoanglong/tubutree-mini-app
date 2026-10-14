@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { Leaf, ExternalLink } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
@@ -13,6 +14,7 @@ import {
   addressLine,
   canPayAgain,
   orderPaymentStatusLabel,
+  orderDetailHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
@@ -20,18 +22,23 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
+import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
+import { OrderActions } from './order-actions';
+import { OrderTimeline } from './order-timeline';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
-  const { status } = useAuth();
+  const phase = useAuthPhase();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const orderQ = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code),
-    enabled: status === 'authenticated' && !!code,
+    enabled: phase === 'authenticated' && !!code,
     // 404 là câu trả lời dứt khoát (đơn không tồn tại/của người khác): thử lại chỉ làm khách chờ thêm.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   });
@@ -47,23 +54,18 @@ export default function OrderDetailPage() {
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <p className="py-16 text-center text-stone-600">Đang tải…</p>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'guest') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <div className="py-16 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để xem đơn hàng.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <LoginRequired message="Đăng nhập để xem đơn hàng của bạn." returnTo={orderDetailHref(code)} />
       </Shell>
     );
   }
@@ -115,6 +117,9 @@ export default function OrderDetailPage() {
           <BankTransferPanel order={o} onPaid={refreshOrder} />
         </div>
       )}
+
+      <OrderTimeline status={o.status} />
+      <OrderActions order={o} userId={user?.id} supportEmail={support.email} />
 
       <section className={`mt-4 p-4 ${ui.card}`}>
         <h2 className={ui.sectionTitle}>Sản phẩm</h2>
@@ -185,7 +190,8 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
   const line = addressLine(addr);
   const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
   const tracking = safeHttpUrl(o.trackingLink);
-  const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking);
+  const journey = journeyEvents(o.shippingHistory);
+  const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking || journey.length > 0);
   // Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không dựng khối rỗng.
   if (!contact && !line && !addr?.note && !hasShipping) return null;
 
@@ -210,6 +216,27 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
           </a>
         )}
       </div>
+      {journey.length > 0 && (
+        <>
+          <h3 className="mt-3 text-sm font-semibold text-stone-900">Hành trình vận chuyển</h3>
+          <ol className="mt-2 text-sm">
+            {journey.map((ev, i) => (
+              <li key={`${ev.at ?? ''}-${i}`} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span aria-hidden="true" className={`mt-1.5 h-2 w-2 flex-none rounded-full ${i === 0 ? 'bg-forest-600' : 'bg-stone-300'}`} />
+                  {i < journey.length - 1 && <span aria-hidden="true" className="my-0.5 w-0.5 flex-1 bg-stone-200" />}
+                </div>
+                <div className={`min-w-0 ${i < journey.length - 1 ? 'pb-3' : ''}`}>
+                  <p className={i === 0 ? 'font-semibold text-stone-900' : 'text-stone-700'}>
+                    {shippingEventLabel(ev.status) ?? (ev.code ? `Đã gán mã vận đơn ${ev.code}` : '—')}
+                  </p>
+                  {ev.at && <p className="text-xs text-stone-600">{formatDateTime(ev.at)}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </section>
   );
 }

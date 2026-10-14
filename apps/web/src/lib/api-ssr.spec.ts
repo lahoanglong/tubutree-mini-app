@@ -5,6 +5,7 @@ import {
   getBrands,
   getProduct,
   getProducts,
+  getProductsPage,
   getStorefront,
   getStorefrontList,
 } from './api';
@@ -116,5 +117,30 @@ describe.each([
     await expect(call()).resolves.toEqual([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(503)));
     await expect(call()).resolves.toEqual([]);
+  });
+});
+
+describe('getProductsPage — trang catalog kèm tổng số (BUYERWEB-7)', () => {
+  it('giữ meta.total của API (trước đây bị bỏ) và xin 24 sản phẩm/trang theo mặc định', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(200, { data: [{ id: 'p1' }], meta: { page: 2, limit: 24, total: 45 } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const out = await getProductsPage({ page: '2', brand: 'Tubu' });
+    expect(out.meta).toEqual({ page: 2, limit: 24, total: 45 });
+    expect(out.data).toEqual([{ id: 'p1' }]);
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain('limit=24');
+    expect(url).toContain('page=2');
+    expect(url).toContain('brand=Tubu');
+  });
+
+  it('lỗi lúc runtime → ném ApiUnavailableError (không lưu bản rỗng vào ISR)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(503)));
+    await expect(getProductsPage()).rejects.toBeInstanceOf(ApiUnavailableError);
+  });
+
+  it('lúc build (API chưa chạy) → trang rỗng hợp lệ để next build không hỏng', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(getProductsPage()).resolves.toEqual({ data: [], meta: { page: 1, limit: 24, total: 0 } });
   });
 });

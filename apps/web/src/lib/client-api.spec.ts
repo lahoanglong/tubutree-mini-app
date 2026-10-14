@@ -2,6 +2,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   apiFetch,
+  ApiError,
+  NetworkError,
+  REQUEST_TIMEOUT_MS,
   hasSessionMarker,
   setSessionMarker,
   clearSessionMarker,
@@ -184,5 +187,93 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
     fetchMock.mockResolvedValue(jsonRes(401));
     await expect(restoreSession([1, 1], async () => undefined)).resolves.toEqual({ kind: 'dead' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    setAccessToken(null);
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('mất mạng: ném NetworkError với câu tiếng Việt, không lộ "Failed to fetch"', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const err = await apiFetch('/cart').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(err).not.toBeInstanceOf(ApiError);
+    expect((err as Error).message).toBe('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
+    expect((err as NetworkError).timedOut).toBe(false);
+  });
+
+  it('máy chủ treo: ngắt sau REQUEST_TIMEOUT_MS và báo hết thời gian chờ', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    );
+    const pending = apiFetch('/checkout/place-order', { method: 'POST', body: {} }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+    const err = await pending;
+    expect(err).toBeInstanceOf(NetworkError);
+    expect((err as NetworkError).timedOut).toBe(true);
+    expect((err as Error).message).toBe('Máy chủ phản hồi quá lâu. Vui lòng thử lại.');
+  });
+
+  it('thân phản hồi treo sau khi đã có header cũng bị ngắt (không kẹt ở "Đang đặt hàng…")', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        } as unknown as Response),
+    );
+    const pending = apiFetch('/cart').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+    expect(await pending).toBeInstanceOf(NetworkError);
+  });
+
+  it('lỗi HTTP vẫn là ApiError mang status, kể cả khi thân không phải JSON', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <');
+      },
+    } as unknown as Response);
+    const err = await apiFetch('/cart').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(502);
+    expect((err as Error).message).toBe('Có lỗi xảy ra. Vui lòng thử lại.');
+  });
+
+  it('refresh gặp lỗi mạng KHÔNG xoá cờ phiên (cookie vẫn sống)', async () => {
+    setSessionMarker();
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(401, { message: 'hết hạn' }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(apiFetch('/me')).rejects.toThrow();
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('timer timeout được gỡ khi gọi xong (không để timer treo)', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(jsonRes(200, { ok: 1 }));
+    await apiFetch('/cart');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -73,33 +73,30 @@ function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function doRefresh(): Promise<RefreshOutcome> {
-  let res: Response;
+  let reply: Reply;
   try {
-    res = await fetch(`${BASE}/auth/refresh`, {
+    reply = await exchange(`${BASE}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...WEB_CLIENT_HEADER },
       body: '{}',
     });
   } catch {
+    // Mất mạng/quá hạn (NetworkError) hoặc thân 2xx hỏng: không nói lên gì về phiên, giữ cờ.
     return { kind: 'transient' };
   }
   // 400 = không còn cookie (BE đã xoá), 401/403 = token chết/bị thu hồi/tài khoản bị khoá. Mất mạng, 5xx,
   // 429 thì cookie vẫn có thể còn sống: giữ cờ để lần sau còn khôi phục được.
-  if (res.status === 400 || res.status === 401 || res.status === 403) {
+  if (reply.status === 400 || reply.status === 401 || reply.status === 403) {
     accessToken = null;
     clearSessionMarker();
     return { kind: 'dead' };
   }
-  if (!res.ok) return { kind: 'transient' };
-  try {
-    const data = (await res.json()) as { accessToken: string; user?: unknown };
-    accessToken = data.accessToken;
-    setSessionMarker();
-    return { kind: 'ok', data };
-  } catch {
-    return { kind: 'transient' };
-  }
+  const data = reply.body as { accessToken?: string; user?: unknown } | undefined;
+  if (!reply.ok || typeof data?.accessToken !== 'string') return { kind: 'transient' };
+  accessToken = data.accessToken;
+  setSessionMarker();
+  return { kind: 'ok', data: { accessToken: data.accessToken, user: data.user } };
 }
 
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
@@ -143,20 +140,71 @@ export class ApiError extends Error {
   }
 }
 
-async function parseError(res: Response): Promise<{ message: string; code: string | null }> {
-  const fallback = 'Có lỗi xảy ra. Vui lòng thử lại.';
-  try {
-    const data = (await res.json()) as { message?: string | string[]; code?: unknown };
-    const m = Array.isArray(data.message) ? data.message[0] : data.message;
-    return { message: m ?? fallback, code: typeof data.code === 'string' ? data.code : null };
-  } catch {
-    return { message: fallback, code: null };
+/** Không nhận được phản hồi nào (mất mạng, DNS, hết thời gian chờ). Cố ý KHÔNG kế thừa ApiError: không có status HTTP. */
+export class NetworkError extends Error {
+  readonly timedOut: boolean;
+  constructor(timedOut: boolean) {
+    super(timedOut ? TIMEOUT_MESSAGE : OFFLINE_MESSAGE);
+    this.name = 'NetworkError';
+    this.timedOut = timedOut;
   }
+}
+
+/** Quá hạn thì thôi chờ: mạng yếu/máy chủ treo không được giữ nút "Đang đặt hàng…" mãi. */
+export const REQUEST_TIMEOUT_MS = 20_000;
+const OFFLINE_MESSAGE = 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.';
+const TIMEOUT_MESSAGE = 'Máy chủ phản hồi quá lâu. Vui lòng thử lại.';
+const GENERIC_ERROR = 'Có lỗi xảy ra. Vui lòng thử lại.';
+
+interface Reply {
+  status: number;
+  ok: boolean;
+  body: unknown;
+}
+
+/**
+ * Một lượt gọi + đọc thân phản hồi, giới hạn REQUEST_TIMEOUT_MS cho cả hai. Lỗi tầng mạng (fetch ném TypeError,
+ * hoặc bị ngắt vì quá hạn) đổi thành NetworkError với câu tiếng Việt thay vì "Failed to fetch" thô.
+ */
+async function exchange(url: string, init: RequestInit): Promise<Reply> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    let body: unknown;
+    if (res.status !== 204) {
+      try {
+        body = await res.json();
+      } catch (e) {
+        // Thân hỏng/không phải JSON: phản hồi lỗi vẫn có status để báo; phản hồi thành công thì ném như trước.
+        if (res.ok || ctrl.signal.aborted) throw e;
+      }
+    }
+    return { status: res.status, ok: res.ok, body };
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new NetworkError(true);
+    if (e instanceof TypeError) throw new NetworkError(false);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseError(body: unknown): { message: string; code: string | null } {
+  const data = (body ?? {}) as { message?: string | string[]; code?: unknown };
+  const m = Array.isArray(data.message) ? data.message[0] : data.message;
+  return { message: m ?? GENERIC_ERROR, code: typeof data.code === 'string' ? data.code : null };
 }
 
 export async function apiFetch<T>(
   path: string,
-  opts: { method?: string; body?: unknown; auth?: boolean; headers?: Record<string, string> } = {},
+  opts: {
+    method?: string;
+    body?: unknown;
+    auth?: boolean;
+    headers?: Record<string, string>;
+    cache?: RequestCache;
+  } = {},
   _retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = { ...opts.headers };
@@ -171,11 +219,12 @@ export async function apiFetch<T>(
   // request là thêm một lượt OPTIONS cho từng lần gọi API.
   if (path.startsWith('/auth/')) Object.assign(headers, WEB_CLIENT_HEADER);
 
-  const res = await fetch(`${BASE}${path}`, {
+  const reply = await exchange(`${BASE}${path}`, {
     method: opts.method ?? 'GET',
     headers,
     // Cookie refresh giới hạn Path=/api/auth nên chỉ thực sự được gửi ở các route auth.
     credentials: 'include',
+    ...(opts.cache ? { cache: opts.cache } : {}),
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
 
@@ -183,15 +232,15 @@ export async function apiFetch<T>(
   // bỏ qua guard này thì một 401 từ chính /auth/refresh hay /auth/zalo-oauth (vd code đã
   // dùng, hết hạn) sẽ vô tình refresh + retry bằng phiên khác đang lưu trong cookie, âm thầm
   // đổi session hiện tại thay vì trả lỗi 401 gốc.
-  if (res.status === 401 && !_retried && opts.auth !== false && hasSessionMarker()) {
+  if (reply.status === 401 && !_retried && opts.auth !== false && hasSessionMarker()) {
     const newToken = await rawRefresh();
     if (newToken) return apiFetch<T>(path, opts, true);
   }
 
-  if (!res.ok) {
-    const { message, code } = await parseError(res);
-    throw new ApiError(message, res.status, code);
+  if (!reply.ok) {
+    const { message, code } = parseError(reply.body);
+    throw new ApiError(message, reply.status, code);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  if (reply.status === 204) return undefined as T;
+  return reply.body as T;
 }

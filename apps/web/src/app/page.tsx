@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
-import { getProducts, getBrands } from '@/lib/api';
-import { firstParam, homeHref, normalizeSearchQuery } from '@/lib/catalog-filter';
+import { getProductsPage, getBrands, HOME_PAGE_SIZE } from '@/lib/api';
+import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
 import ProductCard from '@/components/product-card';
+import ProductPagination from '@/components/product-pagination';
 
 export const revalidate = 300;
 
-type HomeSearchParams = Promise<{ brand?: string | string[]; q?: string | string[] }>;
+type HomeSearchParams = Promise<{ brand?: string | string[]; q?: string | string[]; page?: string | string[] }>;
 
 // Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả.
 export async function generateMetadata({ searchParams }: { searchParams: HomeSearchParams }): Promise<Metadata> {
@@ -19,10 +21,18 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
   const sp = await searchParams;
   const brand = firstParam(sp.brand);
   const q = normalizeSearchQuery(sp.q);
-  const [products, brands] = await Promise.all([
-    getProducts({ ...(brand ? { brand } : {}), ...(q ? { q } : {}) }),
+  const page = parsePage(sp.page);
+  const [result, brands] = await Promise.all([
+    getProductsPage({ ...(brand ? { brand } : {}), ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) }),
     getBrands(),
   ]);
+  const products = result.data;
+  const total = result.meta?.total ?? products.length;
+  const totalPages = Math.max(1, Math.ceil(total / (result.meta?.limit || HOME_PAGE_SIZE)));
+  // ?page= vượt trang cuối (sản phẩm vừa bị gỡ, hoặc URL cũ): đưa về trang cuối thay vì hiện "chưa có sản phẩm".
+  if (products.length === 0 && total > 0 && page > totalPages) {
+    redirect(pageHref({ brand, q }, totalPages));
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
@@ -106,7 +116,7 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-semibold text-stone-900 sm:text-2xl">Danh Mục Thương Hiệu</h2>
           <span className="text-xs text-stone-600">
-            {products.length} sản phẩm {q ? 'phù hợp' : 'đang bán'}
+            {total} sản phẩm {q ? 'phù hợp' : 'đang bán'}
           </span>
         </div>
 
@@ -181,11 +191,14 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
+              {products.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+            <ProductPagination page={page} totalPages={totalPages} filter={{ brand, q }} />
+          </>
         )}
       </section>
     </main>

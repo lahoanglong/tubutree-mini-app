@@ -1,3 +1,5 @@
+import { isGomdonPickedUp } from './recycling';
+
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
   CONFIRMED: 'Đã xác nhận',
@@ -7,6 +9,17 @@ const STATUS_LABEL: Record<string, string> = {
   RETURNED: 'Đã hoàn',
   CANCELLED: 'Đã hủy',
 };
+
+/** Tab lọc danh sách đơn — cùng nhóm với tab của Mini App (Đang xử lý gồm Đang đóng gói, Đã hủy/hoàn gồm Đã hoàn). */
+export const ORDER_TABS = [
+  { key: 'all', label: 'Tất cả', filter: {} },
+  { key: 'pending_payment', label: 'Chờ thanh toán', filter: { status: 'PENDING_PAYMENT' } },
+  { key: 'processing', label: 'Đang xử lý', filter: { group: 'processing' } },
+  { key: 'shipping', label: 'Đang giao', filter: { status: 'SHIPPING' } },
+  { key: 'delivered', label: 'Đã giao', filter: { status: 'DELIVERED' } },
+  { key: 'closed', label: 'Đã hủy/hoàn', filter: { group: 'closed' } },
+] as const satisfies readonly { key: string; label: string; filter: { status?: string; group?: 'processing' | 'closed' } }[];
+export type OrderTabKey = (typeof ORDER_TABS)[number]['key'];
 
 export const orderStatusLabel = (status: string): string => STATUS_LABEL[status] ?? status;
 
@@ -85,4 +98,35 @@ export function safeHttpUrl(url: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/** 5 bước hành trình chuẩn của đơn; Đã hủy/Đã hoàn là trạng thái kết thúc nên không nằm trên đường này. */
+export const TIMELINE_STEPS = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] as const;
+
+/** Vị trí trên hành trình chuẩn; -1 khi trạng thái nằm ngoài (Đã hủy/Đã hoàn). */
+export const timelineIndex = (status: string): number => (TIMELINE_STEPS as readonly string[]).indexOf(status);
+
+/** Đơn đã kết thúc thì mới có "Mua lại" — cùng điều kiện với Mini App. */
+export const isReorderable = (status: string): boolean => status === 'DELIVERED' || status === 'CANCELLED' || status === 'RETURNED';
+
+/**
+ * Khách có tự hủy được không — khớp OrdersService.assertCustomerCancellable ở BE (BE vẫn là nơi quyết định, đây chỉ để
+ * không bày nút chắc chắn bị từ chối): chỉ Chờ thanh toán/Đã xác nhận; đơn CTV lên hộ khách đã trả tiền chỉ admin hủy;
+ * đơn thu gom tái chế mà bưu tá đã lấy hàng thì không hủy được nữa.
+ */
+export function canCancelOrder(
+  o: {
+    status: string;
+    paymentStatus?: string | null;
+    placedForCustomer?: boolean | null;
+    referrerUserId?: string | null;
+    hasRecyclingPickup?: boolean | null;
+    gomdonStatus?: string | null;
+  },
+  userId: string | null | undefined,
+): boolean {
+  if (o.status !== 'PENDING_PAYMENT' && o.status !== 'CONFIRMED') return false;
+  if (o.placedForCustomer && o.paymentStatus === 'PAID' && !!userId && o.referrerUserId === userId) return false;
+  if (o.hasRecyclingPickup && isGomdonPickedUp(o.gomdonStatus)) return false;
+  return true;
 }

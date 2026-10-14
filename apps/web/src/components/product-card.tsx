@@ -7,6 +7,8 @@ export default function ProductCard({ product }: { product: P }) {
   const discountPct = hasSale
     ? Math.round(((product.basePrice - price) / product.basePrice) * 100)
     : 0;
+  // `=== false`: API cũ/nguồn không có cờ thì coi như còn hàng, không dán nhãn nhầm.
+  const soldOut = product.inStock === false;
 
   return (
     <Link
@@ -33,8 +35,14 @@ export default function ProductCard({ product }: { product: P }) {
           </div>
         )}
 
+        {soldOut && (
+          <div className="absolute inset-0 flex items-center justify-center bg-stone-900/45">
+            <span className="rounded-full bg-stone-0 px-3 py-1 text-xs font-bold text-stone-800 shadow-card">Hết hàng</span>
+          </div>
+        )}
+
         {/* Sale Badge */}
-        {hasSale && discountPct > 0 && (
+        {hasSale && discountPct > 0 && !soldOut && (
           <div className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card">
             -{discountPct}%
           </div>

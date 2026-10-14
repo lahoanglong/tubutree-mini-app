@@ -79,7 +79,7 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
     const r = await mount();
     const text = r.container.textContent ?? '';
     expect(text).toContain('Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025)');
-    expect(text).toContain('Hãy thêm địa chỉ mới ở mục Địa chỉ giao hàng.');
+    expect(text).toContain('Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.');
     expect(placeButton(r).disabled).toBe(true);
   });
 

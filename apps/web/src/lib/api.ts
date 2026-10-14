@@ -99,16 +99,32 @@ export interface ProductDetail {
   salePrice: number | null;
   certifications: string[];
   variations: VariationDetail[];
+  ratingAvg?: number;
+  reviewCount?: number;
 }
 interface Page<T> {
   data: T[];
   meta: { page: number; limit: number; total: number };
 }
+export type ProductPage = Page<ProductCard>;
+
+/** 24 chia hết cho 2/3/4 cột của lưới trang chủ nên hàng cuối không bị lẻ. */
+export const HOME_PAGE_SIZE = 24;
 
 /** Fetch catalog server-side (ISR 5 phút). Lỗi API: xem fetchList. */
 export async function getProducts(params: Record<string, string> = {}): Promise<ProductCard[]> {
   const qs = new URLSearchParams({ limit: '30', ...params }).toString();
   return fetchList<ProductCard>(`/products?${qs}`, 300, (json) => (json as Page<ProductCard>).data);
+}
+
+/**
+ * Một trang catalog kèm tổng số sản phẩm (meta.total) — trang chủ cần tổng thật để phân trang và để nhãn
+ * "N sản phẩm" không chỉ đếm những gì đang hiện. Lỗi API: xem fetchList.
+ */
+export async function getProductsPage(params: Record<string, string> = {}): Promise<ProductPage> {
+  const qs = new URLSearchParams({ limit: String(HOME_PAGE_SIZE), ...params }).toString();
+  const [page] = await fetchList<ProductPage>(`/products?${qs}`, 300, (json) => [json as ProductPage]);
+  return page ?? { data: [], meta: { page: 1, limit: HOME_PAGE_SIZE, total: 0 } };
 }
 
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
