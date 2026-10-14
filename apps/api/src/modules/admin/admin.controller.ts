@@ -110,7 +110,11 @@ export class ReviewMerchantProductDto {
   @IsOptional() @IsBoolean() confirmTakeover?: boolean;
 }
 export class UnlinkMerchantProductDto {
-  @IsString() @IsNotEmpty({ message: 'Nhập lý do gỡ liên kết để báo đối tác.' }) @MaxLength(300) reason!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Nhập lý do gỡ liên kết để báo đối tác.' })
+  @MaxLength(300)
+  reason!: string;
 }
 class SetConfigDto {
   @IsString() @IsNotEmpty() key!: string;

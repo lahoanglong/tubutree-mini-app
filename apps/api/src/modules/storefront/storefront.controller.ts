@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { StorefrontService } from './storefront.service';
@@ -11,7 +11,12 @@ import { StorefrontQuestService } from './storefront-quest.service';
 const IMAGE_MAX = 1_500_000;
 
 class UpdateStorefrontDto {
-  @IsOptional() @IsString() @MaxLength(120) title?: string;
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' })
+  @MaxLength(120)
+  title?: string;
   @IsOptional() @IsString() @MaxLength(200) headerNote?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;

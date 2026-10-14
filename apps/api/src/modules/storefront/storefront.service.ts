@@ -157,7 +157,7 @@ export class StorefrontService {
     const data: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(dto)) {
       if (v === undefined || (sf.type !== 'MERCHANT' && k.startsWith('warehouse'))) continue;
-      data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
+      data[k] = k !== 'title' && typeof v === 'string' && v.trim() === '' ? null : v;
     }
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
       await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);

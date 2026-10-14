@@ -357,9 +357,9 @@ export class MerchantService {
       ...(dto.shippingFee !== undefined ? { shippingFee: dto.shippingFee } : {}),
       ...(dto.freeShipFrom !== undefined ? { freeShipFrom: dto.freeShipFrom } : {}),
     };
-    // Chuỗi rỗng = xoá (ví dụ gỡ tài khoản nhận đối soát), không lưu ''.
+    // Chuỗi rỗng = xoá (ví dụ gỡ tài khoản nhận đối soát), không lưu ''. Tên gian hàng là cột bắt buộc: không xoá được.
     for (const [key, v] of Object.entries(updateData)) {
-      if (typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
+      if (key !== 'title' && typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
     }
 
     if (dto.isPublished !== undefined) {
