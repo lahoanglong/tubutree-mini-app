@@ -462,6 +462,50 @@ describe('CartService guard tồn kho', () => {
     expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SAVE' } });
   });
 
+  describe('R2-BUYERMINI-3: nói rõ hàng giờ vàng bị loại khỏi điều kiện/giảm giá của mã', () => {
+    const flashCart = (couponCode: string | null) => ({
+      cart: {
+        upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode,
+          items: [
+            { id: 'ci1', variationId: 'v1', quantity: 2, variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 90000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } } },
+            { id: 'ci2', variationId: 'v2', quantity: 1, variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 165000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } } },
+          ],
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    }) as any;
+    const flashSvc = {
+      resolveEffective: jest.fn().mockResolvedValue(new Map([['v1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
+    } as any;
+
+    it('applyCoupon bị từ chối khi giỏ có hàng giờ vàng: lỗi nói hàng giờ vàng không được tính và phần được tính là bao nhiêu', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 250.000đ để dùng mã này.')) } as any;
+      const prisma = flashCart(null);
+      await expect(new CartService(prisma, couponsSvc, config, flashSvc, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
+        'Đơn tối thiểu 250.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 165.000đ.',
+      );
+      expect(prisma.cart.update).not.toHaveBeenCalled();
+    });
+
+    it('applyCoupon bị từ chối khi giỏ không có hàng giờ vàng: giữ nguyên lỗi', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 250.000đ để dùng mã này.')) } as any;
+      const noFlash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
+      await expect(new CartService(flashCart(null), couponsSvc, config, noFlash, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
+        /^Đơn tối thiểu 250.000đ để dùng mã này.$/,
+      );
+    });
+
+    it('getCart: mã đã áp nhưng có hàng giờ vàng → couponNotice nói mã chỉ giảm trên phần hàng còn lại', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 16500, freeship: false }) } as any;
+      const c = await new CartService(flashCart('XANH10'), couponsSvc, config, flashSvc, analytics).getCart('u1');
+      expect(c.discount).toBe(16500);
+      expect(c.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 165.000đ hàng còn lại.');
+    });
+  });
+
   it('getCart: coupon fail trên base-không-flash NHƯNG hợp lệ trên TOÀN giỏ → GIỮ mã, discount 0, KHÔNG null', async () => {
     const validateAndCompute = jest
       .fn()

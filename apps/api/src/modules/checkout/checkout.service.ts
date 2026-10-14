@@ -22,6 +22,7 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import {
   COUPON_FREESHIP_NOTHING_REASON,
   COUPON_ZERO_DISCOUNT_REASON,
+  couponFlashExcludedNotice,
   couponNotAppliedNotice,
 } from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
@@ -943,6 +944,8 @@ export class CheckoutService {
     if (couponValid && !couponApplied) {
       const reason = freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
       couponNotice = couponNotAppliedNotice(reason, flashSubtotal > 0, combo.total > 0);
+    } else if (couponApplied && discount > 0 && flashSubtotal > 0) {
+      couponNotice = couponFlashExcludedNotice(goodsAfterCombo);
     }
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
     const shipments: CheckoutShipment[] = [];

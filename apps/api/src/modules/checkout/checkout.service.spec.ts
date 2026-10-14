@@ -1443,6 +1443,13 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
+  it('R2-BUYERMINI-3: mã áp được trên giỏ có hàng giờ vàng → couponNotice nói mã chỉ giảm trên phần hàng còn lại', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockResolvedValue({ discount: 8900, freeship: false }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 89.000đ hàng còn lại.');
+  });
+
   it('mã áp được → couponApplied true, couponNotice null', async () => {
     const { svc } = build({
       cartData: { ...FLASH_MIX, items: [FLASH_MIX.items[0]], subtotal: 89000 },

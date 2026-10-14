@@ -14,3 +14,15 @@ export function couponNotAppliedNotice(reason: string, hasFlash: boolean, hasCom
   const why = excluded.length > 0 ? ` (${excluded.join(' và ')} không được tính vào điều kiện của mã)` : '';
   return `Mã chưa được áp dụng cho đơn này${why}: ${reason}`;
 }
+
+const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+
+/** Mã đã áp nhưng giỏ có hàng giờ vàng: giá giờ vàng là giá cuối nên mã chỉ giảm trên phần hàng còn lại. */
+export function couponFlashExcludedNotice(base: number): string {
+  return `Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên ${vnd(base)} hàng còn lại.`;
+}
+
+/** Lỗi áp mã khi giỏ có hàng giờ vàng: nói thêm hàng giờ vàng không được tính vào điều kiện của mã. */
+export function couponRejectedWithFlash(reason: string, base: number): string {
+  return `${reason} Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là ${vnd(base)}.`;
+}

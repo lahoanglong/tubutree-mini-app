@@ -8,7 +8,12 @@ import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
-import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
+import {
+  COUPON_ZERO_DISCOUNT_REASON,
+  couponFlashExcludedNotice,
+  couponNotAppliedNotice,
+  couponRejectedWithFlash,
+} from '../coupons/coupon-notice';
 import { fulfillerOf } from '../checkout/checkout-split';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
@@ -129,6 +134,8 @@ export class CartService {
         freeship = r.freeship;
         if (lines.length > 0 && discount === 0 && !freeship) {
           couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash));
+        } else if (discount > 0 && lines.some((l) => l.isFlash)) {
+          couponNotice = couponFlashExcludedNotice(couponBase);
         }
       } catch (err) {
         // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
@@ -270,7 +277,14 @@ export class CartService {
     // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
     const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
     const normalized = normalizeCouponCode(code);
-    await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    try {
+      await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    } catch (err) {
+      if (err instanceof BadRequestException && cart.items.some((l) => l.isFlash)) {
+        throw new BadRequestException(couponRejectedWithFlash(err.message, couponBase));
+      }
+      throw err;
+    }
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId);
   }
