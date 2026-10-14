@@ -29,7 +29,12 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
     enabled: slugs.length > 0,
     staleTime: 30_000,
   });
-  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
+  const flashQ = useQuery({
+    queryKey: ['flash-sales', 'active'],
+    queryFn: fetchActiveFlashSales,
+    enabled: slugs.length > 0,
+    staleTime: 30_000,
+  });
   const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
   const items = productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored;
   if (items.length === 0) return null;

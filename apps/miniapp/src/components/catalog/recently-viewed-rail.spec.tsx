@@ -40,6 +40,7 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     const { container } = renderRail();
     expect(container).toBeEmptyDOMElement();
     expect(mocks.fetchProductsBySlugs).not.toHaveBeenCalled();
+    expect(mocks.fetchActiveFlashSales).not.toHaveBeenCalled();
   });
 
   it('mới xem nhất đứng đầu; chạm → PDP với listSource=recently_viewed', async () => {
