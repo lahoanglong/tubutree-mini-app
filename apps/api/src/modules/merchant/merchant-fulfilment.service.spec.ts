@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { Prisma } from '@prisma/client';
 import { MerchantFulfilmentService, partialReversalLinesOf, reversalLineOf, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
 import { MerchantSlaCron } from './merchant-sla.cron';
+import { payoutView } from './merchant-fulfilment.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
 
@@ -364,5 +365,107 @@ describe('MerchantSlaCron', () => {
       { merchantSlaNotifiedAt: null },
       { merchantSlaNotifiedAt: { lt: new Date(NOW.getTime() - 12 * H) } },
     ]);
+  });
+
+  it('R2-MERCHANT-11: lần nhắc đầu của đơn chưa gửi hàng → báo cả khách (chậm bước nào, huỷ được); nhắc lại hay đơn đang giao thì không', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]) };
+    const prisma = { order: { updateMany }, $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) };
+    const store = { title: 'Shop B', ownerUserId: 'u1' };
+    const base = { createdAt: new Date(NOW.getTime() - 30 * H), merchantAcceptedAt: null, shippedAt: null, fulfillerStorefront: store };
+    const overdue = [
+      { ...base, id: 'o1', code: 'A', userId: 'buyer-a', status: 'CONFIRMED', merchantSlaNotifiedAt: null },
+      { ...base, id: 'o2', code: 'B', userId: 'buyer-b', status: 'CONFIRMED', merchantSlaNotifiedAt: new Date(NOW.getTime() - 13 * H) },
+      {
+        ...base,
+        id: 'o3',
+        code: 'C',
+        userId: 'buyer-c',
+        status: 'PACKED',
+        createdAt: new Date(NOW.getTime() - 50 * H),
+        merchantAcceptedAt: new Date(NOW.getTime() - 49 * H),
+        merchantSlaNotifiedAt: null,
+      },
+      {
+        ...base,
+        id: 'o4',
+        code: 'D',
+        userId: 'buyer-d',
+        status: 'SHIPPING',
+        createdAt: new Date(NOW.getTime() - 9 * 24 * H),
+        merchantAcceptedAt: new Date(NOW.getTime() - 9 * 24 * H),
+        shippedAt: new Date(NOW.getTime() - 8 * 24 * H),
+        merchantSlaNotifiedAt: null,
+      },
+    ];
+    const fulfilment = { slaConfig: jest.fn().mockResolvedValue(SLA), overdueOrders: jest.fn().mockResolvedValue(overdue) };
+    const notify = jest.fn().mockResolvedValue(undefined);
+    await new MerchantSlaCron(prisma as never, fulfilment as never, { notify } as never).remind(NOW);
+    const buyerCalls = notify.mock.calls.filter((c) => c[1] === 'ORDER_MERCHANT_DELAYED');
+    expect(buyerCalls).toEqual([
+      ['buyer-a', 'ORDER_MERCHANT_DELAYED', { order_code: 'A', store: 'Shop B', step: 'xác nhận đơn' }],
+      ['buyer-c', 'ORDER_MERCHANT_DELAYED', { order_code: 'C', store: 'Shop B', step: 'gửi hàng' }],
+    ]);
+  });
+});
+
+describe('R2-MERCHANT-4: phiếu đối soát âm là đối tác nộp lại Tubu', () => {
+  const created = new Date('2026-10-14T03:00:00Z');
+  it('phiếu âm chờ xử lý: hướng TO_TUBU, nội dung chuyển khoản theo mã phiếu, hạn nộp = ngày lập + số ngày cấu hình', () => {
+    const v = payoutView({ id: 'cmpayout0001abcd1234', amount: -103_500, status: 'PENDING', createdAt: created }, 7);
+    expect(v).toMatchObject({ direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: new Date('2026-10-21T03:00:00Z') });
+  });
+  it('phiếu dương: Tubu chuyển, không có hạn nộp; phiếu âm đã thu: không còn hạn', () => {
+    expect(payoutView({ id: 'p1xxxxxxxx', amount: 50_000, status: 'PENDING', createdAt: created }, 7)).toMatchObject({
+      direction: 'TO_MERCHANT',
+      dueAt: null,
+    });
+    expect(payoutView({ id: 'p2xxxxxxxx', amount: -1, status: 'PAID', createdAt: created }, 7).dueAt).toBeNull();
+  });
+
+  it('myStatement kèm tài khoản nhận của Tubu và phiếu đã gắn hướng/hạn nộp', async () => {
+    const { svc, prisma } = build();
+    (prisma as unknown as { merchantPayout: { findMany: jest.Mock } }).merchantPayout.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'cmpayout0001abcd1234', amount: -103_500, status: 'PENDING', createdAt: created, lines: [] }]);
+    (prisma as unknown as { merchantPancakeLink: unknown }).merchantPancakeLink = { findMany: jest.fn().mockResolvedValue([]) };
+    (prisma.order.findMany as jest.Mock).mockResolvedValue([]);
+    const config = {
+      get: jest.fn(async (k: string, fb: unknown) =>
+        ({
+          'payment.bank_name': 'Techcombank',
+          'payment.bank_account_no': '9984606774',
+          'payment.bank_account_name': 'CONG TY TUBU TREE',
+          'merchant.negative_payout_due_days': 5,
+        })[k] ?? fb,
+      ),
+    };
+    (svc as unknown as { config: unknown }).config = config;
+    const res = await svc.myStatement('u1');
+    expect(res.tubuAccount).toEqual({ bankName: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' });
+    expect(res.payouts[0]).toMatchObject({ direction: 'TO_TUBU', dueAt: new Date('2026-10-19T03:00:00Z') });
+  });
+});
+
+describe('R2-MERCHANT-2: hàng "Tubu giao hộ" đã bán hiện ở Đối soát (để đối chiếu, không vào phiếu)', () => {
+  it('chỉ dòng của biến thể đã liên kết, đơn tạo trong thời gian liên kết, đơn đã giao', async () => {
+    const { svc, prisma } = build();
+    const linkedAt = new Date('2026-10-01T00:00:00Z');
+    (prisma as unknown as { merchantPancakeLink: unknown }).merchantPancakeLink = {
+      findMany: jest.fn().mockResolvedValue([{ variationId: 'v-pk', linkedAt, unlinkedAt: null }]),
+    };
+    const orderItem = {
+      findMany: jest.fn().mockResolvedValue([
+        { variationId: 'v-pk', productName: 'Tiêu', variationName: '200g', quantity: 2, total: 240_000, order: { code: 'A', createdAt: new Date('2026-10-05T00:00:00Z'), deliveredAt: new Date('2026-10-08T00:00:00Z') } },
+        { variationId: 'v-pk', productName: 'Tiêu', variationName: '200g', quantity: 1, total: 120_000, order: { code: 'OLD', createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-10-02T00:00:00Z') } },
+      ]),
+    };
+    (prisma as unknown as { orderItem: unknown }).orderItem = orderItem;
+    const res = await svc.tubuFulfilledSales('sf-a', NOW);
+    expect(res).toEqual({
+      lines: [{ orderCode: 'A', deliveredAt: new Date('2026-10-08T00:00:00Z'), productName: 'Tiêu', variationName: '200g', quantity: 2, total: 240_000 }],
+      goods: 240_000,
+    });
+    expect(orderItem.findMany.mock.calls[0][0].where).toMatchObject({ variationId: { in: ['v-pk'] }, order: { status: 'DELIVERED' } });
   });
 });

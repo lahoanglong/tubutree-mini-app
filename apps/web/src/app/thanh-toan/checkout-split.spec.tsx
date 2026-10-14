@@ -69,6 +69,14 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     expect(r.container.textContent).toContain('sẽ thành 2 đơn riêng');
   });
 
+  it('R2-MERCHANT-8: giỏ tách kiện không bị khung cuộn cao cố định giấu kiện thứ ba', async () => {
+    const r = await mount();
+    const region = r.container.querySelector<HTMLElement>('[aria-label="Sản phẩm trong đơn"]')!;
+    expect(region.className).not.toContain('max-h-');
+    expect(region.className).not.toContain('overflow-auto');
+    expect(region.hasAttribute('tabindex')).toBe(false);
+  });
+
   it('chuyển khoản bị khoá kèm lý do từ BE; đặt hàng gửi COD', async () => {
     m.placeOrder.mockReturnValue(new Promise(() => undefined));
     const r = await mount();

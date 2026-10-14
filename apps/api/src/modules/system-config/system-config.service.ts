@@ -117,6 +117,7 @@ export class SystemConfigService {
     'merchant.default_shipping_fee': { min: 0, max: 500000, note: 'đồng', integer: true },
     'merchant.commission_pct': { min: 0, max: 0.5, note: 'phân số (0.15 = 15%)' },
     'merchant.settlement_hold_days': { min: 0, max: 60, note: 'số ngày', integer: true },
+    'merchant.negative_payout_due_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'merchant.confirm_sla_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
     'ops.alert_unsynced_minutes': { min: 15, max: 1440, note: 'số phút', integer: true },
     'ops.alert_stuck_orders': { min: 1, max: 1000, note: 'số đơn', integer: true },

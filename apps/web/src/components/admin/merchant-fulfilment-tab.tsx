@@ -11,6 +11,7 @@ import {
   type MerchantPayout,
 } from '@/lib/merchant-client';
 import { formatVnd } from '@/lib/shop-client';
+import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge } from './ui';
@@ -148,14 +149,14 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
   const cancelMut = useMutation({ mutationFn: () => cancelAdminMerchantPayout(p.id), onSuccess: onDone, onError });
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
+  const toTubu = payoutToTubu(p);
+  const status = payoutStatus(p, 'admin');
   return (
     <li className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-stone-900">{p.storefront?.title ?? p.storefrontId}</span>
         <span className="font-semibold">{signed(p.amount)}</span>
-        <ToneBadge tone={p.status === 'PAID' ? 'success' : p.status === 'PENDING' ? 'warning' : 'neutral'}>
-          {p.status === 'PAID' ? 'Đã chuyển' : p.status === 'PENDING' ? 'Chờ chuyển' : 'Đã huỷ'}
-        </ToneBadge>
+        <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         <span className="text-stone-500">
           {p.lines.length} khoản · lập {formatDate(p.createdAt)}
           {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}
@@ -164,11 +165,11 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
       {p.status === 'PENDING' && (
         <>
           <p className="text-stone-600">
-            {p.amount >= 0
+            {!toTubu
               ? bank?.accountNo
                 ? `Chuyển vào ${bank.bankName ?? ''} ${bank.accountNo} (${bank.accountName ?? ''})`
                 : 'Gian hàng chưa khai tài khoản nhận đối soát: nhắc đối tác khai trước khi chuyển.'
-              : 'Số âm: đối tác nộp lại Tubu khoản này.'}
+              : `Đối tác nộp ${formatVnd(-p.amount)} cho Tubu${p.transferMemo ? `, nội dung "${p.transferMemo}"` : ''}${p.dueAt ? `, hạn ${formatDate(p.dueAt)}` : ''}. Đối chiếu sao kê rồi bấm Đã thu.`}
           </p>
           <form
             className="flex flex-wrap items-end gap-2"
@@ -178,11 +179,11 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
             }}
           >
             <label className="text-stone-700">
-              Mã giao dịch ngân hàng
+              {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
               <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
             </label>
             <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
-              Đã chuyển
+              {toTubu ? 'Đã thu' : 'Đã chuyển'}
             </button>
             <button type="button" disabled={busy} onClick={() => cancelMut.mutate()} className={BTN_XS_DANGER}>
               Huỷ phiếu

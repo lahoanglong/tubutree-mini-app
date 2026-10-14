@@ -424,12 +424,13 @@ export default function CheckoutPage() {
 
         <div className={`h-fit p-4 ${ui.card}`}>
           <h2 className={ui.sectionTitle}>Đơn hàng</h2>
-          {/* Vùng cuộn phải focus được bằng bàn phím (axe scrollable-region-focusable). */}
+          {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
+              hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
           <div
             role="region"
             aria-label="Sản phẩm trong đơn"
-            tabIndex={0}
-            className="mt-2 max-h-40 space-y-1 overflow-auto text-sm"
+            tabIndex={split ? undefined : 0}
+            className={`mt-2 space-y-1 text-sm ${split ? '' : 'max-h-40 overflow-auto'}`}
           >
             {split
               ? shipments.map((sh) => (

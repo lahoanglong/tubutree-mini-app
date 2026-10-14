@@ -1,14 +1,21 @@
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
+import { MERCHANT_PORTAL_ROLES } from '../merchant/merchant-config';
 
 /**
  * Tách một lần đặt thành một đơn cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3). Hàm thuần —
  * checkout gọi để báo giá và để ghi đơn, test khoá phép chia tiền.
  */
 
+/**
+ * Vì sao dòng không giao được: gian hàng tạm nghỉ (đối tác tự bật), gian hàng ngừng bán (chủ gian hàng bị khoá hoặc không còn
+ * vào được Cổng người bán). Không có = không có đường giao (thiếu mã Pancake, mất gian hàng).
+ */
+export type UnavailableReason = 'STORE_PAUSED' | 'STORE_CLOSED';
+
 export type LineFulfiller =
   | { kind: 'TUBU'; storefrontId: null; name: string; ownerUserId: null }
   | { kind: 'MERCHANT'; storefrontId: string; name: string; ownerUserId: string | null }
-  | { kind: 'UNAVAILABLE'; storefrontId: null; name: string; ownerUserId: null };
+  | { kind: 'UNAVAILABLE'; storefrontId: null; name: string; ownerUserId: null; reason?: UnavailableReason };
 
 export const TUBU_FULFILLER_NAME = 'Tubu Tree';
 
@@ -17,18 +24,33 @@ export interface FulfilmentSource {
   product: {
     fulfilment: string;
     storefrontId: string | null;
-    storefront?: { title: string; ownerUserId: string | null; type: string } | null;
+    storefront?: {
+      title: string;
+      ownerUserId: string | null;
+      type: string;
+      ordersPausedAt: Date | null;
+      owner: { role: string; isBlocked: boolean } | null;
+    } | null;
   };
 }
 
+const PORTAL_ROLES: readonly string[] = MERCHANT_PORTAL_ROLES;
+
 /**
  * Nơi giao của một biến thể. Hàng đối tác tự giao cần thuộc gian hàng đối tác (chỉ chủ gian hàng MERCHANT có màn "Đơn cần
- * giao"); hàng Tubu cần mã Pancake thật.
+ * giao") mà chủ còn vào được Cổng người bán và gian hàng không tạm nghỉ; hàng Tubu cần mã Pancake thật.
  */
 export function fulfillerOf(v: FulfilmentSource): LineFulfiller {
   if (v.product.fulfilment === 'MERCHANT') {
     const store = v.product.storefront;
     if (v.product.storefrontId && store?.type === 'MERCHANT') {
+      const owner = store.owner;
+      if (!owner || owner.isBlocked || !PORTAL_ROLES.includes(owner.role)) {
+        return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason: 'STORE_CLOSED' };
+      }
+      if (store.ordersPausedAt) {
+        return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason: 'STORE_PAUSED' };
+      }
       return {
         kind: 'MERCHANT',
         storefrontId: v.product.storefrontId,
@@ -173,4 +195,33 @@ export function paymentMethodBlockReason(
     return 'Hàng do gian hàng đối tác tự giao chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
   }
   return null;
+}
+
+export interface PublicLineFulfiller {
+  kind: LineFulfiller['kind'];
+  storefrontId: string | null;
+  name: string;
+  reason?: UnavailableReason;
+}
+
+/** Nơi giao trả cho khách (giỏ, báo giá): không kèm ID chủ gian hàng (R2-MERCHANT-14). */
+export function publicFulfiller(f: LineFulfiller): PublicLineFulfiller {
+  const { ownerUserId: _owner, ...rest } = f;
+  return rest;
+}
+
+/** Giỏ trả cho khách: nơi giao từng dòng không kèm ID chủ gian hàng (R2-MERCHANT-14). */
+export function toPublicCart<C extends { items: { fulfiller: LineFulfiller }[] }>(cart: C) {
+  return { ...cart, items: cart.items.map((it) => ({ ...it, fulfiller: publicFulfiller(it.fulfiller) })) };
+}
+
+/** Câu báo cho khách khi lần đặt có dòng không giao được. */
+export function unavailableLineMessage(productName: string, f: Extract<LineFulfiller, { kind: 'UNAVAILABLE' }>): string {
+  if (f.reason === 'STORE_PAUSED') {
+    return `${f.name} đang tạm nghỉ, chưa nhận đơn "${productName}". Vui lòng bỏ sản phẩm này khỏi đơn hoặc đặt lại sau.`;
+  }
+  if (f.reason === 'STORE_CLOSED') {
+    return `${f.name} đã ngừng bán trên Tubu Tree, "${productName}" không đặt được nữa. Vui lòng bỏ sản phẩm này khỏi đơn.`;
+  }
+  return `Sản phẩm "${productName}" đang được cập nhật thông tin giao hàng, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`;
 }

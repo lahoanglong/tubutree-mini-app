@@ -37,6 +37,7 @@ import {
   countMerchantOrders,
   listFulfilOrders,
   updateMerchantOrderStatus,
+  pauseMerchantOrders,
   type MerchantStore,
   type MerchantProduct,
   type UpdateMerchantStoreInput,
@@ -387,7 +388,7 @@ export default function MerchantPage() {
               </div>
             )}
             {activeTab === 'products' && <ProductsTab canCreate={canCreateProducts} />}
-            {activeTab === 'orders' && <OrdersTab selfFulfils={selfFulfils} />}
+            {activeTab === 'orders' && <OrdersTab selfFulfils={selfFulfils} onOpenFulfil={() => setTab('fulfil')} />}
             {activeTab === 'settlement' && <SettlementTab />}
             {activeTab === 'shipping' && <ShippingTab store={store} onUpdated={() => storeQ.refetch()} />}
             {activeTab === 'payoutAccount' && <PayoutAccountTab store={store} onUpdated={() => storeQ.refetch()} />}
@@ -399,6 +400,47 @@ export default function MerchantPage() {
 }
 
 // ── Tab 1: Cấu hình Gian hàng & Subdomain ──
+/** Tạm nghỉ (R2-MERCHANT-13): khách không đặt được hàng gian hàng tự giao; đơn đã đặt vẫn phải giao. */
+function OrdersPauseControl({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
+  const paused = !!store.ordersPausedAt;
+  const [error, setError] = useState<string | null>(null);
+  const mut = useMutation({
+    mutationFn: (next: boolean) => pauseMerchantOrders(next),
+    onSuccess: () => {
+      setError(null);
+      onUpdated();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <div className={`space-y-2 rounded-control border p-3 text-xs ${paused ? 'border-warning-fg bg-warning-bg text-warning-fg' : 'border-stone-200 bg-stone-50 text-stone-700'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <span className="block font-semibold text-stone-900">
+            {paused ? `Đang tạm nghỉ từ ${formatDate(store.ordersPausedAt!)}` : 'Đang nhận đơn hàng tự giao'}
+          </span>
+          {paused
+            ? 'Khách không đặt được hàng bạn tự giao. Đơn đã đặt trước đó vẫn cần giao ở tab Đơn cần giao.'
+            : 'Nghỉ lễ hoặc tạm hết hàng? Tạm nghỉ để khách không đặt được hàng bạn tự giao. Hàng Tubu giao hộ vẫn bán.'}
+        </div>
+        <button
+          type="button"
+          onClick={() => mut.mutate(!paused)}
+          disabled={mut.isPending}
+          className={paused ? `${BTN_PRIMARY} px-4` : BTN_SMALL}
+        >
+          {mut.isPending ? 'Đang lưu…' : paused ? 'Mở nhận đơn lại' : 'Tạm nghỉ nhận đơn'}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-danger-fg">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function StoreSettingsTab({
   store,
   previewProducts,
@@ -540,8 +582,12 @@ function StoreSettingsTab({
           <label htmlFor="isPublished" className="cursor-pointer text-xs font-medium text-stone-700">
             <span className="block font-semibold text-stone-900">Xuất bản công khai gian hàng</span>
             Cho phép khách hàng truy cập gian hàng qua subdomain và đường dẫn công khai.
+            {store.type === 'MERCHANT' &&
+              ' Ẩn gian hàng không dừng bán: sản phẩm vẫn hiện ở danh mục chung. Muốn ngừng nhận đơn tự giao, dùng Tạm nghỉ nhận đơn bên dưới.'}
           </label>
         </div>
+
+        {store.type === 'MERCHANT' && <OrdersPauseControl store={store} onUpdated={onUpdated} />}
 
         {msg && (
           <div
@@ -695,8 +741,9 @@ function PayoutAccountTab({ store, onUpdated }: { store: MerchantStore; onUpdate
         <div>
           <h2 className="font-display font-semibold text-stone-900">Tài khoản nhận đối soát</h2>
           <p className="mt-1 text-xs text-stone-500">
-            Tubu Tree chuyển tiền đối soát các đơn bạn tự giao vào tài khoản này. Khách luôn thanh toán cho Tubu Tree, không chuyển
-            khoản trực tiếp cho gian hàng.
+            Tubu Tree chuyển tiền đối soát các đơn bạn tự giao vào tài khoản này. Khách trả trước qua Ví Tubu thì tiền về Tubu Tree,
+            Tubu chuyển lại cho bạn sau khi trừ phí sàn. Đơn COD do bạn tự giao: bạn thu tiền mặt của khách và nộp phí sàn cho Tubu
+            theo phiếu ở tab Đối soát.
           </p>
         </div>
 
@@ -1193,7 +1240,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
 }
 
 // ── Đơn qua gian hàng ──
-function OrdersTab({ selfFulfils }: { selfFulfils: boolean }) {
+function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpenFulfil: () => void }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   // P0 A5-03=A6-02 & A5-04=A6-36 (docs/audit-2026-09): BE giờ chỉ trả tên/SĐT/địa chỉ đầy đủ VÀ
@@ -1333,6 +1380,10 @@ function OrdersTab({ selfFulfils }: { selfFulfils: boolean }) {
                             )}
                           </div>
                         ))}
+                        {o.total == null && o.ownTotal != null && (
+                          <div className="pt-1 text-xs font-semibold text-stone-900">Hàng của bạn trong đơn: {formatVnd(o.ownTotal)}</div>
+                        )}
+                        {o.partial && <div className="text-[11px] text-stone-500">Đơn còn hàng của nơi khác, chỉ hiện hàng của bạn.</div>}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -1374,7 +1425,16 @@ function OrdersTab({ selfFulfils }: { selfFulfils: boolean }) {
                       ) : (
                         // P0 A5-03=A6-02: BE đã chặn hẳn self-transition cho DEALER/AFFILIATE (403) —
                         // ẩn nút thay vì để đối tác bấm rồi nhận lỗi.
-                        <span className="text-xs italic text-stone-500">Do kho Tubu xử lý</span>
+                        o.selfFulfilled ? (
+                          <div className="inline-flex flex-col items-end gap-1">
+                            <span className="text-xs font-semibold text-stone-900">Bạn tự giao</span>
+                            <button type="button" onClick={onOpenFulfil} className={BTN_SMALL}>
+                              Xem ở tab Đơn cần giao
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs italic text-stone-500">Do kho Tubu xử lý</span>
+                        )
                       )}
                     </td>
                   </tr>

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listMerchantReturns, markMerchantReturnReceived, type MerchantReturn } from '@/lib/merchant-client';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_PRIMARY, ToneBadge } from '@/components/admin/ui';
+import { EvidenceImages } from '@/components/admin/evidence-images';
 
 export const MERCHANT_RETURNS_KEY = ['merchant-returns'] as const;
 
@@ -70,6 +71,7 @@ export function MerchantReturnsSection() {
                 Lý do: {r.reasonLabel ? `${r.reasonLabel}. ` : ''}
                 {r.reason && r.reason !== r.reasonLabel ? r.reason : ''}
               </p>
+              <EvidenceImages images={r.images} />
               {r.receivedAt && <p className="text-stone-500">Đã nhận lúc {formatDateTime(r.receivedAt)}</p>}
               {r.status === 'APPROVED' && !r.receivedAt && (
                 <button

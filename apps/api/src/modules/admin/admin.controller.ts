@@ -106,6 +106,11 @@ class ReviewDto {
 export class ReviewMerchantProductDto {
   @IsBoolean() approve!: boolean;
   @IsOptional() @IsString() rejectReason?: string;
+  /** Admin đã xem sản phẩm đang bán sẽ bị chuyển sang gian hàng ("Tubu giao hộ" lấy mã của sản phẩm đang bán). */
+  @IsOptional() @IsBoolean() confirmTakeover?: boolean;
+}
+export class UnlinkMerchantProductDto {
+  @IsString() @IsNotEmpty({ message: 'Nhập lý do gỡ liên kết để báo đối tác.' }) @MaxLength(300) reason!: string;
 }
 class SetConfigDto {
   @IsString() @IsNotEmpty() key!: string;
@@ -562,6 +567,20 @@ export class AdminController {
     @Param('id') productId: string,
     @Body() dto: ReviewMerchantProductDto,
   ) {
-    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason);
+    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover);
+  }
+
+  @Get('merchant-products/linked')
+  listLinkedMerchantProducts(@Query() q: PaginationQuery) {
+    return this.admin.listLinkedMerchantProducts(q.page, q.limit);
+  }
+
+  @Post('merchant-products/:id/unlink')
+  unlinkMerchantProduct(
+    @CurrentUser('sub') adminId: string,
+    @Param('id') productId: string,
+    @Body() dto: UnlinkMerchantProductDto,
+  ) {
+    return this.admin.unlinkMerchantProduct(adminId, productId, dto.reason);
   }
 }

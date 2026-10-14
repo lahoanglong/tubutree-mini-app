@@ -142,7 +142,7 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
   }
 
   it('4 lần đặt cùng Idempotency-Key, giỏ có hàng Tubu + hàng đối tác → đúng 1 nhóm 2 đơn, kho trừ 1 lần, mọi lần trả cùng nhóm', async () => {
-    const owner = await createUser(prisma);
+    const owner = await createUser(prisma, { role: 'DEALER' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
       data: {

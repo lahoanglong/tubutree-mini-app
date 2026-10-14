@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LineFulfiller } from '../services/shop-api';
-import { groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from './shipments';
+import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from './shipments';
 
 const TUBU: LineFulfiller = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' };
 const SHOP_A: LineFulfiller = { kind: 'MERCHANT', storefrontId: 'a', name: 'Shop A' };
@@ -39,5 +39,14 @@ describe('tubuSubtotal', () => {
         { fulfiller: SHOP_A, total: 1000 },
       ]),
     ).toBe(150);
+  });
+});
+
+describe('fulfillerLabel', () => {
+  it('dòng không giao được nói lý do: gian hàng tạm nghỉ / đã ngừng bán (R2-MERCHANT-3/13)', () => {
+    expect(fulfillerLabel(SHOP_A)).toBe('Shop A giao');
+    expect(fulfillerLabel({ ...GONE, name: 'Shop A', reason: 'STORE_PAUSED' })).toBe('Shop A đang tạm nghỉ, chưa nhận đơn');
+    expect(fulfillerLabel({ ...GONE, name: 'Shop A', reason: 'STORE_CLOSED' })).toBe('Shop A đã ngừng bán');
+    expect(fulfillerLabel(GONE)).toBe('Không giao được');
   });
 });

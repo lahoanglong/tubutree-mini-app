@@ -3,6 +3,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CatalogService } from './catalog.service';
+import { toPublicProductDetail } from './catalog-public';
 import { ProductQuery } from './dto/product-query.dto';
 import { SuggestQuery } from './dto/suggest-query.dto';
 
@@ -29,8 +30,8 @@ export class CatalogController {
   @Public()
   @PublicCache('CATALOG')
   @Get('products/:slug')
-  detail(@Param('slug') slug: string) {
-    return this.catalog.getBySlug(slug);
+  async detail(@Param('slug') slug: string) {
+    return toPublicProductDetail(await this.catalog.getBySlug(slug));
   }
 
   @Public()

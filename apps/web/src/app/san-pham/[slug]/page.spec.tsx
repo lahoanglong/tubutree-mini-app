@@ -165,3 +165,37 @@ describe('/san-pham/[slug] — SEO (BUYERWEB-16)', () => {
     expect(m.alternates).toBeUndefined();
   });
 });
+
+describe('/san-pham/[slug] — ai giao hàng (R2-MERCHANT-7, R2-BUYERWEB-10)', () => {
+  it('hàng gian hàng tự giao: tên gian hàng hiện tại, phí giao riêng, ngưỡng miễn phí và giới hạn thanh toán', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: 500000 } };
+    const c = await mount();
+    const line = c.querySelector('[data-testid="pdp-fulfiller"]')!;
+    expect(line.textContent).toContain('Do Gốm Minh An giao');
+    expect(line.textContent).toContain('phí giao 30.000');
+    expect(line.textContent).toContain('miễn phí từ 500.000');
+    expect(line.textContent).toContain('COD hoặc Ví Tubu');
+    expect(line.textContent).toContain('không nhận chuyển khoản');
+  });
+
+  it('API chưa trả fulfiller: vẫn báo hàng đối tác tự giao, phí giao riêng', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT' };
+    const c = await mount();
+    const line = c.querySelector('[data-testid="pdp-fulfiller"]')!;
+    expect(line.textContent).toContain('Gian hàng đối tác tự giao');
+    expect(line.textContent).toContain('phí giao riêng');
+  });
+
+  it('hàng Tubu giao: ghi Tubu Tree giao, không có giới hạn thanh toán', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const line = c.querySelector('[data-testid="pdp-fulfiller"]')!;
+    expect(line.textContent).toContain('Tubu Tree giao');
+    expect(line.textContent).not.toContain('COD');
+  });
+
+  it('sản phẩm cũ không có thông tin giao: không hiện dòng', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-fulfiller"]')).toBeNull();
+  });
+});

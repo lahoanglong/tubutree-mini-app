@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Check } from 'lucide-react';
-import { getProduct, formatVnd } from '@/lib/api';
+import { Check, Truck } from 'lucide-react';
+import { getProduct, formatVnd, pdpFulfillerText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import ProductGallery from '@/components/product-gallery';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
@@ -43,6 +43,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const description = plainText(product.description);
   const shortDesc = plainText(product.shortDesc);
   const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
+  const fulfillerText = pdpFulfillerText(product);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -64,6 +65,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
           <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
+          {fulfillerText && (
+            <p data-testid="pdp-fulfiller" className="mt-2 flex items-start gap-1.5 text-sm text-stone-700">
+              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+              <span>{fulfillerText}</span>
+            </p>
+          )}
           {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 
           {product.certifications.length > 0 && (

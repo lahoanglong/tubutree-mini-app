@@ -1029,6 +1029,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(1),
       },
+      merchantPancakeLink: { create: jest.fn().mockResolvedValue({}) },
     });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
@@ -1044,6 +1045,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Chưa đủ chứng nhận');

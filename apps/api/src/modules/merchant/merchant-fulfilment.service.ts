@@ -17,12 +17,27 @@ import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.ser
 import {
   DEFAULT_MERCHANT_CONFIRM_SLA_HOURS,
   DEFAULT_MERCHANT_DELIVER_SLA_DAYS,
+  DEFAULT_MERCHANT_NEGATIVE_PAYOUT_DUE_DAYS,
   DEFAULT_MERCHANT_SETTLEMENT_HOLD_DAYS,
   DEFAULT_MERCHANT_SHIP_SLA_HOURS,
 } from './merchant-config';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+
+/**
+ * Hướng tiền của phiếu đối soát: dương Tubu chuyển cho đối tác, âm đối tác nộp lại Tubu (phí sàn trên đơn COD đối tác đã tự thu)
+ * — kèm nội dung chuyển khoản theo mã phiếu và hạn nộp của phiếu âm chưa thu (R2-MERCHANT-4).
+ */
+export function payoutView<P extends { id: string; amount: number; status: string; createdAt: Date }>(p: P, dueDays: number) {
+  const toTubu = p.amount < 0;
+  return {
+    ...p,
+    direction: toTubu ? ('TO_TUBU' as const) : ('TO_MERCHANT' as const),
+    transferMemo: `TUBU DS ${p.id.slice(-8).toUpperCase()}`,
+    dueAt: toTubu && p.status === 'PENDING' ? new Date(p.createdAt.getTime() + dueDays * DAY) : null,
+  };
+}
 
 /** Đơn đối tác tự giao: đủ thông tin người nhận vì đối tác phải tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 5). */
 const FULFIL_ORDER_SELECT = {
@@ -506,7 +521,7 @@ export class MerchantFulfilmentService {
 
   async myStatement(userId: string) {
     const store = await this.merchantStore(userId);
-    const [statement, payouts] = await Promise.all([
+    const [statement, payouts, dueDays, tubuAccount, tubuFulfilled] = await Promise.all([
       this.statementFor(store.id),
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: { not: 'CANCELLED' } },
@@ -514,8 +529,79 @@ export class MerchantFulfilmentService {
         take: 50,
         include: { lines: { orderBy: { createdAt: 'asc' } } },
       }),
+      this.negativeDueDays(),
+      this.tubuAccount(),
+      this.tubuFulfilledSales(store.id),
     ]);
-    return { ...statement, payouts };
+    return {
+      ...statement,
+      payouts: payouts.map((p) => payoutView(p, dueDays)),
+      negativeDueDays: dueDays,
+      tubuAccount,
+      tubuFulfilled,
+    };
+  }
+
+  private negativeDueDays(): Promise<number> {
+    return this.num('merchant.negative_payout_due_days', DEFAULT_MERCHANT_NEGATIVE_PAYOUT_DUE_DAYS);
+  }
+
+  /** Tài khoản Tubu nhận tiền (cùng tài khoản nhận chuyển khoản của khách) — nơi đối tác nộp phiếu âm. */
+  private async tubuAccount(): Promise<{ bankName: string; accountNo: string; accountName: string } | null> {
+    if (!this.config) return null;
+    const [bankName, accountNo, accountName] = await Promise.all([
+      this.config.get<string>('payment.bank_name', ''),
+      this.config.get<string>('payment.bank_account_no', ''),
+      this.config.get<string>('payment.bank_account_name', ''),
+    ]);
+    return accountNo ? { bankName, accountNo, accountName } : null;
+  }
+
+  /**
+   * Hàng "Tubu giao hộ" của gian hàng đã giao trong 90 ngày (đơn tạo trong thời gian liên kết): kho Tubu giao và thu tiền nên
+   * không vào phiếu đối soát; đối tác và Tubu đối chiếu theo thoả thuận nhập hàng (R2-MERCHANT-2). Tiền hàng theo đơn, chưa trừ
+   * hàng trả.
+   */
+  async tubuFulfilledSales(storefrontId: string, now = new Date()) {
+    const links = await this.prisma.merchantPancakeLink.findMany({
+      where: { storefrontId },
+      select: { variationId: true, linkedAt: true, unlinkedAt: true },
+    });
+    if (links.length === 0) return { lines: [], goods: 0 };
+    const rows = await this.prisma.orderItem.findMany({
+      where: {
+        variationId: { in: [...new Set(links.map((l) => l.variationId))] },
+        order: { status: 'DELIVERED', deliveredAt: { gte: new Date(now.getTime() - 90 * DAY) } },
+      },
+      select: {
+        variationId: true,
+        productName: true,
+        variationName: true,
+        quantity: true,
+        total: true,
+        order: { select: { code: true, createdAt: true, deliveredAt: true } },
+      },
+      orderBy: { order: { deliveredAt: 'desc' } },
+      take: 500,
+    });
+    const lines = rows
+      .filter((r) =>
+        links.some(
+          (l) =>
+            l.variationId === r.variationId &&
+            r.order.createdAt >= l.linkedAt &&
+            (l.unlinkedAt === null || r.order.createdAt < l.unlinkedAt),
+        ),
+      )
+      .map((r) => ({
+        orderCode: r.order.code,
+        deliveredAt: r.order.deliveredAt,
+        productName: r.productName,
+        variationName: r.variationName,
+        quantity: r.quantity,
+        total: r.total,
+      }));
+    return { lines, goods: lines.reduce((s, l) => s + l.total, 0) };
   }
 
   /**
@@ -623,7 +709,7 @@ export class MerchantFulfilmentService {
 
   async listPayouts(storefrontId: string | undefined, page = 1, limit = 20) {
     const where: Prisma.MerchantPayoutWhereInput = storefrontId ? { storefrontId } : {};
-    const [total, rows] = await Promise.all([
+    const [total, rows, dueDays] = await Promise.all([
       this.prisma.merchantPayout.count({ where }),
       this.prisma.merchantPayout.findMany({
         where,
@@ -631,8 +717,14 @@ export class MerchantFulfilmentService {
         include: { storefront: { select: { id: true, title: true } }, lines: true },
         ...skipTake(page, limit),
       }),
+      this.negativeDueDays(),
     ]);
-    return paginated(rows, page, limit, total);
+    return paginated(
+      rows.map((p) => payoutView(p, dueDays)),
+      page,
+      limit,
+      total,
+    );
   }
 
   /** Tổng quan cho admin: mỗi gian hàng đối tác có đơn tự giao — số đơn đang xử lý, quá hạn, số tiền chờ đối soát. */
@@ -681,6 +773,7 @@ export class MerchantFulfilmentService {
       select: {
         id: true,
         code: true,
+        userId: true,
         status: true,
         total: true,
         createdAt: true,

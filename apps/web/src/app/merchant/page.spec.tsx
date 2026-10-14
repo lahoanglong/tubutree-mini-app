@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   updateProduct: vi.fn(),
   stopSelling: vi.fn(),
   checkPancake: vi.fn(),
+  pause: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -44,6 +45,7 @@ vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   updateMerchantProduct: (id: string, dto: unknown) => mocks.updateProduct(id, dto),
   stopSellingMerchantProduct: (id: string) => mocks.stopSelling(id),
   checkPancakeVariation: (code: string) => mocks.checkPancake(code),
+  pauseMerchantOrders: (paused: boolean) => mocks.pause(paused),
 }));
 
 const STORE = {
@@ -168,6 +170,7 @@ beforeEach(() => {
   }));
   mocks.updateProduct = vi.fn(async () => ({}));
   mocks.stopSelling = vi.fn(async () => ({}));
+  mocks.pause = vi.fn(async () => ({}));
   mocks.checkPancake = vi.fn(async (code: string) => ({
     variationId: 'pv',
     pancakeId: code,
@@ -349,11 +352,39 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
   });
 });
 
+describe('cổng đối tác — tạm nghỉ nhận đơn (R2-MERCHANT-13)', () => {
+  it('gian hàng đối tác có nút Tạm nghỉ nhận đơn; ẩn gian hàng được giải thích là không dừng bán', async () => {
+    const root = await mount();
+    expect(byText(root, 'label', 'Xuất bản công khai gian hàng')!.textContent).toContain('không dừng bán');
+    click(byText(root, 'button', 'Tạm nghỉ nhận đơn'));
+    await flush();
+    expect(mocks.pause).toHaveBeenCalledWith(true);
+  });
+
+  it('đang tạm nghỉ: hiện trạng thái và nút mở nhận đơn lại', async () => {
+    mocks.store = { ...STORE, ordersPausedAt: '2026-10-13T03:00:00.000Z' };
+    const root = await mount();
+    expect(root.textContent).toContain('Đang tạm nghỉ');
+    click(byText(root, 'button', 'Mở nhận đơn lại'));
+    await flush();
+    expect(mocks.pause).toHaveBeenCalledWith(false);
+  });
+
+  it('gian hàng CTV không có nút tạm nghỉ (hàng do kho Tubu giao)', async () => {
+    mocks.store = { ...STORE, type: 'CTV' };
+    mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
+    const root = await mount();
+    expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).toBeNull();
+  });
+});
+
 describe('cổng đối tác — tab Tài khoản nhận đối soát (SELLER-8)', () => {
   it('nói rõ khách trả tiền cho Tubu, không có mã VietQR mẫu; lưu gửi BIN theo ngân hàng chọn và tên viết hoa', async () => {
     const root = await mount();
     await openTab('Tài khoản nhận đối soát');
-    expect(root.textContent).toContain('Khách luôn thanh toán cho Tubu Tree');
+    expect(root.textContent).not.toContain('Khách luôn thanh toán cho Tubu Tree');
+    expect(root.textContent).toContain('Đơn COD do bạn tự giao: bạn thu tiền mặt của khách');
+    expect(root.textContent).toContain('tab Đối soát');
     expect(root.querySelector('img')).toBeNull();
     selectValue(inputByLabel(root, 'Ngân hàng'), '970418');
     typeInto(inputByLabel(root, 'Số tài khoản'), '0123456789');
@@ -428,6 +459,22 @@ describe('cổng đối tác — tab Đơn cần giao (D4)', () => {
     click(byText(second, 'button', 'Xác nhận đã gửi hàng'));
     await flush();
     expect(mocks.fulfilAction).toHaveBeenLastCalledWith('ship', '2', { carrier: 'GHN', trackingCode: 'GHN999', trackingUrl: undefined });
+  });
+
+  it('R2-MERCHANT-12: ô link tra cứu không dùng kiểm tra URL của trình duyệt (báo lỗi tiếng Anh), gõ thiếu https:// vẫn gửi được', async () => {
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    const second = root.querySelector('article[aria-label="Đơn TF2"]')!;
+    click(byText(second, 'button', 'Nhập mã vận đơn'));
+    const url = inputByLabel(second, 'Link tra cứu') as HTMLInputElement;
+    expect(url.type).toBe('text');
+    expect(url.inputMode).toBe('url');
+    typeInto(inputByLabel(second, 'Đơn vị vận chuyển'), 'GHN');
+    typeInto(inputByLabel(second, 'Mã vận đơn'), 'GHNABC1');
+    typeInto(url, ' ghn.vn/tra-cuu/GHNABC1 ');
+    click(byText(second, 'button', 'Xác nhận đã gửi hàng'));
+    await flush();
+    expect(mocks.fulfilAction).toHaveBeenLastCalledWith('ship', '2', { carrier: 'GHN', trackingCode: 'GHNABC1', trackingUrl: 'ghn.vn/tra-cuu/GHNABC1' });
 
     const third = root.querySelector('article[aria-label="Đơn TF3"]')!;
     expect(third.textContent).toContain('GHN · GHN123');
@@ -468,6 +515,68 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('−15.000');
     expect(root.textContent).toContain('mã GD FT123');
     expect(scrollRegionProblems(root)).toEqual([]);
+  });
+
+  it('R2-MERCHANT-4: phiếu âm ghi "Bạn cần nộp", tài khoản Tubu, nội dung CK, hạn nộp; mở phiếu xem từng đơn', async () => {
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      lines: [],
+      total: 0,
+      upcoming: [],
+      negativeDueDays: 7,
+      tubuAccount: { bankName: 'Vietcombank', accountNo: '0071000999', accountName: 'CONG TY TUBU TREE' },
+      payouts: [
+        {
+          id: 'p2',
+          storefrontId: 's1',
+          amount: -103500,
+          status: 'PENDING',
+          direction: 'TO_TUBU',
+          transferMemo: 'TUBU DS ABCD1234',
+          dueAt: '2026-10-21T03:00:00.000Z',
+          createdAt: '2026-10-14T03:00:00.000Z',
+          lines: [
+            { id: 'l9', orderId: 'o9', orderCode: 'TF9', kind: 'SALE', goodsAmount: 210000, shippingFee: 0, commissionAmount: 31500, codCollected: 210000, netAmount: -31500, deliveredAt: null, createdAt: '2026-10-14T03:00:00.000Z' },
+          ],
+        },
+        { id: 'p1', storefrontId: 's1', amount: -20000, status: 'PAID', direction: 'TO_TUBU', transferMemo: 'TUBU DS X', dueAt: null, createdAt: '2026-09-20T03:00:00.000Z', paidAt: '2026-09-22T03:00:00.000Z', bankRef: 'FT9', lines: [] },
+      ],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const pending = root.querySelector('li[aria-label="Phiếu TUBU DS ABCD1234"]')!;
+    expect(pending.textContent).toContain('Bạn cần nộp 103.500');
+    expect(pending.textContent).toContain('Chờ nộp');
+    expect(pending.textContent).not.toContain('Chờ chuyển');
+    expect(pending.textContent).toContain('Vietcombank · 0071000999 · CONG TY TUBU TREE');
+    expect(pending.textContent).toContain('Nội dung chuyển khoản: TUBU DS ABCD1234');
+    expect(pending.textContent).toContain('Hạn nộp 21/10/2026');
+    const summary = pending.querySelector('summary')!;
+    expect(summary.textContent).toContain('Xem 1 khoản');
+    expect(pending.querySelector('table')!.textContent).toContain('TF9');
+    expect(root.textContent).toContain('Đã thu');
+    expect(root.textContent).toContain('trong 7 ngày');
+  });
+
+  it('R2-MERCHANT-2: hàng Tubu giao hộ đã bán hiện riêng, ghi rõ không vào phiếu đối soát', async () => {
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      lines: [],
+      total: 0,
+      upcoming: [],
+      payouts: [],
+      tubuFulfilled: {
+        goods: 240000,
+        lines: [{ orderCode: 'TT77', deliveredAt: '2026-10-10T03:00:00.000Z', productName: 'Tiêu đen', variationName: '200g', quantity: 2, total: 240000 }],
+      },
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const sec = byText(root, 'section', 'Hàng Tubu giao hộ đã bán')!;
+    expect(sec.textContent).toContain('TT77');
+    expect(sec.textContent).toContain('Tiêu đen (200g)');
+    expect(sec.textContent).toContain('240.000');
+    expect(sec.textContent).toContain('không vào phiếu đối soát');
   });
 
   it('đơn bị trả: giải thích phần nộp lại (COD là số tiền mặt đã thu), dòng ghi "(trả hàng)"', async () => {
@@ -622,6 +731,41 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(mocks.createProduct.mock.calls[0]![0]).not.toHaveProperty('stock');
   });
 
+  it('R2-MERCHANT-1: mã đang thuộc sản phẩm Tubu đang bán → báo cần Tubu xác nhận, không lộ tồn kho Tubu', async () => {
+    mocks.checkPancake = vi.fn(async (code: string) => ({
+      pancakeId: code,
+      productName: 'Tiêu đen',
+      variationName: '200g',
+      retailPrice: 120000,
+      salePrice: null,
+      stock: null,
+      requiresAdminConfirm: true,
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    click(overlay.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]!);
+    typeInto(inputByLabel(overlay, 'Mã biến thể Pancake'), 'PCK-9');
+    click(byText(overlay, 'button', 'Kiểm tra mã'));
+    await flush();
+    const status = overlay.querySelector('[role="status"]')!;
+    expect(status.textContent).toContain('Tiêu đen (200g)');
+    expect(status.textContent).toContain('Tubu Tree xác nhận');
+    expect(status.textContent).not.toContain('còn');
+    expect(status.textContent).not.toContain('null');
+  });
+
+  it('R2-MERCHANT-2: lựa chọn "Tubu giao hộ" nói rõ tiền hàng theo thoả thuận ký gửi, không qua tab Đối soát', async () => {
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    const option = byText(overlay, 'label', 'Tubu giao hộ')!;
+    expect(option.textContent).toContain('thoả thuận ký gửi');
+    expect(option.textContent).toContain('không qua tab Đối soát');
+  });
+
   it('D4 mã Pancake không hợp lệ: hiện lỗi của API ngay dưới ô mã', async () => {
     mocks.checkPancake = vi.fn(async () => {
       throw new Error('Không tìm thấy mã biến thể này trong danh mục Pancake của Tubu Tree');
@@ -639,7 +783,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
 
   it('sửa sản phẩm chỉ gửi trường đã đổi; ngừng bán hỏi xác nhận rồi gọi API; sản phẩm ngừng bán mở bán lại được', async () => {
     mocks.getProducts = vi.fn(async () => ({
-      ownProducts: [PRODUCT('a', 'APPROVED', { isActive: true }), PRODUCT('z', 'APPROVED', { isActive: false })],
+      ownProducts: [PRODUCT('a', 'APPROVED', { isActive: true, heldQty: 3 }), PRODUCT('z', 'APPROVED', { isActive: false })],
       resellProducts: [],
       meta: { page: 1, limit: 20, ownTotal: 2, resellTotal: 0 },
     }));
@@ -648,7 +792,8 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     expect(overlay.textContent).toContain('chờ Tubu Tree duyệt lại');
-    typeInto(inputByLabel(overlay, 'Tồn kho'), '12');
+    expect(byText(overlay, 'label', 'Số còn bán được')!.textContent).toContain('đã trừ 3 sp khách đặt chưa gửi');
+    typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
     click(byText(overlay, 'button', 'Lưu thay đổi'));
     await flush();
     expect(mocks.updateProduct).toHaveBeenCalledWith('a', { stock: 12 });
@@ -707,6 +852,27 @@ describe('cổng đối tác — tab Đơn qua gian hàng', () => {
     expect(byText(root, 'span', 'Đặt trước 1')!.className).toContain('bg-warning-bg');
     const frame = root.querySelector('table')!.parentElement!;
     expect(frame.className).toContain('overflow-x-auto');
+  });
+
+  it('R2-MERCHANT-6/5: đơn gian hàng tự giao ghi "Bạn tự giao" và chuyển sang tab Đơn cần giao; đơn Tubu giao có hàng nơi khác chỉ hiện tiền dòng của mình', async () => {
+    mocks.listOrders = vi.fn(async () => ({
+      data: [
+        ORDER('5', 'CONFIRMED', { selfFulfilled: true, partial: false }),
+        ORDER('6', 'SHIPPING', { total: null, ownTotal: 120000, partial: true, selfFulfilled: false }),
+      ],
+      meta: { page: 1, limit: 20, total: 2 },
+    }));
+    const root = await mount();
+    await openTab('Đơn qua gian hàng');
+    const rows = root.querySelectorAll('tbody tr');
+    expect(rows[0]!.textContent).toContain('Bạn tự giao');
+    expect(rows[0]!.textContent).not.toContain('Do kho Tubu xử lý');
+    expect(rows[1]!.textContent).toContain('Do kho Tubu xử lý');
+    expect(rows[1]!.textContent).toContain('Hàng của bạn trong đơn: 120.000');
+    expect(rows[1]!.textContent).toContain('Đơn còn hàng của nơi khác');
+    click(byText(rows[0] as HTMLElement, 'button', 'Xem ở tab Đơn cần giao'));
+    await flush();
+    expect(byText(root, '[role="tab"]', 'Đơn cần giao')!.getAttribute('aria-selected')).toBe('true');
   });
 
   it('bộ lọc trạng thái có tên truy cập, cao 44px và gọi lại danh sách ở trang 1 theo trạng thái chọn', async () => {

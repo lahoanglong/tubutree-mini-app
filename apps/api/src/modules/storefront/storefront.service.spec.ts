@@ -602,6 +602,41 @@ describe('StorefrontService.getPublicBySlug', () => {
     }
   });
 
+  it('SELLER-8: gian hàng CTV không tự giao nên không trả kho/SĐT kho (dữ liệu cũ còn lưu cũng không lộ); gian hàng đối tác vẫn trả', async () => {
+    const base = {
+      id: 's1', slug: 'ctvone', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' },
+      warehouseAddress: '1 Lê Lợi', warehouseCity: 'HCM', warehouseDistrict: 'Q1', warehouseWard: 'P1', warehousePhone: '0955555555',
+    };
+    const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, type: 'CTV', ownerUserId: 'u9' }) } });
+    const r = await new StorefrontService(ctv, config, affiliate).getPublicBySlug('ctvone');
+    expect(JSON.stringify(r)).not.toContain('0955555555');
+    expect(JSON.stringify(r)).not.toContain('1 Lê Lợi');
+    const merchant = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, type: 'MERCHANT' }) } });
+    expect((await new StorefrontService(merchant, config, affiliate).getPublicBySlug('ctvone')).warehousePhone).toBe('0955555555');
+  });
+
+  it('SELLER-8: CTV sửa gian hàng → không lưu kho/SĐT kho', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', type: 'CTV', subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u9', { title: 'Mới', warehousePhone: '0955555555', warehouseAddress: 'x' });
+    expect(update.mock.calls[0][0].data).toEqual({ title: 'Mới' });
+  });
+
+  it('SELLER-8: gian hàng MERCHANT sửa qua updateMine → vẫn lưu kho và hotline', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's2', type: 'MERCHANT', subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u8', {
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: '',
+    });
+    expect(update.mock.calls[0][0].data).toEqual({
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: null,
+    });
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);

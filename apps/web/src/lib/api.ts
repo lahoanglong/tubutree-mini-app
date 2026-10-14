@@ -103,6 +103,29 @@ export interface ProductDetail {
   variations: VariationDetail[];
   ratingAvg?: number;
   reviewCount?: number;
+  fulfilment?: 'TUBU' | 'MERCHANT';
+  /** Ai giao (D4): tên gian hàng lấy theo gian hàng hiện tại, phí giao riêng của gian hàng. API cũ chưa trả. */
+  fulfiller?: ProductFulfiller;
+}
+
+export interface ProductFulfiller {
+  kind: 'TUBU' | 'MERCHANT';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+}
+
+/** Dòng "ai giao" trên trang sản phẩm; null khi API không nói (sản phẩm cũ). */
+export function pdpFulfillerText(p: Pick<ProductDetail, 'fulfilment' | 'fulfiller'>): string | null {
+  const f = p.fulfiller;
+  if (f?.kind === 'TUBU' || (!f && p.fulfilment === 'TUBU')) return 'Tubu Tree giao hàng';
+  if (!f && p.fulfilment !== 'MERCHANT') return null;
+  const who = f ? `Do ${f.name} giao` : 'Gian hàng đối tác tự giao';
+  const fee =
+    f?.shippingFee != null
+      ? `phí giao ${formatVnd(f.shippingFee)}${f.freeShipFrom != null ? ` (miễn phí từ ${formatVnd(f.freeShipFrom)})` : ''}`
+      : 'phí giao riêng';
+  return `${who}, đi kiện riêng · ${fee} · thanh toán COD hoặc Ví Tubu, không nhận chuyển khoản`;
 }
 interface Page<T> {
   data: T[];

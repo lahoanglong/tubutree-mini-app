@@ -90,6 +90,8 @@ export interface LineFulfiller {
   kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
   storefrontId: string | null;
   name: string;
+  /** Chỉ có ở UNAVAILABLE: gian hàng tạm nghỉ nhận đơn, hoặc gian hàng đã ngừng bán (chủ bị khoá/hết quyền đối tác). */
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
 }
 /** Một kiện của lần đặt: mỗi nơi giao thành một đơn riêng với phí giao và tổng riêng. */
 export interface QuoteShipment {

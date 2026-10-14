@@ -76,6 +76,19 @@ describe('MerchantReturnsSection — gian hàng tự giao nhận hàng khách tr
   });
 });
 
+describe('R2-MERCHANT-11: ảnh khách gửi kèm yêu cầu trả', () => {
+  it('gian hàng xem được ảnh https; ảnh không an toàn bị ẩn', async () => {
+    mocks.list.mockResolvedValue([ret({ status: 'REQUESTED', reviewedAt: null, images: ['https://cdn.tubu/a.jpg', 'javascript:alert(1)'] })]);
+    const c = await mount();
+    click(byText(c, 'button', 'Xem 2 ảnh minh chứng'));
+    await flush();
+    const imgs = c.querySelectorAll('img');
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0]!.getAttribute('src')).toBe('https://cdn.tubu/a.jpg');
+    expect(c.textContent).toContain('Đã ẩn 1 ảnh');
+  });
+});
+
 describe('isPartialReturnLine', () => {
   it('dòng đảo một lần trả một phần khác dòng đảo cả đơn', () => {
     expect(isPartialReturnLine({ kind: 'REVERSAL', refKey: 'RETURN:r1' })).toBe(true);

@@ -150,12 +150,13 @@ export class StorefrontService {
       await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
+    // Chỉ gian hàng MERCHANT tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
     // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
     // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
     // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
     const data: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(dto)) {
-      if (v === undefined) continue;
+      if (v === undefined || (sf.type !== 'MERCHANT' && k.startsWith('warehouse'))) continue;
       data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
     }
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
@@ -269,11 +270,16 @@ export class StorefrontService {
       coverUrl: sf.coverUrl,
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
-      warehouseAddress: sf.warehouseAddress,
-      warehouseCity: sf.warehouseCity,
-      warehouseDistrict: sf.warehouseDistrict,
-      warehouseWard: sf.warehouseWard,
-      warehousePhone: sf.warehousePhone,
+      // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
+      ...(sf.type === 'MERCHANT'
+        ? {
+            warehouseAddress: sf.warehouseAddress,
+            warehouseCity: sf.warehouseCity,
+            warehouseDistrict: sf.warehouseDistrict,
+            warehouseWard: sf.warehouseWard,
+            warehousePhone: sf.warehousePhone,
+          }
+        : {}),
       collections: sf.collections.map((c) => ({
         id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
         items: c.items
