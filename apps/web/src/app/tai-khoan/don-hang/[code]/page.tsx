@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
-import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
+import { fetchMyRefunds, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
   canPayAgain,
@@ -200,7 +200,7 @@ export default function OrderDetailPage() {
             <p className="text-xs text-stone-600">Đã dùng {o.pointsUsed} Điểm Xanh (đã tính trong giảm giá).</p>
           )}
           <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
-          {o.paymentStatus && <Row label="Tình trạng" value={orderPaymentStatusLabel(o)} />}
+          {o.paymentStatus && <PaymentStatusRow order={o} />}
         </div>
       </section>
 
@@ -297,4 +297,15 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
       <div className="mt-3">{children}</div>
     </main>
   );
+}
+
+/** Cùng khoá với khối Hoàn tiền: đơn REFUNDED còn khoản chuyển khoản chưa xong thì "Đang hoàn tiền". */
+function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
+  const refunds = useQuery({
+    queryKey: ['my-refunds', o.id],
+    queryFn: () => fetchMyRefunds(o.id!),
+    enabled: !!o.id && o.paymentStatus === 'REFUNDED',
+    retry: 0,
+  });
+  return <Row label="Tình trạng" value={orderPaymentStatusLabel(o, refunds.data)} />;
 }

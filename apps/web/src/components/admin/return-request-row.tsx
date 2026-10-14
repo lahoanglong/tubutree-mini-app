@@ -341,11 +341,7 @@ export function ReturnRow({
           {r.status === 'APPROVED' && r.refundAmount != null && (
             <div className="text-stone-700">
               {paidMoney > 0
-                ? `Đã hoàn ${formatVnd(paidMoney)} (tiền hàng ${formatVnd(r.refundAmount)} + phí ship ${formatVnd(r.shippingRefund ?? 0)}) ${
-                    r.refundMethod === 'BANK'
-                      ? 'qua chuyển khoản (xem tab "Hoàn tiền khách")'
-                      : 'về Ví Tubu'
-                  }`
+                ? approvedRefundText(r, paidMoney)
                 : 'Không có khoản tiền cần hoàn.'}
             </div>
           )}
@@ -387,4 +383,17 @@ export function ReturnRow({
       )}
     </div>
   );
+}
+
+/**
+ * Câu tiền hoàn của yêu cầu đã duyệt theo khoản hoàn thật (R2-LIFECYCLE-6): chuyển khoản chưa xong thì "Chờ chuyển
+ * khoản", không nói "Đã hoàn"; khách đã đổi sang Ví thì nói Ví.
+ */
+export function approvedRefundText(r: AdminReturnRequest, paidMoney: number): string {
+  const breakdown = `(tiền hàng ${formatVnd(r.refundAmount ?? 0)} + phí ship ${formatVnd(r.shippingRefund ?? 0)})`;
+  const viaBank = r.refund ? r.refund.method === 'MANUAL_TRANSFER' : r.refundMethod === 'BANK';
+  if (!viaBank) return `Đã hoàn ${formatVnd(paidMoney)} ${breakdown} về Ví Tubu`;
+  if (r.refund?.status === 'COMPLETED') return `Đã chuyển khoản ${formatVnd(paidMoney)} ${breakdown} cho khách`;
+  const stage = r.refund?.status === 'PROCESSING' ? 'Đang chuyển khoản' : 'Chờ chuyển khoản';
+  return `${stage} ${formatVnd(paidMoney)} ${breakdown} — xử lý ở tab "Hoàn tiền khách"`;
 }

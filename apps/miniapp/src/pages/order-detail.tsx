@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
-import { fetchOrder, fetchOrders, cancelOrder, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
+import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
@@ -58,6 +58,7 @@ import {
   cancelRefundMode,
   destinationBody,
   remainingByLine,
+  refundOfReturn,
   returnLinesText,
   returnStatusLabel,
   showsPaymentDeadline,
@@ -110,6 +111,13 @@ export default function OrderDetailPage() {
     queryKey: ['my-returns'],
     queryFn: fetchMyReturns,
     enabled: !!order.data && (order.data.status === 'DELIVERED' || order.data.status === 'RETURNED'),
+  });
+  // Cùng khoá với khối Hoàn tiền (OrderRefunds): thẻ đổi/trả nói nơi nhận theo khoản hoàn thật (khách có thể đã đổi sang Ví).
+  const hasApprovedReturn = (myReturns.data ?? []).some((r) => r.orderId === order.data?.id && r.status === 'APPROVED');
+  const myRefunds = useQuery({
+    queryKey: ['my-refunds', order.data?.id],
+    queryFn: () => fetchMyRefunds(order.data!.id),
+    enabled: !!order.data?.id && hasApprovedReturn,
   });
 
   useEffect(() => {
@@ -686,7 +694,7 @@ export default function OrderDetailPage() {
             <Box key={ret.id ?? idx} mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
               <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
-                {returnStatusLabel(ret)}
+                {returnStatusLabel(ret, refundOfReturn(myRefunds.data, ret.id))}
               </Text>
               {linesText && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>

@@ -62,9 +62,20 @@ interface PaymentView {
 const codCollected = (o: PaymentView): boolean =>
   o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID';
 
-/** Tình trạng thanh toán hiển thị cho khách. */
-export const orderPaymentStatusLabel = (o: PaymentView): string =>
-  codCollected(o) ? 'Đã thu tiền khi giao' : paymentStatusLabel(o.paymentStatus);
+/**
+ * Tình trạng thanh toán hiển thị cho khách. Đơn đã lật REFUNDED nhưng còn khoản chuyển khoản Tubu chưa chuyển xong thì là
+ * "Đang hoàn tiền" — "Đã hoàn tiền" chỉ khi mọi khoản đã xong (BUYERWEB-4).
+ */
+export const orderPaymentStatusLabel = (
+  o: PaymentView,
+  refunds?: readonly { method: string; status: string }[],
+): string => {
+  if (codCollected(o)) return 'Đã thu tiền khi giao';
+  if (o.paymentStatus === 'REFUNDED' && refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && r.status !== 'COMPLETED')) {
+    return 'Đang hoàn tiền';
+  }
+  return paymentStatusLabel(o.paymentStatus);
+};
 
 /** Ô gọn trong danh sách đơn admin. */
 export function orderPaymentStatusShort(o: PaymentView): string {
