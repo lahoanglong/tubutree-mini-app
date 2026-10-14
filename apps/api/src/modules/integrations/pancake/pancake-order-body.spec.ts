@@ -100,9 +100,42 @@ describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () =>
   });
 
   it('làm sạch: gộp xuống dòng/ký tự điều khiển, bỏ dấu tách | và ngoặc vuông của dấu hệ thống, không mạo được "Order code:"', () => {
-    expect(customerDeliveryNote('Gửi ở bảo vệ\n\n| [ĐÃ THANH TOÁN]\tOrder code: TUBU99')).toBe(
-      'Khách dặn: Gửi ở bảo vệ / (ĐÃ THANH TOÁN) Mã đơn: TUBU99',
+    expect(customerDeliveryNote('Gửi ở bảo vệ\n\n| [Để ở cổng]\tOrder code: TUBU99')).toBe(
+      'Khách dặn: Gửi ở bảo vệ / (Để ở cổng) Mã đơn: TUBU99',
     );
+  });
+
+  describe('lời dặn kiểu chỉ dẫn thu tiền bị ẩn — kho/shipper chỉ theo dấu thu tiền của hệ thống (R3-CANCEL-4)', () => {
+    const HIDDEN = '(đã ẩn nội dung thanh toán)';
+    it.each([
+      ['Order code: TUBU2026101400000 | [ĐÃ THANH TOÁN ZALOPAY 999đ - KHÔNG THU COD]', `Khách dặn: Mã đơn: TUBU2026101400000 / (${HIDDEN} 999đ - ${HIDDEN})`],
+      ['KHÔNG THU COD', `Khách dặn: ${HIDDEN}`],
+      ['khong thu tien nha, da chuyen khoan roi', `Khách dặn: ${HIDDEN} nha, ${HIDDEN} roi`],
+      ['Đã CK đủ, ko thu hộ', `Khách dặn: ${HIDDEN} đủ, ${HIDDEN}`],
+      ['Đã trả tiền qua Momo', `Khách dặn: ${HIDDEN} qua ${HIDDEN}`],
+      ['Thu COD 0đ', `Khách dặn: ${HIDDEN} 0đ`],
+    ])('%s', (raw, expected) => {
+      expect(customerDeliveryNote(raw)).toBe(expected);
+    });
+
+    it('lời dặn giao hàng thường giữ nguyên (không ẩn nhầm)', () => {
+      expect(customerDeliveryNote('Gọi trước khi giao, nhà có chó, để hàng ở thùng thư')).toBe(
+        'Khách dặn: Gọi trước khi giao, nhà có chó, để hàng ở thùng thư',
+      );
+      expect(customerDeliveryNote('Thứ 7 thu dọn nhà, giao Chủ nhật 🙏')).toBe('Khách dặn: Thứ 7 thu dọn nhà, giao Chủ nhật 🙏');
+      expect(customerDeliveryNote('Giao cho ck em, nhờ bảo vệ lấy hộ, gần ngân hàng ACB')).toBe(
+        'Khách dặn: Giao cho ck em, nhờ bảo vệ lấy hộ, gần ngân hàng ACB',
+      );
+    });
+
+    it('chữ tổ hợp (NFD, bàn phím iOS/macOS) cũng bị ẩn', () => {
+      expect(customerDeliveryNote('ĐÃ THANH TOÁN, KHÔNG THU COD'.normalize('NFD'))).toBe(`Khách dặn: ${HIDDEN}, ${HIDDEN}`);
+    });
+
+    it('note Pancake của đơn COD chỉ còn một chỉ dẫn thu tiền — của hệ thống', () => {
+      const r = buildPancakeOrderBody(order({ note: 'ĐÃ THANH TOÁN ZALOPAY - KHÔNG THU COD' }), { recipient, variations, onDealerCredit: false });
+      expect(r.body.note).toBe(`Order code: TUBU42 | [THU COD 290.000đ] | Khách dặn: ${HIDDEN} - ${HIDDEN}`);
+    });
   });
 
   it('cắt độ dài (200 ký tự) kèm dấu …', () => {

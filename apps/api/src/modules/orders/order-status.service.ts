@@ -30,13 +30,13 @@ import {
   PancakeUnreachableError,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
-
-/** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
-export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
 import { ATTENTION_CANCEL_AFTER_HANDOVER, clearPancakeAttention, flagPancakeAttention } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { notifyMerchantOwner } from './merchant-order-notify';
+
+/** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
+export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
 
