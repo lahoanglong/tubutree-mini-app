@@ -1169,8 +1169,12 @@ model PaymentAttempt {
   appTransId String   @unique
   amount     Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
   createdAt  DateTime @default(now())
+  /// Cổng đã cho kết quả cuối (callback hoặc tra trạng thái: đã trả / thất bại / hết hạn) — cron đối soát thôi hỏi.
+  resolvedAt    DateTime?
+  lastQueriedAt DateTime?
 
   @@index([orderId])
+  @@index([provider, resolvedAt, createdAt])
   @@map("payment_attempts")
 }
 
@@ -1358,6 +1362,9 @@ model Commission {
   commissionableTotal Int              @default(0)
   rate                Decimal
   amount              Int
+  /// Hoa hồng từng dòng lúc tạo { orderItemId: đồng } — trả một phần cắt đúng dòng trả theo mức % của dòng đó.
+  /// Null ở hoa hồng tạo trước khi có cột này.
+  lineAmounts         Json?
   status              CommissionStatus @default(PENDING)
   lockedAt            DateTime? // thời điểm đơn DELIVERED, bắt đầu đếm hold
   approvedAt          DateTime?
@@ -1403,8 +1410,11 @@ enum CustomerRefundMethod {
   MANUAL_TRANSFER
 }
 
+/// PROCESSING: admin đã bấm "Đang chuyển khoản" — nơi nhận bị khoá (khách không đổi sang Ví được nữa) cho tới khi
+/// admin xác nhận đã chuyển (COMPLETED) hoặc trả lại hàng chờ (PENDING).
 enum CustomerRefundStatus {
   PENDING
+  PROCESSING
   COMPLETED
 }
 
@@ -1445,6 +1455,8 @@ model OrderCustomerRefund {
   bankAccountName String?
   completedAt     DateTime?
   completedBy     String? // adminId xác nhận đã chuyển khoản (MANUAL_TRANSFER)
+  claimedBy       String? // adminId đang chuyển khoản (PROCESSING)
+  claimedAt       DateTime?
   bankRef         String?
   adminNote       String?
   createdAt       DateTime             @default(now())
