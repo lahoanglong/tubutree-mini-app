@@ -4,6 +4,7 @@ import {
   buyerOrderStatusLabel,
   canCancelOrder,
   canPayAgain,
+  isRefundInProgress,
   isReorderable,
   ORDER_TABS,
   timelineIndex,
@@ -105,6 +106,48 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
     expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã TT');
     expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
     expect(orderPaymentStatusShort({ status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'FAILED' })).toBe('TT lỗi');
+  });
+});
+
+// R4-ADMIN-1: danh sách đơn admin và CSV từng ghi "Đã hoàn tiền" khi khoản chuyển khoản trả khách còn Chờ/Đang chuyển, trong
+// khi khách thấy "Đang hoàn tiền". Một hàm quyết định cho cả hai phía.
+describe('isRefundInProgress — một luật "Đang hoàn tiền" cho khách và admin', () => {
+  const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
+
+  it('REFUNDED + khoản chuyển khoản Chờ/Đang chuyển → đang hoàn; đã chuyển, Ví, chờ đối soát, bỏ qua → không', () => {
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe(true);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }])).toBe(true);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'DISMISSED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, undefined)).toBe(false);
+    expect(isRefundInProgress({ ...cancelled, paymentStatus: 'PAID' }, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe(false);
+  });
+
+  it('admin (ô gọn): "Đang hoàn tiền" khi khoản chuyển khoản còn Chờ/Đang chuyển, khớp nhãn của khách', () => {
+    const pending = [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }];
+    const processing = [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }];
+    expect(orderPaymentStatusShort(cancelled, pending)).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled, processing)).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled)).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, pending)).toBe(orderPaymentStatusShort(cancelled, pending));
+  });
+
+  it('nhãn chi tiết bỏ qua khoản chờ đối soát / đã bỏ qua khi nói tiền về đâu', () => {
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'WALLET', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'DISMISSED' },
+      ]),
+    ).toBe('Đã hoàn tiền vào Ví Tubu');
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'MANUAL_TRANSFER', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' },
+      ]),
+    ).toBe('Đã hoàn tiền về tài khoản ngân hàng');
   });
 });
 

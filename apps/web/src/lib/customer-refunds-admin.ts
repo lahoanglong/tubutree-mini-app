@@ -1,4 +1,5 @@
 import type { AdminCustomerRefund, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
+import type { Tone } from './recycling';
 import { ApiError } from './client-api';
 import { formatVnd } from './shop-client';
 
@@ -99,6 +100,24 @@ export function claimHolderSuffix(r: Pick<AdminCustomerRefund, 'claimedBy' | 'cl
 export type CustomerRefundView = 'WALLET' | AdminCustomerRefundStatus;
 export const customerRefundView = (r: Pick<AdminCustomerRefund, 'method' | 'status'>): CustomerRefundView =>
   r.method === 'WALLET' ? 'WALLET' : r.status;
+
+/** Huy hiệu trạng thái khoản hoàn — dùng chung cho hàng đợi Hoàn tiền khách và chi tiết đơn admin. */
+export const CUSTOMER_REFUND_VIEW_TONE: Record<CustomerRefundView, Tone> = {
+  UNVERIFIED: 'warning',
+  PENDING: 'warning',
+  PROCESSING: 'info',
+  COMPLETED: 'success',
+  DISMISSED: 'neutral',
+  WALLET: 'info',
+};
+export const CUSTOMER_REFUND_VIEW_LABEL: Record<CustomerRefundView, string> = {
+  UNVERIFIED: 'Chờ đối soát',
+  PENDING: 'Chờ chuyển khoản',
+  PROCESSING: 'Đang chuyển khoản',
+  COMPLETED: 'Đã chuyển khoản',
+  DISMISSED: 'Không phải tiền dư',
+  WALLET: 'Đã hoàn vào ví',
+};
 
 export interface MarkPaidFailure {
   /** true = khoản đã đổi trạng thái (admin khác vừa xử lý): đóng hộp và tải lại; false = giữ hộp để thử lại. */

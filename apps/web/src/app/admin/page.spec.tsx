@@ -2261,3 +2261,103 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
     expect(container.textContent).toContain('mọi người dùng khớp tìm kiếm');
   });
 });
+
+// R4-ADMIN-1 / R4-ADMIN-2: đơn huỷ chọn nhận về ngân hàng lật REFUNDED ngay, tiền còn ở hàng đợi chuyển khoản tay. Danh sách,
+// chi tiết và ngăn kéo 390px phải nói "Đang hoàn tiền" như khách thấy, kèm khoản hoàn và nơi nhận.
+describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
+  const refundOrder = (code: string, refundStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED') => ({
+    id: `id-${code}`,
+    code,
+    status: 'CANCELLED',
+    type: 'RETAIL',
+    total: 178000,
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'REFUNDED',
+    createdAt: '2026-10-14T13:52:00.000Z',
+    user: { fullName: 'Khách Hoàn', phone: '0933333333' },
+    items: [],
+    customerRefunds: [
+      {
+        id: `r-${code}`,
+        kind: 'CANCEL',
+        method: 'MANUAL_TRANSFER',
+        status: refundStatus,
+        amount: 178000,
+        createdAt: '2026-10-14T13:53:00.000Z',
+        completedAt: refundStatus === 'COMPLETED' ? '2026-10-14T15:00:00.000Z' : null,
+      },
+    ],
+  });
+
+  it('cột Thanh toán: "Đang hoàn tiền" (tông cảnh báo) khi khoản chuyển khoản Chờ/Đang chuyển, "Đã hoàn tiền" khi đã chuyển', async () => {
+    mocks.orders = [refundOrder('TUBU1', 'PENDING'), refundOrder('TUBU2', 'PROCESSING'), refundOrder('TUBU3', 'COMPLETED')];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const rows = [...container.querySelectorAll('tbody tr')];
+    const cell = (i: number) => rows[i]!.querySelector('td.md\\:table-cell [data-payment-short]')!;
+    expect(cell(0).textContent).toBe('Đang hoàn tiền');
+    expect(cell(0).className).toContain('text-warning-fg');
+    expect(cell(1).textContent).toBe('Đang hoàn tiền');
+    expect(cell(2).textContent).toBe('Đã hoàn tiền');
+    expect(cell(2).className).not.toContain('text-warning-fg');
+  });
+
+  it('mở chi tiết: dòng Thanh toán + khoản hoàn (loại, số tiền, trạng thái, nơi nhận), không lộ tài khoản ngân hàng', async () => {
+    mocks.orders = [refundOrder('TUBU1', 'PENDING')];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!);
+    await flush();
+    const box = container.querySelector('[data-order-payment]')!;
+    expect(box.textContent).toContain('Thanh toán:');
+    expect(box.querySelector('[data-payment-status]')!.textContent).toBe('Đang hoàn tiền');
+    const refund = box.querySelector('[data-order-refund="PENDING"]')!;
+    expect(refund.textContent).toContain('Khoản hoàn (Huỷ đơn)');
+    expect(refund.textContent).toContain('178.000');
+    expect(refund.textContent).toContain('Chờ chuyển khoản');
+    expect(refund.textContent).toContain('về tài khoản ngân hàng');
+    expect(box.textContent).toContain('Hoàn tiền khách');
+  });
+
+  it('390px: dòng đơn hiện tình trạng thanh toán dưới mã đơn, ngăn kéo có dòng Thanh toán và khoản hoàn; ô tìm có nhãn và gợi ý ngắn', async () => {
+    const mm = vi.fn().mockImplementation((q: string) => ({
+      matches: q.includes('max-width'),
+      media: q,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    window.matchMedia = mm as unknown as typeof window.matchMedia;
+    try {
+      mocks.orders = [refundOrder('TUBU2', 'PROCESSING')];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      const narrowBlock = container.querySelector('tbody td .md\\:hidden')!;
+      expect(narrowBlock.querySelector('[data-payment-short]')!.textContent).toBe('Đang hoàn tiền');
+      const search = container.querySelector('form input[type="text"]') as HTMLInputElement;
+      expect(search.getAttribute('aria-label')).toContain('tên người nhận');
+      expect(search.placeholder.length).toBeLessThanOrEqual(20);
+
+      act(() => (container.querySelector('tbody tr') as HTMLElement).click());
+      await flush();
+      const dialog = document.body.querySelector('[role="dialog"]')!;
+      expect(dialog.querySelector('[data-payment-status]')!.textContent).toBe('Đang hoàn tiền');
+      expect(dialog.querySelector('[data-order-refund="PROCESSING"]')!.textContent).toContain('Đang chuyển khoản');
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  it('cột Khách hàng hiện người nhận khi khác tên tài khoản, để kết quả tìm theo tên người nhận đọc được', async () => {
+    mocks.orders = [
+      { ...refundOrder('TUBU1', 'PENDING'), shippingAddress: { recipient: 'Nguyễn Thị Mẹ Chồng', phone: '0911222333' } },
+      { ...refundOrder('TUBU2', 'PENDING'), shippingAddress: { recipient: ' Khách Hoàn ', phone: '0933333333' } },
+      { ...refundOrder('TUBU3', 'PENDING'), shippingAddress: null },
+    ];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const rows = [...container.querySelectorAll('tbody tr')];
+    expect(rows[0]!.querySelector('[data-order-recipient]')!.textContent).toBe('Nhận: Nguyễn Thị Mẹ Chồng · 0911222333');
+    expect(rows[1]!.querySelector('[data-order-recipient]')).toBeNull();
+    expect(rows[2]!.querySelector('[data-order-recipient]')).toBeNull();
+  });
+});

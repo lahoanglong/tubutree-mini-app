@@ -101,21 +101,34 @@ interface PaymentView {
 const codCollected = (o: PaymentView): boolean =>
   o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID';
 
+/** Khoản hoàn của đơn: chi tiết đơn của khách (/orders/me/refunds) và danh sách đơn admin (customerRefunds). */
+export interface RefundFacts {
+  method: string;
+  status: string;
+}
+
+/** Khoản Tubu nợ khách hoặc đã trả; chờ đối soát (UNVERIFIED) và đã bỏ qua (DISMISSED) chưa/không phải tiền hoàn. */
+const counted = (r: RefundFacts) => r.status === 'PENDING' || r.status === 'PROCESSING' || r.status === 'COMPLETED';
+
+/**
+ * Đơn đã lật REFUNDED (lật ngay khi huỷ/trả) mà còn khoản chuyển khoản Tubu Chờ/Đang chuyển: tiền chưa tới tay khách. Một
+ * luật cho chi tiết đơn của khách, danh sách/chi tiết đơn admin và CSV (API admin-export, BANK_REFUND_IN_PROGRESS).
+ */
+export const isRefundInProgress = (o: PaymentView, refunds?: readonly RefundFacts[] | null): boolean =>
+  o.paymentStatus === 'REFUNDED' &&
+  !!refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && (r.status === 'PENDING' || r.status === 'PROCESSING'));
+
 /**
  * Tình trạng thanh toán hiển thị cho khách. Đơn đã lật REFUNDED nhưng còn khoản chuyển khoản Tubu chưa chuyển xong thì là
  * "Đang hoàn tiền" — "Đã hoàn tiền" chỉ khi mọi khoản đã xong (BUYERWEB-4), kèm nơi tiền về khi mọi khoản cùng một nơi.
  */
-export const orderPaymentStatusLabel = (
-  o: PaymentView,
-  refunds?: readonly { method: string; status: string }[],
-): string => {
+export const orderPaymentStatusLabel = (o: PaymentView, refunds?: readonly RefundFacts[] | null): string => {
   if (codCollected(o)) return 'Đã thu tiền khi giao';
-  if (o.paymentStatus === 'REFUNDED' && refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && r.status !== 'COMPLETED')) {
-    return 'Đang hoàn tiền';
-  }
-  if (o.paymentStatus === 'REFUNDED' && refunds?.length) {
-    if (refunds.every((r) => r.method === 'WALLET')) return 'Đã hoàn tiền vào Ví Tubu';
-    if (refunds.every((r) => r.method === 'MANUAL_TRANSFER')) return 'Đã hoàn tiền về tài khoản ngân hàng';
+  if (isRefundInProgress(o, refunds)) return 'Đang hoàn tiền';
+  const done = refunds?.filter(counted) ?? [];
+  if (o.paymentStatus === 'REFUNDED' && done.length) {
+    if (done.every((r) => r.method === 'WALLET')) return 'Đã hoàn tiền vào Ví Tubu';
+    if (done.every((r) => r.method === 'MANUAL_TRANSFER')) return 'Đã hoàn tiền về tài khoản ngân hàng';
   }
   return paymentStatusLabel(o.paymentStatus);
 };
@@ -123,8 +136,9 @@ export const orderPaymentStatusLabel = (
 /** Ô gọn trong danh sách đơn admin. */
 const PAYMENT_STATUS_SHORT: Record<string, string> = { UNPAID: 'Chưa TT', REFUNDED: 'Đã hoàn tiền', FAILED: 'TT lỗi' };
 
-export function orderPaymentStatusShort(o: PaymentView): string {
+export function orderPaymentStatusShort(o: PaymentView, refunds?: readonly RefundFacts[] | null): string {
   if (codCollected(o)) return 'Đã thu COD';
+  if (isRefundInProgress(o, refunds)) return 'Đang hoàn tiền';
   if (o.paymentStatus === 'PAID') return 'Đã TT';
   return (o.paymentStatus && PAYMENT_STATUS_SHORT[o.paymentStatus]) ?? o.paymentStatus ?? '';
 }
