@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Transform, Type } from 'class-transformer';
 import {
   Allow,
@@ -24,6 +25,9 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
+import { streamCsv } from './admin-export';
+import { IsCalendarDate } from '../../common/calendar-date';
+import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
 import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
 
@@ -225,6 +229,24 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
   /** attention = "Cần xử lý Pancake"; unsynced = đơn còn trong kho chưa lên Pancake (lỗi / quá hạn). */
   @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
+  /** Khoảng ngày đặt (giờ VN, tính cả hai đầu). */
+  @IsOptional() @IsCalendarDate() from?: string;
+  @IsOptional() @IsCalendarDate() to?: string;
+}
+
+/** Bộ lọc của file CSV — đúng bộ lọc danh sách đơn, không phân trang. */
+export class ExportOrdersQuery {
+  @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
+  @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
+  @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
+  @IsOptional() @IsCalendarDate() from?: string;
+  @IsOptional() @IsCalendarDate() to?: string;
+}
+
+export class ExportUsersQuery {
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
 }
 
 export class ListUsersQuery extends PaginationQuery {
@@ -363,7 +385,21 @@ export class AdminController {
 
   @Get('orders')
   orders(@Query() q: ListOrdersQuery) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake);
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to);
+  }
+
+  /**
+   * File CSV cho kế toán: MỌI đơn khớp bộ lọc đang xem (ADMINOPS-12), ghi dần từng lô thay vì dựng cả file trong bộ nhớ.
+   * Trước đây nút "Xuất CSV" chỉ xuất 20 đơn của trang hiện tại mà không báo.
+   */
+  @Get('orders/export')
+  async exportOrders(@Query() q: ExportOrdersQuery, @Res() res: Response) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q));
+  }
+
+  @Get('users/export')
+  async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response) {
+    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search));
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */

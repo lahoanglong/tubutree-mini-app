@@ -113,6 +113,9 @@ export interface AdminOrderFilter {
   recycling?: RecyclingFilter;
   invoice?: InvoiceFilter;
   pancake?: PancakeFilter;
+  /** Khoảng ngày đặt theo giờ VN, 'YYYY-MM-DD', tính cả hai đầu. */
+  from?: string;
+  to?: string;
   /**
    * Id khách khớp `search` theo SĐT/tên, tra trước bằng index trigram trên users. Có thì lọc
    * `userId IN (...)` thay cho lọc theo quan hệ `user` — Prisma dựng quan hệ thành LEFT JOIN users và
@@ -177,6 +180,18 @@ export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
   };
 }
 
+const VN_OFFSET_MS = 7 * 3_600_000;
+const vnDayStart = (key: string) => new Date(Date.parse(`${key}T00:00:00.000Z`) - VN_OFFSET_MS);
+
+/** [from 00:00, to+1 00:00) giờ VN; thiếu một đầu thì để mở. */
+export function vnDayRange(from?: string, to?: string): Prisma.DateTimeFilter | undefined {
+  if (!from && !to) return undefined;
+  return {
+    ...(from ? { gte: vnDayStart(from) } : {}),
+    ...(to ? { lt: new Date(vnDayStart(to).getTime() + 24 * 3_600_000) } : {}),
+  };
+}
+
 /** Điều kiện lọc danh sách đơn admin — search và bộ lọc thu gom ghép bằng AND (cả hai đều có OR riêng). */
 export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInput {
   const and: Prisma.OrderWhereInput[] = [];
@@ -207,6 +222,8 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
       ],
     });
   }
+  const created = vnDayRange(f.from, f.to);
+  if (created) and.push({ createdAt: created });
   if (f.recycling === 'attention') and.push(recyclingAttentionWhere());
   else if (f.recycling === 'all') and.push({ hasRecyclingPickup: true });
   if (f.invoice) and.push(INVOICE_STATUS_WHERE[f.invoice]);

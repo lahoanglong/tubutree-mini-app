@@ -126,6 +126,28 @@ describe('Admin order search + query indexes (real Postgres)', () => {
     expect(ship?.indexdef).toMatch(/USING gin \("shippingCode" gin_trgm_ops\)/);
   });
 
+  it('ADMINOPS-12: file CSV có mọi đơn khớp bộ lọc + khoảng ngày (không phải 20 đơn của trang)', async () => {
+    const tok = randCode(6);
+    const buyer = await createUser(prisma, { fullName: `Xuất ${tok}` });
+    const codes: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      const o = await createOrder(prisma, { userId: buyer.id, code: `ITX${tok}${String(i).padStart(2, '0')}` });
+      codes.push(o.code);
+    }
+    const old = await createOrder(prisma, {
+      userId: buyer.id,
+      code: `ITX${tok}OLD`,
+      createdAt: new Date('2026-01-05T10:00:00Z'),
+    });
+    let csv = '';
+    for await (const c of await admin.orderCsv({ search: `ITX${tok}` })) csv += c;
+    for (const code of [...codes, old.code]) expect(csv).toContain(code);
+    let ranged = '';
+    for await (const c of await admin.orderCsv({ search: `ITX${tok}`, from: '2026-01-05', to: '2026-01-05' })) ranged += c;
+    expect(ranged.trimEnd().split('\r\n')).toHaveLength(2);
+    expect(ranged).toContain(old.code);
+  });
+
   it('chuỗi tìm ngắn (< 3 ký tự, trigram không dùng được) vẫn lọc đúng theo cách cũ', async () => {
     const tok = randCode(6);
     const buyer = await createUser(prisma, { fullName: `Zq${tok}` });

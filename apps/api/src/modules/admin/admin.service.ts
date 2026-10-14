@@ -26,6 +26,7 @@ import {
   type PancakeFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
+import { orderCsvChunks, userCsvChunks } from './admin-export';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -532,6 +533,15 @@ export class AdminService {
     return rows.map((r) => r.id);
   }
 
+  /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
+  async orderCsv(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<AsyncGenerator<string>> {
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f));
+  }
+
+  userCsv(search?: string): AsyncGenerator<string> {
+    return userCsvChunks(this.prisma, adminUserSearchWhere(search));
+  }
+
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
   async adminOrderWhere(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<Prisma.OrderWhereInput> {
     const [searchUserIds, searchOrderIds] = await Promise.all([
@@ -555,8 +565,10 @@ export class AdminService {
     recycling?: RecyclingFilter,
     invoice?: InvoiceFilter,
     pancake?: PancakeFilter,
+    from?: string,
+    to?: string,
   ) {
-    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
