@@ -546,6 +546,7 @@ export const vi = {
     customerTotal: 'Tổng khách trả',
     calculating: 'Đang tính…',
     flashPrice: 'Giá giờ vàng',
+    totalChangedHint: 'Báo lại khách tổng tiền mới bên dưới rồi bấm tạo đơn lần nữa.',
     submit: 'Tạo đơn hộ khách',
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
