@@ -108,6 +108,8 @@ export class ReviewMerchantProductDto {
   @IsOptional() @IsString() rejectReason?: string;
   /** Admin đã xem sản phẩm đang bán sẽ bị chuyển sang gian hàng ("Tubu giao hộ" lấy mã của sản phẩm đang bán). */
   @IsOptional() @IsBoolean() confirmTakeover?: boolean;
+  /** Dòng "Bản sửa chờ duyệt": lần sửa gần nhất admin đã xem (`editVersion` của hàng chờ duyệt). Có thì chỉ xử lý đúng bản đó. */
+  @IsOptional() @IsDateString() editVersion?: string;
 }
 export class UnlinkMerchantProductDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -571,7 +573,7 @@ export class AdminController {
     @Param('id') productId: string,
     @Body() dto: ReviewMerchantProductDto,
   ) {
-    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover);
+    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover, dto.editVersion);
   }
 
   @Get('merchant-products/linked')

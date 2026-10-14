@@ -13,6 +13,7 @@ import {
   GomdonRetryDto,
   ListOrdersQuery,
   ResolvePancakeAttentionDto,
+  ReviewMerchantProductDto,
   SetUserRoleDto,
   UnlinkMerchantProductDto,
 } from './admin.controller';
@@ -415,5 +416,18 @@ describe('UnlinkMerchantProductDto (R3-MERCHANT-6)', () => {
     await expect(asBodyDto(UnlinkMerchantProductDto, { reason: '  Sai thương hiệu  ' })).resolves.toMatchObject({
       reason: 'Sai thương hiệu',
     });
+  });
+});
+
+describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
+  it('dòng "Bản sửa chờ duyệt" gửi editVersion dạng ISO, dòng thường không gửi', async () => {
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: false, rejectReason: 'x', editVersion: '2026-10-14T03:00:00.000Z' }),
+    ).resolves.toMatchObject({ editVersion: '2026-10-14T03:00:00.000Z' });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true })).resolves.toMatchObject({ approve: true });
+  });
+
+  it('editVersion không phải thời điểm hợp lệ bị chặn', async () => {
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, editVersion: 'hôm qua' })).rejects.toBeDefined();
   });
 });

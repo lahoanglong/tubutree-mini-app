@@ -292,9 +292,10 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     expect(pending.editDraft?.name).toBe(`${p.name} (mới)`);
     expect(pending.pancakeLinkCode).toBe(pancakeVariationId);
 
+    const seen = (await admin.listPendingMerchantProducts(1, 500)).data.find((r) => r.id === p.id)!.editVersion!;
     const results = await Promise.allSettled([
-      admin.reviewMerchantProduct('admin-it', p.id, true),
-      admin.reviewMerchantProduct('admin-it', p.id, true),
+      admin.reviewMerchantProduct('admin-it', p.id, true, undefined, false, seen),
+      admin.reviewMerchantProduct('admin-it', p.id, true, undefined, false, seen),
     ]);
     const s = summarize(results);
     const after = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { variations: true, editDraft: true } });

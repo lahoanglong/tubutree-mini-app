@@ -44,6 +44,7 @@ import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-rev
 import { maskPhone } from '../../common/mask-pii';
 
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
+const STALE_EDIT_REVIEW_MESSAGE = 'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.';
 const COUPON_PERCENT_NEEDS_CAP = 50;
 
 /**
@@ -1352,6 +1353,7 @@ export class AdminService {
           ...p,
           ...shown,
           isEdit: !!editDraft,
+          editVersion: editDraft ? editDraft.updatedAt.toISOString() : null,
           live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: p.thumbnail } : null,
           pancakeLink: await describePancakeLink(this.prisma, p),
         };
@@ -1418,12 +1420,19 @@ export class AdminService {
     return { ok: true, originProductId: link.originProductId };
   }
 
+  /**
+   * Duyệt/từ chối một dòng ở màn "Duyệt SP đối tác". Dòng "Bản sửa chờ duyệt" mang `editVersion` (lần sửa gần nhất admin đã xem)
+   * và chỉ xử lý được đúng bản đó: bản đã bị admin khác xử lý, đối tác sửa tiếp hoặc sửa lại về nội dung đang bán đều trả 400 chứ
+   * không bao giờ rơi sang duyệt cả sản phẩm — sản phẩm đang bán không thể bị từ chối/gỡ Pancake bởi một cú bấm trên dòng đã cũ.
+   * Dòng sản phẩm chờ duyệt lần đầu (không có `editVersion`) chỉ đổi được sản phẩm còn PENDING_REVIEW.
+   */
   async reviewMerchantProduct(
     adminId: string,
     productId: string,
     approve: boolean,
     rejectReason?: string,
     confirmTakeover = false,
+    editVersion?: string,
   ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -1431,18 +1440,22 @@ export class AdminService {
     });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const reason = approve ? null : (rejectReason?.trim() || 'Không đạt tiêu chuẩn xanh của Tubu Tree');
-    if (product.editDraft && product.approvalStatus === 'APPROVED') {
+    if (editVersion !== undefined) {
+      const seen = new Date(editVersion).getTime();
+      if (product.approvalStatus !== 'APPROVED' || !product.editDraft || product.editDraft.updatedAt.getTime() !== seen) {
+        throw new BadRequestException(STALE_EDIT_REVIEW_MESSAGE);
+      }
       return this.reviewProductEdit(adminId, product, product.editDraft, approve, reason);
     }
 
-    // CAS theo trạng thái đã đọc: hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn B bấm
-    // Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người
-    // thứ hai nhận lỗi rõ ràng thay vì lặng lẽ lật ngược quyết định.
+    // CAS cố định theo PENDING_REVIEW (không theo trạng thái vừa đọc): hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn
+    // B bấm Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người thứ hai nhận lỗi rõ ràng
+    // thay vì lặng lẽ lật ngược quyết định, kể cả khi sản phẩm đã APPROVED và đang bán.
     // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
     // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
     await this.prisma.$transaction(async (tx) => {
       const moved = await tx.product.updateMany({
-        where: { id: productId, approvalStatus: product.approvalStatus },
+        where: { id: productId, approvalStatus: 'PENDING_REVIEW' },
         data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
       });
       if (moved.count === 0) {
@@ -1485,7 +1498,7 @@ export class AdminService {
     await this.prisma.$transaction(async (tx) => {
       const taken = await tx.productEditDraft.deleteMany({ where: { id: draft.id, updatedAt: draft.updatedAt } });
       if (taken.count === 0) {
-        throw new BadRequestException('Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.');
+        throw new BadRequestException(STALE_EDIT_REVIEW_MESSAGE);
       }
       await tx.product.update({
         where: { id: product.id },

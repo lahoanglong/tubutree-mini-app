@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
@@ -128,11 +128,18 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect((await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } })).productId).toBe(p.id);
     expect(await prisma.merchantPancakeLink.count({ where: { productId: p.id, unlinkedAt: null } })).toBe(1);
 
-    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm');
+    const editRow = (await admin.listPendingMerchantProducts(1, 100)).data.find((r) => r.id === p.id)!;
+    expect(editRow).toMatchObject({ isEdit: true, pancakeLinkCode: tubu.code });
+    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm', false, editRow.editVersion!);
+    for (const approve of [false, true]) {
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(BadRequestException);
+    }
     const rejectedEdit = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
     expect(rejectedEdit).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, rejectReason: 'Nhầm' });
     expect(rejectedEdit.editDraft).toBeNull();
     expect((await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } })).productId).toBe(p.id);
+    expect(await prisma.merchantPancakeLink.count({ where: { productId: p.id, unlinkedAt: null } })).toBe(1);
 
     await admin.unlinkMerchantProduct('admin-it', p.id, 'Hết hợp tác');
     const [v, origin, mine] = await Promise.all([

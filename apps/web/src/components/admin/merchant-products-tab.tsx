@@ -255,7 +255,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
 
   const reviewMut = useMutation({
     mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
-      reviewMerchantProduct(p.id, approve, reason, approve && takeover ? confirmTakeover : undefined),
+      reviewMerchantProduct(p.id, approve, reason, approve && takeover ? confirmTakeover : undefined, p.isEdit ? p.editVersion : undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });

@@ -278,6 +278,7 @@ describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-
     description: 'Mô tả mới của đối tác',
     thumbnail: 'https://cdn.example/new.jpg',
     isEdit: true,
+    editVersion: '2026-10-14T03:00:00.000Z',
     live: { name: 'Nến thơm sả', description: 'Mô tả đang bán', shortDesc: null, thumbnail: 'https://cdn.example/old.jpg' },
     approvalStatus: 'APPROVED',
   });
@@ -302,7 +303,26 @@ describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-
     click(byText(container, 'button', 'Duyệt bản sửa'));
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: true }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, editVersion: '2026-10-14T03:00:00.000Z' }));
+  });
+
+  it('từ chối bản sửa cũng gửi đúng phiên bản bản sửa admin đang xem, để bấm trên dòng cũ không từ chối nhầm cả sản phẩm đang bán', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [edit], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Từ chối'));
+    typeInto(container.querySelector('input[placeholder="Lý do từ chối..."]') as HTMLInputElement, 'Ảnh mờ');
+    click(byText(container, 'button', 'Xác nhận từ chối'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(
+      JSON.stringify({ approve: false, rejectReason: 'Ảnh mờ', editVersion: '2026-10-14T03:00:00.000Z' }),
+    );
   });
 
   it('sản phẩm mới đăng không có khối so sánh "Đang bán"', async () => {

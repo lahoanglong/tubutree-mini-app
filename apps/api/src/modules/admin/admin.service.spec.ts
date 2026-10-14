@@ -1007,7 +1007,8 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       live: { name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', thumbnail: 'a.jpg' },
     });
     expect(edit).not.toHaveProperty('editDraft');
-    expect(fresh).toMatchObject({ id: 'p2', name: 'Mới', isEdit: false, live: null });
+    expect((edit as { editVersion: string }).editVersion).toBe(editDraft.updatedAt.toISOString());
+    expect(fresh).toMatchObject({ id: 'p2', name: 'Mới', isEdit: false, live: null, editVersion: null });
   });
 
   describe('R3-MERCHANT-4: duyệt hoặc từ chối bản sửa của sản phẩm đang bán', () => {
@@ -1037,7 +1038,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
 
     it('duyệt → nội dung mới ghi đè sản phẩm, bản chờ bị xoá, sản phẩm vẫn APPROVED và không đụng liên kết Pancake', async () => {
       const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
-      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
       expect(draftDeleteMany).toHaveBeenCalledWith({ where: { id: 'd1', updatedAt } });
       expect(productUpdate).toHaveBeenCalledWith({
         where: { id: 'p1' },
@@ -1049,7 +1050,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
 
     it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
       const { prisma, productUpdate, productUpdateMany } = setup();
-      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền');
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());
       expect(productUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { rejectReason: 'Ảnh vi phạm bản quyền' } });
       expect(productUpdateMany).not.toHaveBeenCalled();
       expect(notifications.notify).toHaveBeenCalledWith(
@@ -1061,7 +1062,52 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
 
     it('bản chờ vừa được admin khác xử lý hoặc đối tác vừa sửa tiếp (xoá có điều kiện trượt) → BadRequest, không ghi gì', async () => {
       const { prisma, productUpdate } = setup({ taken: 0 });
-      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-2', 'p1', true)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        mkAdmin(prisma).reviewMerchantProduct('admin-2', 'p1', true, undefined, false, updatedAt.toISOString()),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('bấm trên dòng đã cũ: bản chờ đã đổi (đối tác sửa tiếp) hoặc không còn → BadRequest, không đụng sản phẩm, không rơi sang đường duyệt cả sản phẩm', async () => {
+      const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
+      const stale = new Date('2026-10-14T02:00:00Z').toISOString();
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, stale)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x', false, stale)).rejects.toBeInstanceOf(BadRequestException);
+      expect(draftDeleteMany).not.toHaveBeenCalled();
+      expect(productUpdate).not.toHaveBeenCalled();
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('dòng mang phiên bản bản sửa nhưng sản phẩm không còn bản chờ → BadRequest, KHÔNG từ chối cả sản phẩm đang bán', async () => {
+      const { prisma, productUpdate, productUpdateMany } = setup();
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: null });
+      await expect(
+        mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x', false, updatedAt.toISOString()),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(productUpdate).not.toHaveBeenCalled();
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('dòng không mang phiên bản (không phải bản sửa) mà sản phẩm đã APPROVED → CAS chỉ nhận PENDING_REVIEW nên BadRequest, không đổi trạng thái hay gỡ liên kết', async () => {
+      const { prisma, productUpdate, productUpdateMany } = setup();
+      productUpdateMany.mockImplementation(async ({ where }: { where: { approvalStatus: string } }) => ({
+        count: where.approvalStatus === 'PENDING_REVIEW' ? 0 : 1,
+      }));
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: null });
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true)).rejects.toBeInstanceOf(BadRequestException);
+      expect(productUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'p1', approvalStatus: 'PENDING_REVIEW' } }));
+      expect(productUpdate).not.toHaveBeenCalled();
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('dòng không mang phiên bản mà sản phẩm có bản chờ (client cũ) → BadRequest, không duyệt/từ chối cả sản phẩm', async () => {
+      const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
+      productUpdateMany.mockResolvedValue({ count: 0 });
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x')).rejects.toBeInstanceOf(BadRequestException);
+      expect(draftDeleteMany).not.toHaveBeenCalled();
       expect(productUpdate).not.toHaveBeenCalled();
     });
   });
