@@ -72,6 +72,35 @@ describe('/thanh-toan — tổng tiền đổi lúc đặt (PANCAKE-13)', () => 
   });
 });
 
+describe('/thanh-toan — cách thanh toán bị máy chủ khoá lúc đặt (R7 review #4)', () => {
+  const radio = (r: Rendered, label: string) =>
+    [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input')!;
+
+  it('BE trả PAYMENT_METHOD_NOT_ALLOWED → tải lại báo giá, khoá COD kèm lý do và tự chọn chuyển khoản; bấm đặt lại gửi chuyển khoản', async () => {
+    const reason = 'Đơn có hàng gian hàng đối tác tự giao: thanh toán khi nhận hàng tạm chưa nhận cho đơn này.';
+    let blocked = false;
+    m.quote.mockImplementation(async () => (blocked ? { ...QUOTE, blockedPaymentMethods: { COD: reason } } : QUOTE));
+    m.placeOrder.mockRejectedValueOnce(new ApiError(reason, 400, 'PAYMENT_METHOD_NOT_ALLOWED')).mockReturnValue(new Promise(() => undefined));
+    const r = await mount();
+    expect(radio(r, 'Thanh toán khi nhận hàng').checked).toBe(true);
+
+    blocked = true;
+    const before = m.quote.mock.calls.length;
+    click(placeButton(r));
+    await flush(8);
+    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'COD' });
+    expect(m.quote.mock.calls.length).toBeGreaterThan(before);
+    const cod = radio(r, 'Thanh toán khi nhận hàng');
+    expect(cod.disabled).toBe(true);
+    expect(r.container.querySelector(`#${cod.getAttribute('aria-describedby')}`)!.textContent).toBe(reason);
+    expect(radio(r, 'Chuyển khoản ngân hàng').checked).toBe(true);
+
+    click(placeButton(r));
+    await flush(4);
+    expect(m.placeOrder.mock.calls[1]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+});
+
 describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () => {
   it('địa chỉ mã cũ: gắn nhãn cảnh báo; báo giá bị từ chối ADDRESS_OUTDATED thì nói rõ cần thêm địa chỉ mới', async () => {
     m.addresses = [{ ...NEW_ADDR, provinceCode: '01', wardCode: '00004' }];

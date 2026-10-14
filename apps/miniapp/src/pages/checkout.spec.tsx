@@ -763,6 +763,32 @@ describe('CheckoutPage — COD theo từng đơn, báo giá quyết định phư
     expect(body.paymentMethod).toBe('BANK_TRANSFER');
   });
 
+  it('máy chủ từ chối cách đang chọn lúc đặt (PAYMENT_METHOD_NOT_ALLOWED) → báo lỗi, tải lại báo giá, khoá COD và tự chọn chuyển khoản; đặt lại gửi BANK_TRANSFER (R7 review #4)', async () => {
+    let blocked = false;
+    mocks.checkoutQuote.mockImplementation(async () => (blocked ? { ...QUOTE, blockedPaymentMethods: { COD: COD_OVER } } : QUOTE));
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: COD_OVER } } as AxiosResponse;
+    mocks.placeOrder
+      .mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response))
+      .mockResolvedValue({ id: 'o1', code: 'TT001' });
+    renderPage();
+    const cod = await screen.findByRole('radio', { name: /^Thanh toán khi nhận hàng/ });
+    await waitFor(() => expect(cod).toHaveAttribute('aria-checked', 'true'));
+
+    blocked = true;
+    const quotesBefore = mocks.checkoutQuote.mock.calls.length;
+    const first = await placeOrderClick();
+    expect(first.paymentMethod).toBe('COD');
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: COD_OVER, type: 'error' }));
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThan(quotesBefore));
+    await waitFor(() => expect(cod).toHaveAttribute('aria-disabled', 'true'));
+    expect(describedBy(cod)).toBe(COD_OVER);
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.click(await placeButton());
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+
   it('COD và chuyển khoản đều khoá, Ví thiếu: không phương thức nào được chọn, nút đặt hàng khoá, nói rõ chưa có cách thanh toán', async () => {
     mocks.checkoutQuote.mockResolvedValue(BOTH_BLOCKED);
     renderPage();

@@ -205,6 +205,10 @@ export default function CheckoutPage() {
       if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
         void qc.invalidateQueries({ queryKey: ['quote'] });
         void qc.invalidateQueries({ queryKey: ['cart'] });
+      } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
+        // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự
+        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
+        void qc.invalidateQueries({ queryKey: ['quote'] });
       } else if (e instanceof Error && isCartFixableError(e.message)) {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       }
