@@ -591,6 +591,30 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(prisma.orderItem.findMany.mock.calls[1][0].where).toEqual({ orderId: { in: ['o1', 'o2'] } });
   });
 
+  it('hàng giao hộ chưa vào đối soát tự động (đặt trước mốc, liên kết takeover chưa xác nhận): danh sách chỉ đọc kèm lý do và tiền khách trả cho món (Q8 review S5)', async () => {
+    const { svc, prisma } = withLinks();
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
+    prisma.$queryRaw.mockResolvedValueOnce([
+      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, total: 3 },
+      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, total: 3 },
+    ]);
+    prisma.order.findMany.mockResolvedValueOnce([
+      { id: 'o1', code: 'TUBU1', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-09-22T00:00:00Z'), items: items('o1') },
+      { id: 'o2', code: 'TUBU2', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-10-05T00:00:00Z'), deliveredAt: null, items: items('o2') },
+    ]);
+    const out = await svc.consignmentExcluded('sf-a');
+    expect(out.total).toBe(3);
+    expect(out.settleFrom).toEqual(new Date('2026-10-01T00:00:00Z'));
+    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.goodsAmount, l.quantity])).toEqual([
+      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', 42_500, 1],
+      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', 102_000, 2],
+    ]);
+    const sql = sqlOf(prisma.$queryRaw.mock.calls[0]);
+    expect(sql).toContain('NOT (');
+    expect(sql).toContain('LIMIT 200');
+    expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
+  });
+
   it('phí đổi sau khi đặt: dòng tính theo mức hiệu lực lúc đặt đơn, không theo mức hiện tại', async () => {
     const { svc, prisma } = withLinks();
     prisma.storefront.findUnique.mockResolvedValue({ commissionPct: new Prisma.Decimal('0.3'), consignmentFeePct: new Prisma.Decimal('0.05'), consignmentFeeFixed: 9_000 });

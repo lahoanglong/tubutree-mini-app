@@ -174,6 +174,10 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     const takeover = await link(t, ago(60), { takeover: true, stockAtLink: 37 });
     const early = await order(t.v.id, { createdAt: ago(30) });
     expect(await netOf(t.store.id, early.id)).toEqual([]);
+    // Danh sách chỉ đọc "chưa vào đối soát tự động" cho đối tác và admin (Q8 review S5).
+    const excludedOf = async (storefrontId: string) =>
+      (await settlement.consignmentExcluded(storefrontId)).lines.map((l) => [l.orderId, l.reason, l.goodsAmount]);
+    expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_UNCONFIRMED', 100_000]]);
 
     const confirmed = summarize(await Promise.allSettled([1, 2].map(() => settlement.confirmConsignment(admin.id, takeover.id))));
     expect(confirmed.rejected).toHaveLength(0);
@@ -183,11 +187,13 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     const late = await order(t.v.id, { createdAt: new Date(row.consignmentConfirmedAt!.getTime() + 1_000), deliveredAt: ago(8) });
     expect(await netOf(t.store.id, early.id)).toEqual([]);
     expect(await netOf(t.store.id, late.id)).toEqual([90_000]);
+    expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_UNCONFIRMED', 100_000]]);
 
     const plain = await shop({ commissionPct: 0.1 });
     const plainLink = await link(plain, ago(60));
     const o = await order(plain.v.id, { createdAt: ago(30) });
     expect(await netOf(plain.store.id, o.id)).toEqual([90_000]);
+    expect(await excludedOf(plain.store.id)).toEqual([]);
     await expect(settlement.confirmConsignment(admin.id, plainLink.id)).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -200,6 +206,10 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     try {
       expect(await netOf(s.store.id, old.id)).toEqual([]);
       expect(await netOf(s.store.id, fresh.id)).toEqual([90_000]);
+      const excluded = await settlement.consignmentExcluded(s.store.id);
+      expect(excluded.lines.map((l) => [l.orderId, l.orderItemId !== null, l.reason, l.goodsAmount])).toEqual([[old.id, true, 'BEFORE_SETTLE_FROM', 100_000]]);
+      expect(excluded.total).toBe(1);
+      expect(excluded.settleFrom?.getTime()).toBe(new Date((await prisma.systemConfig.findUniqueOrThrow({ where: { key: 'merchant.consignment_settle_from' } })).value as string).getTime());
       // Mốc ghi sai (ghi thẳng DB, không qua kiểm tra lúc ghi): bảng kê không lỗi, tạm không giới hạn (Q8 review S6).
       await setConfig(prisma, 'merchant.consignment_settle_from', '2026-13-01');
       expect(await netOf(s.store.id, old.id)).toEqual([90_000]);
