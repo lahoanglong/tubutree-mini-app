@@ -67,7 +67,8 @@ describe('Báo động vận hành: việc cho người (real Postgres)', () => 
   });
 
   it('(b) đơn mới vào "Cần xử lý Pancake" 10 phút sau lần báo → báo ngay; không có việc mới thì không lặp', async () => {
-    const t0 = new Date();
+    // Đơn do spec khác để lại trong DB dùng chung phải đã quá ngưỡng "kẹt" ngay từ t0, nếu không chúng thành sự cố mới giữa các mốc giả lập.
+    const t0 = new Date(Date.now() + 2 * 3_600_000);
     await order({ pancakeAttention: 'Pancake báo "Đang giao" nhưng đơn đang "Đã huỷ"', pancakeAttentionAt: new Date(t0.getTime() - 60_000) });
     await expect(health.checkAndAlert(t0)).resolves.toMatchObject({ sent: 'ALERT' });
 
