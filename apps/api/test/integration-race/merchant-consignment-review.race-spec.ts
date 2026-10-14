@@ -177,7 +177,10 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     // Danh sách chỉ đọc "chưa vào đối soát tự động" cho đối tác và admin (Q8 review S5).
     const excludedOf = async (storefrontId: string) =>
       (await settlement.consignmentExcluded(storefrontId)).lines.map((l) => [l.orderId, l.reason, l.goodsAmount]);
+    const pendingOf = async (storefrontId: string) =>
+      (await settlement.consignmentExcluded(storefrontId)).lines.map((l) => [l.orderId, l.linkPending]);
     expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_UNCONFIRMED', 100_000]]);
+    expect(await pendingOf(t.store.id)).toEqual([[early.id, true]]);
 
     const confirmed = summarize(await Promise.allSettled([1, 2].map(() => settlement.confirmConsignment(admin.id, takeover.id))));
     expect(confirmed.rejected).toHaveLength(0);
@@ -188,6 +191,7 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     expect(await netOf(t.store.id, early.id)).toEqual([]);
     expect(await netOf(t.store.id, late.id)).toEqual([90_000]);
     expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_UNCONFIRMED', 100_000]]);
+    expect(await pendingOf(t.store.id)).toEqual([[early.id, false]]);
 
     const plain = await shop({ commissionPct: 0.1 });
     const plainLink = await link(plain, ago(60));

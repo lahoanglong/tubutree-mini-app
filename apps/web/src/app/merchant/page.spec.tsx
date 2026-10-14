@@ -640,22 +640,24 @@ describe('cổng đối tác — tab Đối soát', () => {
       payouts: [],
       consignmentExcluded: {
         settleFrom: '2026-10-01T00:00:00.000Z',
-        total: 2,
+        total: 3,
         lines: [
-          { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2, goodsAmount: 180000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: '2026-10-07T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED' },
-          { orderId: 'o4', orderCode: 'TT4', orderItemId: 'i4', productName: 'Trà Shan', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-09-20T03:00:00.000Z', deliveredAt: null, reason: 'BEFORE_SETTLE_FROM' },
+          { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2, goodsAmount: 180000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: '2026-10-07T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED', linkPending: true },
+          { orderId: 'o6', orderCode: 'TT6', orderItemId: 'i6', productName: 'Bột sắn dây', variationName: null, quantity: 1, goodsAmount: 70000, createdAt: '2026-10-04T03:00:00.000Z', deliveredAt: '2026-10-06T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED', linkPending: false },
+          { orderId: 'o4', orderCode: 'TT4', orderItemId: 'i4', productName: 'Trà Shan', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-09-20T03:00:00.000Z', deliveredAt: null, reason: 'BEFORE_SETTLE_FROM', linkPending: false },
         ],
       },
     }));
     const root = await mount();
     await openTab('Đối soát');
-    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (2 món)');
+    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (3 món)');
     expect(root.textContent).toContain('Chờ lập phiếu (0 khoản)');
     const region = root.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động"]')!;
     expect(Array.from(region.querySelectorAll('th')).map((th) => th.textContent)).toEqual(['Đơn', 'Ngày đặt', 'Món', 'Tiền khách trả cho món', 'Lý do']);
     const rows = Array.from(region.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(rows).toEqual([
       ['TT5', '05/10/2026', 'Mật ong (Hũ 500g) × 2', '180.000đ', 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn'],
+      ['TT6', '04/10/2026', 'Bột sắn dây × 1', '70.000đ', 'Đặt lúc chưa xác nhận hàng ký gửi — liên hệ Tubu Tree để đối chiếu'],
       ['TT4', '20/09/2026', 'Trà Shan × 1', '90.000đ', 'Đặt trước 01/10/2026 — trước khi đối soát tự động'],
     ]);
     expect(scrollRegionProblems(root)).toEqual([]);

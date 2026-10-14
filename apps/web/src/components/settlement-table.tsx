@@ -104,8 +104,15 @@ export function SettlementTable<L extends SettlementLine>({
 
 export const CONSIGNMENT_EXCLUDED_TITLE = 'Hàng Tubu giao hộ chưa vào đối soát tự động';
 
+const awaitingConfirm = (l: ConsignmentExcludedLine) => l.reason === 'TAKEOVER_UNCONFIRMED' && l.linkPending !== false;
+
 function excludedReason(l: ConsignmentExcludedLine, settleFrom: string | null, viewer: 'merchant' | 'admin'): string {
   if (l.reason === 'BEFORE_SETTLE_FROM') return `Đặt trước ${formatDate(settleFrom)} — trước khi đối soát tự động`;
+  if (!awaitingConfirm(l)) {
+    return viewer === 'admin'
+      ? 'Đặt lúc chưa xác nhận hàng ký gửi — xử lý ngoài phiếu'
+      : 'Đặt lúc chưa xác nhận hàng ký gửi — liên hệ Tubu Tree để đối chiếu';
+  }
   return viewer === 'admin' ? 'Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt' : 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn';
 }
 
@@ -126,7 +133,7 @@ export function ConsignmentExcludedList({
   onOpenConfirm?: () => void;
 }) {
   if (!data || data.lines.length === 0) return null;
-  const unconfirmed = data.lines.filter((l) => l.reason === 'TAKEOVER_UNCONFIRMED').length;
+  const unconfirmed = data.lines.filter(awaitingConfirm).length;
   const title = `${CONSIGNMENT_EXCLUDED_TITLE} (${data.total} món)`;
   const more = data.total - data.lines.length;
   return (

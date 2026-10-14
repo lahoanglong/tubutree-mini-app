@@ -664,9 +664,10 @@ export class MerchantFulfilmentService {
   async consignmentExcluded(storefrontId: string, db: Db = this.prisma) {
     const settleFrom = await this.consignmentSettleFrom(db);
     const store = Prisma.sql`${storefrontId}`;
-    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; total: number }[]>`
+    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; linkPending: boolean; total: number }[]>`
       SELECT oi."id" AS "orderItemId", o."id" AS "orderId",
              ${settleFrom ? Prisma.sql`(o."createdAt" < ${settleFrom})` : Prisma.sql`false`} AS "beforeSettleFrom",
+             ${consignmentLinkPendingSql(store)} AS "linkPending",
              COUNT(*) OVER ()::int AS "total"
         FROM "order_items" oi
         JOIN "orders" o ON o."id" = oi."orderId"
@@ -708,6 +709,7 @@ export class MerchantFulfilmentService {
           createdAt: found.order.createdAt,
           deliveredAt: found.order.deliveredAt,
           reason: r.beforeSettleFrom ? ('BEFORE_SETTLE_FROM' as const) : ('TAKEOVER_UNCONFIRMED' as const),
+          linkPending: r.linkPending,
         },
       ];
     });
@@ -1334,6 +1336,18 @@ function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma
        WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
          AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
          ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
+}
+
+/**
+ * Liên kết của dòng `oi` lúc đặt đơn `o` vẫn đang chờ admin xác nhận hàng ký gửi (cùng điều kiện CONSIGNMENT_PENDING_LINK_WHERE
+ * của màn "Duyệt SP đối tác" và số "Việc cần xử lý"): còn việc để xác nhận. Liên kết đã xác nhận sau lúc đặt hoặc đã gỡ thì không.
+ */
+function consignmentLinkPendingSql(store: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`EXISTS (
+      SELECT 1 FROM "merchant_pancake_links" l
+       WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
+         AND o."createdAt" >= l."linkedAt"
+         AND l."takeover" AND l."consignmentConfirmedAt" IS NULL AND l."unlinkedAt" IS NULL)`;
 }
 
 /**

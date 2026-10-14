@@ -595,8 +595,8 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const { svc, prisma } = withLinks();
     prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
     prisma.$queryRaw.mockResolvedValueOnce([
-      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, total: 3 },
-      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, total: 3 },
+      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, linkPending: false, total: 3 },
+      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, linkPending: true, total: 3 },
     ]);
     prisma.order.findMany.mockResolvedValueOnce([
       { id: 'o1', code: 'TUBU1', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-09-22T00:00:00Z'), items: items('o1') },
@@ -605,14 +605,15 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const out = await svc.consignmentExcluded('sf-a');
     expect(out.total).toBe(3);
     expect(out.settleFrom).toEqual(new Date('2026-10-01T00:00:00Z'));
-    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.goodsAmount, l.quantity])).toEqual([
-      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', 42_500, 1],
-      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', 102_000, 2],
+    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.linkPending, l.goodsAmount, l.quantity])).toEqual([
+      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', false, 42_500, 1],
+      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', true, 102_000, 2],
     ]);
     const sql = sqlOf(prisma.$queryRaw.mock.calls[0]);
     expect(sql).toContain('NOT (');
     expect(sql).toContain('LIMIT 200');
     expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
+    expect(sql).toContain(`l."takeover" AND l."consignmentConfirmedAt" IS NULL AND l."unlinkedAt" IS NULL`);
   });
 
   it('phí đổi sau khi đặt: dòng tính theo mức hiệu lực lúc đặt đơn, không theo mức hiện tại', async () => {

@@ -395,6 +395,8 @@ export interface ConsignmentExcludedLine {
   deliveredAt: string | null;
   /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
   reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+  /** Liên kết của món lúc đặt vẫn đang chờ admin xác nhận hàng ký gửi (còn việc để xác nhận); false = đã xác nhận sau lúc đặt hoặc đã gỡ. Thiếu ở API cũ. */
+  linkPending?: boolean;
 }
 
 export interface ConsignmentExcluded {

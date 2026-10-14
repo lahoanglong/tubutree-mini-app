@@ -369,6 +369,49 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(byText(r2.container, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
   });
 
+  it('R4-ADMIN-7 review R1: món đặt trước lúc xác nhận hàng ký gửi mà liên kết nay đã xác nhận không còn lời mời xác nhận, không có nút; món liên kết vẫn chờ thì còn', async () => {
+    const line = (orderItemId: string, linkPending?: boolean) => ({
+      orderId: `o-${orderItemId}`,
+      orderCode: `TT-${orderItemId}`,
+      orderItemId,
+      productName: 'Bột sắn dây',
+      variationName: null,
+      quantity: 1,
+      goodsAmount: 90000,
+      createdAt: '2026-10-05T03:00:00.000Z',
+      deliveredAt: null,
+      reason: 'TAKEOVER_UNCONFIRMED',
+      ...(linkPending === undefined ? {} : { linkPending }),
+    });
+    const open = async (lines: ReturnType<typeof line>[]) => {
+      setup({
+        '/admin/merchant-fulfilment/statements/': {
+          body: { ...STATEMENT, lines: [], total: 0, consignmentExcluded: { settleFrom: null, total: lines.length, lines } },
+        },
+      });
+      const r = render(<MerchantFulfilmentTab onOpenConsignmentConfirm={vi.fn()} />);
+      mounted.push(r);
+      await flush();
+      const row = Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
+      click(byText(row, 'button', 'Xem khoản'));
+      await flush();
+      return r;
+    };
+
+    const confirmed = await open([line('i1', false)]);
+    expect(byText(confirmed.container, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
+    expect(confirmed.container.textContent).not.toContain('đang chờ xác nhận hàng ký gửi');
+    expect(confirmed.container.textContent).not.toContain('Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt');
+    expect(confirmed.container.textContent).toContain('Đặt lúc chưa xác nhận hàng ký gửi — xử lý ngoài phiếu');
+    mounted.pop()!.unmount();
+
+    const mixed = await open([line('i2', false), line('i3', true)]);
+    expect(mixed.container.textContent).toContain('1 món đang chờ xác nhận hàng ký gửi');
+    expect(byText(mixed.container, 'button', 'Xác nhận hàng ký gửi')).not.toBeNull();
+    expect(mixed.container.textContent).toContain('Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt');
+    expect(mixed.container.textContent).toContain('Đặt lúc chưa xác nhận hàng ký gửi — xử lý ngoài phiếu');
+  });
+
   it('R4-ADMIN-7: phiếu chờ thu đã quá hạn nộp hiện nhãn "Quá hạn nộp"; chưa tới hạn thì không', async () => {
     const lateNeg = (dueAt: string) => ({ ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt });
     for (const [dueAt, late] of [['2020-01-05T03:00:00.000Z', true], ['2099-01-05T03:00:00.000Z', false]] as const) {
