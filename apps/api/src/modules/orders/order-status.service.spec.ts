@@ -173,6 +173,25 @@ describe('OrderStatusService', () => {
     });
   });
 
+  it('R3-MONEY-7: admin huỷ kèm lý do → tin nói lý do và cả Điểm Xanh thường (lô STANDARD) được hoàn sau tx', async () => {
+    const order = makeOrder({ status: 'CONFIRMED', paymentStatus: 'PAID' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    reversal.reverseFinancials.mockResolvedValue({ moneyRefunded: true, pointsRefunded: 0, refund: { amount: 95_000, to: 'WALLET' } });
+    loyalty.reverseOrderPoints.mockResolvedValue(19);
+    mockTx();
+    await service.setStatus('o1', 'CANCELLED' as never, {
+      actorType: 'ADMIN',
+      note: 'Admin: Hết hàng nhà cung cấp',
+      customerReason: 'Hết hàng nhà cung cấp.',
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      refund_note: ' Lý do: Hết hàng nhà cung cấp. Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
+    });
+  });
+
   it('đơn chưa thu tiền bị huỷ → refund_note rỗng (không nói gì về tiền)', async () => {
     const order = makeOrder({ status: 'CONFIRMED' });
     prisma.order.findFirst.mockResolvedValue(order);
@@ -633,7 +652,11 @@ describe('OrderStatusService.markPaid', () => {
     for (const r of reads) findFirst.mockResolvedValueOnce(r);
     findFirst.mockResolvedValue(reads[reads.length - 1]);
     const prisma = {
-      order: { findFirst, findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]) },
+      order: {
+        findFirst,
+        findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -664,6 +687,15 @@ describe('OrderStatusService.markPaid', () => {
       ...over,
     });
   type FlipCall = [{ where: unknown; data: Record<string, unknown> }];
+
+  it('lật PAID → gỡ cảnh báo "Khách chuyển thiếu" (đơn đã đủ tiền), không đụng lý do khác', async () => {
+    const { svc, prisma } = make([pending()]);
+    await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Khách chuyển thiếu' } }] },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+  });
 
   it('PENDING_PAYMENT+UNPAID → lật PAID + CONFIRMED có guard, ghi lịch sử (ai bấm) + order_paid trong CÙNG tx, báo khách', async () => {
     const { svc, tx, analytics, notifications } = make([pending()]);
