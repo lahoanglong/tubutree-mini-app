@@ -712,20 +712,25 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
   it('hàng giao hộ chưa vào đối soát tự động (đặt trước mốc, liên kết takeover chưa xác nhận): danh sách chỉ đọc kèm lý do và tiền khách trả cho món (Q8 review S5)', async () => {
     const { svc, prisma } = withLinks();
     prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
+    const confirmedAt = new Date('2026-10-08T00:00:00Z');
     prisma.$queryRaw.mockResolvedValueOnce([
-      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, total: 3 },
-      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, total: 3 },
+      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, confirmedAt: null, total: 3 },
+      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, confirmedAt: null, total: 3 },
+      { orderItemId: 'o3-a', orderId: 'o3', beforeSettleFrom: false, confirmedAt, total: 3 },
     ]);
     prisma.order.findMany.mockResolvedValueOnce([
       { id: 'o1', code: 'TUBU1', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-09-22T00:00:00Z'), items: items('o1') },
       { id: 'o2', code: 'TUBU2', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-10-05T00:00:00Z'), deliveredAt: null, items: items('o2') },
+      { id: 'o3', code: 'TUBU3', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-10-06T00:00:00Z'), deliveredAt: null, items: items('o3') },
     ]);
     const out = await svc.consignmentExcluded('sf-a');
     expect(out.total).toBe(3);
     expect(out.settleFrom).toEqual(new Date('2026-10-01T00:00:00Z'));
-    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.goodsAmount, l.quantity])).toEqual([
-      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', 42_500, 1],
-      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', 102_000, 2],
+    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.goodsAmount, l.quantity, l.confirmedAt])).toEqual([
+      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', 42_500, 1, null],
+      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', 102_000, 2, null],
+      // R4-PARTNER-3: liên kết đã xác nhận hàng ký gửi nhưng đơn đặt trước lúc xác nhận → đối soát riêng ngoài phiếu, không còn "chờ xác nhận".
+      ['TUBU3', 'o3-a', 'TAKEOVER_BEFORE_CONFIRM', 102_000, 2, confirmedAt],
     ]);
     const sql = sqlOf(prisma.$queryRaw.mock.calls[0]);
     expect(sql).toContain('NOT (');

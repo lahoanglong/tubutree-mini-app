@@ -403,8 +403,14 @@ export interface ConsignmentExcludedLine {
   goodsAmount: number;
   createdAt: string;
   deliveredAt: string | null;
-  /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
-  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+  /**
+   * BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt;
+   * TAKEOVER_BEFORE_CONFIRM: đã xác nhận nhưng đơn đặt trước lúc xác nhận (`confirmedAt`) nên không bao giờ tự vào phiếu.
+   * API cũ chỉ trả hai lý do đầu.
+   */
+  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED' | 'TAKEOVER_BEFORE_CONFIRM';
+  /** Lúc admin xác nhận hàng ký gửi của liên kết (chỉ có với TAKEOVER_BEFORE_CONFIRM). */
+  confirmedAt?: string | null;
 }
 
 export interface ConsignmentExcluded {

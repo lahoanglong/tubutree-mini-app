@@ -709,22 +709,25 @@ describe('cổng đối tác — tab Đối soát', () => {
       payouts: [],
       consignmentExcluded: {
         settleFrom: '2026-10-01T00:00:00.000Z',
-        total: 2,
+        total: 3,
         lines: [
           { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2, goodsAmount: 180000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: '2026-10-07T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED' },
+          { orderId: 'o6', orderCode: 'TT6', orderItemId: 'i6', productName: 'Mật ong', variationName: 'Hũ 250g', quantity: 1, goodsAmount: 95000, createdAt: '2026-10-06T03:00:00.000Z', deliveredAt: '2026-10-08T03:00:00.000Z', reason: 'TAKEOVER_BEFORE_CONFIRM', confirmedAt: '2026-10-09T03:00:00.000Z' },
           { orderId: 'o4', orderCode: 'TT4', orderItemId: 'i4', productName: 'Trà Shan', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-09-20T03:00:00.000Z', deliveredAt: null, reason: 'BEFORE_SETTLE_FROM' },
         ],
       },
     }));
     const root = await mount();
     await openTab('Đối soát');
-    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (2 món)');
+    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (3 món)');
     expect(root.textContent).toContain('Chờ lập phiếu (0 khoản)');
     const region = root.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động"]')!;
     expect(Array.from(region.querySelectorAll('th')).map((th) => th.textContent)).toEqual(['Đơn', 'Ngày đặt', 'Món', 'Tiền khách trả cho món', 'Lý do']);
     const rows = Array.from(region.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(rows).toEqual([
       ['TT5', '05/10/2026', 'Mật ong (Hũ 500g) × 2', '180.000đ', 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn'],
+      // R4-PARTNER-3: đã xác nhận rồi thì không còn nói "chờ xác nhận"; nói rõ đơn đặt trước lúc xác nhận phải đối soát riêng.
+      ['TT6', '06/10/2026', 'Mật ong (Hũ 250g) × 1', '95.000đ', 'Đặt trước khi Tubu Tree xác nhận hàng ký gửi (09/10/2026) — đối soát riêng ngoài phiếu, liên hệ Tubu Tree'],
       ['TT4', '20/09/2026', 'Trà Shan × 1', '90.000đ', 'Đặt trước 01/10/2026 — trước khi đối soát tự động'],
     ]);
     expect(scrollRegionProblems(root)).toEqual([]);

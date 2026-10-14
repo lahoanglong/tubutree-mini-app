@@ -704,9 +704,12 @@ export class MerchantFulfilmentService {
   async consignmentExcluded(storefrontId: string, db: Db = this.prisma) {
     const settleFrom = await this.consignmentSettleFrom(db);
     const store = Prisma.sql`${storefrontId}`;
-    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; total: number }[]>`
+    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; confirmedAt: Date | null; total: number }[]>`
       SELECT oi."id" AS "orderItemId", o."id" AS "orderId",
              ${settleFrom ? Prisma.sql`(o."createdAt" < ${settleFrom})` : Prisma.sql`false`} AS "beforeSettleFrom",
+             (SELECT MAX(l."consignmentConfirmedAt") FROM "merchant_pancake_links" l
+               WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId" AND l."takeover"
+                 AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")) AS "confirmedAt",
              COUNT(*) OVER ()::int AS "total"
         FROM "order_items" oi
         JOIN "orders" o ON o."id" = oi."orderId"
@@ -747,7 +750,8 @@ export class MerchantFulfilmentService {
           goodsAmount: found.base[idx] ?? 0,
           createdAt: found.order.createdAt,
           deliveredAt: found.order.deliveredAt,
-          reason: r.beforeSettleFrom ? ('BEFORE_SETTLE_FROM' as const) : ('TAKEOVER_UNCONFIRMED' as const),
+          reason: excludedReason(r),
+          confirmedAt: r.confirmedAt,
         },
       ];
     });
@@ -1380,6 +1384,16 @@ function overdueWhere(sla: SlaConfig, now: Date): Prisma.OrderWhereInput {
       { status: 'SHIPPING', shippedAt: { lt: deliverCut } },
     ],
   };
+}
+
+/**
+ * Vì sao dòng hàng giao hộ không tự vào bảng kê: đặt trước mốc bắt đầu đối soát tự động; liên kết nhận lại (takeover) chưa được
+ * xác nhận hàng ký gửi; hoặc đã xác nhận nhưng đơn đặt TRƯỚC lúc xác nhận — chỉ đơn mới từ lúc xác nhận tự vào phiếu, phần này
+ * không bao giờ tự vào và phải xử lý ngoài phiếu.
+ */
+function excludedReason(r: { beforeSettleFrom: boolean; confirmedAt: Date | null }) {
+  if (r.beforeSettleFrom) return 'BEFORE_SETTLE_FROM' as const;
+  return r.confirmedAt ? ('TAKEOVER_BEFORE_CONFIRM' as const) : ('TAKEOVER_UNCONFIRMED' as const);
 }
 
 /** Giá trị mốc bắt đầu sai đã cảnh báo — mỗi giá trị sai chỉ ghi log một lần. */

@@ -187,7 +187,10 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     const late = await order(t.v.id, { createdAt: new Date(row.consignmentConfirmedAt!.getTime() + 1_000), deliveredAt: ago(8) });
     expect(await netOf(t.store.id, early.id)).toEqual([]);
     expect(await netOf(t.store.id, late.id)).toEqual([90_000]);
-    expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_UNCONFIRMED', 100_000]]);
+    // R4-PARTNER-3: đã xác nhận rồi thì đơn đặt trước mốc xác nhận không còn "chờ xác nhận" (sẽ không bao giờ tự vào phiếu).
+    expect(await excludedOf(t.store.id)).toEqual([[early.id, 'TAKEOVER_BEFORE_CONFIRM', 100_000]]);
+    const excluded = await settlement.consignmentExcluded(t.store.id);
+    expect(excluded.lines[0]!.confirmedAt?.getTime()).toBe(row.consignmentConfirmedAt!.getTime());
 
     const plain = await shop({ commissionPct: 0.1 });
     const plainLink = await link(plain, ago(60));

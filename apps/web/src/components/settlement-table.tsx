@@ -116,6 +116,12 @@ export const CONSIGNMENT_EXCLUDED_TITLE = 'Hàng Tubu giao hộ chưa vào đố
 
 function excludedReason(l: ConsignmentExcludedLine, settleFrom: string | null, viewer: 'merchant' | 'admin'): string {
   if (l.reason === 'BEFORE_SETTLE_FROM') return `Đặt trước ${formatDate(settleFrom)} — trước khi đối soát tự động`;
+  if (l.reason === 'TAKEOVER_BEFORE_CONFIRM') {
+    const when = l.confirmedAt ? ` (${formatDate(l.confirmedAt)})` : '';
+    return viewer === 'admin'
+      ? `Đặt trước lúc xác nhận hàng ký gửi${when} — đối soát riêng ngoài phiếu`
+      : `Đặt trước khi Tubu Tree xác nhận hàng ký gửi${when} — đối soát riêng ngoài phiếu, liên hệ Tubu Tree`;
+  }
   return viewer === 'admin' ? 'Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt' : 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn';
 }
 
