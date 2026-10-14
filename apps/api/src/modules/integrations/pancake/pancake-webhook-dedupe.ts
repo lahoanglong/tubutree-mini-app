@@ -12,6 +12,9 @@ export const PANCAKE_EVENT_STATUS = {
 /** Worker giữ claim PROCESSING lâu hơn mốc này coi như đã chết (handler thường xong trong vài giây). */
 export const PANCAKE_CLAIM_STALE_MINUTES = 15;
 
+/** Tồn kho tuyệt đối tại thời điểm gửi: áp muộn sẽ đè số mới hơn, nên không bao giờ chạy lại (cron lẫn tay). */
+export const PANCAKE_STOCK_EVENT = 'variation.stock_changed';
+
 /** Job name của queue pancake-events (giữ nguyên tên cũ để job đang chờ lúc deploy vẫn chạy). */
 export const PANCAKE_JOB_EVENT = 'process';
 

@@ -1,6 +1,10 @@
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsWebhookEventsService } from '../../src/modules/ops/ops-webhook-events.service';
+import { PancakeEventsReconcileService } from '../../src/modules/integrations/pancake/pancake-events-reconcile.service';
+import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
+import { GomdonReconcileService } from '../../src/modules/integrations/gomdon/gomdon-reconcile.service';
+import { GomdonWebhookService } from '../../src/modules/integrations/gomdon/gomdon-webhook.service';
 import { createOrder, createUser, setConfig } from './helpers';
 
 /**
@@ -114,6 +118,65 @@ describe('q6 báo động vận hành (real Postgres)', () => {
     const ev = await prisma.pancakeWebhookEvent.create({ data: { eventType: 'order', rawPayload: {}, status: 'PROCESSED' } });
     await expect(events.retry('pancake', ev.id, adminId)).rejects.toThrow('đã được xử lý xong');
     expect(queueAdd).not.toHaveBeenCalled();
+  });
+
+  it('Đã xử lý: cron cứu hộ Pancake/Gomdon không đưa lại vào hàng đợi, job đang retry dở cũng không chạy; Chạy lại thì cứu tiếp', async () => {
+    const ago = (m: number) => new Date(Date.now() - m * 60_000);
+    const pev = await prisma.pancakeWebhookEvent.create({
+      data: { eventType: 'order.status_updated', rawPayload: { id: 4242, status: 6 }, status: 'FAILED', attempts: 2, error: 'boom', receivedAt: ago(30) },
+    });
+    const gev = await prisma.gomdonWebhookEvent.create({
+      data: { dedupeKey: `q6-dismiss-${Date.now()}`, orderCode: 'TUBUQ6DISMISS', gomdonStatus: 6, rawPayload: { status: 6 }, status: 'FAILED', attempts: 2, receivedAt: ago(30) },
+    });
+    await events.dismiss('pancake', pev.id, adminId);
+    await events.dismiss('gomdon', gev.id, adminId);
+
+    const pq = { getJob: jest.fn().mockResolvedValue(null), add: jest.fn().mockResolvedValue({}) };
+    const gq = { getJob: jest.fn().mockResolvedValue(null), add: jest.fn().mockResolvedValue({}) };
+    const pancakeCron = new PancakeEventsReconcileService(prisma, pq as never);
+    const gomdonCron = new GomdonReconcileService(prisma, {} as never, gq as never, {} as never);
+    const enqueuedIds = (q: typeof pq) => q.add.mock.calls.map((c) => (c[1] as { eventId: string }).eventId);
+
+    await pancakeCron.redriveEvents();
+    await gomdonCron.redriveEvents();
+    expect(enqueuedIds(pq)).not.toContain(pev.id);
+    expect(enqueuedIds(gq)).not.toContain(gev.id);
+
+    const processor = new PancakeProcessor(prisma, { notify: jest.fn() } as never, { setStatus: jest.fn() } as never);
+    const handle = jest.spyOn(processor as unknown as { handle: () => Promise<string> }, 'handle').mockResolvedValue('OK');
+    await processor.process({ data: { eventId: pev.id } } as never);
+    expect(handle).not.toHaveBeenCalled();
+    expect(await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: pev.id } })).toMatchObject({ status: 'FAILED', attempts: 2 });
+
+    const gomdonWebhook = new GomdonWebhookService(prisma, {} as never, {} as never, gq as never, {} as never);
+    const apply = jest.spyOn(gomdonWebhook as unknown as { apply: () => Promise<unknown> }, 'apply').mockResolvedValue({ status: 'PROCESSED' });
+    await gomdonWebhook.processEvent(gev.id);
+    expect(apply).not.toHaveBeenCalled();
+    expect(await prisma.gomdonWebhookEvent.findUniqueOrThrow({ where: { id: gev.id } })).toMatchObject({ status: 'FAILED', attempts: 2 });
+
+    await events.retry('pancake', pev.id, adminId);
+    await events.retry('gomdon', gev.id, adminId);
+    pq.add.mockClear();
+    gq.add.mockClear();
+    await pancakeCron.redriveEvents();
+    await gomdonCron.redriveEvents();
+    expect(enqueuedIds(pq)).toContain(pev.id);
+    expect(enqueuedIds(gq)).toContain(gev.id);
+    await processor.process({ data: { eventId: pev.id } } as never);
+    expect(handle).toHaveBeenCalledTimes(1);
+    await prisma.pancakeWebhookEvent.update({ where: { id: pev.id }, data: { status: 'PROCESSED' } });
+    await prisma.gomdonWebhookEvent.update({ where: { id: gev.id }, data: { status: 'PROCESSED' } });
+  });
+
+  it('Chạy lại sự kiện tồn kho (variation.stock_changed) → từ chối, chỉ đánh dấu Đã xử lý được', async () => {
+    const ev = await prisma.pancakeWebhookEvent.create({
+      data: { eventType: 'variation.stock_changed', rawPayload: { id: 'v1', remain_quantity: 5 }, status: 'FAILED', attempts: 3, error: 'boom' },
+    });
+    await expect(events.retry('pancake', ev.id, adminId)).rejects.toThrow('Đồng bộ danh mục');
+    expect(queueAdd).not.toHaveBeenCalled();
+    expect(await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } })).toMatchObject({ status: 'FAILED', attempts: 3, error: 'boom' });
+    await events.dismiss('pancake', ev.id, adminId);
+    expect((await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } })).dismissedAt).not.toBeNull();
   });
 
   it('webhook Gomdon lỗi: nêu mã đơn, chạy lại được', async () => {

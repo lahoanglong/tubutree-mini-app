@@ -39,6 +39,9 @@ const QUEUE_LABELS: Record<string, string> = {
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
 const newer = (a: string | null | undefined, b: string | null | undefined) => !!a && (!b || a > b);
 
+/** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
+const isStaleStockEvent = (e: OpsWebhookEvent) => e.source === 'pancake' && e.eventType === 'variation.stock_changed';
+
 const OPEN_ORDER_BTN = 'min-h-[44px] text-xs font-medium text-forest-700 hover:underline sm:min-h-0';
 
 type Act = (run: () => Promise<{ message?: string } | unknown>, ok: string) => void;
@@ -92,7 +95,9 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
   const askDismiss = async (e: OpsWebhookEvent) => {
     const ok = await confirm({
       title: 'Đánh dấu webhook đã xử lý?',
-      message: `Chỉ bấm khi đã sửa tay đơn ${e.orderRef ?? 'liên quan'} cho đúng trạng thái. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.`,
+      message: isStaleStockEvent(e)
+        ? 'Chỉ bấm sau khi đã chạy Đồng bộ danh mục Pancake để tồn kho lấy số mới. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.'
+        : `Chỉ bấm khi đã sửa tay đơn ${e.orderRef ?? 'liên quan'} cho đúng trạng thái. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.`,
       confirmLabel: 'Đã xử lý',
     });
     if (ok) act(() => dismissOpsWebhookEvent(e.source, e.id), 'Đã đánh dấu đã xử lý.');
@@ -335,11 +340,18 @@ function HealthBody({
                   · {e.eventType} · {e.status === 'FAILED' ? 'lỗi' : 'kẹt chưa xử lý'} · {e.attempts} lần thử · nhận {formatDateTime(e.receivedAt)}
                 </span>
                 {e.error && <span className="block break-words text-xs text-danger-fg">{e.error}</span>}
+                {isStaleStockEvent(e) && (
+                  <span className="block text-xs text-stone-500">
+                    Tồn kho cũ không chạy lại được — chạy Đồng bộ danh mục Pancake rồi bấm Đã xử lý.
+                  </span>
+                )}
               </span>
               <span className="flex flex-wrap items-center gap-2">
-                <button type="button" disabled={busy} onClick={() => onRetry(e)} className={BTN_XS_SECONDARY}>
-                  Chạy lại
-                </button>
+                {!isStaleStockEvent(e) && (
+                  <button type="button" disabled={busy} onClick={() => onRetry(e)} className={BTN_XS_SECONDARY}>
+                    Chạy lại
+                  </button>
+                )}
                 <button type="button" disabled={busy} onClick={() => onDismiss(e)} className={BTN_XS_SECONDARY}>
                   Đã xử lý
                 </button>

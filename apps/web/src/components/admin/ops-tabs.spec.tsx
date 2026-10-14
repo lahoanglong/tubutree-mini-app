@@ -228,6 +228,28 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
   });
 });
 
+describe('OpsHealthTab — webhook tồn kho Pancake không chạy lại', () => {
+  it('sự kiện variation.stock_changed chỉ có Đã xử lý, kèm hướng dẫn Đồng bộ danh mục', async () => {
+    const STOCK = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        webhookFailedOpen: 1,
+        failedEvents: [
+          { id: 'st1', source: 'pancake', eventType: 'variation.stock_changed', orderRef: null, status: 'FAILED', attempts: 15, error: 'boom', receivedAt: '2026-10-14T01:00:00.000Z' },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: STOCK } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    const labels = [...hooks.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels).toContain('Đã xử lý');
+    expect(labels).not.toContain('Chạy lại');
+    expect(hooks.textContent).toContain('Đồng bộ danh mục');
+  });
+});
+
 describe('AttendanceTab — Chốt ra ca (ADMINOPS-17)', () => {
   it('liệt kê người đang trong ca kèm tên; Chốt ra ca qua hộp xác nhận rồi gửi đúng phiên', async () => {
     const live = [
