@@ -187,6 +187,8 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     id: 'l1',
     linkedAt: '2026-10-14T03:00:00.000Z',
     takeover: true,
+    stockAtLink: 37,
+    consignmentConfirmedAt: null,
     originProductId: 'p-bhnong-pepper',
     product: {
       id: 'pm1',
@@ -269,5 +271,49 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     const call = api.calls.find((c) => c.url.includes('/unlink'));
     expect(call?.url).toContain('/admin/merchant-products/pm1/unlink');
     expect(call?.init?.body).toBe(JSON.stringify({ reason: 'Sai thương hiệu' }));
+  });
+
+  it('liên kết nhận lại hàng Tubu đang bán: hiện tồn lúc liên kết, chưa đối soát; "Xác nhận hàng ký gửi" hỏi lại rồi POST confirm-consignment', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/admin/merchant-products/linked': { body: { data: [linked], meta: { page: 1, limit: 100, total: 1 } } },
+      '/confirm-consignment': { body: { id: 'l1', consignmentConfirmedAt: '2026-10-14T05:00:00.000Z' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Tồn lúc liên kết: 37 sp');
+    expect(text).toContain('Chưa đối soát tự động');
+    click(byText(container, 'button', 'Xác nhận hàng ký gửi'));
+    expect(container.textContent).toContain('Đơn đặt từ lúc xác nhận sẽ vào đối soát của Shop A');
+    expect(api.calls.some((c) => c.url.includes('/confirm-consignment'))).toBe(false);
+    click(byText(container, 'button', 'Xác nhận ký gửi'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/confirm-consignment'));
+    expect(call?.url).toContain('/admin/merchant-fulfilment/links/l1/confirm-consignment');
+    expect(call?.init?.method).toBe('POST');
+  });
+
+  it('đã xác nhận hàng ký gửi → nêu mốc, không còn nút; liên kết thường không có phần ký gửi', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/admin/merchant-products/linked': {
+        body: {
+          data: [
+            { ...linked, consignmentConfirmedAt: '2026-10-14T05:00:00.000Z' },
+            { ...linked, id: 'l2', takeover: false, stockAtLink: 12, product: { ...linked.product, id: 'pm2', name: 'Mật ong Shop B' } },
+          ],
+          meta: { page: 1, limit: 100, total: 2 },
+        },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đã xác nhận hàng ký gửi');
+    expect(byText(container, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
+    expect(text.match(/Tồn lúc liên kết/g)).toHaveLength(1);
   });
 });

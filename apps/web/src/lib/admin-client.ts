@@ -983,6 +983,10 @@ export interface AdminLinkedMerchantProduct {
   id: string;
   linkedAt: string;
   takeover: boolean;
+  /** Tồn kho Tubu của biến thể lúc liên kết (null: liên kết trước khi có ghi nhận). */
+  stockAtLink: number | null;
+  /** Liên kết takeover chỉ đối soát tự động từ mốc admin xác nhận hàng ký gửi; null = chưa xác nhận. */
+  consignmentConfirmedAt: string | null;
   originProductId: string | null;
   product: {
     id: string;
@@ -1029,6 +1033,13 @@ export const unlinkMerchantProduct = (productId: string, reason: string) =>
     method: 'POST',
     body: { reason },
   });
+
+/** Xác nhận hàng đang bán của biến thể nhận lại là hàng ký gửi của gian hàng: đơn đặt từ giờ vào đối soát tự động. */
+export const confirmMerchantConsignment = (linkId: string) =>
+  apiFetch<{ id: string; consignmentConfirmedAt: string | null }>(
+    `/admin/merchant-fulfilment/links/${encodeURIComponent(linkId)}/confirm-consignment`,
+    { method: 'POST' },
+  );
 
 // ── Hoàn tiền sàn ngoài (cashback) ──
 export interface AdminCashbackTxn {
