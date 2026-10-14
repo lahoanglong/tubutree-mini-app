@@ -207,7 +207,7 @@ describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho l
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: { updateMany },
+      commission: { updateMany, findMany: jest.fn().mockResolvedValue([{ affiliateUserId: 'ctv', amount: 12_000 }]) },
     } as unknown as PrismaService;
     return { prisma, updateMany };
   }
@@ -986,7 +986,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     );
   });
 
-  it('BANK hợp lệ → payout.amount = TỔNG THỰC + mark PAID + gán batch', async () => {
+  it('BANK hợp lệ → payout.amount = TỔNG THỰC + gán batch, hoa hồng vẫn APPROVED ("Đang rút") tới khi admin chuyển tiền (SELLER-10)', async () => {
     const { prisma, payoutCreate, updateMany } = makePrisma({
       available: 100_000,
       rows: [{ id: 'c1', amount: 100_000 }],
@@ -996,7 +996,32 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(r.status).toBe('REQUESTED');
     expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000);
     expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
-    expect(updateMany.mock.calls[0][0].data.status).toBe('PAID');
+    expect(updateMany.mock.calls[0][0].data.status).toBeUndefined();
+    expect(updateMany.mock.calls[0][0].data.paidAt).toBeUndefined();
+  });
+
+  // SELLER-11: trả hoa hồng cho cá nhân từ 2.000.000đ/lần thì tổ chức trả thu nhập khấu trừ 10% thuế TNCN (TT 111/2013).
+  it('SELLER-11: rút từ ngưỡng 2.000.000đ → lưu gross, thuế khấu trừ 10%, amount = thực nhận', async () => {
+    const { prisma, payoutCreate } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }] });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 2_500_000, 'BANK', {
+      bankName: 'VCB',
+      accountNumber: '0123456789',
+      accountName: 'NGUYEN A',
+    });
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ grossAmount: 2_500_000, taxWithheld: 250_000, amount: 2_250_000 }),
+    );
+  });
+
+  it('SELLER-11: dưới ngưỡng → không khấu trừ; cấu hình 0% → tắt', async () => {
+    const small = makePrisma({ available: 1_999_000, rows: [{ id: 'c1', amount: 1_999_000 }] });
+    await new AffiliateService(small.prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 1_999_000, 'BANK', {});
+    expect(small.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 1_999_000 }));
+
+    const off = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.pit_withhold_pct' ? 0 : fb) as T } as unknown as SystemConfigService;
+    const big = makePrisma({ available: 5_000_000, rows: [{ id: 'c1', amount: 5_000_000 }] });
+    await new AffiliateService(big.prisma, off, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 5_000_000, 'BANK', {});
+    expect(big.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 5_000_000 }));
   });
 
   it('BANK: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG trả payout REQUESTED (Bug 4 fix)', async () => {
@@ -1407,7 +1432,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     );
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
     expect(commissionUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: 'PAID' },
+      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
       data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
     });
     expect(userUpdate).not.toHaveBeenCalled();

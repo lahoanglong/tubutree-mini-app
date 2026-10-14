@@ -1,5 +1,18 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
@@ -12,10 +25,21 @@ class CreateLinkDto {
   @IsOptional() @IsString() targetId?: string;
 }
 
+class PayoutBankInfoDto {
+  @IsString() @MinLength(2) @MaxLength(100) bankName!: string;
+  @IsString() @Matches(/^\d{6,20}$/, { message: 'Số tài khoản phải gồm 6–20 chữ số.' }) accountNumber!: string;
+  @IsString() @MinLength(2) @MaxLength(100) accountName!: string;
+}
+
 class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
-  @IsOptional() @IsObject() bankInfo?: object;
+  // SELLER-10: rút ngân hàng bắt buộc đủ thông tin tài khoản; trước đây `{}` cũng qua và admin không biết chuyển vào đâu.
+  @ValidateIf((o: PayoutDto) => o.method === 'BANK')
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PayoutBankInfoDto)
+  bankInfo?: PayoutBankInfoDto;
 }
 
 class ClaimMilestoneDto {
@@ -67,6 +91,11 @@ export class AffiliateController {
   @Get('commissions')
   commissions(@CurrentUser('sub') userId: string) {
     return this.affiliate.listCommissions(userId);
+  }
+
+  @Get('payouts')
+  myPayouts(@CurrentUser('sub') userId: string) {
+    return this.affiliate.listMyPayouts(userId);
   }
 
   // Idempotency-Key: mirror wallet.withdraw / affiliate.orders — chống double-tap/retry rút tiền
