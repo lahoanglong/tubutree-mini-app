@@ -231,66 +231,76 @@ export function allocateLineAmounts(lines: SplitLine[], t: CheckoutTotals): Line
   );
 }
 
+/** Các dòng của mọi kiện theo đúng thứ tự kiện (groupByFulfiller): thứ tự duy nhất mà trần điểm và phép chia cùng dùng. */
+function linesOf(groups: { lines: SplitLine[] }[]): SplitLine[] {
+  return groups.flatMap((g) => g.lines);
+}
+
 /**
  * Nền tối đa của Điểm Xanh: tiền hàng Tubu sau combo, mã, hạng (cộng hàng Tubu flash). Hàng của gian hàng đối tác chỉ trả bằng
  * tiền nên không vào nền. Giỏ chỉ hàng Tubu: đúng bằng nền cũ (tiền hàng không flash sau combo, mã, hạng + hàng flash).
+ * Nhận các kiện chứ không nhận giỏ: cùng thứ tự dòng và cùng phép chia allocateGroupAmounts dùng, nên dùng đủ trần thì mỗi
+ * dòng Tubu nhận đúng phần còn lại của nó, không dòng nào âm.
  */
-export function pointsRedeemBase(lines: SplitLine[], t: Omit<CheckoutTotals, 'pointsDiscount' | 'pointsUsed' | 'pointsUsedConverted'>): number {
+export function pointsRedeemBase(
+  groups: { lines: SplitLine[] }[],
+  t: Omit<CheckoutTotals, 'pointsDiscount' | 'pointsUsed' | 'pointsUsedConverted'>,
+): number {
+  const lines = linesOf(groups);
   const out = allocateLineAmounts(lines, { ...t, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0 });
   return lines.reduce((s, l, k) => s + (partnerLine(l) ? 0 : Math.max(0, out[k]!.paid)), 0);
 }
 
 /**
- * Phân bổ các khoản giảm của cả lần đặt về từng kiện rồi về từng dòng của kiện, cùng luật allocateLineAmounts: mã gắn sản
- * phẩm chỉ vào kiện có sản phẩm đó, hàng flash không nhận mã/hạng, Điểm Xanh chỉ vào dòng hàng Tubu. Mỗi khoản chia theo nền
- * của chính bước đó nên tổng từng kiện (và từng dòng) khớp từng đồng với cả lần đặt.
+ * Phân bổ các khoản giảm của cả lần đặt về từng dòng (một lần allocateLineAmounts trên mọi dòng theo thứ tự kiện) rồi cộng
+ * theo kiện: mã gắn sản phẩm chỉ vào kiện có sản phẩm đó, hàng flash không nhận mã/hạng, Điểm Xanh chỉ vào dòng hàng Tubu.
+ * Một phép chia duy nhất nên số từng kiện là tổng đúng các dòng của nó và trần điểm (pointsRedeemBase) khớp từng đồng.
  */
 export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: CheckoutTotals): GroupAmounts[] {
-  const flat = groups.flatMap((g) => g.lines);
-  const combo = lineCombos(flat, t);
-  const { afterCombo, eligible } = lineBases(flat, combo, t.couponProductIds);
-  const starts: number[] = [];
-  groups.reduce((at, g) => {
-    starts.push(at);
-    return at + g.lines.length;
-  }, 0);
-  const slice = <T>(xs: T[], i: number) => xs.slice(starts[i]!, starts[i]! + groups[i]!.lines.length);
-  const perGroup = (xs: number[]) => groups.map((_, i) => sumOf(slice(xs, i)));
-  const subtotal = perGroup(flat.map((l) => l.total));
-  const comboG = perGroup(combo);
-  const afterComboG = perGroup(afterCombo);
-  const coupon = spread(t.couponDiscount, perGroup(eligible), afterComboG);
-  const tierBase = afterComboG.map((b, i) => Math.max(0, b - coupon[i]!));
-  const tier = spread(t.tierDiscount, tierBase, afterComboG);
-  const redeemBase = groups.map((g, i) => {
-    const before = splitOverLines(g.lines, slice(combo, i), { coupon: coupon[i]!, tier: tier[i]!, points: 0 }, t.couponProductIds);
-    return g.lines.reduce((s, l, k) => s + (partnerLine(l) ? 0 : Math.max(0, before[k]!.paid)), 0);
+  const per = allocateLineAmounts(linesOf(groups), t);
+  let at = 0;
+  const slices = groups.map((g) => {
+    const s = per.slice(at, at + g.lines.length);
+    at += g.lines.length;
+    return s;
   });
-  const points = allocateProRata(t.pointsDiscount, redeemBase);
+  const points = slices.map((ls) => sumOf(ls.map((l) => l.points)));
   const standard = allocateProRata(t.pointsUsed - t.pointsUsedConverted, points);
   const converted = allocateProRata(t.pointsUsedConverted, points);
-  return groups.map((g, i) => {
-    const discount = comboG[i]! + coupon[i]! + tier[i]! + points[i]!;
-    const lines = splitOverLines(
-      g.lines,
-      slice(combo, i),
-      { coupon: coupon[i]!, tier: tier[i]!, points: points[i]! },
-      t.couponProductIds,
-    );
+  return slices.map((ls, i) => {
+    const subtotal = sumOf(ls.map((l) => l.total));
+    const comboDiscount = sumOf(ls.map((l) => l.combo));
+    const couponDiscount = sumOf(ls.map((l) => l.coupon));
+    const tierDiscount = sumOf(ls.map((l) => l.tier));
+    const discount = comboDiscount + couponDiscount + tierDiscount + points[i]!;
     return {
-      subtotal: subtotal[i]!,
-      comboDiscount: comboG[i]!,
-      couponDiscount: coupon[i]!,
-      tierDiscount: tier[i]!,
+      subtotal,
+      comboDiscount,
+      couponDiscount,
+      tierDiscount,
       pointsDiscount: points[i]!,
       pointsUsed: standard[i]! + converted[i]!,
       pointsUsedConverted: converted[i]!,
       discount,
-      goodsAfterAll: Math.max(0, subtotal[i]! - discount),
-      linePaid: lines.map((l) => l.paid),
-      linePoints: lines.map((l) => l.points),
+      goodsAfterAll: Math.max(0, subtotal - discount),
+      linePaid: ls.map((l) => l.paid),
+      linePoints: ls.map((l) => l.points),
     };
   });
+}
+
+/**
+ * Lưới an toàn trước khi ghi đơn: dòng âm, kiện giảm quá tiền hàng, hay tiền các dòng lệch tiền hàng của kiện là lỗi tính toán
+ * (không bao giờ được lưu: hoàn tiền và đối soát đọc các số này). Trả câu mô tả lỗi, null = hợp lệ.
+ */
+export function allocationError(amounts: GroupAmounts[]): string | null {
+  for (const [i, a] of amounts.entries()) {
+    const at = `kiện ${i + 1}`;
+    if (a.linePaid.some((x) => x < 0) || a.linePoints.some((x) => x < 0)) return `${at}: tiền hoặc điểm của một dòng âm`;
+    if (a.discount > a.subtotal) return `${at}: giảm ${a.discount} vượt tiền hàng ${a.subtotal}`;
+    if (sumOf(a.linePaid) !== a.subtotal - a.discount) return `${at}: tiền các dòng không khớp tiền hàng sau giảm`;
+  }
+  return null;
 }
 
 /** Phương thức thanh toán mà lần đặt được phép dùng — lý do bằng tiếng Việt để FE hiện ngay cạnh lựa chọn bị tắt. */
