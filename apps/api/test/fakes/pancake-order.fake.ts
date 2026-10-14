@@ -1,5 +1,5 @@
 /* Fake Prisma tối thiểu cho spec chiều Tubu → Pancake: một bảng orders trong bộ nhớ, where hỗ trợ đúng phần
- * PancakeOrderService/PancakeSyncHooks dùng (bằng, null, not, lt, startsWith, OR, NOT). Không dùng ngoài spec. */
+ * PancakeOrderService/PancakeSyncHooks dùng (bằng, null, not, lt, gt, in, some, startsWith, OR, NOT). Không dùng ngoài spec. */
 
 type Row = Record<string, unknown>;
 type Where = Record<string, unknown>;
@@ -14,6 +14,8 @@ function matchField(value: unknown, cond: unknown): boolean {
       if (value === null || value === undefined) return false;
       return value !== c.not;
     }
+    if ('some' in c) return Array.isArray(value) && value.some((v) => matchWhere(v as Row, c.some as Where));
+    if ('gt' in c) return typeof value === 'number' && value > (c.gt as number);
     if ('lt' in c) return value instanceof Date && value.getTime() < (c.lt as Date).getTime();
     if ('startsWith' in c) return typeof value === 'string' && value.startsWith(c.startsWith as string);
     if ('in' in c) return (c.in as unknown[]).includes(value);

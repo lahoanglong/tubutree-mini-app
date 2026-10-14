@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { PANCAKE_CANCEL, PANCAKE_PUSH, PANCAKE_PUSHABLE_STATUSES, PancakeOrderService } from './pancake-order.service';
+import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
 import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
@@ -80,7 +81,7 @@ export class PancakePushReconcileService {
           AND: [
             // Đơn đại lý còn hàng đặt trước (chưa đủ 100%) chỉ được đẩy khi DealerBackorderService lấp đủ
             // (thiết kế duyệt 12/09): lọc ngay trong query để chúng không chiếm lô BATCH_SIZE của đơn khác.
-            { NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } } },
+            { NOT: DEALER_AWAITING_STOCK_WHERE },
             // Trả trước qua cổng chưa có tiền: chờ thanh toán (lật PAID tự xếp đẩy), không chiếm lô.
             { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } },
           ],
@@ -106,7 +107,7 @@ export class PancakePushReconcileService {
       this.logger.warn(`Phát hiện ${stale.length} đơn chưa đẩy Pancake sau ${PancakePushReconcileService.STALE_MINUTES} phút — re-enqueue.`);
       for (const order of stale) {
         try {
-          if (order.type === 'DEALER' && order.items?.some((i) => i.backorderedQty > 0)) continue;
+          if (isDealerAwaitingStock(order)) continue;
           const waitingGomdon =
             order.hasRecyclingPickup &&
             !order.gomdonOrderId &&
@@ -167,7 +168,7 @@ export class PancakePushReconcileService {
           createdAt: { lt: maxAge },
           OR: [{ pancakePushStatus: null }, { pancakePushStatus: { notIn: [PANCAKE_PUSH.STALE] } }],
           AND: [
-            { NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } } },
+            { NOT: DEALER_AWAITING_STOCK_WHERE },
             { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } },
           ],
         },

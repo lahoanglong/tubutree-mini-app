@@ -5,6 +5,7 @@ import { PANCAKE_PUSH, PancakeOrderService } from '../../src/modules/integration
 import { PancakeSyncHooks } from '../../src/modules/integrations/pancake/pancake-sync-hooks';
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
 import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
+import { pancakeUnsyncedWhere } from '../../src/modules/admin/admin-order-filter';
 import { createOrder, createUser, randCode, sleep, summarize, warmPool } from './helpers';
 
 /**
@@ -128,6 +129,46 @@ describe('Pancake push race (real Postgres)', () => {
     const saved = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
     expect(saved).toMatchObject({ status: 'CANCELLED', pancakeOrderId: pkId, pancakeCancelStatus: 'PENDING' });
     expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: o.id }, { jobId: `cancel-${o.id}` });
+  });
+
+  it('đơn đại lý đã trả tiền nhưng còn hàng đặt trước → không lên kho, không vào "Chưa lên Pancake"; đủ hàng mới đẩy một lần (R1)', async () => {
+    const buyer = await createUser(prisma);
+    const o = await createOrder(prisma, {
+      userId: buyer.id,
+      type: 'DEALER',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      total: 100_000,
+      subtotal: 100_000,
+      shippingFee: 0,
+      createdAt: new Date(Date.now() - 3_600_000),
+      items: {
+        create: [
+          { variationId: `var-${randCode(6)}`, productName: 'SP IT', variationName: '1kg', unitPrice: 50_000, quantity: 2, total: 100_000, backorderedQty: 1 },
+        ],
+      },
+    });
+    const pkId = `pk-${randCode(8)}`;
+    client.createOrder.mockImplementation(async () => {
+      await sleep(100);
+      return { id: pkId };
+    });
+
+    await service.syncPayment(o.id);
+    expect(client.createOrder).not.toHaveBeenCalled();
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).toMatchObject({
+      pancakeOrderId: null,
+      pancakePushStatus: PANCAKE_PUSH.WAITING_STOCK,
+      pancakePushClaimedAt: null,
+    });
+    expect(await prisma.order.count({ where: { id: o.id, ...pancakeUnsyncedWhere() } })).toBe(0);
+    await expect(service.retryPushByAdmin('admin-it', o.id)).rejects.toThrow('còn hàng đặt trước');
+
+    await prisma.orderItem.updateMany({ where: { orderId: o.id }, data: { backorderedQty: 0 } });
+    const results = await Promise.allSettled([service.pushOrder(o.id), service.syncPayment(o.id), service.pushOrder(o.id)]);
+    console.log('[dealer filled x3] %j', summarize(results).errors);
+    expect(client.createOrder).toHaveBeenCalledTimes(1);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).pancakeOrderId).toBe(pkId);
   });
 
   it('job push chạy lại sau khi đơn đã huỷ → không tạo đơn kho (PANCAKE-3)', async () => {

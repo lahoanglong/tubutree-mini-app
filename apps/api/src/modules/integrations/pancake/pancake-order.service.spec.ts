@@ -388,6 +388,54 @@ describe('PancakeOrderService.syncPayment', () => {
   });
 });
 
+describe('PancakeOrderService — đơn đại lý còn hàng đặt trước chưa lên kho (R1)', () => {
+  const backordered = {
+    type: 'DEALER',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'PAID',
+    items: [
+      { id: 'i1', variationId: 'v1', quantity: 5, unitPrice: 40_000, backorderedQty: 3 },
+      { id: 'i2', variationId: 'v2', quantity: 1, unitPrice: 30_000, backorderedQty: 0 },
+    ],
+  };
+
+  it('admin xác nhận chuyển khoản (syncPayment) khi còn thiếu hàng → KHÔNG tạo đơn Pancake, WAITING_STOCK', async () => {
+    const t = setup(backordered);
+    await t.svc.syncPayment('o1');
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({ pancakeOrderId: null, pancakePushStatus: PANCAKE_PUSH.WAITING_STOCK, pancakePushClaimedAt: null });
+  });
+
+  it('job push / cron với đơn còn thiếu hàng → không đẩy', async () => {
+    const t = setup({ ...backordered, paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.WAITING_STOCK);
+  });
+
+  it('"Đẩy lại Pancake" của admin với đơn còn thiếu hàng → từ chối, không xếp job', async () => {
+    const t = setup(backordered);
+    const err = await t.svc.retryPushByAdmin('admin1', 'o1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe('Đơn TUBU1 còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.');
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('đã lấp đủ hàng (backorderedQty = 0) → đẩy bình thường', async () => {
+    const t = setup({ ...backordered, items: backordered.items.map((i) => ({ ...i, backorderedQty: 0 })) });
+    await t.svc.syncPayment('o1');
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+    expect(t.row().pancakeOrderId).toBe('pk-new');
+  });
+
+  it('đơn lẻ (không phải đại lý) có backorderedQty lạ → vẫn đẩy (chỉ đơn đại lý được đặt trước)', async () => {
+    const t = setup({ items: [{ id: 'i1', variationId: 'v1', quantity: 2, unitPrice: 100_000, backorderedQty: 1 }] });
+    await t.svc.pushOrder('o1');
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PancakeOrderService.cancelOnPancake (PANCAKE-2, D1)', () => {
   it('đơn Pancake còn mới → PUT status 6, CANCELLED, gỡ cờ chờ huỷ', async () => {
     const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1', pancakeCancelStatus: 'PENDING', pancakeAttention: 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake (x)' });

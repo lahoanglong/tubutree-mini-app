@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { GOMDON_CANCEL, GOMDON_CARRIER, GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
+import { DEALER_AWAITING_STOCK_WHERE } from '../dealer/dealer-awaiting-stock';
 
 // "Cần xử lý thu gom": trạng thái vận đơn Gomdon mà KHÔNG ai tự xử lý được — tạo vận đơn thất bại /
 // không rõ đã tạo / chưa cấu hình (kho phải tạo tay theo ghi chú Pancake), hoặc mã Gomdon báo huỷ /
@@ -63,7 +64,7 @@ export type RecyclingFilter = 'attention' | 'all';
 /**
  * attention = hàng đợi "Cần xử lý Pancake" (Order.pancakeAttention — xem PancakeProcessor.flagAttention).
  * unsynced = đơn còn trong kho mà chưa lên Pancake: đang lỗi / hết lượt / quá hạn tự đẩy / chưa cấu hình, hoặc đơn
- * cũ chưa có trạng thái đồng bộ mà đã quá 15 phút.
+ * cũ chưa có trạng thái đồng bộ mà đã quá 15 phút. Trừ đơn đại lý còn hàng đặt trước: chưa được phép lên kho.
  */
 export type PancakeFilter = 'attention' | 'unsynced';
 export const PANCAKE_FILTERS: readonly PancakeFilter[] = ['attention', 'unsynced'];
@@ -75,6 +76,7 @@ export function pancakeUnsyncedWhere(now: Date = new Date()): Prisma.OrderWhereI
   return {
     pancakeOrderId: null,
     status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] },
+    NOT: DEALER_AWAITING_STOCK_WHERE,
     OR: [
       { pancakePushStatus: { in: PANCAKE_UNSYNCED_STATUSES } },
       { pancakePushStatus: null, createdAt: { lt: new Date(now.getTime() - PANCAKE_UNSYNCED_GRACE_MS) } },

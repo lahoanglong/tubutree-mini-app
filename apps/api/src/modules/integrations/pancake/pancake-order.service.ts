@@ -13,6 +13,7 @@ import { GOMDON_STATE } from '../gomdon/gomdon-status';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { isPrepaidMethod } from '../../orders/order-transition';
 import { resolveDealerRecipient } from '../../dealer/dealer-recipient';
+import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import {
   ALL_LINES,
   buildPancakeOrderBody,
@@ -45,6 +46,7 @@ export { PANCAKE_TAG_GOMDON, PANCAKE_TAG_RECYCLING } from './pancake-order-body'
 /** Trạng thái đẩy đơn (Order.pancakePushStatus). */
 export const PANCAKE_PUSH = {
   WAITING_PAYMENT: 'WAITING_PAYMENT',
+  WAITING_STOCK: 'WAITING_STOCK',
   PENDING: 'PENDING',
   PUSHING: 'PUSHING',
   SYNCED: 'SYNCED',
@@ -66,16 +68,24 @@ export const PANCAKE_CANCEL = {
 /** Trạng thái đơn Tubu còn được tự đẩy sang kho: chưa rời kho, chưa kết thúc. */
 export const PANCAKE_PUSHABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] as const;
 
-export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'DEAD' | 'LEFT_WAREHOUSE';
+export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'WAIT_STOCK' | 'DEAD' | 'LEFT_WAREHOUSE';
 
 /**
  * Đơn có được đẩy sang kho lúc này không. Trả trước qua cổng (ZaloPay/VNPay/Ví) chưa PAID thì chờ tiền — kho không
  * cần thấy đơn có thể bị bỏ dở. Chuyển khoản chưa PAID VẪN đẩy (kèm "CHỜ CHUYỂN KHOẢN"): Pancake đối soát tài
- * khoản ngân hàng theo nội dung CK = mã đơn, cần có đơn để khớp (bank-transfer.service.ts).
+ * khoản ngân hàng theo nội dung CK = mã đơn, cần có đơn để khớp (bank-transfer.service.ts). Đơn đại lý còn hàng đặt
+ * trước thì chờ đủ hàng dù đã thanh toán (dealer-awaiting-stock.ts).
  */
-export function pancakePushGate(order: { status: string; paymentMethod: string; paymentStatus: string }): PancakePushGate {
+export function pancakePushGate(order: {
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  type: string;
+  items: { backorderedQty?: number | null }[];
+}): PancakePushGate {
   if (order.status === 'CANCELLED' || order.status === 'RETURNED') return 'DEAD';
   if (!(PANCAKE_PUSHABLE_STATUSES as readonly string[]).includes(order.status)) return 'LEFT_WAREHOUSE';
+  if (isDealerAwaitingStock(order)) return 'WAIT_STOCK';
   if (order.paymentStatus !== 'PAID' && isPrepaidMethod(order.paymentMethod) && order.paymentMethod !== 'BANK_TRANSFER') {
     return 'WAIT_PAYMENT';
   }
@@ -148,6 +158,10 @@ export class PancakeOrderService {
       await this.setPushStatus(order.id, PANCAKE_PUSH.WAITING_PAYMENT);
       return null;
     }
+    if (gate === 'WAIT_STOCK') {
+      await this.setPushStatus(order.id, PANCAKE_PUSH.WAITING_STOCK);
+      return null;
+    }
     if (!this.client.isConfigured()) {
       this.logger.warn(`Pancake chưa cấu hình — đơn ${order.code} giữ trạng thái chờ đồng bộ.`);
       await this.prisma.order.updateMany({
@@ -173,6 +187,7 @@ export class PancakeOrderService {
         id: order.id,
         pancakeOrderId: null,
         status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
+        NOT: DEALER_AWAITING_STOCK_WHERE,
         OR: [
           { pancakePushStatus: null },
           { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } },
@@ -187,7 +202,7 @@ export class PancakeOrderService {
       },
     });
     if (claim.count === 0) {
-      const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
       if (current.pancakeOrderId) return current.pancakeOrderId;
       if (pancakePushGate(current) !== 'PUSH') return this.pushOrder(order.id);
       throw new PancakeApiError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`, true);
@@ -252,7 +267,10 @@ export class PancakeOrderService {
    * tự đẩy. Đơn ĐÃ rời kho/đã giao thì không đẩy (kho sẽ giao lần hai).
    */
   async retryPushByAdmin(adminId: string, idOrCode: string): Promise<{ ok: true; message: string }> {
-    const order = await this.prisma.order.findFirst({ where: { OR: [{ id: idOrCode }, { code: idOrCode }] } });
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      include: { items: { select: { backorderedQty: true } } },
+    });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (order.pancakeOrderId) throw new BadRequestException(`Đơn ${order.code} đã có trên Pancake (#${order.pancakeOrderId}).`);
     const gate = pancakePushGate(order);
@@ -262,6 +280,9 @@ export class PancakeOrderService {
     }
     if (gate === 'WAIT_PAYMENT') {
       throw new BadRequestException(`Đơn ${order.code} trả trước (${order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
+    }
+    if (gate === 'WAIT_STOCK') {
+      throw new BadRequestException(`Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`);
     }
     if (!this.client.isConfigured()) throw new BadRequestException('Pancake chưa được cấu hình (PANCAKE_API_KEY/SHOP_ID).');
     if (this.pushInFlight(order)) throw new BadRequestException(`Đơn ${order.code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.`);
