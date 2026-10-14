@@ -16,7 +16,12 @@ interface Props {
 }
 
 const OPTIONS = [
-  { value: 'WALLET', Icon: Wallet, title: 'Ví Tubu', hint: 'Cộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng.' },
+  {
+    value: 'WALLET',
+    Icon: Wallet,
+    title: 'Ví Tubu',
+    hint: 'Cộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng.',
+  },
   {
     value: 'BANK',
     Icon: Landmark,
@@ -26,7 +31,14 @@ const OPTIONS = [
 ] as const;
 
 /** Khách chọn nơi nhận tiền hoàn (D2): Ví Tubu cộng ngay, hoặc tài khoản ngân hàng do Tubu chuyển khoản. */
-export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankError, amountLabel }: Props) {
+export function RefundDestinationPicker({
+  method,
+  onMethod,
+  bank,
+  onBank,
+  bankError,
+  amountLabel,
+}: Props) {
   const name = useId();
 
   useEffect(() => {
@@ -42,7 +54,11 @@ export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankEr
     };
   }, [method, bank.accountNumber, onBank]);
 
-  const input = (label: string, key: keyof RefundBankInput, extra: { inputMode?: 'numeric'; placeholder?: string } = {}) => (
+  const input = (
+    label: string,
+    key: keyof RefundBankInput,
+    extra: { inputMode?: 'numeric'; placeholder?: string } = {},
+  ) => (
     <label className="block">
       <span className="text-xs font-medium text-stone-700">{label}</span>
       <input
@@ -58,7 +74,9 @@ export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankEr
 
   return (
     <div role="radiogroup" aria-label="Nơi nhận tiền hoàn" className="space-y-2">
-      <p className="text-sm font-semibold text-stone-900">{amountLabel ? `Nhận lại ${amountLabel} về` : 'Nhận tiền hoàn về'}</p>
+      <p className="text-sm font-semibold text-stone-900">
+        {amountLabel ? `Nhận lại ${amountLabel} về` : 'Nhận tiền hoàn về'}
+      </p>
       {OPTIONS.map((opt) => {
         const checked = method === opt.value;
         return (
@@ -78,7 +96,9 @@ export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankEr
             />
             <opt.Icon className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
             <span className="min-w-0">
-              <span className={`block text-sm text-stone-900 ${checked ? 'font-semibold' : ''}`}>{opt.title}</span>
+              <span className={`block text-sm text-stone-900 ${checked ? 'font-semibold' : ''}`}>
+                {opt.title}
+              </span>
               <span className="block text-xs text-stone-600">{opt.hint}</span>
             </span>
           </label>

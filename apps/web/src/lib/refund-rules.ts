@@ -43,7 +43,11 @@ type CancelOrder = { paymentMethod: PaymentMethod; paymentStatus: PaymentStatus 
  */
 export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidTransfer' | 'none' {
   if (o.paymentStatus === 'PAID') return canRefundToBank(o.paymentMethod) ? 'choose' : 'wallet';
-  if (o.paymentStatus === 'UNPAID' && (o.paymentMethod === 'BANK_TRANSFER' || o.paymentMethod === 'ZALOPAY')) return 'unpaidTransfer';
+  if (
+    o.paymentStatus === 'UNPAID' &&
+    (o.paymentMethod === 'BANK_TRANSFER' || o.paymentMethod === 'ZALOPAY')
+  )
+    return 'unpaidTransfer';
   return 'none';
 }
 
@@ -59,12 +63,20 @@ export function bankDetailsError(b: RefundBankInput): string | null {
 /** Body nơi nhận tiền hoàn gửi API: chọn Ví thì không gửi tài khoản. */
 export function destinationBody(method: RefundMethodChoice, bank: RefundBankInput) {
   return method === 'BANK'
-    ? { refundMethod: 'BANK' as const, bankName: bank.bankName.trim(), accountNumber: bank.accountNumber.trim(), accountName: bank.accountName.trim() }
+    ? {
+        refundMethod: 'BANK' as const,
+        bankName: bank.bankName.trim(),
+        accountNumber: bank.accountNumber.trim(),
+        accountName: bank.accountName.trim(),
+      }
     : { refundMethod: 'WALLET' as const };
 }
 
 /** "Techcombank ••• 5678" — không hiện đủ số tài khoản trên màn hình. */
-export function maskedBank(bankName: string | null | undefined, accountNo: string | null | undefined): string {
+export function maskedBank(
+  bankName: string | null | undefined,
+  accountNo: string | null | undefined,
+): string {
   const tail = (accountNo ?? '').slice(-4);
   return [bankName?.trim() || 'Tài khoản', tail ? `••• ${tail}` : ''].filter(Boolean).join(' ');
 }
@@ -92,7 +104,8 @@ export function remainingByLine(
   const taken = new Map<string, number>();
   for (const r of returns) {
     if (r.status !== 'APPROVED') continue;
-    for (const it of r.items ?? []) taken.set(it.orderItemId, (taken.get(it.orderItemId) ?? 0) + it.quantity);
+    for (const it of r.items ?? [])
+      taken.set(it.orderItemId, (taken.get(it.orderItemId) ?? 0) + it.quantity);
   }
   return new Map(items.map((i) => [i.id, Math.max(0, i.quantity - (taken.get(i.id) ?? 0))]));
 }
@@ -105,9 +118,11 @@ export function returnFormError(input: {
   refundMethod: RefundMethodChoice;
   bank: RefundBankInput;
 }): string | null {
-  if (!input.lines.some((l) => l.selected && l.quantity > 0)) return 'Chọn ít nhất một sản phẩm muốn trả.';
+  if (!input.lines.some((l) => l.selected && l.quantity > 0))
+    return 'Chọn ít nhất một sản phẩm muốn trả.';
   if (!input.reasonCode) return 'Chọn lý do đổi/trả.';
-  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5) return 'Mô tả lý do (tối thiểu 5 ký tự).';
+  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5)
+    return 'Mô tả lý do (tối thiểu 5 ký tự).';
   if (input.refundMethod === 'BANK') return bankDetailsError(input.bank);
   return null;
 }
@@ -130,8 +145,17 @@ export interface MyRefund {
 }
 
 /** Một dòng trạng thái khoản hoàn cho khách: đang ở đâu, cần làm gì. */
-export function refundStatusText(r: MyRefund): { title: string; detail: string; tone: 'success' | 'warning' | 'muted' } {
-  const lead = r.kind === 'LATE_PAYMENT' ? 'Tiền về sau khi đơn đã huỷ' : r.kind === 'RETURN' ? 'Hoàn tiền trả hàng' : 'Hoàn tiền huỷ đơn';
+export function refundStatusText(r: MyRefund): {
+  title: string;
+  detail: string;
+  tone: 'success' | 'warning' | 'muted';
+} {
+  const lead =
+    r.kind === 'LATE_PAYMENT'
+      ? 'Tiền về sau khi đơn đã huỷ'
+      : r.kind === 'RETURN'
+        ? 'Hoàn tiền trả hàng'
+        : 'Hoàn tiền huỷ đơn';
   if (r.status === 'COMPLETED') {
     return r.method === 'WALLET'
       ? { title: `${lead}: đã hoàn vào Ví Tubu`, detail: '', tone: 'success' }
@@ -142,7 +166,11 @@ export function refundStatusText(r: MyRefund): { title: string; detail: string; 
         };
   }
   if (!r.bankAccountNo) {
-    return { title: `${lead}: chờ bạn chọn nơi nhận`, detail: 'Nhận về Ví Tubu ngay, hoặc tài khoản ngân hàng trong 1-3 ngày làm việc (miễn phí).', tone: 'warning' };
+    return {
+      title: `${lead}: chờ bạn chọn nơi nhận`,
+      detail: 'Nhận về Ví Tubu ngay, hoặc tài khoản ngân hàng trong 1-3 ngày làm việc (miễn phí).',
+      tone: 'warning',
+    };
   }
   return {
     title: `${lead}: Tubu đang chuyển khoản`,
@@ -152,7 +180,11 @@ export function refundStatusText(r: MyRefund): { title: string; detail: string; 
 }
 
 /** Đơn trả trước đang chờ tiền và còn hạn — hiện "Thanh toán trước HH:mm dd/MM/yyyy". */
-export function showsPaymentDeadline(o: { status: OrderStatus; paymentStatus: PaymentStatus; paymentDeadline?: string | null }): boolean {
+export function showsPaymentDeadline(o: {
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paymentDeadline?: string | null;
+}): boolean {
   return o.status === 'PENDING_PAYMENT' && o.paymentStatus === 'UNPAID' && !!o.paymentDeadline;
 }
 
@@ -182,7 +214,12 @@ export function returnStatusLabel(r: ReturnLike): string {
 }
 
 /** "Nước giặt ×1, Xịt khoáng ×2" — các dòng của một yêu cầu trả. */
-export function returnLinesText(r: ReturnLike, items: { id: string; productName: string }[]): string {
+export function returnLinesText(
+  r: ReturnLike,
+  items: { id: string; productName: string }[],
+): string {
   const names = new Map(items.map((i) => [i.id, i.productName]));
-  return (r.items ?? []).map((l) => `${names.get(l.orderItemId) ?? 'Sản phẩm'} ×${l.quantity}`).join(', ');
+  return (r.items ?? [])
+    .map((l) => `${names.get(l.orderItemId) ?? 'Sản phẩm'} ×${l.quantity}`)
+    .join(', ');
 }

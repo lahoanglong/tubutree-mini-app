@@ -24,7 +24,11 @@ const TONE = {
 
 /** Khoản hoàn tiền của đơn (chuyển khoản chờ xử lý, tiền về muộn): trạng thái từng bước và chọn nơi nhận (D2). */
 export function OrderRefunds({ orderId }: { orderId: string }) {
-  const refunds = useQuery({ queryKey: ['my-refunds', orderId], queryFn: () => fetchMyRefunds(orderId), retry: 0 });
+  const refunds = useQuery({
+    queryKey: ['my-refunds', orderId],
+    queryFn: () => fetchMyRefunds(orderId),
+    retry: 0,
+  });
   const [choosing, setChoosing] = useState<MyRefund | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
@@ -83,12 +87,26 @@ export function OrderRefunds({ orderId }: { orderId: string }) {
   );
 }
 
-function ChooseDestination({ refund, onClose, onSaved }: { refund: MyRefund; onClose: () => void; onSaved: (msg: string) => void }) {
+function ChooseDestination({
+  refund,
+  onClose,
+  onSaved,
+}: {
+  refund: MyRefund;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
   const qc = useQueryClient();
-  const [method, setMethod] = useState<RefundMethodChoice>(refund.bankAccountNo ? 'BANK' : 'WALLET');
+  const [method, setMethod] = useState<RefundMethodChoice>(
+    refund.bankAccountNo ? 'BANK' : 'WALLET',
+  );
   const [bank, setBank] = useState<RefundBankInput>(
     refund.bankAccountNo
-      ? { bankName: refund.bankName ?? '', accountNumber: refund.bankAccountNo, accountName: refund.bankAccountName ?? '' }
+      ? {
+          bankName: refund.bankName ?? '',
+          accountNumber: refund.bankAccountNo,
+          accountName: refund.bankAccountName ?? '',
+        }
       : EMPTY_BANK,
   );
   const [touched, setTouched] = useState(false);
@@ -107,7 +125,11 @@ function ChooseDestination({ refund, onClose, onSaved }: { refund: MyRefund; onC
   });
 
   return (
-    <div role="group" aria-label={`Nơi nhận tiền hoàn đơn ${refund.orderCode}`} className="mt-2 rounded-control border border-stone-200 p-3">
+    <div
+      role="group"
+      aria-label={`Nơi nhận tiền hoàn đơn ${refund.orderCode}`}
+      className="mt-2 rounded-control border border-stone-200 p-3"
+    >
       <RefundDestinationPicker
         method={method}
         onMethod={setMethod}
@@ -122,7 +144,12 @@ function ChooseDestination({ refund, onClose, onSaved }: { refund: MyRefund; onC
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={onClose} disabled={save.isPending} className={ui.btnSecondary}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={save.isPending}
+          className={ui.btnSecondary}
+        >
           Để sau
         </button>
         <button

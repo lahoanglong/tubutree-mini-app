@@ -72,7 +72,9 @@ export function ReturnRequestForm({
       requestReturn(o.code, {
         reasonCode: reasonCode!,
         reason: reason.trim() || undefined,
-        items: lines.filter((l) => l.selected && l.quantity > 0).map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
+        items: lines
+          .filter((l) => l.selected && l.quantity > 0)
+          .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
         ...(showsMoney && bankAllowed ? destinationBody(method, bank) : {}),
       }),
     onSuccess: () => {
@@ -99,14 +101,16 @@ export function ReturnRequestForm({
           Yêu cầu đổi/trả
         </h3>
         <p className="mt-1 text-xs text-stone-600">
-          Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24 giờ. Cần gửi ảnh minh chứng? Gửi kèm mã đơn {o.code}{' '}
-          qua email {supportEmail}.
+          Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24 giờ. Cần gửi ảnh minh
+          chứng? Gửi kèm mã đơn {o.code} qua email {supportEmail}.
         </p>
       </div>
 
       <fieldset>
         <legend className="text-sm font-semibold text-stone-900">Sản phẩm muốn trả</legend>
-        {lines.length === 0 && <p className="mt-1 text-xs text-stone-600">Mọi sản phẩm của đơn đã được trả.</p>}
+        {lines.length === 0 && (
+          <p className="mt-1 text-xs text-stone-600">Mọi sản phẩm của đơn đã được trả.</p>
+        )}
         <ul className="mt-1 divide-y divide-stone-200">
           {lines.map((l) => (
             <li key={l.orderItemId} className="flex flex-wrap items-center gap-2 py-1">
@@ -125,7 +129,11 @@ export function ReturnRequestForm({
                 </span>
               </label>
               {l.selected && l.remaining > 1 && (
-                <div className="flex items-center gap-1" role="group" aria-label={`Số lượng trả ${l.productName}`}>
+                <div
+                  className="flex items-center gap-1"
+                  role="group"
+                  aria-label={`Số lượng trả ${l.productName}`}
+                >
                   <button
                     type="button"
                     aria-label={`Giảm số lượng ${l.productName}`}
@@ -135,7 +143,10 @@ export function ReturnRequestForm({
                   >
                     <Minus className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-live="polite">
+                  <span
+                    className="w-8 text-center text-sm font-semibold tabular-nums"
+                    aria-live="polite"
+                  >
                     {l.quantity}
                   </span>
                   <button
@@ -158,7 +169,10 @@ export function ReturnRequestForm({
         <legend className="text-sm font-semibold text-stone-900">Lý do</legend>
         <div className="mt-1 grid gap-1 sm:grid-cols-2">
           {RETURN_REASONS.map((r) => (
-            <label key={r.code} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-1">
+            <label
+              key={r.code}
+              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-1"
+            >
               <input
                 type="radio"
                 name={reasonName}
@@ -178,7 +192,9 @@ export function ReturnRequestForm({
             onChange={(e) => setReason(e.target.value)}
             maxLength={REASON_MAX}
             rows={3}
-            placeholder={reasonCode === 'OTHER' ? 'Mô tả lý do (tối thiểu 5 ký tự)…' : 'Không bắt buộc'}
+            placeholder={
+              reasonCode === 'OTHER' ? 'Mô tả lý do (tối thiểu 5 ký tự)…' : 'Không bắt buộc'
+            }
             className={`${ui.field} mt-1 py-2`}
           />
         </label>
@@ -194,11 +210,13 @@ export function ReturnRequestForm({
             bankError={touched ? bankError : null}
           />
         ) : (
-          <p className="text-xs text-stone-600">Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.</p>
+          <p className="text-xs text-stone-600">
+            Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.
+          </p>
         ))}
       <p className="text-xs text-stone-600">
-        Số tiền hoàn = giá trị sản phẩm trả sau khi trừ phần giảm giá và điểm đã dùng tương ứng. Phí ship chỉ hoàn khi trả cả đơn
-        hoặc lỗi do Tubu.
+        Số tiền hoàn = giá trị sản phẩm trả sau khi trừ phần giảm giá và điểm đã dùng tương ứng. Phí
+        ship chỉ hoàn khi trả cả đơn hoặc lỗi do Tubu.
       </p>
 
       {touched && formError && (
@@ -212,10 +230,19 @@ export function ReturnRequestForm({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={onClose} disabled={submit.isPending} className={ui.btnSecondary}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={submit.isPending}
+          className={ui.btnSecondary}
+        >
           Đóng
         </button>
-        <button type="submit" disabled={submit.isPending || lines.length === 0} className={ui.btnPrimary}>
+        <button
+          type="submit"
+          disabled={submit.isPending || lines.length === 0}
+          className={ui.btnPrimary}
+        >
           {submit.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
         </button>
       </div>
