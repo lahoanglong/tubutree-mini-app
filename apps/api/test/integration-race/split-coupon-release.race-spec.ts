@@ -2,17 +2,21 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { OrdersService } from '../../src/modules/orders/orders.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import type { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import type { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
+import type { CartService } from '../../src/modules/cart/cart.service';
+import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * Lần đặt bị tách theo nơi giao (D4): phần giảm của mã chia cho mọi đơn con, lượt dùng mã gắn đơn đầu. Huỷ đơn đầu khi đơn
  * gian hàng còn sống không được trả lượt (mã dùng lại được trong khi đơn kia vẫn hưởng giảm); huỷ hết cả nhóm, kể cả cùng
  * lúc, thì trả đúng một lần. CouponsService, OrderReversalService, OrderStatusService là bản thật trên Postgres.
+ * Chi tiết đơn của khách (OrdersService.detailView) ghi đúng tên mã trên đơn con không giữ lượt dùng mã (R4-BUYER-6).
  */
 describe('Trả lượt dùng mã của lần đặt bị tách (real Postgres)', () => {
   let prisma: PrismaService;
@@ -136,5 +140,26 @@ describe('Trả lượt dùng mã của lần đặt bị tách (real Postgres)'
       expect(statuses.every((o) => o.status === 'CANCELLED')).toBe(true);
       expect(state).toEqual({ usedCount: 0, redemptions: 0 });
     }
+  });
+
+  it('(c) chi tiết đơn gian hàng của lần đặt có mã: groupCouponCode là mã của đơn đầu; đơn đầu tự có couponCode, không lặp lại', async () => {
+    const { coupon, user, primary, shop } = await splitGroup();
+    const orders = new OrdersService(
+      prisma,
+      {} as unknown as LoyaltyService,
+      {} as unknown as CartService,
+      {} as unknown as NotificationsService,
+      {} as unknown as SystemConfigService,
+      {} as unknown as AffiliateService,
+      reversal,
+    );
+
+    const shopView = await orders.detailView(user.id, shop.code);
+    const primaryView = await orders.detailView(user.id, primary.code);
+
+    expect(shopView.couponCode).toBeNull();
+    expect(shopView.groupCouponCode).toBe(coupon.code);
+    expect(primaryView.couponCode).toBe(coupon.code);
+    expect(primaryView.groupCouponCode).toBeNull();
   });
 });
