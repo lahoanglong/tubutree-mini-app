@@ -4,7 +4,11 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { UnpaidPrepaidTransitionError } from '../../src/modules/orders/order-transition';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
-import { PENDING_PAYMENT_TTL_KEY, PendingPaymentExpiryCron } from '../../src/modules/orders/pending-payment-expiry.cron';
+import {
+  DEALER_PENDING_PAYMENT_TTL_KEY,
+  PENDING_PAYMENT_TTL_KEY,
+  PendingPaymentExpiryCron,
+} from '../../src/modules/orders/pending-payment-expiry.cron';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import type { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import type { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
@@ -31,6 +35,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     await prisma.$connect();
     await warmPool(prisma);
     await setConfig(prisma, PENDING_PAYMENT_TTL_KEY, 24);
+    await setConfig(prisma, DEALER_PENDING_PAYMENT_TTL_KEY, 72);
     const loyalty = {
       creditOrderPoints: jest.fn().mockResolvedValue(undefined),
       reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
@@ -277,9 +282,10 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     expect(after.note?.split('vận chuyển đã báo DELIVERED')).toHaveLength(2);
   });
 
-  it('(e) phạm vi: đơn mới đặt, đơn đại lý, đơn COD, đơn đã PAID → không bị đụng tới', async () => {
+  it('(e) phạm vi: đơn mới đặt, đơn đại lý còn trong hạn riêng, đơn COD, đơn đã PAID → không bị đụng tới', async () => {
     const fresh = await staleOrder({ createdAt: new Date() });
-    const dealer = await staleOrder({ type: 'DEALER' });
+    // Quá hạn khách lẻ (24 giờ) nhưng còn trong hạn đơn đại lý (72 giờ).
+    const dealer = await staleOrder({ type: 'DEALER', createdAt: new Date(Date.now() - 48 * 3_600_000) });
     const cod = await staleOrder({ paymentMethod: 'COD' });
     const paid = await staleOrder({ paymentStatus: 'PAID' });
     await newCron().expireStale();
@@ -289,5 +295,15 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
       expect(st.stock).toBe(START_STOCK);
       expect(st.history).toHaveLength(0);
     }
+  });
+
+  it('(i) đơn đại lý chuyển khoản quá hạn riêng (SELLER-7) → huỷ và hoàn kho đúng 1 lần, chạy cron lặp không huỷ lại', async () => {
+    const dealer = await staleOrder({ type: 'DEALER' });
+    await Promise.all([newCron().expireStale(), newCron().expireStale()]);
+    await newCron().expireStale();
+    const st = await state(dealer.order.id, dealer.variationId, dealer.user.id);
+    expect(st.order.status).toBe('CANCELLED');
+    expect(st.history.filter((h) => h.toStatus === 'CANCELLED')).toHaveLength(1);
+    expectConsistent(st);
   });
 });
