@@ -164,6 +164,8 @@ export default function OrderDetailPage() {
     onError: (e: unknown) => {
       setConfirmCancel(false);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Kho đã bàn giao vận chuyển: BE vừa đồng bộ trạng thái mới — tải lại để ẩn nút huỷ.
+      void queryClient.invalidateQueries({ queryKey: ['order', code] });
     },
   });
 
@@ -211,8 +213,10 @@ export default function OrderDetailPage() {
   const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
   const isPaidAssistedByMe =
     !!assisted.placedForCustomer && o.paymentStatus === 'PAID' && !!meId && assisted.referrerUserId === meId;
+  // Khớp OrdersService.assertCustomerCancellable (D1): khách huỷ được tới trước khi bàn giao vận chuyển; đơn đại lý
+  // chỉ tới Đã xác nhận. Kho Pancake đã gửi hàng thì BE từ chối kèm lời "liên hệ CSKH".
   const canCancel =
-    (o.status === 'PENDING_PAYMENT' || o.status === 'CONFIRMED') &&
+    (o.type === 'DEALER' ? ['PENDING_PAYMENT', 'CONFIRMED'] : ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED']).includes(o.status) &&
     !(o.hasRecyclingPickup && isRecyclingPickedUp(o.gomdonStatus)) &&
     !isPaidAssistedByMe;
   const recycling = o.hasRecyclingPickup ? recyclingPickupView(o) : null;

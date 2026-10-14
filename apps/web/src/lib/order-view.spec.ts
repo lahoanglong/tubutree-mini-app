@@ -92,12 +92,18 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
 });
 
 describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', () => {
-  it('chỉ Chờ thanh toán / Đã xác nhận mới hủy được', () => {
+  it('hủy được tới trước khi bàn giao vận chuyển (D1, BUYERWEB-5): Chờ thanh toán / Đã xác nhận / Đang đóng gói', () => {
     expect(canCancelOrder({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
     expect(canCancelOrder({ status: 'CONFIRMED' }, 'u1')).toBe(true);
-    for (const status of ['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED']) {
+    expect(canCancelOrder({ status: 'PACKED' }, 'u1')).toBe(true);
+    for (const status of ['SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED']) {
       expect(canCancelOrder({ status }, 'u1')).toBe(false);
     }
+  });
+
+  it('đơn đại lý giữ mốc cũ: Đang đóng gói thì không tự hủy', () => {
+    expect(canCancelOrder({ status: 'PACKED', type: 'DEALER' }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'CONFIRMED', type: 'DEALER' }, 'u1')).toBe(true);
   });
 
   it('đơn CTV lên hộ khách đã trả tiền: CTV không tự hủy; khách cuối hoặc đơn chưa trả thì vẫn hủy', () => {

@@ -228,6 +228,32 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
 // Cùng dải với scripts/uiux/static-scan.mjs, thêm ⌛ ⏳ ⭐.
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿\u231A\u231B\u23E9-\u23FF\u2B50]/u;
 
+describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuyển (D1, BUYERMINI-1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn lẻ đang đóng gói vẫn có nút "Hủy đơn"; đơn đại lý đang đóng gói / đơn đang giao thì không', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID' });
+    const packed = renderPage();
+    expect(await screen.findByRole('button', { name: 'Hủy đơn' })).toBeInTheDocument();
+    packed.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'DEALER', status: 'PACKED', paymentStatus: 'UNPAID' });
+    const dealer = renderPage();
+    expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    dealer.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'SHIPPING', paymentStatus: 'UNPAID' });
+    renderPage();
+    expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
+});
+
 describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
