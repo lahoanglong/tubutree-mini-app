@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
@@ -15,6 +16,7 @@ import {
   checkoutQuote,
   placeOrder,
   getPublicConfig,
+  getMe,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
@@ -22,6 +24,17 @@ import {
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
 import { checkoutPointsOffer, zeroTotalNote } from '@/lib/checkout-points';
+import {
+  ORDER_NOTE_MAX,
+  effectiveReferralCode,
+  isCartFixableError,
+  isInvoiceValid,
+  outOfStockLine,
+  overStockMessage,
+  shouldFallbackToCod,
+  walletUnavailableReason,
+} from '@/lib/checkout-rules';
+import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
 import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -29,25 +42,48 @@ import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
+import { EMPTY_INVOICE, InvoiceSection, loadSavedInvoice, saveInvoice } from './invoice-section';
 import { fulfillerLabel } from '@/lib/shipments';
 
-const NOTE_MAX = 300;
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
 export default function CheckoutPage() {
   const phase = useAuthPhase();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
+  const [wantInvoice, setWantInvoice] = useState(false);
+  const [invoice, setInvoice] = useState(EMPTY_INVOICE);
+  // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
+  const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
 
   const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
+  // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
+  // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
+  const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
+
+  // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
+  // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
+  const [selection] = useState(() => recallCheckoutSelection());
+  const cartLoaded = !!cartQ.data;
+  const itemIds = cartLoaded ? reconcileSelection(selection, cartQ.data!.items.map((it) => it.id)) : undefined;
+  const itemIdsKey = itemIds ? itemIds.join(',') : '';
+  const cartReady = selection == null || cartLoaded;
+  const checkoutItems = itemIds ? (cartQ.data?.items ?? []).filter((it) => itemIds.includes(it.id)) : (cartQ.data?.items ?? []);
+
+  useEffect(() => {
+    setInvoice(loadSavedInvoice());
+  }, []);
 
   useEffect(() => {
     if (addrQ.data && addressId === null) {
@@ -86,10 +122,9 @@ export default function CheckoutPage() {
   // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
   const couponChanging = useIsMutating({ mutationKey: COUPON_MUTATION_KEY }) > 0;
   const quoteQ = useQuery({
-    queryKey: ['quote', addressId, ctvSlug, usePoints],
-    queryFn: () =>
-      checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug),
-    enabled: !!addressId && phase === 'authenticated',
+    queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey],
+    queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
+    enabled: !!addressId && phase === 'authenticated' && cartReady,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -107,10 +142,16 @@ export default function CheckoutPage() {
   const blocked: Record<string, string> = quote?.blockedPaymentMethods ?? {};
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
-  const paymentBlocked = !!quote?.blockedPaymentMethods?.[payment];
+  // Đang chọn Ví mà tổng đơn vượt số dư, hoặc phương thức bị máy chủ khoá cho giỏ này → về COD thay vì để lệnh đặt bị từ chối.
+  const mustUseCod = !!quote && (shouldFallbackToCod(payment, walletBalance, quote.total) || !!quote.blockedPaymentMethods?.[payment]);
   useEffect(() => {
-    if (paymentBlocked) setPayment('COD');
-  }, [paymentBlocked]);
+    if (mustUseCod) setPayment('COD');
+  }, [mustUseCod]);
+
+  const invoiceValid = isInvoiceValid(wantInvoice, invoice);
+  // Hết hàng/vượt tồn chỉ sửa được ở giỏ: chặn ngay ở đây (khách đi thẳng vào /thanh-toan hay lưu đường dẫn không phải
+  // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
+  const overStock = outOfStockLine(checkoutItems);
 
   const place = useMutation({
     mutationFn: () =>
@@ -119,6 +160,17 @@ export default function CheckoutPage() {
           addressId: addressId!,
           paymentMethod: zeroNote ? 'COD' : payment,
           ...(note.trim() ? { note: note.trim() } : {}),
+          ...(itemIds ? { itemIds } : {}),
+          ...(wantInvoice
+            ? {
+                invoiceRequest: {
+                  taxCode: invoice.taxCode.trim(),
+                  companyName: invoice.companyName.trim(),
+                  address: invoice.address.trim(),
+                  email: invoice.email.trim(),
+                },
+              }
+            : {}),
           // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
           // tạo đơn COD có tiền phải trả mà khách không chọn.
           ...(zeroNote ? { quotedZeroTotal: true } : {}),
@@ -126,7 +178,7 @@ export default function CheckoutPage() {
           ...(quote ? { expectedTotal: quote.total } : {}),
           pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
-          referralCode: sfCtx.referralCode ?? undefined,
+          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
           // Chỉ có khoá khi bật + chọn (API forbidNonWhitelisted; tắt thì body y hệt bản cũ).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
         },
@@ -134,11 +186,18 @@ export default function CheckoutPage() {
       ),
     onSuccess: (order) => {
       setPlaced(order);
+      if (wantInvoice) saveInvoice(invoice);
+      clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
+      for (const key of ['me', 'wallet', 'wallet-txn', 'points-txn']) void qc.invalidateQueries({ queryKey: [key] });
     },
     onError: (e) => {
       if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
         void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+      } else if (e instanceof Error && isCartFixableError(e.message)) {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       }
     },
@@ -225,9 +284,34 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
+  const placeErrorMessage = place.error instanceof Error ? place.error.message : null;
+  const cartIssue = overStock
+    ? overStockMessage(overStock.productName, overStock.stock)
+    : placeErrorMessage && isCartFixableError(placeErrorMessage)
+      ? placeErrorMessage
+      : null;
+  const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
+  const walletReason = quote ? walletUnavailableReason(walletBalance, quote.total) : null;
+  const paymentMethods = [
+    { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)', hint: null as string | null },
+    { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng', hint: null as string | null },
+    { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})`, hint: walletReason },
+  ].map((m) => ({ ...m, hint: blocked[m.k] ?? m.hint }));
 
   return (
     <Shell>
+      {cartIssue && (
+        <div
+          role="alert"
+          data-testid="checkout-cart-issue"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+        >
+          <p className="min-w-0 flex-1 break-words">{cartIssue}</p>
+          <Link href="/gio-hang" className={ui.btnSecondary}>
+            Về giỏ hàng để sửa
+          </Link>
+        </div>
+      )}
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-4 md:col-span-2">
           <section className={`p-4 ${ui.card}`}>
@@ -261,11 +345,8 @@ export default function CheckoutPage() {
               <p className="mt-2 text-sm text-forest-800">{zeroNote}</p>
             ) : (
               <div className="mt-2 space-y-2">
-                {[
-                  { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
-                  { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
-                ].map((p) => {
-                  const reason = blocked[p.k];
+                {paymentMethods.map((p) => {
+                  const reason = p.hint;
                   return (
                     <div key={p.k}>
                       <label className={`${optionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
@@ -299,7 +380,7 @@ export default function CheckoutPage() {
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                maxLength={NOTE_MAX}
+                maxLength={ORDER_NOTE_MAX}
                 rows={3}
                 placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
                 disabled={place.isPending}
@@ -308,7 +389,7 @@ export default function CheckoutPage() {
               />
             </label>
             <p id="order-note-count" className="mt-1 text-xs text-stone-600">
-              {note.length}/{NOTE_MAX} ký tự
+              {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
 
@@ -322,6 +403,22 @@ export default function CheckoutPage() {
               disabled={place.isPending}
             />
           )}
+
+          <ReferralCodeBox
+            linkedCode={sfCtx.referralCode}
+            appliedCode={referralApplied}
+            onApplied={setReferralApplied}
+            disabled={place.isPending}
+          />
+
+          <InvoiceSection
+            want={wantInvoice}
+            onWant={setWantInvoice}
+            invoice={invoice}
+            onInvoice={setInvoice}
+            valid={invoiceValid}
+            disabled={place.isPending}
+          />
         </div>
 
         <div className={`h-fit p-4 ${ui.card}`}>
@@ -337,7 +434,7 @@ export default function CheckoutPage() {
               ? shipments.map((sh) => (
                   <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
                     <p className="text-xs font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
-                    {cart?.items
+                    {checkoutItems
                       .filter((it) => sh.itemIds.includes(it.id))
                       .map((it) => (
                         <div key={it.id} className="flex justify-between gap-2">
@@ -351,7 +448,7 @@ export default function CheckoutPage() {
                     </div>
                   </div>
                 ))
-              : cart?.items.map((it) => (
+              : checkoutItems.map((it) => (
                   <div key={it.id} className="flex justify-between gap-2">
                     <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
                     <span className="text-stone-900">{formatVnd(it.total)}</span>
@@ -363,7 +460,7 @@ export default function CheckoutPage() {
               Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
             </p>
           )}
-          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
+          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
           )}
@@ -377,7 +474,7 @@ export default function CheckoutPage() {
           {cart && (
             <CouponBox
               currentCode={cart.couponCode}
-              subtotal={cart.subtotal}
+              subtotal={previewSubtotal}
               notice={quote?.couponNotice ?? cart.couponNotice}
               disabled={place.isPending}
             />
@@ -431,14 +528,14 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || quoteStale || place.isPending}
+            disabled={!addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock}
             className={`${ui.btnPrimary} mt-4 w-full`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
-          {place.isError && (
+          {place.isError && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
-              <p>{place.error instanceof Error ? place.error.message : 'Đặt hàng thất bại.'}</p>
+              <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
               {place.error instanceof NetworkError && (
                 <p className="mt-1 text-stone-700">
                   Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}

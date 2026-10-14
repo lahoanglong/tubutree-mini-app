@@ -47,10 +47,12 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
-    const label = () => r.container.querySelector('label:has(input[type="checkbox"])')!.textContent ?? '';
+    const pointsLabel = () =>
+      [...r.container.querySelectorAll('label')].find((l) => l.querySelector('input[type="checkbox"]') && /Điểm Xanh/.test(l.textContent ?? ''))!;
+    const label = () => pointsLabel().textContent ?? '';
     expect(label()).toContain('Bạn có 500 Điểm Xanh');
 
-    click(r.container.querySelector<HTMLInputElement>('label input[type="checkbox"]')!);
+    click(pointsLabel().querySelector<HTMLInputElement>('input')!);
     await flush(8);
     expect(calls.pointsToUse).toContain(500);
     expect(label()).toContain('Dùng 20 Điểm Xanh — giảm 20.000đ');
