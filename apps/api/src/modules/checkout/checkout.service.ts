@@ -22,10 +22,41 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+import { SystemConfigService } from '../system-config/system-config.service';
+import {
+  allocateGroupAmounts,
+  groupByFulfiller,
+  PAYMENT_METHOD_NOT_ALLOWED,
+  paymentMethodBlockReason,
+  TUBU_FULFILLER_NAME,
+  type GroupAmounts,
+  type LineFulfiller,
+} from './checkout-split';
+import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 
 /** Mã lỗi ổn định: tổng lúc đặt cao hơn tổng khách đã thấy (giá/phí vừa đổi) — FE báo và tải lại báo giá. */
 export const TOTAL_CHANGED = 'TOTAL_CHANGED';
 export const TOTAL_CHANGED_MESSAGE_PREFIX = 'Tổng tiền đơn vừa thay đổi';
+
+/** Một kiện của lần đặt (một nơi giao) — thành một đơn khi đặt. */
+export interface CheckoutShipment extends GroupAmounts {
+  key: string;
+  fulfiller: LineFulfiller;
+  lineIds: string[];
+  shippingFee: number;
+  total: number;
+  pointsEarned: number;
+  /** Phí sàn chốt cho đơn đối tác (phân số); null với kiện Tubu. */
+  commissionPct: number | null;
+}
+
+/** Gian hàng ghi công resolve phía server (SELLER-4/5). */
+interface ResolvedStorefront {
+  id: string;
+  slug: string;
+  type: string;
+  ownerUserId: string | null;
+}
 
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
@@ -61,7 +92,21 @@ export class CheckoutService {
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
     @Optional() private readonly geo?: GeoService,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /**
+   * Gian hàng đang được ghi công: slug, subdomain hoặc tên miền riêng → gian hàng (đang xuất bản). Đơn lưu slug CHUẨN và id
+   * gian hàng, không lưu chuỗi khách gửi (SELLER-5) — subdomain đổi chủ được, slug thì không.
+   */
+  private async resolveStorefront(identifier: string | null | undefined): Promise<ResolvedStorefront | null> {
+    const value = identifier?.trim().toLowerCase();
+    if (!value) return null;
+    return this.prisma.storefront.findFirst({
+      where: { isPublished: true, OR: [{ slug: value }, { subdomain: value }, { customDomain: value }] },
+      select: { id: true, slug: true, type: true, ownerUserId: true },
+    });
+  }
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
   /**
@@ -102,9 +147,26 @@ export class CheckoutService {
   }
 
   private async quoteInner(userId: string, dto: QuoteDto) {
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, dto.storefrontSlug, dto.itemIds);
+    const storefront = await this.resolveStorefront(dto.storefrontSlug);
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
+    const blockedPaymentMethods: Record<string, string> = {};
+    for (const method of ['BANK_TRANSFER', 'ZALOPAY'] as const) {
+      const reason = paymentMethodBlockReason(computed.shipments, method);
+      if (reason) blockedPaymentMethods[method] = reason;
+    }
     return {
+      // Mỗi kiện thành một đơn riêng khi đặt (nơi giao, phí giao, tổng riêng) — FE chia nhóm theo đây.
+      shipments: computed.shipments.map((s) => ({
+        key: s.key,
+        fulfiller: { kind: s.fulfiller.kind, name: s.fulfiller.name, storefrontId: s.fulfiller.storefrontId },
+        itemIds: s.lineIds,
+        subtotal: s.subtotal,
+        discount: s.discount,
+        shippingFee: s.shippingFee,
+        total: s.total,
+      })),
+      blockedPaymentMethods,
       subtotal: cart.subtotal,
       discount: computed.discount,
       couponApplied: computed.couponApplied,
@@ -180,15 +242,21 @@ export class CheckoutService {
     // "chạm" giới thiệu trong hạn (3 ngày) → fallback. Resolve TRƯỚC compute() để combo +
     // storefrontSlug dùng đúng slug hiệu lực.
     let referrerUserId = await this.resolveReferrer(dto.referralCode, userId);
-    let storefrontSlug = dto.storefrontSlug ?? null;
-    if (!referrerUserId || !storefrontSlug) {
+    let storefront = await this.resolveStorefront(dto.storefrontSlug);
+    // Khách đang mua trong gian hàng CTV mà mã giới thiệu phiên không khớp ai (web suy mã từ subdomain, SELLER-4): chủ gian
+    // hàng là người giới thiệu — trước khi rơi về "chạm" cũ có thể của CTV khác.
+    if (!referrerUserId && storefront?.type === 'CTV' && storefront.ownerUserId && storefront.ownerUserId !== userId) {
+      referrerUserId = storefront.ownerUserId;
+    }
+    if (!referrerUserId || !storefront) {
       const touch = await this.affiliate.getActiveTouch(userId);
       if (touch) {
         if (!referrerUserId) referrerUserId = touch.referrerUserId;
         // chỉ lấy slug từ touch kind=ctv (brand không gắn storefrontSlug — tránh ô nhiễm analytics)
-        if (!storefrontSlug && touch.kind === 'ctv') storefrontSlug = touch.storefrontSlug;
+        if (!storefront && touch.kind === 'ctv') storefront = await this.resolveStorefront(touch.storefrontSlug);
       }
     }
+    const storefrontSlug = storefront?.slug ?? null;
 
     const { cart, user, address, computed } = await this.compute(
       userId,
@@ -217,6 +285,10 @@ export class CheckoutService {
       });
     }
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
+    const blocked = paymentMethodBlockReason(computed.shipments, paymentMethod);
+    if (blocked) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PAYMENT_METHOD_NOT_ALLOWED, message: blocked });
+    }
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');
     }
@@ -224,14 +296,27 @@ export class CheckoutService {
     if (paymentMethod === 'COD' && computed.total > codMax) {
       throw new BadRequestException('Đơn vượt hạn mức COD, vui lòng chọn phương thức khác.');
     }
+    // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
+    const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU');
+    if (dto.hasRecyclingPickup === true && !tubuShipment) {
+      throw new BadRequestException(
+        'Thu gom vật liệu tái chế chỉ đi cùng hàng do Tubu Tree giao. Vui lòng bỏ chọn thu gom hoặc thêm hàng Tubu Tree vào đơn.',
+      );
+    }
 
     // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
     const paid = paymentMethod === 'WALLET';
     const status = paymentMethod === 'COD' || paid ? 'CONFIRMED' : 'PENDING_PAYMENT';
-    // Phần trả bằng Điểm Xanh (cả lô quy đổi) đã bị trừ khỏi goodsAfterAll nên không sinh điểm mới.
-    const pointsEarned = computed.pointsEarned;
     const orderSource = storefrontSlug ? 'ctv_assisted' : dto.itemIds?.length ? 'buy_now' : 'checkout';
-    const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
+    const codes: string[] = [];
+    while (codes.length < computed.shipments.length) {
+      const next = await generateUniqueOrderCode(this.prisma, 'RETAIL');
+      if (!codes.includes(next)) codes.push(next);
+    }
+    const code = codes[0]!;
+    // Lần đặt bị tách theo nơi giao: mọi đơn mang mã đơn đầu để khách/admin thấy chúng đi cùng nhau.
+    const checkoutGroup = computed.shipments.length > 1 ? code : null;
+    const linesById = new Map(cart.items.map((l) => [l.id, l]));
 
     const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
     // Cửa sổ đổi/trả cho lockedOrderPoints trong tx, đọc NGOÀI tx: lần trượt cache cấu hình trong tx xin kết nối pool thứ
@@ -240,9 +325,9 @@ export class CheckoutService {
     // bắt buộc có số trong tx).
     const windowDays = usedStandard > 0 ? await this.loyalty.returnWindowDays() : null;
 
-    let order: Awaited<ReturnType<typeof this.prisma.order.create>>;
+    let orders: Awaited<ReturnType<typeof this.prisma.order.create>>[];
     try {
-      order = await this.prisma.$transaction(async (tx) => {
+      orders = await this.prisma.$transaction(async (tx) => {
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
         // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
@@ -270,54 +355,72 @@ export class CheckoutService {
             }
           }
         }
-        const created = await tx.order.create({
-          data: {
-            code,
-            idempotencyKey: idempotencyKey ?? null,
-            userId,
-            type: 'RETAIL',
-            status,
-            subtotal: cart.subtotal,
-            // P0 A3-05: gồm cả tierDiscount (giảm hạng tự động) — 4 nguồn giảm giá đã tách riêng
-            // (combo/coupon/hạng/điểm) đều cộng vào cùng 1 cột Order.discount để hiển thị/đối soát.
-            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount + computed.tierDiscount,
-            shippingFee: computed.shippingFee,
-            total: computed.total,
-            pointsEarned,
-            pointsUsed: computed.pointsUsed,
-            pointsUsedConverted: computed.pointsUsedConverted,
-            paymentMethod,
-            paymentStatus: paid ? 'PAID' : 'UNPAID',
-            shippingAddress: this.addressSnapshot(address),
-            referrerUserId,
-            storefrontSlug,
-            source: orderSource,
-            platform,
-            paidAt: paid ? new Date() : null,
-            // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
-            couponCode: computed.couponApplied ? cart.couponCode : null,
-            invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
-            invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
-            note: dto.note,
-            hasRecyclingPickup: dto.hasRecyclingPickup === true,
-            recyclingNote: dto.hasRecyclingPickup === true ? dto.recyclingNote?.trim() || null : null,
-            items: {
-              // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
-              // tính trên giá thực trả sau giảm combo (§7.2).
-              create: cart.items.map((l) => ({
-                variationId: l.variationId,
-                productName: l.productName,
-                // Snapshot slug để từ chi tiết đơn mở được trang SP (đánh giá / mua lại).
-                productSlug: l.slug,
-                variationName: l.variationName,
-                unitPrice: l.unitPrice,
-                quantity: l.quantity,
-                total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
-                flashSaleItemId: l.flashSaleItemId ?? null,
-              })),
-            },
-          },
-        });
+
+        const created: Awaited<ReturnType<typeof tx.order.create>>[] = [];
+        for (const [i, shipment] of computed.shipments.entries()) {
+          const isPrimary = i === 0;
+          const isTubu = shipment.fulfiller.kind === 'TUBU';
+          const orderCode = codes[i]!;
+          created.push(
+            await tx.order.create({
+              data: {
+                code: orderCode,
+                // Idempotency-Key + lượt dùng mã giảm giá gắn vào đơn đầu; gửi lại cùng key trả lại cả nhóm.
+                idempotencyKey: isPrimary ? idempotencyKey ?? null : null,
+                userId,
+                type: 'RETAIL',
+                status,
+                subtotal: shipment.subtotal,
+                // P0 A3-05: gồm cả tierDiscount (giảm hạng tự động) — 4 nguồn giảm giá đã tách riêng
+                // (combo/coupon/hạng/điểm) đều cộng vào cùng 1 cột Order.discount để hiển thị/đối soát.
+                discount: shipment.discount,
+                shippingFee: shipment.shippingFee,
+                total: shipment.total,
+                pointsEarned: shipment.pointsEarned,
+                pointsUsed: shipment.pointsUsed,
+                pointsUsedConverted: shipment.pointsUsedConverted,
+                paymentMethod,
+                paymentStatus: paid ? 'PAID' : 'UNPAID',
+                shippingAddress: this.addressSnapshot(address),
+                referrerUserId,
+                storefrontSlug,
+                storefrontId: storefront?.id ?? null,
+                fulfiller: shipment.fulfiller.kind === 'MERCHANT' ? 'MERCHANT' : 'TUBU',
+                fulfillerStorefrontId: shipment.fulfiller.storefrontId,
+                merchantCommissionPct: shipment.commissionPct,
+                checkoutGroup,
+                source: orderSource,
+                platform,
+                paidAt: paid ? new Date() : null,
+                // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
+                couponCode: isPrimary && computed.couponApplied ? cart.couponCode : null,
+                invoiceRequest: dto.invoiceRequest ? (dto.invoiceRequest as object) : undefined,
+                invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
+                note: dto.note,
+                hasRecyclingPickup: isTubu && dto.hasRecyclingPickup === true,
+                recyclingNote: isTubu && dto.hasRecyclingPickup === true ? dto.recyclingNote?.trim() || null : null,
+                items: {
+                  // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
+                  // tính trên giá thực trả sau giảm combo (§7.2).
+                  create: shipment.lineIds.map((lineId) => {
+                    const l = linesById.get(lineId)!;
+                    return {
+                      variationId: l.variationId,
+                      productName: l.productName,
+                      // Snapshot slug để từ chi tiết đơn mở được trang SP (đánh giá / mua lại).
+                      productSlug: l.slug,
+                      variationName: l.variationName,
+                      unitPrice: l.unitPrice,
+                      quantity: l.quantity,
+                      total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
+                      flashSaleItemId: l.flashSaleItemId ?? null,
+                    };
+                  }),
+                },
+              },
+            }),
+          );
+        }
 
         if (computed.pointsUsed > 0) {
           // Khoá dòng user (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/
@@ -346,26 +449,32 @@ export class CheckoutService {
             }
             throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${balance} điểm).`);
           }
-          await tx.pointsTransaction.create({
-            data: {
-              userId,
-              delta: -usedStandard,
-              lot: 'STANDARD',
-              reason: `ORDER_REDEEM:${code}`,
-              refType: 'ORDER',
-              refId: created.id,
-            },
-          });
+          // Sổ điểm theo từng đơn: huỷ một đơn của lần đặt bị tách chỉ hoàn đúng phần điểm của đơn đó.
+          for (const [i, shipment] of computed.shipments.entries()) {
+            const standard = shipment.pointsUsed - shipment.pointsUsedConverted;
+            if (standard <= 0) continue;
+            await tx.pointsTransaction.create({
+              data: {
+                userId,
+                delta: -standard,
+                lot: 'STANDARD',
+                reason: `ORDER_REDEEM:${codes[i]}`,
+                refType: 'ORDER',
+                refId: created[i]!.id,
+              },
+            });
+          }
         }
-        if (computed.pointsUsedConverted > 0) {
+        for (const [i, shipment] of computed.shipments.entries()) {
+          if (shipment.pointsUsedConverted <= 0) continue;
           // Lô quy đổi (spec 2.3): guard gte trên pointsConvertedBalance; thiếu → rollback cả đơn.
           const conv = await applyPointsDelta(tx, {
             userId,
-            delta: -computed.pointsUsedConverted,
+            delta: -shipment.pointsUsedConverted,
             lot: 'CONVERTED',
-            reason: `ORDER_REDEEM_CONVERTED:${code}`,
+            reason: `ORDER_REDEEM_CONVERTED:${codes[i]}`,
             refType: 'ORDER',
-            refId: created.id,
+            refId: created[i]!.id,
           });
           if (!conv.applied) {
             throw new BadRequestException(
@@ -373,65 +482,71 @@ export class CheckoutService {
             );
           }
         }
-        if (paymentMethod === 'WALLET' && computed.total > 0) {
-          // Trừ ví dưới khoá dòng user — chống overdraft khi 2 đơn WALLET chạy đồng thời; không đủ
-          // → throw, rollback toàn bộ đơn/stock/điểm.
-          await applyWalletDelta(tx, {
-            userId,
-            delta: -computed.total,
-            type: 'ORDER_PAY',
-            refType: 'ORDER',
-            refId: created.id,
-            reason: `Thanh toán đơn ${code}`,
-            insufficientMessage: 'Số dư Ví Tubu không đủ.',
-          });
+        if (paymentMethod === 'WALLET') {
+          for (const [i, order] of created.entries()) {
+            if (order.total <= 0) continue;
+            // Trừ ví dưới khoá dòng user — chống overdraft khi 2 đơn WALLET chạy đồng thời; không đủ
+            // → throw, rollback toàn bộ đơn/stock/điểm.
+            await applyWalletDelta(tx, {
+              userId,
+              delta: -order.total,
+              type: 'ORDER_PAY',
+              refType: 'ORDER',
+              refId: order.id,
+              reason: `Thanh toán đơn ${codes[i]}`,
+              insufficientMessage: 'Số dư Ví Tubu không đủ.',
+            });
+          }
         }
         // B4: redeem coupon ATOMIC trong cùng tx — chống race usageLimit/perUserLimit khi 2 đơn
         // đồng thời cùng dùng 1 mã (đặc biệt voucher giới thiệu usageLimit=1). Nếu hết lượt
         // sẽ throw → rollback toàn bộ order/stock/ví/điểm, đảm bảo không bị "đặt nửa".
         if (cart.couponCode && computed.couponApplied) {
-          await this.coupons.redeem(cart.couponCode, userId, created.id, tx);
+          await this.coupons.redeem(cart.couponCode, userId, created[0]!.id, tx);
           await this.analytics.record(tx, {
             eventName: 'coupon_applied',
             userId,
             platform,
             props: {
               couponCode: cart.couponCode,
-              orderId: created.id,
+              orderId: created[0]!.id,
               discount: computed.discount,
             },
           });
         }
 
-        await this.analytics.record(tx, {
-          eventName: 'order_placed',
-          userId,
-          platform,
-          storefrontSlug: storefrontSlug ?? null,
-          refCode: dto.referralCode ?? null,
-          props: {
-            orderId: created.id,
-            total: computed.total,
-            subtotal: cart.subtotal,
-            discount: computed.discount + computed.comboDiscount + computed.pointsDiscount + computed.tierDiscount,
-            shippingFee: computed.shippingFee,
-            itemCount: cart.items.length,
-            paymentMethod,
-            couponCode: computed.couponApplied ? cart.couponCode : null,
-            pointsUsed: computed.pointsUsed,
-            pointsUsedConverted: computed.pointsUsedConverted,
-            orderSource,
-          },
-        });
-        if (paid) {
+        for (const [i, order] of created.entries()) {
+          const shipment = computed.shipments[i]!;
           await this.analytics.record(tx, {
-            eventName: 'order_paid',
+            eventName: 'order_placed',
             userId,
             platform,
-            props: { orderId: created.id, method: paymentMethod, amount: computed.total, secsFromPlaced: 0 },
+            storefrontSlug: storefrontSlug ?? null,
+            refCode: dto.referralCode ?? null,
+            props: {
+              orderId: order.id,
+              total: order.total,
+              subtotal: order.subtotal,
+              discount: order.discount,
+              shippingFee: order.shippingFee,
+              itemCount: shipment.lineIds.length,
+              paymentMethod,
+              couponCode: i === 0 && computed.couponApplied ? cart.couponCode : null,
+              pointsUsed: order.pointsUsed,
+              pointsUsedConverted: order.pointsUsedConverted,
+              orderSource,
+            },
           });
+          if (paid) {
+            await this.analytics.record(tx, {
+              eventName: 'order_paid',
+              userId,
+              platform,
+              props: { orderId: order.id, method: paymentMethod, amount: order.total, secsFromPlaced: 0 },
+            });
+          }
+          if (referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
         }
-        if (referrerUserId) await this.affiliate.createCommissionForOrder(created.id, tx);
         return created;
       });
     } catch (err) {
@@ -457,47 +572,67 @@ export class CheckoutService {
     } catch (err) {
       this.logger.error(`Dọn giỏ lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
-    // Qua queue (retry+backoff, xem PancakePushProcessor) thay vì gọi pushOrder() trực tiếp —
-    // trước đây Pancake lỗi/timeout 1 lần là log rồi MẤT VĨNH VIỄN: đơn vẫn CONFIRMED, đã trừ
-    // kho + trừ tiền khách, nhưng kho vật lý không bao giờ thấy đơn (P0-2,
-    // docs/2026-09-08-review-progress.md). enqueuePush() chỉ thêm job vào Redis — nếu việc
-    // ĐÓ cũng lỗi (Redis blip), cron PancakePushReconcileService quét lại sau.
-    //
-    // Đơn thu gom tái chế → queue Gomdon (GomdonOrderService.pushOrder tự quyết: đơn chưa thanh toán thì
-    // đẩy Pancake ngay và CHỜ tiền về mới đặt bưu tá; đã thanh toán/COD thì tạo vận đơn rồi mới đẩy
-    // Pancake kèm mã). Enqueue lỗi: KHÔNG đẩy thẳng Pancake (trước đây làm vậy: nếu job Gomdon thực ra
-    // đã vào Redis thì vừa có vận đơn Gomdon vừa có note "tạo vận đơn tay" → giao 2 lần). Cron
-    // GomdonReconcileService quét đơn thu gom gomdonStatus=null và enqueue lại; quá 60 phút thì
-    // PancakePushReconcileService chốt FAILED rồi đẩy Pancake.
-    if (order.hasRecyclingPickup) {
-      try {
-        await this.gomdonOrder.enqueuePush(order.id);
-      } catch (err) {
-        this.logger.error(`Xếp hàng đẩy Gomdon lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+    for (const [i, order] of orders.entries()) {
+      const shipment = computed.shipments[i]!;
+      if (shipment.fulfiller.kind === 'MERCHANT') {
+        // Đơn đối tác tự giao không đi Pancake: báo chủ gian hàng vào xử lý ở /merchant.
+        const ownerId = shipment.fulfiller.ownerUserId;
+        if (ownerId) {
+          try {
+            await this.notifications.notify(ownerId, 'MERCHANT_ORDER_NEW', {
+              order_code: order.code,
+              total: order.total.toLocaleString('vi-VN'),
+            });
+          } catch (err) {
+            this.logger.error(`Báo đối tác đơn mới ${order.code} lỗi: ${err instanceof Error ? err.message : err}`);
+          }
+        }
+        continue;
       }
-    } else {
-      try {
-        await this.pancakeOrder.enqueuePush(order.id);
-      } catch (err) {
-        this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
+      // Qua queue (retry+backoff, xem PancakePushProcessor) thay vì gọi pushOrder() trực tiếp —
+      // trước đây Pancake lỗi/timeout 1 lần là log rồi MẤT VĨNH VIỄN: đơn vẫn CONFIRMED, đã trừ
+      // kho + trừ tiền khách, nhưng kho vật lý không bao giờ thấy đơn (P0-2,
+      // docs/2026-09-08-review-progress.md). enqueuePush() chỉ thêm job vào Redis — nếu việc
+      // ĐÓ cũng lỗi (Redis blip), cron PancakePushReconcileService quét lại sau.
+      //
+      // Đơn thu gom tái chế → queue Gomdon (GomdonOrderService.pushOrder tự quyết: đơn chưa thanh toán thì
+      // đẩy Pancake ngay và CHỜ tiền về mới đặt bưu tá; đã thanh toán/COD thì tạo vận đơn rồi mới đẩy
+      // Pancake kèm mã). Enqueue lỗi: KHÔNG đẩy thẳng Pancake (trước đây làm vậy: nếu job Gomdon thực ra
+      // đã vào Redis thì vừa có vận đơn Gomdon vừa có note "tạo vận đơn tay" → giao 2 lần). Cron
+      // GomdonReconcileService quét đơn thu gom gomdonStatus=null và enqueue lại; quá 60 phút thì
+      // PancakePushReconcileService chốt FAILED rồi đẩy Pancake.
+      if (order.hasRecyclingPickup) {
+        try {
+          await this.gomdonOrder.enqueuePush(order.id);
+        } catch (err) {
+          this.logger.error(`Xếp hàng đẩy Gomdon lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+        }
+      } else {
+        try {
+          await this.pancakeOrder.enqueuePush(order.id);
+        } catch (err) {
+          this.logger.error(`Xếp hàng đẩy Pancake lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+        }
       }
     }
-    // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake).
-    try {
-      await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
-    } catch (err) {
-      this.logger.error(`Gửi thông báo lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
-    }
-    // CTV nhận tin có đơn mới từ link của mình — gửi sau commit vì hoa hồng được tạo trong tx của đơn.
-    if (referrerUserId) {
+    for (const order of orders) {
+      // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake).
       try {
-        await this.affiliate.notifyCommissionCreated(order.id);
+        await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: order.code });
       } catch (err) {
-        this.logger.error(`Báo hoa hồng mới cho CTV lỗi, đơn ${code}: ${err instanceof Error ? err.message : err}`);
+        this.logger.error(`Gửi thông báo lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+      }
+      // CTV nhận tin có đơn mới từ link của mình — gửi sau commit vì hoa hồng được tạo trong tx của đơn.
+      if (referrerUserId) {
+        try {
+          await this.affiliate.notifyCommissionCreated(order.id);
+        } catch (err) {
+          this.logger.error(`Báo hoa hồng mới cho CTV lỗi, đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+        }
       }
     }
 
-    return this.findOrderResponse(order.id);
+    return this.findOrderResponse(orders[0]!.id);
   }
 
   // ── Helpers ────────────────────────────────────────
@@ -676,18 +811,45 @@ export class CheckoutService {
       user.pointsConvertedBalance,
       redeemBase,
     );
-    const goodsAfterAll = Math.max(0, redeemBase - redemption.discount);
 
-    let shippingFee = await this.pricing.calcShippingFee({
-      subtotal: cart.subtotal,
-      tierId: user.tierId,
+    // Một kiện cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giảm giá tính trên cả lần đặt ở trên
+    // rồi phân bổ về từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng Tubu = một kiện = đúng số tiền như trước.
+    const unavailable = cart.items.find((l) => l.fulfiller.kind === 'UNAVAILABLE');
+    if (unavailable) {
+      throw new BadRequestException(
+        `Sản phẩm "${unavailable.productName}" đang được cập nhật thông tin giao hàng, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`,
+      );
+    }
+    const groups = groupByFulfiller(cart.items);
+    const amounts = allocateGroupAmounts(groups, {
+      comboPerLine: combo.perLine,
+      comboTotal: combo.total,
+      couponDiscount: discount,
+      tierDiscount,
+      pointsDiscount: redemption.discount,
+      pointsUsed: redemption.pointsUsed,
+      pointsUsedConverted: redemption.pointsUsedConverted,
     });
-    if (freeship) shippingFee = 0;
-
+    const terms = await this.shipmentTerms(groups, amounts, user.tierId, freeship);
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
-    const pointsEarned = await this.pricing.calcPointsEarned(goodsAfterAll, multiplier);
-
-    const total = goodsAfterAll + shippingFee;
+    const shipments: CheckoutShipment[] = [];
+    for (const [i, g] of groups.entries()) {
+      const a = amounts[i]!;
+      const shipping = terms[i]!.shippingFee;
+      shipments.push({
+        ...a,
+        key: g.key,
+        fulfiller: g.fulfiller,
+        lineIds: g.lines.map((l) => l.id),
+        shippingFee: shipping,
+        total: a.goodsAfterAll + shipping,
+        pointsEarned: await this.pricing.calcPointsEarned(a.goodsAfterAll, multiplier),
+        commissionPct: terms[i]!.commissionPct,
+      });
+    }
+    const shippingFee = shipments.reduce((s, x) => s + x.shippingFee, 0);
+    const pointsEarned = shipments.reduce((s, x) => s + x.pointsEarned, 0);
+    const total = shipments.reduce((s, x) => s + x.total, 0);
     return {
       cart,
       user,
@@ -707,8 +869,50 @@ export class CheckoutService {
         shippingFee,
         total,
         pointsEarned,
+        shipments,
       },
     };
+  }
+
+  /**
+   * Phí giao và phí sàn từng kiện. Kiện Tubu: luật phí giao hiện có trên tiền hàng của kiện. Kiện đối tác: phí gian hàng tự
+   * đặt (trống thì merchant.default_shipping_fee), miễn khi tiền hàng của kiện đạt freeShipFrom. Mã freeship (Tubu tài trợ)
+   * miễn mọi kiện.
+   */
+  private async shipmentTerms(
+    groups: { fulfiller: LineFulfiller }[],
+    amounts: GroupAmounts[],
+    tierId: string | null,
+    freeship: boolean,
+  ): Promise<{ shippingFee: number; commissionPct: number | null }[]> {
+    const merchantIds = groups.flatMap((g) => (g.fulfiller.kind === 'MERCHANT' ? [g.fulfiller.storefrontId] : []));
+    const [stores, defaultFee, defaultPct] = merchantIds.length
+      ? await Promise.all([
+          this.prisma.storefront.findMany({
+            where: { id: { in: merchantIds } },
+            select: { id: true, shippingFee: true, freeShipFrom: true, commissionPct: true },
+          }),
+          this.config?.get<number>('merchant.default_shipping_fee', DEFAULT_MERCHANT_SHIPPING_FEE) ?? DEFAULT_MERCHANT_SHIPPING_FEE,
+          this.config?.get<number>('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT) ?? DEFAULT_MERCHANT_COMMISSION_PCT,
+        ])
+      : [[], DEFAULT_MERCHANT_SHIPPING_FEE, DEFAULT_MERCHANT_COMMISSION_PCT];
+    const byId = new Map(stores.map((sf) => [sf.id, sf]));
+    const out: { shippingFee: number; commissionPct: number | null }[] = [];
+    for (const [i, g] of groups.entries()) {
+      if (g.fulfiller.kind !== 'MERCHANT') {
+        const fee = freeship ? 0 : await this.pricing.calcShippingFee({ subtotal: amounts[i]!.subtotal, tierId });
+        out.push({ shippingFee: fee, commissionPct: null });
+        continue;
+      }
+      const sf = byId.get(g.fulfiller.storefrontId);
+      const freeByShop = sf?.freeShipFrom != null && amounts[i]!.subtotal >= sf.freeShipFrom;
+      out.push({
+        // Mã freeship là Tubu tài trợ phí kho Tubu; phí giao của đối tác là tiền của đối tác nên chỉ miễn theo ngưỡng của shop.
+        shippingFee: freeByShop ? 0 : sf?.shippingFee ?? defaultFee,
+        commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
+      });
+    }
+    return out;
   }
 
   private addressSnapshot(a: {
@@ -735,10 +939,35 @@ export class CheckoutService {
     };
   }
 
+  /** Đơn vừa đặt; lần đặt bị tách theo nơi giao thì kèm `splitOrders` (mọi đơn cùng lần đặt, kể cả đơn này). */
   private async findOrderResponse(orderId: string) {
-    return this.prisma.order.findUniqueOrThrow({
+    const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true },
     });
+    if (!order.checkoutGroup) return order;
+    const group = await this.prisma.order.findMany({
+      where: { checkoutGroup: order.checkoutGroup, userId: order.userId },
+      orderBy: [{ fulfiller: 'asc' }, { code: 'asc' }],
+      select: {
+        id: true,
+        code: true,
+        total: true,
+        status: true,
+        fulfiller: true,
+        fulfillerStorefront: { select: { title: true } },
+      },
+    });
+    return {
+      ...order,
+      splitOrders: group.map((o) => ({
+        id: o.id,
+        code: o.code,
+        total: o.total,
+        status: o.status,
+        fulfiller: o.fulfiller,
+        fulfillerName: o.fulfiller === 'MERCHANT' ? o.fulfillerStorefront?.title ?? 'Gian hàng đối tác' : TUBU_FULFILLER_NAME,
+      })),
+    };
   }
 }
