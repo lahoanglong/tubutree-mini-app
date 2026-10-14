@@ -161,6 +161,8 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const geoOk = !!geo.provinceCode && !!geo.wardCode;
   const itemsOk = lines.length > 0;
   const valid = recipientOk && phoneOk && streetOk && geoOk && itemsOk;
+  // Báo giá đang tính: gửi đơn lúc này sẽ không kèm tổng đã báo cho khách nên máy chủ không bắt được giá đổi. Báo giá lỗi hẳn thì vẫn cho đặt như trước.
+  const quotePending = itemsOk && !quote && !quoteFailed;
 
   const mut = useMutation({
     mutationFn: () =>
@@ -214,7 +216,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
 
   const submit = () => {
     setShowErrors(true);
-    if (!valid) return;
+    if (!valid || quotePending) return;
     mut.mutate();
   };
 
@@ -434,7 +436,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       <Button
         fullWidth
         loading={mut.isPending}
-        disabled={showErrors && !valid}
+        disabled={(showErrors && !valid) || quotePending}
         onPress={submit}
         style={{ marginTop: 12 }}
       >

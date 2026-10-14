@@ -289,6 +289,54 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('đối tác đổi sang biến thể khác của CÙNG sản phẩm đang bán → bỏ tích xác nhận, phải tích lại cho mã mới', async () => {
+    const sameOriginOtherCode = {
+      data: [
+        product({
+          name: 'Tiêu đen Shop A',
+          pancakeLinkCode: 'seed-BHN-PP-500',
+          pancakeLink: preview({ code: 'seed-BHN-PP-500' }),
+          storefront: { id: 'sf-a', title: 'Shop A', subdomain: null, ownerUserId: 'u' },
+        }),
+      ],
+      meta: { page: 1, limit: 100, total: 1 },
+    };
+    let listCalls = 0;
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: listCalls++ === 0 ? pending(preview()) : sameOriginOtherCode }),
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { status: 409, body: { statusCode: 409, code: 'PANCAKE_CODE_CHANGED', message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-BHN-PP-500.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(container.querySelector('input[type="checkbox"]'));
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    expect(container.textContent ?? '').toContain('seed-BHN-PP-500');
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(false);
+    expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('API trả 409 bất kỳ khi duyệt (vd sản phẩm gốc vừa mở bán, cần tích xác nhận) → danh sách tự tải lại', async () => {
+    let listCalls = 0;
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: (listCalls++, pending(preview({ state: 'AVAILABLE' }))) }),
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { status: 409, body: { statusCode: 409, code: 'PANCAKE_TAKEOVER_UNCONFIRMED', message: 'Sản phẩm đang bán, hãy tích xác nhận.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+  });
+
   it('mã không liên kết được → nêu lý do, khoá Duyệt (chỉ còn Từ chối)', async () => {
     const api = mockFetch({
       '/admin/merchant-products/pending': {

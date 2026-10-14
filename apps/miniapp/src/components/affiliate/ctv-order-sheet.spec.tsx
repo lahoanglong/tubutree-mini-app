@@ -72,11 +72,14 @@ function inputNear(labelText: string): HTMLInputElement {
   return input;
 }
 
-async function addProduct() {
+/** `settle: false` giữ báo giá đang tính (nút Tạo đơn khoá); mặc định đợi báo giá xong để các test bấm Tạo đơn như CTV thật. */
+async function addProduct(opts: { settle?: boolean } = {}) {
   fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
   fireEvent.click(await screen.findByText('Nước rửa chén'));
   fireEvent.click(await screen.findByText('Chanh'));
   await screen.findByRole('button', { name: 'Giảm số lượng' });
+  if (opts.settle === false) return;
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo đơn hộ khách' })).not.toBeDisabled());
 }
 
 describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
@@ -340,16 +343,33 @@ describe('CtvOrderSheet — đơn tạo ra đúng tổng CTV đã báo khách (R
     mocks.createCtvOrder.mockResolvedValue({ code: 'TUBU9', total: 71_000, items: [] });
   });
 
-  async function readyToSubmit() {
+  async function readyToSubmit(opts: { settle?: boolean } = {}) {
     saveRecentCustomer('ctv1', AN, 1);
     renderSheet();
     fireEvent.click(screen.getByRole('button', { name: 'Nguyễn An · …567' }));
-    await addProduct();
+    await addProduct(opts);
   }
 
   it('tạo đơn gửi kèm tổng đang hiện ở báo giá (expectedTotal)', async () => {
     mocks.quoteCtvOrder.mockResolvedValue(FLASH_QUOTE);
     await readyToSubmit();
+    await waitFor(() => expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.createCtvOrder.mock.calls[0]![0]).toMatchObject({ expectedTotal: 71_000 });
+  });
+
+  it('báo giá còn đang tính: bấm Tạo đơn không gửi đơn (không có tổng để bảo vệ); có báo giá rồi mới gửi', async () => {
+    let resolveQuote: (v: typeof FLASH_QUOTE) => void = () => {};
+    mocks.quoteCtvOrder.mockImplementation(() => new Promise((r) => { resolveQuote = r; }));
+    await readyToSubmit({ settle: false });
+    await waitFor(() => expect(mocks.quoteCtvOrder).toHaveBeenCalled());
+    const submitBtn = screen.getByRole('button', { name: 'Tạo đơn hộ khách' });
+    expect(submitBtn).toBeDisabled();
+    fireEvent.click(submitBtn);
+    expect(mocks.createCtvOrder).not.toHaveBeenCalled();
+
+    resolveQuote(FLASH_QUOTE);
     await waitFor(() => expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ'));
     fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
     await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));

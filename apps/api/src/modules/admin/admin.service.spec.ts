@@ -1385,7 +1385,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     it('client không gửi mã đã xem mà sản phẩm có mã → 409, không duyệt mã nào', async () => {
       const { prisma, updateMany } = setup({ pancakeLinkCode: 'PK-B' });
       await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED }),
+        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại trang') }),
       });
       expect(updateMany).not.toHaveBeenCalled();
     });

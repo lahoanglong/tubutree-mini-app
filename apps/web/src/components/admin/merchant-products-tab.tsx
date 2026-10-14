@@ -338,9 +338,10 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
   const link = p.pancakeLink ?? null;
   const takeover = link?.state === 'TAKEOVER';
   const originId = takeover ? (link?.origin?.id ?? null) : null;
-  // Tích xác nhận gắn với đúng sản phẩm đang bán đang hiện: danh sách tải lại mà sản phẩm sẽ bị chuyển đã khác thì phải tích lại.
+  // Tích xác nhận gắn với đúng mã và sản phẩm đang bán đang hiện: danh sách tải lại mà mã hoặc sản phẩm sẽ bị chuyển đã khác thì phải tích lại.
+  const originKey = originId ? `${link?.code ?? ''}|${originId}` : null;
   const [confirmedOrigin, setConfirmedOrigin] = useState<string | null>(null);
-  const confirmTakeover = !!originId && confirmedOrigin === originId;
+  const confirmTakeover = !!originKey && confirmedOrigin === originKey;
   const approveBlocked = link?.state === 'UNAVAILABLE' || (takeover && !confirmTakeover);
 
   const reviewMut = useMutation({
@@ -360,7 +361,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
     },
     onError: (e) => {
-      if (e instanceof ApiError && (e.code === 'PANCAKE_CODE_CHANGED' || e.code === 'PANCAKE_TAKEOVER_CHANGED')) {
+      if (e instanceof ApiError && e.status === 409) {
         qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
       }
     },
@@ -409,7 +410,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
               <input
                 type="checkbox"
                 checked={confirmTakeover}
-                onChange={(e) => setConfirmedOrigin(e.target.checked ? originId : null)}
+                onChange={(e) => setConfirmedOrigin(e.target.checked ? originKey : null)}
                 className="mt-0.5 h-4 w-4 accent-forest-600"
               />
               <span>Tôi đã xem sản phẩm đang bán ở dưới và đồng ý chuyển nó sang gian hàng này</span>

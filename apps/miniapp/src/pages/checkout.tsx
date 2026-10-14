@@ -333,7 +333,7 @@ export default function CheckoutPage() {
     : (cart.data?.items ?? []);
   const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
   const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '');
+  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '');
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [

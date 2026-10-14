@@ -53,6 +53,15 @@ import { maskPhone } from '../../common/mask-pii';
 const STALE_EDIT_REVIEW_MESSAGE = 'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.';
 const COUPON_PERCENT_NEEDS_CAP = 50;
 
+function pancakeCodeNotSent() {
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: PANCAKE_CODE_CHANGED,
+    message: 'Màn duyệt này đã cũ nên không gửi kèm mã Pancake bạn đang xem. Tải lại trang rồi duyệt lại.',
+  });
+}
+
 function pancakeCodeChanged(current: string | null) {
   return new ConflictException({
     statusCode: 409,
@@ -1528,7 +1537,7 @@ export class AdminService {
     const seenCode = seen.pancakeCode === undefined ? undefined : seen.pancakeCode?.trim() || null;
     const readCode = product.pancakeLinkCode ?? null;
     if (product.approvalStatus === 'PENDING_REVIEW' && (approve || seenCode !== undefined) && (seenCode ?? null) !== readCode) {
-      throw pancakeCodeChanged(readCode);
+      throw seenCode === undefined ? pancakeCodeNotSent() : pancakeCodeChanged(readCode);
     }
 
     // CAS cố định theo PENDING_REVIEW (không theo trạng thái vừa đọc): hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn
