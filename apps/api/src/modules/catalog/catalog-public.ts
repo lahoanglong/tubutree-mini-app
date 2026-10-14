@@ -24,6 +24,7 @@ const PUBLIC_PRODUCT_DETAIL_KEYS = [
   'tags',
   'fulfilment',
   'fulfiller',
+  'partnerOwned',
   'sold',
   'variations',
   'reviews',

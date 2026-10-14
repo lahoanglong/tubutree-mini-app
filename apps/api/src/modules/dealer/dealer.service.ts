@@ -18,6 +18,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
+import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 
 interface BonusTier {
   min: number;
@@ -168,8 +169,9 @@ export class DealerService {
     const { discountPct, tier } = await this.dealerContext(userId);
     // Cùng điều kiện với placeOrder: FE cho đặt trước cả hàng tồn 0, nên một dòng không bán được mà vẫn
     // lên bảng giá sẽ làm cả đơn bị PRODUCT_DISCONTINUED.
+    // Hàng của gian hàng đối tác chỉ bán giá lẻ (partner-goods.ts), không lên bảng giá đại lý.
     const variations = await this.prisma.variation.findMany({
-      where: SELLABLE_PANCAKE_VARIATION_WHERE,
+      where: { AND: [SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] },
       include: { product: { select: { name: true, brand: true } } },
     });
     return variations.map((v) => {
@@ -205,7 +207,7 @@ export class DealerService {
 
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: dto.items.map((i) => i.variationId) } },
-      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true, storefrontId: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
@@ -216,6 +218,7 @@ export class DealerService {
       const v = vmap.get(line.variationId);
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
       if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
+      if (isPartnerOwnedVariation(v)) throw partnerGoodsError('DEALER', v.product.name);
       const unitPrice = this.unitPrice(v, tier?.id, discountPct);
       const total = unitPrice * line.quantity;
       subtotal += total;

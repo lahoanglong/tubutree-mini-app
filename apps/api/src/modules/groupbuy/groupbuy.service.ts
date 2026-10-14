@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 
 /** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
 const EXPIRE_BATCH = 200;
@@ -56,7 +57,8 @@ export class GroupBuyService {
     if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
       throw new NotFoundException('Sản phẩm không khả dụng.');
     }
-    // Mã giảm của nhóm là Tubu tài trợ trên hàng Tubu giao; hàng gian hàng tự giao chưa có chính sách ai chịu phần giảm (D4).
+    // Mã giảm của nhóm là chương trình của Tubu: hàng của gian hàng đối tác (kể cả Tubu giao hộ) chỉ bán giá lẻ (partner-goods.ts).
+    if (isPartnerOwnedProduct(product)) throw partnerGoodsError('GROUP_BUY', product.name);
     if (product.fulfilment === 'MERCHANT') {
       throw new BadRequestException('Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ mua chung.');
     }

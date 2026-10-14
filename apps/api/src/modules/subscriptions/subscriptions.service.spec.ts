@@ -740,15 +740,6 @@ describe('SubscriptionsService.skipCycle', () => {
     expect(update.mock.calls[0][0].data.retryCount).toBe(0);
   });
 
-  it('Q8 S2: không bật lại gói của hàng gian hàng đối tác; tạm dừng/huỷ vẫn được', async () => {
-    const sub = { id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) };
-    const { svc, update } = makeSetStatus(sub, 'sf-doi-tac');
-    await expect(svc.setStatus('u1', 's1', 'ACTIVE')).rejects.toMatchObject({ response: { code: 'PARTNER_GOODS_NOT_ELIGIBLE' } });
-    expect(update).not.toHaveBeenCalled();
-    await svc.setStatus('u1', 's1', 'CANCELLED');
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSkip(null);
     await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
@@ -784,6 +775,15 @@ describe('SubscriptionsService.setStatus', () => {
     const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics, walletLedger());
     return { svc, update, analytics };
   }
+
+  it('Q8 S2: không bật lại gói của hàng gian hàng đối tác; tạm dừng/huỷ vẫn được', async () => {
+    const sub = { id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) };
+    const { svc, update } = makeSetStatus(sub, 'sf-doi-tac');
+    await expect(svc.setStatus('u1', 's1', 'ACTIVE')).rejects.toMatchObject({ response: { code: 'PARTNER_GOODS_NOT_ELIGIBLE' } });
+    expect(update).not.toHaveBeenCalled();
+    await svc.setStatus('u1', 's1', 'CANCELLED');
+    expect(update).toHaveBeenCalledTimes(1);
+  });
 
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSetStatus(null);
