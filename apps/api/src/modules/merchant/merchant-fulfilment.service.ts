@@ -35,6 +35,8 @@ import {
   type ConsignmentTerms,
   type ConsignmentTermsRow,
 } from './merchant-consignment';
+import { merchantLineBase } from './merchant-line-base';
+import { distributeByWeight } from '../orders/refund-allocation';
 
 type Db = Prisma.TransactionClient;
 
@@ -147,8 +149,9 @@ export interface SettlementLine {
 }
 
 /**
- * Một dòng đối soát của đơn đã giao (mục 7 thiết kế): tiền hàng sau combo + phí giao − phí sàn − tiền COD đối tác đã tự thu.
- * Dương: Tubu trả đối tác; âm: đối tác nộp lại Tubu (mã giảm/Điểm Xanh Tubu tài trợ nhỏ hơn phí sàn).
+ * Một dòng đối soát của đơn đã giao (mục 7 thiết kế): tiền hàng + phí giao − phí sàn − tiền COD đối tác đã tự thu. Tiền hàng là
+ * tiền khách thực trả cho hàng (merchantLineBase, cùng nền với hàng Tubu giao hộ): mã giảm giá Tubu, Điểm Xanh, giảm hạng do
+ * gian hàng chịu; phí sàn vẫn theo mức chốt trên đơn. Dương: Tubu trả đối tác; âm: đối tác nộp lại Tubu (đơn COD: phí sàn).
  */
 export function saleLineOf(o: {
   id: string;
@@ -158,9 +161,9 @@ export function saleLineOf(o: {
   shippingFee: number;
   merchantCommissionPct: Prisma.Decimal | number | null;
   deliveredAt: Date | null;
-  items: { total: number }[];
+  items: { id: string; total: number }[];
 }): SettlementLine {
-  const goodsAmount = o.items.reduce((s, it) => s + it.total, 0);
+  const goodsAmount = merchantLineBase(o).reduce((s, v) => s + v, 0);
   const pct = o.merchantCommissionPct == null ? 0 : Number(o.merchantCommissionPct);
   const commissionAmount = Math.round(goodsAmount * pct);
   const codCollected = o.paymentMethod === 'COD' ? o.total : 0;
@@ -194,23 +197,46 @@ export interface ApprovedPartialReturn {
 }
 
 /**
+ * Tiền hàng từng dòng của đơn tự giao làm nền cho dòng đảo. Đã có SALE thì theo đúng tiền hàng đã lưu ở SALE (phiếu lập trước
+ * khi đổi nền giữ số cũ): khớp nền hiện tại thì dùng luôn, khác thì chia số đã lưu theo giá trị dòng.
+ */
+function selfShipLineBase(
+  o: { total: number; shippingFee: number; items: { id: string; total: number }[] },
+  saleGoods: number | undefined,
+): number[] {
+  const base = merchantLineBase(o);
+  if (saleGoods === undefined || saleGoods === base.reduce((s, v) => s + v, 0)) return base;
+  return distributeByWeight(saleGoods, o.items.map((i) => Math.max(0, i.total)));
+}
+
+/**
  * Dòng REVERSAL cho từng lần trả một phần của đơn đối tác (cùng công thức với dòng đảo cả đơn, áp lên phần hàng trả): đối tác
- * nhận hàng về nên trả lại tiền hàng của các đơn vị trả + phí giao Tubu đã hoàn khách − phí sàn của phần đó. COD không đảo
- * (tiền mặt đối tác thu đã nằm trong dòng SALE). Tính luỹ kế theo thứ tự duyệt rồi lấy hiệu, nên nhiều lần trả cộng lại đúng
- * bằng trả cả dòng, không lệch làm tròn.
+ * nhận hàng về nên trả lại tiền hàng của các đơn vị trả + phí giao Tubu đã hoàn khách − phí sàn của phần đó. Tiền hàng của đơn
+ * vị trả lấy theo nền của dòng (selfShipLineBase; `saleGoods` = tiền hàng ở SALE đã lưu). COD không đảo (tiền mặt đối tác thu đã
+ * nằm trong dòng SALE). Tính luỹ kế theo thứ tự duyệt rồi lấy hiệu, nên nhiều lần trả cộng lại đúng bằng trả cả dòng, không lệch
+ * làm tròn.
  */
 export function partialReversalLinesOf(
-  o: { id: string; code: string; merchantCommissionPct: Prisma.Decimal | number | null; items: { id: string; total: number; quantity: number }[] },
+  o: {
+    id: string;
+    code: string;
+    total: number;
+    shippingFee: number;
+    merchantCommissionPct: Prisma.Decimal | number | null;
+    items: { id: string; total: number; quantity: number }[];
+  },
   requests: ApprovedPartialReturn[],
+  saleGoods?: number,
 ): SettlementLine[] {
   if (requests.length === 0) return [];
   const pct = o.merchantCommissionPct == null ? 0 : Number(o.merchantCommissionPct);
-  const items = new Map(o.items.map((i) => [i.id, i]));
+  const base = selfShipLineBase(o, saleGoods);
+  const items = new Map(o.items.map((i, idx) => [i.id, { quantity: i.quantity, goods: base[idx] ?? 0 }]));
   const returned = new Map<string, number>();
   const goodsOf = () =>
     [...returned].reduce((s, [id, q]) => {
       const it = items.get(id);
-      return it && it.quantity > 0 ? s + Math.round((it.total * Math.min(q, it.quantity)) / it.quantity) : s;
+      return it && it.quantity > 0 ? s + Math.round((it.goods * Math.min(q, it.quantity)) / it.quantity) : s;
     }, 0);
   const ordered = [...requests].sort(
     (a, b) => (a.reviewedAt?.getTime() ?? 0) - (b.reviewedAt?.getTime() ?? 0) || a.id.localeCompare(b.id),
@@ -230,9 +256,9 @@ export function partialReversalLinesOf(
       orderCode: o.code,
       kind: 'REVERSAL',
       refKey: `${RETURN_REF_PREFIX}${r.id}`,
-      goodsAmount: -goods,
-      shippingFee: -ship,
-      commissionAmount: -commission,
+      goodsAmount: -goods || 0,
+      shippingFee: -ship || 0,
+      commissionAmount: -commission || 0,
       opsFeeAmount: 0,
       codCollected: 0,
       netAmount: -(goods + ship - commission),
@@ -558,10 +584,11 @@ export class MerchantFulfilmentService {
           select: { id: true, orderId: true, reviewedAt: true, shippingRefund: true, items: { select: { orderItemId: true, quantity: true } } },
         })
       : [];
-    const partialsOf = (order: Parameters<typeof partialReversalLinesOf>[0]) =>
+    const partialsOf = (order: Parameters<typeof partialReversalLinesOf>[0], stored: { kind: string; goodsAmount: number }[] = []) =>
       partialReversalLinesOf(
         order,
         partialRows.filter((r) => r.orderId === order.id),
+        stored.find((l) => l.kind === 'SALE')?.goodsAmount,
       );
     const notStored = (stored: { kind: string; refKey: string }[]) => (l: SettlementLine) =>
       !stored.some((x) => x.kind === l.kind && x.refKey === l.refKey);
@@ -570,11 +597,11 @@ export class MerchantFulfilmentService {
     const lines: SettlementLine[] = [
       // SALE vừa đủ hạn đi cùng phiếu với các lần trả một phần của nó (đối tác không được tính tiền hàng khách đã trả).
       ...sales.flatMap((o) => [saleLineOf(o), ...partialsOf(o)]),
-      ...settled.flatMap((o) => partialsOf(o).filter(notStored(o.merchantPayoutLines))),
+      ...settled.flatMap((o) => partialsOf(o, o.merchantPayoutLines).filter(notStored(o.merchantPayoutLines))),
       ...returned.flatMap((o) => {
         const sale = o.merchantPayoutLines.find((l) => l.kind === 'SALE') ?? null;
         if (!sale) return reversalLineOf(o, null) ?? [];
-        const partials = partialsOf(o);
+        const partials = partialsOf(o, o.merchantPayoutLines);
         const whole = reversalLineOf(o, sale, partials);
         return [...partials.filter(notStored(o.merchantPayoutLines)), ...(whole ? [whole] : [])];
       }),

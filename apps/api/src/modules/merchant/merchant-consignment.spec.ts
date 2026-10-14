@@ -1,13 +1,12 @@
 import {
-  consignmentLineBase,
   consignmentPartialReversals,
   consignmentRefKey,
   consignmentReturnRefKey,
   consignmentSaleLines,
   consignmentWholeReversal,
-  paidGoodsByLine,
   termsAt,
 } from './merchant-consignment';
+import { merchantLineBase, paidGoodsByLine } from './merchant-line-base';
 
 const DAY = 86_400_000;
 const ORDERED = new Date('2026-10-01T03:00:00Z');
@@ -57,8 +56,8 @@ describe('paidGoodsByLine — tiền hàng khách thực trả từng dòng (cù
   it('chia tiền hàng thực trả theo giá trị dòng, cộng lại đúng bằng tổng − phí giao', () => {
     expect(paidGoodsByLine(ORDER)).toEqual([25_500, 102_000, 42_500]);
   });
-  it('nền tính tiền của dòng giao hộ đi qua một hàm duy nhất', () => {
-    expect(consignmentLineBase(ORDER)).toEqual(paidGoodsByLine(ORDER));
+  it('nền tính tiền của dòng giao hộ đi qua hàm dùng chung với đơn tự giao', () => {
+    expect(merchantLineBase(ORDER)).toEqual(paidGoodsByLine(ORDER));
   });
   it('không giảm gì → đúng tiền dòng; phí giao không bao giờ vào tiền hàng', () => {
     expect(paidGoodsByLine({ total: 230_000, shippingFee: 30_000, items: [{ total: 150_000 }, { total: 50_000 }] })).toEqual([150_000, 50_000]);

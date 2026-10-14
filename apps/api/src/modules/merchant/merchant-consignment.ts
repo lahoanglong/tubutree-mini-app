@@ -1,5 +1,6 @@
 import { distributeByWeight } from '../orders/refund-allocation';
 import { RETURN_REF_PREFIX } from './merchant-config';
+import { merchantLineBase } from './merchant-line-base';
 import type { SettlementLine } from './merchant-fulfilment.service';
 
 /**
@@ -61,27 +62,6 @@ export interface ConsignmentOrder {
 }
 
 /**
- * Tiền khách thực trả từng dòng hàng: tiền hàng thực trả (`total − shippingFee`) chia theo giá trị dòng — cùng tỉ lệ
- * paidLineTotals/refund-allocation dùng cho hoa hồng và hoàn tiền, nhưng chia phần dư cho phần lẻ lớn nhất nên cộng lại đúng
- * bằng số khách trả.
- */
-export function paidGoodsByLine(order: { total: number; shippingFee: number; items: { total: number }[] }): number[] {
-  const totals = order.items.map((i) => Math.max(0, i.total));
-  const gross = totals.reduce((s, v) => s + v, 0);
-  const paid = Math.max(0, order.total - Math.max(0, order.shippingFee));
-  if (paid >= gross) return totals;
-  return distributeByWeight(paid, totals);
-}
-
-/**
- * Số tiền làm nền cho từng dòng hàng giao hộ (tiền hàng của dòng trên phiếu). Chỗ DUY NHẤT quyết định nền tính: hiện là tiền
- * khách thực trả cho dòng; đổi sang `OrderItem.total` như đơn tự giao thì chỉ sửa hàm này.
- */
-export function consignmentLineBase(order: { total: number; shippingFee: number; items: { total: number }[] }): number[] {
-  return paidGoodsByLine(order);
-}
-
-/**
  * Dòng SALE cho các dòng hàng của đơn thuộc gian hàng (`mine`: biến thể liên kết với gian hàng lúc đặt), thứ tự theo id dòng để
  * số luôn như nhau. Phí cố định mỗi đơn chia theo tiền hàng và bị chặn ở phần còn lại sau phí sàn và phí % — không dòng nào âm
  * vì phí cố định; phần vượt Tubu chịu. Dòng 0đ không gánh phí cố định.
@@ -92,7 +72,7 @@ export function consignmentSaleLines(
   terms: ConsignmentTerms,
 ): SettlementLine[] {
   const items = [...order.items].sort((a, b) => a.id.localeCompare(b.id));
-  const base = consignmentLineBase({ ...order, items });
+  const base = merchantLineBase({ ...order, items });
   const own = items.flatMap((it, idx) => (mine(it) ? [{ it, goods: base[idx] ?? 0 }] : []));
   if (own.length === 0) return [];
   const weights = own.map((m) => Math.max(0, m.goods));
