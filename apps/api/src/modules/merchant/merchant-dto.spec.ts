@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
 import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto } from './merchant.controller';
+import { MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -57,5 +58,19 @@ describe('Link tra cứu vận đơn (R2-MERCHANT-12)', () => {
 
   it('chuỗi không phải link → 400 tiếng Việt kèm ví dụ', async () => {
     expect(await message(ShipMerchantOrderDto, { ...BASE, trackingUrl: 'GHN ABC' })).toContain('Link tra cứu vận đơn không hợp lệ');
+  });
+});
+
+describe('Phí sàn / phí Tubu giao hộ của gian hàng (admin, Q8)', () => {
+  it('phân số 0–0,5; bỏ phí sàn riêng (null) được; phí cố định là số nguyên không âm', async () => {
+    await expect(run(MerchantStoreTermsDto, { commissionPct: null, consignmentFeePct: 0.025, consignmentFeeFixed: 3_400 })).resolves.toMatchObject({
+      commissionPct: null,
+      consignmentFeePct: 0.025,
+      consignmentFeeFixed: 3_400,
+    });
+    await expect(run(MerchantStoreTermsDto, { commissionPct: 0.6 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeePct: -0.01 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: -1 })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
