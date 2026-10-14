@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { MerchantFulfilmentService, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
+import { MerchantFulfilmentService, reversalLineOf, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
 import { MerchantSlaCron } from './merchant-sla.cron';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
@@ -140,6 +140,38 @@ describe('MerchantFulfilmentService — đối tác xử lý đơn', () => {
   });
 });
 
+describe('reversalLineOf — đơn đối tác bị trả, khách đã được Tubu hoàn tiền (thiết kế mục 7)', () => {
+  // hàng 100k, phí giao 30k, phí sàn 15% = 15k; khách trả 130k.
+  const cod = { id: 'o', code: 'C', paymentMethod: 'COD', paymentStatus: 'REFUNDED', total: 130_000 };
+  const codSale = { goodsAmount: 100_000, shippingFee: 30_000, commissionAmount: 15_000, codCollected: 130_000, netAmount: -15_000 };
+
+  it('COD đã đối soát rồi bị trả: đối tác vẫn giữ tiền mặt đã thu → tổng SALE + REVERSAL = −130k (nộp lại đúng số đã thu)', () => {
+    const l = reversalLineOf(cod, codSale)!;
+    expect(l).toEqual(
+      expect.objectContaining({ kind: 'REVERSAL', goodsAmount: -100_000, shippingFee: -30_000, commissionAmount: -15_000, codCollected: 0 }),
+    );
+    expect(codSale.netAmount + l.netAmount).toBe(-130_000);
+  });
+
+  it('COD bị trả TRƯỚC khi đối soát: chưa từng lên bảng kê nhưng đối tác giữ 130k mà Tubu đã hoàn khách → dòng −130k', () => {
+    const l = reversalLineOf(cod, null)!;
+    expect(l).toEqual(
+      expect.objectContaining({ kind: 'REVERSAL', goodsAmount: 0, shippingFee: 0, commissionAmount: 0, codCollected: 130_000, netAmount: -130_000 }),
+    );
+  });
+
+  it('trả trước (Ví) đã đối soát: đảo đúng phần Tubu đã trả đối tác; chưa đối soát: không có gì để đảo', () => {
+    const walletSale = { goodsAmount: 100_000, shippingFee: 30_000, commissionAmount: 15_000, codCollected: 0, netAmount: 115_000 };
+    const wallet = { ...cod, paymentMethod: 'WALLET' };
+    expect(reversalLineOf(wallet, walletSale)!.netAmount).toBe(-115_000);
+    expect(reversalLineOf(wallet, null)).toBeNull();
+  });
+
+  it('COD bị trả mà khách chưa được hoàn (không REFUNDED) và chưa đối soát → không tạo dòng', () => {
+    expect(reversalLineOf({ ...cod, paymentStatus: 'UNPAID' }, null)).toBeNull();
+  });
+});
+
 describe('MerchantFulfilmentService — phiếu đối soát', () => {
   const delivered = {
     id: 'o9',
@@ -158,14 +190,30 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
       .mockResolvedValueOnce([delivered])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
-        { id: 'o5', code: 'TUBU5', merchantPayoutLines: [{ goodsAmount: 100, shippingFee: 10, commissionAmount: 15, codCollected: 0, netAmount: 95 }] },
+        {
+          id: 'o5',
+          code: 'TUBU5',
+          paymentMethod: 'WALLET',
+          paymentStatus: 'REFUNDED',
+          total: 110,
+          merchantPayoutLines: [{ goodsAmount: 100, shippingFee: 10, commissionAmount: 15, codCollected: 0, netAmount: 95 }],
+        },
+        { id: 'o6', code: 'TUBU6', paymentMethod: 'COD', paymentStatus: 'REFUNDED', total: 130_000, merchantPayoutLines: [] },
       ]);
     const st = await svc.statementFor('sf-a', NOW);
     expect(st.lines.map((l) => [l.orderCode, l.kind, l.netAmount])).toEqual([
       ['TUBU9', 'SALE', 200_000 + 30_000 - 30_000],
       ['TUBU5', 'REVERSAL', -95],
+      ['TUBU6', 'REVERSAL', -130_000],
     ]);
-    expect(st.total).toBe(200_000 - 95);
+    expect(st.total).toBe(200_000 - 95 - 130_000);
+    expect(prisma.order.findMany.mock.calls[2][0].where).toEqual(
+      expect.objectContaining({
+        status: 'RETURNED',
+        merchantPayoutLines: { none: { kind: 'REVERSAL' } },
+        OR: [{ merchantPayoutLines: { some: { kind: 'SALE' } } }, { paymentMethod: 'COD', paymentStatus: 'REFUNDED' }],
+      }),
+    );
     const saleWhere = prisma.order.findMany.mock.calls[0][0].where;
     expect(saleWhere).toEqual(
       expect.objectContaining({

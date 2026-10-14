@@ -131,6 +131,32 @@ export function saleLineOf(o: {
   };
 }
 
+type PayoutAmounts = Pick<SettlementLine, 'goodsAmount' | 'shippingFee' | 'commissionAmount' | 'codCollected' | 'netAmount'>;
+
+/**
+ * Dòng đảo của đơn đối tác bị trả (Tubu đã hoàn khách). Đối tác nhận hàng về nên trả lại phần đã được tính cho đơn: đã đối soát
+ * thì đảo tiền hàng + phí giao − phí sàn; tiền COD đối tác tự thu vẫn nằm ở đối tác nên không đảo, tổng SALE + REVERSAL của đơn
+ * COD = −số tiền đã thu. Chưa đối soát thì đơn trả trước không có gì để đảo, còn đơn COD là đúng số tiền mặt đối tác đang giữ.
+ */
+export function reversalLineOf(
+  o: { id: string; code: string; paymentMethod: string; paymentStatus: string; total: number },
+  sale: PayoutAmounts | null,
+): SettlementLine | null {
+  const base = { orderId: o.id, orderCode: o.code, kind: 'REVERSAL' as const, deliveredAt: null };
+  if (sale) {
+    return {
+      ...base,
+      goodsAmount: -sale.goodsAmount,
+      shippingFee: -sale.shippingFee,
+      commissionAmount: -sale.commissionAmount,
+      codCollected: 0,
+      netAmount: -(sale.goodsAmount + sale.shippingFee - sale.commissionAmount),
+    };
+  }
+  if (o.paymentMethod !== 'COD' || o.paymentStatus !== 'REFUNDED' || o.total <= 0) return null;
+  return { ...base, goodsAmount: 0, shippingFee: 0, commissionAmount: 0, codCollected: o.total, netAmount: -o.total };
+}
+
 @Injectable()
 export class MerchantFulfilmentService {
   private readonly logger = new Logger(MerchantFulfilmentService.name);
@@ -302,7 +328,7 @@ export class MerchantFulfilmentService {
 
   /**
    * Bảng kê chưa đối soát của một gian hàng, tính từ đơn lúc xem (không lưu sẵn): đơn đã giao qua hạn đổi/trả chưa vào phiếu
-   * nào (SALE) và đơn đã đối soát rồi bị trả (REVERSAL, âm).
+   * nào (SALE) và đơn bị trả mà đối tác đã được tính tiền hoặc đang giữ tiền COD (REVERSAL, âm, xem reversalLineOf).
    */
   async statementFor(storefrontId: string, now = new Date()) {
     const holdDays = await this.holdDays();
@@ -333,30 +359,22 @@ export class MerchantFulfilmentService {
         where: {
           ...base,
           status: 'RETURNED',
-          AND: [{ merchantPayoutLines: { some: { kind: 'SALE' } } }, { merchantPayoutLines: { none: { kind: 'REVERSAL' } } }],
+          merchantPayoutLines: { none: { kind: 'REVERSAL' } },
+          OR: [{ merchantPayoutLines: { some: { kind: 'SALE' } } }, { paymentMethod: 'COD', paymentStatus: 'REFUNDED' }],
         },
         select: {
           id: true,
           code: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          total: true,
           merchantPayoutLines: { where: { kind: 'SALE' }, select: { goodsAmount: true, shippingFee: true, commissionAmount: true, codCollected: true, netAmount: true } },
         },
       }),
     ]);
     const lines: SettlementLine[] = [
       ...sales.map(saleLineOf),
-      ...returned.flatMap((o) =>
-        o.merchantPayoutLines.map((l) => ({
-          orderId: o.id,
-          orderCode: o.code,
-          kind: 'REVERSAL' as const,
-          goodsAmount: -l.goodsAmount,
-          shippingFee: -l.shippingFee,
-          commissionAmount: -l.commissionAmount,
-          codCollected: -l.codCollected,
-          netAmount: -l.netAmount,
-          deliveredAt: null,
-        })),
-      ),
+      ...returned.flatMap((o) => reversalLineOf(o, o.merchantPayoutLines[0] ?? null) ?? []),
     ];
     return {
       holdDays,
