@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MerchantProductsTab } from './merchant-products-tab';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
-import type { AdminPendingProduct } from '@/lib/admin-client';
+import type { AdminLinkedMerchantProduct, AdminPendingProduct, PancakeLinkPreview } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -92,6 +92,9 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
       'fetch',
       vi.fn(async (url: string) => {
         calls.push(url);
+        if (url.includes('/linked')) {
+          return new Response(JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0 } }), { status: 200 });
+        }
         const page = url.includes('page=2') ? 2 : 1;
         const body =
           page === 1
@@ -154,5 +157,117 @@ describe('MerchantProductsTab — DS v2', () => {
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
     expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận' }));
+  });
+});
+
+// R2-MERCHANT-1: admin phải thấy sản phẩm đang bán nào sẽ bị chuyển, xác nhận rõ, và gỡ liên kết được.
+describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm đang bán', () => {
+  const preview = (over: Partial<PancakeLinkPreview> = {}): PancakeLinkPreview => ({
+    code: 'seed-BHN-PP-200',
+    state: 'TAKEOVER',
+    reason: null,
+    variation: { name: '200g', stock: 150, retailPrice: 120000, salePrice: null },
+    origin: {
+      id: 'p-bhnong-pepper',
+      name: 'Tiêu đen Chư Sê',
+      slug: 'tieu-den-chu-se-bh-nong',
+      brand: 'BH.Nong',
+      brandName: 'BH.Nong',
+      isActive: true,
+      onSale: true,
+      sold: 42,
+      reviewCount: 5,
+      otherVariations: 0,
+      storefrontTitle: null,
+    },
+    brandMatchesStore: false,
+    ...over,
+  });
+  const linked: AdminLinkedMerchantProduct = {
+    id: 'l1',
+    linkedAt: '2026-10-14T03:00:00.000Z',
+    takeover: true,
+    originProductId: 'p-bhnong-pepper',
+    product: {
+      id: 'pm1',
+      name: 'Tiêu đen Shop A',
+      slug: 'tieu-den-shop-a',
+      thumbnail: null,
+      isActive: true,
+      approvalStatus: 'APPROVED',
+      storefront: { id: 'sf-a', title: 'Shop A', subdomain: 'shopa' },
+    },
+    variation: { pancakeId: 'seed-BHN-PP-200', name: '200g', stock: 150 },
+    originProduct: { id: 'p-bhnong-pepper', name: 'Tiêu đen Chư Sê', slug: 'tieu-den-chu-se-bh-nong', brand: 'BH.Nong', isActive: false },
+  };
+  const pending = (p: PancakeLinkPreview | null) => ({
+    data: [product({ name: 'Tiêu đen Shop A', pancakeLinkCode: 'seed-BHN-PP-200', pancakeLink: p, storefront: { id: 'sf-a', title: 'Shop A', subdomain: null, ownerUserId: 'u' } })],
+    meta: { page: 1, limit: 100, total: 1 },
+  });
+
+  it('nêu sản phẩm sẽ bị chuyển (tên, thương hiệu, tồn, lượt bán, sẽ tắt), cảnh báo không phải chủ thương hiệu; chưa tích xác nhận thì không duyệt được', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: pending(preview()) },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Tiêu đen Chư Sê');
+    expect(text).toContain('BH.Nong');
+    expect(text).toContain('150');
+    expect(text).toContain('42');
+    expect(text).toContain('tắt bán');
+    expect(text).toContain('không phải chủ thương hiệu');
+    const approve = byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement;
+    expect(approve.disabled).toBe(true);
+    const box = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    click(box);
+    await flush();
+    expect(approve.disabled).toBe(false);
+    click(approve);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, confirmTakeover: true }));
+  });
+
+  it('mã không liên kết được → nêu lý do, khoá Duyệt (chỉ còn Từ chối)', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: pending(preview({ state: 'UNAVAILABLE', reason: 'Mã đang thuộc sản phẩm của gian hàng Shop B.' })),
+      },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).toContain('Mã đang thuộc sản phẩm của gian hàng Shop B.');
+    expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('danh sách đang liên kết: "Gỡ liên kết" bắt nhập lý do rồi POST /unlink', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/admin/merchant-products/linked': { body: { data: [linked], meta: { page: 1, limit: 100, total: 1 } } },
+      '/unlink': { body: { ok: true, originProductId: 'p-bhnong-pepper' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).toContain('Đang liên kết mã Pancake (1)');
+    expect(container.textContent).toContain('Tiêu đen Shop A');
+    expect(container.textContent).toContain('Tiêu đen Chư Sê');
+    click(byText(container, 'button', 'Gỡ liên kết'));
+    const confirmBtn = byText(container, 'button', 'Xác nhận gỡ') as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(true);
+    typeInto(container.querySelector('input[placeholder="Lý do gỡ (gửi đối tác)..."]'), ' Sai thương hiệu ');
+    expect(confirmBtn.disabled).toBe(false);
+    click(confirmBtn);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/unlink'));
+    expect(call?.url).toContain('/admin/merchant-products/pm1/unlink');
+    expect(call?.init?.body).toBe(JSON.stringify({ reason: 'Sai thương hiệu' }));
   });
 });

@@ -934,6 +934,50 @@ export interface AdminPendingProduct {
     price: number;
     stock: number;
   }[];
+  /** Biến thể Pancake và sản phẩm sẽ bị chuyển khi bấm Duyệt (null: gian hàng tự giao). API cũ chưa trả. */
+  pancakeLink?: PancakeLinkPreview | null;
+}
+
+/** LINKED: đã ở sản phẩm này; AVAILABLE: sản phẩm gốc không bán; TAKEOVER: lấy từ sản phẩm đang bán; UNAVAILABLE: không liên kết được. */
+export type PancakeLinkState = 'LINKED' | 'AVAILABLE' | 'TAKEOVER' | 'UNAVAILABLE';
+
+export interface PancakeLinkPreview {
+  code: string;
+  state: PancakeLinkState;
+  reason: string | null;
+  variation: { name: string; stock: number; retailPrice: number; salePrice: number | null } | null;
+  origin: {
+    id: string;
+    name: string;
+    slug: string;
+    brand: string;
+    brandName: string | null;
+    isActive: boolean;
+    onSale: boolean;
+    sold: number;
+    reviewCount: number;
+    otherVariations: number;
+    storefrontTitle: string | null;
+  } | null;
+  brandMatchesStore: boolean;
+}
+
+export interface AdminLinkedMerchantProduct {
+  id: string;
+  linkedAt: string;
+  takeover: boolean;
+  originProductId: string | null;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    thumbnail: string | null;
+    isActive: boolean;
+    approvalStatus: string;
+    storefront: { id: string; title: string; subdomain: string | null } | null;
+  };
+  variation: { pancakeId: string | null; name: string; stock: number };
+  originProduct: { id: string; name: string; slug: string; brand: string; isActive: boolean } | null;
 }
 
 // P0 A6-07 (docs/audit-2026-09/06-web.md): API trả {data, meta} (paginated(), xem
@@ -949,14 +993,25 @@ export const reviewMerchantProduct = (
   productId: string,
   approve: boolean,
   rejectReason?: string,
+  confirmTakeover?: boolean,
 ) =>
   apiFetch<{ id: string; approvalStatus: string }>(
     `/admin/merchant-products/${productId}/review`,
     {
       method: 'POST',
-      body: { approve, rejectReason },
+      body: { approve, rejectReason, ...(confirmTakeover ? { confirmTakeover: true } : {}) },
     },
   );
+
+export const listLinkedMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_SIZE) =>
+  apiFetch<Page<AdminLinkedMerchantProduct>>(`/admin/merchant-products/linked?page=${page}&limit=${limit}`);
+
+/** Gỡ liên kết "Tubu giao hộ": biến thể Pancake về sản phẩm gốc, sản phẩm đối tác tắt bán. */
+export const unlinkMerchantProduct = (productId: string, reason: string) =>
+  apiFetch<{ ok: true; originProductId: string }>(`/admin/merchant-products/${productId}/unlink`, {
+    method: 'POST',
+    body: { reason },
+  });
 
 // ── Hoàn tiền sàn ngoài (cashback) ──
 export interface AdminCashbackTxn {
