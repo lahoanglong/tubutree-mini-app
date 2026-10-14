@@ -102,7 +102,7 @@ export class PancakeProcessor extends WorkerHost {
     const event = await this.prisma.pancakeWebhookEvent.findUnique({
       where: { id: job.data.eventId },
     });
-    if (!event || event.status === PANCAKE_EVENT_STATUS.PROCESSED) return;
+    if (!event || event.status === PANCAKE_EVENT_STATUS.PROCESSED || event.dismissedAt) return;
 
     // Claim nguyên tử: cùng một sự kiện có thể tới worker từ nhiều đường (BullMQ retry/stalled, cron cứu,
     // Pancake gửi lại khi lần trước chưa xong) — chỉ một worker được chạy handler. Claim PROCESSING quá hạn
@@ -111,6 +111,8 @@ export class PancakeProcessor extends WorkerHost {
     const claim = await this.prisma.pancakeWebhookEvent.updateMany({
       where: {
         id: event.id,
+        // "Đã xử lý" sau khi job đã nằm trong hàng đợi (BullMQ retry, Pancake gửi lại) cũng phải chặn được.
+        dismissedAt: null,
         OR: [
           { status: { notIn: [PANCAKE_EVENT_STATUS.PROCESSED, PANCAKE_EVENT_STATUS.PROCESSING] } },
           {

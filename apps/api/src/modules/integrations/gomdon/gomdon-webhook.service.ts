@@ -181,6 +181,8 @@ export class GomdonWebhookService {
   async processEvent(eventId: string): Promise<void> {
     const event = await this.prisma.gomdonWebhookEvent.findUnique({ where: { id: eventId } });
     if (!event || event.status === GOMDON_EVENT_STATUS.PROCESSED || event.status === GOMDON_EVENT_STATUS.IGNORED) return;
+    // Người vận hành đã bấm "Đã xử lý": job còn trong hàng đợi (BullMQ retry, Gomdon gửi lại) không được chạy đè.
+    if (event.dismissedAt) return;
 
     try {
       const outcome = await this.apply(event.rawPayload as unknown as GomdonWebhookPayload);
