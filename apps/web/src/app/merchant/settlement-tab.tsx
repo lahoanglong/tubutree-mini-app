@@ -187,7 +187,7 @@ function TubuFulfilledSection({ sales }: { sales: TubuFulfilledSales }) {
         với Tubu Tree; bảng này để bạn đối chiếu.
       </p>
       <ScrollRegion label="Hàng Tubu giao hộ đã bán" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
-        <table className="w-full text-left text-xs">
+        <table className="w-full min-w-[520px] text-left text-xs">
           <thead className="bg-stone-50 text-stone-500">
             <tr>
               <th className="px-3 py-2 font-medium">Đơn</th>
