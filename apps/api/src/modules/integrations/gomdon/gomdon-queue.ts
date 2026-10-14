@@ -1,4 +1,5 @@
 import type { JobsOptions, Queue } from 'bullmq';
+import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
 /**
  * Helper enqueue dùng chung cho queue gomdon-push — gọi được từ module KHÔNG import GomdonModule
@@ -27,7 +28,7 @@ export const gomdonCancelJobId = (orderId: string) => `cancel-${orderId}`;
 /**
  * Xoá job cũ cùng jobId nếu nó đã KẾT THÚC (completed/failed) rồi add lại.
  *
- * BullMQ giữ hash job sau khi xong (removeOnComplete 1000 / removeOnFail 5000 — jobs/queue.module.ts)
+ * BullMQ giữ hash job sau khi xong (removeOnComplete 1000 / removeOnFail 1000 — jobs/queue.module.ts)
  * và addStandardJob thấy jobId còn tồn tại là KHÔNG enqueue — cron cứu hộ sẽ log "re-enqueue" mãi mà
  * không có gì chạy. Khác pancake-push (chỉ xoá job failed vì pushOrder Pancake không có claim), ở đây
  * xoá cả job completed là AN TOÀN vì mọi handler Gomdon đều idempotent:
@@ -36,12 +37,22 @@ export const gomdonCancelJobId = (orderId: string) => `cancel-${orderId}`;
  *  - event: bỏ qua event đã PROCESSED/IGNORED.
  * Job đang waiting/active/delayed thì giữ nguyên — BullMQ tự dedupe.
  */
-export async function addGomdonJob(
+export function addGomdonJob(
   queue: Queue,
   name: string,
   data: object,
   jobId: string,
   opts: Omit<JobsOptions, 'jobId'> = {},
+): Promise<void> {
+  return withQueueTimeout(replaceFinishedAndAdd(queue, name, data, jobId, opts), `${queue.name} ${jobId}`);
+}
+
+async function replaceFinishedAndAdd(
+  queue: Queue,
+  name: string,
+  data: object,
+  jobId: string,
+  opts: Omit<JobsOptions, 'jobId'>,
 ): Promise<void> {
   try {
     const existing = await queue.getJob(jobId);

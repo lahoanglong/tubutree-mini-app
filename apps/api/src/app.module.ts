@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CronLeaderModule } from './common/cron-leader/cron-leader.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
@@ -57,6 +58,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
+    CronLeaderModule,
     ThrottlerModule.forRoot(throttlerOptions),
     PrismaModule,
     QueueModule,

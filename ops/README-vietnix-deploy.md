@@ -67,6 +67,47 @@ sudo crontab -l  # xem đã có dòng certbot renew chưa (aaPanel thường t�
 # Nếu chưa có, thêm: 0 3 * * * certbot renew --quiet --post-hook "/www/server/apache/bin/apachectl -k graceful"
 ```
 
+## Deploy bản mới
+
+```bash
+cd /opt/tubutree
+# 1. Backup trước (bản pre-deploy, ngoài bản cron hằng ngày)
+COMPOSE_FILE=docker-compose.vietnix.yml ./tools/backup/backup-db.sh
+# 2. Đưa mã lên (git bundle / git merge --ff-only)
+# 3. Build -> migrate bằng image MỚI -> thay api -> thay web
+bash tools/deploy/deploy.sh
+```
+
+`tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
+chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của
+image CŨ ("No pending migrations") và migration mới chỉ chạy trong CMD của container mới, sau khi
+container cũ đã bị thay. Script build trước, migrate bằng image mới, migration lỗi thì dừng khi
+container cũ vẫn phục vụ. Nhiều instance api cùng lúc (scale, hoặc container cũ/mới chồng nhau) thì
+chỉ instance giữ lease trong bảng `cron_leases` chạy @Cron (`src/common/cron-leader`); log có dòng
+`Instance <host:pid:id> chạy cron.` ở đúng một instance. Vẫn giữ một instance cho tới khi đo lại
+P2028 (pool Prisma) với nhiều instance.
+
+## Backup hằng ngày (bắt buộc trước khi có khách thật)
+
+Cài cron theo `tools/backup/README.md` mục "Cài đặt trên VPS Vietnix" và "Cài crontab":
+`COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml`, `RCLONE_REMOTE` trỏ ra ngoài máy
+(R2/S3/Drive), `HEALTHCHECK_URL` để được báo khi backup lỗi hoặc cron không chạy. Diễn tập restore
+trước go-live và mỗi tháng (cùng README).
+
+## Redis và log container
+
+- Redis chạy `--maxmemory 150mb --maxmemory-policy noeviction` (BullMQ bắt buộc noeviction; trước
+  đây là `allkeys-lru`, có thể xoá âm thầm job đang chờ retry). Lần deploy đầu sau thay đổi này phải
+  tạo lại container redis: `docker compose -f docker-compose.vietnix.yml up -d redis`, rồi kiểm
+  `docker compose -f docker-compose.vietnix.yml exec redis redis-cli config get maxmemory-policy`.
+- Theo dõi bộ nhớ Redis: `docker compose -f docker-compose.vietnix.yml exec redis redis-cli info memory | grep used_memory_human`.
+  Gần 150MB thì lệnh ghi lỗi OOM, enqueue rơi về cron reconcile; tìm queue nào ứ (job failed giữ
+  tối đa 1000 mỗi queue) trước khi nâng trần.
+- `/api/health` trả 503 khi DB **hoặc** Redis không phản hồi, nên `docker ps` hiện api `unhealthy`
+  khi Redis sập. Monitor ngoài (UptimeRobot...) nên gọi `https://api.tubutree.com/api/health`.
+- Mọi container ghi log json-file tối đa 5 × 10MB (`x-logging` trong compose). Theo dõi đĩa:
+  `df -h /` và `docker system df`.
+
 ## Khi có VM/VPS riêng (dọn dẹp về sau)
 
 Quay lại `docker-compose.prod.yml` (có Caddy, không giới hạn RAM) trên máy mới, migrate DNS

@@ -2569,3 +2569,14 @@ model FunnelDailySnapshot {
   @@unique([date, step, entrySource])
   @@map("funnel_daily_snapshot")
 }
+
+/// Lease chọn MỘT instance API chạy @Cron (common/cron-leader). Nhiều instance (scale, chồng lúc deploy)
+/// thì chỉ instance giữ lease còn hạn chạy cron; instance khác dừng mọi cron job tới khi lease hết hạn.
+model CronLease {
+  name      String   @id
+  holder    String
+  expiresAt DateTime
+  updatedAt DateTime
+
+  @@map("cron_leases")
+}

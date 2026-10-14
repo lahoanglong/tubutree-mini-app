@@ -5,6 +5,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
+import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
 import { recyclingWeight } from '../gomdon/gomdon-weight';
@@ -54,7 +55,7 @@ export class PancakeOrderService {
    * (checkout gọi + cron reconcile gọi lại) trong lúc job cũ còn active/waiting.
    *
    * Xoá job cũ trước khi add, NHƯNG CHỈ KHI nó đã THẤT BẠI: BullMQ giữ job hash lại sau khi job
-   * xong/thất bại (removeOnComplete 1000, removeOnFail 5000 — xem jobs/queue.module.ts), và
+   * xong/thất bại (removeOnComplete 1000, removeOnFail 1000 — xem jobs/queue.module.ts), và
    * script addStandardJob trả về job cũ mà KHÔNG enqueue nếu hash cùng jobId còn tồn tại. Không
    * dọn thì đơn đã đẩy hỏng hết 5 lần thử sẽ chặn vĩnh viễn mọi lần enqueue sau — cron cứu hộ
    * 15 phút/lần in log "re-enqueue" mãi mà không có gì chạy.
@@ -65,7 +66,11 @@ export class PancakeOrderService {
    * thì cứ 15 phút lại tạo thêm MỘT ĐƠN TRÙNG ở kho vật lý, vô thời hạn. Giữ job completed
    * chính là chốt chặn cuối cho trường hợp này.
    */
-  async enqueuePush(orderId: string): Promise<void> {
+  enqueuePush(orderId: string): Promise<void> {
+    return withQueueTimeout(this.replaceFailedAndAdd(orderId), `${QUEUE_PANCAKE_PUSH} ${orderId}`);
+  }
+
+  private async replaceFailedAndAdd(orderId: string): Promise<void> {
     try {
       const existing = await this.pushQueue.getJob(orderId);
       if (existing && (await existing.getState()) === 'failed') {

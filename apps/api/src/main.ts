@@ -10,6 +10,7 @@ import helmet from 'helmet';
 // khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
@@ -96,6 +97,8 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');
+  // Sau listen thì ScheduleModule đã bật mọi cron job; chỉ instance giữ lease được chạy tiếp.
+  app.get(CronLeaderService).start();
   Logger.log(`🌿 Tubu Tree API listening on http://localhost:${port}/api`, 'Bootstrap');
 }
 

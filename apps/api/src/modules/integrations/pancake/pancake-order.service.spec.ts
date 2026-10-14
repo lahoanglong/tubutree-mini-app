@@ -1,6 +1,7 @@
 import { PancakeOrderService } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
+import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -177,6 +178,21 @@ describe('PancakeOrderService.enqueuePush', () => {
 
     await expect(svc.enqueuePush('o1')).resolves.toBeUndefined();
     expect(add).toHaveBeenCalled();
+  });
+
+  it('Redis mất kết nối (getJob/add treo) → ném QueueTimeoutError sau hạn chờ để checkout trả đơn ngay', async () => {
+    jest.useFakeTimers();
+    try {
+      const add = jest.fn(() => new Promise(() => undefined));
+      const getJob = jest.fn(() => new Promise(() => undefined));
+      const svc = new PancakeOrderService({} as unknown as PrismaService, {} as unknown as PancakeClient, { add, getJob } as never);
+      const res = svc.enqueuePush('o1');
+      const settled = expect(res).rejects.toBeInstanceOf(QueueTimeoutError);
+      await jest.advanceTimersByTimeAsync(QUEUE_COMMAND_TIMEOUT_MS);
+      await settled;
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

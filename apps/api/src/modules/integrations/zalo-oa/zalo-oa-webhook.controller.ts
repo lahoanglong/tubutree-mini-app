@@ -4,6 +4,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_ZALO_OA_EVENTS } from '../../../jobs/queues';
+import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
 interface ZaloOaWebhookBody {
   event_name?: string;
@@ -38,6 +40,7 @@ interface ZaloOaWebhookBody {
 @SkipThrottle()
 @Controller('webhooks/zalo-oa')
 export class ZaloOaWebhookController {
+  private readonly logger = new Logger(ZaloOaWebhookController.name);
   private readonly secret: string;
 
   constructor(
@@ -79,7 +82,12 @@ export class ZaloOaWebhookController {
       }
       throw err;
     }
-    await this.queue.add('process', { eventId: event.id }, { jobId: event.id });
+    try {
+      await withQueueTimeout(this.queue.add('process', { eventId: event.id }, { jobId: event.id }), `${QUEUE_ZALO_OA_EVENTS} ${event.id}`);
+    } catch (err) {
+      // Tin đã lưu DB; Zalo gửi lại sẽ đụng unique msgId nên trả lỗi cũng không giúp enqueue lại.
+      this.logger.error(`Enqueue tin OA ${event.id} lỗi: ${err instanceof Error ? err.message : err}`);
+    }
     return { received: true };
   }
 

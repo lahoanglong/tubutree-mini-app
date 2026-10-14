@@ -20,7 +20,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 3m
           script: |
-            cd ~/tubutree
-            DC="docker compose -f docker-compose.prod.yml"
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
+            DC="docker compose -f ${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}"
             echo "===== API: DIAG client + lỗi gần đây (20m) ====="
             $DC logs api --since 20m 2>&1 | grep -iE "DIAG|CLIENT|fail|zalo-ok|tokenLen|WARN|error|exception|getAccessToken|zmpLogin" | tail -50 || echo "(không có)"

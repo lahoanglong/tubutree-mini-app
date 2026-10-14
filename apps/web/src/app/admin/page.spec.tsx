@@ -258,7 +258,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const bar = tabs[0]!.parentElement!;
     expect(bar.className).toContain('overflow-x-auto');
     const all = [...bar.querySelectorAll('button')];
-    expect(all).toHaveLength(22);
+    expect(all).toHaveLength(23);
     for (const b of all) expect(b.className).toContain('min-h-[44px]');
     expect(tabs[0]!.className).toContain('border-forest-600');
     expect(all[1]!.className).not.toContain('border-forest-600');
