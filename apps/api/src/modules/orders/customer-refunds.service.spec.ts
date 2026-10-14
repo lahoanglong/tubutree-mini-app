@@ -25,7 +25,11 @@ const pending = (over: Record<string, unknown> = {}) => ({
 });
 
 function setup(row: Record<string, unknown> | null = pending()) {
-  const tx = { orderCustomerRefund: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
+  const tx = {
+    orderCustomerRefund: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    order: { findUnique: jest.fn().mockResolvedValue({ status: 'CANCELLED' }) },
+    orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+  };
   const prisma = {
     orderCustomerRefund: {
       findUnique: jest.fn().mockResolvedValue(row),
@@ -36,7 +40,7 @@ function setup(row: Record<string, unknown> | null = pending()) {
     },
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
     payout: { findFirst: jest.fn().mockResolvedValue(null) },
-    user: { findMany: jest.fn().mockResolvedValue([]) },
+    user: { findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Admin An', phone: null }]) },
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -59,10 +63,10 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
   });
 
   it('xác nhận xong → báo khách kèm số tiền, tài khoản che số và mã giao dịch', async () => {
-    const { service, prisma, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
+    const { service, tx, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
-    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PROCESSING' },
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] },
       data: expect.objectContaining({ status: 'COMPLETED', bankRef: 'FT123', completedBy: 'a1' }),
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_BANK_COMPLETED', {
@@ -81,18 +85,43 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
   });
 
   it('khoản khách cuối đơn CTV (không có tài khoản khách) → xác nhận thẳng từ hàng chờ được', async () => {
-    const { service, prisma } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+    const { service, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
-    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', status: { in: ['PENDING', 'PROCESSING'] } } }),
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
     );
   });
 
   it('khoản vừa được xử lý (guard thua) → báo tải lại, không báo khách', async () => {
-    const { service, prisma, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
-    prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    const { service, tx, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
+    tx.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('tải lại');
     expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-4: admin khác người đang chuyển khoản → không xác nhận được, nói rõ ai đang chuyển', async () => {
+    const { service, tx, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1', claimedAt: new Date('2026-10-14T03:05:00Z') }));
+    await expect(service.markPaid('a2', 'r1', { bankRef: 'FT999' })).rejects.toThrow(
+      'Khoản này đang do Admin An chuyển khoản từ 10:05 14/10/2026',
+    );
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-4: admin khác chọn "Tiếp quản" kèm lý do → xác nhận được, ghi lịch sử đơn trong cùng tx', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1', claimedAt: new Date('2026-10-14T03:05:00Z') }));
+    await service.markPaid('a2', 'r1', { bankRef: 'FT999', takeOver: true, takeOverReason: 'An nghỉ phép, đã kiểm tra sao kê' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] } }),
+    );
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'o1',
+        actorType: 'ADMIN',
+        actorId: 'a2',
+        note: expect.stringMatching(/tiếp quản khoản Admin An.*Lý do: An nghỉ phép, đã kiểm tra sao kê · Mã GD FT999/),
+      }),
+    });
   });
 });
 
@@ -122,12 +151,20 @@ describe('CustomerRefundsService.claim (R2-LIFECYCLE-2: "Đang chuyển khoản"
   });
 
   it('trả về hàng chờ → PENDING, xoá người nhận', async () => {
-    const { service, prisma } = setup(pending({ status: 'PROCESSING' }));
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
     await service.release('a1', 'r1');
-    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PROCESSING' },
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PROCESSING', claimedBy: 'a1' },
       data: { status: 'PENDING', claimedBy: null, claimedAt: null },
     });
+    expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-4: admin khác không trả được khoản người khác đang chuyển về hàng chờ (khách sẽ rút được về Ví)', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
+    await expect(service.release('a2', 'r1')).rejects.toThrow('Chỉ người đó được trả về hàng chờ');
+    await expect(service.release('a2', 'r1', { takeOver: true, takeOverReason: ' ' })).rejects.toThrow('Tiếp quản');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,7 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
 import { announceBankRefund } from './refund-queue';
 import { formatVnDateTime } from '../../common/vn-time';
+import { maskPhone } from '../../common/mask-pii';
 
 /** Khoản khách thấy ở chi tiết đơn (không lộ cột nội bộ như completedBy). */
 export interface MyRefundView {
@@ -72,7 +73,59 @@ export class CustomerRefundsService {
       }),
       this.prisma.orderCustomerRefund.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    const names = await this.adminNames(items.flatMap((r) => [r.claimedBy, r.completedBy]));
+    const named = items.map((r) => ({
+      ...r,
+      claimedByName: r.claimedBy ? (names.get(r.claimedBy) ?? null) : null,
+      completedByName: r.completedBy ? (names.get(r.completedBy) ?? null) : null,
+    }));
+    return paginated(named, page, limit, total);
+  }
+
+  private async adminNames(ids: (string | null)[]): Promise<Map<string, string>> {
+    const unique = [...new Set(ids.filter((id): id is string => !!id))];
+    if (unique.length === 0) return new Map();
+    const users = await this.prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, fullName: true, phone: true } });
+    return new Map(users.map((u) => [u.id, u.fullName?.trim() || (u.phone ? maskPhone(u.phone) : 'Quản trị viên')]));
+  }
+
+  /**
+   * Khoản đang chuyển khoản chỉ người bấm "Bắt đầu chuyển khoản" được trả về hàng chờ hay xác nhận đã chuyển (R3-MONEY-4):
+   * admin khác bấm nhầm là khách lại rút được về Ví trong khi người kia đã chuyển tiền — hoàn hai lần. Admin khác chỉ làm
+   * được khi chọn "Tiếp quản" kèm lý do; lần tiếp quản ghi vào lịch sử đơn. Trả `claimedBy` phải khớp ở câu ghi.
+   */
+  private async claimGuard(
+    adminId: string,
+    row: { amount: number; status: CustomerRefundStatus; claimedBy: string | null; claimedAt: Date | null },
+    action: 'release' | 'paid',
+    takeOver: { confirm?: boolean; reason?: string },
+  ): Promise<{ claimedBy: string | null; takeOverNote: string | null }> {
+    if (row.status !== 'PROCESSING' || !row.claimedBy || row.claimedBy === adminId) {
+      return { claimedBy: row.status === 'PROCESSING' ? row.claimedBy : null, takeOverNote: null };
+    }
+    const holder = (await this.adminNames([row.claimedBy])).get(row.claimedBy) ?? 'một quản trị viên khác';
+    const since = row.claimedAt ? ` từ ${formatVnDateTime(row.claimedAt)}` : '';
+    const reason = takeOver.reason?.trim() ?? '';
+    if (!takeOver.confirm || reason.length < 5) {
+      throw new BadRequestException(
+        `Khoản này đang do ${holder} chuyển khoản${since}. Chỉ người đó được ${action === 'release' ? 'trả về hàng chờ' : 'xác nhận đã chuyển'}; ` +
+          `nếu chắc chắn ${holder} không chuyển nữa, chọn "Tiếp quản" và ghi lý do (được lưu vào lịch sử đơn).`,
+      );
+    }
+    return {
+      claimedBy: row.claimedBy,
+      takeOverNote:
+        `Hoàn tiền ${formatVnd(row.amount)}: tiếp quản khoản ${holder} đang chuyển khoản${since} — ` +
+        `${action === 'release' ? 'trả về hàng chờ' : 'xác nhận đã chuyển khoản'}. Lý do: ${reason}`,
+    };
+  }
+
+  private async recordTakeOver(tx: Prisma.TransactionClient, adminId: string, orderId: string, note: string): Promise<void> {
+    const order = await tx.order.findUnique({ where: { id: orderId }, select: { status: true } });
+    if (!order) return;
+    await tx.orderStatusHistory.create({
+      data: { orderId, fromStatus: order.status, toStatus: order.status, actorType: 'ADMIN', actorId: adminId, note },
+    });
   }
 
   /**
@@ -108,20 +161,39 @@ export class CustomerRefundsService {
   }
 
   /** Admin nhận nhầm / chưa chuyển được: trả khoản về hàng chờ, khách lại đổi được nơi nhận. */
-  async release(adminId: string, id: string) {
-    const res = await this.prisma.orderCustomerRefund.updateMany({
-      where: { id, method: 'MANUAL_TRANSFER', status: 'PROCESSING' },
-      data: { status: 'PENDING', claimedBy: null, claimedAt: null },
+  async release(adminId: string, id: string, opts: { takeOver?: boolean; takeOverReason?: string } = {}) {
+    const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    if (row.method !== 'MANUAL_TRANSFER' || row.status !== 'PROCESSING') {
+      throw new BadRequestException('Khoản hoàn không còn ở trạng thái đang chuyển khoản — vui lòng tải lại.');
+    }
+    const guard = await this.claimGuard(adminId, row, 'release', { confirm: opts.takeOver, reason: opts.takeOverReason });
+    const won = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.orderCustomerRefund.updateMany({
+        where: { id, method: 'MANUAL_TRANSFER', status: 'PROCESSING', claimedBy: guard.claimedBy },
+        data: { status: 'PENDING', claimedBy: null, claimedAt: null },
+      });
+      if (res.count === 0) return false;
+      if (guard.takeOverNote) await this.recordTakeOver(tx, adminId, row.orderId, guard.takeOverNote);
+      return true;
     });
-    if (res.count === 0) throw new BadRequestException('Khoản hoàn không còn ở trạng thái đang chuyển khoản — vui lòng tải lại.');
-    this.logger.log(`Admin ${adminId} trả khoản hoàn ${id} về hàng chờ.`);
+    if (!won) throw new BadRequestException(await this.notTransferableReason(id, adminId));
+    this.logger.log(`Admin ${adminId} trả khoản hoàn ${id} về hàng chờ${guard.takeOverNote ? ' (tiếp quản)' : ''}.`);
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
   }
 
   async markPaid(
     adminId: string,
     id: string,
-    opts: { bankRef?: string; note?: string; bankName?: string; accountNumber?: string; accountName?: string } = {},
+    opts: {
+      bankRef?: string;
+      note?: string;
+      bankName?: string;
+      accountNumber?: string;
+      accountName?: string;
+      takeOver?: boolean;
+      takeOverReason?: string;
+    } = {},
   ) {
     const bankRef = opts.bankRef?.trim();
     if (!bankRef) throw new BadRequestException('Vui lòng nhập mã giao dịch ngân hàng của lần chuyển khoản hoàn tiền.');
@@ -138,20 +210,35 @@ export class CustomerRefundsService {
     if (lockable && row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
       throw new BadRequestException('Bấm "Bắt đầu chuyển khoản" để khoá nơi nhận trước khi chuyển tiền, rồi mới xác nhận đã chuyển.');
     }
-    const res = await this.prisma.orderCustomerRefund.updateMany({
-      where: { id, method: 'MANUAL_TRANSFER', status: lockable ? 'PROCESSING' : { in: ['PENDING', 'PROCESSING'] } },
-      data: {
-        status: 'COMPLETED',
-        completedBy: adminId,
-        completedAt: new Date(),
-        bankRef,
-        ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
-        ...(typedBank
-          ? { bankName: typedBank.bankName, bankAccountNo: typedBank.accountNumber, bankAccountName: typedBank.accountName }
-          : {}),
-      },
+    const guard = await this.claimGuard(adminId, row, 'paid', { confirm: opts.takeOver, reason: opts.takeOverReason });
+    // Đang chuyển khoản: chỉ khớp đúng người giữ khoản lúc đọc (chính mình, hoặc người được tiếp quản) — ai đó trả về hàng
+    // chờ hay nhận lại chen giữa thì câu ghi trượt. Khoản khách cuối đơn CTV (không ai đổi nơi nhận) xác nhận thẳng từ hàng chờ.
+    const allowed: Prisma.OrderCustomerRefundWhereInput[] =
+      row.status === 'PROCESSING'
+        ? [{ status: 'PROCESSING', claimedBy: guard.claimedBy }]
+        : lockable
+          ? []
+          : [{ status: 'PENDING' }];
+    const won = await this.prisma.$transaction(async (tx) => {
+      if (allowed.length === 0) return false;
+      const res = await tx.orderCustomerRefund.updateMany({
+        where: { id, method: 'MANUAL_TRANSFER', OR: allowed },
+        data: {
+          status: 'COMPLETED',
+          completedBy: adminId,
+          completedAt: new Date(),
+          bankRef,
+          ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
+          ...(typedBank
+            ? { bankName: typedBank.bankName, bankAccountNo: typedBank.accountNumber, bankAccountName: typedBank.accountName }
+            : {}),
+        },
+      });
+      if (res.count === 0) return false;
+      if (guard.takeOverNote) await this.recordTakeOver(tx, adminId, row.orderId, `${guard.takeOverNote} · Mã GD ${bankRef}`);
+      return true;
     });
-    if (res.count === 0) throw new BadRequestException(await this.notTransferableReason(id, adminId));
+    if (!won) throw new BadRequestException(await this.notTransferableReason(id, adminId));
     this.logger.log(`Admin ${adminId} xác nhận đã chuyển khoản hoàn tiền khách ${id} (mã GD ${bankRef}).`);
     const done = await this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
     if (done.userId) {
@@ -176,7 +263,10 @@ export class CustomerRefundsService {
       return `Khách đã chọn nhận khoản này về Ví Tubu${at} và đã được cộng ${formatVnd(now.amount)} — KHÔNG chuyển khoản. Nếu đã lỡ chuyển, liên hệ khách để thu hồi.`;
     }
     if (now.status === 'COMPLETED') return `Khoản này đã được xác nhận chuyển khoản${now.bankRef ? ` (mã GD ${now.bankRef})` : ''}.`;
-    if (now.status === 'PROCESSING' && now.claimedBy !== adminId) return 'Khoản này đang được một quản trị viên khác chuyển khoản.';
+    if (now.status === 'PROCESSING' && now.claimedBy !== adminId) {
+      const holder = now.claimedBy ? (await this.adminNames([now.claimedBy])).get(now.claimedBy) : undefined;
+      return `Khoản này đang được ${holder ?? 'một quản trị viên khác'} chuyển khoản.`;
+    }
     return 'Khoản hoàn vừa thay đổi — vui lòng tải lại.';
   }
 
