@@ -515,6 +515,12 @@ export interface OrderItemMedia {
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
 export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
+  /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
+  couponCode?: string | null;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
   /** Ai giao đơn này (D4). API cũ chưa trả. */
   fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
   /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */

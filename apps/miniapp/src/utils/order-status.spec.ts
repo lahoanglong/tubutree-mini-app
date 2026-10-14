@@ -7,6 +7,7 @@ import {
   returnWindowState,
   timelineIndex,
   timelineStepsFor,
+  discountRows,
   TIMELINE_STEPS,
 } from './order-status';
 
@@ -89,5 +90,29 @@ describe('returnWindowState', () => {
   it('thiếu mốc giao → tính từ updatedAt như API; không có gì → coi như còn hạn để API quyết', () => {
     expect(returnWindowState({ updatedAt: daysAgo(10) }, 7, now).open).toBe(false);
     expect(returnWindowState({}, 7, now)).toEqual({ open: true, daysLeft: 7 });
+  });
+});
+
+describe('discountRows (R2-BUYERMINI-8: tách mã giảm giá và Điểm Xanh bằng số tiền thật)', () => {
+  it('đơn có chi tiết từng khoản: mỗi khoản một dòng, Điểm Xanh kèm số điểm', () => {
+    expect(
+      discountRows({ discount: 98_000, couponCode: 'XANH10', couponDiscount: 38_000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 60_000, pointsUsed: 60 }),
+    ).toEqual([
+      { label: 'Mã giảm giá (XANH10)', amount: 38_000 },
+      { label: 'Điểm Xanh (60 điểm)', amount: 60_000 },
+    ]);
+  });
+  it('combo, hạng thành viên và phần giảm không rõ nguồn đều có dòng riêng; tổng các dòng = discount', () => {
+    const rows = discountRows({ discount: 100_000, couponDiscount: 0, comboDiscount: 30_000, tierDiscount: 20_000, pointsDiscount: 0, pointsUsed: 0 });
+    expect(rows).toEqual([
+      { label: 'Ưu đãi combo', amount: 30_000 },
+      { label: 'Ưu đãi hạng thành viên', amount: 20_000 },
+      { label: 'Giảm giá khác', amount: 50_000 },
+    ]);
+  });
+  it('đơn cũ không có chi tiết: một dòng Giảm giá, ghi rõ đã gồm Điểm Xanh nếu có dùng điểm', () => {
+    expect(discountRows({ discount: 98_000, pointsUsed: 60 })).toEqual([{ label: 'Giảm giá (gồm Điểm Xanh)', amount: 98_000 }]);
+    expect(discountRows({ discount: 38_000, pointsUsed: 0 })).toEqual([{ label: 'Giảm giá', amount: 38_000 }]);
+    expect(discountRows({ discount: 0, pointsUsed: 0 })).toEqual([]);
   });
 });
