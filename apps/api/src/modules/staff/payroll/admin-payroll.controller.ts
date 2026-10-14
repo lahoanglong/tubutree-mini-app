@@ -88,6 +88,7 @@ export class AdminPayrollController {
       dto.amount,
       dto.reason,
       adminId,
+      { allowDuplicate: dto.allowDuplicate === true },
     );
   }
 }

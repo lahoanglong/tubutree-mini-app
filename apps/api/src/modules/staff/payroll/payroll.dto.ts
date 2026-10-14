@@ -1,5 +1,6 @@
-import { IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, NotEquals } from 'class-validator';
 import { IsCalendarDate } from '../../../common/calendar-date';
+import { Trim } from '../../../common/decorators/trim.decorator';
 
 export class UpdateBankDto {
   @IsOptional()
@@ -60,9 +61,18 @@ export class AdjustDto {
   @IsInt()
   @Min(-50_000_000)
   @Max(50_000_000)
+  @NotEquals(0, { message: 'Số tiền điều chỉnh phải khác 0 (số dương = trừ lương, số âm = thưởng).' })
   amount!: number; // dương=trừ, âm=thưởng
 
+  // Lý do là dấu vết kiểm toán duy nhất của khoản trừ/thưởng tay — nhân viên đọc nó khi hỏi vì sao lương thiếu.
+  @Trim()
   @IsString()
+  @MinLength(3, { message: 'Lý do điều chỉnh cần ít nhất 3 ký tự.' })
   @MaxLength(500)
   reason!: string;
+
+  /** Admin xác nhận đây là khoản thứ hai thật (cùng ngày, số tiền, lý do với khoản vừa ghi trong 5 phút). */
+  @IsOptional()
+  @IsBoolean()
+  allowDuplicate?: boolean;
 }

@@ -471,13 +471,13 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
 
   it('2 request "đồng thời" cùng ngày/số tiền/lý do (giả lập tuần tự do mock $transaction chạy đồng bộ) → chỉ request đầu tạo bản ghi, request sau tự nhận biết đã trùng', async () => {
     const create = jest.fn().mockResolvedValue({});
-    const existing: { id: string }[] = [];
+    const existing: { id: string; createdAt: Date }[] = [];
     const prisma = base();
     (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
       // Mô phỏng DB thật: findFirst thấy bản ghi mà lần gọi create() trước đã "commit".
       findFirst: jest.fn().mockImplementation(async () => existing[0] ?? null),
       create: jest.fn().mockImplementation(async () => {
-        existing.push({ id: 'adj-1' });
+        existing.push({ id: 'adj-1', createdAt: new Date() });
         return create();
       }),
       findMany: jest.fn().mockResolvedValue([]),
