@@ -15,12 +15,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
+  CONSIGNMENT_SETTLE_FROM_KEY,
   DEFAULT_MERCHANT_COMMISSION_PCT,
   DEFAULT_MERCHANT_CONFIRM_SLA_HOURS,
   DEFAULT_MERCHANT_DELIVER_SLA_DAYS,
   DEFAULT_MERCHANT_NEGATIVE_PAYOUT_DUE_DAYS,
   DEFAULT_MERCHANT_SETTLEMENT_HOLD_DAYS,
   DEFAULT_MERCHANT_SHIP_SLA_HOURS,
+  parseConsignmentSettleFrom,
   RETURN_REF_PREFIX,
 } from './merchant-config';
 import {
@@ -636,6 +638,23 @@ export class MerchantFulfilmentService {
     };
   }
 
+  /**
+   * Mốc bắt đầu đối soát giao hộ (merchant.consignment_settle_from): đơn đặt trước mốc không tự vào bảng kê. Đọc thẳng DB (cùng
+   * transaction khi lập phiếu); thiếu thì không giới hạn. Giá trị sai (ghi tay vào DB, 2026-13-01) cũng không giới hạn thay vì làm
+   * hỏng bảng kê, kèm cảnh báo một lần để admin sửa.
+   */
+  private async consignmentSettleFrom(db: Db): Promise<Date | null> {
+    const row = await db.systemConfig.findUnique({ where: { key: CONSIGNMENT_SETTLE_FROM_KEY }, select: { value: true } });
+    if (row?.value == null) return null;
+    const at = parseConsignmentSettleFrom(row.value);
+    const raw = JSON.stringify(row.value);
+    if (!at && !warnedSettleFrom.has(raw)) {
+      warnedSettleFrom.add(raw);
+      this.logger.warn(`${CONSIGNMENT_SETTLE_FROM_KEY} = ${raw} không phải thời điểm ISO 8601 có thật — bảng kê giao hộ tạm không giới hạn theo mốc.`);
+    }
+    return at;
+  }
+
   /** Phí sàn (cùng mức đơn tự giao) và phí Tubu giao hộ hiện tại của gian hàng; phí sàn null = merchant.commission_pct. */
   async consignmentTerms(storefrontId: string, db: Db = this.prisma, defaultCommissionPct?: number): Promise<ConsignmentTerms> {
     const [sf, defaultPct] = await Promise.all([
@@ -680,6 +699,7 @@ export class MerchantFulfilmentService {
       return { terms: null, lines: [] as SettlementLine[], upcoming: [] as (SettlementLine & { availableAt: Date | null })[] };
     }
     const itemSelect = { id: true, variationId: true, productName: true, variationName: true, quantity: true, total: true, paidTotal: true } as const;
+    const settleFrom = await this.consignmentSettleFrom(db);
     const [terms, history, pendingRows, returnedRows, partialRows] = await Promise.all([
       this.consignmentTerms(storefrontId, db, defaultCommissionPct),
       this.termsHistory(storefrontId, db, defaultCommissionPct),
@@ -691,7 +711,7 @@ export class MerchantFulfilmentService {
                  o."updatedAt") AS "deliveredAt"
           FROM "order_items" oi
           JOIN "orders" o ON o."id" = oi."orderId"
-         WHERE ${consignmentPendingSql(Prisma.sql`${storefrontId}`)}`,
+         WHERE ${consignmentPendingSql(Prisma.sql`${storefrontId}`, settleFrom)}`,
       db.orderItem.findMany({
         where: {
           order: { status: 'RETURNED' },
@@ -988,6 +1008,7 @@ export class MerchantFulfilmentService {
    * này mới phải dựng bảng kê ở tổng quan admin.
    */
   private async storesWithPending(): Promise<Set<string>> {
+    const settleFrom = await this.consignmentSettleFrom(this.prisma);
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT o."fulfillerStorefrontId" AS "id" FROM "orders" o
        WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" IS NOT NULL AND (
@@ -1005,7 +1026,7 @@ export class MerchantFulfilmentService {
       SELECT lk."storefrontId" FROM "merchant_pancake_links" lk
         JOIN "order_items" oi ON oi."variationId" = lk."variationId"
         JOIN "orders" o ON o."id" = oi."orderId"
-       WHERE ${consignmentPendingSql(Prisma.raw('lk."storefrontId"'))}
+       WHERE ${consignmentPendingSql(Prisma.raw('lk."storefrontId"'), settleFrom)}
       UNION
       SELECT p."storefrontId" FROM "merchant_payout_lines" s
         JOIN "merchant_payouts" p ON p."id" = s."payoutId"
@@ -1212,24 +1233,18 @@ function overdueWhere(sla: SlaConfig, now: Date): Prisma.OrderWhereInput {
   };
 }
 
-/**
- * Mốc bắt đầu đối soát giao hộ (system_config merchant.consignment_settle_from, ISO): đơn đặt trước mốc không tự vào bảng kê.
- * Đọc thẳng trong câu SQL để cùng một lần đọc với bảng kê; thiếu hoặc sai định dạng thì không giới hạn.
- */
-const CONSIGNMENT_SETTLE_FROM_SQL = Prisma.sql`COALESCE((
-  SELECT ((c."value" #>> '{}')::timestamptz AT TIME ZONE 'UTC') FROM "system_configs" c
-   WHERE c."key" = 'merchant.consignment_settle_from' AND jsonb_typeof(c."value") = 'string'
-     AND (c."value" #>> '{}') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'), '-infinity'::timestamp)`;
+/** Giá trị mốc bắt đầu sai đã cảnh báo — mỗi giá trị sai chỉ ghi log một lần. */
+const warnedSettleFrom = new Set<string>();
 
 /**
  * Điều kiện SQL cho dòng hàng `oi` của đơn `o` đang chờ đối soát "Tubu giao hộ" của gian hàng `store`: đơn kho Tubu đã giao,
  * Tubu đã thu tiền (PAID hoặc COD — cùng luật doanh thu admin), đặt từ mốc bắt đầu, biến thể liên kết với gian hàng lúc đặt
  * (liên kết takeover: từ lúc admin xác nhận hàng ký gửi), chưa có SALE.
  */
-function consignmentPendingSql(store: Prisma.Sql): Prisma.Sql {
+function consignmentPendingSql(store: Prisma.Sql, settleFrom: Date | null): Prisma.Sql {
   return Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 'DELIVERED'
     AND (o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')
-    AND o."createdAt" >= ${CONSIGNMENT_SETTLE_FROM_SQL}
+    ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
     AND EXISTS (
       SELECT 1 FROM "merchant_pancake_links" l
        WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"

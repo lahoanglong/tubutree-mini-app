@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
+import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
@@ -212,6 +213,11 @@ export class SystemConfigService {
       return null;
     },
     'community.banned_keywords': bannedKeywordsProblem,
+    // Bảng kê đối soát giao hộ lọc đơn theo mốc này: mốc không có thật thì bảng kê tạm bỏ giới hạn, nên chặn ngay lúc ghi.
+    'merchant.consignment_settle_from': (value) =>
+      parseConsignmentSettleFrom(value)
+        ? null
+        : 'phải là thời điểm ISO 8601 có thật, vd "2026-10-14T00:00:00Z" (không ghi múi giờ thì hiểu là UTC)',
     'seasonpass.tiers': (value) => {
       if (!Array.isArray(value)) return 'phải là mảng bậc [{ xp, free, premium }]';
       const max = SystemConfigService.SEASONPASS_POINTS_MAX;

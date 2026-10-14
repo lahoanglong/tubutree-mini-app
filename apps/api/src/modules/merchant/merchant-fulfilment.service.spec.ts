@@ -567,7 +567,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(st.upcoming.map((l) => [l.refKey, l.availableAt])).toEqual([['ITEM:o2-a', new Date(soonAt.getTime() + 7 * 24 * H)]]);
     const sql = sqlOf(prisma.$queryRaw.mock.calls[1]);
     expect(sql).toContain(`(o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')`);
-    expect(sql).toContain(`o."createdAt" >= $`);
+    expect(sql).toContain(`AND o."createdAt" >= ?\n`);
     expect(queryOf(prisma.$queryRaw.mock.calls[1]).values).toContainEqual(new Date('2026-10-01T00:00:00Z'));
     expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
     expect(sql).toContain(`(l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")`);
