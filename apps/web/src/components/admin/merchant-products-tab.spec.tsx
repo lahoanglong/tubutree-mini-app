@@ -271,3 +271,49 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     expect(call?.init?.body).toBe(JSON.stringify({ reason: 'Sai thương hiệu' }));
   });
 });
+
+describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-MERCHANT-4)', () => {
+  const edit = product({
+    name: 'Nến thơm sả (tên mới)',
+    description: 'Mô tả mới của đối tác',
+    thumbnail: 'https://cdn.example/new.jpg',
+    isEdit: true,
+    live: { name: 'Nến thơm sả', description: 'Mô tả đang bán', shortDesc: null, thumbnail: 'https://cdn.example/old.jpg' },
+    approvalStatus: 'APPROVED',
+  });
+
+  it('dòng bản sửa ghi rõ "Bản sửa chờ duyệt", đặt nội dung đang bán cạnh nội dung mới, nút duyệt gọi đúng là "Duyệt bản sửa"', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [edit], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Bản sửa chờ duyệt');
+    expect(text).toContain('Đang bán');
+    expect(text).toContain('Nến thơm sả');
+    expect(text).toContain('Mô tả đang bán');
+    expect(text).toContain('Nến thơm sả (tên mới)');
+    expect(text).toContain('Mô tả mới của đối tác');
+    expect(byText(container, 'button', 'Duyệt xuất bản')).toBeNull();
+    click(byText(container, 'button', 'Duyệt bản sửa'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true }));
+  });
+
+  it('sản phẩm mới đăng không có khối so sánh "Đang bán"', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [product()], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).not.toContain('Đang bán');
+    expect(container.textContent).not.toContain('Bản sửa chờ duyệt');
+  });
+});

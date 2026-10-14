@@ -362,22 +362,33 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
   function buildEdit(product: Record<string, unknown>) {
     const productUpdate = jest.fn().mockResolvedValue({});
     const variationUpdate = jest.fn().mockResolvedValue({});
+    const draftUpsert = jest.fn().mockResolvedValue({});
+    const draftDelete = jest.fn().mockResolvedValue({ count: 1 });
+    const notify = jest.fn().mockResolvedValue(undefined);
     const p = {
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }),
-        findMany: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([{ id: 'admin-1' }]),
       },
       storefront: { findFirst: jest.fn().mockResolvedValue(MERCHANT_STORE) },
       product: {
         findFirst: jest.fn().mockResolvedValue(product),
         update: productUpdate,
-        findUniqueOrThrow: jest.fn().mockResolvedValue(product),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, editDraft: null }),
       },
+      productEditDraft: { upsert: draftUpsert, deleteMany: draftDelete },
       variation: { update: variationUpdate },
       $transaction: jest.fn(),
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
-    return { svc: new MerchantService(p as unknown as PrismaService, orderStatus), productUpdate, variationUpdate };
+    return {
+      svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify } as never),
+      productUpdate,
+      variationUpdate,
+      draftUpsert,
+      draftDelete,
+      notify,
+    };
   }
   const OWN = {
     id: 'prod-a',
@@ -390,23 +401,131 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     salePrice: null,
     approvalStatus: 'APPROVED',
     fulfilment: 'MERCHANT',
+    editDraft: null,
     variations: [{ id: 'v-a' }],
   };
+  const DRAFT = { id: 'd1', name: 'Mật ong rừng', description: 'x', shortDesc: null, images: [], thumbnail: null };
 
   it('đổi giá/tồn có hiệu lực ngay, không phải duyệt lại', async () => {
-    const { svc, productUpdate, variationUpdate } = buildEdit(OWN);
+    const { svc, productUpdate, variationUpdate, draftUpsert } = buildEdit(OWN);
     await svc.updateProduct('u1', 'prod-a', { basePrice: 180_000, stock: 5 });
     expect(productUpdate.mock.calls[0][0].data.approvalStatus).toBeUndefined();
+    expect(draftUpsert).not.toHaveBeenCalled();
     expect(variationUpdate).toHaveBeenCalledWith({
       where: { id: 'v-a' },
       data: { retailPrice: 180_000, salePrice: null, stock: 5 },
     });
   });
 
-  it('đổi tên sản phẩm đã duyệt → về chờ duyệt lại', async () => {
-    const { svc, productUpdate } = buildEdit(OWN);
-    await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng U Minh' });
-    expect(productUpdate.mock.calls[0][0].data.approvalStatus).toBe('PENDING_REVIEW');
+  describe('R3-MERCHANT-4: sửa nội dung sản phẩm đang bán không gỡ nó khỏi trang bán', () => {
+    it('đổi tên → lưu bản sửa chờ duyệt, tên/mô tả/ảnh đang bán và trạng thái APPROVED giữ nguyên', async () => {
+      const { svc, productUpdate, draftUpsert } = buildEdit(OWN);
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng U Minh' });
+      expect(draftUpsert).toHaveBeenCalledWith({
+        where: { productId: 'prod-a' },
+        create: { productId: 'prod-a', name: 'Mật ong rừng U Minh', description: 'x', shortDesc: null, images: [], thumbnail: null },
+        update: { name: 'Mật ong rừng U Minh', description: 'x', shortDesc: null, images: [], thumbnail: null },
+      });
+      const data = productUpdate.mock.calls[0]?.[0].data ?? {};
+      expect(data.approvalStatus).toBeUndefined();
+      expect(data.name).toBeUndefined();
+      expect(data.description).toBeUndefined();
+      expect(data.images).toBeUndefined();
+    });
+
+    it('báo admin một lần có bản sửa mới; đối tác sửa tiếp khi bản trước còn chờ thì gộp vào bản chờ, không báo lại', async () => {
+      const first = buildEdit(OWN);
+      await first.svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+      expect(first.notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_EDIT_PENDING', expect.objectContaining({ product_name: 'Mật ong rừng' }));
+
+      const again = buildEdit({ ...OWN, editDraft: DRAFT });
+      await again.svc.updateProduct('u1', 'prod-a', { description: 'Mật ong U Minh nguyên chất' });
+      expect(again.draftUpsert.mock.calls[0]![0].update).toEqual({
+        name: 'Mật ong rừng',
+        description: 'Mật ong U Minh nguyên chất',
+        shortDesc: null,
+        images: [],
+        thumbnail: null,
+      });
+      expect(again.notify).not.toHaveBeenCalled();
+    });
+
+    it('sửa về đúng nội dung đang bán → bỏ bản chờ, không còn gì để duyệt', async () => {
+      const { svc, draftUpsert, draftDelete } = buildEdit({ ...OWN, editDraft: DRAFT });
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong' });
+      expect(draftUpsert).not.toHaveBeenCalled();
+      expect(draftDelete).toHaveBeenCalledWith({ where: { productId: 'prod-a' } });
+    });
+
+    it('lưu lại đúng nội dung (không đổi gì) → không tạo bản sửa, không báo admin', async () => {
+      const { svc, draftUpsert, notify } = buildEdit(OWN);
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong', description: 'x' });
+      expect(draftUpsert).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('đổi cả giá lẫn tên cùng lúc: giá có hiệu lực ngay, tên chờ duyệt', async () => {
+      const { svc, productUpdate, variationUpdate, draftUpsert } = buildEdit(OWN);
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng', basePrice: 190_000 });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 190_000 });
+      expect(productUpdate.mock.calls[0]![0].data.name).toBeUndefined();
+      expect(variationUpdate.mock.calls[0]![0].data).toMatchObject({ retailPrice: 190_000 });
+      expect(draftUpsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('sản phẩm "Tubu giao hộ" đã liên kết: sửa mô tả không về chờ duyệt, nên mã Pancake vẫn bán', async () => {
+      const { svc, productUpdate, draftUpsert } = buildEdit({ ...OWN, fulfilment: 'TUBU', pancakeLinkCode: 'PK-1' });
+      await svc.updateProduct('u1', 'prod-a', { shortDesc: 'Sửa lỗi chính tả' });
+      expect(draftUpsert).toHaveBeenCalledTimes(1);
+      expect(productUpdate.mock.calls[0]?.[0].data.approvalStatus).toBeUndefined();
+    });
+
+    it('sản phẩm chưa được duyệt (chờ duyệt): sửa thẳng vào sản phẩm, không có bản sửa riêng và không báo lại', async () => {
+      const { svc, productUpdate, draftUpsert, notify } = buildEdit({ ...OWN, approvalStatus: 'PENDING_REVIEW' });
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+      expect(draftUpsert).not.toHaveBeenCalled();
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ name: 'Mật ong rừng' });
+      expect(productUpdate.mock.calls[0]![0].data.approvalStatus).toBeUndefined();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm bị từ chối: sửa xong về chờ duyệt (chưa từng bán nên không có gì phải giữ)', async () => {
+      const { svc, productUpdate, draftUpsert, notify } = buildEdit({ ...OWN, approvalStatus: 'REJECTED', rejectReason: 'Ảnh mờ' });
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+      expect(draftUpsert).not.toHaveBeenCalled();
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ name: 'Mật ong rừng', approvalStatus: 'PENDING_REVIEW', rejectReason: null });
+      expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ product_name: 'Mật ong rừng' }));
+    });
+
+    it('mở bán lại sản phẩm đã gỡ liên kết: về chờ duyệt, bản sửa đang chờ được gộp vào sản phẩm', async () => {
+      const { svc, productUpdate, draftDelete } = buildEdit({
+        ...OWN,
+        fulfilment: 'MERCHANT',
+        pancakeLinkCode: 'PK-1',
+        isActive: false,
+        editDraft: DRAFT,
+      });
+      await svc.updateProduct('u1', 'prod-a', { isActive: true });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ name: 'Mật ong rừng', approvalStatus: 'PENDING_REVIEW', isActive: true });
+      expect(draftDelete).toHaveBeenCalledWith({ where: { productId: 'prod-a' } });
+    });
+
+    it('đối tác xem lại: danh sách sản phẩm kèm bản sửa đang chờ (pendingEdit) bên cạnh nội dung đang bán', async () => {
+      const submitted = new Date('2026-10-14T03:00:00Z');
+      const findMany = jest.fn().mockResolvedValue([{ ...OWN, variations: [], editDraft: { ...DRAFT, updatedAt: submitted } }]);
+      const p = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(MERCHANT_STORE) },
+        product: { count: jest.fn().mockResolvedValue(1), findMany },
+        storefrontItem: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+        orderItem: { groupBy: jest.fn().mockResolvedValue([]) },
+      };
+      const res = await new MerchantService(p as unknown as PrismaService, orderStatus).listMyProducts('u1');
+      const row = res.ownProducts[0] as unknown as Record<string, unknown>;
+      expect(row.name).toBe('Mật ong');
+      expect(row.pendingEdit).toEqual({ name: 'Mật ong rừng', description: 'x', shortDesc: null, images: [], thumbnail: null, submittedAt: submitted });
+      expect(row).not.toHaveProperty('editDraft');
+    });
   });
 
   it('sản phẩm Tubu giao hộ: không sửa giá/tồn ở đây', async () => {

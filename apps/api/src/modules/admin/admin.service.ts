@@ -40,6 +40,7 @@ import {
   linkTubuFulfilledVariation,
   unlinkTubuFulfilledVariation,
 } from '../merchant/merchant-pancake-link';
+import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
 
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
@@ -1319,8 +1320,12 @@ export class AdminService {
   }
 
   // ── Kiểm duyệt sản phẩm của đối tác ──
+  /**
+   * Hàng chờ duyệt: sản phẩm mới/bị sửa khi chưa bán, và sản phẩm ĐANG BÁN có bản sửa nội dung chờ duyệt (R3-MERCHANT-4).
+   * Dòng có bản sửa mang nội dung MỚI ở các trường thường (cái admin sẽ duyệt) và nội dung đang bán ở `live` để đối chiếu.
+   */
   async listPendingMerchantProducts(page: number, limit: number) {
-    const where = { approvalStatus: 'PENDING_REVIEW' as const };
+    const where = PENDING_MERCHANT_PRODUCT_WHERE;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
@@ -1329,15 +1334,28 @@ export class AdminService {
             select: { id: true, title: true, subdomain: true, ownerUserId: true },
           },
           variations: true,
+          editDraft: true,
         },
-        orderBy: { createdAt: 'desc' },
+        // Bản sửa mới của sản phẩm cũ phải nổi lên đầu như sản phẩm mới đăng.
+        orderBy: { updatedAt: 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.product.count({ where }),
     ]);
     // Màn duyệt phải thấy sản phẩm nào (thương hiệu, tồn, lượt bán) sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1).
     const data = await Promise.all(
-      items.map(async (p) => ({ ...p, pancakeLink: await describePancakeLink(this.prisma, p) })),
+      items.map(async ({ editDraft, ...p }) => {
+        const shown = editDraft
+          ? { name: editDraft.name, description: editDraft.description, shortDesc: editDraft.shortDesc, images: editDraft.images, thumbnail: editDraft.thumbnail }
+          : {};
+        return {
+          ...p,
+          ...shown,
+          isEdit: !!editDraft,
+          live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: p.thumbnail } : null,
+          pancakeLink: await describePancakeLink(this.prisma, p),
+        };
+      }),
     );
     return paginated(data, page, limit, total);
   }
@@ -1409,10 +1427,13 @@ export class AdminService {
   ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: { storefront: { select: { ownerUserId: true } } },
+      include: { storefront: { select: { ownerUserId: true } }, editDraft: true },
     });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const reason = approve ? null : (rejectReason?.trim() || 'Không đạt tiêu chuẩn xanh của Tubu Tree');
+    if (product.editDraft && product.approvalStatus === 'APPROVED') {
+      return this.reviewProductEdit(adminId, product, product.editDraft, approve, reason);
+    }
 
     // CAS theo trạng thái đã đọc: hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn B bấm
     // Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người
@@ -1428,7 +1449,7 @@ export class AdminService {
         throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
       }
       if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover });
-      // Sản phẩm đã liên kết bị sửa nội dung rồi bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
+      // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       else await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
     });
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
@@ -1446,6 +1467,53 @@ export class AdminService {
         .catch((e: unknown) => this.logger.warn(`Báo đối tác kết quả duyệt ${productId} lỗi: ${(e as Error).message}`));
     }
 
+    return updated;
+  }
+
+  /**
+   * Duyệt/từ chối bản sửa nội dung của sản phẩm ĐANG BÁN (R3-MERCHANT-4). Sản phẩm vẫn APPROVED và giữ liên kết Pancake suốt
+   * thời gian chờ; duyệt thì nội dung mới ghi đè, từ chối thì nội dung đang bán giữ nguyên. Xoá bản chờ có điều kiện theo lần
+   * sửa gần nhất admin đã xem: hai admin cùng bấm, hoặc đối tác sửa tiếp giữa lúc admin đọc và bấm, chỉ một bên thắng.
+   */
+  private async reviewProductEdit(
+    adminId: string,
+    product: { id: string; name: string; storefront: { ownerUserId: string | null } | null },
+    draft: { id: string; name: string; description: string; shortDesc: string | null; images: string[]; thumbnail: string | null; updatedAt: Date },
+    approve: boolean,
+    reason: string | null,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const taken = await tx.productEditDraft.deleteMany({ where: { id: draft.id, updatedAt: draft.updatedAt } });
+      if (taken.count === 0) {
+        throw new BadRequestException('Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.');
+      }
+      await tx.product.update({
+        where: { id: product.id },
+        data: approve
+          ? {
+              name: draft.name,
+              description: draft.description,
+              shortDesc: draft.shortDesc,
+              images: draft.images,
+              thumbnail: draft.thumbnail,
+              rejectReason: null,
+            }
+          : { rejectReason: reason },
+      });
+    });
+    const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    this.logger.warn(
+      `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} bản sửa của sản phẩm đối tác ${product.id} (${product.name})`,
+    );
+    const ownerId = product.storefront?.ownerUserId;
+    if (ownerId) {
+      await this.notifications
+        .notify(ownerId, approve ? 'MERCHANT_PRODUCT_EDIT_APPROVED' : 'MERCHANT_PRODUCT_EDIT_REJECTED', {
+          product_name: approve ? draft.name : product.name,
+          reason: reason ?? '',
+        })
+        .catch((e: unknown) => this.logger.warn(`Báo đối tác kết quả duyệt bản sửa ${product.id} lỗi: ${(e as Error).message}`));
+    }
     return updated;
   }
 }

@@ -59,6 +59,15 @@ export interface MerchantProductVariation {
   stock: number;
 }
 
+export interface MerchantProductPendingEdit {
+  name: string;
+  description: string;
+  shortDesc: string | null;
+  images: string[];
+  thumbnail: string | null;
+  submittedAt: string;
+}
+
 export interface MerchantProduct {
   id: string;
   name: string;
@@ -70,7 +79,10 @@ export interface MerchantProduct {
   images: string[];
   thumbnail?: string | null;
   approvalStatus: 'APPROVED' | 'PENDING_REVIEW' | 'REJECTED';
+  /** Sản phẩm APPROVED mà có lý do: lần sửa nội dung gần nhất bị từ chối, sản phẩm vẫn bán nội dung cũ. */
   rejectReason?: string | null;
+  /** Bản sửa tên/mô tả/ảnh của sản phẩm đang bán, chờ admin duyệt; các trường thường ở trên vẫn là nội dung đang bán. */
+  pendingEdit?: MerchantProductPendingEdit | null;
   storefrontId?: string | null;
   isActive?: boolean;
   /** TUBU: kho Tubu giao qua Pancake ("Tubu giao hộ" đã duyệt); MERCHANT: gian hàng tự giao. */

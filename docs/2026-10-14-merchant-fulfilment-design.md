@@ -139,6 +139,8 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
 | `MERCHANT_PAYOUT_CREATED`/`MERCHANT_PAYOUT_PAID` | chủ gian hàng | admin lập phiếu / đánh dấu đã chuyển |
 | `MERCHANT_PRODUCT_APPROVED`/`MERCHANT_PRODUCT_REJECTED` | chủ gian hàng | admin duyệt sản phẩm (SELLER-12) |
 | `OPS_MERCHANT_PRODUCT_PENDING` | admin | đối tác gửi sản phẩm mới chờ duyệt |
+| `OPS_MERCHANT_PRODUCT_EDIT_PENDING` | admin | đối tác sửa nội dung sản phẩm đang bán, bản sửa chờ duyệt (sản phẩm vẫn bán nội dung cũ) |
+| `MERCHANT_PRODUCT_EDIT_APPROVED`/`MERCHANT_PRODUCT_EDIT_REJECTED` | chủ gian hàng | admin duyệt / từ chối bản sửa |
 
 ## 7. Tiền
 
@@ -184,9 +186,12 @@ chưa đối soát, trả trước:        không lên bảng kê (Tubu giữ ti
 - Admin duyệt: trong một transaction, chuyển biến thể Pancake đó sang sản phẩm của đối tác (cùng một dòng `Variation`, nên giữ
   chỗ tồn, hoàn kho, đồng bộ tồn Pancake đều không đổi), xoá biến thể tạm, sản phẩm Tubu cũ hết biến thể thì tắt. Đồng bộ Pancake
   về sau chỉ cập nhật giá/tồn của biến thể theo `pancakeId`, không kéo nó về sản phẩm cũ. Hai đối tác xin cùng mã: lần duyệt sau
-  bị từ chối (cập nhật có điều kiện `productId = sản phẩm cũ`). Đối tác sửa nội dung sản phẩm đã liên kết đưa nó về chờ duyệt;
-  lần duyệt lại thấy biến thể đã thuộc chính sản phẩm này thì không chuyển gì nữa (kể cả hai admin duyệt lại cùng lúc), chỉ
-  báo trùng mã khi biến thể đang thuộc sản phẩm khác.
+  bị từ chối (cập nhật có điều kiện `productId = sản phẩm cũ`). Đối tác sửa tên, mô tả hoặc ảnh sản phẩm đang bán (kể cả sản phẩm
+  đã liên kết) không gỡ nó khỏi trang bán: bản sửa lưu ở `product_edit_drafts` (tối đa một dòng mỗi sản phẩm, đối tác sửa tiếp
+  thì gộp vào), sản phẩm giữ nội dung đã duyệt, trạng thái `APPROVED` và biến thể Pancake cho tới khi admin duyệt bản sửa
+  (ghi đè nội dung) hoặc từ chối (giữ nội dung cũ, lý do ở `rejectReason`). Hai admin duyệt cùng một bản sửa: xoá bản chờ có
+  điều kiện theo `updatedAt` nên chỉ một bên thắng. Lần duyệt thấy biến thể đã thuộc chính sản phẩm này thì không chuyển gì nữa,
+  chỉ báo trùng mã khi biến thể đang thuộc sản phẩm khác.
 - Không tích "Tubu giao hộ" (hoặc không nhập mã): sản phẩm `MERCHANT`, không có `pancakeId`, đối tác tự khai và tự sửa tồn.
   Chỉ gian hàng loại `MERCHANT` được tạo sản phẩm (kể cả admin vào gian hàng CTV cũng không), vì chỉ loại này có tab giao đơn.
 - Migration `p8_seller_merchant_fulfilment`: `pancakeId` thành nullable; mọi `pancakeId LIKE 'MCH\_%'` (sản phẩm và biến thể) đổi

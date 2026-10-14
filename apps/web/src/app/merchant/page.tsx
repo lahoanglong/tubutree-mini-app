@@ -1113,6 +1113,16 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                       </td>
                       <td className="px-3 py-2.5">
                         {badge}
+                        {p.approvalStatus === 'APPROVED' && p.pendingEdit && (
+                          <span className="mt-1 flex w-fit items-center gap-1 rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
+                            <Clock className="h-3 w-3" aria-hidden="true" /> Bản sửa chờ duyệt
+                          </span>
+                        )}
+                        {p.approvalStatus === 'APPROVED' && !p.pendingEdit && p.rejectReason && (
+                          <span className="mt-1 block text-[11px] font-semibold text-danger-fg" title={p.rejectReason}>
+                            Bản sửa bị từ chối: {p.rejectReason}. Sản phẩm vẫn bán nội dung cũ.
+                          </span>
+                        )}
                         {p.isActive === false && (
                           <span className="mt-1 block text-[11px] font-semibold text-stone-500">Đã ngừng bán</span>
                         )}

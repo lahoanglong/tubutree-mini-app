@@ -446,6 +446,8 @@ model Product {
   contentKit       ProductContentKit?
   pancakeLinks     MerchantPancakeLink[] @relation("PancakeLinkProduct")
   pancakeLinkedOut MerchantPancakeLink[] @relation("PancakeLinkOrigin")
+  /// Bản sửa nội dung đang chờ duyệt của sản phẩm đang bán (R3-MERCHANT-4); sản phẩm vẫn bán với nội dung của chính dòng này.
+  editDraft        ProductEditDraft?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -1525,6 +1527,25 @@ enum MerchantPayoutStatus {
 enum MerchantPayoutLineKind {
   SALE
   REVERSAL
+}
+
+/// Bản sửa tên/mô tả/ảnh của sản phẩm đối tác ĐANG BÁN, chờ admin duyệt (R3-MERCHANT-4). Nội dung trên `products` giữ nguyên
+/// cho tới khi duyệt nên trang sản phẩm, giỏ và liên kết Pancake không gián đoạn; duyệt thì ghi đè lên sản phẩm, từ chối thì xoá
+/// dòng. Mỗi sản phẩm tối đa một dòng (đối tác sửa tiếp thì dòng được cập nhật, không thêm). Là bản chụp đủ cả năm trường.
+model ProductEditDraft {
+  id          String   @id @default(cuid())
+  productId   String   @unique
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name        String
+  description String   @db.Text
+  shortDesc   String?
+  images      String[]
+  thumbnail   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+  @@map("product_edit_drafts")
 }
 
 /// "Tubu giao hộ" (D4): một lần chuyển biến thể Pancake từ sản phẩm gốc sang sản phẩm đối tác. `unlinkedAt` NULL = đang

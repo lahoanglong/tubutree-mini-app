@@ -967,9 +967,9 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
 });
 
 describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () => {
-  it('listPendingMerchantProducts chỉ lấy sản phẩm có approvalStatus=PENDING_REVIEW, có phân trang thật', async () => {
+  it('listPendingMerchantProducts lấy sản phẩm chờ duyệt và sản phẩm đang bán có bản sửa chờ duyệt, có phân trang thật', async () => {
     const findMany = jest.fn().mockResolvedValue([
-      { id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW' },
+      { id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW', editDraft: null },
     ]);
     const count = jest.fn().mockResolvedValue(1);
     const prisma = makePrisma({
@@ -980,13 +980,90 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { approvalStatus: 'PENDING_REVIEW' },
+        where: { OR: [{ approvalStatus: 'PENDING_REVIEW' }, { editDraft: { isNot: null } }] },
         skip: 0,
         take: 20,
       }),
     );
     expect(res.data).toHaveLength(1);
     expect(res.meta).toMatchObject({ page: 1, limit: 20, total: 1 });
+  });
+
+  it('R3-MERCHANT-4: dòng có bản sửa hiện nội dung MỚI để admin duyệt, kèm nội dung đang bán để đối chiếu', async () => {
+    const live = {
+      id: 'p1', name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', images: ['a.jpg'], thumbnail: 'a.jpg',
+      approvalStatus: 'APPROVED', pancakeLinkCode: null,
+    };
+    const editDraft = { id: 'd1', productId: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', images: ['b.jpg'], thumbnail: 'b.jpg', updatedAt: new Date() };
+    const findMany = jest.fn().mockResolvedValue([{ ...live, editDraft }, { id: 'p2', name: 'Mới', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
+    const prisma = makePrisma({
+      product: { findMany, count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+    });
+    const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
+    const [edit, fresh] = res.data as unknown as Record<string, unknown>[];
+    expect(edit).toMatchObject({
+      id: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', thumbnail: 'b.jpg', isEdit: true,
+      live: { name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', thumbnail: 'a.jpg' },
+    });
+    expect(edit).not.toHaveProperty('editDraft');
+    expect(fresh).toMatchObject({ id: 'p2', name: 'Mới', isEdit: false, live: null });
+  });
+
+  describe('R3-MERCHANT-4: duyệt hoặc từ chối bản sửa của sản phẩm đang bán', () => {
+    const updatedAt = new Date('2026-10-14T03:00:00Z');
+    const draft = { id: 'd1', productId: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', images: ['b.jpg'], thumbnail: 'b.jpg', updatedAt };
+    const product = { id: 'p1', name: 'Nến thơm', approvalStatus: 'APPROVED', storefront: { ownerUserId: 'owner-1' }, editDraft: draft };
+
+    function setup(over: { taken?: number } = {}) {
+      (notifications.notify as jest.Mock).mockClear();
+      const productUpdate = jest.fn().mockResolvedValue({});
+      const productUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const draftDeleteMany = jest.fn().mockResolvedValue({ count: over.taken ?? 1 });
+      const prisma = makePrisma({
+        product: {
+          findUnique: jest.fn().mockResolvedValue(product),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'APPROVED' }),
+          update: productUpdate,
+          updateMany: productUpdateMany,
+        },
+        productEditDraft: { deleteMany: draftDeleteMany },
+        variation: { findFirst: jest.fn() },
+        merchantPancakeLink: { findFirst: jest.fn() },
+      });
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+      return { prisma, productUpdate, productUpdateMany, draftDeleteMany };
+    }
+
+    it('duyệt → nội dung mới ghi đè sản phẩm, bản chờ bị xoá, sản phẩm vẫn APPROVED và không đụng liên kết Pancake', async () => {
+      const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
+      expect(draftDeleteMany).toHaveBeenCalledWith({ where: { id: 'd1', updatedAt } });
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', images: ['b.jpg'], thumbnail: 'b.jpg', rejectReason: null },
+      });
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_EDIT_APPROVED', expect.objectContaining({ product_name: 'Nến thơm sả' }));
+    });
+
+    it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
+      const { prisma, productUpdate, productUpdateMany } = setup();
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền');
+      expect(productUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { rejectReason: 'Ảnh vi phạm bản quyền' } });
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(notifications.notify).toHaveBeenCalledWith(
+        'owner-1',
+        'MERCHANT_PRODUCT_EDIT_REJECTED',
+        expect.objectContaining({ product_name: 'Nến thơm', reason: 'Ảnh vi phạm bản quyền' }),
+      );
+    });
+
+    it('bản chờ vừa được admin khác xử lý hoặc đối tác vừa sửa tiếp (xoá có điều kiện trượt) → BadRequest, không ghi gì', async () => {
+      const { prisma, productUpdate } = setup({ taken: 0 });
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-2', 'p1', true)).rejects.toBeInstanceOf(BadRequestException);
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
   });
 
   it('reviewMerchantProduct duyệt APPROVED', async () => {

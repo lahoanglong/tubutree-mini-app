@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
@@ -6,6 +6,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { AdminService } from '../../src/modules/admin/admin.service';
 import { linkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
 import type { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import type { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
@@ -267,7 +268,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     expect(rshell.isActive).toBe(false);
   });
 
-  it('(b2) sản phẩm "Tubu giao hộ" đã duyệt, đối tác sửa nội dung → chờ duyệt lại → 2 admin duyệt lại cùng lúc: 1 thắng, biến thể Pancake vẫn ở sản phẩm, bán lại được', async () => {
+  it('(b2) sản phẩm "Tubu giao hộ" đã duyệt, đối tác sửa nội dung → vẫn bán với nội dung cũ và giữ biến thể Pancake → 2 admin duyệt bản sửa cùng lúc: 1 thắng', async () => {
     const pancakeVariationId = `itmf-pv-${randCode(8)}`;
     await productWithVariation({ pancakeId: `itmf-pp-${randCode(8)}`, variationPancakeId: pancakeVariationId });
     const { owner, store } = await merchantStore();
@@ -277,31 +278,33 @@ describe('Merchant fulfilment races (real Postgres)', () => {
       approvalStatus: 'PENDING_REVIEW',
       pancakeLinkCode: pancakeVariationId,
     });
-    const approve = () =>
-      prisma.$transaction(async (tx) => {
-        const flipped = await tx.product.updateMany({
-          where: { id: p.id, approvalStatus: 'PENDING_REVIEW' },
-          data: { approvalStatus: 'APPROVED' },
-        });
-        if (flipped.count === 0) throw new Error('đã xử lý');
-        await linkTubuFulfilledVariation(tx, p, { adminId: 'admin-it', confirmTakeover: true });
-      });
-    await approve();
+    const none = {} as never;
+    const notifications = { notify } as unknown as NotificationsService;
+    const admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
+    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
 
-    const merchant = new MerchantService(prisma, orderStatus, { notify } as unknown as NotificationsService);
+    const merchant = new MerchantService(prisma, orderStatus, notifications);
     await merchant.updateProduct(owner.id, p.id, { name: `${p.name} (mới)` });
-    const pending = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
-    expect(pending.approvalStatus).toBe('PENDING_REVIEW');
+    const pending = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
+    expect(pending.approvalStatus).toBe('APPROVED');
+    expect(pending.isActive).toBe(true);
+    expect(pending.name).toBe(p.name);
+    expect(pending.editDraft?.name).toBe(`${p.name} (mới)`);
     expect(pending.pancakeLinkCode).toBe(pancakeVariationId);
 
-    const results = await Promise.allSettled([approve(), approve()]);
+    const results = await Promise.allSettled([
+      admin.reviewMerchantProduct('admin-it', p.id, true),
+      admin.reviewMerchantProduct('admin-it', p.id, true),
+    ]);
     const s = summarize(results);
-    const after = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { variations: true } });
+    const after = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { variations: true, editDraft: true } });
     console.log('[b2] fulfilled=%d rejected=%d status=%s errors=%j', s.fulfilled.length, s.rejected.length, after.approvalStatus, s.errors);
 
     expect(s.fulfilled).toHaveLength(1);
-    expect(s.rejected.some((r) => r.reason instanceof ConflictException)).toBe(false);
+    expect(s.rejected[0]!.reason).toBeInstanceOf(BadRequestException);
     expect(after.approvalStatus).toBe('APPROVED');
+    expect(after.name).toBe(`${p.name} (mới)`);
+    expect(after.editDraft).toBeNull();
     expect(after.fulfilment).toBe('TUBU');
     expect(after.variations.map((v) => v.pancakeId)).toEqual([pancakeVariationId]);
   });

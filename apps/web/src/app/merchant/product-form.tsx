@@ -241,13 +241,18 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
   );
 }
 
-/** Sửa sản phẩm tự đăng. Giá, tồn kho có hiệu lực ngay; đổi tên, mô tả, ảnh thì sản phẩm chờ duyệt lại. */
+/**
+ * Sửa sản phẩm tự đăng. Giá, tồn kho có hiệu lực ngay; đổi tên, mô tả, ảnh của sản phẩm đang bán thành bản sửa chờ duyệt, sản
+ * phẩm vẫn bán nội dung cũ. Có bản sửa đang chờ thì form mở từ bản đó (sửa tiếp, không bắt đầu lại từ nội dung đang bán).
+ */
 export function EditProductModal({ product, onClose, onSuccess }: { product: MerchantProduct; onClose: () => void; onSuccess: () => void }) {
   const tubu = product.fulfilment === 'TUBU';
-  const [name, setName] = useState(product.name);
-  const [shortDesc, setShortDesc] = useState(product.shortDesc ?? '');
-  const [description, setDescription] = useState(product.description);
-  const [imageUrl, setImageUrl] = useState(product.images[0] ?? '');
+  const live = product.approvalStatus === 'APPROVED';
+  const base = product.pendingEdit ?? product;
+  const [name, setName] = useState(base.name);
+  const [shortDesc, setShortDesc] = useState(base.shortDesc ?? '');
+  const [description, setDescription] = useState(base.description);
+  const [imageUrl, setImageUrl] = useState(base.images[0] ?? '');
   const [basePrice, setBasePrice] = useState(String(product.basePrice));
   const [stock, setStock] = useState(String(product.variations?.[0]?.stock ?? 0));
   const [msg, setMsg] = useState<string | null>(null);
@@ -262,10 +267,10 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     e.preventDefault();
     setMsg(null);
     const dto: UpdateMerchantProductInput = {};
-    if (name.trim() !== product.name) dto.name = name.trim();
-    if (shortDesc.trim() !== (product.shortDesc ?? '')) dto.shortDesc = shortDesc.trim();
-    if (description.trim() !== product.description) dto.description = description.trim();
-    if (imageUrl.trim() !== (product.images[0] ?? '')) dto.images = imageUrl.trim() ? [imageUrl.trim()] : [];
+    if (name.trim() !== base.name) dto.name = name.trim();
+    if (shortDesc.trim() !== (base.shortDesc ?? '')) dto.shortDesc = shortDesc.trim();
+    if (description.trim() !== base.description) dto.description = description.trim();
+    if (imageUrl.trim() !== (base.images[0] ?? '')) dto.images = imageUrl.trim() ? [imageUrl.trim()] : [];
     if (!tubu) {
       if (Number(basePrice) !== product.basePrice) dto.basePrice = Number(basePrice);
       if (Number(stock) !== (product.variations?.[0]?.stock ?? 0)) dto.stock = Number(stock);
@@ -281,10 +286,18 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     <ModalShell title={`Sửa sản phẩm: ${product.name}`} onClose={onClose}>
       <div className="mt-3">
         <Notice>
-          {tubu
-            ? 'Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu. Đổi tên, mô tả hoặc ảnh thì sản phẩm chờ duyệt lại.'
-            : 'Giá và tồn kho có hiệu lực ngay. Đổi tên, mô tả hoặc ảnh thì sản phẩm chờ Tubu Tree duyệt lại trước khi hiển thị nội dung mới.'}
+          {tubu ? 'Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu. ' : 'Giá và tồn kho có hiệu lực ngay. '}
+          {live
+            ? 'Đổi tên, mô tả hoặc ảnh thì Tubu Tree duyệt lại nội dung mới; trong lúc chờ, sản phẩm vẫn bán với nội dung cũ.'
+            : 'Sản phẩm chưa hiển thị với khách; sửa xong Tubu Tree duyệt rồi mới bán.'}
         </Notice>
+        {live && product.pendingEdit && (
+          <div className="mt-2">
+            <Notice tone="warning">
+              Bản sửa đang chờ Tubu Tree duyệt, form dưới là nội dung bản sửa. Khách vẫn thấy nội dung đang bán cho tới khi được duyệt.
+            </Notice>
+          </div>
+        )}
       </div>
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div>

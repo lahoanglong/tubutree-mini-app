@@ -930,11 +930,16 @@ export interface AdminPendingProduct {
   brand: string;
   category: string;
   description: string | null;
+  shortDesc?: string | null;
   ingredients: string | null;
   certifications: string[];
   ecoBadges: string[];
   approvalStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
   rejectReason?: string | null;
+  /** true: sản phẩm đang bán, dòng này mang nội dung bản sửa chờ duyệt (name/description/thumbnail là bản MỚI). */
+  isEdit?: boolean;
+  /** Nội dung đang bán để đối chiếu với bản sửa (null/thiếu: sản phẩm chờ duyệt lần đầu). */
+  live?: { name: string; description: string; shortDesc: string | null; thumbnail: string | null } | null;
   /** Mã biến thể Pancake xin "Tubu giao hộ"; duyệt thì biến thể đó chuyển sang sản phẩm này. */
   pancakeLinkCode?: string | null;
   createdAt: string;
