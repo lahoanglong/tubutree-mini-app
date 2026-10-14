@@ -7,6 +7,7 @@ const PUBLIC_PRODUCT_DETAIL_KEYS = [
   'slug',
   'name',
   'brand',
+  'brandSlug',
   'shortDesc',
   'description',
   'images',
