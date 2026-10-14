@@ -542,7 +542,7 @@ export class MerchantFulfilmentService {
     const storedSelect = { kind: true, refKey: true, goodsAmount: true, shippingFee: true, commissionAmount: true, codCollected: true, netAmount: true } as const;
     const base = { fulfiller: 'MERCHANT' as const, fulfillerStorefrontId: storefrontId };
     const collected: Prisma.OrderWhereInput = { OR: [{ paymentStatus: 'PAID' }, { paymentMethod: 'COD' }] };
-    const [sales, upcoming, returned, settledWithReturns] = await Promise.all([
+    const [sales, upcoming, returnedRows, settledWithReturns] = await Promise.all([
       db.order.findMany({
         where: { ...base, ...collected, status: 'DELIVERED', deliveredAt: { lte: cutoff }, merchantPayoutLines: { none: { kind: 'SALE' } } },
         select: saleSelect,
@@ -577,7 +577,11 @@ export class MerchantFulfilmentService {
              SELECT 1 FROM "merchant_payout_lines" l
               WHERE l."orderId" = o."id" AND l."kind" = 'REVERSAL' AND l."refKey" = ${RETURN_REF_PREFIX} || rr."id")`,
     ]);
-    const returnedIds = new Set(returned.map((o) => o.id));
+    // Mỗi truy vấn READ COMMITTED đọc một ảnh riêng: đơn vừa lật DELIVERED → RETURNED giữa hai lần đọc có thể nằm ở cả hai danh
+    // sách. Lần này coi như đơn còn đã giao (SALE); bảng kê sau thấy SALE đã lưu và đảo đúng phần còn lại.
+    const deliveredIds = new Set([...sales, ...upcoming].map((o) => o.id));
+    const returned = returnedRows.filter((o) => !deliveredIds.has(o.id));
+    const returnedIds = new Set(returnedRows.map((o) => o.id));
     const settledIds = settledWithReturns.map((r) => r.orderId).filter((id) => !returnedIds.has(id));
     const settled = settledIds.length
       ? await db.order.findMany({
