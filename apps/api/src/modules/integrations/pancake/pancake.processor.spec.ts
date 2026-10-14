@@ -582,6 +582,33 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     });
   });
 
+  it('webhook vận chuyển tới trễ (updated_at cũ hơn mốc đã ghi) → không lùi trạng thái vận chuyển (R2-PANCAKE-3)', async () => {
+    const history = [{ at: '2026-10-14T05:00:00.000Z', status: 'delivered', carrier: 'GHN', code: 'GHN1', pancakeAt: '2026-10-14T04:59:00.000Z' }];
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'delivered', shippingHistory: history,
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, updated_at: '2026-10-14T03:00:00', partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('đơn đã giao mà Pancake gửi lại "Đã gửi hàng" (2) không kèm mốc giờ → không đổi dòng vận chuyển về "đang giao"', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'delivered', shippingHistory: [],
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('cập nhật mới hơn → ghi mốc kèm giờ Pancake để so lần sau', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'picked', shippingHistory: [],
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, updated_at: '2026-10-14T06:00:00', partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    const data = orderUpdate.mock.calls[0][0].data;
+    expect(data.shippingStatus).toBe('on_the_way');
+    expect(data.shippingHistory.at(-1).pancakeAt).toBe(new Date('2026-10-14T06:00:00').toISOString());
+  });
+
   it('đơn hàng không tồn tại → bỏ qua không ném lỗi', async () => {
     const { proc, orderUpdate } = setup(null);
     await proc.onShippingUpdated({ id: 'nonexistent-p1', partner: { partner_name: 'GHN' } });

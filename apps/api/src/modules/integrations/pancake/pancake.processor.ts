@@ -88,6 +88,25 @@ function blockedNeedsAttention(err: InvalidOrderTransitionError): boolean {
  * Khớp đơn theo pancakeOrderId; mã đơn (external_order_id / "Order code: …" trong note) chỉ dùng khi đơn Tubu
  * chưa gắn đơn Pancake nào hoặc gắn đúng đơn này — xem resolveOrder.
  */
+/** Mã Pancake POS "Đã gửi hàng". */
+const PANCAKE_STATUS_SHIPPED = 2;
+
+function pancakeTime(v: unknown): Date | null {
+  if (typeof v !== 'string' && typeof v !== 'number') return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Mốc updated_at Pancake mới nhất đã ghi vào hành trình vận chuyển (null nếu chưa mốc nào có). */
+function latestPancakeAt(history: unknown[]): Date | null {
+  let latest: Date | null = null;
+  for (const h of history) {
+    const at = pancakeTime((h as { pancakeAt?: unknown } | null)?.pancakeAt);
+    if (at && (!latest || at > latest)) latest = at;
+  }
+  return latest;
+}
+
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
   private readonly logger = new Logger(PancakeProcessor.name);
@@ -420,13 +439,34 @@ export class PancakeProcessor extends WorkerHost {
     }
 
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
+    // Webhook tới trễ / sai thứ tự (Pancake gửi lại, cron chạy lại UNMATCHED): không lùi dòng vận chuyển. So theo
+    // updated_at của Pancake với mốc mới nhất đã ghi; không có mốc giờ thì ít nhất không đưa đơn đã giao về "đang giao".
+    const eventAt = pancakeTime(data['updated_at']);
+    const lastAt = latestPancakeAt(history);
+    if (eventAt && lastAt && eventAt.getTime() < lastAt.getTime()) {
+      this.logger.warn(`Bỏ qua cập nhật vận chuyển cũ (${data['updated_at']}) cho đơn ${order.code}.`);
+      return;
+    }
+    if (order.status === 'DELIVERED' && Number(data['status']) === PANCAKE_STATUS_SHIPPED) {
+      this.logger.warn(`Bỏ qua "Đã gửi hàng" tới sau khi đơn ${order.code} đã giao.`);
+      return;
+    }
     // Ghi mốc khi TRẠNG THÁI hoặc MÃ VẬN ĐƠN đổi (gán waybill cũng là 1 mốc) — tránh ghi trùng.
     const last = history[history.length - 1] as { status?: string | null; code?: string | null } | undefined;
     const changed =
       (!!shipStatusS && shipStatusS !== (last?.status ?? null)) ||
       (!!waybillS && waybillS !== (last?.code ?? null));
     const nextHistory = changed
-      ? [...history, { at: new Date().toISOString(), status: shipStatusS, carrier: carrierS, code: waybillS }]
+      ? [
+          ...history,
+          {
+            at: new Date().toISOString(),
+            status: shipStatusS,
+            carrier: carrierS,
+            code: waybillS,
+            ...(eventAt ? { pancakeAt: eventAt.toISOString() } : {}),
+          },
+        ]
       : history;
 
     await this.prisma.order.update({
