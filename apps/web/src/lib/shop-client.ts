@@ -378,6 +378,19 @@ export const requestReturn = (code: string, body: ReturnRequestBody & Partial<Re
   apiFetch<ReturnRequestDTO>(`/orders/${encodeURIComponent(code)}/return-request`, { method: 'POST', body });
 export const fetchMyReturns = () => apiFetch<ReturnRequestDTO[]>('/orders/me/returns');
 
+/** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt, D3) — không ghi gì. */
+export interface ReturnEstimateDTO {
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  pointsUsedBack: number;
+  lines: { orderItemId: string; quantity: number; refundAmount: number }[];
+}
+export const estimateReturn = (code: string, body: { reasonCode?: ReturnReasonCode; items: { orderItemId: string; quantity: number }[] }) =>
+  apiFetch<ReturnEstimateDTO>(`/orders/${encodeURIComponent(code)}/return-estimate`, { method: 'POST', body });
+
 /** Các khoản hoàn tiền của khách cho một đơn (chuyển khoản chờ xử lý, tiền về muộn). */
 export const fetchMyRefunds = (orderId: string) =>
   apiFetch<MyRefund[]>(`/orders/me/refunds?orderId=${encodeURIComponent(orderId)}`);

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   repurchase: vi.fn(),
   requestReturn: vi.fn(),
+  estimate: vi.fn(),
   returns: [] as unknown[],
   returnsError: false,
   refunds: [] as unknown[],
@@ -43,6 +44,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   cancelOrder: mocks.cancel,
   repurchaseOrder: mocks.repurchase,
   requestReturn: mocks.requestReturn,
+  estimateReturn: mocks.estimate,
   fetchMyReturns: async () => {
     if (mocks.returnsError) throw new Error('boom');
     return mocks.returns;
@@ -90,6 +92,7 @@ beforeEach(() => {
   mocks.cancel.mockReset().mockResolvedValue({ ...BASE, status: 'CANCELLED' });
   mocks.repurchase.mockReset();
   mocks.requestReturn.mockReset().mockResolvedValue({ id: 'r1' });
+  mocks.estimate.mockReset().mockResolvedValue({ isFull: false, goods: 90000, shipping: 0, refund: 90000, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
   mocks.returns = [];
   mocks.returnsError = false;
   mocks.refunds = [];
@@ -314,6 +317,64 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     });
     expect(container.querySelector('form[aria-labelledby="return-form-title"]')).toBeNull();
     expect(container.textContent).toContain('Đã gửi yêu cầu đổi/trả');
+  });
+
+  // R3-UI-6: Mini App hiện "Dự kiến hoàn" theo D3 trước khi gửi; web phải cho khách thấy cùng con số (cùng API).
+  describe('ước tính tiền hoàn (R3-UI-6)', () => {
+    const estimateText = (c: HTMLElement) => c.querySelector('[data-testid="return-estimate"]')?.textContent ?? null;
+
+    it('chọn dòng thì hỏi API ước tính và hiện "Dự kiến hoàn", cập nhật khi đổi lý do (phí ship chỉ khi lỗi shop/trả cả đơn)', async () => {
+      mocks.order = delivered;
+      mocks.estimate.mockImplementation(async (_code: string, body: { reasonCode?: string }) =>
+        body.reasonCode === 'DEFECTIVE'
+          ? { isFull: false, goods: 90000, shipping: 15000, refund: 105000, moneyRefundable: true, pointsUsedBack: 12, lines: [] }
+          : { isFull: false, goods: 90000, shipping: 0, refund: 90000, moneyRefundable: true, pointsUsedBack: 0, lines: [] },
+      );
+      const { container } = await mount();
+      click(btn(container, 'Yêu cầu đổi/trả')!);
+      await flush(6);
+      expect(mocks.estimate).toHaveBeenCalledWith('TB-9', { items: [{ orderItemId: 'i1', quantity: 1 }], reasonCode: undefined });
+      expect(estimateText(container)).toContain('Dự kiến hoàn 90.000đ');
+      click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+      await flush(6);
+      expect(mocks.estimate).toHaveBeenLastCalledWith('TB-9', { items: [{ orderItemId: 'i1', quantity: 1 }], reasonCode: 'DEFECTIVE' });
+      expect(estimateText(container)).toContain('Dự kiến hoàn 105.000đ');
+      expect(estimateText(container)).toContain('gồm 15.000đ phí vận chuyển');
+      expect(estimateText(container)).toContain('hoàn lại 12 Điểm Xanh đã dùng');
+      expect(estimateText(container)).toContain('Tubu xác nhận số cuối cùng khi duyệt');
+    });
+
+    it('bỏ chọn hết dòng → không hiện ước tính', async () => {
+      mocks.order = delivered;
+      const { container } = await mount();
+      click(btn(container, 'Yêu cầu đổi/trả')!);
+      await flush(6);
+      click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+      await flush(4);
+      expect(estimateText(container)).toBeNull();
+    });
+
+    it('đơn không có tiền để hoàn (moneyRefundable=false) → không hiện số', async () => {
+      mocks.order = delivered;
+      mocks.estimate.mockResolvedValue({ isFull: false, goods: 0, shipping: 0, refund: 0, moneyRefundable: false, pointsUsedBack: 0, lines: [] });
+      const { container } = await mount();
+      click(btn(container, 'Yêu cầu đổi/trả')!);
+      await flush(6);
+      expect(estimateText(container)).toBeNull();
+    });
+
+    it('API ước tính lỗi → form vẫn gửi được, không hiện số', async () => {
+      mocks.order = delivered;
+      mocks.estimate.mockRejectedValue(new Error('boom'));
+      const { container } = await mount();
+      click(btn(container, 'Yêu cầu đổi/trả')!);
+      await flush(6);
+      expect(estimateText(container)).toBeNull();
+      click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+      click(btn(container, 'Gửi yêu cầu')!);
+      await flush(8);
+      expect(mocks.requestReturn).toHaveBeenCalled();
+    });
   });
 
   it('R2-LIFECYCLE-10: form có ô tải ảnh minh chứng thay cho lời dặn gửi email; ảnh đi cùng yêu cầu', async () => {
