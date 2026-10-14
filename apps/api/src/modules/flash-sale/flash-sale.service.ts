@@ -221,6 +221,23 @@ export class FlashSaleService {
     });
   }
 
+  /**
+   * Xoá đợt flash sale CHƯA bắt đầu (admin): gõ nhầm tên/giờ thì tạo lại được. Đợt đã bắt đầu có thể đã có người xem giá
+   * và đặt hàng nên chỉ cho tắt. Item, lượt mua và nhắc tôi xoá theo cascade.
+   */
+  async deleteSale(id: string) {
+    const sale = await this.prisma.flashSale.findUnique({ where: { id }, include: { items: { select: { soldCount: true } } } });
+    if (!sale) throw new BadRequestException('Không tìm thấy đợt flash sale.');
+    if (sale.startAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Đợt flash sale đã bắt đầu, chỉ có thể tắt chứ không xoá.');
+    }
+    if (sale.items.some((it) => it.soldCount > 0)) {
+      throw new BadRequestException('Đợt flash sale đã phát sinh đơn, chỉ có thể tắt chứ không xoá.');
+    }
+    await this.prisma.flashSale.delete({ where: { id } });
+    return { ok: true };
+  }
+
   /** Danh sách toàn bộ đợt flash sale kèm item (admin). */
   async listSales() {
     return this.prisma.flashSale.findMany({

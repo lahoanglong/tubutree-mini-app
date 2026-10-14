@@ -43,6 +43,11 @@ export class FlashSaleAdminController {
     return this.flashSale.updateSale(id, dto);
   }
 
+  @Delete(':id')
+  removeSale(@Param('id') id: string) {
+    return this.flashSale.deleteSale(id);
+  }
+
   @Post(':id/items')
   addItem(@Param('id') id: string, @Body() dto: AddItemDto) {
     return this.flashSale.addItem(id, dto);
