@@ -29,6 +29,7 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
+import { TOTAL_CHANGED } from '../../src/modules/checkout/checkout.service';
 import { createDealer, createUser, randCode, setConfig, warmPool } from './helpers';
 
 const DAY = 86_400_000;
@@ -50,6 +51,7 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
   let dealer: DealerService;
   let subs: SubscriptionsService;
   let settlement: MerchantFulfilmentService;
+  let returns: OrderReturnsService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -94,6 +96,7 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     dealer = moduleRef.get(DealerService);
     subs = moduleRef.get(SubscriptionsService);
     settlement = moduleRef.get(MerchantFulfilmentService);
+    returns = moduleRef.get(OrderReturnsService);
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
     await setConfig(prisma, 'returns.window_days', 7);
     await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
@@ -260,5 +263,81 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     await prisma.order.update({ where: { id: order!.id }, data: { status: 'DELIVERED', deliveredAt: ago(10) } });
     const st = await settlement.statementFor(store.id);
     expect(st.lines.map((l) => [l.refKey, l.goodsAmount, l.commissionAmount, l.netAmount])).toEqual([[`ITEM:${ic.id}`, 80_000, 8_000, 72_000]]);
+  });
+
+  describe('Q8 S7: Điểm Xanh chỉ trả cho hàng của Tubu', () => {
+    const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
+    const key = () => `itpg-${randCode(12)}`;
+
+    it('giỏ Tubu + hàng giao hộ: trần điểm = giá trị hàng Tubu; báo giá kẹp kèm lời giải thích; đặt đúng số đã báo; dòng giao hộ không nhận điểm', async () => {
+      const store = await shop();
+      const t = await variation(100_000);
+      const c = await variation(100_000, { consignment: store.id });
+      const u = await buyer({ pointsConvertedBalance: 300 });
+      await cart.addItem(u.userId, { variationId: t.id, quantity: 1 });
+      await cart.addItem(u.userId, { variationId: c.id, quantity: 1 });
+
+      const q = await checkout.quote(u.userId, { addressId: u.addressId, pointsToUse: 300 } as never);
+      expect(q).toMatchObject({ pointsUsed: 100, pointsDiscount: 100_000, pointsMax: 100, pointsPartnerNote: NOTE });
+      expect(q.pointsNotice).toBe(`Đơn này dùng được tối đa 100 Điểm Xanh. ${NOTE}.`);
+      expect(q.total).toBe(100_000 + q.shippingFee);
+
+      await expect(
+        checkout.placeOrder(u.userId, { addressId: u.addressId, paymentMethod: 'COD', pointsToUse: 300, expectedTotal: q.total - 1 } as never, key()),
+      ).rejects.toMatchObject({ response: { code: TOTAL_CHANGED } });
+      await checkout.placeOrder(u.userId, { addressId: u.addressId, paymentMethod: 'COD', pointsToUse: 300, expectedTotal: q.total } as never, key());
+      const [order] = await prisma.order.findMany({ where: { userId: u.userId }, include: { items: true } });
+      expect(order).toMatchObject({ pointsUsed: 100, pointsUsedConverted: 100, pointsDiscount: 100_000, total: q.total });
+      const it = (id: string) => order!.items.find((i) => i.variationId === id)!;
+      expect([it(t.id).paidTotal, it(t.id).pointsDiscount, it(c.id).paidTotal, it(c.id).pointsDiscount]).toEqual([0, 100_000, 100_000, 0]);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.userId } })).pointsConvertedBalance).toBe(200);
+
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      await prisma.order.update({ where: { id: order!.id }, data: { status: 'DELIVERED', deliveredAt: ago(10) } });
+      const st = await settlement.statementFor(store.id);
+      expect(st.lines.map((l) => [l.refKey, l.goodsAmount, l.commissionAmount, l.netAmount])).toEqual([[`ITEM:${it(c.id).id}`, 100_000, 10_000, 90_000]]);
+
+      await prisma.order.update({ where: { id: order!.id }, data: { deliveredAt: ago(2) } });
+      const rc = await returns.request(u.userId, order!.code, { reasonCode: 'OTHER', reason: 'Không cần nữa', items: [{ orderItemId: it(c.id).id, quantity: 1 }] });
+      expect(await returns.preview(rc.id)).toMatchObject({ goods: 100_000, pointsUsedBack: 0 });
+      await returns.review(admin.id, rc.id, { approve: true, expectedRefund: 100_000 });
+      const rt = await returns.request(u.userId, order!.code, { reasonCode: 'OTHER', reason: 'Không cần nữa', items: [{ orderItemId: it(t.id).id, quantity: 1 }] });
+      expect(await returns.preview(rt.id)).toMatchObject({ goods: 0, pointsUsedBack: 100 });
+    });
+
+    it('dùng ít hơn trần: có lời giải thích nhưng không có lời báo kẹp', async () => {
+      const store = await shop();
+      const t = await variation(100_000);
+      const c = await variation(100_000, { consignment: store.id });
+      const u = await buyer({ pointsConvertedBalance: 30 });
+      await cart.addItem(u.userId, { variationId: t.id, quantity: 1 });
+      await cart.addItem(u.userId, { variationId: c.id, quantity: 1 });
+      const q = await checkout.quote(u.userId, { addressId: u.addressId, pointsToUse: 30 } as never);
+      expect(q).toMatchObject({ pointsUsed: 30, pointsMax: 30, pointsPartnerNote: NOTE, pointsNotice: null });
+    });
+
+    it('giỏ chỉ có hàng của gian hàng (giao hộ hoặc tự giao): không dùng được điểm nào, báo giá nói rõ', async () => {
+      const store = await shop();
+      const c = await variation(100_000, { consignment: store.id });
+      const m = await variation(70_000, { selfShip: store.id });
+      for (const v of [c, m]) {
+        const u = await buyer({ pointsBalance: 50, pointsConvertedBalance: 50 });
+        await cart.addItem(u.userId, { variationId: v.id, quantity: 1 });
+        const q = await checkout.quote(u.userId, { addressId: u.addressId, pointsToUse: 100 } as never);
+        expect(q).toMatchObject({ pointsUsed: 0, pointsDiscount: 0, pointsMax: 0, pointsPartnerNote: NOTE });
+        expect(q.pointsNotice).toBe(`Đơn này không dùng được Điểm Xanh. ${NOTE}.`);
+        await checkout.placeOrder(u.userId, { addressId: u.addressId, paymentMethod: 'COD', pointsToUse: 100, expectedTotal: q.total } as never, key());
+        const orders = await prisma.order.findMany({ where: { userId: u.userId } });
+        expect(orders.map((o) => o.pointsUsed)).toEqual([0]);
+      }
+    });
+
+    it('giỏ chỉ hàng Tubu: báo giá như cũ, không có lời giải thích hàng đối tác', async () => {
+      const t = await variation(100_000);
+      const u = await buyer({ pointsBalance: 50 });
+      await cart.addItem(u.userId, { variationId: t.id, quantity: 1 });
+      const q = await checkout.quote(u.userId, { addressId: u.addressId, pointsToUse: 50 } as never);
+      expect(q).toMatchObject({ pointsUsed: 20, pointsMax: 20, pointsPartnerNote: null, pointsNotice: null });
+    });
   });
 });

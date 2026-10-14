@@ -2,6 +2,7 @@ import {
   allocateGroupAmounts,
   allocateLineAmounts,
   allocateProRata,
+  pointsRedeemBase,
   fulfillerOf,
   groupByFulfiller,
   paymentMethodBlockReason,
@@ -157,7 +158,7 @@ describe('allocateGroupAmounts', () => {
       pointsUsedConverted: 7,
     };
     const out = allocateGroupAmounts(groups, t);
-    const sum = (k: Exclude<keyof (typeof out)[number], 'linePaid'>) => out.reduce((s, g) => s + g[k], 0);
+    const sum = (k: Exclude<keyof (typeof out)[number], 'linePaid' | 'linePoints'>) => out.reduce((s, g) => s + g[k], 0);
     expect(sum('comboDiscount')).toBe(5_000);
     expect(sum('couponDiscount')).toBe(32_777);
     expect(sum('tierDiscount')).toBe(9_999);
@@ -219,7 +220,7 @@ describe('allocateLineAmounts — mỗi khoản giảm chỉ rơi vào dòng đ�
     expect(shop).toMatchObject({ couponDiscount: 0, discount: 0, goodsAfterAll: 100_000, linePaid: [100_000] });
   });
 
-  it('combo về đúng dòng; mã trên dòng khớp sau combo; hạng trên hàng không flash; Điểm Xanh trên mọi dòng; tổng khớp cả lần đặt', () => {
+  it('combo về đúng dòng; mã trên dòng khớp sau combo; hạng trên hàng không flash; Điểm Xanh trên hàng Tubu (cả flash); tổng khớp cả lần đặt', () => {
     const lines = [
       scoped('v1', 'p1', 200_000, TUBU),
       scoped('v2', 'p2', 100_000, SHOP_A),
@@ -242,10 +243,70 @@ describe('allocateLineAmounts — mỗi khoản giảm chỉ rơi vào dòng đ�
     ]);
     // hạng 12.000 chia theo phần còn lại không flash: 200.000 và 60.000.
     expect(out.map((l) => l.tier)).toEqual([9_231, 2_769, 0]);
+    expect(out[1]!.points).toBe(0);
     expect(out[2]!.points).toBeGreaterThan(0);
     expect(out.reduce((s, l) => s + l.points, 0)).toBe(20_000);
     expect(out.reduce((s, l) => s + l.paid, 0)).toBe(350_000 - 10_000 - 30_000 - 12_000 - 20_000);
     for (const l of out) expect(l.paid).toBe(l.total - l.combo - l.coupon - l.tier - l.points);
+  });
+});
+
+describe('Điểm Xanh không trả cho hàng của gian hàng đối tác (Q8 S7)', () => {
+  const none = { comboPerLine: {}, comboTotal: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0 };
+  const partner = (variationId: string, total: number, fulfiller: LineFulfiller = TUBU, isFlash = false): SplitLine => ({
+    ...line(variationId, total, fulfiller, isFlash),
+    partnerOwned: true,
+  });
+
+  it('nền Điểm Xanh = hàng Tubu sau combo, mã, hạng (cộng hàng Tubu giờ vàng); hàng giao hộ, hàng tự giao, hàng đối tác giờ vàng không tính', () => {
+    const lines = [
+      line('t', 200_000, TUBU),
+      line('tf', 50_000, TUBU, true),
+      partner('c', 100_000),
+      partner('cf', 80_000, TUBU, true),
+      line('m', 60_000, SHOP_A),
+    ];
+    // mã 36.000 chia theo nền không flash: t 200.000, c 100.000, m 60.000 → t 20.000; hạng 3% trên phần còn lại → t 5.400.
+    expect(pointsRedeemBase(lines, { ...none, couponDiscount: 36_000, tierDiscount: 9_720 })).toBe(200_000 - 20_000 - 5_400 + 50_000);
+    expect(pointsRedeemBase([partner('c', 100_000), line('m', 60_000, SHOP_A)], none)).toBe(0);
+  });
+
+  it('dòng hàng giao hộ của gian hàng (cùng kiện Tubu) không nhận đồng Điểm Xanh nào', () => {
+    const out = allocateLineAmounts([line('t', 100_000, TUBU), partner('c', 100_000)], {
+      ...none,
+      pointsDiscount: 60_000,
+      pointsUsed: 60,
+    });
+    expect(out.map((l) => [l.points, l.paid])).toEqual([
+      [60_000, 40_000],
+      [0, 100_000],
+    ]);
+  });
+
+  it('nhiều kiện: điểm chỉ vào kiện Tubu và chỉ vào dòng hàng Tubu; kiện gian hàng tự giao không có điểm; mỗi dòng trả về phần điểm của nó', () => {
+    const groups = [{ lines: [line('t', 100_000, TUBU), partner('c', 100_000)] }, { lines: [line('m', 100_000, SHOP_A)] }];
+    const [tubu, shop] = allocateGroupAmounts(groups, { ...none, pointsDiscount: 30_000, pointsUsed: 30, pointsUsedConverted: 10 });
+    expect(tubu).toMatchObject({ pointsDiscount: 30_000, pointsUsed: 30, pointsUsedConverted: 10, linePaid: [70_000, 100_000], linePoints: [30_000, 0] });
+    expect(shop).toMatchObject({ pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0, linePaid: [100_000], linePoints: [0] });
+  });
+
+  it('giỏ không có hàng đối tác: nền Điểm Xanh đúng bằng nền cũ (sau combo, mã, hạng + hàng giờ vàng)', () => {
+    const rand = rng(7);
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
+    for (let n = 0; n < 1_000; n += 1) {
+      const lines = Array.from({ length: int(1, 5) }, (_, k) => ({ ...line(`v${k}`, int(1, 30) * int(1_000, 99_999), TUBU, rand() < 0.3), productId: `p${k}` }));
+      const nonFlash = lines.filter((l) => !l.isFlash);
+      const comboPerLine: Record<string, number> = {};
+      for (const l of nonFlash) if (rand() < 0.4) comboPerLine[l.variationId] = Math.floor((l.total * int(1, 30)) / 100);
+      const comboTotal = Object.values(comboPerLine).reduce((s, x) => s + x, 0);
+      const afterCombo = nonFlash.reduce((s, l) => s + l.total, 0) - comboTotal;
+      const couponDiscount = rand() < 0.6 ? Math.min(afterCombo, int(0, 60_000)) : 0;
+      const tierDiscount = Math.floor((afterCombo - couponDiscount) * 0.05);
+      const flash = lines.filter((l) => l.isFlash).reduce((s, l) => s + l.total, 0);
+      expect(pointsRedeemBase(lines, { ...none, comboPerLine, comboTotal, couponDiscount, tierDiscount })).toBe(
+        afterCombo - couponDiscount - tierDiscount + flash,
+      );
+    }
   });
 });
 
@@ -337,8 +398,9 @@ describe('hồi quy: giỏ không có hàng đối tác ra đúng số như trư
       const groups = groupByFulfiller(lines);
       const [now] = allocateGroupAmounts(groups, t);
       const [before] = preQ8GroupAmounts(groups, t);
-      const { linePaid, ...amounts } = now!;
+      const { linePaid, linePoints, ...amounts } = now!;
       expect(amounts).toEqual(before);
+      expect(linePoints.reduce((s, x) => s + x, 0)).toBe(before!.pointsDiscount);
       expect(linePaid.reduce((s, x) => s + x, 0)).toBe(before!.goodsAfterAll);
     }
   });
