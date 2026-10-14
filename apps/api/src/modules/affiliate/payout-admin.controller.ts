@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
@@ -10,6 +10,10 @@ const PAYOUT_STATUSES = ['REQUESTED', 'APPROVED', 'PAID', 'REJECTED'] as const;
 /** Query danh sách Payout — khai báo `status` trong DTO (ValidationPipe forbidNonWhitelisted). */
 export class ListPayoutsQuery extends PaginationQuery {
   @IsOptional() @IsIn(PAYOUT_STATUSES) status?: (typeof PAYOUT_STATUSES)[number];
+}
+
+export class PitReportQuery {
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'Tháng phải có dạng YYYY-MM.' }) month!: string;
 }
 
 export class ReviewPayoutDto {
@@ -41,6 +45,12 @@ export class PayoutAdminController {
   @Get()
   list(@Query() q: ListPayoutsQuery) {
     return this.affiliate.listPayouts(q.status, q.page, q.limit);
+  }
+
+  /** Báo cáo khấu trừ thuế TNCN theo tháng cho kế toán kê khai (SELLER-11). */
+  @Get('pit-report')
+  pitReport(@Query() q: PitReportQuery) {
+    return this.affiliate.pitReport(q.month);
   }
 
   @Post(':id/approve')

@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -15,8 +16,9 @@ import {
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
-import { AffiliateService } from './affiliate.service';
+import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN } from './affiliate.service';
 import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
@@ -31,7 +33,7 @@ class PayoutBankInfoDto {
   @IsString() @MinLength(2) @MaxLength(100) accountName!: string;
 }
 
-class PayoutDto {
+export class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
   // SELLER-10: rút ngân hàng bắt buộc đủ thông tin tài khoản; trước đây `{}` cũng qua và admin không biết chuyển vào đâu.
@@ -40,6 +42,12 @@ class PayoutDto {
   @ValidateNested()
   @Type(() => PayoutBankInfoDto)
   bankInfo?: PayoutBankInfoDto;
+  /** MST cá nhân hoặc số CCCD, bắt buộc khi lần rút bị khấu trừ thuế TNCN mà hồ sơ chưa có (SELLER-11). */
+  @IsOptional() @IsString() @Matches(PERSONAL_TAX_ID_PATTERN, { message: PERSONAL_TAX_ID_FORMAT_MESSAGE }) taxId?: string;
+}
+
+export class TaxStatementQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2020) @Max(2100) year?: number;
 }
 
 class ClaimMilestoneDto {
@@ -106,7 +114,13 @@ export class AffiliateController {
     @Body() dto: PayoutDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey);
+    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey, dto.taxId);
+  }
+
+  /** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (mặc định năm nay, giờ VN). */
+  @Get('tax-statement')
+  taxStatement(@CurrentUser('sub') userId: string, @Query() q: TaxStatementQuery) {
+    return this.affiliate.taxStatement(userId, q.year ?? vnDateParts().year);
   }
 
   // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).

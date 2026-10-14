@@ -29,6 +29,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
+import { VN_OFFSET_MS } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
@@ -44,6 +45,10 @@ const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
  */
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
 export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 2_000_000;
+export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
+/** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
+export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
+export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
 
 @Injectable()
 export class AffiliateService {
@@ -95,6 +100,7 @@ export class AffiliateService {
       isAffiliate: user.role === 'AFFILIATE' || user.role === 'ADMIN',
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
+      personalTaxId: user.personalTaxId,
       monthRevenue,
       tier: this.monthlyTier(monthRevenue),
     };
@@ -309,6 +315,129 @@ export class AffiliateService {
         reviewedAt: true,
         paidAt: true,
       },
+    });
+  }
+
+  /** Lệnh rút hoa hồng (có grossAmount, khác rút Ví) đã chi trong [start, end). */
+  private paidCommissionPayouts(where: Prisma.PayoutWhereInput, start: Date, end: Date) {
+    return this.prisma.payout.findMany({
+      where: { ...where, status: 'PAID', grossAmount: { not: null }, paidAt: { gte: start, lt: end } },
+      orderBy: { paidAt: 'asc' },
+      select: {
+        id: true,
+        userId: true,
+        method: true,
+        grossAmount: true,
+        taxWithheld: true,
+        amount: true,
+        taxId: true,
+        paidAt: true,
+        user: { select: { fullName: true, phone: true, personalTaxId: true } },
+      },
+    });
+  }
+
+  /**
+   * Báo cáo khấu trừ thuế TNCN theo tháng (giờ VN) cho kế toán kê khai: mọi lần chi hoa hồng cho cá nhân trong tháng, gộp theo
+   * người nhận. MST lấy theo số đã chụp vào lệnh rút (số đã kê khai), thiếu thì theo hồ sơ hiện tại.
+   */
+  async pitReport(month: string) {
+    const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+    if (!m) throw new BadRequestException('Tháng phải có dạng YYYY-MM.');
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const start = new Date(Date.UTC(y, mo, 1) - VN_OFFSET_MS);
+    const end = new Date(Date.UTC(y, mo + 1, 1) - VN_OFFSET_MS);
+    const payouts = await this.paidCommissionPayouts({}, start, end);
+    const byUser = new Map<
+      string,
+      { userId: string; fullName: string | null; phone: string | null; taxId: string | null; payoutCount: number; grossAmount: number; taxWithheld: number; netAmount: number }
+    >();
+    for (const p of payouts) {
+      const row = byUser.get(p.userId) ?? {
+        userId: p.userId,
+        fullName: p.user.fullName,
+        phone: p.user.phone,
+        taxId: null,
+        payoutCount: 0,
+        grossAmount: 0,
+        taxWithheld: 0,
+        netAmount: 0,
+      };
+      row.taxId = p.taxId ?? row.taxId ?? p.user.personalTaxId;
+      row.payoutCount += 1;
+      row.grossAmount += p.grossAmount ?? 0;
+      row.taxWithheld += p.taxWithheld;
+      row.netAmount += p.amount;
+      byUser.set(p.userId, row);
+    }
+    const rows = [...byUser.values()].sort((a, b) => b.taxWithheld - a.taxWithheld || b.grossAmount - a.grossAmount);
+    const sum = (k: 'grossAmount' | 'taxWithheld' | 'netAmount') => rows.reduce((s, r) => s + r[k], 0);
+    return {
+      month,
+      rows,
+      totals: {
+        recipients: rows.length,
+        withheldRecipients: rows.filter((r) => r.taxWithheld > 0).length,
+        grossAmount: sum('grossAmount'),
+        taxWithheld: sum('taxWithheld'),
+        netAmount: sum('netAmount'),
+      },
+    };
+  }
+
+  /** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (giờ VN) của một CTV, kèm MST đang khai. */
+  async taxStatement(userId: string, year: number) {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new BadRequestException('Năm không hợp lệ.');
+    const start = new Date(Date.UTC(year, 0, 1) - VN_OFFSET_MS);
+    const end = new Date(Date.UTC(year + 1, 0, 1) - VN_OFFSET_MS);
+    const [payouts, user] = await Promise.all([
+      this.paidCommissionPayouts({ userId }, start, end),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, personalTaxId: true } }),
+    ]);
+    const items = payouts.map((p) => ({
+      id: p.id,
+      paidAt: p.paidAt,
+      method: p.method,
+      grossAmount: p.grossAmount ?? 0,
+      taxWithheld: p.taxWithheld,
+      amount: p.amount,
+      taxId: p.taxId,
+    }));
+    const sum = (k: 'grossAmount' | 'taxWithheld' | 'amount') => items.reduce((s, i) => s + i[k], 0);
+    return {
+      year,
+      fullName: user?.fullName ?? null,
+      taxId: user?.personalTaxId ?? null,
+      items,
+      totals: { grossAmount: sum('grossAmount'), taxWithheld: sum('taxWithheld'), netAmount: sum('amount') },
+    };
+  }
+
+  /**
+   * MST/CCCD chụp vào lệnh rút. CTV khai trong lần rút thì lưu vào hồ sơ; lần rút bị khấu trừ thuế TNCN mà chưa có số nào thì
+   * từ chối: Tubu Tree phải kê khai khấu trừ theo MST người nhận và cấp chứng từ khấu trừ cho họ (SELLER-11).
+   */
+  private async taxIdForPayout(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    taxWithheld: number,
+    input?: string,
+  ): Promise<string | null> {
+    const given = input?.trim();
+    if (given) {
+      if (!PERSONAL_TAX_ID_PATTERN.test(given)) throw new BadRequestException(PERSONAL_TAX_ID_FORMAT_MESSAGE);
+      await tx.user.update({ where: { id: userId }, data: { personalTaxId: given } });
+      return given;
+    }
+    if (taxWithheld <= 0) return null;
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { personalTaxId: true } });
+    if (user?.personalTaxId) return user.personalTaxId;
+    throw new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      code: PIT_TAX_ID_REQUIRED,
+      message: `Lần rút này được khấu trừ thuế TNCN ${vnd(taxWithheld)}. Nhập mã số thuế cá nhân hoặc số CCCD để Tubu Tree kê khai và cấp chứng từ khấu trừ thuế cho bạn.`,
     });
   }
 
@@ -635,6 +764,7 @@ export class AffiliateService {
     method: string,
     bankInfo?: object,
     idempotencyKey?: string,
+    taxIdInput?: string,
   ) {
     const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
     // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
@@ -706,6 +836,9 @@ export class AffiliateService {
             select: { id: true, amount: true },
           });
           const total = rows.reduce((s, c) => s + c.amount, 0);
+          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
+          const taxWithheld = await this.personalIncomeTax(total);
+          const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
           const marked = await tx.commission.updateMany({
             where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
             data: { status: 'PAID', paidAt: new Date() },
@@ -719,8 +852,6 @@ export class AffiliateService {
           if (marked.count !== rows.length) {
             throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
           }
-          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
-          const taxWithheld = await this.personalIncomeTax(total);
           const credited = total - taxWithheld;
           const payout = await tx.payout.create({
             data: {
@@ -728,6 +859,7 @@ export class AffiliateService {
               amount: credited,
               grossAmount: total,
               taxWithheld,
+              taxId,
               method,
               status: 'PAID',
               paidAt: new Date(),
@@ -785,12 +917,14 @@ export class AffiliateService {
         const total = rows.reduce((s, c) => s + c.amount, 0);
         if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
         const taxWithheld = await this.personalIncomeTax(total);
+        const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({
           data: {
             userId,
             amount: total - taxWithheld,
             grossAmount: total,
             taxWithheld,
+            taxId,
             method: 'BANK',
             bankInfo: bankInfo ?? {},
             status: 'REQUESTED',

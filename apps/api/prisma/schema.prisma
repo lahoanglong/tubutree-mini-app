@@ -224,6 +224,8 @@ model User {
   phone             String?         @unique
   email             String?
   fullName          String?
+  /// Mã số thuế cá nhân (10 số) hoặc số CCCD 12 số dùng làm MST, CTV khai khi lần rút hoa hồng đầu tiên bị khấu trừ thuế TNCN.
+  personalTaxId     String?
   dob               DateTime?
   avatarUrl         String?
   role              UserRole        @default(CUSTOMER)
@@ -1400,6 +1402,8 @@ model Payout {
   grossAmount     Int?
   /// Thuế TNCN đã khấu trừ tại nguồn (affiliate.pit_withhold_pct khi grossAmount ≥ affiliate.pit_withhold_threshold).
   taxWithheld     Int          @default(0)
+  /// MST/CCCD của người nhận lúc khấu trừ (chứng từ khấu trừ, báo cáo tháng giữ đúng số đã kê khai dù sau đó CTV sửa).
+  taxId           String?
   method          String
   bankInfo        Json?
   status          PayoutStatus @default(REQUESTED)
