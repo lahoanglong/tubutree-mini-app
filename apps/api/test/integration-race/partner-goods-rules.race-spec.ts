@@ -268,6 +268,18 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     const item = (id: string) => order!.items.find((i) => i.variationId === id)!;
     expect([item(t1.id).total, item(t2.id).total, item(c.id).total]).toEqual([90_000, 54_000, 80_000]);
     expect(item(c.id).paidTotal).toBe(80_000);
+    expect(view.collections.find((col) => col.id === combo.id)!.comboDiscountPct).toBe(10);
+
+    // Combo 1 hàng Tubu + 1 hàng đối tác: còn 1 sản phẩm được giảm nên checkout không giảm combo, trang gian hàng không hứa mức giảm.
+    const half = await prisma.storefrontCollection.create({
+      data: { storefrontId: sf.id, title: 'Combo nửa', kind: 'COMBO', comboDiscountPct: 20, items: { create: [{ productId: t1.productId, sortOrder: 0 }, { productId: c.productId, sortOrder: 1 }] } },
+    });
+    const halfView = (await storefronts.getPublicBySlug(sf.slug)).collections.find((col) => col.id === half.id)!;
+    expect([halfView.comboDiscountPct, halfView.items.map((i) => i.product.id)]).toEqual([null, [t1.productId]]);
+    const u2 = await buyer();
+    for (const v of [t1, c]) await cart.addItem(u2.userId, { variationId: v.id, quantity: 1 });
+    const q = await checkout.quote(u2.userId, { addressId: u2.addressId, storefrontSlug: sf.slug } as never);
+    expect(q.comboDiscount).toBe(0);
   });
 
   it('giờ vàng do admin đặt vẫn áp cho hàng giao hộ; phiếu đối soát tính trên đúng giá giờ vàng khách đã trả', async () => {
