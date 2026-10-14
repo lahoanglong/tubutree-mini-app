@@ -109,7 +109,7 @@ export class ReviewMerchantProductDto {
 class SetConfigDto {
   @IsString() @IsNotEmpty() key!: string;
   // value tự do (object/số/chuỗi/boolean) — @Allow để ValidationPipe không loại bỏ.
-  // null/undefined bị chặn ở SystemConfigService.set() (không chặn ở DTO vì @Allow không hỗ trợ).
+  // null/undefined bị chặn ở SystemConfigService.set() (trừ khoá ETA giao hàng: null = ẩn dòng "Giao dự kiến").
   @Allow() value!: object | string | number | boolean;
 }
 // Export để test DTO validation trực tiếp (xem admin.controller.spec.ts).

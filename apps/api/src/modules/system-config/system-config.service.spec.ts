@@ -312,6 +312,42 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     }
   });
 
+  it.each([
+    ['attendance.late_fine', 10_000, [-1, 1.5, 500_001]],
+    ['refill.seeds_per_bottle', 50, [-1, 10_001]],
+    ['game.streak_repair_cost', 150, [-1, 0]],
+    ['game.streak_freeze_cost', 80, [-1, 0]],
+    ['game.dew_seeds', 15, [-1, 10_001]],
+    ['game.daily_login_seeds', 10, [-5]],
+    ['game.harvest_coupon_min_order', 199_000, [-1, 50_000_001]],
+    ['groupbuy.target_size', 3, [-1, 0, 1, 51]],
+    ['referral.window_days', 30, [-1, 0, 366]],
+    ['affiliate.attribution_days', 7, [-1, 0, 366]],
+    ['flashsale.default_per_user_limit', 5, [-1, 0]],
+  ] as const)('round 2 (ADMINOPS-3) %s: nhận %d, từ chối %j', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(fine);
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('refill.pickup_phone: rỗng (ẩn) hoặc SĐT Việt Nam', async () => {
+    for (const v of ['', '0901234567', '+84901234567']) await mk('').svc.set('refill.pickup_phone', v, 'admin1');
+    for (const v of ['abc', '12345', '09012345678901']) {
+      await expect(mk('').svc.set('refill.pickup_phone', v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('ETA giao hàng đặt lại null (ẩn dòng "Giao dự kiến") được; khoá khác vẫn chặn null', async () => {
+    const eta = mk(3);
+    await eta.svc.set('shipping.eta_min_days', null as never, 'admin1');
+    expect(eta.tx.systemConfig.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { value: Prisma.JsonNull, updatedBy: 'admin1' } }));
+    await expect(mk(3).svc.set('game.dew_seeds', null as never, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('hasWriteRule: khoá có luật ghi là khoá hệ thống biết, khoá gõ sai thì không', () => {
     expect(SystemConfigService.hasWriteRule('shipping.free_threshold')).toBe(true);
     expect(SystemConfigService.hasWriteRule('payment.bank_bin')).toBe(true);
