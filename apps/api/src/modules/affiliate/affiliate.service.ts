@@ -680,11 +680,15 @@ export class AffiliateService {
     let weightedRate = 0;
     // Nền doanh số bậc/mốc: chỉ dòng CÓ hưởng hoa hồng (loại hàng bị chặn/rate 0 + phí ship).
     let commissionableTotal = 0;
+    // Trả một phần cắt hoa hồng theo đúng dòng trả (order-reversal.reversePartialReturn) — giữ phần của từng dòng.
+    const lineAmounts: Record<string, number> = {};
     const paid = paidLineTotals(order, order.items);
     order.items.forEach((item, idx) => {
       const rate = rateMap.get(item.variationId) ?? 0;
       const base = paid[idx] ?? 0;
-      amount += Math.floor((base * rate) / 100);
+      const lineAmount = Math.floor((base * rate) / 100);
+      amount += lineAmount;
+      if (lineAmount > 0) lineAmounts[item.id] = (lineAmounts[item.id] ?? 0) + lineAmount;
       weightedRate += rate;
       if (rate > 0) commissionableTotal += base;
     });
@@ -699,6 +703,7 @@ export class AffiliateService {
         commissionableTotal,
         rate: weightedRate / order.items.length,
         amount,
+        lineAmounts,
         status: 'PENDING',
       },
     });
