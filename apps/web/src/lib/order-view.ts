@@ -86,10 +86,12 @@ export const orderPaymentStatusLabel = (o: PaymentView): string =>
   codCollected(o) ? 'Đã thu tiền khi giao' : paymentStatusLabel(o.paymentStatus);
 
 /** Ô gọn trong danh sách đơn admin. */
+const PAYMENT_STATUS_SHORT: Record<string, string> = { UNPAID: 'Chưa TT', REFUNDED: 'Đã hoàn tiền', FAILED: 'TT lỗi' };
+
 export function orderPaymentStatusShort(o: PaymentView): string {
   if (codCollected(o)) return 'Đã thu COD';
   if (o.paymentStatus === 'PAID') return 'Đã TT';
-  return o.paymentStatus ?? '';
+  return (o.paymentStatus && PAYMENT_STATUS_SHORT[o.paymentStatus]) ?? o.paymentStatus ?? '';
 }
 
 export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${encodeURIComponent(code)}`;
