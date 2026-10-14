@@ -328,6 +328,13 @@ export interface OrderDetailDTO extends OrderDTO {
   shippingHistory?: ShippingEvent[] | null;
   shippingStatus?: string | null;
   couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */
+  groupCouponCode?: string | null;
+  /** Các phần của `discount` (đơn tạo trước khi API lưu từng khoản thì không có, các trường này bằng 0). */
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
   /** Số Điểm Xanh đã dùng (đã nằm trong `discount`, không trừ thêm lần nữa). */
   pointsUsed?: number;
   note?: string | null;

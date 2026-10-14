@@ -51,6 +51,10 @@ const ORDER = {
   status: 'PENDING_PAYMENT',
   subtotal: 300000,
   discount: 30000,
+  couponDiscount: 30000,
+  comboDiscount: 0,
+  tierDiscount: 0,
+  pointsDiscount: 0,
   shippingFee: 30000,
   total: 300000,
   paymentMethod: 'BANK_TRANSFER',
@@ -144,16 +148,55 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(labels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: TB-9']));
   });
 
-  // Order.discount gộp mã + combo + giảm hạng + Điểm Xanh nên số tiền không được gắn riêng cho mã.
-  it('dòng Giảm giá là tổng trung tính, mã và Điểm Xanh nằm ở dòng ghi chú riêng', async () => {
-    mocks.order = { ...structuredClone(ORDER), discount: 80000, pointsUsed: 500 };
+  // R4-BUYER-7: Order.discount gộp nhiều nguồn; mỗi khoản một dòng đúng tên, không gắn cả tổng cho mã.
+  const LEGACY = (() => {
+    const { couponDiscount: _c, comboDiscount: _b, tierDiscount: _t, pointsDiscount: _p, ...rest } = structuredClone(ORDER);
+    return rest;
+  })();
+  const rowOf = (container: HTMLElement, label: string) =>
+    Array.from(container.querySelectorAll('div.flex.justify-between')).find((r) => r.firstElementChild?.textContent === label);
+
+  it('đơn có số liệu từng khoản: mỗi nguồn giảm một dòng, cộng lại bằng tổng giảm', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER), discount: 80000, couponDiscount: 30000, comboDiscount: 10000,
+      tierDiscount: 5000, pointsDiscount: 35000, pointsUsed: 35,
+    };
     const { container } = await mount();
-    const rows = Array.from(container.querySelectorAll('div.flex.justify-between'));
-    const row = rows.find((r) => (r.textContent ?? '').includes('-80.000đ'));
-    expect(row?.firstElementChild?.textContent).toBe('Giảm giá');
-    expect(container.textContent).not.toContain('Giảm giá (');
-    expect(container.textContent).toContain('Mã giảm giá đã áp dụng: WELCOME30');
-    expect(container.textContent).toContain('Đã dùng 500 Điểm Xanh (đã tính trong giảm giá)');
+    expect(rowOf(container, 'Mã giảm giá (WELCOME30)')?.textContent).toContain('-30.000đ');
+    expect(rowOf(container, 'Ưu đãi combo')?.textContent).toContain('-10.000đ');
+    expect(rowOf(container, 'Ưu đãi hạng thành viên')?.textContent).toContain('-5.000đ');
+    expect(rowOf(container, 'Điểm Xanh (35 điểm)')?.textContent).toContain('-35.000đ');
+    expect(rowOf(container, 'Giảm giá')).toBeUndefined();
+    expect(container.textContent).not.toContain('đã tính trong giảm giá');
+    expect(container.textContent).not.toContain('Mã giảm giá đã áp dụng');
+  });
+
+  it('khoản nào bằng 0 thì không có dòng', async () => {
+    mocks.order = { ...structuredClone(ORDER), discount: 30000, couponDiscount: 30000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 0 };
+    const { container } = await mount();
+    expect(rowOf(container, 'Mã giảm giá (WELCOME30)')?.textContent).toContain('-30.000đ');
+    expect(container.textContent).not.toContain('Ưu đãi combo');
+    expect(container.textContent).not.toContain('Điểm Xanh (');
+  });
+
+  it('đơn tách của nhóm đặt hàng: tên mã lấy từ đơn đầu của nhóm (groupCouponCode)', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER), couponCode: null, groupCouponCode: 'FREESHIP', discount: 20000, couponDiscount: 20000,
+    };
+    const { container } = await mount();
+    expect(rowOf(container, 'Mã giảm giá (FREESHIP)')?.textContent).toContain('-20.000đ');
+  });
+
+  it('đơn cũ chưa có số liệu từng khoản: một dòng tổng, ghi rõ đã gồm Điểm Xanh khi có dùng điểm', async () => {
+    mocks.order = { ...LEGACY, discount: 80000, pointsUsed: 500 };
+    const { container } = await mount();
+    expect(rowOf(container, 'Giảm giá (gồm Điểm Xanh)')?.textContent).toContain('-80.000đ');
+  });
+
+  it('đơn cũ không dùng điểm: một dòng "Giảm giá"', async () => {
+    mocks.order = LEGACY;
+    const { container } = await mount();
+    expect(rowOf(container, 'Giảm giá')?.textContent).toContain('-30.000đ');
   });
 
   it('ngày đặt đơn theo giờ Việt Nam, dáng HH:mm dd/MM/yyyy', async () => {
