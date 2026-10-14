@@ -603,50 +603,54 @@ model ReferralTouch {
 }
 
 model Storefront {
-  id                String                 @id @default(cuid())
-  type              StorefrontType
-  slug              String                 @unique
-  subdomain         String?                @unique
-  customDomain      String?                @unique
-  ownerUserId       String?
-  owner             User?                  @relation(fields: [ownerUserId], references: [id])
-  brandId           String?                @unique
-  brand             Brand?                 @relation(fields: [brandId], references: [id])
-  title             String
-  headerNote        String?
-  avatarUrl         String?
-  coverUrl          String?
-  theme             String                 @default("leaf-orange")
-  themeColor        String?                @default("#16a34a")
-  bankName          String?
-  bankBin           String?
-  bankAccountNo     String?
-  bankAccountName   String?
-  warehouseAddress  String?
-  warehouseCity     String?
-  warehouseDistrict String?
-  warehouseWard     String?
-  warehousePhone    String?
+  id                  String                 @id @default(cuid())
+  type                StorefrontType
+  slug                String                 @unique
+  subdomain           String?                @unique
+  customDomain        String?                @unique
+  ownerUserId         String?
+  owner               User?                  @relation(fields: [ownerUserId], references: [id])
+  brandId             String?                @unique
+  brand               Brand?                 @relation(fields: [brandId], references: [id])
+  title               String
+  headerNote          String?
+  avatarUrl           String?
+  coverUrl            String?
+  theme               String                 @default("leaf-orange")
+  themeColor          String?                @default("#16a34a")
+  bankName            String?
+  bankBin             String?
+  bankAccountNo       String?
+  bankAccountName     String?
+  warehouseAddress    String?
+  warehouseCity       String?
+  warehouseDistrict   String?
+  warehouseWard       String?
+  warehousePhone      String?
   /// Phí giao mỗi kiện của đối tác tự giao (NULL = merchant.default_shipping_fee).
-  shippingFee       Int?
+  shippingFee         Int?
   /// Kiện của đối tác có tiền hàng từ mức này được miễn phí giao (NULL = không miễn phí).
-  freeShipFrom      Int?
+  freeShipFrom        Int?
   /// Phí sàn riêng cho gian hàng (phân số, 0.15 = 15%). NULL = merchant.commission_pct. Chỉ admin đặt.
-  commissionPct     Decimal?               @db.Decimal(5, 4)
+  commissionPct       Decimal?               @db.Decimal(5, 4)
+  /// Phí vận hành "Tubu giao hộ" theo tiền hàng khách thực trả (phân số), trừ thêm ngoài phí sàn khi đối soát. Chỉ admin đặt.
+  consignmentFeePct   Decimal                @default(0) @db.Decimal(5, 4)
+  /// Phí vận hành "Tubu giao hộ" cố định mỗi đơn (đồng), chia cho các dòng hàng giao hộ của gian hàng trong đơn. Chỉ admin đặt.
+  consignmentFeeFixed Int                    @default(0)
   /// Đối tác bật "Tạm nghỉ": hàng tự giao của gian hàng không đặt được tới khi tắt (R2-MERCHANT-13). NULL = đang nhận đơn.
-  ordersPausedAt    DateTime?
-  isPublished       Boolean                @default(false)
-  publishedAt       DateTime?
-  collections       StorefrontCollection[]
-  products          Product[]              @relation("StorefrontProducts")
-  fulfilledOrders   Order[]                @relation("OrderFulfiller")
-  attributedOrders  Order[]                @relation("OrderStorefront")
-  merchantPayouts   MerchantPayout[]
+  ordersPausedAt      DateTime?
+  isPublished         Boolean                @default(false)
+  publishedAt         DateTime?
+  collections         StorefrontCollection[]
+  products            Product[]              @relation("StorefrontProducts")
+  fulfilledOrders     Order[]                @relation("OrderFulfiller")
+  attributedOrders    Order[]                @relation("OrderStorefront")
+  merchantPayouts     MerchantPayout[]
   /// Mốc lần cuối nhắc CTV thêm sản phẩm nổi bật còn thiếu vào gian hàng (storefront-reminder.service.ts).
   /// Null = chưa từng nhắc. Chỉ dùng cho guard chống gửi trùng, không phải mốc nghiệp vụ khác.
-  lastReminderAt    DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  lastReminderAt      DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
 
   @@unique([ownerUserId])
   @@index([ownerUserId])
@@ -1038,24 +1042,25 @@ model Order {
 }
 
 model OrderItem {
-  id              String  @id @default(cuid())
-  orderId         String
-  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variationId     String
-  productName     String
+  id                  String               @id @default(cuid())
+  orderId             String
+  order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variationId         String
+  productName         String
   // Slug SP tại thời điểm mua — snapshot như productName. Không có nó thì từ đơn hàng không
   // mở được trang sản phẩm: khách nhận hàng xong KHÔNG có lối nào để đánh giá (P1-2, audit
   // mạch lạc B2C), và "mua lại từng món" cũng không dẫn đi đâu được. Nullable cho đơn cũ.
-  productSlug     String?
-  variationName   String
-  unitPrice       Int
-  quantity        Int
-  total           Int
-  flashSaleItemId String?
+  productSlug         String?
+  variationName       String
+  unitPrice           Int
+  quantity            Int
+  total               Int
+  flashSaleItemId     String?
   /// Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ khi đặt vượt
   /// tồn (§ DealerService.placeOrder cho đặt trước thay vì từ chối). Với mọi đơn khác luôn 0.
   /// `quantity - backorderedQty` là số đã thực sự trừ kho (dùng khi hoàn kho lúc huỷ/trả).
-  backorderedQty  Int     @default(0)
+  backorderedQty      Int                  @default(0)
+  merchantPayoutLines MerchantPayoutLine[]
 
   @@index([orderId])
   // Đối soát đặt trước quét OrderItem theo variation + còn thiếu hàng — cần nhanh, chạy mỗi
@@ -1172,13 +1177,13 @@ model PosPointCredit {
 // đơn vẫn UNPAID. Lưu từng lần thử + khoá unique theo appTransId để callback nào cũng khớp
 // đúng đơn, và đối chiếu được số tiền (P2, docs/2026-09-08-review-progress.md).
 model PaymentAttempt {
-  id         String   @id @default(cuid())
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider   String // ZALOPAY | VNPAY ...
-  appTransId String   @unique
-  amount     Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider      String // ZALOPAY | VNPAY ...
+  appTransId    String    @unique
+  amount        Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
+  createdAt     DateTime  @default(now())
   /// Cổng đã cho kết quả cuối (callback hoặc tra trạng thái: đã trả / thất bại / hết hạn) — cron đối soát thôi hỏi.
   resolvedAt    DateTime?
   lastQueriedAt DateTime?
@@ -1594,13 +1599,21 @@ model MerchantPayoutLine {
   commissionAmount Int
   codCollected     Int
   netAmount        Int
+  /// Phí vận hành "Tubu giao hộ" của dòng (phần % cộng phần cố định của đơn); 0 với đơn gian hàng tự giao.
+  opsFeeAmount     Int                    @default(0)
+  /// Dòng hàng "Tubu giao hộ" (đơn kho Tubu giao qua Pancake) mà dòng đối soát này thuộc về; NULL = đơn gian hàng tự giao.
+  orderItemId      String?
+  orderItem        OrderItem?             @relation(fields: [orderItemId], references: [id])
   /// Khoá dòng trong đơn: '' = dòng của cả đơn (SALE, REVERSAL khi đơn RETURNED); `RETURN:<id yêu cầu trả>` = REVERSAL của
-  /// một lần trả một phần (D3) trên đơn đã/đang đối soát. Mỗi khoá một dòng duy nhất trên mọi phiếu.
+  /// một lần trả một phần (D3) trên đơn đã/đang đối soát. Hàng "Tubu giao hộ" khoá theo dòng hàng: `ITEM:<orderItemId>` (SALE,
+  /// REVERSAL khi đơn RETURNED), `RETURN:<id yêu cầu trả>:ITEM:<orderItemId>` (trả một phần). Mỗi khoá một dòng duy nhất trên
+  /// mọi phiếu.
   refKey           String                 @default("")
   createdAt        DateTime               @default(now())
 
   @@unique([orderId, kind, refKey])
   @@index([payoutId])
+  @@index([orderItemId])
   @@map("merchant_payout_lines")
 }
 
