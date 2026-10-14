@@ -36,6 +36,30 @@ const PAYMENT_STATUS_LABEL: Record<string, string> = {
 export const paymentStatusLabel = (status: string | undefined): string =>
   status ? (PAYMENT_STATUS_LABEL[status] ?? status) : '';
 
+interface PaymentView {
+  status: string;
+  paymentMethod: string;
+  paymentStatus?: string;
+}
+
+/**
+ * Đơn COD đã giao: bưu tá đã thu tiền mặt của khách, nhưng API cố ý giữ paymentStatus = UNPAID (order-reversal dùng
+ * nó làm chốt hoàn tiền một lần khi đơn COD đã giao bị trả) — nên chỉ đổi chữ hiển thị, không đổi dữ liệu.
+ */
+const codCollected = (o: PaymentView): boolean =>
+  o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID';
+
+/** Tình trạng thanh toán hiển thị cho khách. */
+export const orderPaymentStatusLabel = (o: PaymentView): string =>
+  codCollected(o) ? 'Đã thu tiền khi giao' : paymentStatusLabel(o.paymentStatus);
+
+/** Ô gọn trong danh sách đơn admin. */
+export function orderPaymentStatusShort(o: PaymentView): string {
+  if (codCollected(o)) return 'Đã thu COD';
+  if (o.paymentStatus === 'PAID') return 'Đã TT';
+  return o.paymentStatus ?? '';
+}
+
 export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${encodeURIComponent(code)}`;
 
 /**

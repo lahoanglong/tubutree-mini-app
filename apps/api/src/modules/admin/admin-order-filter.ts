@@ -125,6 +125,9 @@ export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
         // Admin đã bấm "Đã xử lý tay" → rời hàng đợi. (`not` của Prisma loại cả NULL → ghi rõ nhánh null.)
         OR: [{ gomdonStatus: null }, { gomdonStatus: { not: GOMDON_STATE.MANUAL_HANDLED } }],
       },
+      // Báo động Gomdon chưa ai xử lý (gomdon-alert.service.ts) — gồm các ca trạng thái vận đơn trông bình
+      // thường nhưng nguy hiểm: Gomdon tự gắn vận đơn cho đơn đã báo "tạo tay", Pancake gắn vận đơn hãng khác.
+      { gomdonAlerts: { some: { resolvedAt: null } } },
     ],
   };
 }

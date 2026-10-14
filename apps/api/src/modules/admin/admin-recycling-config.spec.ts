@@ -73,6 +73,8 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
           gomdonCancelStatus: { in: ['FAILED', 'TOO_LATE'] },
           OR: [{ gomdonStatus: null }, { gomdonStatus: { not: 'MANUAL_HANDLED' } }],
         },
+        // UAT GOMDON-2: còn báo động Gomdon chưa ai xử lý (giao trùng vận đơn…) dù trạng thái vận đơn trông bình thường.
+        { gomdonAlerts: { some: { resolvedAt: null } } },
       ],
     });
     // count dùng CÙNG điều kiện — số trên badge khớp danh sách.
@@ -136,6 +138,17 @@ describe('AdminService.listOrders — bộ lọc "Cần xử lý thu gom"', () =
     expect(args.select).toBeUndefined();
     expect(args.include).toEqual(expect.objectContaining({ items: true }));
     expect(args.where).toEqual({});
+  });
+
+  it('UAT GOMDON-2: kèm báo động Gomdon đang mở của từng đơn (web admin hiện ở chi tiết đơn)', async () => {
+    const { prisma, findMany } = listOrdersPrisma();
+    await mkAdmin(prisma).listOrders(1, 20);
+    expect(findMany.mock.calls[0][0].include.gomdonAlerts).toEqual({
+      where: { resolvedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { id: true, message: true, createdAt: true },
+    });
   });
 });
 
@@ -206,7 +219,7 @@ describe('AdminService.markGomdonHandled — "Đã xử lý tay"', () => {
     const warn = jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
     await expect(admin.markGomdonHandled('admin-1', 'TB-9', '  đã tạo vận đơn GHN tay  ')).resolves.toEqual(ok);
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [{ id: 'TB-9' }, { code: 'TB-9' }] } }));
-    expect(markHandled).toHaveBeenCalledWith('o1');
+    expect(markHandled).toHaveBeenCalledWith('o1', 'admin-1');
     const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
     expect(logged).toContain('admin-1');
     expect(logged).toContain('TB-9');
@@ -239,6 +252,7 @@ describe('AdminService.gomdonStatus — chỉ trả boolean, không lộ tài kh
             defaultWarehouse: {},
             defaultWeightFallback: 500,
           }),
+          getHealth: jest.fn(),
         },
         gomdonOrder: { isRecyclingEnabled: jest.fn().mockResolvedValue(true) },
         config: { get: jest.fn().mockResolvedValue(true) as SystemConfigService['get'] },
@@ -255,7 +269,7 @@ describe('AdminService.gomdonStatus — chỉ trả boolean, không lộ tài kh
     const res = await mkAdmin(
       {},
       {
-        gomdonClient: { getConfig: jest.fn().mockResolvedValue({ baseUrl: '', phone: '', password: '' }) },
+        gomdonClient: { getConfig: jest.fn().mockResolvedValue({ baseUrl: '', phone: '', password: '' }), getHealth: jest.fn() },
         gomdonOrder: { isRecyclingEnabled: jest.fn().mockResolvedValue(false) },
         config: { get: jest.fn().mockResolvedValue(true) as SystemConfigService['get'] },
       },
@@ -350,5 +364,38 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
       mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'loyalty.checkin_points', [1, 1, 1, 1, 1, 1]),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(set).not.toHaveBeenCalled();
+  });
+});
+
+describe('UAT GOMDON-1/2: kết nối Gomdon + báo động trên web admin', () => {
+  it('gomdonStatus kèm tình trạng kết nối gần nhất (không lộ tài khoản)', async () => {
+    const health = { lastOkAt: null, lastErrorAt: '2026-10-13T09:00:00.000Z', lastError: 'Đăng nhập Gomdon thất bại (HTTP 401)', credentialsRejected: true, credentialsRejectedAt: '2026-10-13T09:00:00.000Z' };
+    const res = await mkAdmin(
+      {},
+      {
+        gomdonClient: {
+          getConfig: jest.fn().mockResolvedValue({ baseUrl: 'https://g', phone: 'p', password: 'x' }),
+          getHealth: jest.fn().mockReturnValue(health),
+        },
+        gomdonOrder: { isRecyclingEnabled: jest.fn().mockResolvedValue(false) },
+        config: { get: jest.fn().mockResolvedValue(true) as SystemConfigService['get'] },
+      },
+    ).gomdonStatus();
+    expect(res).toEqual(expect.objectContaining({ recyclingToggle: true, recyclingEnabled: false, connection: health }));
+  });
+
+  it('checkGomdonConnection gọi đăng nhập thật qua client và trả kết quả', async () => {
+    const checkConnection = jest.fn().mockResolvedValue({ ok: true, message: 'Đăng nhập Gomdon thành công.', checkedAt: 'x' });
+    const res = await mkAdmin({}, { gomdonClient: { checkConnection } }).checkGomdonConnection('admin-1');
+    expect(checkConnection).toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+  });
+
+  it('resolveGomdonAlert: đóng báo động; không có / đã đóng → 404', async () => {
+    const resolveAlert = jest.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const admin = mkAdmin({}, { gomdonOrder: { resolveAlert } as Partial<GomdonOrderService> });
+    await expect(admin.resolveGomdonAlert('admin-1', 'a1')).resolves.toEqual({ ok: true });
+    expect(resolveAlert).toHaveBeenCalledWith('a1', 'admin-1');
+    await expect(admin.resolveGomdonAlert('admin-1', 'a1')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

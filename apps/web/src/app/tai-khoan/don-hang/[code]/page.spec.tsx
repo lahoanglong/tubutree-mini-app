@@ -184,6 +184,13 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(link!.target).toBe('_blank');
   });
 
+  it('UAT GOMDON-11: đơn COD đã giao (API vẫn để UNPAID) → "Đã thu tiền khi giao", không hiện "Chưa thanh toán"', async () => {
+    mocks.order = { ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Đã thu tiền khi giao');
+    expect(container.textContent).not.toContain('Chưa thanh toán');
+  });
+
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {
     mocks.order = { ...ORDER, status: 'CANCELLED' };
     const { container } = await mount();

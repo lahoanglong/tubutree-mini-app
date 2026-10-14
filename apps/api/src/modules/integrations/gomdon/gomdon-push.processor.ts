@@ -4,11 +4,16 @@ import { UnrecoverableError, type Job } from 'bullmq';
 import { GomdonOrderService } from './gomdon-order.service';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { GOMDON_JOB_CANCEL } from './gomdon-queue';
+import { GomdonRejectedError } from './gomdon.errors';
+
+/** Gomdon từ chối DỨT KHOÁT (lỗi dữ liệu): thử chừng này lần là đủ, không chờ hết cửa sổ thử lại dài. */
+export const GOMDON_PERMANENT_REJECT_ATTEMPTS = 3;
 
 /**
- * Worker queue gomdon-push (outbound). Retry 5 lần (defaultJobOptions BullMQ).
- *  - job 'push': tạo vận đơn. Hết lượt retry mà Gomdon vẫn từ chối → fail-safe: FAILED (hoặc
- *    NEEDS_MANUAL_CHECK nếu không rõ đã tạo chưa) + VẪN đẩy Pancake với ghi chú cảnh báo + báo CSKH.
+ * Worker queue gomdon-push (outbound). Retry theo GOMDON_OUTBOUND_JOB_OPTIONS (gomdon-queue.ts).
+ *  - job 'push': tạo vận đơn. Hết lượt retry mà Gomdon vẫn từ chối → fail-safe markFinalPushFailure: lỗi tạm
+ *    còn trong cửa sổ thì để cron thử tiếp; còn lại FAILED (hoặc NEEDS_MANUAL_CHECK nếu không rõ đã tạo chưa)
+ *    + VẪN đẩy Pancake với ghi chú cảnh báo + báo CSKH. Lỗi dữ liệu dứt khoát chốt sớm sau vài lần.
  *    Nếu chính fail-safe lỗi (DB down) → ném tiếp để job kết thúc 'failed' (trước đây nuốt lỗi và
  *    'completed' → cron re-enqueue cùng jobId bị BullMQ bỏ qua, đơn kẹt vĩnh viễn không tới kho).
  *  - job 'cancel': huỷ vận đơn của đơn đã huỷ; lần thử cuối lỗi → CANCEL FAILED + báo CSKH.
@@ -36,10 +41,12 @@ export class GomdonPushProcessor extends WorkerHost {
       // Đã tạo vận đơn mà không ghi được DB / không ghi được NEEDS_MANUAL_CHECK: KHÔNG retry, KHÔNG
       // fail-safe "tạo tay" (có thể đã có vận đơn thật) — để job failed, cron cứu hộ xử lý CREATING kẹt.
       if (err instanceof UnrecoverableError) throw err;
-      if (!isLastAttempt) throw err; // BullMQ retry
+      const permanentGiveUp =
+        err instanceof GomdonRejectedError && !err.transient && job.attemptsMade + 1 >= GOMDON_PERMANENT_REJECT_ATTEMPTS;
+      if (!isLastAttempt && !permanentGiveUp) throw err; // BullMQ retry
 
       this.logger.error(
-        `Tạo đơn Gomdon THẤT BẠI sau ${attempts} lần cho đơn ${job.data.orderId}: ${
+        `Tạo đơn Gomdon THẤT BẠI sau ${job.attemptsMade + 1} lần cho đơn ${job.data.orderId}: ${
           err instanceof Error ? err.message : err
         }. Kích hoạt fail-safe: đẩy Pancake với cảnh báo + báo CSKH.`,
       );

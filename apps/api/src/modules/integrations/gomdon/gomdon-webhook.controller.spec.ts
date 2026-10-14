@@ -1,8 +1,9 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { type INestApplication, UnauthorizedException } from '@nestjs/common';
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 import { GomdonWebhookController } from './gomdon-webhook.controller';
-import type { GomdonWebhookService } from './gomdon-webhook.service';
+import { GomdonWebhookService } from './gomdon-webhook.service';
 import type { Env } from '../../../config/env.validation';
 
 const SECRET = 'gomdon-secret-123';
@@ -24,7 +25,7 @@ describe('GomdonWebhookController — xác thực token chia sẻ', () => {
   it('token đúng qua header → lưu event (gọi receive)', async () => {
     const { controller, webhook } = make(SECRET);
     await expect(controller.handle(body, SECRET, undefined)).resolves.toEqual({ result: true });
-    expect(webhook.receive).toHaveBeenCalledWith(body);
+    expect(webhook.receive).toHaveBeenCalledWith(body, expect.anything());
   });
 
   it('token đúng qua ?token= hoặc path /webhooks/gomdon/<secret> → chấp nhận', async () => {
@@ -66,5 +67,68 @@ describe('GomdonWebhookController — xác thực token chia sẻ', () => {
     const { controller, webhook } = make('');
     await controller.handle(body, undefined, undefined);
     expect(webhook.receive).toHaveBeenCalled();
+  });
+});
+
+describe('UAT GOMDON-5: webhook hợp lệ không bị giới hạn 120 request/phút/IP', () => {
+  it('controller bỏ throttle chung (như webhook Pancake) — chỉ token chia sẻ quyết định nhận hay không', () => {
+    expect(Reflect.getMetadata('THROTTLER:SKIPdefault', GomdonWebhookController)).toBe(true);
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', GomdonWebhookController)).toBeUndefined();
+  });
+});
+
+describe('UAT GOMDON-6: webhook gửi multipart/form-data (kiểu mọi API Gomdon) được đọc đúng', () => {
+  let app: INestApplication;
+  const webhook = { receive: jest.fn().mockResolvedValue({ result: true }) };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [GomdonWebhookController],
+      providers: [
+        { provide: GomdonWebhookService, useValue: webhook },
+        { provide: ConfigService, useValue: { get: () => SECRET } },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    await app.listen(0, '127.0.0.1');
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => webhook.receive.mockClear());
+
+  it('form-data → body có đủ trường, kèm Content-Type để chẩn đoán', async () => {
+    const fd = new FormData();
+    fd.append('status', '3');
+    fd.append('order_id', '9029');
+    fd.append('order_code', '84850000009029');
+    fd.append('order_customer_id', 'TUBU2026101379083');
+    const res = await fetch(`${await app.getUrl()}/webhooks/gomdon/${SECRET}`, { method: 'POST', body: fd });
+    expect(res.status).toBe(200);
+    expect(webhook.receive).toHaveBeenCalledWith(
+      { status: '3', order_id: '9029', order_code: '84850000009029', order_customer_id: 'TUBU2026101379083' },
+      { contentType: expect.stringContaining('multipart/form-data') },
+    );
+  });
+
+  it('JSON vẫn đọc như cũ', async () => {
+    const res = await fetch(`${await app.getUrl()}/webhooks/gomdon`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-webhook-token': SECRET },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(200);
+    expect(webhook.receive).toHaveBeenCalledWith(body, { contentType: 'application/json' });
+  });
+
+  it('form-data kèm FILE → từ chối (không nhận file trên route webhook)', async () => {
+    const fd = new FormData();
+    fd.append('status', '3');
+    fd.append('f', new Blob(['x']), 'x.txt');
+    const res = await fetch(`${await app.getUrl()}/webhooks/gomdon/${SECRET}`, { method: 'POST', body: fd });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(webhook.receive).not.toHaveBeenCalled();
   });
 });

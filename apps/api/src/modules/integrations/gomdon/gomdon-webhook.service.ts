@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -20,7 +20,12 @@ import {
   gomdonStatusText,
   isGomdonPayable,
   isGomdonTerminal,
+  parseGomdonCustomerId,
 } from './gomdon-status';
+import { gomdonHealth } from './gomdon-health';
+
+/** Báo động "payload webhook không đọc được" tối đa 1 lần / Content-Type trong khoảng này. */
+const UNREADABLE_ALERT_GAP_MS = 10 * 60_000;
 
 export const GOMDON_EVENT_STATUS = {
   RECEIVED: 'RECEIVED',
@@ -114,6 +119,7 @@ const PROBLEM_ADVICE: Record<number, string> = {
 @Injectable()
 export class GomdonWebhookService {
   private readonly logger = new Logger(GomdonWebhookService.name);
+  private readonly unreadableAlertedAt = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -123,9 +129,16 @@ export class GomdonWebhookService {
     @InjectQueue(QUEUE_GOMDON_PUSH) private readonly pushQueue: Queue,
   ) {}
 
-  /** Lưu event (dedupe) rồi enqueue xử lý. Ném lỗi chỉ khi KHÔNG lưu được (để Gomdon gửi lại). */
-  async receive(body: GomdonWebhookPayload): Promise<{ result: true; duplicate?: true }> {
+  /**
+   * Lưu event (dedupe) rồi enqueue xử lý. Ném lỗi khi KHÔNG lưu được, hoặc khi payload không đọc được (thiếu
+   * status — vd Gomdon đổi Content-Type): trả 200 lúc đó là Gomdon thôi gửi lại và event mất không ai biết.
+   */
+  async receive(body: GomdonWebhookPayload, meta: { contentType?: string } = {}): Promise<{ result: true; duplicate?: true }> {
     const parsed = parseGomdonPayload(body ?? {});
+    if (parsed.status == null) {
+      await this.reportUnreadable(body ?? {}, parsed.orderCode, meta.contentType);
+      throw new BadRequestException('Không đọc được payload webhook Gomdon (thiếu status).');
+    }
     const dedupeKey = gomdonDedupeKey(parsed, body ?? {});
     // Chỉ log định danh + status — không log nguyên payload (địa chỉ/SĐT khách, phí...).
     this.logger.log(
@@ -194,6 +207,20 @@ export class GomdonWebhookService {
     }
   }
 
+  /** Chỉ báo tên trường + Content-Type (không báo giá trị: địa chỉ/SĐT khách). */
+  private async reportUnreadable(body: object, orderCode: string | null, contentType: string | undefined): Promise<void> {
+    const ct = contentType?.split(';')[0]?.trim() || 'không có';
+    const keys = Object.keys(body).slice(0, 20).join(', ') || 'không có';
+    const message = `Webhook Gomdon không đọc được (Content-Type: ${contentType ?? 'không có'}; trường nhận được: ${keys}) — đã trả 400 để Gomdon gửi lại. Báo Gomdon kiểm tra định dạng webhook (cần JSON hoặc form có trường status).`;
+    this.logger.error(message);
+    gomdonHealth.recordError(message);
+    const now = Date.now();
+    const last = this.unreadableAlertedAt.get(ct);
+    if (last != null && now - last < UNREADABLE_ALERT_GAP_MS) return;
+    this.unreadableAlertedAt.set(ct, now);
+    await this.alerts.alert(orderCode ?? '(không rõ đơn)', message);
+  }
+
   private ignored(reason: string, orderId?: string): Outcome {
     this.logger.warn(`Bỏ qua webhook Gomdon: ${reason}`);
     return { status: GOMDON_EVENT_STATUS.IGNORED, reason, orderId };
@@ -213,9 +240,11 @@ export class GomdonWebhookService {
     // mã đơn (order_customer_id) CHỈ với đơn thu gom chưa gắn vận đơn nào, rồi điền mã.
     // Không nhận lại vận đơn ĐÃ HUỶ (status 2): webhook trễ của vận đơn cũ (admin huỷ → tạo lại) mà
     // được gắn vào đơn đang chờ tạo lại thì pushOrder thấy "đã có mã" và không bao giờ tạo vận đơn mới.
+    // Lần tạo lại thứ n gửi order_customer_id `${code}-R${n}` (gomdonCustomerId) — chỉ nhận đúng lần tạo hiện tại.
     if (p.orderCode && (p.gomdonOrderId || p.partnerCode) && p.status !== 2) {
+      const { code, attempt } = parseGomdonCustomerId(p.orderCode);
       const order = await this.prisma.order.findFirst({
-        where: { code: p.orderCode, hasRecyclingPickup: true, gomdonOrderId: null, gomdonPartnerCode: null },
+        where: { code, gomdonAttempt: attempt, hasRecyclingPickup: true, gomdonOrderId: null, gomdonPartnerCode: null },
       });
       if (order) return { order, backfill: true };
     }
@@ -234,8 +263,8 @@ export class GomdonWebhookService {
         `không khớp đơn thu gom nào (order_id=${p.gomdonOrderId}, order_code=${p.partnerCode}, order_customer_id=${p.orderCode})`,
       );
     }
-    // Đối chiếu chéo: có order_customer_id thì phải trùng mã đơn đã khớp.
-    if (p.orderCode && p.orderCode !== order.code) {
+    // Đối chiếu chéo: có order_customer_id thì phải trùng mã đơn đã khớp (kể cả dạng `${code}-R${n}`).
+    if (p.orderCode && parseGomdonCustomerId(p.orderCode).code !== order.code) {
       return this.ignored(`order_customer_id ${p.orderCode} lệch mã đơn ${order.code}`, order.id);
     }
     if (order.gomdonOrderId && p.gomdonOrderId && order.gomdonOrderId !== p.gomdonOrderId) {

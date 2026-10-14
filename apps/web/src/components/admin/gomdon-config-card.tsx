@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import { Recycle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getGomdonStatus, setConfig, type ConfigRow } from '@/lib/admin-client';
+import {
+  checkGomdonConnection,
+  getGomdonStatus,
+  setConfig,
+  type ConfigRow,
+  type GomdonConnectionHealth,
+} from '@/lib/admin-client';
 import {
   buildGomdonConfigValue,
   configValue,
@@ -13,7 +19,8 @@ import {
   WAREHOUSE_LABEL,
   type WarehouseForm,
 } from '@/lib/admin-config-forms';
-import { Field, INPUT_CLASS, Notice } from './ui';
+import { formatDateTime } from '@/lib/format-date';
+import { BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 
 /** Hằng (không phải `{}` mới mỗi render) — useEffect bên dưới so sánh theo tham chiếu. */
 const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
@@ -25,6 +32,29 @@ function StatusDot({ ok, label }: { ok: boolean; label: string }) {
       <span className={ok ? 'text-stone-700' : 'text-danger-fg'}>
         {label}: {ok ? 'đã đặt' : 'chưa đặt'}
       </span>
+    </span>
+  );
+}
+
+/** Lần gọi Gomdon gần nhất của API — để admin thấy Gomdon đang lỗi trước khi đơn thành "tạo tay". */
+function ConnectionLine({ c }: { c: GomdonConnectionHealth }) {
+  const okAt = c.lastOkAt ? Date.parse(c.lastOkAt) : 0;
+  const errAt = c.lastErrorAt ? Date.parse(c.lastErrorAt) : 0;
+  let tone = 'text-stone-600';
+  let text = 'chưa gọi Gomdon lần nào từ khi API khởi động';
+  if (c.credentialsRejected) {
+    tone = 'text-danger-fg';
+    text = 'Gomdon từ chối tài khoản';
+  } else if (okAt && okAt >= errAt) {
+    tone = 'text-success-fg';
+    text = `ổn, lần cuối ${formatDateTime(c.lastOkAt!)}`;
+  } else if (errAt) {
+    tone = 'text-warning-fg';
+    text = `lỗi lúc ${formatDateTime(c.lastErrorAt!)}`;
+  }
+  return (
+    <span className="text-xs">
+      Kết nối: <b className={tone}>{text}</b>
     </span>
   );
 }
@@ -42,6 +72,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const [warehouse, setWarehouse] = useState<WarehouseForm>(() => readGomdonForm(current).warehouse);
   const [weight, setWeight] = useState(() => readGomdonForm(current).weight);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [checkMsg, setCheckMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loadedFrom, setLoadedFrom] = useState<unknown>(current);
 
   // Nạp lại form khi dữ liệu config về (lần đầu rows còn undefined) hoặc sau khi lưu.
@@ -81,8 +112,19 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
   });
 
+  const checkConnection = useMutation({
+    mutationFn: checkGomdonConnection,
+    onSuccess: (r) => {
+      setCheckMsg({ ok: r.ok, text: r.ok ? r.message : `Không đăng nhập được Gomdon: ${r.message}` });
+      void qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] });
+    },
+    onError: (e) => setCheckMsg({ ok: false, text: e instanceof Error ? e.message : 'Không kiểm tra được kết nối.' }),
+  });
+
   const st = statusQ.data;
-  const toggleOnButNotLive = toggle && st && !st.recyclingEnabled;
+  const rejected = st?.connection?.credentialsRejected === true;
+  const lastError = st?.connection?.lastError ?? null;
+  const toggleOnButNotLive = toggle && st && !st.recyclingEnabled && !rejected;
 
   return (
     <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -108,7 +150,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         </label>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
         {statusQ.isError && <span className="text-xs text-danger-fg">Không tải được tình trạng tích hợp.</span>}
         {st && (
           <>
@@ -122,9 +164,36 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
               </b>{' '}
               lựa chọn thu gom
             </span>
+            {st.connection && <ConnectionLine c={st.connection} />}
           </>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setCheckMsg(null);
+            checkConnection.mutate();
+          }}
+          disabled={checkConnection.isPending}
+          className={BTN_XS_SECONDARY}
+        >
+          {checkConnection.isPending ? 'Đang kiểm tra…' : 'Kiểm tra kết nối'}
+        </button>
       </div>
+      {checkMsg && (
+        <p role={checkMsg.ok ? 'status' : 'alert'} className={`mt-1 text-xs ${checkMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+          {checkMsg.text}
+        </p>
+      )}
+
+      {rejected && (
+        <div className="mt-2">
+          <Notice tone="danger">
+            Gomdon đang từ chối tài khoản (<code>GOMDON_PHONE</code>/<code>GOMDON_PASSWORD</code>) nên khách tạm KHÔNG thấy lựa
+            chọn thu gom. Đơn thu gom đang chờ sẽ tự tạo vận đơn khi đăng nhập lại được. Sai tài khoản thì sửa env rồi khởi động
+            lại API; Gomdon vừa mở khoá tài khoản thì bấm &quot;Kiểm tra kết nối&quot;.{lastError && <> Lỗi gần nhất: {lastError}</>}
+          </Notice>
+        </div>
+      )}
 
       {toggleOnButNotLive && (
         <div className="mt-2">

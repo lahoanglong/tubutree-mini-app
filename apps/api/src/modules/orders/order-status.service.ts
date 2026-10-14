@@ -136,9 +136,8 @@ export class OrderStatusService {
           status: targetStatus,
           // Mốc giao thật — hạn đổi/trả tính từ đây (không dùng updatedAt: ghi gì sau đó cũng đổi nó).
           ...(targetStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
-          ...(opts.note
-            ? { note: order.note ? `${order.note} | ${opts.note}` : opts.note }
-            : {}),
+          // opts.note chỉ ghi vào order_status_history (dưới): Order.note là ghi chú khách tự viết lúc đặt và
+          // hiện nguyên văn trên trang đơn của khách.
         },
       });
       if (flip.count === 0) return false;

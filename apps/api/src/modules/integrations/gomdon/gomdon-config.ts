@@ -1,5 +1,6 @@
 import type { SystemConfigService } from '../../system-config/system-config.service';
 import type { GomdonConfig, GomdonWarehouseConfig } from './gomdon.types';
+import { gomdonHealth, type GomdonHealth } from './gomdon-health';
 
 /** Cấu hình KHÔNG bí mật (kho lấy hàng, cân nặng mặc định). Admin sửa ở tab Cấu hình. */
 export const GOMDON_CONFIG_KEY = 'shipping.gomdon.config';
@@ -67,15 +68,18 @@ export function hasGomdonCredentials(cfg: Pick<GomdonConfig, 'baseUrl' | 'phone'
 }
 
 /**
- * Cờ tính năng cho checkout: CHỈ bật khi Gomdon đã cấu hình đủ VÀ admin bật công tắc
- * (=== true: config là Json, chuỗi "false" vẫn truthy). Tắt thì FE ẩn lựa chọn và BE từ chối
- * hasRecyclingPickup=true — không hứa thu gom khi không có ai đi thu.
+ * Cờ tính năng cho checkout: CHỈ bật khi Gomdon đã cấu hình đủ, admin bật công tắc
+ * (=== true: config là Json, chuỗi "false" vẫn truthy) VÀ Gomdon không đang từ chối tài khoản (sai mật
+ * khẩu thì mọi đơn thu gom đều hỏng). Tắt thì FE ẩn lựa chọn và BE từ chối hasRecyclingPickup=true —
+ * không hứa thu gom khi không có ai đi thu.
  */
 export async function isGomdonRecyclingEnabled(
   systemConfig: Pick<SystemConfigService, 'get'>,
   env: NodeJS.ProcessEnv = process.env,
+  health: Pick<GomdonHealth, 'credentialsRejected'> = gomdonHealth,
 ): Promise<boolean> {
   const toggle = await systemConfig.get<unknown>(GOMDON_RECYCLING_TOGGLE_KEY, false);
   if (toggle !== true) return false;
+  if (health.credentialsRejected) return false;
   return hasGomdonCredentials(await loadGomdonConfig(systemConfig, env));
 }

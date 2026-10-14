@@ -1,5 +1,11 @@
 import type { Queue } from 'bullmq';
-import { addGomdonJob, enqueueGomdonCancel, enqueueGomdonPush, gomdonCancelJobId } from './gomdon-queue';
+import {
+  GOMDON_OUTBOUND_JOB_OPTIONS,
+  addGomdonJob,
+  enqueueGomdonCancel,
+  enqueueGomdonPush,
+  gomdonCancelJobId,
+} from './gomdon-queue';
 
 /**
  * Queue giả mô phỏng ĐÚNG hành vi dedupe của BullMQ addStandardJob: jobId còn tồn tại (kể cả job đã
@@ -63,5 +69,16 @@ describe('gomdon-queue', () => {
     await enqueueGomdonCancel(queue, 'o1');
     expect(enqueued).toEqual([{ name: 'cancel', data: { orderId: 'o1' }, jobId: 'cancel-o1' }]);
     expect(gomdonCancelJobId('o1')).not.toContain(':');
+  });
+  it('UAT GOMDON-1: job tạo/huỷ vận đơn có cửa sổ thử lại riêng dài hơn ~30 giây mặc định của BullMQ', async () => {
+    const { queue } = fakeBullQueue();
+    await enqueueGomdonPush(queue, 'o1');
+    await enqueueGomdonCancel(queue, 'o1');
+    const opts = (queue.add as jest.Mock).mock.calls.map((c) => c[2]);
+    for (const o of opts) expect(o).toMatchObject(GOMDON_OUTBOUND_JOB_OPTIONS);
+    const { attempts, backoff } = GOMDON_OUTBOUND_JOB_OPTIONS;
+    // exponential: delay * 2^(n-1) giữa các lần — tổng phải đủ phủ một sự cố Gomdon vài phút.
+    const totalMs = Array.from({ length: attempts - 1 }, (_, i) => backoff.delay * 2 ** i).reduce((a, b) => a + b, 0);
+    expect(totalMs).toBeGreaterThanOrEqual(5 * 60_000);
   });
 });

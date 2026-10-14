@@ -614,6 +614,12 @@ export class AdminService {
         include: {
           items: true,
           user: { select: { id: true, phone: true, fullName: true } },
+          gomdonAlerts: {
+            where: { resolvedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: { id: true, message: true, createdAt: true },
+          },
         },
       }),
       this.prisma.order.count({ where }),
@@ -848,7 +854,7 @@ export class AdminService {
     const order = await this.resolveOrderRef(idOrCode);
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
     try {
-      const res = await this.gomdonOrder.markHandled(order.id);
+      const res = await this.gomdonOrder.markHandled(order.id, adminId);
       this.logger.warn(
         `Admin ${adminId} đánh dấu "Đã xử lý tay" vận đơn thu gom đơn ${order.code} (trạng thái trước: ${res.previousStatus})` +
           `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
@@ -879,7 +885,24 @@ export class AdminService {
       webhookSecretSet: Boolean(process.env.GOMDON_WEBHOOK_SECRET?.trim()),
       recyclingToggle: toggle === true,
       recyclingEnabled: enabled,
+      // Lần gọi Gomdon gần nhất của process API: đăng nhập bị từ chối thì checkout tự ẩn lựa chọn thu gom.
+      connection: this.gomdonClient.getHealth(),
     };
+  }
+
+  /** Nút "Kiểm tra kết nối": đăng nhập Gomdon thật (không tạo đơn nào). */
+  async checkGomdonConnection(adminId: string) {
+    const res = await this.gomdonClient.checkConnection();
+    this.logger.warn(`Admin ${adminId} kiểm tra kết nối Gomdon: ${res.ok ? 'OK' : `lỗi — ${res.message}`}.`);
+    return res;
+  }
+
+  /** Đánh dấu một báo động Gomdon đã xử lý — đơn rời hàng đợi "Cần xử lý thu gom" nếu không còn việc khác. */
+  async resolveGomdonAlert(adminId: string, alertId: string) {
+    const ok = await this.gomdonOrder.resolveAlert(alertId, adminId);
+    if (!ok) throw new NotFoundException('Cảnh báo không tồn tại hoặc đã được xử lý.');
+    this.logger.warn(`Admin ${adminId} đánh dấu đã xử lý cảnh báo Gomdon ${alertId}.`);
+    return { ok: true as const };
   }
 
   // ── SystemConfig ──
