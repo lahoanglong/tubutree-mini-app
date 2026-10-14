@@ -4,7 +4,7 @@
 # Build context = ROOT của monorepo (d:/tubutree-mini-app).
 #   docker build -f apps/api/Dockerfile -t tubutree-api .
 # ──────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN apk add --no-cache openssl
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
@@ -21,7 +21,7 @@ RUN pnpm --filter @tubutree/api exec prisma generate
 RUN pnpm --filter @tubutree/api build
 
 # ──────────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl tzdata
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app

@@ -67,6 +67,30 @@ describe('tools/deploy/deploy.sh', () => {
     expect(calls.filter((c) => c.startsWith('docker compose')).every((c) => c.includes('docker-compose.vietnix.yml'))).toBe(true);
   });
 
+  it('kiểm cấu hình môi trường bằng image MỚI trước khi migrate/thay container (R2-PLATFORM-4)', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', []);
+    expect(status).toBe(0);
+    const build = idx(calls, ' build api web');
+    const check = idx(calls, 'run --rm --no-deps api node dist/config/check-env.js');
+    expect(check).toBeGreaterThan(build);
+    expect(idx(calls, 'migrate deploy')).toBeGreaterThan(check);
+  });
+
+  it('.env sai → dừng trước migrate, KHÔNG thay container đang chạy', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: 'check-env' });
+    expect(status).toBe(2);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(idx(calls, ' up ')).toBe(-1);
+    expect(out).toContain('.env');
+  });
+
+  it('api mới không healthy → dừng, in cách quay lại image trước', () => {
+    const { status, out, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: '.State.Health' });
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/docker tag \S+ \S+/);
+    expect(idx(calls, 'up -d --no-build web')).toBe(-1);
+  });
+
   it('migration lỗi → dừng, KHÔNG thay container đang chạy', () => {
     const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: 'migrate deploy' });
     expect(status).not.toBe(0);

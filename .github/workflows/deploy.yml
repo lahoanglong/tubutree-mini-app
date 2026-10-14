@@ -88,5 +88,5 @@ jobs:
             set -euo pipefail
             cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
             git pull --ff-only
-            # build → migrate bằng image mới → thay api → thay web (xem script vì sao thứ tự này).
+            # build → kiểm .env + migrate bằng image mới → thay api → thay web (xem script vì sao thứ tự này).
             COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" bash tools/deploy/deploy.sh

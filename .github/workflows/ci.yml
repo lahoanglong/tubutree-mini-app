@@ -27,12 +27,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # jsdom@30 (apps/web test) gọi undici's CacheStorage polyfill cần
-          # `webidl.util.markAsUncloneable` — API nội bộ Node không có ở Node 20 trên runner
-          # GitHub Actions, dù package.json ghi "node": ">=20" và chạy được trên máy dev (Node 22+).
-          # Lockfile cũng resolve chain jsdom/vitest dựa trên @types/node@22. Nâng CI lên 22 để
-          # khớp đúng môi trường lockfile đã build, không phải hạ cấp gói.
-          node-version: 22
+          # Cùng bản Node với image production (node:22-alpine) và engines ở package.json: jsdom@30 (apps/web
+          # test) cần Node ^22.22, undici 8 cần >=22.19 — Node 20 đã hết hỗ trợ.
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install
