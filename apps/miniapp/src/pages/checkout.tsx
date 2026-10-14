@@ -23,10 +23,11 @@ import {
   checkoutPoints,
   isInvoiceValid,
   partnerPointsState,
+  paymentMissingNote,
+  paymentUnavailableReason,
+  pickPaymentMethod,
   pointsEarnLabel,
   pointsUseLabel,
-  shouldFallbackToCod,
-  walletUnavailableReason,
   zeroTotalNote,
 } from '../utils/checkout-rules';
 import {
@@ -158,13 +159,12 @@ export default function CheckoutPage() {
   const zeroNote = quote.data ? zeroTotalNote(quote.data) : null;
   const paymentToSend = zeroNote ? 'COD' : payment;
 
-  // Đang chọn Ví mà tổng đơn vượt số dư, hoặc phương thức bị máy chủ khoá cho giỏ này (có hàng gian hàng tự giao, D4)
-  // → tự trả về COD, tránh đặt fail.
+  // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
+  // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
   useEffect(() => {
     if (!quote.data) return;
-    if (shouldFallbackToCod(payment, walletBalanceLive, quote.data.total) || quote.data.blockedPaymentMethods?.[payment]) {
-      setPayment('COD');
-    }
+    const next = pickPaymentMethod(payment, quote.data, walletBalanceLive);
+    if (next !== payment) setPayment(next);
   }, [payment, quote.data, walletBalanceLive]);
 
   // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
@@ -318,9 +318,8 @@ export default function CheckoutPage() {
   }
 
   const walletBalance = walletBalanceLive;
-  const total = quote.data?.total ?? 0;
   // Lý do THẬT khiến "Đặt hàng" không bấm được (chưa chọn địa chỉ / quote chưa sẵn sàng / hoá đơn
-  // VAT chưa hợp lệ) — KHÔNG gồm order.isPending/submitting: 2 cờ đó là trạng thái ĐANG XỬ LÝ, đã
+  // VAT chưa hợp lệ / chưa có cách thanh toán dùng được) — KHÔNG gồm order.isPending/submitting: 2 cờ đó là trạng thái ĐANG XỬ LÝ, đã
   // truyền riêng qua Button's `loading` bên dưới. Button (Task 10, components/ui/button.tsx) tự
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
@@ -330,19 +329,20 @@ export default function CheckoutPage() {
     : (cart.data?.items ?? []);
   const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
   const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid && !overStockLine;
+  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '');
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
-  const walletReason = quote.isSuccess ? walletUnavailableReason(walletBalance, total) : null;
   const paymentMethods = [
-    { value: 'COD', label: vi.checkout.paymentCod, hint: null },
+    { value: 'COD', label: vi.checkout.paymentCod },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
-    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null as string | null },
-    { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)), hint: walletReason },
-  ]
-    .map((m) => ({ ...m, hint: quote.data?.blockedPaymentMethods?.[m.value] ?? m.hint }))
-    .map((m) => ({ ...m, disabled: m.hint !== null }));
+    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank },
+    { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)) },
+  ].map((m) => {
+    const hint = quote.isSuccess ? paymentUnavailableReason(m.value, quote.data, walletBalance) : null;
+    return { ...m, hint, disabled: hint !== null };
+  });
+  const paymentNote = quote.isSuccess && !zeroNote && payment === '' ? paymentMissingNote(quote.data, walletBalance) : null;
   // Mỗi nơi giao thành một đơn riêng (D4): chia danh sách món và phí giao theo kiện máy chủ báo.
   const shipments = quote.data?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((sh) => sh.fulfiller.kind === 'MERCHANT');
@@ -593,6 +593,11 @@ export default function CheckoutPage() {
             </Box>
           </Box>
         ))}
+        {paymentNote && (
+          <Text role="status" size="small" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
+            {paymentNote}
+          </Text>
+        )}
       </Box>
 
       {/* ── Điểm Xanh ── */}
@@ -718,7 +723,7 @@ export default function CheckoutPage() {
                   Chúng tôi sẽ thu gom lại các vật liệu tái chế được đóng gói gọn gàng như bọc nilong, hoặc quần áo cũ, pin, vỏ sữa làm sạch -&gt; giúp bảo vệ môi trường. Số kg thu gom tối đa bằng số kg của đơn hàng (~{maxRecycleKg} kg).
                 </Text>
               </Box>
-              {paymentToSend !== 'COD' && paymentToSend !== 'WALLET' && (
+              {paymentToSend === 'BANK_TRANSFER' && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
                   Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
                 </Text>

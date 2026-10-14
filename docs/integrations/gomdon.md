@@ -81,7 +81,7 @@ Ghi chú trạng thái:
 | `product_name` | Chuỗi, bắt buộc | Danh sách sản phẩm, cắt 250 ký tự | đã khớp |
 | `product_price` | Giá trị gói hàng, VND | `order.total` | đã khớp |
 | `product_number` | Số kiện | `1` | đã khớp |
-| `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout đã chặn COD trên 5 triệu | đã khớp |
+| `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout chặn COD khi một đơn (một kiện) trên 5 triệu, xét từng đơn sau khi tách theo nơi giao | đã khớp |
 | `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng. Thiếu thì lấy 500 g | đã khớp |
 | `width` / `height` / `length` | **Milimét** | `0`, không khai kích thước, giống mẫu | đã khớp |
 | `note` | Ghi chú trên bưu kiện | "Đơn đổi hàng thu gom tái chế (Tối đa X kg) …" | đã khớp |

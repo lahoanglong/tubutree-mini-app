@@ -6,7 +6,9 @@ import {
   isInvoiceValid,
   outOfStockLine,
   overStockMessage,
-  shouldFallbackToCod,
+  paymentMissingNote,
+  paymentUnavailableReason,
+  pickPaymentMethod,
   walletUnavailableReason,
 } from './checkout-rules';
 
@@ -34,12 +36,37 @@ describe('isInvoiceValid', () => {
 describe('Ví Tubu ở thanh toán', () => {
   it('số dư đủ → dùng được, không có lý do khoá', () => {
     expect(walletUnavailableReason(50000, 50000)).toBeNull();
-    expect(shouldFallbackToCod('WALLET', 50000, 50000)).toBe(false);
+    expect(pickPaymentMethod('WALLET', { total: 50000 }, 50000)).toBe('WALLET');
   });
-  it('số dư thiếu → nói thiếu bao nhiêu và tự rơi về COD', () => {
+  it('số dư thiếu → nói thiếu bao nhiêu và chọn lại COD', () => {
     expect(walletUnavailableReason(50000, 120000)).toBe('Số dư chưa đủ — cần thêm 70.000đ');
-    expect(shouldFallbackToCod('WALLET', 50000, 120000)).toBe(true);
-    expect(shouldFallbackToCod('COD', 0, 120000)).toBe(false);
+    expect(pickPaymentMethod('WALLET', { total: 120000 }, 50000)).toBe('COD');
+    expect(pickPaymentMethod('COD', { total: 120000 }, 0)).toBe('COD');
+  });
+});
+
+describe('chọn phương thức thanh toán theo báo giá (R4-CHECKOUT-2)', () => {
+  const COD_OVER = 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.';
+  const SPLIT = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+
+  it('lý do lấy đúng câu máy chủ khoá trong báo giá; Ví so số dư với tổng đơn', () => {
+    const quote = { total: 5400000, blockedPaymentMethods: { COD: COD_OVER } };
+    expect(paymentUnavailableReason('COD', quote, 0)).toBe(COD_OVER);
+    expect(paymentUnavailableReason('BANK_TRANSFER', quote, 0)).toBeNull();
+    expect(paymentUnavailableReason('WALLET', quote, 5000000)).toBe('Số dư chưa đủ — cần thêm 400.000đ');
+  });
+
+  it('COD bị khoá → chọn chuyển khoản; chuyển khoản bị khoá → COD', () => {
+    expect(pickPaymentMethod('COD', { total: 5400000, blockedPaymentMethods: { COD: COD_OVER } }, 0)).toBe('BANK_TRANSFER');
+    expect(pickPaymentMethod('BANK_TRANSFER', { total: 295000, blockedPaymentMethods: { BANK_TRANSFER: SPLIT } }, 0)).toBe('COD');
+  });
+
+  it('COD và chuyển khoản đều bị khoá → không tự chọn Ví; khách tự chọn Ví thì giữ', () => {
+    const quote = { total: 5600000, blockedPaymentMethods: { COD: COD_OVER, BANK_TRANSFER: SPLIT } };
+    expect(pickPaymentMethod('COD', quote, 9000000)).toBe('');
+    expect(pickPaymentMethod('WALLET', quote, 9000000)).toBe('WALLET');
+    expect(paymentMissingNote(quote, 9000000)).toBe('Chọn một cách thanh toán cho đơn này để đặt hàng.');
+    expect(paymentMissingNote(quote, 0)).toBe('Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.');
   });
 });
 

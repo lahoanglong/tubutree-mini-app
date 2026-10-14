@@ -31,8 +31,9 @@ import {
   isInvoiceValid,
   outOfStockLine,
   overStockMessage,
-  shouldFallbackToCod,
-  walletUnavailableReason,
+  paymentMissingNote,
+  paymentUnavailableReason,
+  pickPaymentMethod,
 } from '@/lib/checkout-rules';
 import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
 import { orderDetailHref } from '@/lib/order-view';
@@ -146,15 +147,14 @@ export default function CheckoutPage() {
   }, [partnerPoints.disabled, usePoints]);
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
-  // Giỏ có hàng gian hàng tự giao: BE chỉ nhận COD/Ví cho phần đó (D4) và nói lý do; FE khoá lựa chọn tương ứng.
-  const blocked: Record<string, string> = quote?.blockedPaymentMethods ?? {};
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
-  // Đang chọn Ví mà tổng đơn vượt số dư, hoặc phương thức bị máy chủ khoá cho giỏ này → về COD thay vì để lệnh đặt bị từ chối.
-  const mustUseCod = !!quote && (shouldFallbackToCod(payment, walletBalance, quote.total) || !!quote.blockedPaymentMethods?.[payment]);
+  // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
+  // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
+  const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
   useEffect(() => {
-    if (mustUseCod) setPayment('COD');
-  }, [mustUseCod]);
+    if (pickedPayment !== payment) setPayment(pickedPayment);
+  }, [pickedPayment, payment]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
   // Hết hàng/vượt tồn chỉ sửa được ở giỏ: chặn ngay ở đây (khách đi thẳng vào /thanh-toan hay lưu đường dẫn không phải
@@ -321,12 +321,12 @@ export default function CheckoutPage() {
       ? placeErrorMessage
       : null;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
-  const walletReason = quote ? walletUnavailableReason(walletBalance, quote.total) : null;
   const paymentMethods = [
-    { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)', hint: null as string | null },
-    { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng', hint: null as string | null },
-    { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})`, hint: walletReason },
-  ].map((m) => ({ ...m, hint: blocked[m.k] ?? m.hint }));
+    { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
+    { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+    { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
+  ].map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
+  const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
 
   return (
     <Shell>
@@ -399,6 +399,11 @@ export default function CheckoutPage() {
                     </div>
                   );
                 })}
+                {paymentNote && (
+                  <p role="status" className="text-sm text-warning-fg">
+                    {paymentNote}
+                  </p>
+                )}
               </div>
             )}
           </section>
@@ -574,7 +579,7 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock}
+            disabled={!addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '')}
             className={`${ui.btnPrimary} mt-4 w-full`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}

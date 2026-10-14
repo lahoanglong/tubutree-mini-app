@@ -87,8 +87,14 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
    đó." và không ghi lượt dùng.
 5. Thanh toán: kiện đối tác chỉ nhận **COD** (đối tác thu) hoặc **Ví Tubu** (Tubu giữ tiền). Chuyển khoản được Pancake đối soát
    theo mã đơn Pancake nên không có đường xác nhận cho đơn đối tác; ZaloPay đang ẩn ở cả hai app. Lần đặt bị tách cũng chỉ nhận
-   COD/Ví vì một lệnh thanh toán ngoài chỉ trỏ được một mã đơn. Báo giá trả `blockedPaymentMethods` (phương thức → câu lý do)
-   để FE tắt sẵn lựa chọn không hợp lệ, hiện đúng lý do và tự chuyển về COD; API vẫn chặn (mã lỗi `PAYMENT_METHOD_NOT_ALLOWED`).
+   COD/Ví vì một lệnh thanh toán ngoài chỉ trỏ được một mã đơn. COD còn bị trần 5.000.000đ (`COD_MAX_PER_ORDER`, trần thu hộ
+   mỗi kiện của hãng vận chuyển) xét trên **từng đơn sau khi tách** (tiền hàng sau giảm cộng phí giao của đơn đó), không xét
+   tổng cả giỏ: giỏ 2,6 triệu hàng Tubu cộng 3 triệu hàng gian hàng vẫn COD được. Báo giá trả `blockedPaymentMethods`
+   (phương thức → câu lý do kèm cách đặt tiếp) cho COD, chuyển khoản và ZaloPay; đây là nguồn duy nhất: đặt hàng từ chối đúng các
+   phương thức báo giá khoá, cùng câu (mã lỗi `PAYMENT_METHOD_NOT_ALLOWED`), phương thức không khoá thì đặt được. Ví Tubu do FE
+   so số dư mới nhất với tổng đơn (đúng điều kiện API dùng lúc đặt). FE tắt sẵn lựa chọn bị khoá kèm lý do; lựa chọn đang chọn
+   không còn dùng được thì tự chọn COD hoặc chuyển khoản nếu dùng được, không tự chọn Ví (Ví trừ tiền ngay), không còn cách nào
+   thì bỏ chọn, khoá nút đặt và nói khách xem hướng dẫn dưới từng phương thức (UAT vòng 4 R4-CHECKOUT-2).
 6. Thu gom vỏ tái chế (Gomdon) chỉ gắn vào đơn Tubu; lần đặt không có hàng Tubu mà bật thu gom bị từ chối.
 7. Ghi đơn: một transaction tạo mọi đơn con, giữ tồn từng dòng, trừ điểm một lần dưới khoá dòng user rồi ghi sổ điểm theo
    từng đơn, trừ ví theo từng đơn, tạo hoa hồng CTV theo từng đơn. Mã giảm giá ghi nhận lượt dùng trên đơn đầu tiên

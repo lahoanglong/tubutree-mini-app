@@ -4,9 +4,11 @@ import {
   isInvoiceValid,
   partnerPointsState,
   walletUnavailableReason,
+  paymentMissingNote,
+  paymentUnavailableReason,
+  pickPaymentMethod,
   pointsEarnLabel,
   pointsUseLabel,
-  shouldFallbackToCod,
   zeroTotalNote,
   type InvoiceInfo,
 } from './checkout-rules';
@@ -39,22 +41,50 @@ describe('isInvoiceValid', () => {
   });
 });
 
-describe('shouldFallbackToCod', () => {
-  it('WALLET không đủ số dư trả tổng đơn → true', () => {
-    expect(shouldFallbackToCod('WALLET', 50_000, 100_000)).toBe(true);
+describe('chọn phương thức thanh toán theo báo giá (R4-CHECKOUT-2)', () => {
+  const COD_OVER = 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.';
+  const SPLIT = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+
+  it('lý do lấy đúng câu máy chủ khoá trong báo giá; Ví so số dư mới nhất với tổng đơn', () => {
+    const quote = { total: 5_400_000, blockedPaymentMethods: { COD: COD_OVER } };
+    expect(paymentUnavailableReason('COD', quote, 0)).toBe(COD_OVER);
+    expect(paymentUnavailableReason('BANK_TRANSFER', quote, 0)).toBeNull();
+    expect(paymentUnavailableReason('WALLET', quote, 5_000_000)).toBe('Số dư chưa đủ — cần thêm 400.000đ');
+    expect(paymentUnavailableReason('WALLET', quote, 5_400_000)).toBeNull();
+    expect(paymentUnavailableReason('WALLET', { total: 70_000 }, 70_000)).toBeNull();
   });
 
-  it('WALLET đủ số dư → false', () => {
-    expect(shouldFallbackToCod('WALLET', 200_000, 100_000)).toBe(false);
+  it('lựa chọn của khách còn dùng được thì giữ nguyên', () => {
+    expect(pickPaymentMethod('BANK_TRANSFER', { total: 70_000 }, 0)).toBe('BANK_TRANSFER');
+    expect(pickPaymentMethod('WALLET', { total: 70_000, blockedPaymentMethods: { BANK_TRANSFER: SPLIT } }, 70_000)).toBe('WALLET');
   });
 
-  it('COD hoặc BANK_TRANSFER không bao giờ tự fallback (không dùng số dư)', () => {
-    expect(shouldFallbackToCod('COD', 0, 100_000)).toBe(false);
-    expect(shouldFallbackToCod('BANK_TRANSFER', 0, 100_000)).toBe(false);
+  it('COD bị khoá (một đơn vượt 5 triệu) → chọn chuyển khoản thay vì ép về COD', () => {
+    expect(pickPaymentMethod('COD', { total: 5_400_000, blockedPaymentMethods: { COD: COD_OVER } }, 0)).toBe('BANK_TRANSFER');
   });
 
-  it('XU không còn là phương thức thanh toán (PD-3): không có nhánh riêng, không tự rơi về COD', () => {
-    expect(shouldFallbackToCod('XU', 0, 100_000)).toBe(false);
+  it('chuyển khoản bị khoá (giỏ tách đơn) hoặc Ví thiếu số dư → về COD khi COD dùng được', () => {
+    expect(pickPaymentMethod('BANK_TRANSFER', { total: 295_000, blockedPaymentMethods: { BANK_TRANSFER: SPLIT } }, 0)).toBe('COD');
+    expect(pickPaymentMethod('WALLET', { total: 100_000 }, 50_000)).toBe('COD');
+  });
+
+  it('COD và chuyển khoản đều bị khoá → không tự chọn (kể cả Ví đủ tiền: Ví trừ tiền nên khách phải tự chọn)', () => {
+    const quote = { total: 5_600_000, blockedPaymentMethods: { COD: COD_OVER, BANK_TRANSFER: SPLIT } };
+    expect(pickPaymentMethod('COD', quote, 0)).toBe('');
+    expect(pickPaymentMethod('COD', quote, 9_000_000)).toBe('');
+    expect(pickPaymentMethod('WALLET', quote, 9_000_000)).toBe('WALLET');
+  });
+
+  it('chưa có phương thức nào được chọn: nhắc chọn khi còn cách dùng được, nói rõ khi không còn cách nào', () => {
+    const quote = { total: 5_600_000, blockedPaymentMethods: { COD: COD_OVER, BANK_TRANSFER: SPLIT } };
+    expect(paymentMissingNote(quote, 9_000_000)).toBe('Chọn một cách thanh toán cho đơn này để đặt hàng.');
+    expect(paymentMissingNote(quote, 0)).toBe(
+      'Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.',
+    );
+  });
+
+  it('XU không còn là phương thức thanh toán (PD-3): không được giữ, chọn lại COD', () => {
+    expect(pickPaymentMethod('XU', { total: 100_000 }, 0)).toBe('COD');
   });
 });
 
@@ -183,9 +213,9 @@ describe('walletUnavailableReason (C-080)', () => {
     expect(walletUnavailableReason(900_000, 798_000)).toBeNull();
   });
 
-  it('khớp tuyệt đối với shouldFallbackToCod: có lý do ⇔ sẽ bị rơi về COD', () => {
+  it('khớp tuyệt đối với lựa chọn: có lý do ⇔ Ví đang chọn bị đổi sang cách khác', () => {
     for (const [bal, total] of [[0, 1], [99, 100], [100, 100], [101, 100]] as const) {
-      expect(walletUnavailableReason(bal, total) !== null).toBe(shouldFallbackToCod('WALLET', bal, total));
+      expect(walletUnavailableReason(bal, total) !== null).toBe(pickPaymentMethod('WALLET', { total }, bal) !== 'WALLET');
     }
   });
 });
