@@ -24,6 +24,10 @@ export interface SubscriptionDTO {
   slug: string | null;
   unitPrice: number;
   effectiveDiscountPct: number;
+  /** Tiền hàng mỗi kỳ trước giảm, phần giảm và tiền hàng sau giảm theo đúng công thức đơn kỳ của server. Optional: API cũ chưa trả. */
+  cycleSubtotal?: number;
+  cycleDiscount?: number;
+  cycleGoods?: number;
 }
 
 export interface SubscriptionFirstOrder {

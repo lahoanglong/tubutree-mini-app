@@ -112,6 +112,7 @@ export const vi = {
     skipOk: 'Đã bỏ qua kỳ này, hẹn kỳ sau nhé 🌿',
     intro: (pct: number) => `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${pct}% mỗi đơn, hủy bất kỳ lúc nào.`,
     perCycle: (weeks: number, price: string) => `Mỗi ${weeks} tuần · ${price}`,
+    savePill: (pct: number) => `Tiết kiệm ${pct}%`,
     nextRun: (date: string) => `Lần kế: ${date}`,
     scheduling: 'Đang lên lịch',
     pausedLine: 'Đang tạm dừng',
