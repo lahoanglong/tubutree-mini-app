@@ -249,6 +249,101 @@ describe('allocateLineAmounts — mỗi khoản giảm chỉ rơi vào dòng đ�
   });
 });
 
+/**
+ * Bản sao NGUYÊN VĂN allocateGroupAmounts trước nhánh Q8 (uat/integration @056430e5) — làm thước đo: giỏ không có hàng
+ * đối tác (một kiện Tubu) phải ra đúng từng đồng như code cũ.
+ */
+function preQ8GroupAmounts(
+  groups: { lines: SplitLine[] }[],
+  t: { comboPerLine: Record<string, number>; comboTotal: number; couponDiscount: number; tierDiscount: number; pointsDiscount: number; pointsUsed: number; pointsUsedConverted: number },
+) {
+  const subtotal = groups.map((g) => g.lines.reduce((s, l) => s + l.total, 0));
+  const combo = groups.map((g) =>
+    g.lines.filter((l) => !l.isFlash).reduce((s, l) => s + (t.comboPerLine[l.variationId] ?? 0), 0),
+  );
+  const comboGap = t.comboTotal - combo.reduce((s, x) => s + x, 0);
+  if (comboGap !== 0 && combo.length > 0) combo[0]! += comboGap;
+  const couponBase = groups.map((g, i) =>
+    Math.max(0, g.lines.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0) - combo[i]!),
+  );
+  const coupon = allocateProRata(t.couponDiscount, couponBase);
+  const tierBase = couponBase.map((b, i) => Math.max(0, b - coupon[i]!));
+  const tier = allocateProRata(t.tierDiscount, tierBase);
+  const flash = groups.map((g) => g.lines.filter((l) => l.isFlash).reduce((s, l) => s + l.total, 0));
+  const redeemBase = tierBase.map((b, i) => Math.max(0, b - tier[i]!) + flash[i]!);
+  const points = allocateProRata(t.pointsDiscount, redeemBase);
+  const standard = allocateProRata(t.pointsUsed - t.pointsUsedConverted, points);
+  const converted = allocateProRata(t.pointsUsedConverted, points);
+  return groups.map((_, i) => {
+    const discount = combo[i]! + coupon[i]! + tier[i]! + points[i]!;
+    return {
+      subtotal: subtotal[i]!,
+      comboDiscount: combo[i]!,
+      couponDiscount: coupon[i]!,
+      tierDiscount: tier[i]!,
+      pointsDiscount: points[i]!,
+      pointsUsed: standard[i]! + converted[i]!,
+      pointsUsedConverted: converted[i]!,
+      discount,
+      goodsAfterAll: Math.max(0, subtotal[i]! - discount),
+    };
+  });
+}
+
+/** PRNG cố định (mulberry32) để ca ngẫu nhiên lặp lại được. */
+function rng(seed: number) {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe('hồi quy: giỏ không có hàng đối tác ra đúng số như trước nhánh Q8', () => {
+  it('2.000 giỏ Tubu ngẫu nhiên (combo, mã chung/gắn sản phẩm, hạng, Điểm Xanh hai lô, hàng flash): số từng kiện khớp từng đồng', () => {
+    const rand = rng(20261014);
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
+    for (let n = 0; n < 2_000; n += 1) {
+      const lines = Array.from({ length: int(1, 6) }, (_, k) => ({
+        ...line(`v${k}`, int(1, 40) * int(1_000, 199_999), TUBU, rand() < 0.25),
+        productId: `p${k}`,
+      }));
+      const nonFlash = lines.filter((l) => !l.isFlash);
+      const comboPerLine: Record<string, number> = {};
+      for (const l of nonFlash) if (rand() < 0.4) comboPerLine[l.variationId] = Math.floor((l.total * int(1, 30)) / 100);
+      const comboTotal = Object.values(comboPerLine).reduce((s, x) => s + x, 0);
+      const afterCombo = nonFlash.reduce((s, l) => s + l.total - (comboPerLine[l.variationId] ?? 0), 0);
+      const scoped = rand() < 0.3 && nonFlash.length > 0 ? [nonFlash[int(0, nonFlash.length - 1)]!.productId!] : null;
+      const couponBase = scoped
+        ? nonFlash.filter((l) => scoped.includes(l.productId!)).reduce((s, l) => s + l.total - (comboPerLine[l.variationId] ?? 0), 0)
+        : afterCombo;
+      const couponDiscount = rand() < 0.6 ? Math.min(couponBase, int(0, 80_000)) : 0;
+      const tierDiscount = Math.floor((afterCombo - couponDiscount) * [0, 0.02, 0.03, 0.05][int(0, 3)]!);
+      const flashTotal = lines.filter((l) => l.isFlash).reduce((s, l) => s + l.total, 0);
+      const redeem = afterCombo - couponDiscount - tierDiscount + flashTotal;
+      const pointsUsed = rand() < 0.6 ? Math.floor(Math.min(redeem, int(0, 400_000)) / 1_000) : 0;
+      const t = {
+        comboPerLine,
+        comboTotal,
+        couponDiscount,
+        couponProductIds: scoped,
+        tierDiscount,
+        pointsDiscount: pointsUsed * 1_000,
+        pointsUsed,
+        pointsUsedConverted: int(0, pointsUsed),
+      };
+      const groups = groupByFulfiller(lines);
+      const [now] = allocateGroupAmounts(groups, t);
+      const [before] = preQ8GroupAmounts(groups, t);
+      const { linePaid, ...amounts } = now!;
+      expect(amounts).toEqual(before);
+      expect(linePaid.reduce((s, x) => s + x, 0)).toBe(before!.goodsAfterAll);
+    }
+  });
+});
+
 describe('paymentMethodBlockReason', () => {
   it('chỉ hàng Tubu: mọi phương thức', () => {
     expect(paymentMethodBlockReason([{ fulfiller: TUBU }], 'BANK_TRANSFER')).toBeNull();

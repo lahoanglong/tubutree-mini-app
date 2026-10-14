@@ -1,0 +1,849 @@
+{
+  "cod-plain": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 210000,
+          "discount": 0,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 0,
+          "shippingFee": 0,
+          "total": 210000,
+          "pointsEarned": 21,
+          "pointsUsed": 0,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": false,
+          "items": {
+            "A": {
+              "unitPrice": 120000,
+              "quantity": 1,
+              "total": 120000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 45000,
+              "quantity": 2,
+              "total": 90000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 120000,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 12
+            },
+            "1 × B": {
+              "goods": 45000,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 5
+            },
+            "cả đơn": {
+              "goods": 210000,
+              "shipping": 0,
+              "pointsUsedBack": 0,
+              "pointsEarnedBack": 21
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "cod-coupon-tier-points": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 225922,
+          "discount": 77758,
+          "couponDiscount": 22592,
+          "comboDiscount": 0,
+          "tierDiscount": 10166,
+          "pointsDiscount": 45000,
+          "shippingFee": 0,
+          "total": 148164,
+          "pointsEarned": 22,
+          "pointsUsed": 45,
+          "pointsUsedConverted": 15,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "A": {
+              "unitPrice": 33333,
+              "quantity": 1,
+              "total": 33333,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 77777,
+              "quantity": 2,
+              "total": 155554,
+              "flash": false
+            },
+            "C": {
+              "unitPrice": 12345,
+              "quantity": 3,
+              "total": 37035,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 21860,
+              "pointsUsedBack": 7,
+              "convertedBack": 2,
+              "pointsEarnedBack": 3
+            },
+            "1 × B": {
+              "goods": 51008,
+              "pointsUsedBack": 15,
+              "convertedBack": 5,
+              "pointsEarnedBack": 8
+            },
+            "1 × C": {
+              "goods": 8096,
+              "pointsUsedBack": 2,
+              "convertedBack": 1,
+              "pointsEarnedBack": 1
+            },
+            "cả đơn": {
+              "goods": 148164,
+              "shipping": 0,
+              "pointsUsedBack": 45,
+              "pointsEarnedBack": 22
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "wallet-flash-coupon-points": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 1733500,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "WALLET",
+          "paymentStatus": "PAID",
+          "fulfiller": "TUBU",
+          "subtotal": 326500,
+          "discount": 60000,
+          "couponDiscount": 20000,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 40000,
+          "shippingFee": 0,
+          "total": 266500,
+          "pointsEarned": 26,
+          "pointsUsed": 40,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "F": {
+              "unitPrice": 99000,
+              "quantity": 2,
+              "total": 198000,
+              "flash": true
+            },
+            "A": {
+              "unitPrice": 64000,
+              "quantity": 1,
+              "total": 64000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 21500,
+              "quantity": 3,
+              "total": 64500,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × F": {
+              "goods": 80807,
+              "pointsUsedBack": 12,
+              "convertedBack": 0,
+              "pointsEarnedBack": 8
+            },
+            "1 × A": {
+              "goods": 52239,
+              "pointsUsedBack": 8,
+              "convertedBack": 0,
+              "pointsEarnedBack": 5
+            },
+            "1 × B": {
+              "goods": 17549,
+              "pointsUsedBack": 3,
+              "convertedBack": 0,
+              "pointsEarnedBack": 2
+            },
+            "cả đơn": {
+              "goods": 266500,
+              "shipping": 0,
+              "pointsUsedBack": 40,
+              "pointsEarnedBack": 26
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "transfer-scoped-coupon-tier": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "PENDING_PAYMENT",
+          "paymentMethod": "BANK_TRANSFER",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 209900,
+          "discount": 51085,
+          "couponDiscount": 20400,
+          "comboDiscount": 0,
+          "tierDiscount": 5685,
+          "pointsDiscount": 25000,
+          "shippingFee": 0,
+          "total": 158815,
+          "pointsEarned": 23,
+          "pointsUsed": 25,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "A": {
+              "unitPrice": 88000,
+              "quantity": 1,
+              "total": 88000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 51000,
+              "quantity": 2,
+              "total": 102000,
+              "flash": false
+            },
+            "C": {
+              "unitPrice": 19900,
+              "quantity": 1,
+              "total": 19900,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 66583,
+              "pointsUsedBack": 10,
+              "convertedBack": 0,
+              "pointsEarnedBack": 10
+            },
+            "1 × B": {
+              "goods": 38588,
+              "pointsUsedBack": 6,
+              "convertedBack": 0,
+              "pointsEarnedBack": 6
+            },
+            "1 × C": {
+              "goods": 15057,
+              "pointsUsedBack": 2,
+              "convertedBack": 0,
+              "pointsEarnedBack": 2
+            },
+            "cả đơn": {
+              "goods": 158815,
+              "shipping": 0,
+              "pointsUsedBack": 25,
+              "pointsEarnedBack": 23
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "ctv-combo-coupon-points": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 250000,
+          "discount": 72588,
+          "couponDiscount": 15988,
+          "comboDiscount": 21600,
+          "tierDiscount": 0,
+          "pointsDiscount": 35000,
+          "shippingFee": 0,
+          "total": 177412,
+          "pointsEarned": 17,
+          "pointsUsed": 35,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "A": {
+              "unitPrice": 110000,
+              "quantity": 1,
+              "total": 96800,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 70000,
+              "quantity": 1,
+              "total": 61600,
+              "flash": false
+            },
+            "C": {
+              "unitPrice": 35000,
+              "quantity": 2,
+              "total": 70000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 75190,
+              "pointsUsedBack": 15,
+              "convertedBack": 0,
+              "pointsEarnedBack": 7
+            },
+            "1 × B": {
+              "goods": 47848,
+              "pointsUsedBack": 9,
+              "convertedBack": 0,
+              "pointsEarnedBack": 5
+            },
+            "1 × C": {
+              "goods": 27187,
+              "pointsUsedBack": 5,
+              "convertedBack": 0,
+              "pointsEarnedBack": 3
+            },
+            "cả đơn": {
+              "goods": 177412,
+              "shipping": 0,
+              "pointsUsedBack": 35,
+              "pointsEarnedBack": 17
+            }
+          },
+          "commissions": [
+            {
+              "amount": 14064,
+              "commissionableTotal": 177411,
+              "lines": {
+                "A": 7519,
+                "B": 3827,
+                "C": 2718
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "groupbuy-coupon": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 222000,
+          "discount": 37000,
+          "couponDiscount": 27000,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 10000,
+          "shippingFee": 0,
+          "total": 185000,
+          "pointsEarned": 18,
+          "pointsUsed": 10,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "G": {
+              "unitPrice": 180000,
+              "quantity": 1,
+              "total": 180000,
+              "flash": false
+            },
+            "A": {
+              "unitPrice": 42000,
+              "quantity": 1,
+              "total": 42000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × G": {
+              "goods": 150000,
+              "pointsUsedBack": 8,
+              "convertedBack": 0,
+              "pointsEarnedBack": 15
+            },
+            "1 × A": {
+              "goods": 35000,
+              "pointsUsedBack": 2,
+              "convertedBack": 0,
+              "pointsEarnedBack": 3
+            },
+            "cả đơn": {
+              "goods": 185000,
+              "shipping": 0,
+              "pointsUsedBack": 10,
+              "pointsEarnedBack": 18
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "cod-shipping-points": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 30,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 101000,
+          "discount": 20000,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 20000,
+          "shippingFee": 19000,
+          "total": 100000,
+          "pointsEarned": 8,
+          "pointsUsed": 20,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": false,
+          "items": {
+            "A": {
+              "unitPrice": 55000,
+              "quantity": 1,
+              "total": 55000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 23000,
+              "quantity": 2,
+              "total": 46000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 44109,
+              "pointsUsedBack": 11,
+              "convertedBack": 0,
+              "pointsEarnedBack": 4
+            },
+            "1 × B": {
+              "goods": 18446,
+              "pointsUsedBack": 5,
+              "convertedBack": 0,
+              "pointsEarnedBack": 2
+            },
+            "cả đơn": {
+              "goods": 81000,
+              "shipping": 19000,
+              "pointsUsedBack": 20,
+              "pointsEarnedBack": 8
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "cod-freeship": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 118000,
+          "discount": 0,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 0,
+          "shippingFee": 0,
+          "total": 118000,
+          "pointsEarned": 11,
+          "pointsUsed": 0,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": true,
+          "items": {
+            "A": {
+              "unitPrice": 59000,
+              "quantity": 2,
+              "total": 118000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 59000,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 6
+            },
+            "cả đơn": {
+              "goods": 118000,
+              "shipping": 0,
+              "pointsUsedBack": 0,
+              "pointsEarnedBack": 11
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "dealer-prepaid": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "DEALER",
+          "status": "PENDING_PAYMENT",
+          "paymentMethod": "BANK_TRANSFER",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 1432500,
+          "discount": 0,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 0,
+          "shippingFee": 0,
+          "total": 1432500,
+          "pointsEarned": 0,
+          "pointsUsed": 0,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": false,
+          "items": {
+            "A": {
+              "unitPrice": 172500,
+              "quantity": 4,
+              "total": 690000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 74250,
+              "quantity": 10,
+              "total": 742500,
+              "flash": false
+            }
+          }
+        }
+      ],
+      "pricelist": [
+        {
+          "label": "A",
+          "dealerPrice": 172500,
+          "discountPct": 25
+        },
+        {
+          "label": "B",
+          "dealerPrice": 74250,
+          "discountPct": 25
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 172500,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 0
+            },
+            "1 × B": {
+              "goods": 74250,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 0
+            },
+            "cả đơn": {
+              "goods": 1432500,
+              "shipping": 0,
+              "pointsUsedBack": 0,
+              "pointsEarnedBack": 0
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "subscription-first-order": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 290000,
+          "discount": 14500,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 0,
+          "shippingFee": 0,
+          "total": 275500,
+          "pointsEarned": 27,
+          "pointsUsed": 0,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": false,
+          "items": {
+            "A": {
+              "unitPrice": 145000,
+              "quantity": 2,
+              "total": 290000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 137750,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 14
+            },
+            "cả đơn": {
+              "goods": 275500,
+              "shipping": 0,
+              "pointsUsedBack": 0,
+              "pointsEarnedBack": 27
+            }
+          },
+          "commissions": []
+        }
+      ]
+    }
+  },
+  "ctv-assisted": {
+    "placement": {
+      "buyer": {
+        "walletBalance": 0,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0
+      },
+      "orders": [
+        {
+          "type": "RETAIL",
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "paymentStatus": "UNPAID",
+          "fulfiller": "TUBU",
+          "subtotal": 228000,
+          "discount": 0,
+          "couponDiscount": 0,
+          "comboDiscount": 0,
+          "tierDiscount": 0,
+          "pointsDiscount": 0,
+          "shippingFee": 0,
+          "total": 228000,
+          "pointsEarned": 0,
+          "pointsUsed": 0,
+          "pointsUsedConverted": 0,
+          "commission": 0,
+          "couponCode": false,
+          "items": {
+            "A": {
+              "unitPrice": 150000,
+              "quantity": 1,
+              "total": 150000,
+              "flash": false
+            },
+            "B": {
+              "unitPrice": 39000,
+              "quantity": 2,
+              "total": 78000,
+              "flash": false
+            }
+          }
+        }
+      ]
+    },
+    "perLine": {
+      "orders": [
+        {
+          "refunds": {
+            "1 × A": {
+              "goods": 150000,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 0
+            },
+            "1 × B": {
+              "goods": 39000,
+              "pointsUsedBack": 0,
+              "convertedBack": 0,
+              "pointsEarnedBack": 0
+            },
+            "cả đơn": {
+              "goods": 228000,
+              "shipping": 0,
+              "pointsUsedBack": 0,
+              "pointsEarnedBack": 0
+            }
+          },
+          "commissions": [
+            {
+              "amount": 19680,
+              "commissionableTotal": 228000,
+              "lines": {
+                "A": 15000,
+                "B": 4680
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
