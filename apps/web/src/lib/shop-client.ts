@@ -158,6 +158,56 @@ export const applyCoupon = (code: string) =>
   apiFetch<CartSummary>('/cart/coupon', { method: 'POST', body: { code } });
 export const removeCoupon = () => apiFetch<CartSummary>('/cart/coupon', { method: 'DELETE' });
 
+/** GET /me — chỉ khai các số dư web hiển thị; hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập nên sẽ cũ. */
+export interface MyBalances {
+  pointsBalance: number;
+  /** Lô Điểm Xanh quy đổi từ xu cũ (không hết hạn). API cũ chưa trả → coi là 0. */
+  pointsConvertedBalance?: number;
+  walletBalance: number;
+}
+export const getMe = () => apiFetch<MyBalances>('/me');
+
+// Ví Tubu và Điểm Xanh — số dư thật + sổ cái, cùng contract với Mini App (services/account-api.ts).
+export interface WalletSummary {
+  walletBalance: number;
+  cashbackPending: number;
+  commissionApproved: number;
+  commissionPending: number;
+  withdrawMin: number;
+  withdrawFee: number;
+}
+export const getWallet = () => apiFetch<WalletSummary>('/me/wallet');
+
+/** Một dòng sao kê Ví Tubu; `delta` có dấu: + vào ví, − ra khỏi ví. */
+export interface WalletTxn {
+  id: string;
+  delta: number;
+  balanceAfter: number;
+  type: string;
+  reason: string | null;
+  orderId: string | null;
+  createdAt: string;
+}
+export interface WalletTxnPage {
+  data: WalletTxn[];
+  meta: { page: number; limit: number; total: number };
+}
+export const WALLET_PAGE_SIZE = 20;
+export const getWalletTransactions = (page: number) =>
+  apiFetch<WalletTxnPage>(`/me/wallet/transactions?page=${page}&limit=${WALLET_PAGE_SIZE}`);
+
+export interface PointsTxn {
+  id: string;
+  delta: number;
+  reason: string;
+  expiresAt: string | null;
+  /** Dòng cũ/API cũ không có → lô thường. */
+  lot?: 'STANDARD' | 'CONVERTED';
+  createdAt: string;
+}
+/** API trả tối đa 100 dòng mới nhất. */
+export const getPointsTransactions = () => apiFetch<PointsTxn[]>('/me/points/transactions');
+
 // Addresses
 export const getAddresses = () => apiFetch<AddressDTO[]>('/me/addresses');
 export const createAddress = (data: Omit<AddressDTO, 'id' | 'isDefault'>) =>
@@ -172,16 +222,25 @@ export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?
   apiFetch<{ ok: boolean }>('/affiliate/touch', { method: 'POST', body: dto });
 
 // Checkout
-export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string) =>
+export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) =>
   apiFetch<CheckoutQuote>('/checkout/quote', {
     method: 'POST',
-    body: { addressId, pointsToUse, storefrontSlug },
+    body: { addressId, pointsToUse, storefrontSlug, ...(itemIds ? { itemIds } : {}) },
   });
+export interface InvoiceRequestBody {
+  taxCode: string;
+  companyName: string;
+  address: string;
+  email: string;
+}
 export const placeOrder = (
   body: {
     addressId: string;
     paymentMethod: string;
     pointsToUse?: number;
+    /** Chỉ thanh toán các dòng này của giỏ; không gửi = toàn giỏ. */
+    itemIds?: string[];
+    invoiceRequest?: InvoiceRequestBody;
     /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
     quotedZeroTotal?: boolean;
     /** Tổng khách đang thấy (từ báo giá): lúc đặt mà tổng cao hơn thì BE trả TOTAL_CHANGED. */
