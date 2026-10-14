@@ -22,6 +22,7 @@ const order6 = () => Math.random().toString(36).slice(2, 8);
 describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (real Postgres)', () => {
   let prisma: PrismaService;
   let processor: PancakeProcessor;
+  let orderStatus: OrderStatusService;
   const notify = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
@@ -43,7 +44,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
     );
     const analytics = new AnalyticsEventsService(prisma);
-    const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
+    orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
     processor = new PancakeProcessor(prisma, notifications, orderStatus);
   });
 
@@ -121,8 +122,20 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect(ev.status).toBe('PROCESSED');
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
-    expect(after.note).toContain(`vận chuyển đã báo SHIPPING — ${MARKER}`);
+    expect(after.note ?? '').not.toContain(MARKER);
     expect(after.pancakeAttention).toContain('chưa ghi nhận thanh toán');
+    expect(after.pancakeAttentionAt).not.toBeNull();
+  });
+
+  it('webhook vận chuyển (Gomdon/hệ thống) bị chặn vì chưa trả tiền → dấu "đẩy tay" vào hàng đợi admin, KHÔNG vào ghi chú khách (R2-PANCAKE-5)', async () => {
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { note: 'Gọi trước khi giao' } });
+    for (let i = 0; i < 2; i++) {
+      await expect(orderStatus.setStatus(order.id, 'SHIPPING', { actorType: 'SYSTEM' })).rejects.toThrow();
+    }
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.note).toBe('Gọi trước khi giao');
+    expect(after.pancakeAttention).toBe(`[Chờ thanh toán: vận chuyển đã báo SHIPPING — ${MARKER}]`);
     expect(after.pancakeAttentionAt).not.toBeNull();
   });
 

@@ -372,18 +372,21 @@ export class OrderStatusService {
 
   /**
    * Webhook (Pancake/Gomdon) báo trạng thái vận đơn cho đơn trả trước chưa PAID bị chặn và nuốt êm, không phát lại
-   * sau khi tiền về — đơn sẽ đứng yên ở trạng thái cũ. Để lại dấu trên ghi chú đơn (mỗi trạng thái một lần, webhook
-   * retry không nhân bản) để sau khi xác nhận "Đã nhận tiền" admin biết cần đẩy tiếp tay. Best-effort: lỗi ghi dấu
-   * không được thay lỗi chuyển trạng thái gốc (webhook dựa vào loại lỗi đó để bỏ qua êm).
+   * sau khi tiền về — đơn sẽ đứng yên ở trạng thái cũ. Để lại dấu trong hàng đợi "Cần xử lý Pancake" (mỗi trạng thái
+   * một lần, webhook retry không nhân bản; giữ lý do đang chờ khác) để sau khi xác nhận "Đã nhận tiền" admin biết cần
+   * đẩy tiếp tay. Không ghi vào Order.note: đó là lời dặn của khách, khách đọc lại và kho nhận qua Pancake.
+   * Best-effort: lỗi ghi dấu không được thay lỗi chuyển trạng thái gốc (webhook dựa vào loại lỗi đó để bỏ qua êm).
    */
   private async flagDroppedStatus(orderId: string, code: string, target: OrderStatus): Promise<void> {
     const marker = `[Chờ thanh toán: vận chuyển đã báo ${target} — đẩy tay sau khi nhận tiền]`;
     try {
       await this.prisma.$executeRaw`
         UPDATE "orders"
-        SET "note" = CASE WHEN "note" IS NULL OR "note" = '' THEN ${marker} ELSE "note" || ' | ' || ${marker} END
-        WHERE "id" = ${orderId} AND ("note" IS NULL OR position(${marker} in "note") = 0)`;
-      this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã ghi chú để admin đẩy tay sau khi nhận tiền.`);
+        SET "pancakeAttention" = CASE WHEN "pancakeAttention" IS NULL OR "pancakeAttention" = '' THEN ${marker}
+                                      ELSE "pancakeAttention" || ' | ' || ${marker} END,
+            "pancakeAttentionAt" = COALESCE("pancakeAttentionAt", NOW())
+        WHERE "id" = ${orderId} AND ("pancakeAttention" IS NULL OR position(${marker} in "pancakeAttention") = 0)`;
+      this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã đưa vào hàng đợi để admin đẩy tay sau khi nhận tiền.`);
     } catch (err) {
       this.logger.error(`Không ghi được dấu trạng thái bị chặn cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
