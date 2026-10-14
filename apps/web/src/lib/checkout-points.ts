@@ -55,6 +55,20 @@ export function checkoutPointsOffer(
 }
 
 /**
+ * Ô Điểm Xanh khi giỏ có hàng của gian hàng đối tác (Điểm Xanh chỉ trả cho hàng Tubu): nêu trần điểm của đơn và câu giải thích
+ * báo giá trả về; trần 0 (giỏ chỉ hàng đối tác) thì tắt ô. Giỏ chỉ hàng Tubu hoặc API cũ: không đổi gì.
+ */
+export function partnerPointsState(
+  quote: { pointsMax?: number; pointsPartnerNote?: string | null } | undefined,
+): { disabled: boolean; capNote: string | null; partnerNote: string | null } {
+  const partnerNote = quote?.pointsPartnerNote ?? null;
+  if (!partnerNote) return { disabled: false, capNote: null, partnerNote: null };
+  const max = clamp(quote?.pointsMax);
+  if (max === 0) return { disabled: true, capNote: null, partnerNote };
+  return { disabled: false, capNote: `Đơn này dùng tối đa ${group(max)} Điểm Xanh`, partnerNote };
+}
+
+/**
  * Đơn 0đ (điểm hoặc mã giảm giá phủ hết cả hàng lẫn phí ship): BE ép COD và xác nhận luôn, không thu tiền,
  * nên màn thanh toán ẩn lựa chọn phương thức và nói rõ lý do. null = còn tiền cần trả.
  */

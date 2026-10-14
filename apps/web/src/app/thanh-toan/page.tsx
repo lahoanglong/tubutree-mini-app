@@ -23,7 +23,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer, zeroTotalNote } from '@/lib/checkout-points';
+import { checkoutPointsOffer, partnerPointsState, zeroTotalNote } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -137,6 +137,11 @@ export default function CheckoutPage() {
   // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
   // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
   const quote = quoteQ.isError ? undefined : quoteQ.data;
+  // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
+  const partnerPoints = partnerPointsState(quote);
+  useEffect(() => {
+    if (partnerPoints.disabled && usePoints) setUsePoints(false);
+  }, [partnerPoints.disabled, usePoints]);
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
   // Giỏ có hàng gian hàng tự giao: BE chỉ nhận COD/Ví cho phần đó (D4) và nói lý do; FE khoá lựa chọn tương ứng.
@@ -490,10 +495,15 @@ export default function CheckoutPage() {
             />
           )}
           {usablePoints > 0 && (
-            <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
+            <label
+              className={`mt-3 flex min-h-11 items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm ${
+                partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+              }`}
+            >
               <input
                 type="checkbox"
-                checked={usePoints}
+                checked={usePoints && !partnerPoints.disabled}
+                disabled={partnerPoints.disabled}
                 onChange={(e) => setUsePoints(e.target.checked)}
                 className="h-4 w-4 accent-forest-600"
               />
@@ -505,6 +515,8 @@ export default function CheckoutPage() {
               </span>
             </label>
           )}
+          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.capNote}</p>}
+          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
           {pointsOffer.convertedNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.convertedNote}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
