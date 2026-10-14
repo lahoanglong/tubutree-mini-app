@@ -371,3 +371,33 @@ describe('CustomerRefundsService.lastBankDetails', () => {
     await expect(service.lastBankDetails('u1')).resolves.toBeNull();
   });
 });
+
+// R4-ADMIN-3: thẻ "Hoàn tiền khách" ở trang chủ đếm UNVERIFIED + PENDING + PROCESSING; bấm vào phải ra đúng ngần ấy dòng.
+describe('CustomerRefundsService.list — bộ lọc "Đang mở"', () => {
+  function listSetup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      orderCustomerRefund: { findMany, count },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    return { service: new CustomerRefundsService(prisma as never), findMany, count };
+  }
+
+  it('OPEN = chờ đối soát + chờ chuyển khoản + đang chuyển khoản, cũ nhất trước; số đếm cùng điều kiện', async () => {
+    const { service, findMany, count } = listSetup();
+    await service.list('OPEN', 1, 20);
+    const where = { status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] } };
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where, orderBy: { createdAt: 'asc' } }));
+    expect(count).toHaveBeenCalledWith({ where });
+  });
+
+  it('OPEN kèm loại khoản; trạng thái cụ thể giữ như cũ', async () => {
+    const { service, findMany } = listSetup();
+    await service.list('OPEN', 1, 20, 'LATE_PAYMENT');
+    expect(findMany.mock.calls[0][0].where).toEqual({ status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] }, kind: 'LATE_PAYMENT' });
+    await service.list('COMPLETED', 1, 20);
+    expect(findMany.mock.calls[1][0]).toMatchObject({ where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' } });
+  });
+});

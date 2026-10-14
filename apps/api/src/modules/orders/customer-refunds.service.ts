@@ -5,7 +5,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { announceBankRefund } from './refund-queue';
+import { OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund } from './refund-queue';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
 
@@ -71,13 +71,17 @@ export class CustomerRefundsService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  async list(status: CustomerRefundStatus | undefined, page: number, limit: number, kind?: CustomerRefundKind) {
-    const where: Prisma.OrderCustomerRefundWhereInput = { ...(status ? { status } : {}), ...(kind ? { kind } : {}) };
+  async list(status: CustomerRefundStatus | 'OPEN' | undefined, page: number, limit: number, kind?: CustomerRefundKind) {
+    const where: Prisma.OrderCustomerRefundWhereInput = {
+      ...(status === 'OPEN' ? { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } : status ? { status } : {}),
+      ...(kind ? { kind } : {}),
+    };
+    const queue = status === 'OPEN' || status === 'PENDING' || status === 'UNVERIFIED';
     const [items, total] = await this.prisma.$transaction([
       // Hàng chờ: cũ nhất trước để khoản nợ khách lâu nhất không bị chìm.
       this.prisma.orderCustomerRefund.findMany({
         where,
-        orderBy: { createdAt: status === 'PENDING' || status === 'UNVERIFIED' ? 'asc' : 'desc' },
+        orderBy: { createdAt: queue ? 'asc' : 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.orderCustomerRefund.count({ where }),

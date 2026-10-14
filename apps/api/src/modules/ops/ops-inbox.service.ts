@@ -4,6 +4,7 @@ import type { StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 
 export type InboxKey =
   | 'pancakeAttention'
@@ -44,7 +45,7 @@ export class OpsInboxService {
       { key: 'pancakeAttention', audience: ['KHO'], count: () => p.order.count({ where: { pancakeAttentionAt: { not: null } } }) },
       { key: 'pancakeUnsynced', audience: ['KHO'], count: () => p.order.count({ where: pancakeUnsyncedWhere(now) }) },
       { key: 'gomdonAttention', audience: ['KHO'], count: () => p.order.count({ where: recyclingAttentionWhere() }) },
-      { key: 'customerRefunds', audience: 'ADMIN', count: () => p.orderCustomerRefund.count({ where: { status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] } } }) },
+      { key: 'customerRefunds', audience: 'ADMIN', count: () => p.orderCustomerRefund.count({ where: { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } }) },
       { key: 'returnsPending', audience: ['CSKH'], count: () => p.returnRequest.count({ where: { status: 'REQUESTED' } }) },
       {
         key: 'returnsToReceive',
