@@ -39,6 +39,21 @@ afterEach(() => {
   mounted = [];
 });
 
+describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB-18)', () => {
+  it('nhãn đã công khai: tên nhãn là liên kết tới /brand/:slug', async () => {
+    api.product = { ...PRODUCT, brandSlug: 'xanh-viet' };
+    const c = await mount();
+    const a = Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')!;
+    expect(a.getAttribute('href')).toBe('/brand/xanh-viet');
+  });
+
+  it('nhãn chưa có trang: tên nhãn chỉ là chữ, không có liên kết chết', async () => {
+    const c = await mount();
+    expect(Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')).toBeUndefined();
+    expect(c.textContent).toContain('Xanh Việt');
+  });
+});
+
 describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
   it('hiện đủ ảnh sản phẩm: mỗi ảnh một slide, ảnh đầu tải sớm, còn lại tải lười', async () => {
     const c = await mount();

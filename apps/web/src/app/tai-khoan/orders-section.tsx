@@ -16,6 +16,7 @@ import {
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { formatDate } from '@/lib/format-date';
+import { formatCount } from '@/lib/checkout-points';
 
 /** Số sản phẩm đầu mỗi đơn hiện tên + ảnh; phần còn lại gộp thành "và N sản phẩm khác". */
 const PREVIEW_ITEMS = 2;
@@ -42,7 +43,7 @@ function OrderItemsPreview({ items }: { items: OrderDTO['items'] }) {
           {it.quantity > 1 && <span className="flex-none text-xs text-stone-600">×{it.quantity}</span>}
         </div>
       ))}
-      {more > 0 && <div className="text-xs text-stone-600">và {more.toLocaleString('vi-VN')} sản phẩm khác</div>}
+      {more > 0 && <div className="text-xs text-stone-600">và {formatCount(more)} sản phẩm khác</div>}
     </div>
   );
 }

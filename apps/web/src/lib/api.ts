@@ -98,6 +98,8 @@ export interface ProductDetail {
   basePrice: number;
   salePrice: number | null;
   certifications: string[];
+  /** Slug trang nhãn hàng (/brand/:slug) khi nhãn đã công khai; null/thiếu → tên nhãn chỉ là chữ. */
+  brandSlug?: string | null;
   variations: VariationDetail[];
   ratingAvg?: number;
   reviewCount?: number;
@@ -131,8 +133,14 @@ export async function getProduct(slug: string): Promise<ProductDetail | null> {
   return fetchDetail<ProductDetail>(`/products/${slug}`, 300);
 }
 
-export async function getBrands(): Promise<{ brand: string; count: number }[]> {
-  return fetchList<{ brand: string; count: number }>('/brands', 600, (json) => json as { brand: string; count: number }[]);
+export interface BrandCount {
+  brand: string;
+  count: number;
+  /** Slug trang /brand/:slug khi nhãn đã công khai; API cũ chưa trả → không có liên kết. */
+  slug?: string | null;
+}
+export async function getBrands(): Promise<BrandCount[]> {
+  return fetchList<BrandCount>('/brands', 600, (json) => json as BrandCount[]);
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {

@@ -52,7 +52,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="mt-2 grid gap-8 md:grid-cols-2">
         <ProductGallery images={images} name={product.name} />
         <div>
-          <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
+          {product.brandSlug ? (
+            <Link
+              href={`/brand/${encodeURIComponent(product.brandSlug)}`}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 underline"
+            >
+              {product.brand}
+            </Link>
+          ) : (
+            <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
+          )}
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
           <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
           {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
