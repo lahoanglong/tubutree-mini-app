@@ -7,7 +7,8 @@ import { Logger } from '@nestjs/common';
  * Lần đăng nhập được / bị từ chối ghi vào bản ghi CHUNG (GomdonHealthStore — ops_health_states) để mọi replica sau load balancer
  * cùng một câu trả lời: trước đây cờ nằm trong bộ nhớ từng process, replica không phải leader (không chạy cron dò lại) cứ ẩn
  * lựa chọn thu gom sau khi Gomdon đã ổn, và "Kiểm tra kết nối" chỉ chữa đúng replica nhận request (R4-SYNC-4). Bộ nhớ trong
- * process vẫn giữ để replica phản ứng ngay với lần gọi của chính nó và để chạy được khi DB chập.
+ * process vẫn giữ để replica phản ứng ngay với lần gọi của chính nó và để chạy được khi DB chập. Bản ghi chung sống qua lần khởi
+ * động lại, nên GomdonClient đăng nhập thử ngay lúc khởi động khi bản ghi còn báo bị từ chối (sửa env rồi khởi động lại là gỡ).
  *
  * Là một đối tượng module (không phải provider) vì isGomdonRecyclingEnabled — dùng ở checkout VÀ /config/public, nơi không
  * inject được GomdonClient — cũng phải đọc nó; GomdonClient gắn bản ghi chung lúc khởi tạo.

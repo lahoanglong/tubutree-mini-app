@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap, Optional, ServiceUnavailableException } from '@nestjs/common';
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -78,7 +78,7 @@ export interface GomdonConnectionCheck {
 }
 
 @Injectable()
-export class GomdonClient {
+export class GomdonClient implements OnApplicationBootstrap {
   private readonly logger = new Logger(GomdonClient.name);
   private readonly http: AxiosInstance;
   private readonly baseUrl: string;
@@ -151,6 +151,31 @@ export class GomdonClient {
     if (since == null || since < minIntervalMs) return;
     this.invalidateToken();
     await this.login({ force: true }).catch(() => undefined);
+  }
+
+  /**
+   * Lần bị từ chối nằm trong bản ghi chung nên sống qua lần khởi động lại; ops sửa env rồi khởi động lại API (lời dặn ở thẻ Gomdon
+   * của admin) mà không thử đăng nhập ngay thì thu gom vẫn ẩn tới lượt cron dò lại (tới ~40 phút). Không chặn khởi động.
+   */
+  onApplicationBootstrap(): void {
+    void this.recheckRejectedLoginOnBoot();
+  }
+
+  /**
+   * Bản ghi chung báo đang bị từ chối → đăng nhập thử đúng một lần, bỏ thời gian chờ chống khoá tài khoản: tiến trình này chưa
+   * gửi tài khoản (có thể đã sửa) của nó lần nào. Được thì mọi replica bật lại thu gom; vẫn sai thì chỉ ghi lại lần từ chối.
+   */
+  async recheckRejectedLoginOnBoot(): Promise<void> {
+    try {
+      if (!(await this.isConfigured())) return;
+      await this.health.refresh();
+      if (!this.health.credentialsRejected) return;
+      this.invalidateToken();
+      await this.login({ force: true });
+      this.logger.log('Gomdon đã nhận tài khoản khi khởi động — gỡ trạng thái bị từ chối cho mọi replica.');
+    } catch (err) {
+      this.logger.warn(`Thử đăng nhập Gomdon lúc khởi động không được: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   private async assertConfigured(): Promise<GomdonConfig> {
