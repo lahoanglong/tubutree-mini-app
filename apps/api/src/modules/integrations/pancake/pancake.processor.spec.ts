@@ -802,6 +802,28 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
   });
 
+  it('"Đã huỷ" (6) / order.cancelled khi đơn ĐANG GIAO → không huỷ/hoàn tiền: vào "Cần xử lý Pancake" (D1)', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const order = { ...base, paymentMethod: 'WALLET', paymentStatus: 'PAID', status: 'SHIPPING', shippingCode: 'BEX1', shippingPartner: 'BEX' };
+    const { proc, txUpdateMany, loyalty } = setup(order, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    await proc.onCancelled({ id: 'p1' });
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(attentionFlags(txUpdateMany)[0]).toContain('Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao)');
+  });
+
+  it('"Đã hoàn" (5) sau "Đang hoàn" (4) → huỷ xong thì tự gỡ việc "ĐANG HOÀN" khỏi hàng đợi (R2-PANCAKE-4)', async () => {
+    const order = { ...base, status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN (giao không thành…' };
+    const { proc, prisma, orderUpdateMany } = setup(order);
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...order, status: 'CANCELLED' });
+    await proc.onStatusUpdated({ id: 'p1', status: 5 });
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+  });
+
   it('"Đã hoàn" (5) khi đơn ĐÃ GIAO → RETURNED', async () => {
     // total 0: phần hoàn tiền của RETURNED đã có spec riêng (order-reversal) — ở đây chỉ kiểm đích trạng thái.
     const { proc, txUpdateMany } = setup({ ...base, total: 0, status: 'DELIVERED' });
@@ -943,10 +965,20 @@ describe('PancakeProcessor — đơn có vận đơn Gomdon sống: Gomdon là n
     expect(txUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('huỷ từ Pancake vẫn nhận', async () => {
-    const { proc, txUpdateMany } = setup({ ...liveGomdon, status: 'CONFIRMED' });
+  it('huỷ từ Pancake vẫn nhận khi bưu tá Gomdon chưa lấy hàng', async () => {
+    const { proc, txUpdateMany } = setup({ ...liveGomdon, status: 'CONFIRMED', gomdonStatus: '1' });
     await proc.onStatusUpdated({ id: 'p1', status: 6 });
     expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'CANCELLED' });
+  });
+
+  it('Pancake huỷ đơn mà bưu tá Gomdon đã lấy hàng → KHÔNG huỷ, không hoàn tiền; vào hàng đợi + báo admin (R2-GOMDON-2)', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, txUpdateMany, loyalty } = setup({ ...liveGomdon, status: 'SHIPPING', gomdonStatus: '4' }, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(attentionFlags(txUpdateMany)).toEqual([expect.stringContaining('Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển')]);
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('KHÔNG tự huỷ/hoàn tiền'), 'OPS_PANCAKE_ALERT');
   });
 
   it('vận đơn Gomdon đã huỷ → Pancake lại được chốt đã giao', async () => {

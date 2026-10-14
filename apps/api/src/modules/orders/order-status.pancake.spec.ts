@@ -69,12 +69,12 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
   });
 
-  it('Pancake đã gửi hàng → từ chối (liên hệ CSKH), không lật CANCELLED, đồng bộ lại SHIPPING theo Pancake', async () => {
+  it('Pancake đã gửi hàng → từ chối (hướng dẫn chặn giao với hãng), không lật CANCELLED, đồng bộ lại SHIPPING theo Pancake', async () => {
     const { svc, tx, pancakeHooks } = make(makeOrder({ status: 'PACKED' }), {
       precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)),
     });
     await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow(
-      'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH',
+      /Pancake báo đã gửi hàng \(mã 2\).*chặn giao\/hoàn hàng/,
     );
     expect(tx.order.updateMany.mock.calls.map((c) => c[0].data.status)).toEqual(['SHIPPING']);
     expect(pancakeHooks.afterLocalCancel).not.toHaveBeenCalled();

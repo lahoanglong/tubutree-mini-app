@@ -8,11 +8,12 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
-import { resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { clearPancakeAttention } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
-import { UnpaidPrepaidTransitionError } from '../../orders/order-transition';
+import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordLatePaymentRefund } from '../../orders/refund-queue';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 
@@ -275,6 +276,7 @@ export class PancakeProcessor extends WorkerHost {
     }
     const target = this.targetStatus(order, action);
     if (!target) return;
+    const returned = action.kind === 'returned';
 
     // Hai nguồn trạng thái giao hàng không được cãi nhau: đơn có vận đơn Gomdon sống thì mốc đang giao/đã giao
     // chỉ theo Gomdon (DELIVERED cộng điểm, khoá hoa hồng — kho bấm "hoàn thành" hàng loạt trên Pancake không
@@ -296,7 +298,7 @@ export class PancakeProcessor extends WorkerHost {
     // OrderStatusService tự chặn DELIVERED sau khi đã ở CANCELLED/RETURNED (trạng thái cuối).
     // CHỈ nuốt lỗi transition không hợp lệ; lỗi khác (DB down, loyalty/affiliate throw thật) phải NÉM TIẾP
     // để process() đánh dấu FAILED + BullMQ retry — nuốt hết ở đây sẽ mất event vĩnh viễn.
-    await this.setStatusFromPancake(order, target.status, target.note);
+    await this.setStatusFromPancake(order, target.status, target.note, returned);
   }
 
   /** "Đã hoàn" (hàng về kho): đơn chưa giao → huỷ (hoàn tiền, hoàn kho, đảo điểm); đã giao → trả hàng. */
@@ -308,11 +310,25 @@ export class PancakeProcessor extends WorkerHost {
       : { status: 'CANCELLED', note: 'Pancake: giao không thành, hàng đã hoàn về kho' };
   }
 
-  private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string): Promise<void> {
+  /** `returnedToSender`: Pancake "Đã hoàn" — hàng đã về kho, được huỷ/hoàn tiền dù đơn đã bàn giao vận chuyển (D1). */
+  private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string, returnedToSender = false): Promise<void> {
     try {
-      await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note });
+      const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender });
+      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
+      if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
+        await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
+      }
     } catch (err) {
       if (!(err instanceof InvalidOrderTransitionError)) throw err;
+      if (err instanceof CancelAfterHandoverError) {
+        // D1: sau bàn giao chỉ còn luồng hoàn/trả — lệnh huỷ từ Pancake là việc cho người, không phải lệnh hoàn tiền.
+        await this.flagAttention(
+          order,
+          `Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (${err.handover.detail}) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng ` +
+            'vận chuyển: chặn giao và chờ Pancake báo "Đã hoàn" (đơn tự huỷ, hoàn tiền), hoặc khách đã nhận thì xử lý ở Đổi/Trả.',
+        );
+        return;
+      }
       if (blockedNeedsAttention(err)) {
         await this.flagAttention(
           order,

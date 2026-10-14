@@ -8,6 +8,7 @@ import {
   assertPaidBeforeFulfilment,
   requiresPaymentBefore,
   allowedNextStatuses,
+  cancelHandover,
 } from './order-transition';
 
 describe('order-transition', () => {
@@ -181,5 +182,63 @@ describe('allowedNextStatuses', () => {
 
   it('trạng thái lạ (dữ liệu hỏng) → rỗng, không ném', () => {
     expect(allowedNextStatuses({ ...base, status: 'SHIPPED' })).toEqual([]);
+  });
+});
+
+describe('cancelHandover (D1: chỉ huỷ được tới khi bàn giao vận chuyển)', () => {
+  const live = { status: 'PACKED' };
+
+  it('chưa có dấu hiệu bàn giao → huỷ được', () => {
+    expect(cancelHandover(live)).toBeNull();
+    expect(cancelHandover({ status: 'CONFIRMED', shippingCode: null, shippedAt: null })).toBeNull();
+  });
+
+  it('đơn đang giao → chặn', () => {
+    expect(cancelHandover({ status: 'SHIPPING' })).toEqual({ kind: 'SHIPPING', detail: 'đơn đang giao' });
+  });
+
+  it('đã có mã vận đơn hãng (Pancake) dù còn PACKED → chặn', () => {
+    expect(cancelHandover({ ...live, shippingCode: 'GHN777', shippingPartner: 'GHN' })?.kind).toBe('CARRIER_WAYBILL');
+  });
+
+  it('gian hàng tự giao đã báo gửi hàng (shippedAt) → chặn', () => {
+    expect(cancelHandover({ ...live, shippedAt: new Date() })?.kind).toBe('MERCHANT_SHIPPED');
+  });
+
+  it('vận đơn Gomdon mới tạo (bưu tá chưa lấy) KHÔNG tính là bàn giao', () => {
+    const gomdon = { ...live, hasRecyclingPickup: true, gomdonOrderId: '9001', gomdonPartnerCode: 'BEX1', shippingCode: 'BEX1', gomdonStatus: '1' };
+    expect(cancelHandover(gomdon)).toBeNull();
+    expect(cancelHandover({ ...gomdon, gomdonStatus: '10' })).toBeNull();
+  });
+
+  it('bưu tá Gomdon đã lấy hàng → chặn (kể cả webhook SHIPPING chưa tới)', () => {
+    const picked = { ...live, hasRecyclingPickup: true, gomdonOrderId: '9001', gomdonPartnerCode: 'BEX1', shippingCode: 'BEX1', gomdonStatus: '3' };
+    expect(cancelHandover(picked)?.kind).toBe('GOMDON_PICKED_UP');
+    expect(cancelHandover({ ...picked, status: 'SHIPPING', gomdonStatus: '6' })?.kind).toBe('SHIPPING');
+  });
+
+  it('Gomdon báo đã hoàn hàng về kho / mất hàng → hàng không còn ở hãng, huỷ được dù đơn đang SHIPPING', () => {
+    const back = { status: 'SHIPPING', hasRecyclingPickup: true, gomdonOrderId: '9001', gomdonPartnerCode: 'BEX1', shippingCode: 'BEX1' };
+    expect(cancelHandover({ ...back, gomdonStatus: '8' })).toBeNull();
+    expect(cancelHandover({ ...back, gomdonStatus: '9' })).toBeNull();
+  });
+});
+
+describe('allowedNextStatuses — không hiện Huỷ sau khi bàn giao (D1)', () => {
+  const paid = { code: 'TB-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' };
+
+  it('đơn đang giao → không còn CANCELLED', () => {
+    expect(allowedNextStatuses({ ...paid, status: 'SHIPPING' })).toEqual(['DELIVERED']);
+  });
+
+  it('đơn PACKED đã có mã vận đơn hãng → không còn CANCELLED', () => {
+    expect(allowedNextStatuses({ ...paid, status: 'PACKED', shippingCode: 'GHN1' })).not.toContain('CANCELLED');
+  });
+
+  it('đơn gian hàng đã gửi / bưu tá Gomdon đã lấy → không còn CANCELLED', () => {
+    expect(allowedNextStatuses({ ...paid, status: 'CONFIRMED', shippedAt: new Date() })).not.toContain('CANCELLED');
+    expect(
+      allowedNextStatuses({ ...paid, status: 'CONFIRMED', hasRecyclingPickup: true, gomdonPartnerCode: 'B1', shippingCode: 'B1', gomdonStatus: '3' }),
+    ).not.toContain('CANCELLED');
   });
 });
