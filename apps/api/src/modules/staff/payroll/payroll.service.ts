@@ -219,8 +219,24 @@ export class PayrollService {
 
   // ─────────────── Admin ───────────────
 
+  /**
+   * Lương chỉ áp cho nhân viên (STAFF/ADMIN). `allowFormer`: người đã hạ quyền nhưng còn hồ sơ lương đang dùng vẫn được
+   * điều chỉnh kỳ cũ. Trước đây đặt đơn giá cho khách là tạo luôn hồ sơ lương, bảng lương có dòng của người không làm.
+   */
+  private async assertStaffMember(userId: string, allowFormer: boolean): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, staffProfile: { select: { active: true } } },
+    });
+    if (!user) throw new BadRequestException('Không tìm thấy nhân viên.');
+    if (user.role === 'STAFF' || user.role === 'ADMIN') return;
+    if (allowFormer && user.staffProfile?.active) return;
+    throw new BadRequestException('Tài khoản này không phải nhân viên — cấp quyền nhân viên trước khi tính lương.');
+  }
+
   async setRate(userId: string, hourlyRate: number) {
     if (hourlyRate < 0) throw new BadRequestException('Đơn giá không hợp lệ.');
+    await this.assertStaffMember(userId, false);
     return this.prisma.staffProfile.upsert({
       where: { userId },
       update: { hourlyRate },
@@ -356,6 +372,7 @@ export class PayrollService {
   }
 
   async adjust(staffId: string, workDate: Date, amount: number, reason: string, adminId: string) {
+    await this.assertStaffMember(staffId, true);
     if (await this.isMonthLocked(staffId, workDate)) {
       throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
     }
