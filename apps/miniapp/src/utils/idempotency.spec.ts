@@ -1,5 +1,42 @@
 import { describe, it, expect, vi } from 'vitest';
-import { newIdempotencyKey, newDeviceId } from './idempotency';
+import { newIdempotencyKey, newDeviceId, createOrderKeyRing } from './idempotency';
+
+describe('createOrderKeyRing — Idempotency-Key đặt hàng theo nội dung đơn (R2-MONEY-2)', () => {
+  const body = { addressId: 'a1', paymentMethod: 'WALLET', pointsToUse: 0, itemIds: ['i1'] };
+
+  it('bấm lại cùng nội dung sau lỗi mạng/quá thời gian → cùng key (server trả lại đơn đã tạo, không đặt đơn thứ hai)', () => {
+    const ring = createOrderKeyRing();
+    const first = ring.keyFor(body);
+    expect(ring.keyFor({ ...body })).toBe(first);
+  });
+
+  it('tổng tiền khách đang thấy đổi (báo giá mới) không phải nội dung khác → vẫn cùng key', () => {
+    const ring = createOrderKeyRing();
+    expect(ring.keyFor({ ...body, expectedTotal: 100 })).toBe(ring.keyFor({ ...body, expectedTotal: 120 }));
+  });
+
+  it('thứ tự khoá trong body không làm đổi key', () => {
+    const ring = createOrderKeyRing();
+    expect(ring.keyFor({ paymentMethod: 'WALLET', addressId: 'a1', itemIds: ['i1'], pointsToUse: 0 })).toBe(ring.keyFor(body));
+  });
+
+  it('đổi địa chỉ / cách trả tiền / món → key mới; quay về nội dung cũ → lại key cũ', () => {
+    const ring = createOrderKeyRing();
+    const k1 = ring.keyFor(body);
+    const k2 = ring.keyFor({ ...body, paymentMethod: 'COD' });
+    const k3 = ring.keyFor({ ...body, addressId: 'a2' });
+    const k4 = ring.keyFor({ ...body, itemIds: ['i1', 'i2'] });
+    expect(new Set([k1, k2, k3, k4]).size).toBe(4);
+    expect(ring.keyFor(body)).toBe(k1);
+  });
+
+  it('đặt thành công → reset: đơn sau dù giống hệt là đơn mới, key mới', () => {
+    const ring = createOrderKeyRing();
+    const k1 = ring.keyFor(body);
+    ring.reset();
+    expect(ring.keyFor(body)).not.toBe(k1);
+  });
+});
 
 describe('newIdempotencyKey', () => {
   it('sinh chuỗi không rỗng', () => {

@@ -719,3 +719,61 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
     expect(screen.queryByText(/đơn riêng/)).toBeNull();
   });
 });
+
+describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn thứ hai (R2-MONEY-2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  async function clickPlace(times: number) {
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(times));
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+  }
+
+  it('quá thời gian chờ rồi bấm lại cùng nội dung → gửi lại đúng Idempotency-Key cũ', async () => {
+    mocks.placeOrder
+      .mockRejectedValueOnce(new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED'))
+      .mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    renderPage();
+    await clickPlace(1);
+    await clickPlace(2);
+    const [k1, k2] = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
+    expect(k1).toBeTruthy();
+    expect(k2).toBe(k1);
+  });
+
+  it('lỗi 5xx rồi bấm lại → cùng key; đổi cách thanh toán rồi bấm → key mới', async () => {
+    const response = { status: 502, data: { message: 'Bad Gateway' } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Gateway', 'ERR_BAD_RESPONSE', undefined, undefined, response));
+    renderPage();
+    await clickPlace(1);
+    await clickPlace(2);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await clickPlace(3);
+    const keys = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('BE báo CART_CHANGED → báo khách và tải lại giỏ', async () => {
+    const message = 'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+    const response = { status: 400, data: { statusCode: 400, code: 'CART_CHANGED', message } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    await clickPlace(1);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+});

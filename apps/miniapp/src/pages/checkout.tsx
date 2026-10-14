@@ -17,7 +17,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, recyclingCheckoutFields, recyclingMaxKg } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { newIdempotencyKey } from '../utils/idempotency';
+import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
   isInvoiceValid,
@@ -89,8 +89,8 @@ export default function CheckoutPage() {
     }
     return { taxCode: '', companyName: '', address: '', email: '' };
   });
-  // Key giữ nguyên suốt phiên checkout — retry sau timeout không tạo đơn đôi (AD-004).
-  const idempotencyKey = useRef(newIdempotencyKey());
+  // Một key cho một nội dung đơn trong phiên checkout: bấm lại sau lỗi mạng/quá thời gian là gửi lại cùng đơn (AD-004).
+  const orderKeys = useRef(createOrderKeyRing());
 
   // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
   const cart = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: authed });
@@ -180,34 +180,33 @@ export default function CheckoutPage() {
   }, [quote.isSuccess]);
 
   const order = useMutation({
-    mutationFn: () =>
-      placeOrder(
-        {
-          addressId: addressId!,
-          paymentMethod: paymentToSend,
-          pointsToUse,
-          // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
-          // tạo đơn COD có tiền phải trả mà khách không chọn.
-          ...(zeroNote ? { quotedZeroTotal: true } : {}),
-          // Tổng khách đang thấy: giá/phí đổi giữa lúc báo giá và lúc bấm đặt thì BE trả TOTAL_CHANGED thay vì thu số mới.
-          ...(quote.data ? { expectedTotal: quote.data.total } : {}),
-          note: note.trim() || undefined,
-          // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
-          ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
-          invoiceRequest: wantInvoice
-            ? {
-                taxCode: invoice.taxCode.trim(),
-                companyName: invoice.companyName.trim(),
-                address: invoice.address.trim(),
-                email: invoice.email.trim(),
-              }
-            : undefined,
-          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
-          storefrontSlug: ctvSlug,
-          itemIds,
-        },
-        idempotencyKey.current,
-      ),
+    mutationFn: () => {
+      const body = {
+        addressId: addressId!,
+        paymentMethod: paymentToSend,
+        pointsToUse,
+        // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
+        // tạo đơn COD có tiền phải trả mà khách không chọn.
+        ...(zeroNote ? { quotedZeroTotal: true } : {}),
+        // Tổng khách đang thấy: giá/phí đổi giữa lúc báo giá và lúc bấm đặt thì BE trả TOTAL_CHANGED thay vì thu số mới.
+        ...(quote.data ? { expectedTotal: quote.data.total } : {}),
+        note: note.trim() || undefined,
+        // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
+        ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
+        invoiceRequest: wantInvoice
+          ? {
+              taxCode: invoice.taxCode.trim(),
+              companyName: invoice.companyName.trim(),
+              address: invoice.address.trim(),
+              email: invoice.email.trim(),
+            }
+          : undefined,
+        referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
+        storefrontSlug: ctvSlug,
+        itemIds,
+      };
+      return placeOrder(body, orderKeys.current.keyFor(body));
+    },
     onSuccess: (o) => {
       haptic('heavy');
       // Nhớ thông tin hoá đơn cho lần đặt sau (đỡ nhập lại).
@@ -228,7 +227,7 @@ export default function CheckoutPage() {
       void queryClient.invalidateQueries({ queryKey: ['me'] });
       // Refresh auth store (user.walletBalance / pointsBalance dùng ở header/checkout) để UI đồng bộ.
       void useAuthStore.getState().restore().catch(() => undefined);
-      idempotencyKey.current = newIdempotencyKey(); // đơn sau là đơn mới
+      orderKeys.current.reset(); // đơn sau là đơn mới
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
       if (paymentToSend === 'BANK_TRANSFER') {
@@ -238,11 +237,15 @@ export default function CheckoutPage() {
       setPlaced(o);
     },
     onError: (e: unknown) => {
-      // Bất kể lỗi gì (mạng/timeout/PRICE_CHANGED/lỗi nghiệp vụ khác): server CÓ THỂ đã tạo đơn
-      // thật dù FE nhận lỗi. Nếu user sửa địa chỉ/thanh toán rồi bấm lại mà vẫn dùng key CŨ, BE sẽ
-      // coi là replay của lệnh trước (AD-004) → không áp dụng thay đổi vừa sửa. Regenerate NGAY
-      // để lần bấm tiếp theo luôn là đơn MỚI.
-      idempotencyKey.current = newIdempotencyKey();
+      // Giữ key: lỗi mạng/quá thời gian/5xx có thể xảy ra sau khi server đã tạo đơn — bấm lại cùng nội dung phải là replay,
+      // không phải đơn thứ hai. Khách sửa địa chỉ/thanh toán/món thì keyFor tự ra key mới.
+      if (getErrorCode(e) === 'CART_CHANGED') {
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+        void queryClient.invalidateQueries({ queryKey: ['orders'] });
+        void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        openSnackbar({ text: getErrorMessage(e), type: 'error' });
+        return;
+      }
       if (getErrorMessage(e) === 'PRICE_CHANGED') {
         setPriceChanged(true);
         return;
