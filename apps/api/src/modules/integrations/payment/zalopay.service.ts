@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import type { Order } from '@prisma/client';
 import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -19,6 +20,7 @@ import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
+import { recordLatePaymentRefund } from '../../orders/refund-queue';
 
 interface ZalopayCreateResponse {
   return_code?: number;
@@ -166,10 +168,9 @@ export class ZalopayService {
       // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
       // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
       // ghi nhận PAID vào đơn đã chết.
+      const paidAmount = data.amount ?? attempt?.amount ?? order.total;
       if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-        this.logger.warn(
-          `Nhận callback thanh toán ZaloPay cho đơn ${order.code} đã ${order.status} — CẦN HOÀN TIỀN THỦ CÔNG cho khách, không tự lật PAID.`,
-        );
+        await this.recordLatePayment(order, paidAmount, data.app_trans_id);
         return { return_code: 1, return_message: 'success' };
       }
       // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
@@ -216,9 +217,24 @@ export class ZalopayService {
           );
         }
         await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+      } else {
+        // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
+        const current = await this.prisma.order.findUnique({ where: { id: order.id } });
+        if (current && current.paymentStatus === 'UNPAID' && (current.status === 'CANCELLED' || current.status === 'RETURNED')) {
+          await this.recordLatePayment(current, paidAmount, data.app_trans_id);
+        }
       }
     }
     return { return_code: 1, return_message: 'success' };
+  }
+
+  /** Tiền về khi đơn đã huỷ/trả: không lật PAID, tạo yêu cầu hoàn tiền (khách chọn Ví hay ngân hàng). */
+  private async recordLatePayment(order: Order, amount: number, appTransId: string): Promise<void> {
+    await recordLatePaymentRefund({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order, {
+      amount,
+      source: 'ZALOPAY',
+      refKey: appTransId,
+    });
   }
 
   /** So sánh MAC chống timing-attack (độ dài khác → false ngay, không ném). */
