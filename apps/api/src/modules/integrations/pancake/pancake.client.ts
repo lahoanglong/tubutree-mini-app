@@ -1,15 +1,45 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { type AxiosInstance } from 'axios';
+import axios, { isAxiosError, type AxiosInstance } from 'axios';
 import type { Env } from '../../../config/env.validation';
 import type {
   PancakeCreateOrderBody,
   PancakeCreateOrderResponse,
+  PancakeOrderDTO,
+  PancakeOrderListResponse,
+  PancakeUpdateOrderBody,
   PancakeProductsResponse,
   PancakeProvinceDTO,
   PancakeCommuneDTO,
   PancakeGeoResponse,
 } from './pancake.types';
+import { PancakeApiError } from './pancake-outbound';
+
+/** Thời gian chờ mặc định; huỷ đơn đồng bộ trên đường request của khách dùng mức ngắn hơn (PancakeSyncHooks). */
+export const PANCAKE_HTTP_TIMEOUT_MS = 15_000;
+
+type PancakeBody = { success?: boolean; message?: string; error?: string } | null | undefined;
+
+/** `success:false` trong HTTP 200 → lỗi dứt khoát (kèm lời Pancake); `order_not_found` → notFound. */
+function assertSuccess<T extends PancakeBody>(body: T, what: string): T {
+  if (body && body.success === false) {
+    const reason = body.message ?? body.error ?? 'không rõ lý do';
+    throw new PancakeApiError(`Pancake từ chối ${what}: ${reason}`, false, body.error === 'order_not_found');
+  }
+  return body;
+}
+
+/** Phân loại lỗi axios: không có phản hồi / 5xx / 408 / 429 là lỗi tạm (Pancake CÓ THỂ đã xử lý); 4xx là từ chối. */
+function toPancakeError(err: unknown, what: string): Error {
+  if (err instanceof PancakeApiError || !isAxiosError(err)) return err as Error;
+  const status = err.response?.status;
+  const body = err.response?.data as PancakeBody;
+  const reason = (body && typeof body === 'object' && (body.message ?? body.error)) || err.message;
+  if (status === undefined) return new PancakeApiError(`Không kết nối được Pancake khi ${what}: ${err.message}`, true);
+  if (status === 404) return new PancakeApiError(`Pancake không tìm thấy (${what}): ${reason}`, false, true);
+  const transient = status >= 500 || status === 408 || status === 429;
+  return new PancakeApiError(`Pancake trả ${status} khi ${what}: ${reason}`, transient);
+}
 
 /**
  * Pancake có thể trả HTTP 200 kèm `success:false` (hạn mức, lỗi phía họ) — đọc thành `[]` thì GeoService coi là
@@ -38,7 +68,7 @@ export class PancakeClient {
     this.shopId = config.get('PANCAKE_SHOP_ID', { infer: true });
     this.http = axios.create({
       baseURL: config.get('PANCAKE_BASE_URL', { infer: true }),
-      timeout: 15000,
+      timeout: PANCAKE_HTTP_TIMEOUT_MS,
     });
   }
 
@@ -88,11 +118,71 @@ export class PancakeClient {
 
   async createOrder(body: PancakeCreateOrderBody): Promise<PancakeCreateOrderResponse> {
     this.assertConfigured();
-    const { data } = await this.http.post<PancakeCreateOrderResponse>(
-      `/shops/${this.shopId}/orders`,
-      body,
-      { params: { api_key: this.apiKey } },
-    );
-    return data;
+    try {
+      const { data } = await this.http.post<PancakeCreateOrderResponse>(`/shops/${this.shopId}/orders`, body, {
+        params: { api_key: this.apiKey },
+      });
+      return assertSuccess(data, 'tạo đơn');
+    } catch (err) {
+      throw toPancakeError(err, 'tạo đơn');
+    }
+  }
+
+  /** Một đơn theo id Pancake. Không có (404 / order_not_found) → null. */
+  async getOrder(orderId: string, opts: { timeoutMs?: number } = {}): Promise<PancakeOrderDTO | null> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.get<PancakeCreateOrderResponse>(`/shops/${this.shopId}/orders/${encodeURIComponent(orderId)}`, {
+        params: { api_key: this.apiKey },
+        timeout: opts.timeoutMs,
+      });
+      const body = assertSuccess(data, 'đọc đơn');
+      return body?.data ?? body ?? null;
+    } catch (err) {
+      const e = toPancakeError(err, 'đọc đơn');
+      if (e instanceof PancakeApiError && e.notFound) return null;
+      throw e;
+    }
+  }
+
+  /**
+   * Đơn Pancake mang mã đơn Tubu. Open API: tham số `search` tìm theo "SĐT, tên khách, ghi chú..." — ghi chú đơn
+   * luôn mở đầu "Order code: <mã>". Trả nguyên kết quả; người gọi tự lọc đơn khớp ĐÚNG mã (pancakeOrderHasCode).
+   */
+  async searchOrders(text: string, opts: { timeoutMs?: number } = {}): Promise<PancakeOrderDTO[]> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.get<PancakeOrderListResponse>(`/shops/${this.shopId}/orders`, {
+        params: { api_key: this.apiKey, search: text, page_size: 50, page_number: 1 },
+        timeout: opts.timeoutMs,
+      });
+      const body = assertSuccess(data, 'tra cứu đơn');
+      if (!body || !Array.isArray(body.data)) {
+        throw new PancakeApiError('Pancake không trả danh sách đơn khi tra cứu.', true);
+      }
+      return body.data;
+    } catch (err) {
+      throw toPancakeError(err, 'tra cứu đơn');
+    }
+  }
+
+  /** Cập nhật một phần đơn (Open API: PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). Huỷ = `{ status: 6 }`. */
+  async updateOrder(
+    orderId: string,
+    body: PancakeUpdateOrderBody,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<PancakeOrderDTO | null> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.put<PancakeCreateOrderResponse>(
+        `/shops/${this.shopId}/orders/${encodeURIComponent(orderId)}`,
+        body,
+        { params: { api_key: this.apiKey }, timeout: opts.timeoutMs },
+      );
+      const res = assertSuccess(data, 'cập nhật đơn');
+      return res?.data ?? res ?? null;
+    } catch (err) {
+      throw toPancakeError(err, 'cập nhật đơn');
+    }
   }
 }
