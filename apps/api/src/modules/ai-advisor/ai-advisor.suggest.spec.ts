@@ -2,6 +2,7 @@ import { AiAdvisorService } from './ai-advisor.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LlmClient } from './llm.client';
 import type { FaqService } from '../faq/faq.service';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 
 function makePrisma(products: unknown[] = []) {
   return { product: { findMany: jest.fn().mockResolvedValue(products) } } as unknown as PrismaService;
@@ -25,7 +26,7 @@ describe('AiAdvisorService — gợi ý sản phẩm theo độ liên quan (ENGA
   it('gõ không dấu vẫn tìm: tra trên cột nameSearch bằng token đã bỏ dấu (như GET /products?q=)', async () => {
     const { names, findMany } = await suggest('nuoc rua chen', [p('a', 'Nước rửa chén sinh học Fuwa3e')]);
     const where = findMany.mock.calls[0][0].where;
-    expect(where.isActive).toBe(true);
+    expect(where).toMatchObject(PUBLIC_PRODUCT_WHERE);
     expect(where.OR).toEqual(
       expect.arrayContaining([
         { nameSearch: { contains: 'nuoc' } },
@@ -84,5 +85,40 @@ describe('AiAdvisorService — gợi ý sản phẩm theo độ liên quan (ENGA
     const many = Array.from({ length: 12 }, (_, i) => p(`p${i}`, `Nước rửa chén loại ${i}`));
     const { names } = await suggest('nước rửa chén', many);
     expect(names).toHaveLength(5);
+  });
+});
+
+// R2-ENGAGE-4: SP đối tác chờ duyệt/bị từ chối vẫn isActive:true nên chỉ lọc isActive là để lọt vào gợi ý.
+describe('AiAdvisorService — chỉ gợi ý sản phẩm hiện công khai (R2-ENGAGE-4)', () => {
+  it('truy vấn DB dùng đúng điều kiện công khai của catalog: đã duyệt + đang bán', async () => {
+    const { findMany } = await suggest('nước rửa chén', [p('a', 'Nước rửa chén')]);
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.approvalStatus).toBe('APPROVED');
+    expect(where.isActive).toBe(true);
+  });
+
+  it('điều kiện gợi ý AI và catalog dùng chung một hằng, không tự viết lại', () => {
+    expect(PUBLIC_PRODUCT_WHERE).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+  });
+});
+
+// R2-ENGAGE-17: câu trả lời offline không được hứa "gợi ý bên dưới" khi danh sách rỗng.
+describe('AiAdvisorService — lời đáp offline khớp với số gợi ý (R2-ENGAGE-17)', () => {
+  const reply = async (query: string, candidates: unknown[]) =>
+    (await new AiAdvisorService(makePrisma(candidates), offlineLlm(), faq()).chat('u1', query)).reply;
+
+  it('có sản phẩm gợi ý → mời xem gợi ý bên dưới', async () => {
+    expect(await reply('nước rửa chén', [p('a', 'Nước rửa chén sinh học')])).toContain('bên dưới');
+  });
+
+  it('không có sản phẩm khớp → không hứa "bên dưới", đề xuất từ khoá và mục Sản phẩm', async () => {
+    const r = await reply('xe máy điện', []);
+    expect(r).not.toContain('bên dưới');
+    expect(r).toContain('chưa tìm thấy sản phẩm');
+    expect(r).toContain('Sản phẩm');
+  });
+
+  it('câu chỉ có từ đệm (không truy vấn được) cũng không hứa gợi ý', async () => {
+    expect(await reply('cho tôi', [])).not.toContain('bên dưới');
   });
 });
