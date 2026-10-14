@@ -71,7 +71,16 @@ export async function linkTubuFulfilledVariation(
 ): Promise<void> {
   if (!product.pancakeLinkCode || !product.storefrontId) return;
   const target = await findLinkablePancakeVariation(tx, product.pancakeLinkCode, product.storefrontId);
-  if (!target || target.productId === product.id) throw new ConflictException(LINK_TAKEN_MESSAGE);
+  // Sửa nội dung đưa sản phẩm đã liên kết về chờ duyệt; lần duyệt lại không có gì để chuyển.
+  if (target?.productId === product.id) return;
+  if (!target) {
+    const owned = await tx.variation.findFirst({
+      where: { productId: product.id, pancakeId: product.pancakeLinkCode },
+      select: { id: true },
+    });
+    if (owned) return;
+    throw new ConflictException(LINK_TAKEN_MESSAGE);
+  }
 
   const moved = await tx.variation.updateMany({
     where: { id: target.variationId, productId: target.productId },

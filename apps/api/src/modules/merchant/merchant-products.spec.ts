@@ -139,6 +139,30 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
     expect(t.variation.deleteMany).not.toHaveBeenCalled();
   });
 
+  it('duyệt lại sau khi đối tác sửa nội dung: biến thể Pancake đã thuộc chính sản phẩm này → không làm gì, không ném lỗi', async () => {
+    const t = tx({ row: { ...PANCAKE_ROW, product: { id: 'prod-a', name: 'Mật ong rừng' } } });
+    await expect(linkTubuFulfilledVariation(t as never, product)).resolves.toBeUndefined();
+    expect(t.variation.updateMany).not.toHaveBeenCalled();
+    expect(t.variation.deleteMany).not.toHaveBeenCalled();
+    expect(t.product.update).not.toHaveBeenCalled();
+  });
+
+  it('duyệt lại khi biến thể đã liên kết đang tạm ngừng bán (không còn "liên kết được") → vẫn coi là đã liên kết', async () => {
+    const t = tx({ row: null });
+    t.variation.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'var-pk' });
+    await expect(linkTubuFulfilledVariation(t as never, product)).resolves.toBeUndefined();
+    expect(t.variation.findFirst).toHaveBeenLastCalledWith({
+      where: { productId: 'prod-a', pancakeId: 'PK-123' },
+      select: { id: true },
+    });
+    expect(t.variation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('mã không còn trong danh mục và chưa thuộc sản phẩm này → ConflictException', async () => {
+    const t = tx({ row: null });
+    await expect(linkTubuFulfilledVariation(t as never, product)).rejects.toThrow(new ConflictException(LINK_TAKEN_MESSAGE));
+  });
+
   it('sản phẩm không xin "Tubu giao hộ" → không làm gì', async () => {
     const t = tx();
     await linkTubuFulfilledVariation(t as never, { ...product, pancakeLinkCode: null });

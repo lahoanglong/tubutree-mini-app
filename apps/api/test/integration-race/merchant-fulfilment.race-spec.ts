@@ -5,6 +5,7 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
+import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { linkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
 import type { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import type { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
@@ -73,7 +74,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
   });
 
   async function merchantStore() {
-    const owner = await createUser(prisma);
+    const owner = await createUser(prisma, { role: 'DEALER' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
       data: {
@@ -264,6 +265,45 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     expect(loser.variations[0]!.pancakeId).toBeNull();
     expect(rshell.variations).toHaveLength(0);
     expect(rshell.isActive).toBe(false);
+  });
+
+  it('(b2) sản phẩm "Tubu giao hộ" đã duyệt, đối tác sửa nội dung → chờ duyệt lại → 2 admin duyệt lại cùng lúc: 1 thắng, biến thể Pancake vẫn ở sản phẩm, bán lại được', async () => {
+    const pancakeVariationId = `itmf-pv-${randCode(8)}`;
+    await productWithVariation({ pancakeId: `itmf-pp-${randCode(8)}`, variationPancakeId: pancakeVariationId });
+    const { owner, store } = await merchantStore();
+    const p = await productWithVariation({
+      storefrontId: store.id,
+      fulfilment: 'MERCHANT',
+      approvalStatus: 'PENDING_REVIEW',
+      pancakeLinkCode: pancakeVariationId,
+    });
+    const approve = () =>
+      prisma.$transaction(async (tx) => {
+        const flipped = await tx.product.updateMany({
+          where: { id: p.id, approvalStatus: 'PENDING_REVIEW' },
+          data: { approvalStatus: 'APPROVED' },
+        });
+        if (flipped.count === 0) throw new Error('đã xử lý');
+        await linkTubuFulfilledVariation(tx, p);
+      });
+    await approve();
+
+    const merchant = new MerchantService(prisma, orderStatus, { notify } as unknown as NotificationsService);
+    await merchant.updateProduct(owner.id, p.id, { name: `${p.name} (mới)` });
+    const pending = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(pending.approvalStatus).toBe('PENDING_REVIEW');
+    expect(pending.pancakeLinkCode).toBe(pancakeVariationId);
+
+    const results = await Promise.allSettled([approve(), approve()]);
+    const s = summarize(results);
+    const after = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { variations: true } });
+    console.log('[b2] fulfilled=%d rejected=%d status=%s errors=%j', s.fulfilled.length, s.rejected.length, after.approvalStatus, s.errors);
+
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.rejected.some((r) => r.reason instanceof ConflictException)).toBe(false);
+    expect(after.approvalStatus).toBe('APPROVED');
+    expect(after.fulfilment).toBe('TUBU');
+    expect(after.variations.map((v) => v.pancakeId)).toEqual([pancakeVariationId]);
   });
 
   it('(c) đối tác nhập vận đơn chồng với admin huỷ đơn chưa gửi (D1) → đúng 1 bên thắng, không có đơn huỷ mang mã vận đơn', async () => {
