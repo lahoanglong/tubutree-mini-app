@@ -200,6 +200,8 @@ describe('Merchant Pancake link (real Postgres)', () => {
       createOrder(prisma, {
         userId: buyer.id,
         createdAt: when,
+        pancakeOrderId: `itpl-${randCode(10)}`,
+        pancakePushStatus: 'SYNCED',
         total: 300_000,
         items: {
           create: [
