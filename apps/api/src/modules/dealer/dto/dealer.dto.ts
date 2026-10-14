@@ -78,4 +78,6 @@ export class DealerOrderDto {
 
   @IsIn(['CREDIT', 'PREPAID']) paymentMethod!: string;
   @IsOptional() @IsString() note?: string;
+  /** Địa chỉ nhận trong sổ địa chỉ của đại lý. Bỏ trống → địa chỉ mặc định, rồi tới địa chỉ trong hồ sơ đại lý. */
+  @IsOptional() @IsString() addressId?: string;
 }

@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createUser, randCode, summarize, warmPool } from './helpers';
+import { createDealer, createUser, randCode, summarize, warmPool } from './helpers';
 
 /** C-008: hạn mức công nợ đơn CREDIT trên Postgres thật — có tier (trần thật) và không tier (trần 0). */
 describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
@@ -60,7 +60,7 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
   });
 
   it('đại lý không tier: 4 đơn CREDIT đồng thời đều bị từ chối, sổ công nợ = 0, không có đơn', async () => {
-    const d = await createUser(prisma, { role: 'DEALER' });
+    const d = await createDealer(prisma);
     const results = await Promise.allSettled(
       Array.from({ length: 4 }, () =>
         dealer.placeOrder(d.id, { items: [{ variationId, quantity: 1000 }], paymentMethod: 'CREDIT' } as never),
@@ -80,7 +80,7 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
     await prisma.dealerTier.create({
       data: { id: tierId, name: 'IT', minOrderVolume: 0, discountRules: { default: 0.2 }, creditLimit: 160_000 },
     });
-    const d = await createUser(prisma, { role: 'DEALER', metadata: { dealerTierId: tierId } });
+    const d = await createDealer(prisma, { metadata: { dealerTierId: tierId } });
     const results = await Promise.allSettled(
       Array.from({ length: 5 }, () =>
         dealer.placeOrder(d.id, { items: [{ variationId, quantity: 1 }], paymentMethod: 'CREDIT' } as never),

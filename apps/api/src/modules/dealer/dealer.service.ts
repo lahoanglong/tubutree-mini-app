@@ -17,6 +17,7 @@ import { generateUniqueOrderCode } from '../../common/order-code';
 import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { resolveDealerRecipient } from './dealer-recipient';
 
 interface BonusTier {
   min: number;
@@ -223,6 +224,16 @@ export class DealerService {
       );
     }
 
+    // Kho Pancake cần tên, SĐT, địa chỉ người nhận — trước đây đơn đại lý chỉ có ghi chú "giao theo hợp đồng".
+    const shippingAddress = await resolveDealerRecipient(this.prisma, userId, dto.addressId);
+    if (!shippingAddress) {
+      throw new BadRequestException(
+        dto.addressId
+          ? 'Không tìm thấy địa chỉ nhận hàng đã chọn.'
+          : 'Chưa có địa chỉ nhận hàng. Vui lòng thêm địa chỉ trong sổ địa chỉ trước khi đặt đơn đại lý.',
+      );
+    }
+
     const onCredit = dto.paymentMethod === 'CREDIT';
     // Fast-fail thân thiện (không tốn lượt sinh mã đơn khi rõ ràng vượt). Check
     // QUYẾT ĐỊNH nằm trong transaction Serializable bên dưới để chống TOCTOU.
@@ -279,7 +290,7 @@ export class DealerService {
               total: subtotal,
               paymentMethod: 'BANK_TRANSFER',
               paymentStatus: 'UNPAID',
-              shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
+              shippingAddress: { ...shippingAddress },
               note: dto.note,
               idempotencyKey: key ?? null,
               items: { create: itemsWithBackorder },
@@ -1127,6 +1138,10 @@ export class DealerService {
       `Admin ${adminId} xác nhận thanh toán đơn đại lý ${order.code} (${vnd(order.total)}): UNPAID → PAID, ${order.status} → ${toStatus}` +
         (bankRef ? `, mã GD ${bankRef}` : ''),
     );
+    // Đơn đã lên kho kèm "CHỜ CHUYỂN KHOẢN": báo Pancake đã thanh toán (chưa lên thì đẩy luôn).
+    await this.pancakeOrder
+      ?.enqueuePayment(order.id)
+      .catch((e) => this.logger.error(`Xếp cập nhật thanh toán Pancake lỗi cho đơn ${order.code}: ${(e as Error).message}`));
     if (this.notifications) {
       await this.notifications
         .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })

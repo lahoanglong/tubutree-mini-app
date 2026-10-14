@@ -7,7 +7,7 @@ import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { BrandService } from '../../src/modules/brand/brand.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createOrder, createUser, warmPool } from './helpers';
+import { createDealer, createOrder, createUser, warmPool } from './helpers';
 
 /**
  * C-055: ngưỡng thưởng / doanh số kỳ của đại lý vượt Int 32-bit (2.147.483.647) trước đây ra
@@ -105,7 +105,7 @@ describe('Dealer reward threshold / volume above Int32 (real Postgres)', () => {
   });
 
   it('dealer order whose total exceeds the per-order cap is rejected with 400, not a DB overflow 500', async () => {
-    const d = await createUser(prisma, { role: 'DEALER' });
+    const d = await createDealer(prisma);
     const product = await prisma.product.create({
       data: {
         pancakeId: `it-p-dl-${d.id}`,
