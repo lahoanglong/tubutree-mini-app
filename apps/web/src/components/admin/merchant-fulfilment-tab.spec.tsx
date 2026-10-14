@@ -94,6 +94,27 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(api.calls.some((c) => c.url.includes('/payouts/mp1/cancel'))).toBe(true);
   });
 
+  it('R2-MERCHANT-4: phiếu âm là tiền đối tác nộp — "Chờ thu", nội dung CK, hạn nộp; nút "Đã thu"', async () => {
+    const NEG = { ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: '2026-10-19T03:00:00.000Z' };
+    const api = setup({
+      '/admin/merchant-fulfilment/payouts/mp1/paid': { body: { ...NEG, status: 'PAID' } },
+      '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('Chờ thu');
+    expect(root.textContent).not.toContain('Chờ chuyển');
+    expect(root.textContent).toContain('TUBU DS ABCD1234');
+    expect(root.textContent).toContain('hạn 19/10/2026');
+    expect(byText(root, 'button', 'Đã chuyển')).toBeNull();
+    typeInto(root.querySelector('input')!, 'FT777');
+    click(byText(root, 'button', 'Đã thu'));
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(true);
+  });
+
   it('lỗi API (ví dụ phiếu trùng) hiện thông báo danger role alert', async () => {
     setup({ '/admin/merchant-fulfilment/payouts': { status: 409, body: { message: 'Một phiếu đối soát khác vừa được lập cho các đơn này.' } } });
     const r = render(<MerchantFulfilmentTab />);
