@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -7,7 +7,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { QUEUE_GOMDON_EVENTS, QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import type { GomdonWebhookPayload } from './gomdon.types';
-import { GomdonAlertService } from './gomdon-alert.service';
+import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
+import { PancakeOrderService, waybillNoteAlert } from '../pancake/pancake-order.service';
 import { GOMDON_JOB_EVENT, addGomdonJob, enqueueGomdonCancel } from './gomdon-queue';
 import {
   GOMDON_CANCEL,
@@ -127,6 +128,7 @@ export class GomdonWebhookService {
     private readonly alerts: GomdonAlertService,
     @InjectQueue(QUEUE_GOMDON_EVENTS) private readonly eventsQueue: Queue,
     @InjectQueue(QUEUE_GOMDON_PUSH) private readonly pushQueue: Queue,
+    @Optional() private readonly pancakeOrder?: PancakeOrderService,
   ) {}
 
   /**
@@ -361,8 +363,11 @@ export class GomdonWebhookService {
           `Gomdon CÓ vận đơn ${partnerCode} cho đơn đã được đánh dấu "Đã xử lý tay" — kiểm tra ngay tránh giao trùng 2 vận đơn.`,
         );
       } else if (cur === GOMDON_STATE.NEEDS_MANUAL_CHECK) {
-        await this.alerts.alert(order.code, `Đã tự khớp vận đơn Gomdon ${partnerCode} — KHÔNG tạo vận đơn tay.`);
+        this.logger.warn(`Đã tự khớp vận đơn Gomdon ${partnerCode} cho đơn ${order.code} (đang chờ kiểm tra tay).`);
       }
+      // Hệ thống đã biết vận đơn: việc "tạo/kiểm tra vận đơn tay" cũ hết hiệu lực (báo trùng ở trên vẫn mở).
+      await this.alerts.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NEEDED]);
+      if (!isDead(order.status) && order.pancakeOrderId && partnerCode) await this.syncPancakeNote(order, partnerCode);
     }
     if (backfill && isDead(order.status)) {
       await enqueueGomdonCancel(this.pushQueue, order.id);
@@ -411,6 +416,13 @@ export class GomdonWebhookService {
           where: { id: order.id, OR: [{ gomdonCancelStatus: null }, { gomdonCancelStatus: GOMDON_CANCEL.FAILED }] },
           data: { gomdonCancelStatus: GOMDON_CANCEL.CANCELLED },
         });
+        if (isDead(order.status)) {
+          await this.alerts.resolveKinds(order.id, [
+            GOMDON_ALERT_KIND.CANCEL_NEEDED,
+            GOMDON_ALERT_KIND.WAYBILL_NEEDED,
+            GOMDON_ALERT_KIND.WAYBILL_NOTE,
+          ]);
+        }
         return;
       }
       // Ghi nhận + báo CSKH. KHÔNG tự huỷ/hoàn tiền/restock — người xử lý quyết định.
@@ -426,6 +438,21 @@ export class GomdonWebhookService {
     if (order.status !== 'CANCELLED') return;
     if (order.gomdonCancelStatus != null && order.gomdonCancelStatus !== GOMDON_CANCEL.FAILED) return;
     await enqueueGomdonCancel(this.pushQueue, order.id);
+  }
+
+  /** Vận đơn tự khớp cho đơn đã có trên Pancake: ghi mã vào ghi chú Pancake; Pancake từ chối thì báo ghi tay. */
+  private async syncPancakeNote(order: Order, partnerCode: string): Promise<void> {
+    if (!this.pancakeOrder || !order.pancakeOrderId) return;
+    try {
+      await this.pancakeOrder.syncWaybillNote(order.id);
+    } catch (err) {
+      await this.alerts.alert(
+        order.code,
+        waybillNoteAlert(partnerCode, order.pancakeOrderId, err),
+        GOMDON_ALERT_TEMPLATE,
+        GOMDON_ALERT_KIND.WAYBILL_NOTE,
+      );
+    }
   }
 
   /** Chỉ nuốt lỗi chuyển trạng thái không hợp lệ (webhook trễ); lỗi khác ném tiếp để retry. */

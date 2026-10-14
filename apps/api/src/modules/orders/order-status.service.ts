@@ -308,7 +308,17 @@ export class OrderStatusService {
    */
   async markPaid(
     orderIdOrCode: string,
-    opts: { actorType: StatusActor; actorId?: string; note?: string },
+    opts: {
+      actorType: StatusActor;
+      actorId?: string;
+      note?: string;
+      /**
+       * Người gọi tự xếp tạo vận đơn Gomdon sau (enqueueGomdonAfterPaid): webhook Pancake mang cả tiền lẫn "đã gửi
+       * hàng" + vận đơn hãng khác phải ghi xong vận chuyển trước, kẻo job Gomdon thấy đơn còn trong kho và đặt bưu
+       * tá thứ hai (GOMDON-3).
+       */
+      deferGomdonPush?: boolean;
+    },
   ): Promise<{ outcome: MarkPaidOutcome; order: Order }> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const order = await this.prisma.order.findFirst({ where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] } });
@@ -349,15 +359,7 @@ export class OrderStatusService {
       });
       if (!won) continue;
 
-      if (order.hasRecyclingPickup && this.gomdonQueue) {
-        // Lỗi enqueue không được làm hỏng việc đã lật PAID — GomdonReconcileService quét
-        // AWAITING_PAYMENT + PAID và enqueue lại.
-        await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
-          this.logger.error(
-            `Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`,
-          ),
-        );
-      }
+      if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications
         .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
@@ -368,6 +370,16 @@ export class OrderStatusService {
       };
     }
     throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — vui lòng tải lại rồi thử lại.');
+  }
+
+  /** Đơn thu gom vừa trả tiền: lúc này mới đặt bưu tá Gomdon. */
+  async enqueueGomdonAfterPaid(order: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup'>): Promise<void> {
+    if (!order.hasRecyclingPickup || !this.gomdonQueue) return;
+    // Lỗi enqueue không được làm hỏng việc đã lật PAID — GomdonReconcileService quét AWAITING_PAYMENT + PAID và
+    // enqueue lại.
+    await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+      this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
+    );
   }
 
   /**

@@ -106,13 +106,13 @@ describe('PancakePushReconcileService.reconcile', () => {
     const { svc, enqueuePush, alert } = mk({ order: { findMany, updateMany } });
     await svc.reconcile();
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: null },
+      where: { id: 'o1', gomdonOrderId: null, gomdonPartnerCode: null, OR: [{ gomdonStatus: null }, { gomdonStatus: 'AWAITING_PAYMENT' }] },
       data: { gomdonStatus: 'FAILED' },
     });
     // Chốt trạng thái TRƯỚC khi đẩy Pancake (note Pancake đọc trạng thái đã chốt).
     expect(updateMany.mock.invocationCallOrder[0]).toBeLessThan(enqueuePush.mock.invocationCallOrder[0]!);
     expect(enqueuePush).toHaveBeenCalledWith('o1');
-    expect(alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('TẠO VẬN ĐƠN TAY'));
+    expect(alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('TẠO VẬN ĐƠN TAY'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('CREATING kẹt > 60 phút → NEEDS_MANUAL_CHECK có guard + báo KIỂM TRA GOMDON trước khi tạo tay', async () => {
@@ -131,7 +131,7 @@ describe('PancakePushReconcileService.reconcile', () => {
       data: { gomdonStatus: 'NEEDS_MANUAL_CHECK' },
     });
     expect(enqueuePush).toHaveBeenCalledWith('o1');
-    expect(alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('KIỂM TRA GOMDON'));
+    expect(alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('KIỂM TRA GOMDON'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('trả trước CHƯA thanh toán kẹt > 60 phút → AWAITING_PAYMENT (không FAILED) để tiền về vẫn tự đặt vận đơn; không báo động', async () => {

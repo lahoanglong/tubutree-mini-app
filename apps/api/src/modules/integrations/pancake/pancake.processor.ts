@@ -172,22 +172,7 @@ export class PancakeProcessor extends WorkerHost {
       case 'order':
       case 'order.status_updated':
       case 'order.updated':
-        // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
-        // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
-        // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
-        // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/hoàn: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
-        // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
-        if (isTerminalPancakeStatus(data)) {
-          await this.onStatusUpdated(data);
-          await this.onPaymentReconcile(data);
-        } else {
-          await this.onPaymentReconcile(data);
-          await this.onStatusUpdated(data);
-        }
-        // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
-        if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
-          await this.onShippingUpdated(data);
-        }
+        await this.onOrderEvent(data);
         break;
       case 'order.shipping_updated':
         await this.onShippingUpdated(data);
@@ -205,6 +190,33 @@ export class PancakeProcessor extends WorkerHost {
         this.logger.debug(`Bỏ qua event chưa xử lý: ${eventType}`);
     }
     return 'PROCESSED';
+  }
+
+  private async onOrderEvent(data: Record<string, unknown>): Promise<void> {
+    // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
+    // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
+    // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
+    // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/hoàn: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
+    // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
+    let paidNow: Order | null = null;
+    try {
+      if (isTerminalPancakeStatus(data)) {
+        await this.onStatusUpdated(data);
+        await this.onPaymentReconcile(data);
+      } else {
+        paidNow = await this.onPaymentReconcile(data, { deferGomdonPush: true });
+        await this.onStatusUpdated(data);
+      }
+      // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
+      if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
+        await this.onShippingUpdated(data);
+      }
+    } finally {
+      // Đặt bưu tá thu gom SAU khi đã ghi trạng thái + vận đơn của cùng sự kiện: kho đã giao bằng hãng khác thì
+      // job Gomdon thấy ngay và không tạo vận đơn thứ hai (GOMDON-3). Lần chạy lại sau lỗi không lật PAID nữa
+      // nên vẫn phải xếp ở đây.
+      if (paidNow) await this.orderStatus.enqueueGomdonAfterPaid(paidNow);
+    }
   }
 
   /**
@@ -347,18 +359,21 @@ export class PancakeProcessor extends WorkerHost {
    * OrderStatusService.markPaid với nút "Đã nhận tiền" của admin: guard nguyên tử, ghi lịch sử trạng thái
    * (ai/lúc nào xác nhận tiền) và event order_paid cùng transaction, đặt vận đơn thu gom đang chờ tiền, báo khách.
    */
-  private async onPaymentReconcile(data: Record<string, unknown>): Promise<void> {
+  /** Trả đơn vừa lật PAID (null nếu không lật) — để người gọi đặt bưu tá thu gom khi đã `deferGomdonPush`. */
+  private async onPaymentReconcile(data: Record<string, unknown>, opts: { deferGomdonPush?: boolean } = {}): Promise<Order | null> {
     const order = await this.findOrder(data);
-    if (!order) return;
-    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
-    if (!isPancakeOrderPaid(data, order.total)) return;
+    if (!order) return null;
+    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return null;
+    if (!isPancakeOrderPaid(data, order.total)) return null;
 
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'PANCAKE',
       note: 'Pancake ghi nhận chuyển khoản',
+      deferGomdonPush: opts.deferGomdonPush,
     });
     if (outcome === 'PAID') {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
+      return current;
     } else if (outcome === 'CLOSED') {
       // Tiền về sau khi đơn đã huỷ/trả: không "hồi sinh" đơn — tạo yêu cầu hoàn tiền, khách chọn Ví hay ngân hàng.
       const amount = pancakePaidAmount(data) || order.total;
@@ -368,6 +383,7 @@ export class PancakeProcessor extends WorkerHost {
         { amount, source: 'PANCAKE', refKey: `${String(data['id'] ?? 'order')}:${amount}` },
       );
     }
+    return null;
   }
 
   private async onShippingUpdated(data: Record<string, unknown>): Promise<void> {

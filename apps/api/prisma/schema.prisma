@@ -2556,6 +2556,10 @@ model GomdonAlert {
   orderId      String
   order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   message      String
+  /// Nhóm việc hệ thống tự đóng được khi tự xử lý xong (gomdon-alert.service.ts GOMDON_ALERT_KIND): WAYBILL_NEEDED
+  /// (cần tạo/kiểm tra vận đơn tay), WAYBILL_NOTE (cần ghi mã vận đơn vào Pancake), CANCEL_NEEDED (cần huỷ tay vận
+  /// đơn của đơn đã huỷ). Null = chỉ người đóng.
+  kind         String?
   createdAt    DateTime  @default(now())
   resolvedAt   DateTime?
   resolvedById String?

@@ -84,7 +84,7 @@ function setup(
   const proc = new PancakeProcessor(prisma, notifications, orderStatus, alerts as never) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
-    onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
+    onPaymentReconcile(d: Record<string, unknown>): Promise<unknown>;
     onShippingUpdated(d: Record<string, unknown>): Promise<void>;
     extractOrderCode(d: Record<string, unknown>): string | null;
     process(job: { data: { eventId: string } }): Promise<void>;
@@ -703,7 +703,7 @@ describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
       { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, hasRecyclingPickup: true },
       q2,
     );
-    await expect(b.proc.onPaymentReconcile({ id: 'p1', is_paid: true })).resolves.toBeUndefined();
+    await expect(b.proc.onPaymentReconcile({ id: 'p1', is_paid: true })).resolves.toMatchObject({ id: 'o1' });
     expect(b.notifications.notify).toHaveBeenCalled();
   });
 

@@ -183,4 +183,51 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect((await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe('PROCESSED');
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).shippingCode).toBe('GHN123');
   });
+
+  it('GOMDON-3: đơn thu gom, Pancake ghi nhận tiền + "Đã gửi hàng" kèm vận đơn GHN cùng lúc → job Gomdon chỉ xếp SAU khi đơn đã SHIPPING + có mã GHN (không đặt bưu tá thứ hai)', async () => {
+    const seenAtEnqueue: { status: string; shippingCode: string | null }[] = [];
+    const gomdonQueue = {
+      getJob: jest.fn().mockResolvedValue(undefined),
+      add: jest.fn(async (_name: string, data: { orderId: string }) => {
+        const o = await prisma.order.findUniqueOrThrow({ where: { id: data.orderId }, select: { status: true, shippingCode: true } });
+        seenAtEnqueue.push(o);
+        return {};
+      }),
+    };
+    const loyalty = { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn() } as unknown as LoyaltyService;
+    const affiliate = { lockCommissionsForOrder: jest.fn(), grantReferralReward: jest.fn(), reverseCommissionsForOrder: jest.fn() } as unknown as AffiliateService;
+    const reversal = new OrderReversalService(
+      { restore: jest.fn() } as unknown as FlashSaleService,
+      { release: jest.fn() } as unknown as CouponsService,
+    );
+    const statusWithGomdon = new OrderStatusService(
+      prisma,
+      loyalty,
+      affiliate,
+      { notify } as unknown as NotificationsService,
+      reversal,
+      gomdonQueue as never,
+    );
+    const proc = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, statusWithGomdon);
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT' } });
+    const ev = await prisma.pancakeWebhookEvent.create({
+      data: {
+        eventType: 'orders',
+        rawPayload: {
+          id: `pc-${order.code}`,
+          extension: { external_order_id: order.code },
+          status: 2,
+          bank_payment: order.total,
+          partner: { partner_name: 'GHN', extend_code: 'GHN777888' },
+        } as object,
+        status: 'PENDING',
+      },
+    });
+    await proc.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after).toMatchObject({ status: 'SHIPPING', paymentStatus: 'PAID', shippingCode: 'GHN777888' });
+    expect(seenAtEnqueue).toEqual([{ status: 'SHIPPING', shippingCode: 'GHN777888' }]);
+  });
 });
