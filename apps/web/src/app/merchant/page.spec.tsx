@@ -512,8 +512,12 @@ describe('cổng đối tác — tab Đối soát', () => {
     const selfShip = root.textContent!.slice(root.textContent!.indexOf('Mỗi đơn bạn tự giao'), root.textContent!.indexOf('Chờ lập phiếu'));
     expect(selfShip).toContain('thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
     // Q8 review S3: nêu cả giảm giá hạng thành viên; mỗi khoản giảm chỉ trừ vào món được hưởng khoản đó.
-    expect(selfShip).toContain('Phần mã giảm giá, giảm giá hạng thành viên và Điểm Xanh áp cho món của bạn được trừ vào số tiền của bạn');
+    // Q8 S2/S7: hàng đối tác bán giá lẻ (giờ vàng nếu Tubu đưa vào), chỉ chịu mã của khách và giảm hạng; không Điểm Xanh.
+    expect(selfShip).toContain('Hàng của bạn bán theo giá lẻ niêm yết (hoặc giá giờ vàng khi Tubu Tree đưa món vào giờ vàng)');
+    expect(selfShip).toContain('Phần mã giảm giá của khách và giảm giá hạng thành viên áp cho món của bạn được trừ vào số tiền của bạn');
     expect(selfShip).toContain('mã chỉ áp cho món khác không trừ vào món của bạn');
+    expect(selfShip).toContain('Khách không trả hàng của bạn bằng Điểm Xanh; hàng của bạn không bán giá đại lý, không đặt định kỳ, không vào combo hay mua chung');
+    expect(selfShip).not.toContain('Điểm Xanh áp cho');
     expect(root.textContent).toContain('sau 7 ngày');
     expect(root.textContent).toContain('Chờ lập phiếu (2 khoản)');
     expect(root.textContent).toContain('−15.000');
@@ -602,8 +606,10 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('3.400đ mỗi đơn (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt)');
     expect(root.textContent).toContain('chỉ đơn Tubu Tree đã thu được tiền');
     const consignmentNote = root.textContent!.slice(root.textContent!.indexOf('Hàng Tubu giao hộ: kho Tubu Tree'), root.textContent!.indexOf('Chờ lập phiếu'));
-    expect(consignmentNote).toContain('đã trừ phần mã giảm giá, giảm giá hạng thành viên và Điểm Xanh áp cho chính món đó');
+    expect(consignmentNote).toContain('giá bán của món, kể cả giá giờ vàng, đã trừ phần mã giảm giá của khách và giảm giá hạng thành viên áp cho chính món đó');
     expect(consignmentNote).toContain('mã chỉ áp cho món khác không trừ vào món của bạn');
+    expect(consignmentNote).toContain('Điểm Xanh không dùng cho hàng của bạn');
+    expect(consignmentNote).not.toContain('Điểm Xanh áp cho');
     expect(consignmentNote).not.toContain('chia theo giá trị món');
     expect(root.textContent).not.toContain('thoả thuận ký gửi');
     expect(root.textContent).not.toContain('chưa vào đối soát tự động');
