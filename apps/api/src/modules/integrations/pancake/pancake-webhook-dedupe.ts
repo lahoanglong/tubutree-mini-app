@@ -7,7 +7,12 @@ export const PANCAKE_EVENT_STATUS = {
   FAILED: 'FAILED',
   /** Chưa khớp được đơn Tubu (vd webhook tới trước khi lưu pancakeOrderId) — cron đối chiếu lại trong ít lâu. */
   UNMATCHED: 'UNMATCHED',
+  /** Cố ý không áp (lý do ở `error`): mã đơn của đơn đối tác tự giao, số tồn kho cũ hơn số đã áp. Đã xong, không chạy lại. */
+  IGNORED: 'IGNORED',
 } as const;
+
+/** Sự kiện đã có kết cục cuối — worker, Pancake gửi lại và cron cứu đều không chạy lại. */
+export const PANCAKE_EVENT_DONE: readonly string[] = [PANCAKE_EVENT_STATUS.PROCESSED, PANCAKE_EVENT_STATUS.IGNORED];
 
 /** Worker giữ claim PROCESSING lâu hơn mốc này coi như đã chết (handler thường xong trong vài giây). */
 export const PANCAKE_CLAIM_STALE_MINUTES = 15;

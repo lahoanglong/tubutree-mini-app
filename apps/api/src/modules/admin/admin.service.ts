@@ -1044,10 +1044,11 @@ export class AdminService {
    * Để admin thấy vì sao bật công tắc mà khách vẫn không thấy lựa chọn thu gom (thiếu env).
    */
   async gomdonStatus() {
-    const [cfg, toggle, enabled] = await Promise.all([
+    const [cfg, toggle, enabled, connection] = await Promise.all([
       this.gomdonClient.getConfig(),
       this.config.get<unknown>(GOMDON_RECYCLING_TOGGLE_KEY, false),
       this.gomdonOrder.isRecyclingEnabled(),
+      this.gomdonClient.getHealth(),
     ]);
     return {
       baseUrlSet: Boolean(cfg.baseUrl),
@@ -1056,8 +1057,8 @@ export class AdminService {
       webhookSecretSet: Boolean(process.env.GOMDON_WEBHOOK_SECRET?.trim()),
       recyclingToggle: toggle === true,
       recyclingEnabled: enabled,
-      // Lần gọi Gomdon gần nhất của process API: đăng nhập bị từ chối thì checkout tự ẩn lựa chọn thu gom.
-      connection: this.gomdonClient.getHealth(),
+      // Lần gọi Gomdon gần nhất (chung mọi replica): đăng nhập bị từ chối thì checkout tự ẩn lựa chọn thu gom.
+      connection,
     };
   }
 

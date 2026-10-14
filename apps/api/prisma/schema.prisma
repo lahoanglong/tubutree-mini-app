@@ -717,6 +717,9 @@ model Variation {
   /// tự trừ tồn khi ta tạo đơn (số giảm ⇒ nhả giữ chỗ) lẫn không tự trừ (số đứng yên ⇒ giữ chỗ
   /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
   reservedStock Int      @default(0)
+  /// `updated_at` (giờ Pancake) của webhook tồn kho gần nhất đã áp. Webhook cũ hơn mốc này tới sau (Pancake gửi không theo
+  /// thứ tự, BullMQ thử lại) thì không áp. NULL = chưa áp webhook nào có mốc giờ. Đồng bộ danh mục không đọc/ghi cột này.
+  pancakeStockEventAt DateTime?
   isActive      Boolean  @default(true)
   /// Lý do đồng bộ Pancake tự tắt biến thể: REMOVED (Pancake xoá / không còn trong danh mục) | NO_PRICE
   /// (tạo mới mà thiếu giá). NULL = đồng bộ không giữ — isActive=false khi đó là do admin/merchant tắt,
@@ -990,6 +993,9 @@ model Order {
   pancakeAttention       String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
   pancakeAttentionAt     DateTime?
+  /// Lúc hệ thống thử tự huỷ (hết hạn thanh toán) mà đơn đã bàn giao vận chuyển — D1 không cho huỷ nữa. Cron hết hạn bỏ qua
+  /// đơn này (không thử lại, không nhắc lại mỗi lượt); người vận hành xử lý theo lời nhắc ở "Cần xử lý Pancake".
+  autoCancelBlockedAt    DateTime?
   /// Số tiền chuyển khoản (cộng dồn) Pancake báo đã nhận khi đơn còn chưa đủ tiền — đơn bị huỷ thì hoàn đúng số này.
   pancakePaidReported    Int?
   /// Đẩy đơn sang Pancake (pancake-order.service.ts): WAITING_PAYMENT (trả trước qua cổng, chờ tiền) | PENDING
@@ -2640,7 +2646,7 @@ model PancakeWebhookEvent {
   rawPayload    Json
   receivedAt    DateTime  @default(now())
   processedAt   DateTime?
-  /// RECEIVED | PROCESSING | PROCESSED | FAILED | UNMATCHED
+  /// RECEIVED | PROCESSING | PROCESSED | FAILED | UNMATCHED | IGNORED (cố ý không áp, lý do ở `error`)
   status        String
   /// Số lần worker đã claim (tăng lúc claim, không phải lúc xong) — tiến trình chết giữa chừng vẫn bị tính.
   attempts      Int       @default(0)

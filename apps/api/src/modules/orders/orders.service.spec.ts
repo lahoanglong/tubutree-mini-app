@@ -772,6 +772,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       pancakeOrderId: 'pk-1',
       idempotencyKey: 'idem-1',
       reviewInvitedAt: new Date(),
+      autoCancelBlockedAt: new Date(),
     };
     const { svc } = makeMediaService([{ ...baseOrder, ...internal, items: [] }], []);
     const view = (await svc.detailView('u1', 'TUBU1')) as unknown as Record<string, unknown>;

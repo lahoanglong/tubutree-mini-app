@@ -1,4 +1,5 @@
-import { PancakeSyncService } from './pancake-sync.service';
+import { ConflictException, Logger } from '@nestjs/common';
+import { CATALOG_SYNC_LEASE, CATALOG_SYNC_RUNNING, CatalogSyncBusyError, PancakeSyncService } from './pancake-sync.service';
 import { PancakeClient as RealPancakeClient } from './pancake.client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
@@ -51,6 +52,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     wishlist: { findMany: jest.fn().mockResolvedValue([]) },
     // Tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — mock nhận (strings, ...values).
     $executeRaw: jest.fn().mockResolvedValue(1),
+    // Khoá đồng bộ chung (cron_leases): mặc định giành/gia hạn/nhả đều được.
+    $queryRaw: jest.fn().mockResolvedValue([{ holder: 'this-run' }]),
   };
   const merged: Record<string, unknown> = { ...base };
   for (const [k, v] of Object.entries(over)) {
@@ -302,12 +305,6 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
     expect(n).toBe(3);
   });
 
-  it('hai lượt sync chồng nhau → lượt sau bỏ qua, không ghi đè lẫn nhau', async () => {
-    const prisma = makePrisma();
-    const svc = new PancakeSyncService(prisma, makeClient([[prod('a')], []]), lifecycle);
-    const [first, second] = await Promise.all([svc.syncProducts(), svc.syncProducts()]);
-    expect([first, second].filter((x) => x === 0)).toHaveLength(1);
-  });
 });
 
 type Model = { findMany: jest.Mock; updateMany: jest.Mock; upsert: jest.Mock; create: jest.Mock; update: jest.Mock };
@@ -545,5 +542,81 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
   it('thiếu giá không bị tính là giảm giá (không báo wishlist)', async () => {
     await runWith(prev, variation('v-a', { retail_price: 0 }));
     expect(notifyPriceDrop).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * R4-SYNC-6: bấm đồng bộ khi một lượt khác đang chạy từng trả 201 {synced:0} như thành công (admin tưởng Pancake không có gì
+ * đổi), và cờ chặn chỉ nằm trong bộ nhớ từng replica nên hai replica vẫn quét chồng nhau. Nay: khoá chung trong cron_leases,
+ * lượt bị chặn là 409 CATALOG_SYNC_RUNNING có lời giải thích.
+ */
+describe('PancakeSyncService — một lượt đồng bộ một lúc trên cả cụm (R4-SYNC-6)', () => {
+  const leaseSql = (prisma: PrismaService) =>
+    (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mock.calls.map((c) => (c[0] as string[]).join('?'));
+
+  it('hai lượt bấm chồng nhau trên cùng replica → lượt sau 409 CATALOG_SYNC_RUNNING, không phải {synced:0}', async () => {
+    const svc = new PancakeSyncService(makePrisma(), makeClient([[prod('a')], []]), lifecycle);
+    const [first, second] = await Promise.allSettled([svc.syncProducts(), svc.syncProducts()]);
+    expect(first).toEqual({ status: 'fulfilled', value: 1 });
+    expect(second.status).toBe('rejected');
+    const err = (second as PromiseRejectedResult).reason;
+    expect(err).toBeInstanceOf(CatalogSyncBusyError);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect(err.getStatus()).toBe(409);
+    expect(err.getResponse()).toMatchObject({ code: CATALOG_SYNC_RUNNING, message: expect.stringContaining('đang chạy') });
+  });
+
+  it('replica khác đang giữ khoá đồng bộ → 409, không gọi Pancake, không ghi trạng thái danh mục thành lỗi', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]), opsHealthState: { upsert } });
+    const client = makeClient([[prod('a')]]);
+    await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts()).rejects.toBeInstanceOf(CatalogSyncBusyError);
+    expect(client.fetchProducts).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('giành khoá chung trước khi gọi Pancake, nhả khoá khi xong — kể cả khi lượt lỗi', async () => {
+    const prisma = makePrisma();
+    const client = { isConfigured: () => true, fetchProducts: jest.fn().mockRejectedValue(new Error('timeout')) } as unknown as PancakeClient;
+    await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts()).rejects.toThrow('timeout');
+    const sql = leaseSql(prisma);
+    expect(sql[0]).toContain('INSERT INTO cron_leases');
+    expect(sql.at(-1)).toMatch(/UPDATE cron_leases SET "expiresAt"/);
+    const holder = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw.mock.calls[0]!.slice(1);
+    expect(holder).toContain(CATALOG_SYNC_LEASE);
+
+    await expect(new PancakeSyncService(makePrisma(), makeClient([[prod('a')]]), lifecycle).syncProducts()).resolves.toBe(1);
+  });
+
+  it('gia hạn khoá mỗi trang; khoá đã sang lượt khác giữa chừng → dừng, không ghi tiếp trang sau', async () => {
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([{ holder: 'this-run' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]);
+    const prisma = makePrisma({ $queryRaw: queryRaw });
+    const client = makeClient([[prod('a')], [prod('b')], []]);
+    await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts('2026-10-14T00:00:00.000Z')).rejects.toThrow(
+      /khoá đồng bộ/,
+    );
+    expect(client.fetchProducts).toHaveBeenCalledTimes(1);
+    expect((prisma.variation.upsert as jest.Mock).mock.calls.map((c) => c[0].where.pancakeId)).toEqual(['v-a']);
+  });
+
+  it('cron 15 phút / quét đêm gặp lượt đang chạy → chỉ cảnh báo, không log lỗi', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      const prisma = makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]) });
+      const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
+      await svc.scheduledSync();
+      await svc.nightlyFullSync();
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls[0]![0]).toContain('đang chạy');
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 });

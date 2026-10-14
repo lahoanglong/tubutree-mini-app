@@ -381,7 +381,7 @@ describe('GomdonClient', () => {
       const err = await c.createOrder(body).catch((e) => e);
       expect(err).toBeInstanceOf(GomdonRejectedError);
       expect((err as GomdonRejectedError).transient).toBe(true);
-      expect(c.getHealth()).toMatchObject({ credentialsRejected: true, lastError: expect.stringContaining('mật khẩu') });
+      expect(await c.getHealth()).toMatchObject({ credentialsRejected: true, lastError: expect.stringContaining('mật khẩu') });
     });
 
     it('vừa bị từ chối tài khoản → không đăng nhập lại liên tục (chống khoá tài khoản), vẫn Rejected TẠM', async () => {
@@ -413,8 +413,8 @@ describe('GomdonClient', () => {
       const c = makeClient();
       mockHttp.post.mockRejectedValueOnce(axiosErr({ code: 'ECONNREFUSED' }));
       await c.createOrder(body).catch(() => undefined);
-      expect(c.getHealth().credentialsRejected).toBe(false);
-      expect(c.getHealth().lastError).toBeTruthy();
+      expect((await c.getHealth()).credentialsRejected).toBe(false);
+      expect((await c.getHealth()).lastError).toBeTruthy();
     });
 
     it('checkConnection: luôn đăng nhập thật (bỏ token cache) và trả kết quả cho admin', async () => {
@@ -428,11 +428,126 @@ describe('GomdonClient', () => {
       expect(mockHttp.post).toHaveBeenCalledTimes(2);
     });
 
+    it('cron dò lại (chỉ leader chạy) thấy lần từ chối của replica KHÁC qua bản ghi chung → đăng nhập thử, được thì ghi chung để mọi replica bật lại thu gom (R4-SYNC-4)', async () => {
+      const shared = { okAt: null as Date | null, rejectedAt: new Date(Date.now() - 31 * 60_000), rejectedMessage: 'sai mật khẩu' };
+      const store = {
+        load: jest.fn(async () => ({ ...shared })),
+        recordOk: jest.fn(async (okAt: Date) => {
+          shared.okAt = okAt;
+        }),
+        recordRejected: jest.fn().mockResolvedValue(undefined),
+      };
+      gomdonHealth.attachStore(store);
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+      await c.probeRejectedLogin(30 * 60_000);
+      expect(mockHttp.post).toHaveBeenCalledWith('/api/v2/auth/login', expect.anything());
+      expect(store.recordOk).toHaveBeenCalledTimes(1);
+      expect((await c.getHealth()).credentialsRejected).toBe(false);
+    });
+
+    describe('khởi động lại API khi bản ghi chung còn giữ lần bị từ chối (sửa env rồi khởi động lại, R4-SYNC-4)', () => {
+      function sharedStore(rejectedAgoMs: number | null) {
+        const shared = {
+          okAt: null as Date | null,
+          rejectedAt: rejectedAgoMs == null ? null : new Date(Date.now() - rejectedAgoMs),
+          rejectedMessage: rejectedAgoMs == null ? null : 'Đăng nhập Gomdon thất bại (HTTP 401): sai mật khẩu',
+        };
+        const store = {
+          load: jest.fn(async () => ({ ...shared })),
+          recordOk: jest.fn(async (at: Date) => {
+            shared.okAt = at;
+          }),
+          recordRejected: jest.fn(async (at: Date, message: string) => {
+            shared.rejectedAt = at;
+            shared.rejectedMessage = message;
+          }),
+        };
+        gomdonHealth.attachStore(store);
+        return store;
+      }
+      const enableToggle = () =>
+        systemConfig.get.mockImplementation(async (k: string) =>
+          k === GOMDON_RECYCLING_TOGGLE_KEY ? true : { phone: '0987654321', password: 'secretpassword' },
+        );
+
+      it('tài khoản đã sửa đúng → đăng nhập thử ngay (không đợi cron dò 30 phút), ghi chung để mọi replica bật lại thu gom', async () => {
+        const store = sharedStore(5 * 60_000);
+        enableToggle();
+        const c = makeClient();
+        expect(await c.isRecyclingEnabled()).toBe(false);
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+        await c.recheckRejectedLoginOnBoot();
+        expect(mockHttp.post).toHaveBeenCalledTimes(1);
+        expect(mockHttp.post).toHaveBeenCalledWith('/api/v2/auth/login', expect.anything());
+        expect(store.recordOk).toHaveBeenCalledTimes(1);
+        expect(await c.isRecyclingEnabled()).toBe(true);
+      });
+
+      it('lần từ chối vừa mới (trong thời gian chờ chống khoá tài khoản) vẫn thử: tiến trình mới chưa gọi Gomdon lần nào', async () => {
+        sharedStore(10_000);
+        const c = makeClient();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+        await c.recheckRejectedLoginOnBoot();
+        expect(mockHttp.post).toHaveBeenCalledTimes(1);
+        expect((await c.getHealth()).credentialsRejected).toBe(false);
+      });
+
+      it('tài khoản vẫn sai → chỉ ghi lại lần từ chối, không ném lỗi, thu gom vẫn ẩn', async () => {
+        const store = sharedStore(5 * 60_000);
+        enableToggle();
+        const c = makeClient();
+        mockHttp.post.mockRejectedValueOnce(LOGIN_REJECTED);
+        await expect(c.recheckRejectedLoginOnBoot()).resolves.toBeUndefined();
+        expect(mockHttp.post).toHaveBeenCalledTimes(1);
+        expect(store.recordRejected).toHaveBeenCalledTimes(1);
+        expect(await c.isRecyclingEnabled()).toBe(false);
+      });
+
+      it('không bị từ chối → không đăng nhập lúc khởi động', async () => {
+        sharedStore(null);
+        await makeClient().recheckRejectedLoginOnBoot();
+        expect(mockHttp.post).not.toHaveBeenCalled();
+      });
+
+      it('chưa cấu hình Gomdon (dev/test không có GOMDON_BASE_URL) → không gọi gì', async () => {
+        delete process.env.GOMDON_BASE_URL;
+        const store = sharedStore(5 * 60_000);
+        await makeClient().recheckRejectedLoginOnBoot();
+        expect(mockHttp.post).not.toHaveBeenCalled();
+        expect(store.load).not.toHaveBeenCalled();
+      });
+
+      it('đọc bản ghi chung lỗi (DB chập) → không ném, không đăng nhập', async () => {
+        gomdonHealth.attachStore({
+          load: jest.fn().mockRejectedValue(new Error('db down')),
+          recordOk: jest.fn(),
+          recordRejected: jest.fn(),
+        });
+        await expect(makeClient().recheckRejectedLoginOnBoot()).resolves.toBeUndefined();
+        expect(mockHttp.post).not.toHaveBeenCalled();
+      });
+
+      it('onApplicationBootstrap không chặn khởi động (Gomdon treo vẫn lên API)', async () => {
+        sharedStore(5 * 60_000);
+        const c = makeClient();
+        let release!: (v: unknown) => void;
+        mockHttp.post.mockReturnValueOnce(new Promise((r) => (release = r)));
+        const recheck = jest.spyOn(c, 'recheckRejectedLoginOnBoot');
+        expect(c.onApplicationBootstrap()).toBeUndefined();
+        expect(recheck).toHaveBeenCalledTimes(1);
+        await new Promise((r) => setImmediate(r));
+        release(LOGIN_OK);
+        await recheck.mock.results[0]!.value;
+        expect((await c.getHealth()).credentialsRejected).toBe(false);
+      });
+    });
+
     it('tạo đơn thành công → ghi nhận lần gọi tốt gần nhất', async () => {
       const c = makeClient();
       mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CREATE_OK);
       await c.createOrder(body);
-      expect(c.getHealth().lastOkAt).not.toBeNull();
+      expect((await c.getHealth()).lastOkAt).not.toBeNull();
     });
   });
 });

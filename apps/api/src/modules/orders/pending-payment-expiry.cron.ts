@@ -88,6 +88,8 @@ export class PendingPaymentExpiryCron {
         status: 'PENDING_PAYMENT',
         paymentStatus: 'UNPAID',
         paymentMethod: { in: [...PREPAID_METHODS] },
+        // Đã bàn giao vận chuyển (D1): lần thử đầu đã nhắc người xử lý, thử lại mỗi lượt chỉ lặp lỗi và nhắc lại (R4-SYNC-5).
+        autoCancelBlockedAt: null,
         OR: [
           { type: 'RETAIL', createdAt: { lt: cutoff } },
           { type: 'DEALER', createdAt: { lt: dealerCutoff } },

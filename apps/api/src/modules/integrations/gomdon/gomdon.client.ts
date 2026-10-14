@@ -1,6 +1,7 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap, Optional, ServiceUnavailableException } from '@nestjs/common';
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import { SystemConfigService } from '../../system-config/system-config.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import type {
   GomdonConfig,
   GomdonCreateOrderBody,
@@ -25,6 +26,7 @@ import {
   looksLikeDuplicateOrder,
 } from './gomdon.errors';
 import { gomdonHealth, type GomdonHealthSnapshot } from './gomdon-health';
+import { PrismaGomdonHealthStore } from './gomdon-health-store';
 
 export { GOMDON_CONFIG_KEY };
 
@@ -76,7 +78,7 @@ export interface GomdonConnectionCheck {
 }
 
 @Injectable()
-export class GomdonClient {
+export class GomdonClient implements OnApplicationBootstrap {
   private readonly logger = new Logger(GomdonClient.name);
   private readonly http: AxiosInstance;
   private readonly baseUrl: string;
@@ -88,7 +90,12 @@ export class GomdonClient {
   private loginInFlight: Promise<string> | null = null;
   private readonly health = gomdonHealth;
 
-  constructor(private readonly systemConfig: SystemConfigService) {
+  constructor(
+    private readonly systemConfig: SystemConfigService,
+    // Optional: test dựng tay không có DB thì trạng thái đăng nhập chỉ nằm trong bộ nhớ như trước.
+    @Optional() prisma?: PrismaService,
+  ) {
+    if (prisma) this.health.attachStore(new PrismaGomdonHealthStore(prisma));
     this.baseUrl = resolveGomdonBaseUrl();
     this.http = axios.create({
       baseURL: this.baseUrl || undefined,
@@ -110,7 +117,9 @@ export class GomdonClient {
     return isGomdonRecyclingEnabled(this.systemConfig, process.env, this.health);
   }
 
-  getHealth(): GomdonHealthSnapshot {
+  /** Trạng thái chung của mọi replica (đọc lại bản ghi chung nếu đã cũ). */
+  async getHealth(): Promise<GomdonHealthSnapshot> {
+    await this.health.refresh();
     return this.health.snapshot();
   }
 
@@ -136,10 +145,37 @@ export class GomdonClient {
    * khi Gomdon mở khoá/khôi phục tài khoản mà không phải khởi động lại API.
    */
   async probeRejectedLogin(minIntervalMs: number): Promise<void> {
+    // Chỉ leader chạy cron này: phải thấy cả lần từ chối của replica khác, không chỉ của chính nó.
+    await this.health.refresh();
     const since = this.health.msSinceCredentialsRejected();
     if (since == null || since < minIntervalMs) return;
     this.invalidateToken();
     await this.login({ force: true }).catch(() => undefined);
+  }
+
+  /**
+   * Lần bị từ chối nằm trong bản ghi chung nên sống qua lần khởi động lại; ops sửa env rồi khởi động lại API (lời dặn ở thẻ Gomdon
+   * của admin) mà không thử đăng nhập ngay thì thu gom vẫn ẩn tới lượt cron dò lại (tới ~40 phút). Không chặn khởi động.
+   */
+  onApplicationBootstrap(): void {
+    void this.recheckRejectedLoginOnBoot();
+  }
+
+  /**
+   * Bản ghi chung báo đang bị từ chối → đăng nhập thử đúng một lần, bỏ thời gian chờ chống khoá tài khoản: tiến trình này chưa
+   * gửi tài khoản (có thể đã sửa) của nó lần nào. Được thì mọi replica bật lại thu gom; vẫn sai thì chỉ ghi lại lần từ chối.
+   */
+  async recheckRejectedLoginOnBoot(): Promise<void> {
+    try {
+      if (!(await this.isConfigured())) return;
+      await this.health.refresh();
+      if (!this.health.credentialsRejected) return;
+      this.invalidateToken();
+      await this.login({ force: true });
+      this.logger.log('Gomdon đã nhận tài khoản khi khởi động — gỡ trạng thái bị từ chối cho mọi replica.');
+    } catch (err) {
+      this.logger.warn(`Thử đăng nhập Gomdon lúc khởi động không được: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   private async assertConfigured(): Promise<GomdonConfig> {
@@ -152,6 +188,7 @@ export class GomdonClient {
 
   /** Đăng nhập Gomdon lấy token (POST /api/v2/auth/login). Single-flight. */
   async login(opts: { force?: boolean } = {}): Promise<string> {
+    if (!opts.force) await this.health.refresh();
     const since = this.health.msSinceCredentialsRejected();
     if (!opts.force && since != null && since < LOGIN_REJECTED_COOLDOWN_MS) {
       throw new GomdonLoginRejectedError(
@@ -185,16 +222,16 @@ export class GomdonClient {
         const message = `Đăng nhập Gomdon thất bại (HTTP ${status ?? 'ERR'}): ${errorDetail}`;
         // Gomdon trả lời 4xx (trừ 429 quá tải) = từ chối tài khoản; không có response / 5xx = lỗi tạm.
         const rejected = status !== undefined && status >= 400 && status < 500 && status !== 429;
-        this.health.recordError(message, { credentialsRejected: rejected });
+        await this.health.recordError(message, { credentialsRejected: rejected });
         throw rejected ? new GomdonLoginRejectedError(message) : new Error(message);
       }
-      this.health.recordError(err instanceof Error ? err.message : String(err));
+      await this.health.recordError(err instanceof Error ? err.message : String(err));
       throw err;
     }
 
     if (!res.data?.result || !res.data.data?.access_token) {
       const message = `Đăng nhập Gomdon thất bại: ${res.data?.message ?? 'Không có access_token'}`;
-      this.health.recordError(message, { credentialsRejected: true });
+      await this.health.recordError(message, { credentialsRejected: true });
       throw new GomdonLoginRejectedError(message);
     }
 
@@ -202,7 +239,7 @@ export class GomdonClient {
     const now = Date.now();
     this.cachedToken = token;
     this.tokenExpiresAt = now + tokenCacheMs(res.data.data.expires_at, now);
-    this.health.recordOk();
+    await this.health.recordOk();
     return token;
   }
 
@@ -261,11 +298,11 @@ export class GomdonClient {
 
     try {
       const created = await this.sendCreate(token, sendRequest, reLogin);
-      this.health.recordOk();
+      await this.health.recordOk();
       return created;
     } catch (err) {
       if (!(err instanceof GomdonDuplicateOrderError) && (!(err instanceof GomdonRejectedError) || err.transient)) {
-        this.health.recordError(err instanceof Error ? err.message : String(err));
+        await this.health.recordError(err instanceof Error ? err.message : String(err));
       }
       throw err;
     }

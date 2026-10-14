@@ -92,15 +92,37 @@ export async function releaseVariationStock(
  *   đầu tiên không có cú đặt lại tồn kho hàng loạt, và variation của merchant tự tạo (không
  *   thuộc Pancake) không bao giờ bị ảnh hưởng vì không bao giờ được đồng bộ.
  * - Đã có mốc: nhả phần giảm khỏi `reservedStock` rồi đặt `stock = số mới − giữ chỗ còn lại`.
+ *
+ * `eventAt` (webhook tồn kho, giờ Pancake): số tuyệt đối mang mốc cũ hơn mốc đã áp là số đã lỗi thời — áp vào là lùi tồn kho
+ * (R4-SYNC-2). Điều kiện so mốc nằm trong chính câu UPDATE nên hai sự kiện xử lý song song không cùng qua được rồi ghi đè nhau.
+ * Trả `false` khi không dòng nào được ghi (không có biến thể, hoặc sự kiện cũ hơn).
  */
 export async function applyPancakeStock(
   tx: StockExecutor,
   pancakeVariationId: string,
   pancakeStock: number,
-): Promise<void> {
+  opts: { eventAt?: Date } = {},
+): Promise<boolean> {
   // Một câu duy nhất cho cả hai nhánh: mọi vế phải đọc giá trị CŨ của hàng nên phép tính nhất
   // quán, và không có khoảng hở giữa hai lệnh để một lượt checkout xen vào.
-  await tx.$executeRaw`
+  const { eventAt } = opts;
+  const affected = eventAt
+    ? await tx.$executeRaw`
+    UPDATE "variations"
+       SET "reservedStock" = CASE
+             WHEN "pancakeStock" IS NULL THEN "reservedStock"
+             ELSE GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock}))
+           END,
+           "stock" = CASE
+             WHEN "pancakeStock" IS NULL THEN "stock"
+             ELSE GREATEST(0, ${pancakeStock} - GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock})))
+           END,
+           "pancakeStock" = ${pancakeStock},
+           "pancakeStockEventAt" = ${eventAt}
+     WHERE "pancakeId" = ${pancakeVariationId}
+       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})
+  `
+    : await tx.$executeRaw`
     UPDATE "variations"
        SET "reservedStock" = CASE
              WHEN "pancakeStock" IS NULL THEN "reservedStock"
@@ -113,6 +135,7 @@ export async function applyPancakeStock(
            "pancakeStock" = ${pancakeStock}
      WHERE "pancakeId" = ${pancakeVariationId}
   `;
+  return affected > 0;
 }
 
 /**

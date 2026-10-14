@@ -161,6 +161,30 @@ describe('OrderStatusService — D1: không huỷ sau khi bàn giao vận chuy�
     );
   });
 
+  it('cron gặp đơn chờ chuyển khoản đã có vận đơn hãng → ghi mốc thôi tự huỷ, nhắc một lần kèm "Đã nhận tiền" (R4-SYNC-5)', async () => {
+    const order = makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', shippingCode: 'GHN1' });
+    const first = make(order);
+    await expect(first.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toBeInstanceOf(
+      CancelAfterHandoverError,
+    );
+    expect(first.prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', autoCancelBlockedAt: null },
+      data: { autoCancelBlockedAt: expect.any(Date) },
+    });
+    expect(first.prisma.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('"Đã nhận tiền"') }) }),
+    );
+
+    const again = make(order);
+    again.prisma.order.updateMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => ({
+      count: 'autoCancelBlockedAt' in where ? 0 : 1,
+    }));
+    await expect(again.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toBeInstanceOf(
+      CancelAfterHandoverError,
+    );
+    expect(again.prisma.order.updateMany).toHaveBeenCalledTimes(1);
+  });
+
   it('hàng đã hoàn về (Pancake "Đã hoàn" / gian hàng báo giao không thành) → returnedToSender cho huỷ + hoàn tiền', async () => {
     const pancake = make(makeOrder());
     await pancake.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'PANCAKE', returnedToSender: true });

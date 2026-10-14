@@ -156,6 +156,7 @@ export class OpsHealthService {
           ...gomdon,
           webhookRefs: refs(gomdon.failedEvents, (e) => e.orderRef),
           backlogRefs: refs(gomdon.backlogOrders, (o) => o.code),
+          attentionRefs: refs(gomdon.attentionOrders, (o) => o.code),
         },
         queues,
       },
@@ -275,8 +276,19 @@ export class OpsHealthService {
   private async gomdonHealth(now: Date, t: OpsThresholds) {
     const since = new Date(now.getTime() - DAY_MS);
     const backlogWhere = gomdonBacklogWhere(now, t.gomdonBacklogMinutes);
-    const [cfg, lastByStatus, webhookFailed24h, webhookFailedOpen, failedEvents, openAlerts, alerts, attention, backlog, backlogOrders] =
-      await Promise.all([
+    const [
+      cfg,
+      lastByStatus,
+      webhookFailed24h,
+      webhookFailedOpen,
+      failedEvents,
+      openAlerts,
+      alerts,
+      attention,
+      attentionOrders,
+      backlog,
+      backlogOrders,
+    ] = await Promise.all([
       this.gomdon?.getConfig().catch(() => null) ?? Promise.resolve(null),
       Promise.all(
         GOMDON_STATUSES.map((status) =>
@@ -299,6 +311,12 @@ export class OpsHealthService {
         select: { id: true, message: true, createdAt: true, order: { select: { code: true } } },
       }),
       this.prisma.order.count({ where: recyclingAttentionWhere() }),
+      this.prisma.order.findMany({
+        where: recyclingAttentionWhere(),
+        orderBy: { createdAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, code: true, gomdonStatus: true, gomdonCancelStatus: true },
+      }),
       this.prisma.order.count({ where: backlogWhere }),
       this.prisma.order.findMany({
         where: backlogWhere,
@@ -307,7 +325,7 @@ export class OpsHealthService {
         select: { id: true, code: true, createdAt: true, gomdonStatus: true, paymentMethod: true },
       }),
     ]);
-    const connection = this.gomdon?.getHealth() ?? null;
+    const connection = (await this.gomdon?.getHealth()) ?? null;
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     return {
       configured: cfg ? hasGomdonCredentials(cfg) : false,
@@ -326,6 +344,7 @@ export class OpsHealthService {
       openAlerts,
       alerts: alerts.map(({ order, ...a }) => ({ ...a, orderCode: order.code })),
       attention,
+      attentionOrders,
       backlog,
       backlogOrders,
     };
@@ -384,8 +403,10 @@ export class OpsHealthService {
   async checkAndAlert(now = new Date()): Promise<{ sent: 'ALERT' | 'RECOVERED' | null; problems: OpsProblem[] }> {
     const snap = await this.snapshot(now);
     const row = await this.prisma.opsHealthState.findUnique({ where: { key: ALERT_STATE_KEY } });
-    const detail = (row?.detail ?? null) as { keys?: string[]; webhookPending?: boolean } | null;
-    const prev: AlertMemory | null = row ? { keys: (detail?.keys ?? []).slice(), alertSince: row.alertSince, alertedAt: row.alertedAt } : null;
+    const detail = (row?.detail ?? null) as { keys?: string[]; tracked?: AlertMemory['tracked']; webhookPending?: boolean } | null;
+    const prev: AlertMemory | null = row
+      ? { keys: (detail?.keys ?? []).slice(), alertSince: row.alertSince, alertedAt: row.alertedAt, tracked: detail?.tracked }
+      : null;
     const { send, next } = decideAlert(prev, snap.problems, now, snap.thresholds.repeatHours);
     let webhookPending = false;
     if (send) {
@@ -395,7 +416,7 @@ export class OpsHealthService {
       webhookPending = !(await this.sendWebhook(snap.problems.length > 0 ? 'ALERT' : 'RECOVERED', snap.problems, null, now));
     }
     const data = {
-      detail: { keys: next.keys, ...(webhookPending ? { webhookPending: true } : {}) },
+      detail: { keys: next.keys, ...(next.tracked ? { tracked: next.tracked } : {}), ...(webhookPending ? { webhookPending: true } : {}) },
       alertSince: next.alertSince,
       alertedAt: next.alertedAt,
     };

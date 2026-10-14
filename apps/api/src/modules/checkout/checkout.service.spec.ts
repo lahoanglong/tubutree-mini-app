@@ -1725,10 +1725,11 @@ describe('CheckoutService — không lộ trường nội bộ cho khách (R3-ME
     gomdonAttempt: 1,
     reviewInvitedAt: null,
     gomdonStatusAt: null,
+    autoCancelBlockedAt: null,
   };
   const HIDDEN = [
     'merchantCommissionPct', 'commission', 'endCustomerKey', 'idempotencyKey', 'pancakeOrderId', 'pancakePushStatus',
-    'pancakeSyncError', 'pancakePushAttempts', 'gomdonAttempt', 'reviewInvitedAt', 'gomdonStatusAt',
+    'pancakeSyncError', 'pancakePushAttempts', 'gomdonAttempt', 'reviewInvitedAt', 'gomdonStatusAt', 'autoCancelBlockedAt',
   ];
 
   it('placeOrder trả đơn đã lọc cột nội bộ, vẫn giữ mã đơn và tổng tiền', async () => {

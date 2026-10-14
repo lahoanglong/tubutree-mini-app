@@ -37,7 +37,7 @@ import {
   clearPancakeAttention,
   flagPancakeAttention,
 } from '../integrations/pancake/pancake-attention';
-import { GOMDON_ALERT_KIND, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
+import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 
@@ -53,6 +53,15 @@ export type OrderStatusPatch = Partial<
 /** Người bấm nhận 400 ngay trên màn hình; chỉ webhook/cron (bị nuốt lỗi êm) mới cần để lại dấu. */
 function isHumanActor(actor: StatusActor | undefined): boolean {
   return actor === 'ADMIN' || actor === 'MERCHANT' || actor === 'CUSTOMER';
+}
+
+/** Đơn trả trước chưa nhận tiền mà hàng đã đi: không còn huỷ được (D1), chỉ còn hai lối ra cho người vận hành. */
+function unpaidExitHint(order: Pick<Order, 'paymentStatus'>): string {
+  if (order.paymentStatus !== 'UNPAID') return '';
+  return (
+    ' Đơn CHƯA thanh toán — hệ thống thôi tự huỷ đơn này. Khách trả tiền (chuyển khoản, hoặc hãng thu hộ khi giao) thì bấm ' +
+    '"Đã nhận tiền" để đơn đi tiếp; khách không nhận thì chặn giao với hãng, hàng về kho Pancake báo "Đã hoàn" thì đơn tự huỷ.'
+  );
 }
 
 /**
@@ -77,6 +86,7 @@ export type MarkPaidOutcome = 'PAID' | 'ALREADY_PAID' | 'CLOSED' | 'NOT_PAYABLE'
 @Injectable()
 export class OrderStatusService {
   private readonly logger = new Logger(OrderStatusService.name);
+  private alerts?: GomdonAlertService;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -173,7 +183,7 @@ export class OrderStatusService {
         const err = new CancelAfterHandoverError(order.code, from, handover);
         // Webhook Pancake tự đưa vào "Cần xử lý" (có báo động); cron/hệ thống không có ai đọc lỗi nên ghi dấu ở đây.
         if (opts.actorType === 'SYSTEM' || opts.actorType === undefined) {
-          await flagPancakeAttention(this.prisma, undefined, order, `Hệ thống: ${err.message}`, this.logger);
+          await this.blockAutoCancel(order, `Hệ thống: ${err.message}${unpaidExitHint(order)}`);
         }
         throw err;
       }
@@ -486,16 +496,32 @@ export class OrderStatusService {
         );
       }
       if (asker === 'SYSTEM') {
-        await flagPancakeAttention(
-          this.prisma,
-          undefined,
+        await this.blockAutoCancel(
           order,
-          `Hệ thống không tự huỷ được đơn: Pancake báo đã bàn giao vận chuyển (mã ${err.pancakeStatus}). Kiểm tra thanh toán và giao hàng.`,
-          this.logger,
+          `Hệ thống không tự huỷ được đơn: Pancake báo đã bàn giao vận chuyển (mã ${err.pancakeStatus}). Kiểm tra thanh toán và giao hàng.` +
+            unpaidExitHint(order),
         );
       }
       throw new BadRequestException(err.message);
     }
+  }
+
+  /**
+   * Hệ thống tự huỷ (hết hạn thanh toán) gặp đơn đã bàn giao: ghi mốc để cron thôi thử lại đơn này, và chỉ lần ghi mốc đầu
+   * tiên mới nhắc "Cần xử lý Pancake" + báo admin in-app — admin bấm "Đã xử lý" thì đơn không quay lại hàng đợi mỗi 10 phút.
+   */
+  private async blockAutoCancel(order: Pick<Order, 'id' | 'code'>, reason: string): Promise<void> {
+    const first = await this.prisma.order.updateMany({
+      where: { id: order.id, autoCancelBlockedAt: null },
+      data: { autoCancelBlockedAt: new Date() },
+    });
+    if (first.count === 0) return;
+    await flagPancakeAttention(this.prisma, this.opsAlerts(), order, reason, this.logger);
+  }
+
+  /** Báo động in-app tới ADMIN/kho (cùng kênh webhook Pancake dùng) — chỉ cần Prisma + Notifications nên tự dựng, không vòng module. */
+  private opsAlerts(): GomdonAlertService {
+    return (this.alerts ??= new GomdonAlertService(this.prisma, this.notifications));
   }
 
   /**

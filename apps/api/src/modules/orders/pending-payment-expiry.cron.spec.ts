@@ -108,6 +108,12 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(res).toMatchObject({ scanned: 2, cancelled: 2, failed: 0 });
   });
 
+  it('bỏ qua đơn hệ thống đã thôi tự huỷ vì đã bàn giao vận chuyển — không thử huỷ lại mỗi 10 phút (R4-SYNC-5)', async () => {
+    const { cron, prisma } = make();
+    await cron.expireStale(NOW);
+    expect(prisma.order.findMany.mock.calls[0][0].where).toMatchObject({ autoCancelBlockedAt: null });
+  });
+
   it('đơn chuyển khoản chờ tiền có thể đã lên Pancake → huỷ qua cổng Pancake (D1, PANCAKE-2)', async () => {
     const { cron, orderStatus } = make({ ttl: 6, orders: [{ id: 'o1', code: 'A' }] });
     await cron.expireStale(NOW);

@@ -49,6 +49,14 @@ describe('PancakeWebhookController.handle (verify token tĩnh)', () => {
     expect(add).not.toHaveBeenCalled();
   });
 
+  it('trùng khoá với sự kiện đã IGNORED (đơn lạ / tồn kho cũ) → coi như trùng, không enqueue lại', async () => {
+    const { ctrl, create, add, findUnique } = makeController(SECRET);
+    create.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: 'P2002' }));
+    findUnique.mockResolvedValueOnce({ id: 'evt0', status: 'IGNORED' });
+    await expect(ctrl.handle(body, SECRET)).resolves.toEqual({ received: true, duplicate: true });
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('trùng khoá với sự kiện chưa xong (FAILED) → enqueue lại đúng event cũ', async () => {
     const { ctrl, create, add, findUnique } = makeController(SECRET);
     create.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: 'P2002' }));

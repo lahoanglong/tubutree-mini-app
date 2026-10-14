@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
@@ -10,6 +10,7 @@ import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } 
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
+import { RunLease } from '../../../common/cron-leader/run-lease';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -18,6 +19,26 @@ export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as cons
  * sai shop…) chứ không phải shop xoá hàng loạt — không tắt gì, chỉ log lỗi để người kiểm tra.
  */
 const MAX_REMOVED_RATIO = 0.5;
+
+/** Khoá chung (cron_leases) cho lượt đồng bộ danh mục: một lượt một lúc trên cả cụm, kể cả lượt admin bấm (R4-SYNC-6). */
+export const CATALOG_SYNC_LEASE = 'pancake.catalog-sync';
+/** Hạn khoá; lượt đồng bộ gia hạn mỗi trang. Process chết giữa lượt thì lượt sau chờ tối đa chừng này. */
+const CATALOG_SYNC_LEASE_TTL_MS = 10 * 60_000;
+export const CATALOG_SYNC_RUNNING = 'CATALOG_SYNC_RUNNING';
+
+/** Một lượt đồng bộ danh mục đang chạy (trên replica này hay replica khác) — 409 để admin không đọc thành "đồng bộ 0 sản phẩm". */
+export class CatalogSyncBusyError extends ConflictException {
+  constructor() {
+    super({
+      statusCode: 409,
+      error: 'Conflict',
+      code: CATALOG_SYNC_RUNNING,
+      message:
+        'Một lượt đồng bộ danh mục Pancake đang chạy — chưa chạy thêm lượt này. Đợi vài phút cho lượt kia xong rồi xem lại danh mục; ' +
+        'cần đồng bộ lại thì bấm sau khi lượt kia xong.',
+    });
+  }
+}
 
 const positiveInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
 
@@ -50,7 +71,7 @@ function noteExpected(exp: SweepExpected, res: PancakeProductsResponse): void {
 export class PancakeSyncService implements OnModuleInit {
   private readonly logger = new Logger(PancakeSyncService.name);
   private lastRunAt: string | null = null;
-  /** Chặn hai lượt sync chạy chồng lên nhau (boot sync chậm gặp đúng mốc cron 15 phút). */
+  /** Chặn nhanh lượt chồng trên chính replica này; chặn giữa các replica là khoá chung CATALOG_SYNC_LEASE. */
   private running = false;
   private bootSyncStarted = false;
   /** Trần số trang — phòng trường hợp API bỏ qua tham số `page` và trả mãi cùng một trang. */
@@ -84,9 +105,16 @@ export class PancakeSyncService implements OnModuleInit {
   private bootSync(): void {
     if (this.bootSyncStarted) return;
     this.bootSyncStarted = true;
-    void this.syncProducts().catch((e) =>
-      this.logger.error(`Sync lúc khởi động lỗi: ${e instanceof Error ? e.message : e}`),
-    );
+    void this.syncProducts().catch((e) => this.logFailure('Sync lúc khởi động', e));
+  }
+
+  /** Lượt tự động gặp lượt khác đang chạy là chuyện bình thường (boot chậm gặp mốc cron, admin vừa bấm) — chỉ cảnh báo. */
+  private logFailure(what: string, err: unknown): void {
+    if (err instanceof CatalogSyncBusyError) {
+      this.logger.warn(`${what}: một lượt đồng bộ danh mục khác đang chạy — bỏ qua lượt này.`);
+      return;
+    }
+    this.logger.error(`${what} lỗi: ${err instanceof Error ? err.message : err}`);
   }
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút
@@ -98,7 +126,7 @@ export class PancakeSyncService implements OnModuleInit {
     try {
       await this.syncProducts(this.lastRunAt ?? undefined);
     } catch (err) {
-      this.logger.error(`scheduledSync lỗi: ${err instanceof Error ? err.message : err}`);
+      this.logFailure('scheduledSync', err);
     }
   }
 
@@ -109,7 +137,7 @@ export class PancakeSyncService implements OnModuleInit {
     try {
       await this.syncProducts();
     } catch (err) {
-      this.logger.error(`nightlyFullSync lỗi: ${err instanceof Error ? err.message : err}`);
+      this.logFailure('nightlyFullSync', err);
     }
   }
 
@@ -118,6 +146,8 @@ export class PancakeSyncService implements OnModuleInit {
    *
    * `opts.forceStock` — lối thoát CÓ CHỦ ĐÍCH cho admin: tin tuyệt đối số Pancake và xoá sạch
    * giữ chỗ. Chỉ dùng khi tồn kho local đã lệch thật; luồng tự động không bao giờ bật cờ này.
+   *
+   * Một lượt khác đang chạy (replica này hay replica khác) → CatalogSyncBusyError (409), không chạy chồng.
    */
   async syncProducts(
     updatedSince?: string,
@@ -127,11 +157,22 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
     }
-    if (this.running) {
-      this.logger.warn('Một lượt sync đang chạy — bỏ qua lượt này để hai lượt không ghi đè nhau.');
-      return 0;
-    }
+    if (this.running) throw new CatalogSyncBusyError();
     this.running = true;
+    let lease: RunLease | null = null;
+    try {
+      lease = await RunLease.tryAcquire(this.prisma, CATALOG_SYNC_LEASE, CATALOG_SYNC_LEASE_TTL_MS);
+      if (!lease) throw new CatalogSyncBusyError();
+      return await this.sweep(lease, updatedSince, opts);
+    } finally {
+      // Cờ và khoá phải được nhả kể cả khi fetch ném — nếu không, một lần Pancake timeout là mọi lượt
+      // sync sau đều bị chặn cho tới lần restart (cờ) hoặc tới khi khoá hết hạn.
+      this.running = false;
+      await lease?.release();
+    }
+  }
+
+  private async sweep(lease: RunLease, updatedSince: string | undefined, opts: { forceStock?: boolean }): Promise<number> {
     // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
     // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).
     const startedAt = new Date().toISOString();
@@ -145,6 +186,13 @@ export class PancakeSyncService implements OnModuleInit {
     const seen: SweepSeen = { products: new Set(), variations: new Set() };
     try {
       for (;;) {
+      if (page > 1 && !(await lease.renew())) {
+        // Khoá đã hết hạn (một trang chạy quá lâu) và lượt khác đã nhận: dừng để hai lượt không ghi chồng nhau.
+        throw new ServiceUnavailableException(
+          `Đồng bộ Pancake dừng ở trang ${page}: khoá đồng bộ đã sang một lượt khác (lượt này chạy quá lâu). ` +
+            `Đã cập nhật ${count} sản phẩm; không tắt sản phẩm nào, lượt sau sẽ đọc lại.`,
+        );
+      }
       const res = await this.client.fetchProducts(page, updatedSince);
       noteExpected(expected, res);
       const products = res.data ?? res.products ?? [];
@@ -204,10 +252,6 @@ export class PancakeSyncService implements OnModuleInit {
     } catch (err) {
       await this.noteRun({ ok: false, error: err instanceof Error ? err.message : String(err) });
       throw err;
-    } finally {
-      // Cờ phải được nhả kể cả khi fetch ném — nếu không, một lần Pancake timeout là mọi lượt
-      // sync sau đều bị chính cờ này chặn cho tới lần restart.
-      this.running = false;
     }
   }
 
