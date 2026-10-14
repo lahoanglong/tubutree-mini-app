@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
@@ -33,6 +33,7 @@ import { formatVnd } from '../orders/refund-destination';
 import { formatVnDateTime } from '../../common/vn-time';
 import {
   allocateGroupAmounts,
+  allocationError,
   groupByFulfiller,
   PAYMENT_METHOD_NOT_ALLOWED,
   pointsRedeemBase,
@@ -927,7 +928,10 @@ export class CheckoutService {
     // Điểm Xanh chỉ trả cho hàng Tubu (gồm flash): nền = hàng Tubu sau combo, mã, hạng + hàng Tubu flash. Hàng của gian hàng
     // đối tác chỉ trả bằng tiền (cart/partner-goods.ts). Giỏ chỉ hàng Tubu: nền đúng bằng goodsAfterTierDiscount + flashSubtotal.
     const hasPartnerLines = cart.items.some((l) => l.partnerOwned || l.fulfiller.kind === 'MERCHANT');
-    const redeemBase = pointsRedeemBase(cart.items, {
+    // Một kiện cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3). Trần điểm và phép chia về từng dòng đi
+    // trên cùng các kiện này (cùng thứ tự dòng) nên dùng đủ trần không làm dòng nào âm.
+    const groups = groupByFulfiller(cart.items);
+    const redeemBase = pointsRedeemBase(groups, {
       comboPerLine: combo.perLine,
       comboTotal: combo.total,
       couponDiscount: discount,
@@ -966,13 +970,12 @@ export class CheckoutService {
       if (withPartner.pointsUsed > redemption.pointsUsed) pointsNotice = partnerPointsNotice(pointsMax);
     }
 
-    // Một kiện cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giảm giá tính trên cả lần đặt ở trên
-    // rồi phân bổ về từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng Tubu = một kiện = đúng số tiền như trước.
+    // Giảm giá tính trên cả lần đặt ở trên rồi phân bổ về từng dòng và từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng
+    // Tubu = một kiện = đúng số tiền như trước.
     const unavailable = cart.items.find((l) => l.fulfiller.kind === 'UNAVAILABLE');
     if (unavailable && unavailable.fulfiller.kind === 'UNAVAILABLE') {
       throw new BadRequestException(unavailableLineMessage(unavailable.productName, unavailable.fulfiller));
     }
-    const groups = groupByFulfiller(cart.items);
     const amounts = allocateGroupAmounts(groups, {
       comboPerLine: combo.perLine,
       comboTotal: combo.total,
@@ -983,6 +986,13 @@ export class CheckoutService {
       pointsUsed: redemption.pointsUsed,
       pointsUsedConverted: redemption.pointsUsedConverted,
     });
+    const broken = allocationError(amounts);
+    if (broken) {
+      this.logger.error(
+        `Chặn đặt đơn của ${userId}: phép chia tiền lỗi (${broken}) — ${JSON.stringify({ lines: cart.items.map((l) => [l.variationId, l.total, l.isFlash, l.fulfiller.kind, l.partnerOwned === true]), comboTotal: combo.total, discount, couponProductIds, tierDiscount, points: redemption.discount })}`,
+      );
+      throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Vui lòng thử lại sau hoặc liên hệ Tubu Tree.');
+    }
     const terms = await this.shipmentTerms(groups, amounts, user.tierId, freeship);
     // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
     // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không

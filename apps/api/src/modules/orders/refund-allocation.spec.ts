@@ -1,4 +1,4 @@
-import { computeReturnShares, distributeByWeight, type AllocOrder } from './refund-allocation';
+import { computeReturnShares, distributeByWeight, remainingPointsBack, type AllocOrder } from './refund-allocation';
 
 const order = (over: Partial<AllocOrder> = {}): AllocOrder => ({
   total: 214_000,
@@ -180,5 +180,91 @@ describe('computeReturnShares — Điểm Xanh chỉ nằm trên dòng hàng Tub
   it('đơn cũ chưa lưu điểm từng dòng → chia điểm theo giá trị dòng như trước', () => {
     const legacy = order({ ...o, items: o.items.map(({ pointsDiscount: _p, ...i }) => i) });
     expect(computeReturnShares(legacy, new Map(), new Map([['c', 1]]), { shopFault: false, priorShipping: 0 }).pointsUsedBack).toBe(50);
+  });
+});
+
+describe('điểm đã dùng trả lại không bao giờ quá số đã dùng (Q8 review vòng 3 S1)', () => {
+  const opts = { shopFault: false, priorShipping: 0 };
+
+  it('không có lần trả một phần: lô quy đổi trả hết phần quy đổi, lô thường phần còn lại (như trước)', () => {
+    expect(remainingPointsBack({ pointsUsed: 50, pointsUsedConverted: 46 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 46, standard: 4 });
+    expect(remainingPointsBack({ pointsUsed: 30, pointsUsedConverted: 0 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 0, standard: 30 });
+    expect(remainingPointsBack({ pointsUsed: 10, pointsUsedConverted: 12 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 10, standard: 0 });
+  });
+
+  it('50 điểm (46 quy đổi), 5 dòng, trả lần lượt 4 dòng rồi trả nốt: cả đơn trả đúng 50 điểm (trước: 51), khớp số báo trước của lần trả nốt', () => {
+    const order: AllocOrder = {
+      total: 680_000 - 50_000,
+      shippingFee: 0,
+      pointsUsed: 50,
+      pointsUsedConverted: 46,
+      pointsEarned: 0,
+      items: [40_000, 20_000, 90_000, 300_000, 230_000].map((total, k) => ({ id: `L${k + 1}`, total, quantity: 1 })),
+    };
+    const before = new Map<string, number>();
+    const prior = { pointsUsedBack: 0, convertedBack: 0 };
+    for (const id of ['L3', 'L4', 'L2', 'L5']) {
+      const sh = computeReturnShares(order, before, new Map([[id, 1]]), opts);
+      prior.pointsUsedBack += sh.pointsUsedBack;
+      prior.convertedBack += sh.convertedBack;
+      before.set(id, 1);
+    }
+    // Phần quy đổi bị kẹp ở lần trả L2 (1 điểm trả, phần quy đổi tính ra 2) nên các lần trả một phần đã trả 5 điểm thường > 4.
+    expect(prior).toEqual({ pointsUsedBack: 47, convertedBack: 42 });
+    const last = computeReturnShares(order, before, new Map([['L1', 1]]), opts);
+    expect(last).toMatchObject({ isFull: true, pointsUsedBack: 3, convertedBack: 3 });
+    const rest = remainingPointsBack(order, prior);
+    expect(rest).toEqual({ converted: 3, standard: 0 });
+    expect(prior.pointsUsedBack + rest.converted + rest.standard).toBe(50);
+  });
+
+  it('20.000 đơn ngẫu nhiên × chuỗi trả ngẫu nhiên (đơn cũ theo giá trị, đơn mới theo điểm từng dòng): không lúc nào trả quá số đã dùng, cả đơn trả đúng bằng số đã dùng, lô quy đổi không quá phần quy đổi', () => {
+    let seed = 20261015;
+    const rand = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
+    for (let n = 0; n < 20_000; n += 1) {
+      const items = Array.from({ length: int(1, 6) }, (_, k) => ({ id: `L${k}`, total: int(1, 400) * 1_000 + int(0, 999), quantity: int(1, 6) }));
+      const gross = items.reduce((s, i) => s + i.total, 0);
+      const pointsUsed = int(1, Math.min(300, Math.floor(gross / 1_000)));
+      const pointsUsedConverted = int(0, pointsUsed);
+      const perLine = rand() < 0.5;
+      const weights = items.map((i) => (rand() < 0.2 ? 0 : i.total));
+      const linePoints = distributeByWeight(pointsUsed * 1_000, weights.some((w) => w > 0) ? weights : items.map((i) => i.total));
+      const order: AllocOrder = {
+        total: gross - pointsUsed * 1_000,
+        shippingFee: 0,
+        pointsUsed,
+        pointsUsedConverted,
+        pointsEarned: 0,
+        items: items.map((i, k) => (perLine ? { ...i, pointsDiscount: linePoints[k]! } : i)),
+      };
+      const before = new Map<string, number>();
+      const prior = { pointsUsedBack: 0, convertedBack: 0 };
+      for (;;) {
+        const left = items.filter((i) => (before.get(i.id) ?? 0) < i.quantity);
+        const req = new Map<string, number>();
+        for (const i of left) if (rand() < 0.5 || left.length === 1) req.set(i.id, int(1, i.quantity - (before.get(i.id) ?? 0)));
+        if (req.size === 0) continue;
+        const sh = computeReturnShares(order, before, req, opts);
+        if (sh.isFull) {
+          const rest = remainingPointsBack(order, prior);
+          expect(rest.converted + rest.standard).toBe(sh.pointsUsedBack);
+          expect(prior.pointsUsedBack + rest.converted + rest.standard).toBe(pointsUsed);
+          expect(prior.convertedBack + rest.converted).toBeLessThanOrEqual(pointsUsedConverted);
+          expect(Math.min(rest.converted, rest.standard)).toBeGreaterThanOrEqual(0);
+          break;
+        }
+        prior.pointsUsedBack += sh.pointsUsedBack;
+        prior.convertedBack += sh.convertedBack;
+        expect(prior.pointsUsedBack).toBeLessThanOrEqual(pointsUsed);
+        expect(prior.convertedBack).toBeLessThanOrEqual(pointsUsedConverted);
+        for (const [id, q] of req) before.set(id, (before.get(id) ?? 0) + q);
+      }
+    }
   });
 });

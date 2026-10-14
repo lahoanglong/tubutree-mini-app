@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { MIN_COMBO_PRODUCTS } from './combo.service';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -281,19 +282,22 @@ export class StorefrontService {
             warehousePhone: sf.warehousePhone,
           }
         : {}),
-      collections: sf.collections.map((c) => ({
-        id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
-        items: c.items
-          .filter(
-            (i) =>
-              !i.isHidden &&
-              i.product.isActive &&
-              !i.product.affiliateBlocked &&
-              (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED') &&
-              // Hàng của gian hàng đối tác không được giảm combo (combo.service.ts) nên không hiện như một phần của combo.
-              !(c.kind === 'COMBO' && isPartnerOwnedProduct(i.product)),
-          )
-          .map((i) => ({
+      collections: sf.collections.map((c) => {
+        const items = c.items.filter(
+          (i) =>
+            !i.isHidden &&
+            i.product.isActive &&
+            !i.product.affiliateBlocked &&
+            (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED') &&
+            // Hàng của gian hàng đối tác không được giảm combo (combo.service.ts) nên không hiện như một phần của combo.
+            !(c.kind === 'COMBO' && isPartnerOwnedProduct(i.product)),
+        );
+        // Combo còn dưới MIN_COMBO_PRODUCTS sản phẩm khác nhau thì checkout không giảm (allocateComboDiscounts): không trả mức
+        // giảm để trang gian hàng không hứa "Combo −X%".
+        const comboLive = c.kind !== 'COMBO' || new Set(items.map((i) => i.product.id)).size >= MIN_COMBO_PRODUCTS;
+        return {
+          id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: comboLive ? c.comboDiscountPct : null,
+          items: items.map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
               id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
@@ -303,7 +307,8 @@ export class StorefrontService {
               inStock: (i.product.variations ?? []).some((v) => v.stock > 0),
             },
           })),
-      })),
+        };
+      }),
     };
   }
 

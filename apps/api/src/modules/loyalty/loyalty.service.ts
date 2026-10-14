@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
+import { remainingPointsBack } from '../orders/refund-allocation';
 import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -161,9 +162,9 @@ export class LoyaltyService {
     // phần còn lại. Chỉ đơn đã giao (giờ RETURNED) mới có thể có lần trả một phần.
     const prior = order.status === 'RETURNED' ? await partialReturnTotals(this.prisma, order.id) : NO_PARTIAL_RETURNS;
     // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
-    // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
-    const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
-    const usedStandard = Math.max(0, order.pointsUsed - usedConverted - (prior.pointsUsedBack - prior.convertedBack));
+    // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1); hai phần
+    // cùng tính bởi remainingPointsBack nên cộng lại đúng bằng số điểm đã dùng chưa trả.
+    const usedStandard = remainingPointsBack(order, prior).standard;
     const earnedLeft = Math.max(0, order.pointsEarned - prior.pointsEarnedBack);
     // Điểm hoàn là điểm thường nên có hạn như mọi điểm thưởng khác (OQ-15). Đọc cấu hình NGOÀI tx: không giữ
     // kết nối tx trong lúc chờ SystemConfigService.

@@ -276,6 +276,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       analytics,
       subUpdate,
       findMany,
+      prisma,
     };
   }
 
@@ -606,6 +607,22 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       await expect(
         svc.create('u1', { variationId: 'v1', quantity: 60, intervalWeeks: 4, addressId: 'a1' }),
       ).rejects.toThrow('hạn mức');
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm thành hàng của gian hàng đối tác giữa lúc kiểm và lúc ra đơn đầu giao ngay → 400 tiếng Việt kèm mã, không tạo gói lẫn đơn (Q8 review vòng 3 S3)', async () => {
+      const { svc, prisma, orderCreate, stockExecuteRaw } = makeProcess(1, { partnerOwned: true });
+      (prisma.variation.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: 'v1', pancakeId: 'pv1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V',
+        product: { name: 'P', isActive: true, approvalStatus: 'APPROVED', storefrontId: null },
+      });
+      const err = await svc.create('u1', { variationId: 'v1', quantity: 1, intervalWeeks: 4, addressId: 'a1' }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "P" là hàng của gian hàng đối tác, không đặt định kỳ được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      });
       expect(stockExecuteRaw).not.toHaveBeenCalled();
       expect(orderCreate).not.toHaveBeenCalled();
     });

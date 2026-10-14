@@ -451,3 +451,65 @@ describe('GroupBuyService.reconcileSuccessfulGroups', () => {
     expect(prisma.coupon.create).not.toHaveBeenCalled();
   });
 });
+
+describe('Q8 review vòng 3 S2: nhóm đã mở trên hàng của gian hàng đối tác không thành công được', () => {
+  const partnerProduct = { id: 'prod1', name: 'Mật ong rừng', slug: 'mat-ong-rung', storefrontId: 'sf-doi-tac' };
+  const NOT_ELIGIBLE = {
+    response: {
+      code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+      message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không mở mua chung được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+    },
+  };
+
+  it('tham gia nhóm OPEN của hàng đối tác → từ chối, không thêm thành viên; nhóm đóng (FAILED) và các thành viên nhận GROUP_BUY_FAILED', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group({ currentSize: 2, targetSize: 3 }));
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue(partnerProduct);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }]);
+    const notify = jest.fn().mockResolvedValue(undefined);
+    await expect(new GroupBuyService(prisma, makeConfig(), { notify } as never).join('u1', 'gb1')).rejects.toMatchObject(NOT_ELIGIBLE);
+    expect(prisma.groupBuyMember.create).not.toHaveBeenCalled();
+    expect(prisma.groupBuy.updateMany).toHaveBeenCalledWith({ where: { id: 'gb1', status: 'OPEN' }, data: { status: 'FAILED' } });
+    expect(notify.mock.calls).toEqual([
+      ['u0', 'GROUP_BUY_FAILED', { product: 'Mật ong rừng', product_slug: 'mat-ong-rung' }],
+      ['uA', 'GROUP_BUY_FAILED', { product: 'Mật ong rừng', product_slug: 'mat-ong-rung' }],
+    ]);
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
+  });
+
+  it('nhóm vừa đủ người nhưng sản phẩm đã thành hàng đối tác → không cấp mã, nhóm FAILED, báo thành viên', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock)
+      .mockResolvedValueOnce(group({ currentSize: 2, targetSize: 3 }))
+      .mockResolvedValueOnce(group({ currentSize: 3, targetSize: 3 }));
+    (prisma.product.findUnique as jest.Mock)
+      .mockResolvedValueOnce({ ...partnerProduct, storefrontId: null })
+      .mockResolvedValue(partnerProduct);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }, { userId: 'u1' }]);
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const r = await new GroupBuyService(prisma, makeConfig(), { notify } as never).join('u1', 'gb1');
+    expect(r.status).toBe('FAILED');
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
+    expect(prisma.groupBuy.updateMany).toHaveBeenLastCalledWith({ where: { id: 'gb1', status: 'SUCCESS' }, data: { status: 'FAILED' } });
+    expect(notify).toHaveBeenCalledTimes(3);
+    expect(notify).toHaveBeenCalledWith('u1', 'GROUP_BUY_FAILED', { product: 'Mật ong rừng', product_slug: 'mat-ong-rung' });
+  });
+
+  it('đối soát nhóm SUCCESS chưa phát mã trên hàng đối tác → không cấp mã, nhóm FAILED, báo thành viên', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([group({ id: 'gbX', status: 'SUCCESS' })]);
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue(partnerProduct);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }]);
+    const notify = jest.fn().mockResolvedValue(undefined);
+    expect(await new GroupBuyService(prisma, makeConfig(), { notify } as never).reconcileSuccessfulGroups()).toBe(0);
+    expect(prisma.coupon.create).not.toHaveBeenCalled();
+    expect(prisma.groupBuy.updateMany).toHaveBeenCalledWith({ where: { id: 'gbX', status: 'SUCCESS' }, data: { status: 'FAILED' } });
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  it('danh sách nhóm đang mở không gồm nhóm của hàng đối tác', async () => {
+    const prisma = makePrisma();
+    await new GroupBuyService(prisma, makeConfig()).listOpen();
+    expect((prisma.groupBuy.findMany as jest.Mock).mock.calls[0][0].where).toMatchObject({ status: 'OPEN', product: { storefrontId: null } });
+  });
+});

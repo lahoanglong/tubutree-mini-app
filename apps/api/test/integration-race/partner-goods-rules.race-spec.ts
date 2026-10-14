@@ -26,7 +26,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
+import { GroupBuyService, groupBuyCouponCode } from '../../src/modules/groupbuy/groupbuy.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { TOTAL_CHANGED } from '../../src/modules/checkout/checkout.service';
@@ -211,6 +211,32 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     await expect(groupBuy.create(u.userId, c.productId)).rejects.toMatchObject(NOT_ELIGIBLE);
   });
 
+  it('mua chung: nhóm đã mở từ trước trên hàng giao hộ của gian hàng → không tham gia được, nhóm đóng và thành viên được báo; nhóm đủ người chưa phát mã thì không phát (review vòng 3 S2)', async () => {
+    const notify = moduleRef.get(NotificationsService).notify as jest.Mock;
+    const store = await shop();
+    const c = await variation(80_000, { consignment: store.id });
+    const [opener, member, joiner] = [await buyer(), await buyer(), await buyer()];
+    const open = await prisma.groupBuy.create({
+      data: { productId: c.productId, initiatorId: opener.userId, targetSize: 3, currentSize: 2, unitPrice: 68_000, basePrice: 80_000, expiresAt: ago(-1) },
+    });
+    await prisma.groupBuyMember.createMany({ data: [opener, member].map((u) => ({ groupBuyId: open.id, userId: u.userId })) });
+    notify.mockClear();
+    await expect(groupBuy.join(joiner.userId, open.id)).rejects.toMatchObject(NOT_ELIGIBLE);
+    expect((await prisma.groupBuy.findUniqueOrThrow({ where: { id: open.id } })).status).toBe('FAILED');
+    expect(await prisma.groupBuyMember.count({ where: { groupBuyId: open.id } })).toBe(2);
+    expect(notify.mock.calls.filter((call) => call[1] === 'GROUP_BUY_FAILED').map((call) => call[0]).sort()).toEqual([opener.userId, member.userId].sort());
+    expect((await groupBuy.listOpen(joiner.userId)).some((g) => g.id === open.id)).toBe(false);
+
+    const done = await prisma.groupBuy.create({
+      data: { productId: c.productId, initiatorId: opener.userId, targetSize: 2, currentSize: 2, unitPrice: 68_000, basePrice: 80_000, status: 'SUCCESS', expiresAt: ago(-1) },
+    });
+    await prisma.groupBuyMember.createMany({ data: [opener, member].map((u) => ({ groupBuyId: done.id, userId: u.userId })) });
+    await groupBuy.reconcileSuccessfulGroups();
+    expect((await prisma.groupBuy.findUniqueOrThrow({ where: { id: done.id } })).status).toBe('FAILED');
+    const codes = [opener, member].map((u) => groupBuyCouponCode(done.id, u.userId));
+    expect(await prisma.coupon.count({ where: { code: { in: codes } } })).toBe(0);
+  });
+
   it('combo CTV: không thêm hàng đối tác vào combo; hàng đối tác đã nằm trong combo thì không được giảm, hàng Tubu vẫn được', async () => {
     const store = await shop();
     const owner = await createUser(prisma, { role: 'AFFILIATE', phone: phone() });
@@ -242,6 +268,18 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     const item = (id: string) => order!.items.find((i) => i.variationId === id)!;
     expect([item(t1.id).total, item(t2.id).total, item(c.id).total]).toEqual([90_000, 54_000, 80_000]);
     expect(item(c.id).paidTotal).toBe(80_000);
+    expect(view.collections.find((col) => col.id === combo.id)!.comboDiscountPct).toBe(10);
+
+    // Combo 1 hàng Tubu + 1 hàng đối tác: còn 1 sản phẩm được giảm nên checkout không giảm combo, trang gian hàng không hứa mức giảm.
+    const half = await prisma.storefrontCollection.create({
+      data: { storefrontId: sf.id, title: 'Combo nửa', kind: 'COMBO', comboDiscountPct: 20, items: { create: [{ productId: t1.productId, sortOrder: 0 }, { productId: c.productId, sortOrder: 1 }] } },
+    });
+    const halfView = (await storefronts.getPublicBySlug(sf.slug)).collections.find((col) => col.id === half.id)!;
+    expect([halfView.comboDiscountPct, halfView.items.map((i) => i.product.id)]).toEqual([null, [t1.productId]]);
+    const u2 = await buyer();
+    for (const v of [t1, c]) await cart.addItem(u2.userId, { variationId: v.id, quantity: 1 });
+    const q = await checkout.quote(u2.userId, { addressId: u2.addressId, storefrontSlug: sf.slug } as never);
+    expect(q.comboDiscount).toBe(0);
   });
 
   it('giờ vàng do admin đặt vẫn áp cho hàng giao hộ; phiếu đối soát tính trên đúng giá giờ vàng khách đã trả', async () => {

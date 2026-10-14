@@ -101,10 +101,7 @@ export class GroupBuyService {
     let status = created.status;
     if (created.currentSize >= created.targetSize) {
       const flip = await this.prisma.groupBuy.updateMany({ where: { id: created.id, status: 'OPEN' }, data: { status: 'SUCCESS' } });
-      if (flip.count === 1) {
-        status = 'SUCCESS';
-        await this.onSuccess({ ...created, status: 'SUCCESS' });
-      }
+      if (flip.count === 1) status = (await this.onSuccess({ ...created, status: 'SUCCESS' })) ? 'SUCCESS' : 'FAILED';
     }
     return this.toView(
       { ...created, status },
@@ -120,6 +117,8 @@ export class GroupBuyService {
     if (!group) throw new NotFoundException('Không tìm thấy nhóm mua chung.');
     if (group.status !== 'OPEN') throw new BadRequestException('Nhóm đã đóng.');
     if (new Date(group.expiresAt).getTime() <= Date.now()) throw new BadRequestException('Nhóm đã hết hạn.');
+    const partner = await this.closeIfPartnerGoods(group, 'OPEN');
+    if (partner) throw partnerGoodsError('GROUP_BUY', partner.name);
 
     const existing = await this.prisma.groupBuyMember.findUnique({
       where: { groupBuyId_userId: { groupBuyId, userId } },
@@ -154,18 +153,38 @@ export class GroupBuyService {
       return { currentSize: updated.currentSize, succeeded };
     });
 
-    if (result.succeeded) await this.onSuccess(group);
-    return { joined: true, currentSize: result.currentSize, status: result.succeeded ? 'SUCCESS' : 'OPEN' };
+    const status = result.succeeded ? ((await this.onSuccess(group)) ? 'SUCCESS' : 'FAILED') : 'OPEN';
+    return { joined: true, currentSize: result.currentSize, status };
   }
 
   /**
    * Nhóm đủ người: cấp coupon giảm giá cho từng thành viên + thông báo.
    * Chỉ đánh dấu `couponsGrantedAt` khi TẤT CẢ thành viên đã có coupon — nếu còn sót
    * (lỗi DB tạm thời), để null cho cron `reconcileSuccessfulGroups` thử lại sau.
+   * Sản phẩm đã là hàng của gian hàng đối tác (nhóm mở trước khi có luật, hoặc sản phẩm vừa chuyển cho gian hàng): không cấp
+   * mã, nhóm FAILED như nhóm không đủ người. Trả false khi nhóm bị đóng như vậy.
    */
-  private async onSuccess(group: GroupRow) {
+  private async onSuccess(group: GroupRow): Promise<boolean> {
+    if (await this.closeIfPartnerGoods(group, 'SUCCESS')) return false;
     const allGranted = await this.grantAllMembers(group);
     if (allGranted) await this.markGranted(group.id);
+    return true;
+  }
+
+  /**
+   * Mua chung là chương trình của Tubu, không áp cho hàng của gian hàng đối tác (cart/partner-goods.ts). Nhóm đã mở trên hàng
+   * đó thì đóng (FAILED, chỉ khi còn ở trạng thái `from`) và báo thành viên GROUP_BUY_FAILED như nhóm hết hạn; thành viên chưa
+   * trả gì khi tham gia nên không có gì phải hoàn. Trả sản phẩm khi nhóm thuộc hàng đối tác, null khi không.
+   */
+  private async closeIfPartnerGoods(group: Pick<GroupRow, 'id' | 'productId'>, from: 'OPEN' | 'SUCCESS') {
+    const product = await this.prisma.product.findUnique({
+      where: { id: group.productId },
+      select: { name: true, slug: true, storefrontId: true },
+    });
+    if (!product || !isPartnerOwnedProduct(product)) return null;
+    const flip = await this.prisma.groupBuy.updateMany({ where: { id: group.id, status: from }, data: { status: 'FAILED' } });
+    if (flip.count === 1) await this.notifyExpired(group.id, product);
+    return product;
   }
 
   /** Cấp coupon (idempotent qua mã tất định + @unique) + thông báo MỚI cho từng thành viên.
@@ -221,6 +240,7 @@ export class GroupBuyService {
     })) as unknown as GroupRow[];
     let fixed = 0;
     for (const g of groups) {
+      if (await this.closeIfPartnerGoods(g, 'SUCCESS')) continue;
       const allGranted = await this.grantAllMembers(g);
       if (allGranted) {
         await this.markGranted(g.id);
@@ -250,7 +270,8 @@ export class GroupBuyService {
   /** `userId` (khi đã đăng nhập) để đánh dấu nhóm mình đã tham gia / tự mở; khách thì joined=false. */
   async listOpen(userId?: string) {
     const groups = await this.prisma.groupBuy.findMany({
-      where: { status: 'OPEN', expiresAt: { gt: new Date() } },
+      // Nhóm trên hàng của gian hàng đối tác không tham gia được nữa (join đóng nhóm) nên không mời khách vào.
+      where: { status: 'OPEN', expiresAt: { gt: new Date() }, product: { storefrontId: null } },
       orderBy: { createdAt: 'desc' },
       take: 30,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },

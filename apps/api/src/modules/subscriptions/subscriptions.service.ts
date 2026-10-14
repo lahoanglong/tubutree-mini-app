@@ -78,7 +78,11 @@ class SubscriptionOutOfStockError extends Error {}
 /** Địa chỉ của gói đã mất/không còn thuộc khách lúc sinh đơn kỳ. */
 class SubscriptionAddressError extends Error {}
 /** Sản phẩm của gói đã thành hàng của gian hàng đối tác: không có giảm giá định kỳ, gói tạm dừng. */
-class SubscriptionPartnerGoodsError extends Error {}
+class SubscriptionPartnerGoodsError extends Error {
+  constructor(readonly productName: string) {
+    super(partnerGoodsMessage('SUBSCRIPTION', productName));
+  }
+}
 /** Ví Tubu không đủ trả đơn kỳ: không sinh đơn nợ, gói tạm dừng. */
 class SubscriptionWalletShortError extends Error {}
 /** Đơn kỳ trả COD vượt hạn mức COD: không sinh đơn, gói tạm dừng. */
@@ -247,6 +251,7 @@ export class SubscriptionsService {
         throw new BadRequestException('Số dư Ví Tubu không đủ để thanh toán đơn đầu tiên, hãy nạp thêm hoặc chọn cách trả khác.');
       }
       if (err instanceof SubscriptionAddressError) throw new BadRequestException('Địa chỉ không hợp lệ.');
+      if (err instanceof SubscriptionPartnerGoodsError) throw partnerGoodsError('SUBSCRIPTION', err.productName);
       if (err instanceof SubscriptionCodLimitError) {
         throw new BadRequestException(
           `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), vui lòng giảm số lượng hoặc chọn Ví Tubu/chuyển khoản.`,
@@ -674,7 +679,7 @@ export class SubscriptionsService {
     });
     if (!variation || !isSellableVariation(variation)) throw productDiscontinuedError(variation?.product.name);
     if (isPartnerOwnedVariation(variation)) {
-      throw new SubscriptionPartnerGoodsError(partnerGoodsMessage('SUBSCRIPTION', variation.product.name));
+      throw new SubscriptionPartnerGoodsError(variation.product.name);
     }
     const addr = await tx.address.findUnique({ where: { id: sub.addressId } });
     if (!addr || addr.userId !== sub.userId) throw new SubscriptionAddressError('invalid address');

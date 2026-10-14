@@ -150,15 +150,22 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
   (`cart/partner-goods.ts`, lỗi mã `PARTNER_GOODS_NOT_ELIGIBLE` kèm câu tiếng Việt) cho mọi chương trình:
   - Giá đại lý: bảng giá đại lý bỏ biến thể của gian hàng (`TUBU_OWNED_VARIATION_WHERE`), đặt đơn đại lý có món đó bị từ chối.
   - Đặt định kỳ (giảm giá định kỳ): trang sản phẩm ẩn lựa chọn; tạo hoặc bật lại gói bị từ chối; gói cũ đến kỳ thì tạm dừng
-    (lý do `partner_goods`), không lên đơn.
+    (lý do `partner_goods`), không lên đơn. Đơn đầu giao ngay gặp món vừa thành hàng của gian hàng trả 400 tiếng Việt kèm mã
+    `PARTNER_GOODS_NOT_ELIGIBLE`, không tạo gói lẫn đơn.
   - Combo CTV: không thêm món vào bộ sưu tập loại COMBO; món đã nằm trong combo bị bỏ khỏi combo khi hiển thị và khi tính giảm
-    giá combo (`combo.service.ts`), nên giảm combo không bao giờ rơi vào món của gian hàng.
-  - Mua chung: không mở nhóm mua chung cho món của gian hàng (trang sản phẩm ẩn nút).
+    giá combo (`combo.service.ts`), nên giảm combo không bao giờ rơi vào món của gian hàng. Combo còn dưới `MIN_COMBO_PRODUCTS`
+    (2) sản phẩm được giảm thì checkout không giảm, nên trang gian hàng trả `comboDiscountPct = null` cho combo đó.
+  - Mua chung: không mở nhóm mua chung cho món của gian hàng (trang sản phẩm ẩn nút). Nhóm đã mở trước khi món thành hàng của
+    gian hàng: tham gia bị từ chối, nhóm đủ người (kể cả lúc đối soát mã) không phát mã; nhóm chuyển `FAILED`, thành viên nhận
+    thông báo `GROUP_BUY_FAILED` như nhóm hết hạn, danh sách nhóm đang mở không gồm nhóm đó.
   - Điểm Xanh: không trả hàng của gian hàng bằng điểm. Số điểm tối đa của lần đặt bằng `pointsRedeemBase` (`checkout-split.ts`):
     tiền các dòng hàng Tubu sau combo, mã, giảm hạng, cộng hàng Tubu giá flash; giỏ chỉ hàng Tubu thì đúng bằng nền cũ. Gửi
     điểm quá mức thì checkout kẹp về mức tối đa, báo giá trả `pointsMax`, `pointsPartnerNote` ("Điểm Xanh chỉ dùng cho hàng của
     Tubu, không dùng cho hàng của gian hàng đối tác") và `pointsNotice` (chỉ khi luật này làm giảm số điểm dùng); tổng đổi so
     với tổng khách thấy thì vẫn trả `TOTAL_CHANGED`. Giỏ chỉ hàng đối tác: ô Điểm Xanh tắt kèm câu giải thích (web, miniapp).
+    Mức tối đa và phần tiền từng dòng dùng chung một phép chia: chia một lần trên mọi dòng theo thứ tự kiện (`groupByFulfiller`),
+    rồi cộng theo kiện, nên chênh làm tròn không làm dòng nào âm hay giảm vượt tiền hàng. Phép chia lỗi (dòng âm, giảm quá tiền
+    hàng, tổng dòng lệch) thì checkout báo lỗi, không tạo đơn (`allocationError`).
   - Giá giờ vàng do admin đặt vẫn áp (admin chủ động chọn): món bán giá flash thì nền đối soát là giá flash khách thực trả.
   - Giảm hạng thành viên vẫn áp như mọi món; phần giảm hạng và phần mã giảm giá của khách áp cho món được trừ vào tiền của gian
     hàng. Mã chỉ áp cho món khác (mã gắn sản phẩm Tubu) không trừ vào món của gian hàng.
@@ -172,7 +179,8 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
   nhận 0 điểm), rồi lưu `OrderItem.paidTotal` = `total` − phần mã, hạng, điểm của dòng (cộng lại = `order.total − shippingFee`)
   và `OrderItem.pointsDiscount` = phần Điểm Xanh của dòng. Trả một phần hoàn điểm theo phần điểm của chính các dòng được trả
   (trả hàng đối tác không hoàn điểm vì dòng đó không dùng điểm); đơn cũ không có `pointsDiscount` hoàn theo tỉ lệ giá trị như
-  trước. `merchantLineBase`, hoàn tiền khách (`refund-allocation`) và
+  trước. Đảo cả đơn sau các lần trả một phần chỉ trả phần còn lại của số điểm đã dùng (`remainingPointsBack`): lô quy đổi nhận
+  tối đa phần quy đổi chưa trả, lô thường nhận phần còn lại, nên tổng điểm hoàn không vượt số đã dùng. `merchantLineBase`, hoàn tiền khách (`refund-allocation`) và
   hoa hồng CTV (`paidLineTotals`) đọc cùng số này, nên tiền hoàn cho khách và dòng đảo của gian hàng khớp nhau. Đơn cũ (không có
   `paidTotal`, hoặc tổng không khớp) chia tiền hàng thực trả theo `OrderItem.total` như trước; khách vẫn trả đúng tổng như trước,
   phiếu đã lập giữ số đã lưu. Ví dụ (phí sàn 10%, phí giao 30.000):
