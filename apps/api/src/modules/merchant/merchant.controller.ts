@@ -145,7 +145,7 @@ export class ShipMerchantOrderDto {
 }
 
 export class MerchantOrderReasonDto {
-  @IsString() @IsNotEmpty() @MaxLength(300) reason!: string;
+  @Transform(trim) @IsString() @IsNotEmpty({ message: 'Cần nhập lý do để báo khách.' }) @MaxLength(300) reason!: string;
 }
 
 // Bug 3: /merchant/orders trước đây chỉ nhận `status` rời, không có page/limit thật.

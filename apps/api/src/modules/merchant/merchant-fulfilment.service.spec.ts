@@ -204,6 +204,15 @@ describe('MerchantFulfilmentService — đối tác xử lý đơn', () => {
     await expect(b2.svc.fail('u1', 'o1', 'x')).rejects.toThrow(BadRequestException);
   });
 
+  it('giao thất bại hoặc huỷ với lý do chỉ có khoảng trắng bị từ chối, đơn không đổi trạng thái (R4-PARTNER-1)', async () => {
+    const { svc, setStatus } = build({ id: 'o1', code: 'TUBU1', status: 'SHIPPING', merchantAcceptedAt: NOW });
+    await expect(svc.fail('u1', 'o1', '   ')).rejects.toThrow('Cần nhập lý do để báo khách.');
+    const b2 = build();
+    await expect(b2.svc.cancel('u1', 'o1', ' \n ')).rejects.toThrow('Cần nhập lý do để báo khách.');
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(b2.setStatus).not.toHaveBeenCalled();
+  });
+
   it('xác nhận đơn: chỉ ghi mốc một lần (guard merchantAcceptedAt null)', async () => {
     const { svc, prisma } = build();
     await svc.accept('u1', 'o1');

@@ -503,6 +503,23 @@ describe('cổng đối tác — tab Đơn cần giao (D4)', () => {
     await flush();
     expect(mocks.listFulfil).toHaveBeenLastCalledWith('SHIPPING', 1);
   });
+
+  it('R4-PARTNER-1: lý do chỉ có khoảng trắng không gửi được, nút xác nhận tắt cho tới khi có chữ', async () => {
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    const first = root.querySelector('article[aria-label="Đơn TF1"]')!;
+    mocks.fulfilAction.mockClear();
+    click(byText(first, 'button', 'Huỷ đơn'));
+    const submit = byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    typeInto(inputByLabel(first, 'Lý do huỷ'), '    ');
+    expect((byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement).disabled).toBe(true);
+    first.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(mocks.fulfilAction).not.toHaveBeenCalled();
+    typeInto(inputByLabel(first, 'Lý do huỷ'), 'Hết hàng');
+    expect((byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement).disabled).toBe(false);
+  });
 });
 
 describe('cổng đối tác — tab Đối soát', () => {

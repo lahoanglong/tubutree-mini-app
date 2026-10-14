@@ -92,6 +92,8 @@ const FULFIL_ORDER_SELECT = {
   user: { select: { fullName: true, phone: true } },
 } satisfies Prisma.OrderSelect;
 
+const REASON_REQUIRED = 'Cần nhập lý do để báo khách.';
+
 export const MERCHANT_FULFIL_STATUSES = ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] as const;
 
 export interface ShipDto {
@@ -474,8 +476,10 @@ export class MerchantFulfilmentService {
   async fail(userId: string, orderId: string, reason: string) {
     const { store, order } = await this.ownOrder(userId, orderId);
     if (order.status !== 'SHIPPING') throw new BadRequestException('Chỉ đơn đang giao mới báo giao thất bại được.');
+    const why = reason.trim();
+    if (!why) throw new BadRequestException(REASON_REQUIRED);
     // Giao không thành = hàng quay về gian hàng: đây là luồng hoàn của D1 nên huỷ được dù đã gửi hàng.
-    return this.cancelBySeller(userId, store.title, order, `Giao không thành công: ${reason.trim()}`, true);
+    return this.cancelBySeller(userId, store.title, order, `Giao không thành công: ${why}`, true);
   }
 
   /** Đối tác huỷ trước khi giao cho đơn vị vận chuyển (cùng mốc D1: chưa SHIPPING). */
@@ -494,7 +498,7 @@ export class MerchantFulfilmentService {
     reason: string,
     returnedToSender = false,
   ) {
-    if (!reason) throw new BadRequestException('Cần nhập lý do để báo khách.');
+    if (!reason) throw new BadRequestException(REASON_REQUIRED);
     await this.transition(userId, order, 'CANCELLED', {
       note: reason,
       returnedToSender,

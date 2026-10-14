@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
+import { CreateMerchantProductDto, MerchantOrderReasonDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
 import { CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
@@ -97,5 +97,19 @@ describe('Lập phiếu kèm tổng bảng kê admin vừa xem (Q8)', () => {
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a' })).resolves.toMatchObject({ storefrontId: 'sf-a' });
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 'abc' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Lý do huỷ / giao không thành công (R4-PARTNER-1)', () => {
+  it('chỉ có khoảng trắng hoặc rỗng → 400 tiếng Việt, không lọt xuống thông báo cho khách', async () => {
+    expect(await message(MerchantOrderReasonDto, { reason: '   ' })).toContain('Cần nhập lý do để báo khách.');
+    expect(await message(MerchantOrderReasonDto, { reason: ' \n\t ' })).toContain('Cần nhập lý do để báo khách.');
+    expect(await message(MerchantOrderReasonDto, { reason: '' })).toContain('Cần nhập lý do để báo khách.');
+    await expect(run(MerchantOrderReasonDto, {})).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lý do được cắt khoảng trắng hai đầu', async () => {
+    const dto = await run(MerchantOrderReasonDto, { reason: '  Khách không nghe máy  ' });
+    expect(dto.reason).toBe('Khách không nghe máy');
   });
 });
