@@ -111,7 +111,7 @@ describe('variation-stock', () => {
       const sql = sqlOf($executeRaw);
       expect(sql).toContain('"pancakeStockEventAt" = ?');
       expect(sql).toContain('("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ?)');
-      expect(argsOf($executeRaw).filter((a) => a === at)).toHaveLength(2);
+      expect(argsOf($executeRaw).filter((a: unknown) => a === at)).toHaveLength(2);
     });
 
     it('0 dòng bị sửa (sự kiện cũ hơn / không có biến thể) → false', async () => {
