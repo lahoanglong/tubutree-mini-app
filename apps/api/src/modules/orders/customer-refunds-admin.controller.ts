@@ -40,7 +40,7 @@ export class CustomerRefundsAdminController {
     return this.refunds.list(q.status, q.page, q.limit, q.kind);
   }
 
-  /** "Đang chuyển khoản": khoá nơi nhận trước khi admin chuyển tiền (khách không đổi sang Ví được nữa). */
+  /** "Bắt đầu chuyển khoản" (khoản sang Đang chuyển khoản): khoá nơi nhận trước khi admin chuyển tiền (khách không đổi sang Ví được nữa). */
   @Post(':id/claim')
   claim(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ClaimCustomerRefundDto) {
     return this.refunds.claim(adminId, id, dto);

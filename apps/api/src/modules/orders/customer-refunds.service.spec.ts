@@ -73,9 +73,9 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     });
   });
 
-  it('khoản chưa khoá bằng "Đang chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
+  it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
     const { service, prisma, notifications } = setup();
-    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Đang chuyển khoản');
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
     expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
     expect(notifications.notify).not.toHaveBeenCalled();
   });

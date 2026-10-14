@@ -14,6 +14,8 @@ export interface MyRefundView {
   orderId: string;
   orderCode: string;
   kind: CustomerRefundKind;
+  /** Khoản trả hàng: id yêu cầu trả (khớp thẻ đổi/trả với khoản tiền thật). */
+  refKey: string;
   amount: number;
   method: 'WALLET' | 'MANUAL_TRANSFER';
   status: CustomerRefundStatus;
@@ -32,6 +34,7 @@ const MINE_SELECT = {
   orderId: true,
   orderCode: true,
   kind: true,
+  refKey: true,
   amount: true,
   method: true,
   status: true,
@@ -73,7 +76,7 @@ export class CustomerRefundsService {
   }
 
   /**
-   * Admin bấm "Đang chuyển khoản" TRƯỚC khi chuyển tiền: khoản sang PROCESSING, nơi nhận bị khoá — khách không đổi sang Ví
+   * Admin bấm "Bắt đầu chuyển khoản" TRƯỚC khi chuyển tiền: khoản sang PROCESSING, nơi nhận bị khoá — khách không đổi sang Ví
    * được nữa. Cùng guard (PENDING) với lần khách chọn Ví nên đúng một bên thắng; khách vừa chọn Ví thì admin được báo rõ
    * và không chuyển. Khoản chưa có tài khoản thì admin nhập tài khoản khách gửi qua kênh khác ngay lúc này.
    */
@@ -129,11 +132,11 @@ export class CustomerRefundsService {
     if (row.kind !== 'END_CUSTOMER' && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi xác nhận.');
     }
-    // Khách tự đổi được nơi nhận (khoản có chủ tài khoản) thì chỉ xác nhận được khoản đã khoá bằng "Đang chuyển khoản":
+    // Khách tự đổi được nơi nhận (khoản có chủ tài khoản) thì chỉ xác nhận được khoản đã khoá bằng "Bắt đầu chuyển khoản":
     // xác nhận thẳng từ hàng chờ là chuyển tiền trong lúc khách vẫn có thể rút về Ví — hoàn hai lần.
     const lockable = row.userId !== null;
     if (lockable && row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
-      throw new BadRequestException('Bấm "Đang chuyển khoản" để khoá nơi nhận trước khi chuyển tiền, rồi mới xác nhận đã chuyển.');
+      throw new BadRequestException('Bấm "Bắt đầu chuyển khoản" để khoá nơi nhận trước khi chuyển tiền, rồi mới xác nhận đã chuyển.');
     }
     const res = await this.prisma.orderCustomerRefund.updateMany({
       where: { id, method: 'MANUAL_TRANSFER', status: lockable ? 'PROCESSING' : { in: ['PENDING', 'PROCESSING'] } },

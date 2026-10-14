@@ -308,7 +308,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     },
   );
 
-  it('khách chọn Ví đúng lúc admin bấm "Đang chuyển khoản" → đúng 1 bên thắng; Ví chỉ cộng khi Ví thắng', async () => {
+  it('khách chọn Ví đúng lúc admin bấm "Bắt đầu chuyển khoản" → đúng 1 bên thắng; Ví chỉ cộng khi Ví thắng', async () => {
     for (let round = 0; round < 5; round++) {
       const adminUser = await createUser(prisma, { role: 'ADMIN' });
       const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });

@@ -69,7 +69,7 @@ export async function announceBankRefund(
       data: () => ({
         order_code: refund.orderCode,
         message: refund.bankAccountNo
-          ? `khách chọn nhận ${amount} về ${maskedBank(refund)} — ở mục Hoàn tiền bấm "Đang chuyển khoản" để khoá nơi nhận, chuyển khoản, rồi bấm "Đã chuyển khoản".`
+          ? `khách chọn nhận ${amount} về ${maskedBank(refund)} — ở mục Hoàn tiền bấm "Bắt đầu chuyển khoản" để khoá nơi nhận, chuyển khoản, rồi bấm "Đã chuyển khoản".`
           : `cần hoàn ${amount}, đang chờ khách chọn nơi nhận.`,
       }),
     },

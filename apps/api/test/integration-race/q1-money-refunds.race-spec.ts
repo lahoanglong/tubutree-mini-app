@@ -83,7 +83,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
   }
 
   describe('R2-LIFECYCLE-2: "Đang chuyển khoản" khoá nơi nhận', () => {
-    it('khách đổi sang Ví đúng lúc admin bấm "Đang chuyển khoản" → đúng một bên thắng; bên thua được nói rõ; Ví chỉ cộng khi Ví thắng', async () => {
+    it('khách đổi sang Ví đúng lúc admin bấm "Bắt đầu chuyển khoản" → đúng một bên thắng; bên thua được nói rõ; Ví chỉ cộng khi Ví thắng', async () => {
       const outcomes = new Set<string>();
       for (let round = 0; round < 8; round++) {
         const admin = await createUser(prisma, { role: 'ADMIN' });
@@ -138,7 +138,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
     it('chưa khoá thì không xác nhận được; khách vẫn đổi sang Ví được; admin trả về hàng chờ thì khách lại đổi được', async () => {
       const admin = await createUser(prisma, { role: 'ADMIN' });
       const { user, row } = await bankRefund(60_000);
-      await expect(refunds.markPaid(admin.id, row.id, { bankRef: 'FT1' })).rejects.toThrow('Đang chuyển khoản');
+      await expect(refunds.markPaid(admin.id, row.id, { bankRef: 'FT1' })).rejects.toThrow('Bắt đầu chuyển khoản');
 
       await refunds.claim(admin.id, row.id);
       const mine = await refunds.listMine(user.id, row.orderId);
@@ -149,7 +149,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
       expect(await walletOf(user.id)).toBe(60_000);
     });
 
-    it('hai admin cùng bấm "Đang chuyển khoản" → một người nhận, người kia được báo đang có người chuyển', async () => {
+    it('hai admin cùng bấm "Bắt đầu chuyển khoản" → một người nhận, người kia được báo đang có người chuyển', async () => {
       const [a1, a2] = await Promise.all([createUser(prisma, { role: 'ADMIN' }), createUser(prisma, { role: 'ADMIN' })]);
       const { row } = await bankRefund(80_000);
       const s = summarize(await Promise.allSettled([refunds.claim(a1.id, row.id), refunds.claim(a2.id, row.id)]));
