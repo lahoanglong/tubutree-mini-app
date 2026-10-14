@@ -1,5 +1,6 @@
 import {
   allocateGroupAmounts,
+  allocateLineAmounts,
   allocateProRata,
   fulfillerOf,
   groupByFulfiller,
@@ -135,6 +136,8 @@ describe('allocateGroupAmounts', () => {
       pointsUsedConverted: 5,
       discount: 73_500,
       goodsAfterAll: 276_500,
+      // t1: 300.000 − combo 10.000 − mã 20.000 − hạng 13.500 − điểm 25.106; t2 (flash): 50.000 − điểm 4.894.
+      linePaid: [231_394, 45_106],
     });
   });
 
@@ -154,7 +157,7 @@ describe('allocateGroupAmounts', () => {
       pointsUsedConverted: 7,
     };
     const out = allocateGroupAmounts(groups, t);
-    const sum = (k: keyof (typeof out)[number]) => out.reduce((s, g) => s + g[k], 0);
+    const sum = (k: Exclude<keyof (typeof out)[number], 'linePaid'>) => out.reduce((s, g) => s + g[k], 0);
     expect(sum('comboDiscount')).toBe(5_000);
     expect(sum('couponDiscount')).toBe(32_777);
     expect(sum('tierDiscount')).toBe(9_999);
@@ -167,6 +170,7 @@ describe('allocateGroupAmounts', () => {
     for (const g of out) {
       expect(g.pointsUsedConverted).toBeLessThanOrEqual(g.pointsUsed);
       expect(g.goodsAfterAll).toBe(g.subtotal - g.discount);
+      expect(g.linePaid.reduce((s, v) => s + v, 0)).toBe(g.goodsAfterAll);
     }
   });
 
@@ -180,6 +184,68 @@ describe('allocateGroupAmounts', () => {
     expect(out[1]!.couponDiscount).toBe(10_000);
     expect(out[0]!.pointsDiscount + out[1]!.pointsDiscount).toBe(20_000);
     expect(out[0]!.pointsDiscount).toBeGreaterThan(out[1]!.pointsDiscount);
+  });
+});
+
+describe('allocateLineAmounts — mỗi khoản giảm chỉ rơi vào dòng được hưởng (Q8 review M1)', () => {
+  const scoped = (variationId: string, productId: string, total: number, fulfiller: LineFulfiller, isFlash = false): SplitLine => ({
+    variationId,
+    productId,
+    total,
+    isFlash,
+    fulfiller,
+  });
+  const none = { comboPerLine: {}, comboTotal: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0 };
+
+  it('(a) mã 50.000 chỉ cho sản phẩm T: dòng hàng giao hộ C không gánh đồng nào (trước: C 83.333)', () => {
+    const lines = [scoped('vT', 'pT', 200_000, TUBU), scoped('vC', 'pC', 100_000, TUBU)];
+    const out = allocateLineAmounts(lines, { ...none, couponDiscount: 50_000, couponProductIds: ['pT'] });
+    expect(out.map((l) => [l.coupon, l.paid])).toEqual([
+      [50_000, 150_000],
+      [0, 100_000],
+    ]);
+  });
+
+  it('(b) mã 20% chỉ trên hàng không flash: hàng flash C giữ đủ 100.000 (trước: 86.667)', () => {
+    const lines = [scoped('vT', 'pT', 200_000, TUBU), scoped('vC', 'pC', 100_000, TUBU, true)];
+    const out = allocateLineAmounts(lines, { ...none, couponDiscount: 40_000 });
+    expect(out.map((l) => l.paid)).toEqual([160_000, 100_000]);
+  });
+
+  it('(c) mã 50.000 cho sản phẩm Tubu P: kiện gian hàng tự giao không bị trừ (trước: 16.667 → đơn gian hàng 113.333)', () => {
+    const groups = [{ lines: [scoped('vP', 'pP', 200_000, TUBU)] }, { lines: [scoped('vM', 'pM', 100_000, SHOP_A)] }];
+    const [tubu, shop] = allocateGroupAmounts(groups, { ...none, couponDiscount: 50_000, couponProductIds: ['pP'] });
+    expect(tubu).toMatchObject({ couponDiscount: 50_000, goodsAfterAll: 150_000, linePaid: [150_000] });
+    expect(shop).toMatchObject({ couponDiscount: 0, discount: 0, goodsAfterAll: 100_000, linePaid: [100_000] });
+  });
+
+  it('combo về đúng dòng; mã trên dòng khớp sau combo; hạng trên hàng không flash; Điểm Xanh trên mọi dòng; tổng khớp cả lần đặt', () => {
+    const lines = [
+      scoped('v1', 'p1', 200_000, TUBU),
+      scoped('v2', 'p2', 100_000, SHOP_A),
+      scoped('vf', 'pf', 50_000, TUBU, true),
+    ];
+    const out = allocateLineAmounts(lines, {
+      comboPerLine: { v2: 10_000 },
+      comboTotal: 10_000,
+      couponDiscount: 30_000,
+      couponProductIds: ['p2'],
+      tierDiscount: 12_000,
+      pointsDiscount: 20_000,
+      pointsUsed: 20,
+      pointsUsedConverted: 0,
+    });
+    expect(out.map((l) => [l.combo, l.coupon])).toEqual([
+      [0, 0],
+      [10_000, 30_000],
+      [0, 0],
+    ]);
+    // hạng 12.000 chia theo phần còn lại không flash: 200.000 và 60.000.
+    expect(out.map((l) => l.tier)).toEqual([9_231, 2_769, 0]);
+    expect(out[2]!.points).toBeGreaterThan(0);
+    expect(out.reduce((s, l) => s + l.points, 0)).toBe(20_000);
+    expect(out.reduce((s, l) => s + l.paid, 0)).toBe(350_000 - 10_000 - 30_000 - 12_000 - 20_000);
+    for (const l of out) expect(l.paid).toBe(l.total - l.combo - l.coupon - l.tier - l.points);
   });
 });
 

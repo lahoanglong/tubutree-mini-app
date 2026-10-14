@@ -194,3 +194,24 @@ describe('dòng đảo hàng giao hộ (trả một phần / cả đơn)', () =>
     expect(consignmentWholeReversal(sale(saleB!), partials)).toBeNull();
   });
 });
+
+describe('Hàng giao hộ trên đơn có tiền thực trả từng dòng (Q8 review M1)', () => {
+  const base = { id: 'o', code: 'TUBU', total: 280_000, shippingFee: 30_000, createdAt: ORDERED, deliveredAt: DELIVERED };
+  const T = { id: 'iT', variationId: 'vT', productName: 'Hàng Tubu', variationName: null, quantity: 1, total: 200_000 };
+  const C = { id: 'iC', variationId: 'vA', productName: 'Mật ong', variationName: 'Hũ', quantity: 1, total: 100_000 };
+  const terms = { commissionPct: 0.1, feePct: 0, feeFixed: 0 };
+  const onlyC = (it: { id: string }) => it.id === 'iC';
+
+  it('(a) mã 50.000 chỉ cho T: C tính trên 100.000 → phí sàn 10.000, thực nhận 90.000 (trước: 83.333 / 75.000)', () => {
+    const now = consignmentSaleLines({ ...base, items: [{ ...T, paidTotal: 150_000 }, { ...C, paidTotal: 100_000 }] }, onlyC, terms);
+    expect(now.map((l) => [l.goodsAmount, l.commissionAmount, l.netAmount])).toEqual([[100_000, 10_000, 90_000]]);
+    const legacy = consignmentSaleLines({ ...base, items: [T, C] }, onlyC, terms);
+    expect(legacy.map((l) => [l.goodsAmount, l.netAmount])).toEqual([[83_333, 75_000]]);
+  });
+
+  it('(b) C mua giá flash 100.000, mã 20% (40.000) chỉ trên T: C tính trên 100.000 (trước: 86.667)', () => {
+    const order = { ...base, total: 290_000, items: [{ ...T, paidTotal: 160_000 }, { ...C, paidTotal: 100_000 }] };
+    expect(consignmentSaleLines(order, onlyC, terms).map((l) => l.goodsAmount)).toEqual([100_000]);
+    expect(consignmentSaleLines({ ...order, items: [T, C] }, onlyC, terms).map((l) => l.goodsAmount)).toEqual([86_667]);
+  });
+});
