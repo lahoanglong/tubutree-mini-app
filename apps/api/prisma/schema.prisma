@@ -603,21 +603,21 @@ model ReferralTouch {
 }
 
 model Storefront {
-  id                  String                 @id @default(cuid())
+  id                  String                   @id @default(cuid())
   type                StorefrontType
-  slug                String                 @unique
-  subdomain           String?                @unique
-  customDomain        String?                @unique
+  slug                String                   @unique
+  subdomain           String?                  @unique
+  customDomain        String?                  @unique
   ownerUserId         String?
-  owner               User?                  @relation(fields: [ownerUserId], references: [id])
-  brandId             String?                @unique
-  brand               Brand?                 @relation(fields: [brandId], references: [id])
+  owner               User?                    @relation(fields: [ownerUserId], references: [id])
+  brandId             String?                  @unique
+  brand               Brand?                   @relation(fields: [brandId], references: [id])
   title               String
   headerNote          String?
   avatarUrl           String?
   coverUrl            String?
-  theme               String                 @default("leaf-orange")
-  themeColor          String?                @default("#16a34a")
+  theme               String                   @default("leaf-orange")
+  themeColor          String?                  @default("#16a34a")
   bankName            String?
   bankBin             String?
   bankAccountNo       String?
@@ -632,25 +632,26 @@ model Storefront {
   /// Kiện của đối tác có tiền hàng từ mức này được miễn phí giao (NULL = không miễn phí).
   freeShipFrom        Int?
   /// Phí sàn riêng cho gian hàng (phân số, 0.15 = 15%). NULL = merchant.commission_pct. Chỉ admin đặt.
-  commissionPct       Decimal?               @db.Decimal(5, 4)
+  commissionPct       Decimal?                 @db.Decimal(5, 4)
   /// Phí vận hành "Tubu giao hộ" theo tiền hàng khách thực trả (phân số), trừ thêm ngoài phí sàn khi đối soát. Chỉ admin đặt.
-  consignmentFeePct   Decimal                @default(0) @db.Decimal(5, 4)
+  consignmentFeePct   Decimal                  @default(0) @db.Decimal(5, 4)
   /// Phí vận hành "Tubu giao hộ" cố định mỗi đơn (đồng), chia cho các dòng hàng giao hộ của gian hàng trong đơn. Chỉ admin đặt.
-  consignmentFeeFixed Int                    @default(0)
+  consignmentFeeFixed Int                      @default(0)
   /// Đối tác bật "Tạm nghỉ": hàng tự giao của gian hàng không đặt được tới khi tắt (R2-MERCHANT-13). NULL = đang nhận đơn.
   ordersPausedAt      DateTime?
-  isPublished         Boolean                @default(false)
+  isPublished         Boolean                  @default(false)
   publishedAt         DateTime?
   collections         StorefrontCollection[]
-  products            Product[]              @relation("StorefrontProducts")
-  fulfilledOrders     Order[]                @relation("OrderFulfiller")
-  attributedOrders    Order[]                @relation("OrderStorefront")
+  products            Product[]                @relation("StorefrontProducts")
+  fulfilledOrders     Order[]                  @relation("OrderFulfiller")
+  attributedOrders    Order[]                  @relation("OrderStorefront")
   merchantPayouts     MerchantPayout[]
+  termsHistory        StorefrontTermsHistory[]
   /// Mốc lần cuối nhắc CTV thêm sản phẩm nổi bật còn thiếu vào gian hàng (storefront-reminder.service.ts).
   /// Null = chưa từng nhắc. Chỉ dùng cho guard chống gửi trùng, không phải mốc nghiệp vụ khác.
   lastReminderAt      DateTime?
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@unique([ownerUserId])
   @@index([ownerUserId])
@@ -1536,24 +1537,30 @@ enum MerchantPayoutLineKind {
 /// liên kết (mỗi biến thể tối đa một dòng như vậy — unique index có điều kiện trong migration). Gỡ liên kết trả biến thể về
 /// sản phẩm gốc; khoảng [linkedAt, unlinkedAt) là các đơn của biến thể đó gian hàng được xem.
 model MerchantPancakeLink {
-  id                String    @id @default(cuid())
-  productId         String
-  product           Product   @relation("PancakeLinkProduct", fields: [productId], references: [id])
-  storefrontId      String
-  variationId       String
-  variation         Variation @relation(fields: [variationId], references: [id])
+  id                     String    @id @default(cuid())
+  productId              String
+  product                Product   @relation("PancakeLinkProduct", fields: [productId], references: [id])
+  storefrontId           String
+  variationId            String
+  variation              Variation @relation(fields: [variationId], references: [id])
   /// NULL = liên kết có từ trước khi lưu lịch sử, không rõ sản phẩm gốc.
-  originProductId   String?
-  originProduct     Product?  @relation("PancakeLinkOrigin", fields: [originProductId], references: [id])
+  originProductId        String?
+  originProduct          Product?  @relation("PancakeLinkOrigin", fields: [originProductId], references: [id])
   /// Lần liên kết làm sản phẩm gốc hết biến thể nên bị tắt: gỡ liên kết thì bật lại.
-  originDeactivated Boolean   @default(false)
+  originDeactivated      Boolean   @default(false)
   /// Sản phẩm gốc đang bán lúc liên kết: admin đã xác nhận chuyển nó sang gian hàng.
-  takeover          Boolean   @default(false)
-  linkedAt          DateTime  @default(now())
-  linkedBy          String?
-  unlinkedAt        DateTime?
-  unlinkedBy        String?
-  unlinkReason      String?
+  takeover               Boolean   @default(false)
+  linkedAt               DateTime  @default(now())
+  linkedBy               String?
+  unlinkedAt             DateTime?
+  unlinkedBy             String?
+  unlinkReason           String?
+  /// Tồn kho Tubu của biến thể lúc liên kết — hàng Tubu đã sở hữu; admin xem khi xác nhận hàng ký gửi (liên kết takeover).
+  stockAtLink            Int?
+  /// Liên kết takeover chỉ đối soát tự động sau khi admin xác nhận hàng đang bán là hàng ký gửi của gian hàng; đơn đặt từ
+  /// mốc này mới tính. NULL với takeover = chưa đối soát; liên kết thường tính từ linkedAt.
+  consignmentConfirmedAt DateTime?
+  consignmentConfirmedBy String?
 
   @@index([productId])
   @@index([storefrontId])
@@ -1615,6 +1622,24 @@ model MerchantPayoutLine {
   @@index([payoutId])
   @@index([orderItemId])
   @@map("merchant_payout_lines")
+}
+
+/// Lịch sử phí sàn / phí "Tubu giao hộ" của gian hàng: mỗi lần admin sửa thêm một dòng. Khoản giao hộ lấy mức của dòng mới
+/// nhất có effectiveFrom <= lúc đặt đơn (giống đơn tự giao chốt merchantCommissionPct lúc đặt).
+model StorefrontTermsHistory {
+  id                  String     @id @default(cuid())
+  storefrontId        String
+  storefront          Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  /// NULL = theo merchant.commission_pct.
+  commissionPct       Decimal?   @db.Decimal(5, 4)
+  consignmentFeePct   Decimal    @db.Decimal(5, 4)
+  consignmentFeeFixed Int
+  effectiveFrom       DateTime   @default(now())
+  /// NULL = dòng gốc (mức có trước khi lưu lịch sử).
+  changedById         String?
+
+  @@index([storefrontId, effectiveFrom])
+  @@map("storefront_terms_history")
 }
 
 /// Subdomain/tên miền vừa bị gian hàng nhả: gian hàng KHÁC chỉ dùng lại sau thời gian chờ (SELLER-5) — link cũ khách lưu
