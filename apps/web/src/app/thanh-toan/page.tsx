@@ -455,6 +455,14 @@ export default function CheckoutPage() {
                   </div>
                 ))}
           </div>
+          {itemIds && cart && (
+            <p className="mt-2 text-xs text-stone-600">
+              Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
+              <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+                Đổi lựa chọn
+              </Link>
+            </p>
+          )}
           {split && (
             <p className="mt-2 text-xs text-stone-600">
               Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.

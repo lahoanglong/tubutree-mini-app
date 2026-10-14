@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Truck, Leaf } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,11 +10,20 @@ import { CouponBox } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
+import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 
 export default function CartPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
   const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
+  // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
+  const [deselected, setDeselected] = useState<Set<string>>(() => new Set());
+  const toggleSelect = (id: string) =>
+    setDeselected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const update = useMutation({
     mutationFn: ({ id, q }: { id: string; q: number }) => updateCartItem(id, q),
@@ -56,14 +66,25 @@ export default function CartPage() {
 
   const cart = cartQ.data;
   // Checkout sẽ từ chối dòng hết hàng/vượt tồn: chặn từ giỏ để khách biết phải sửa gì thay vì gặp lỗi ở bước sau.
-  const stockBlocked = !!cart?.items.some((it) => it.stock <= 0 || it.quantity > it.stock);
+  const allItems = cart?.items ?? [];
+  const selectedItems = allItems.filter((it) => !deselected.has(it.id));
+  const allSelected = selectedItems.length === allItems.length;
+  const selectedSubtotal = selectedItems.reduce((sum, it) => sum + it.total, 0);
+  const selectedCount = selectedItems.reduce((sum, it) => sum + it.quantity, 0);
+  // Chỉ chặn theo các dòng đang chọn: bỏ chọn dòng hết hàng thì vẫn thanh toán được phần còn lại.
+  const stockBlocked = selectedItems.some((it) => it.stock <= 0 || it.quantity > it.stock);
+  const toggleAll = () => setDeselected(allSelected ? new Set(allItems.map((it) => it.id)) : new Set());
   // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
-  const groups = groupByFulfiller(cart?.items ?? []);
+  const groups = groupByFulfiller(allItems);
   const withHeaders = showFulfillerHeaders(groups);
-  const hasMerchant = groups.some((g) => g.fulfiller.kind === 'MERCHANT');
-  const freeshipBase = cart ? (hasMerchant ? tubuSubtotal(cart.items) : cart.subtotal) : 0;
+  const hasMerchant = groupByFulfiller(selectedItems).some((g) => g.fulfiller.kind === 'MERCHANT');
+  // Tiến độ miễn phí vận chuyển theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao.
+  const freeshipBase = hasMerchant ? tubuSubtotal(selectedItems) : selectedSubtotal;
+  const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship) || (!!cart && freeshipBase >= cart.freeshipThreshold);
   const remainingFreeship =
-    cart && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
+    cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
+  // Mã giảm giá chỉ cộng vào số hiển thị khi chọn cả giỏ; chọn một phần thì báo giá ở bước thanh toán tính lại.
+  const shownDiscount = cart && allSelected ? cart.discount : 0;
 
   return (
     <Shell>
@@ -118,7 +139,17 @@ export default function CartPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="min-w-0 md:col-span-2">
-            {!cart.freeship && remainingFreeship > 0 && (
+            <label className="mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                aria-label="Chọn tất cả sản phẩm"
+                className="h-5 w-5 flex-none accent-forest-600"
+              />
+              Chọn tất cả ({allItems.length})
+            </label>
+            {!freeshipReached && remainingFreeship > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-card border border-forest-200 bg-forest-50 px-4 py-3 text-sm text-forest-800">
                 <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
                 <span>
@@ -152,6 +183,15 @@ export default function CartPage() {
                     const busy = busyItemId === it.id;
                     return (
                       <div key={it.id} className="flex gap-3 p-3">
+                        <label className="flex h-11 w-7 flex-none cursor-pointer items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={!deselected.has(it.id)}
+                            onChange={() => toggleSelect(it.id)}
+                            aria-label={`Chọn ${it.productName} để thanh toán`}
+                            className="h-5 w-5 accent-forest-600"
+                          />
+                        </label>
                         <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
                           {it.thumbnail ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -165,7 +205,9 @@ export default function CartPage() {
                           <div className="break-words text-xs text-stone-600">{it.variationName}</div>
                           <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
                           {soldOut && (
-                            <p className="mt-1 text-xs font-semibold text-danger-fg">Hết hàng — hãy xóa khỏi giỏ để tiếp tục thanh toán</p>
+                            <p className="mt-1 text-xs font-semibold text-danger-fg">
+                              Hết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
+                            </p>
                           )}
                           {!soldOut && atMax && (
                             <p className="mt-1 text-xs font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
@@ -228,31 +270,47 @@ export default function CartPage() {
           <div className={`h-fit p-4 ${ui.card}`}>
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
-              <span className="text-stone-900">{formatVnd(cart.subtotal)}</span>
+              <span className="text-stone-900">{formatVnd(selectedSubtotal)}</span>
             </div>
-            {cart.discount > 0 && (
+            {shownDiscount > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá{cart.couponCode ? ` (${cart.couponCode})` : ''}</span>
-                <span>-{formatVnd(cart.discount)}</span>
+                <span>-{formatVnd(shownDiscount)}</span>
               </div>
             )}
-            <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} notice={cart.couponNotice} />
+            <CouponBox currentCode={cart.couponCode} subtotal={selectedSubtotal} notice={cart.couponNotice} />
+            {!allSelected && cart.couponCode && (
+              <p className="mt-2 text-xs text-stone-600">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
+            )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(cart.subtotal - cart.discount)}</span>
+              <span>{formatVnd(Math.max(0, selectedSubtotal - shownDiscount))}</span>
             </div>
-            {stockBlocked ? (
+            {selectedItems.length === 0 ? (
               <>
                 <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
-                  Thanh toán ({cart.itemCount})
+                  Thanh toán (0)
+                </button>
+                <p role="status" className="mt-2 text-xs text-stone-600">
+                  Chọn ít nhất một sản phẩm để thanh toán.
+                </p>
+              </>
+            ) : stockBlocked ? (
+              <>
+                <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  Thanh toán ({selectedCount})
                 </button>
                 <p role="alert" className="mt-2 text-xs text-danger-fg">
-                  Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa hoặc giảm số lượng rồi thanh toán.
+                  Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.
                 </p>
               </>
             ) : (
-              <Link href="/thanh-toan" className={`${ui.btnPrimary} mt-4 w-full`}>
-                Thanh toán ({cart.itemCount})
+              <Link
+                href="/thanh-toan"
+                onClick={() => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id))}
+                className={`${ui.btnPrimary} mt-4 w-full`}
+              >
+                Thanh toán ({selectedCount})
               </Link>
             )}
           </div>

@@ -155,6 +155,8 @@ describe('/thanh-toan — mua một phần giỏ (R2-BUYERWEB-6)', () => {
     click(placeButton(r));
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ itemIds: ['i2'] });
+    expect(r.container.textContent).toContain('Đang thanh toán 1/2 sản phẩm trong giỏ');
+    expect(byText(r.container, 'a', 'Đổi lựa chọn')?.getAttribute('href')).toBe('/gio-hang');
   });
 
   it('lựa chọn nhắc dòng đã bị xoá khỏi giỏ → bỏ dòng đó; hết dòng → toàn giỏ', async () => {
