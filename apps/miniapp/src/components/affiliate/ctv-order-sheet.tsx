@@ -28,7 +28,7 @@ import {
   type ProductSuggestion,
   type VariationDetail,
 } from '../../services/shop-api';
-import { createCtvOrder, type CtvOrderResult } from '../../services/affiliate-api';
+import { createCtvOrder, quoteCtvOrder, type CtvOrderItemInput, type CtvOrderResult } from '../../services/affiliate-api';
 import { getErrorMessage } from '../../services/api';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
@@ -129,7 +129,21 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
     setLines((prev) => prev.filter((l) => l.variationId !== variationId));
   };
 
-  const goods = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+  // Giá trên form theo báo giá máy chủ (giờ vàng như khách tự đặt, phí giao): đúng số sẽ ghi vào đơn. Báo giá chỉ dùng khi
+  // khớp đúng các dòng đang có; chưa có hoặc lỗi thì tạm tính theo giá niêm yết như trước.
+  const itemsKey = JSON.stringify(lines.map((l) => ({ variationId: l.variationId, quantity: l.quantity })));
+  const quotedKey = useDebounced(itemsKey, 300);
+  const quoteQ = useQuery({
+    queryKey: ['ctv-order-quote', quotedKey],
+    queryFn: () => quoteCtvOrder(JSON.parse(quotedKey) as CtvOrderItemInput[]),
+    enabled: quotedKey !== '[]',
+    staleTime: 30_000,
+  });
+  const quoteFresh = quotedKey === itemsKey;
+  const quote = quoteFresh ? quoteQ.data : undefined;
+  const quoteFailed = quoteFresh && quoteQ.isError;
+  const quotedLines = new Map((quote?.items ?? []).map((i) => [i.variationId, i]));
+  const goods = quote?.goods ?? lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
 
   const phoneClean = phone.replace(/\s/g, '');
   const recipientOk = recipient.trim().length > 0;
@@ -302,8 +316,18 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
               {l.productName}
             </Text>
             <Text variant="caption" tone="tertiary" as="div">
-              {l.variationName} · {formatVnd(l.unitPrice)}
+              {l.variationName} · {formatVnd(quotedLines.get(l.variationId)?.unitPrice ?? l.unitPrice)}
             </Text>
+            {quotedLines.get(l.variationId)?.isFlash && (
+              <Text variant="caption" tone="brand" as="div">
+                {t.flashPrice}
+              </Text>
+            )}
+            {quotedLines.get(l.variationId)?.flashLimitNotice && (
+              <Text variant="caption" tone="warning" as="div">
+                {quotedLines.get(l.variationId)!.flashLimitNotice}
+              </Text>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Stepper icon={Minus} label="Giảm số lượng" onClick={() => setQty(l.variationId, -1)} />
@@ -348,19 +372,37 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Tạm tính + submit */}
-      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <Text variant="body-sm" tone="tertiary" as="div">
-            {t.goodsSubtotal}
-          </Text>
-          <Text variant="caption" tone="tertiary" as="div">
-            {t.shipNote}
+      {lines.length > 0 && !quoteFailed ? (
+        <div style={{ marginTop: 16 }}>
+          <KeyValueRow label={t.goodsSubtotal} value={<span data-testid="ctv-order-goods">{formatVnd(goods)}</span>} />
+          <KeyValueRow
+            label={t.shippingFee}
+            value={<span data-testid="ctv-order-shipping">{quote ? formatVnd(quote.shippingFee) : t.calculating}</span>}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 6 }}>
+            <Text variant="body-sm" tone="secondary">
+              {t.customerTotal}
+            </Text>
+            <Text variant="price-lg" tone="brand" data-testid="ctv-order-total">
+              {quote ? formatVnd(quote.total) : t.calculating}
+            </Text>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <Text variant="body-sm" tone="tertiary" as="div">
+              {t.goodsSubtotal}
+            </Text>
+            <Text variant="caption" tone="tertiary" as="div">
+              {t.shipNote}
+            </Text>
+          </div>
+          <Text variant="price-lg" tone="brand" data-testid="ctv-order-goods">
+            {formatVnd(goods)}
           </Text>
         </div>
-        <Text variant="price-lg" tone="brand">
-          {formatVnd(goods)}
-        </Text>
-      </div>
+      )}
       <Button
         fullWidth
         loading={mut.isPending}

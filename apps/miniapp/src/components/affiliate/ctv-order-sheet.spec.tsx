@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   createCtvOrder: vi.fn(),
+  quoteCtvOrder: vi.fn(),
   suggestProducts: vi.fn(),
   fetchProduct: vi.fn(),
 }));
@@ -38,7 +39,7 @@ vi.mock('../../services/shop-api', () => ({
   suggestProducts: mocks.suggestProducts,
   fetchProduct: mocks.fetchProduct,
 }));
-vi.mock('../../services/affiliate-api', () => ({ createCtvOrder: mocks.createCtvOrder }));
+vi.mock('../../services/affiliate-api', () => ({ createCtvOrder: mocks.createCtvOrder, quoteCtvOrder: mocks.quoteCtvOrder }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { CtvOrderSheet } from './ctv-order-sheet';
@@ -87,6 +88,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
       variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }],
     });
     mocks.createCtvOrder.mockResolvedValue({ code: 'TUBU9', total: 65_000, items: [] });
+    mocks.quoteCtvOrder.mockRejectedValue(new Error('chưa có báo giá'));
   });
 
   it('chưa có khách gần đây thì không hiện hàng chip', () => {
@@ -252,6 +254,61 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
     fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
     await waitFor(() => expect(mocks.suggestProducts).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng (R4-CHECKOUT-5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.suggestProducts.mockResolvedValue([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]);
+    mocks.fetchProduct.mockResolvedValue({
+      name: 'Nước rửa chén',
+      variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }],
+    });
+  });
+
+  it('đang giờ vàng: dòng hàng, tạm tính, phí giao và tổng lấy từ báo giá của máy chủ (đúng số sẽ ghi vào đơn)', async () => {
+    mocks.quoteCtvOrder.mockResolvedValue({
+      items: [{ variationId: 'var1', unitPrice: 52_000, quantity: 1, total: 52_000, isFlash: true, flashLimitNotice: null }],
+      goods: 52_000, shippingFee: 19_000, total: 71_000,
+    });
+    renderSheet();
+    await addProduct();
+    expect(await screen.findByText('Chanh · 52.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Giá giờ vàng')).toBeInTheDocument();
+    expect(screen.getByTestId('ctv-order-goods')).toHaveTextContent('52.000đ');
+    expect(screen.getByTestId('ctv-order-shipping')).toHaveTextContent('19.000đ');
+    expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ');
+    expect(screen.queryByText('Phí ship tính khi tạo đơn')).toBeNull();
+    expect(mocks.quoteCtvOrder).toHaveBeenLastCalledWith([{ variationId: 'var1', quantity: 1 }]);
+  });
+
+  it('vượt số suất giờ vàng: báo lý do ngay dưới dòng hàng, giá thường', async () => {
+    const notice = 'Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 2 sản phẩm với giá thường.';
+    mocks.quoteCtvOrder.mockImplementation(async (items: { variationId: string; quantity: number }[]) => {
+      const q = items[0]!.quantity;
+      return q === 1
+        ? { items: [{ variationId: 'var1', unitPrice: 52_000, quantity: 1, total: 52_000, isFlash: true, flashLimitNotice: null }], goods: 52_000, shippingFee: 19_000, total: 71_000 }
+        : { items: [{ variationId: 'var1', unitPrice: 65_000, quantity: q, total: 65_000 * q, isFlash: false, flashLimitNotice: notice }], goods: 65_000 * q, shippingFee: 19_000, total: 65_000 * q + 19_000 };
+    });
+    renderSheet();
+    await addProduct();
+    await screen.findByText('Chanh · 52.000đ');
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    expect(await screen.findByText(notice)).toBeInTheDocument();
+    expect(screen.getByText('Chanh · 65.000đ')).toBeInTheDocument();
+    expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('149.000đ');
+  });
+
+  it('chưa lấy được báo giá: hiện giá niêm yết như trước và ghi phí giao tính khi tạo đơn', async () => {
+    mocks.quoteCtvOrder.mockRejectedValue(new Error('mạng lỗi'));
+    renderSheet();
+    await addProduct();
+    await waitFor(() => expect(mocks.quoteCtvOrder).toHaveBeenCalled());
+    expect(screen.getByText('Chanh · 65.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Phí ship tính khi tạo đơn')).toBeInTheDocument();
+    expect(screen.getByTestId('ctv-order-goods')).toHaveTextContent('65.000đ');
   });
 });
 
