@@ -4,6 +4,7 @@ import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { recordUserAdminEvent } from '../../../common/user-admin-events';
 import { maskPhone } from '../../../common/mask-pii';
+import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../../common/admin-roster';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -103,6 +104,7 @@ export class RbacService {
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
     return this.prisma.$transaction(async (tx) => {
+      await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
         where: { phone: normalized, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -113,12 +115,7 @@ export class RbacService {
       if (user && user.id === adminId) {
         throw new BadRequestException('Không thể tự thu hồi quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
       }
-      if (user?.role === 'ADMIN') {
-        const admins = await tx.user.count({ where: { role: 'ADMIN' } });
-        if (admins <= 1) {
-          throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi thu hồi.');
-        }
-      }
+      if (user?.role === 'ADMIN') await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.revoke);
       let downgraded = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
