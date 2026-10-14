@@ -84,8 +84,9 @@ export function computeReturnShares(
 ): ReturnShares {
   const after = new Map(before);
   for (const [id, q] of request) after.set(id, (after.get(id) ?? 0) + q);
-  const rb = returnedRatio(order.items, before);
-  const ra = returnedRatio(order.items, after);
+  // Đơn không có dòng hàng (dữ liệu cũ) chỉ trả được nguyên đơn.
+  const rb = order.items.length ? returnedRatio(order.items, before) : 0;
+  const ra = order.items.length ? returnedRatio(order.items, after) : 1;
   const isFull = order.items.every((i) => (after.get(i.id) ?? 0) >= i.quantity);
   const delta = (amount: number) => Math.max(0, shareOf(amount, ra) - shareOf(amount, rb));
 

@@ -84,6 +84,12 @@ describe('computeReturnShares (D3)', () => {
     expect(r.isFull).toBe(true);
     expect(r.goods).toBe(0);
   });
+
+  it('đơn không có dòng hàng (dữ liệu cũ) → coi là trả cả đơn, hoàn đủ tiền hàng và ship', () => {
+    const r = computeReturnShares(order({ items: [] }), new Map(), new Map(), { shopFault: false, priorShipping: 0 });
+    expect(r.isFull).toBe(true);
+    expect(r.goods + r.shipping).toBe(order().total);
+  });
 });
 
 describe('distributeByWeight', () => {

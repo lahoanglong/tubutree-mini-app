@@ -126,12 +126,13 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect(after.pancakeAttentionAt).not.toBeNull();
   });
 
-  it('status=6 (huỷ) + bank_payment=total → CANCELLED, KHÔNG tự lật PAID; vào hàng đợi hoàn tiền thủ công', async () => {
+  it('status=6 (huỷ) + bank_payment=total → CANCELLED, KHÔNG tự lật PAID; tạo đúng 1 yêu cầu hoàn tiền về muộn (D2)', async () => {
     const order = await bankTransferOrder();
     await deliver({ extension: { external_order_id: order.code }, status: 6, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
-    expect(after.pancakeAttention).toContain('HOÀN TIỀN THỦ CÔNG');
+    const late = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(late).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: order.total, status: 'PENDING', userId: order.userId })]);
   });
 
   it('status=5 (Đã hoàn) khi đơn COD đang giao → CANCELLED (không kẹt "Đang giao"), lịch sử actor PANCAKE', async () => {

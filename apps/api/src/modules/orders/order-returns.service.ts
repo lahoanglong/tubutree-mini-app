@@ -350,7 +350,8 @@ export class OrderReturnsService {
         }
       }
     }
-    if (out.size === 0) throw new BadRequestException('Đơn không còn sản phẩm nào có thể trả.');
+    // Đơn không có dòng hàng (dữ liệu cũ) chỉ trả được nguyên đơn — computeReturnShares coi là trả cả đơn.
+    if (out.size === 0 && order.items.length > 0) throw new BadRequestException('Đơn không còn sản phẩm nào có thể trả.');
     return out;
   }
 

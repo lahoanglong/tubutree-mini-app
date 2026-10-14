@@ -220,7 +220,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     }
     const codes = new Set(fixtures.map((f) => f.order.code));
     const notices = notify.mock.calls.filter(
-      (c) => c[1] === 'ORDER_CANCELLED' && codes.has((c[2] as { order_code: string }).order_code),
+      (c) => c[1] === 'ORDER_PAYMENT_EXPIRED' && codes.has((c[2] as { order_code: string }).order_code),
     );
     expect(notices).toHaveLength(5);
   });
