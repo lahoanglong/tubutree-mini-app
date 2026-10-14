@@ -129,7 +129,7 @@ export interface AdminOrder {
   fulfillerStorefront?: { title: string } | null;
 }
 export interface DashboardStats {
-  /** Tiền đã thu: đơn đã thanh toán hoặc COD đã giao, trừ đơn huỷ/trả và phần đã hoàn khi trả một phần. */
+  /** Tiền đã thu: đơn đã thanh toán hoặc COD đã giao (không gồm đơn đại lý ghi công nợ), trừ đơn huỷ/trả và phần đã hoàn khi trả một phần. */
   totalRevenue: number;
   /** Giá trị đơn còn hiệu lực (gồm COD chưa thu) — API cũ chưa trả thì vắng. */
   gmv?: number;
@@ -139,6 +139,8 @@ export interface DashboardStats {
   pendingReturns?: number;
   /** Tổng tiền đã hoàn cho các yêu cầu trả hàng đã duyệt. */
   returnRefundTotal?: number;
+  /** Tổng dư nợ đại lý (đơn ghi công nợ chưa trả qua sổ công nợ) — không nằm trong doanh thu đã thu. */
+  dealerDebtOutstanding?: number;
   totalOrders: number;
   pendingOrders: number;
   shippingOrders: number;

@@ -675,7 +675,7 @@ function DashboardTab({
         <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu đã thu</div>
           <div className="mt-2 text-2xl font-bold text-forest-700">{formatVnd(stats.totalRevenue)}</div>
-          <div className="mt-1 text-xs text-stone-500">Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả và tiền hoàn</div>
+          <div className="mt-1 text-xs text-stone-500">Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả, tiền hoàn và đơn ghi công nợ</div>
           {stats.gmv !== undefined && (
             <dl className="mt-2 space-y-0.5 text-xs text-stone-600" data-kpi-revenue-breakdown>
               <div className="flex justify-between gap-2">
@@ -686,6 +686,12 @@ function DashboardTab({
                 <dt>COD chưa thu</dt>
                 <dd className="font-medium text-warning-fg">{formatVnd(stats.codPendingValue ?? 0)}</dd>
               </div>
+              {(stats.dealerDebtOutstanding ?? 0) > 0 && (
+                <div className="flex justify-between gap-2">
+                  <dt>Công nợ đại lý chưa thu</dt>
+                  <dd className="font-medium text-warning-fg">{formatVnd(stats.dealerDebtOutstanding ?? 0)}</dd>
+                </div>
+              )}
             </dl>
           )}
         </div>

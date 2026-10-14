@@ -90,6 +90,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       returnedOrders: 2,
       pendingReturns: 3,
       returnRefundTotal: 120_000,
+      dealerDebtOutstanding: 2_500_000,
       totalOrders: 7,
       pendingOrders: 1,
       shippingOrders: 1,
@@ -1772,10 +1773,11 @@ describe('admin/page — KPI doanh thu (ADMINOPS-14)', () => {
     const { container } = await mount();
     const text = container.textContent ?? '';
     expect(text).toContain('Doanh thu đã thu');
-    expect(text).toContain('Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả và tiền hoàn');
+    expect(text).toContain('Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả, tiền hoàn và đơn ghi công nợ');
     const dl = container.querySelector('[data-kpi-revenue-breakdown]')!;
     expect(dl.textContent).toContain('Giá trị đơn còn hiệu lực1.500.000');
     expect(dl.textContent).toContain('COD chưa thu400.000');
+    expect(dl.textContent).toContain('Công nợ đại lý chưa thu2.500.000');
     expect(text).toContain('2 đã trả hàng');
     const refunds = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Đã hoàn khi trả hàng'))!;
     expect(refunds.textContent).toContain('120.000');

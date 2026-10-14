@@ -53,4 +53,29 @@ describe('ADMINOPS-14 — KPI doanh thu (real Postgres)', () => {
     expect(after.pendingReturns - before.pendingReturns).toBe(1);
     expect(after.cancelledOrders - before.cancelledOrders).toBe(2);
   });
+
+  it('đơn đại lý ghi công nợ đã giao chưa trả: không vào doanh thu đã thu, hiện ở công nợ đại lý', async () => {
+    const before = await admin.getDashboardStats();
+    const dealer = await createUser(prisma, { role: 'DEALER' });
+    const credit = await createOrder(prisma, {
+      userId: dealer.id,
+      type: 'DEALER',
+      status: 'DELIVERED',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      total: 5_000_000,
+    });
+    await prisma.dealerCreditLedger.create({
+      data: { userId: dealer.id, delta: 5_000_000, refType: 'ORDER', refId: credit.id, note: 'IT' },
+    });
+    await prisma.returnRequest.create({
+      data: { orderId: credit.id, userId: dealer.id, reason: 'IT', status: 'APPROVED', refundAmount: 200_000 },
+    });
+    await prisma.dealerCreditLedger.create({ data: { userId: dealer.id, delta: -1_000_000, refType: 'PAYMENT', note: 'IT' } });
+    await createOrder(prisma, { userId: dealer.id, status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 300_000 });
+
+    const after = await admin.getDashboardStats();
+    expect(after.totalRevenue - before.totalRevenue).toBe(0);
+    expect(after.dealerDebtOutstanding - before.dealerDebtOutstanding).toBe(4_000_000);
+  });
 });

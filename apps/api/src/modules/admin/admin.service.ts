@@ -536,7 +536,7 @@ export class AdminService {
     const collected: Prisma.OrderWhereInput = {
       status: { notIn: ['CANCELLED', 'RETURNED'] },
       paymentStatus: { not: 'REFUNDED' },
-      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED' }],
+      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED', paymentMethod: 'COD' }],
     };
     const [
       totalOrders,
@@ -550,6 +550,7 @@ export class AdminService {
       gmvResult,
       codPendingResult,
       refundRows,
+      dealerDebtRows,
       totalUsers,
       totalAffiliates,
       totalProducts,
@@ -575,11 +576,15 @@ export class AdminService {
           SUM(r."refundAmount") FILTER (
             WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
               AND o."paymentStatus" <> 'REFUNDED'
-              AND (o."paymentStatus" = 'PAID' OR o.status = 'DELIVERED')
+              AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD'))
           ) AS on_collected
         FROM return_requests r
         JOIN orders o ON o.id = r."orderId"
         WHERE r.status = 'APPROVED'`,
+      this.prisma.$queryRaw<{ outstanding: bigint | null }[]>`
+        SELECT SUM(balance) AS outstanding
+        FROM (SELECT SUM(delta) AS balance FROM dealer_credit_ledgers GROUP BY "userId") b
+        WHERE balance > 0`,
       this.prisma.user.count(),
       this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
       this.prisma.product.count(),
@@ -613,6 +618,7 @@ export class AdminService {
       returnedOrders,
       pendingReturns,
       returnRefundTotal: Number(refunds?.all_refunds ?? 0),
+      dealerDebtOutstanding: Number(dealerDebtRows[0]?.outstanding ?? 0),
       totalUsers,
       totalAffiliates,
       totalProducts,
