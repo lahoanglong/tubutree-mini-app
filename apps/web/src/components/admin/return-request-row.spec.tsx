@@ -255,4 +255,20 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(btn(done, 'Đã nhận hàng về')).toBeNull();
     expect(done.textContent).toContain('Đã nhận hàng về lúc');
   });
+
+  it('đơn gian hàng tự giao (D4): hàng về gian hàng — xem trước nói rõ, đã duyệt không có nút "Đã nhận hàng về" của kho Tubu', async () => {
+    const order = { id: 'o1', code: 'TB-1', total: 282_000, status: 'DELIVERED', paymentMethod: 'COD', pancakeOrderId: null, fulfiller: 'MERCHANT', fulfillerStorefront: { title: 'Mật ong Linh' } };
+    mocks.preview.mockResolvedValue(PREVIEW({ returnTo: { kind: 'MERCHANT', name: 'Mật ong Linh' } }));
+    const c = await mount(REQ({ order }));
+    expect(c.textContent).toContain('Mật ong Linh tự giao');
+    click(btn(c, 'Duyệt hoàn tiền'));
+    await flush();
+    expect(c.textContent).toContain('Hàng trả về Mật ong Linh, không về kho Tubu');
+
+    const approved = await mount(REQ({ order, status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' }));
+    expect(btn(approved, 'Đã nhận hàng về')).toBeNull();
+    expect(approved.textContent).toContain('chờ gian hàng xác nhận đã nhận');
+    const received = await mount(REQ({ order, status: 'APPROVED', refundAmount: 89_000, receivedAt: '2026-10-14T00:00:00Z' }));
+    expect(received.textContent).toContain('Mật ong Linh đã nhận hàng trả lúc');
+  });
 });

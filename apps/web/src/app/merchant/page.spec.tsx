@@ -40,6 +40,7 @@ vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   failFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('fail', id, reason),
   cancelFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('cancel', id, reason),
   getMerchantSettlement: () => mocks.settlement(),
+  listMerchantReturns: async () => [],
   updateMerchantProduct: (id: string, dto: unknown) => mocks.updateProduct(id, dto),
   stopSellingMerchantProduct: (id: string) => mocks.stopSelling(id),
   checkPancakeVariation: (code: string) => mocks.checkPancake(code),
@@ -463,7 +464,7 @@ describe('cổng đối tác — tab Đối soát', () => {
     await openTab('Đối soát');
     expect(root.textContent).toContain('thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
     expect(root.textContent).toContain('sau 7 ngày');
-    expect(root.textContent).toContain('Chờ lập phiếu (2 đơn)');
+    expect(root.textContent).toContain('Chờ lập phiếu (2 khoản)');
     expect(root.textContent).toContain('−15.000');
     expect(root.textContent).toContain('mã GD FT123');
     expect(scrollRegionProblems(root)).toEqual([]);

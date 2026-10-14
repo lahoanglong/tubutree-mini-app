@@ -482,6 +482,7 @@ export class AdminService {
         include: {
           items: true,
           user: { select: { id: true, phone: true, fullName: true } },
+          fulfillerStorefront: { select: { title: true } },
           gomdonAlerts: {
             where: { resolvedAt: null },
             orderBy: { createdAt: 'desc' },

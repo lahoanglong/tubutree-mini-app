@@ -94,6 +94,7 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
 
   const p = preview.data;
   const busy = approve.isPending || reject.isPending;
+  const merchantStore = r.order?.fulfiller === 'MERCHANT' ? (r.order.fulfillerStorefront?.title ?? 'Gian hàng đối tác') : null;
   const paidMoney = (r.refundAmount ?? 0) + (r.shippingRefund ?? 0);
 
   return (
@@ -106,6 +107,11 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
             {r.fullReturn && (
               <span className="rounded bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700">
                 Trả cả đơn
+              </span>
+            )}
+            {merchantStore && (
+              <span className="rounded bg-info-bg px-2 py-0.5 text-xs font-medium text-info-fg">
+                {merchantStore} tự giao
               </span>
             )}
           </div>
@@ -285,7 +291,9 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
                     </p>
                   )}
                   <p className="mt-1 text-xs text-stone-600">
-                    Kho chỉ cộng lại khi bấm &quot;Đã nhận hàng về&quot;.
+                    {p.returnTo?.kind === 'MERCHANT'
+                      ? `Hàng trả về ${p.returnTo.name}, không về kho Tubu — gian hàng xác nhận nhận hàng và tự cộng kho; khoản đã quyết toán cho gian hàng được trừ lại ở kỳ sau.`
+                      : 'Kho chỉ cộng lại khi bấm "Đã nhận hàng về".'}
                   </p>
                   {approve.isError && (
                     <p role="alert" className="mt-2 text-sm text-danger-fg">
@@ -339,7 +347,11 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
           {r.status === 'APPROVED' &&
             !!r.items?.length &&
             (r.receivedAt ? (
-              <div>Đã nhận hàng về lúc {formatDateTime(r.receivedAt)} (đã cộng kho).</div>
+              <div>
+                {merchantStore ? `${merchantStore} đã nhận hàng trả` : 'Đã nhận hàng về'} lúc {formatDateTime(r.receivedAt)} (đã cộng kho).
+              </div>
+            ) : merchantStore ? (
+              <div className="pt-1 text-warning-fg">Hàng trả về gian hàng {merchantStore} — chờ gian hàng xác nhận đã nhận.</div>
             ) : (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-warning-fg">Chưa nhận hàng trả về — kho chưa cộng.</span>

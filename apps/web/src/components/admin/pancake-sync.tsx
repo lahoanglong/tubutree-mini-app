@@ -29,8 +29,14 @@ function awaitingStock(order: AdminOrder): boolean {
   return order.type === 'DEALER' && order.items.some((i) => (i.backorderedQty ?? 0) > 0);
 }
 
+/** Đơn gian hàng đối tác tự giao: kho Tubu không giao nên không bao giờ lên Pancake (API chặn đẩy/huỷ). */
+export function isMerchantFulfilled(order: AdminOrder): boolean {
+  return order.fulfiller === 'MERCHANT';
+}
+
 /** Tình trạng đồng bộ đơn với kho Pancake, theo các cột PancakeOrderService ghi. */
 export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
+  if (isMerchantFulfilled(order)) return null;
   switch (order.pancakeCancelStatus) {
     case 'PENDING':
       return { tone: 'warning', label: 'Pancake: đang chờ huỷ', flag: true };
@@ -65,7 +71,7 @@ export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
 }
 
 export function canRetryPancakePush(order: AdminOrder): boolean {
-  if (order.pancakeOrderId || !IN_WAREHOUSE.has(order.status)) return false;
+  if (isMerchantFulfilled(order) || order.pancakeOrderId || !IN_WAREHOUSE.has(order.status)) return false;
   return order.pancakePushStatus !== 'WAITING_PAYMENT' && !awaitingStock(order);
 }
 
@@ -101,6 +107,16 @@ export function PancakeSyncPanel({ order }: { order: AdminOrder }) {
 
   const s = pancakeSyncState(order);
   const showRetry = canRetryPancakePush(order);
+  if (isMerchantFulfilled(order)) {
+    return (
+      <section aria-label="Kho Pancake" className="rounded-card border border-stone-200 bg-stone-0 p-3 text-xs">
+        <span className="font-semibold uppercase text-stone-500">Kho Pancake:</span>{' '}
+        <span className="text-stone-600">
+          Không áp dụng — {order.fulfillerStorefront?.title ?? 'gian hàng đối tác'} tự giao đơn này.
+        </span>
+      </section>
+    );
+  }
   if (!s && !showRetry && !msg) return null;
 
   const onRetry = async () => {

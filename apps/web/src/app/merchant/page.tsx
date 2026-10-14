@@ -48,6 +48,7 @@ import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 import { formatDate } from '@/lib/format-date';
 import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
+import { MerchantReturnsSection } from './merchant-returns';
 import { CreateProductModal, EditProductModal } from './product-form';
 
 const POPULAR_BANKS = [
@@ -379,7 +380,12 @@ export default function MerchantPage() {
                 onUpdated={() => storeQ.refetch()}
               />
             )}
-            {activeTab === 'fulfil' && <FulfilOrdersTab />}
+            {activeTab === 'fulfil' && (
+              <div className="space-y-6">
+                <FulfilOrdersTab />
+                <MerchantReturnsSection />
+              </div>
+            )}
             {activeTab === 'products' && <ProductsTab canCreate={canCreateProducts} />}
             {activeTab === 'orders' && <OrdersTab selfFulfils={selfFulfils} />}
             {activeTab === 'settlement' && <SettlementTab />}

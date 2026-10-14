@@ -307,6 +307,8 @@ export interface SettlementLine {
   orderId: string;
   orderCode: string;
   kind: 'SALE' | 'REVERSAL';
+  /** '' = cả đơn; 'RETURN:<id>' = dòng đảo của một lần khách trả một phần (mỗi đơn có thể có nhiều). */
+  refKey?: string;
   goodsAmount: number;
   shippingFee: number;
   commissionAmount: number;
@@ -335,6 +337,27 @@ export interface MerchantStatement {
   total: number;
   upcoming: (SettlementLine & { availableAt: string | null })[];
 }
+
+// ── Hàng khách trả về gian hàng (đơn tự giao) ──
+
+export interface MerchantReturn {
+  id: string;
+  status: 'REQUESTED' | 'APPROVED';
+  createdAt: string;
+  reviewedAt: string | null;
+  receivedAt: string | null;
+  reasonLabel: string | null;
+  reason: string;
+  fullReturn: boolean;
+  shopFault: boolean | null;
+  orderCode: string;
+  lines: { productName: string; variationName: string | null; quantity: number }[];
+}
+
+export const listMerchantReturns = () => apiFetch<MerchantReturn[]>('/merchant/returns');
+/** Gian hàng đã nhận hàng khách trả: BE cộng lại tồn kho sản phẩm của gian hàng (một lần mỗi yêu cầu). */
+export const markMerchantReturnReceived = (id: string) =>
+  apiFetch<unknown>(`/merchant/returns/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
 
 export const getMerchantSettlement = () =>
   apiFetch<MerchantStatement & { payouts: MerchantPayout[] }>('/merchant/settlement');

@@ -124,6 +124,9 @@ export interface AdminOrder {
   allowedTransitions?: string[];
   /** true = đơn lẻ chuyển khoản còn UNPAID, chưa huỷ/trả → nút "Đã nhận tiền". */
   canConfirmPayment?: boolean;
+  /** TUBU = kho Tubu (qua Pancake); MERCHANT = gian hàng đối tác tự giao, không bao giờ lên Pancake. */
+  fulfiller?: 'TUBU' | 'MERCHANT' | string;
+  fulfillerStorefront?: { title: string } | null;
 }
 export interface DashboardStats {
   totalRevenue: number;
@@ -274,6 +277,9 @@ export interface AdminReturnRequest {
     paymentMethod: string;
     pancakeOrderId?: string | null;
     placedForCustomer?: boolean;
+    /** MERCHANT = gian hàng đối tác tự giao: hàng trả về gian hàng, gian hàng xác nhận nhận hàng (không về kho Tubu). */
+    fulfiller?: string;
+    fulfillerStorefront?: { title: string } | null;
   } | null;
   user?: {
     id: string;
@@ -305,6 +311,8 @@ export interface AdminReturnPreview {
   pointsEarnedBack: number;
   lines: { orderItemId: string; productName: string; variationName: string; quantity: number; orderedQuantity: number; refundAmount: number }[];
   pancakeTask: boolean;
+  /** Hàng trả về kho Tubu hay về gian hàng đối tác tự giao. */
+  returnTo?: { kind: 'TUBU' | 'MERCHANT'; name: string };
 }
 export const previewReturnRequest = (id: string, shopFault?: boolean) =>
   apiFetch<AdminReturnPreview>(

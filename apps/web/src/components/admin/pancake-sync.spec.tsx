@@ -132,3 +132,19 @@ describe('PancakeSyncPanel', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 });
+
+describe('đơn gian hàng đối tác tự giao (D4 × P1) — không bao giờ lên Pancake', () => {
+  const merchant = (o: Partial<AdminOrder> = {}) =>
+    order({ fulfiller: 'MERCHANT', fulfillerStorefront: { title: 'Mật ong Linh' }, pancakePushStatus: null, pancakeSyncError: null, ...o });
+
+  it('không badge "chưa lên Pancake", không nút "Đẩy lại Pancake", panel ghi rõ gian hàng tự giao', () => {
+    expect(pancakeSyncState(merchant())).toBeNull();
+    expect(pancakeSyncState(merchant({ pancakePushStatus: 'FAILED' }))).toBeNull();
+    expect(canRetryPancakePush(merchant())).toBe(false);
+    const badge = mount(<PancakeSyncBadge order={merchant({ pancakePushStatus: 'STALE' })} />);
+    expect(badge.container.textContent).toBe('');
+    const { container } = mount(<PancakeSyncPanel order={merchant()} />);
+    expect(container.textContent).toContain('Không áp dụng — Mật ong Linh tự giao đơn này.');
+    expect(container.querySelector('button')).toBeNull();
+  });
+});

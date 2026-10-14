@@ -18,6 +18,11 @@ export function signedVnd(n: number): string {
   return n < 0 ? `−${formatVnd(-n)}` : formatVnd(Math.abs(n));
 }
 
+/** Dòng đảo của một lần khách trả một phần đơn đã quyết toán (khác dòng đảo cả đơn). */
+export function isPartialReturnLine(l: Pick<SettlementLine, 'kind' | 'refKey'>): boolean {
+  return l.kind === 'REVERSAL' && !!l.refKey?.startsWith('RETURN:');
+}
+
 export function SettlementTable<L extends SettlementLine>({ lines, label, dateHeader, dateOf }: {
   lines: L[];
   label: string;
@@ -40,10 +45,12 @@ export function SettlementTable<L extends SettlementLine>({ lines, label, dateHe
         </thead>
         <tbody className="divide-y divide-stone-100">
           {lines.map((l) => (
-            <tr key={`${l.orderId}-${l.kind}`}>
+            <tr key={`${l.orderId}-${l.kind}-${l.refKey ?? ''}`}>
               <td className="px-3 py-2 font-medium text-stone-900">
                 {l.orderCode}
-                {l.kind === 'REVERSAL' && <span className="ml-1 text-danger-fg">(trả hàng)</span>}
+                {l.kind === 'REVERSAL' && (
+                  <span className="ml-1 text-danger-fg">{isPartialReturnLine(l) ? '(trả một phần)' : '(trả hàng)'}</span>
+                )}
               </td>
               <td className="px-3 py-2 text-stone-600">{formatDate(dateOf(l))}</td>
               <td className="px-3 py-2 text-right">{signedVnd(l.goodsAmount)}</td>
@@ -72,12 +79,13 @@ export function SettlementTab() {
         Mỗi đơn bạn tự giao: thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của khách. Đơn được đưa vào
         bảng kê sau {s.holdDays} ngày kể từ khi giao (hết hạn đổi/trả). Tubu Tree lập phiếu và chuyển khoản vào tài khoản nhận đối
         soát của gian hàng; số âm là phần bạn nộp lại Tubu. Đơn bị trả: Tubu Tree hoàn tiền cho khách, bạn nhận hàng về và nộp
-        lại phần đã nhận cho đơn đó; đơn COD là đúng số tiền mặt bạn đã thu.
+        lại phần đã nhận cho đơn đó; đơn COD là đúng số tiền mặt bạn đã thu. Khách trả một phần đơn đã đối soát: kỳ sau có
+        dòng &quot;trả một phần&quot; trừ lại đúng phần hàng trả.
       </Notice>
 
       <section className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-display font-semibold text-stone-900">Chờ lập phiếu ({s.lines.length} đơn)</h2>
+          <h2 className="font-display font-semibold text-stone-900">Chờ lập phiếu ({s.lines.length} khoản)</h2>
           <p className="text-sm text-stone-700">
             Tổng: <span className={`font-semibold ${s.total < 0 ? 'text-danger-fg' : 'text-forest-700'}`}>{signedVnd(s.total)}</span>
           </p>
@@ -112,7 +120,7 @@ export function SettlementTab() {
                 <span className="font-semibold text-stone-900">{signedVnd(p.amount)}</span>
                 <ToneBadge tone={PAYOUT_STATUS[p.status].tone}>{PAYOUT_STATUS[p.status].label}</ToneBadge>
                 <span className="text-xs text-stone-500">
-                  {p.lines.length} đơn · lập {formatDate(p.createdAt)}
+                  {p.lines.length} khoản · lập {formatDate(p.createdAt)}
                   {p.paidAt ? ` · chuyển ${formatDate(p.paidAt)}` : ''}
                   {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}
                 </span>
