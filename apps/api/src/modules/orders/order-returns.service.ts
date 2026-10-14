@@ -534,7 +534,7 @@ export class OrderReturnsService {
     const what = shares.lines
       .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
       .join(', ');
-    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. Tạo phiếu trả hàng trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
     try {
       await this.prisma.order.updateMany({
         where: { id: order.id },

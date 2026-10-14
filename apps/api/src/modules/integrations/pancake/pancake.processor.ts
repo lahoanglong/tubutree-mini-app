@@ -13,7 +13,8 @@ import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { UnpaidPrepaidTransitionError } from '../../orders/order-transition';
-import { recordLatePaymentRefund } from '../../orders/refund-queue';
+import { recordCumulativeLatePayment } from '../../orders/refund-queue';
+import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 
 interface EventData {
@@ -247,14 +248,16 @@ export class PancakeProcessor extends WorkerHost {
    * Hàng đợi "Cần xử lý Pancake": ghi lý do lên đơn + báo ADMIN in-app. Cùng lý do đang chờ thì không ghi/báo
    * lại (Pancake gửi lại webhook mỗi lần đơn đổi). Best-effort về báo động; lỗi ghi DB ném tiếp để retry.
    */
-  private async flagAttention(order: Pick<Order, 'id' | 'code'>, reason: string): Promise<void> {
+  /** Trả true khi vừa gắn (lời nhắc khác lời đang gắn); cùng lời thì không báo lại. */
+  private async flagAttention(order: Pick<Order, 'id' | 'code'>, reason: string): Promise<boolean> {
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
       data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
     });
-    if (r.count === 0) return;
+    if (r.count === 0) return false;
     this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
     await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
+    return true;
   }
 
   private async flagForeignPancakeOrder(order: Order, pancakeId: string | null): Promise<void> {
@@ -275,6 +278,7 @@ export class PancakeProcessor extends WorkerHost {
     }
     const target = this.targetStatus(order, action);
     if (!target) return;
+    if (action.kind === 'returned' && target.status === 'RETURNED' && (await this.blockedByPartialReturn(order))) return;
 
     // Hai nguồn trạng thái giao hàng không được cãi nhau: đơn có vận đơn Gomdon sống thì mốc đang giao/đã giao
     // chỉ theo Gomdon (DELIVERED cộng điểm, khoá hoa hồng — kho bấm "hoàn thành" hàng loạt trên Pancake không
@@ -308,6 +312,26 @@ export class PancakeProcessor extends WorkerHost {
       : { status: 'CANCELLED', note: 'Pancake: giao không thành, hàng đã hoàn về kho' };
   }
 
+  /**
+   * Pancake "Đã hoàn" (5) nghĩa là cả đơn về kho. Đơn đã duyệt trả một phần (hoặc đang có yêu cầu trả chờ duyệt) mà nhận
+   * 5 thì thường là kho làm phiếu trả sai loại — tự lật RETURNED sẽ hoàn tiền và cộng kho cả món khách vẫn giữ. Đưa vào
+   * hàng cần xử lý thay vì tự đổi.
+   */
+  private async blockedByPartialReturn(order: Order): Promise<boolean> {
+    const open = await this.prisma.returnRequest.findFirst({
+      where: { orderId: order.id, OR: [{ status: 'APPROVED', fullReturn: false }, { status: 'REQUESTED' }] },
+      select: { status: true },
+    });
+    if (!open) return false;
+    await this.flagAttention(
+      order,
+      open.status === 'REQUESTED'
+        ? 'Pancake báo "Đã hoàn" (cả đơn) trong khi khách đang có yêu cầu đổi/trả chờ duyệt — hệ thống KHÔNG tự hoàn tiền. Duyệt yêu cầu trả trên Tubu trước; trả một phần thì dùng "Hoàn một phần" trên Pancake.'
+        : 'Pancake báo "Đã hoàn" (cả đơn) cho đơn đã duyệt trả một phần — hệ thống KHÔNG tự hoàn phần còn lại. Kiểm tra phiếu trả trên Pancake (trả một phần phải dùng "Hoàn một phần"); nếu khách thật sự trả nốt, duyệt yêu cầu trả các món còn lại trên Tubu.',
+    );
+    return true;
+  }
+
   private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string): Promise<void> {
     try {
       await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note });
@@ -330,12 +354,23 @@ export class PancakeProcessor extends WorkerHost {
    * Đối soát thanh toán chuyển khoản: chỉ lật đơn BANK_TRANSFER còn UNPAID → PAID (idempotent). Dùng chung
    * OrderStatusService.markPaid với nút "Đã nhận tiền" của admin: guard nguyên tử, ghi lịch sử trạng thái
    * (ai/lúc nào xác nhận tiền) và event order_paid cùng transaction, đặt vận đơn thu gom đang chờ tiền, báo khách.
+   * Đơn đã huỷ/trả: mọi khoản Pancake báo đã nhận (kể cả chuyển thiếu) thành yêu cầu hoàn, tính theo phần tăng thêm.
+   * Đơn còn sống mà chuyển thiếu: vào hàng cần xử lý và báo khách số còn thiếu.
    */
   private async onPaymentReconcile(data: Record<string, unknown>): Promise<void> {
     const order = await this.findOrder(data);
     if (!order) return;
     if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
-    if (!isPancakeOrderPaid(data, order.total)) return;
+    const flaggedPaid = isPancakeOrderPaid(data, order.total);
+    const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      await this.recordLatePancakePayment(order, reported);
+      return;
+    }
+    if (!flaggedPaid) {
+      if (reported > 0) await this.flagUnderpaid(order, reported);
+      return;
+    }
 
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'PANCAKE',
@@ -345,13 +380,33 @@ export class PancakeProcessor extends WorkerHost {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
     } else if (outcome === 'CLOSED') {
       // Tiền về sau khi đơn đã huỷ/trả: không "hồi sinh" đơn — tạo yêu cầu hoàn tiền, khách chọn Ví hay ngân hàng.
-      const amount = pancakePaidAmount(data) || order.total;
-      await recordLatePaymentRefund(
-        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-        current ?? order,
-        { amount, source: 'PANCAKE', refKey: `${String(data['id'] ?? 'order')}:${amount}` },
-      );
+      await this.recordLatePancakePayment(current ?? order, reported);
     }
+  }
+
+  private async recordLatePancakePayment(order: Order, reported: number): Promise<void> {
+    await recordCumulativeLatePayment(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      order,
+      { reportedTotal: reported, source: 'PANCAKE' },
+    );
+  }
+
+  private async flagUnderpaid(order: Order, paid: number): Promise<void> {
+    const missing = order.total - paid;
+    const flagged = await this.flagAttention(
+      order,
+      `Khách chuyển thiếu: Pancake ghi nhận ${formatVnd(paid)}/${formatVnd(order.total)}, còn thiếu ${formatVnd(missing)} — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận.`,
+    );
+    if (!flagged) return;
+    await this.notifications
+      .notify(order.userId, 'ORDER_UNDERPAID', {
+        order_code: order.code,
+        paid: formatVnd(paid),
+        missing: formatVnd(missing),
+        total: formatVnd(order.total),
+      })
+      .catch((err) => this.logger.warn(`Không báo được khách chuyển thiếu đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
   }
 
   private async onShippingUpdated(data: Record<string, unknown>): Promise<void> {
