@@ -63,7 +63,8 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     await flush();
     const root = r.container;
     expect(root.textContent).toContain('Hạn SLA: xác nhận 24 giờ, gửi hàng 48 giờ, giao xong 7 ngày');
-    expect(root.textContent).toContain('2 đơn · 185.000');
+    // Một dòng bảng kê có thể là dòng đảo (trả một phần) của đơn đã quyết toán — đếm "khoản", không phải "đơn".
+    expect(root.textContent).toContain('2 khoản · 185.000');
     expect(root.textContent).toContain('Quá hạn xác nhận');
     const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Lập phiếu đối soát');
     expect(buttons.map((b) => b.disabled)).toEqual([false, true]);
@@ -82,6 +83,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     await flush();
     const root = r.container;
     expect(root.textContent).toContain('Chuyển vào BIDV 0123456789 (NGUYEN LINH)');
+    expect(root.textContent).toContain('2 khoản · lập');
     typeInto(root.querySelector('input')!, ' FT555 ');
     click(byText(root, 'button', 'Đã chuyển'));
     await flush();

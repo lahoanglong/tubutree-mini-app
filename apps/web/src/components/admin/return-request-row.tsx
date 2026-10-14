@@ -283,7 +283,7 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
                       onChange={(e) => setShopFault(e.target.checked)}
                       className="h-4 w-4 accent-forest-600"
                     />
-                    Lỗi do Tubu (hoàn cả phí ship dù chỉ trả một phần)
+                    {p.returnTo?.kind === 'MERCHANT' ? `Lỗi do gian hàng ${p.returnTo.name}` : 'Lỗi do Tubu'} (hoàn cả phí ship dù chỉ trả một phần)
                   </label>
                   {p.pancakeTask && (
                     <p className="mt-1 text-xs font-medium text-warning-fg">

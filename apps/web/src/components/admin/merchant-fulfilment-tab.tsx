@@ -85,7 +85,7 @@ export function MerchantFulfilmentTab() {
                       <td className="px-3 py-2 text-right">{s.activeOrders}</td>
                       <td className={`px-3 py-2 text-right ${s.overdueOrders > 0 ? 'font-semibold text-danger-fg' : ''}`}>{s.overdueOrders}</td>
                       <td className="px-3 py-2 text-right">
-                        {s.settleableLines > 0 ? `${s.settleableLines} đơn · ${signed(s.settleableAmount)}` : '—'}
+                        {s.settleableLines > 0 ? `${s.settleableLines} khoản · ${signed(s.settleableAmount)}` : '—'}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button
@@ -157,7 +157,7 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
           {p.status === 'PAID' ? 'Đã chuyển' : p.status === 'PENDING' ? 'Chờ chuyển' : 'Đã huỷ'}
         </ToneBadge>
         <span className="text-stone-500">
-          {p.lines.length} đơn · lập {formatDate(p.createdAt)}
+          {p.lines.length} khoản · lập {formatDate(p.createdAt)}
           {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}
         </span>
       </div>

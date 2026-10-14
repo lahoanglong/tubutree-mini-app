@@ -264,6 +264,9 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     click(btn(c, 'Duyệt hoàn tiền'));
     await flush();
     expect(c.textContent).toContain('Hàng trả về Mật ong Linh, không về kho Tubu');
+    // Đơn gian hàng tự giao: lỗi (nếu có) là của gian hàng, không phải của Tubu.
+    expect(c.textContent).toContain('Lỗi do gian hàng Mật ong Linh (hoàn cả phí ship dù chỉ trả một phần)');
+    expect(c.textContent).not.toContain('Lỗi do Tubu');
 
     const approved = await mount(REQ({ order, status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' }));
     expect(btn(approved, 'Đã nhận hàng về')).toBeNull();
