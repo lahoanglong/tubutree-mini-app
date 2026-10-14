@@ -15,7 +15,7 @@ const PAYOUT_STATUS: Record<MerchantPayout['status'], { label: string; tone: 'wa
 
 /** Số tiền có dấu: dương Tubu trả gian hàng, âm gian hàng nộp lại Tubu. */
 export function signedVnd(n: number): string {
-  return n < 0 ? `−${formatVnd(-n)}` : formatVnd(n);
+  return n < 0 ? `−${formatVnd(-n)}` : formatVnd(Math.abs(n));
 }
 
 export function SettlementTable<L extends SettlementLine>({ lines, label, dateHeader, dateOf }: {

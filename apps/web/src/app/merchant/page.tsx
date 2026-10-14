@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -171,6 +171,17 @@ export default function MerchantPage() {
   });
   const visibleTabs = TAB_DEFS.filter((t) => !t.merchantOnly || selfFulfils);
   const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? 'store' : tab;
+  // Thanh tab cuộn ngang ở màn hẹp: mở bằng ?tab= thì tab đang chọn có thể nằm ngoài khung nhìn. Chỉ cuộn ngang thanh tab,
+  // không dùng scrollIntoView vì nó kéo cả trang xuống.
+  const tablistRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = tablistRef.current;
+    const el = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!list || !el) return;
+    if (el.offsetLeft < list.scrollLeft || el.offsetLeft + el.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = Math.max(0, el.offsetLeft - 16);
+    }
+  }, [activeTab, visibleTabs.length]);
 
   // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
   // không chờ thì màn "Cổng Quản Trị Đối Tác — đăng nhập" chớp lên mỗi lần F5.
@@ -315,7 +326,12 @@ export default function MerchantPage() {
       </div>
 
       {/* ── Navigation Tabs ── */}
-      <div role="tablist" aria-label="Mục quản lý gian hàng" className="mt-6 flex gap-2 overflow-x-auto border-b border-stone-200 pb-0.5 scrollbar-none">
+      <div
+        ref={tablistRef}
+        role="tablist"
+        aria-label="Mục quản lý gian hàng"
+        className="relative mt-6 flex gap-2 overflow-x-auto border-b border-stone-200 pb-0.5 scrollbar-none lg:flex-wrap lg:overflow-visible"
+      >
         {visibleTabs.map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.k;
@@ -567,8 +583,8 @@ function StoreSettingsTab({
             </div>
 
             {/* Profile Avatar & Info inside screen */}
-            <div className="px-3 -mt-6">
-              <div className="flex items-end gap-2">
+            <div className="relative px-3 -mt-6">
+              <div className="flex items-start gap-2">
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border-2 border-stone-0 bg-stone-0 shadow-card">
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -579,7 +595,7 @@ function StoreSettingsTab({
                     </div>
                   )}
                 </div>
-                <div className="pb-0.5 min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pt-7">
                   <p className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</p>
                   <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
                 </div>
@@ -991,7 +1007,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
 
       {subTab === 'own' && q.data && (
         <ScrollRegion label="Sản phẩm do tôi đăng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Sản phẩm</th>
@@ -1053,7 +1069,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="inline-flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={() => setEditing(p)} className={`${BTN_SMALL} gap-1`}>
+                          <button type="button" onClick={() => setEditing(p)} className={`${BTN_SMALL} inline-flex items-center gap-1`}>
                             <Pencil className="h-3 w-3" aria-hidden="true" />
                             <span>Sửa</span>
                           </button>
