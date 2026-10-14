@@ -16,9 +16,9 @@ export function paidGoodsByLine(order: { total: number; shippingFee: number; ite
 /**
  * Nền tiền hàng của từng dòng trên phiếu đối soát, dùng chung cho đơn gian hàng tự giao và hàng Tubu giao hộ — chỗ DUY NHẤT
  * quyết định nền tính: tiền khách thực trả cho dòng. Đơn có `OrderItem.paidTotal` dùng đúng số checkout đã chia (mỗi khoản
- * giảm chỉ vào dòng được hưởng: mã gắn sản phẩm chỉ dòng sản phẩm đó, mã/hạng không vào hàng flash) — cùng số hoàn tiền
- * khách dùng. Đơn cũ: tiền hàng thực trả chia theo giá trị dòng, phần dư theo thứ tự id dòng nên số không đổi theo thứ tự DB
- * trả về. Kết quả theo đúng thứ tự `items`.
+ * giảm chỉ vào dòng được hưởng: mã gắn sản phẩm chỉ dòng sản phẩm đó, mã/hạng không vào hàng flash, Điểm Xanh không vào hàng
+ * của gian hàng đối tác) — cùng số hoàn tiền khách dùng. Đơn cũ: tiền hàng thực trả chia theo giá trị dòng (khi đó Điểm Xanh
+ * còn chia vào mọi dòng), phần dư theo thứ tự id dòng nên số không đổi theo thứ tự DB trả về. Kết quả theo đúng thứ tự `items`.
  */
 export function merchantLineBase(order: {
   total: number;

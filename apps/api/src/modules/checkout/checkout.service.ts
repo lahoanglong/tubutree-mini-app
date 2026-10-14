@@ -35,12 +35,14 @@ import {
   allocateGroupAmounts,
   groupByFulfiller,
   PAYMENT_METHOD_NOT_ALLOWED,
+  pointsRedeemBase,
   paymentMethodBlockReason,
   TUBU_FULFILLER_NAME,
   unavailableLineMessage,
   type GroupAmounts,
   type LineFulfiller,
 } from './checkout-split';
+import { PARTNER_POINTS_NOTE } from '../cart/partner-goods';
 import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
@@ -65,6 +67,13 @@ class CartChangedError extends Error {
   constructor(readonly consumed: boolean) {
     super(CART_CHANGED);
   }
+}
+
+/** Lời báo trong báo giá khi số Điểm Xanh khách chọn bị kẹp vì giỏ có hàng của gian hàng đối tác. */
+export function partnerPointsNotice(pointsMax: number): string {
+  return pointsMax > 0
+    ? `Đơn này dùng được tối đa ${pointsMax.toLocaleString('vi-VN')} Điểm Xanh. ${PARTNER_POINTS_NOTE}.`
+    : `Đơn này không dùng được Điểm Xanh. ${PARTNER_POINTS_NOTE}.`;
 }
 
 function cartChangeSince(
@@ -221,6 +230,11 @@ export class CheckoutService {
       pointsUsed: computed.pointsUsed,
       pointsUsedConverted: computed.pointsUsedConverted,
       pointsDiscount: computed.pointsDiscount,
+      // Số Điểm Xanh tối đa dùng được cho lần đặt này (số dư dùng được, trần %, chỉ trên hàng Tubu) và câu giải thích khi giỏ
+      // có hàng của gian hàng đối tác; pointsNotice khi số khách chọn bị kẹp vì hàng đó.
+      pointsMax: computed.pointsMax,
+      pointsPartnerNote: computed.pointsPartnerNote,
+      pointsNotice: computed.pointsNotice,
       shippingFee: computed.shippingFee,
       total: computed.total,
       pointsEarned: computed.pointsEarned,
@@ -474,6 +488,7 @@ export class CheckoutService {
                       // Tiền khách thực trả cho dòng (mỗi khoản giảm chỉ vào dòng được hưởng) — nền hoàn tiền, hoa hồng,
                       // đối soát đối tác.
                       paidTotal: shipment.linePaid[idx] ?? null,
+                      pointsDiscount: shipment.linePoints[idx] ?? null,
                       flashSaleItemId: l.flashSaleItemId ?? null,
                     };
                   }),
@@ -907,8 +922,16 @@ export class CheckoutService {
     const tierDiscount = this.pricing.calcTierDiscount(goodsAfterCoupon, tierDiscountPct);
     const goodsAfterTierDiscount = Math.max(0, goodsAfterCoupon - tierDiscount);
 
-    // Điểm áp trên TOÀN đơn (gồm flash): base = phần non-flash sau coupon+hạng + flashSubtotal.
-    const redeemBase = goodsAfterTierDiscount + flashSubtotal;
+    // Điểm Xanh chỉ trả cho hàng Tubu (gồm flash): nền = hàng Tubu sau combo, mã, hạng + hàng Tubu flash. Hàng của gian hàng
+    // đối tác chỉ trả bằng tiền (cart/partner-goods.ts). Giỏ chỉ hàng Tubu: nền đúng bằng goodsAfterTierDiscount + flashSubtotal.
+    const hasPartnerLines = cart.items.some((l) => l.partnerOwned || l.fulfiller.kind === 'MERCHANT');
+    const redeemBase = pointsRedeemBase(cart.items, {
+      comboPerLine: combo.perLine,
+      comboTotal: combo.total,
+      couponDiscount: discount,
+      couponProductIds,
+      tierDiscount,
+    });
     // Trần điểm = số DÙNG ĐƯỢC (số dư − điểm đơn còn có thể bị đảo), không phải số dư — cùng luật
     // LoyaltyService.redeemReward. Đọc ngoài tx ở đây chỉ để báo giá/kẹp; placeOrder kiểm lại trong tx.
     const lockedPoints =
@@ -921,6 +944,25 @@ export class CheckoutService {
       user.pointsConvertedBalance,
       redeemBase,
     );
+    const pointsMax = (
+      await this.pricing.resolvePointsRedemptionByLot(
+        redeemablePoints + user.pointsConvertedBalance,
+        redeemablePoints,
+        user.pointsConvertedBalance,
+        redeemBase,
+      )
+    ).pointsUsed;
+    // Báo khách khi chính hàng của gian hàng đối tác làm số điểm dùng được ít hơn số khách chọn (không báo khi chỉ vì số dư/trần %).
+    let pointsNotice: string | null = null;
+    if (hasPartnerLines && (pointsToUse ?? 0) > redemption.pointsUsed) {
+      const withPartner = await this.pricing.resolvePointsRedemptionByLot(
+        pointsToUse ?? 0,
+        redeemablePoints,
+        user.pointsConvertedBalance,
+        goodsAfterTierDiscount + flashSubtotal,
+      );
+      if (withPartner.pointsUsed > redemption.pointsUsed) pointsNotice = partnerPointsNotice(pointsMax);
+    }
 
     // Một kiện cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giảm giá tính trên cả lần đặt ở trên
     // rồi phân bổ về từng kiện; phí giao tính riêng từng kiện. Giỏ chỉ hàng Tubu = một kiện = đúng số tiền như trước.
@@ -985,6 +1027,9 @@ export class CheckoutService {
         pointsUsed: redemption.pointsUsed,
         pointsUsedConverted: redemption.pointsUsedConverted,
         pointsDiscount: redemption.discount,
+        pointsMax,
+        pointsNotice,
+        pointsPartnerNote: hasPartnerLines ? PARTNER_POINTS_NOTE : null,
         redeemablePoints,
         lockedPoints,
         shippingFee,

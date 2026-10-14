@@ -6,8 +6,9 @@ import type { SettlementLine } from './merchant-fulfilment.service';
 /**
  * Đối soát hàng "Tubu giao hộ" (D4, Q8): kho Tubu giao qua Pancake và tiền khách luôn về Tubu, nên mỗi dòng hàng giao hộ là
  * một khoản Tubu trả gian hàng trên cùng phiếu đối soát với đơn tự giao. Thực nhận của dòng = tiền khách thực trả cho dòng
- * (sau phần mã giảm/Điểm Xanh/giảm hạng chia theo giá trị dòng) − phí sàn của gian hàng − phí Tubu giao hộ (% và phần chia
- * của phí cố định mỗi đơn). Phí giao là của Tubu (Tubu cũng chịu freeship) nên không bao giờ vào tiền của gian hàng.
+ * (merchantLineBase: giá bán, kể cả giá giờ vàng, trừ phần mã giảm giá và giảm hạng của dòng; Điểm Xanh không trả cho hàng
+ * đối tác) − phí sàn của gian hàng − phí Tubu giao hộ (% và phần chia của phí cố định mỗi đơn). Phí giao là của Tubu (Tubu
+ * cũng chịu freeship) nên không bao giờ vào tiền của gian hàng.
  */
 
 export const ITEM_REF_PREFIX = 'ITEM:';

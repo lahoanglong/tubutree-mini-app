@@ -4,6 +4,9 @@
  * dùng); phần của các đơn vị trả = paidTotal × số trả / số lượng, làm tròn từng dòng. Đơn cũ không có paidTotal: tiền hàng
  * thực trả `total − shippingFee` nhân tỉ lệ giá trị các đơn vị trả trên tổng `OrderItem.total`.
  *
+ * Điểm Xanh đã dùng trả lại theo phần điểm của từng dòng (`OrderItem.pointsDiscount`; dòng hàng của gian hàng đối tác không
+ * nhận điểm nên trả nó không hoàn điểm); đơn cũ chưa lưu thì theo tỉ lệ giá trị.
+ *
  * Mỗi đại lượng (tiền hàng, điểm đã dùng, điểm lô quy đổi, điểm tích) tính theo kiểu "luỹ kế sau trừ luỹ kế trước":
  * phần của lần này = share(đã trả sau lần này) − share(đã trả trước đó). Nhờ vậy trả nhiều lần cộng lại đúng bằng
  * cả đơn, không lệch đồng nào vì làm tròn, và lần trả nốt nhận đúng phần còn lại.
@@ -14,6 +17,8 @@ export interface AllocItem {
   quantity: number;
   /** Tiền khách thực trả cho dòng lúc đặt (OrderItem.paidTotal); null ở đơn đặt trước khi có cột này. */
   paidTotal?: number | null;
+  /** Phần Điểm Xanh (đồng) trừ vào dòng lúc đặt (OrderItem.pointsDiscount); hàng của gian hàng đối tác luôn 0. */
+  pointsDiscount?: number | null;
 }
 
 /**
@@ -78,6 +83,23 @@ function returnedRatio(items: AllocItem[], qty: ReadonlyMap<string, number>): nu
   return Math.min(1, value / gross);
 }
 
+/**
+ * Tỉ lệ Điểm Xanh của các đơn vị đã trả khi đơn lưu phần điểm từng dòng: điểm chỉ nằm trên dòng hàng Tubu, nên trả hàng của
+ * gian hàng đối tác không hoàn điểm. Đơn cũ chưa lưu (một dòng thiếu) → null, dùng tỉ lệ giá trị như trước.
+ */
+function returnedPointsRatio(items: AllocItem[], qty: ReadonlyMap<string, number>): number | null {
+  if (items.length === 0 || items.some((i) => i.pointsDiscount == null || i.pointsDiscount < 0)) return null;
+  if (items.every((i) => (qty.get(i.id) ?? 0) >= i.quantity)) return 1;
+  const total = items.reduce((s, i) => s + i.pointsDiscount!, 0);
+  if (total <= 0) return 0;
+  let value = 0;
+  for (const i of items) {
+    const q = Math.min(qty.get(i.id) ?? 0, i.quantity);
+    if (q > 0 && i.quantity > 0) value += (i.pointsDiscount! * q) / i.quantity;
+  }
+  return Math.min(1, value / total);
+}
+
 /** Phần của `amount` ứng với tỉ lệ; tỉ lệ 1 trả đúng `amount` để luỹ kế khép kín. */
 export function shareOf(amount: number, ratio: number): number {
   if (amount <= 0 || ratio <= 0) return 0;
@@ -121,8 +143,11 @@ export function computeReturnShares(
   const shippingLeft = Math.max(0, order.shippingFee - opts.priorShipping);
   const shipping = isFull || opts.shopFault ? shippingLeft : 0;
   const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
-  const pointsUsedBack = delta(order.pointsUsed);
-  const convertedBack = Math.min(pointsUsedBack, delta(usedConverted));
+  const prb = returnedPointsRatio(order.items, before) ?? rb;
+  const pra = returnedPointsRatio(order.items, after) ?? ra;
+  const pointsDelta = (amount: number) => Math.max(0, shareOf(amount, pra) - shareOf(amount, prb));
+  const pointsUsedBack = pointsDelta(order.pointsUsed);
+  const convertedBack = Math.min(pointsUsedBack, pointsDelta(usedConverted));
 
   const lineIds = [...request.keys()].filter((id) => (request.get(id) ?? 0) > 0);
   let goods: number;

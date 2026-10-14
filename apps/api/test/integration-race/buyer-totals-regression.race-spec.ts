@@ -53,7 +53,14 @@ type Snapshot = { placement: Json; perLine: Json };
 const ROUNDING = 'làm tròn theo từng dòng (paidTotal) thay vì theo tỉ lệ cả đơn, lệch 1đ';
 const FLASH = 'hàng giờ vàng không gánh mã giảm giá: hoàn đúng giá giờ vàng đã trả (trừ phần Điểm Xanh), dòng thường hoàn ít hơn';
 const SCOPED = 'mã gắn sản phẩm chỉ trừ vào dòng sản phẩm đó: dòng đó hoàn ít hơn, dòng khác hoàn nhiều hơn';
+const POINTS = 'Điểm Xanh hoàn theo đúng phần điểm của dòng (OrderItem.pointsDiscount) thay vì theo giá trị dòng: tiền hoàn + điểm hoàn của một dòng khớp giá trị dòng đó';
 const PER_LINE_CHANGES: Record<string, { now: unknown; why: string }> = {
+  'wallet-flash-coupon-points.orders[0].refunds.1 × F.pointsUsedBack': { now: 13, why: POINTS },
+  'wallet-flash-coupon-points.orders[0].refunds.1 × A.pointsUsedBack': { now: 7, why: POINTS },
+  'wallet-flash-coupon-points.orders[0].refunds.1 × B.pointsUsedBack': { now: 2, why: POINTS },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsUsedBack': { now: 12, why: POINTS },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsUsedBack': { now: 5, why: POINTS },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × C.pointsUsedBack': { now: 3, why: POINTS },
   'cod-coupon-tier-points.orders[0].refunds.1 × A.goods': { now: 21_861, why: ROUNDING },
   'wallet-flash-coupon-points.orders[0].refunds.1 × F.goods': { now: 86_080, why: FLASH },
   'wallet-flash-coupon-points.orders[0].refunds.1 × A.goods': { now: 46_987, why: FLASH },
@@ -311,7 +318,10 @@ describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng s
         pointsUsed: o.pointsUsed,
         pointsUsedConverted: o.pointsUsedConverted,
         pointsEarned: o.pointsEarned,
-        items: o.items.map((i) => ({ id: i.id, total: i.total, quantity: i.quantity, paidTotal: (i as { paidTotal?: number | null }).paidTotal })),
+        items: o.items.map((i) => {
+          const stored = i as { paidTotal?: number | null; pointsDiscount?: number | null };
+          return { id: i.id, total: i.total, quantity: i.quantity, paidTotal: stored.paidTotal, pointsDiscount: stored.pointsDiscount };
+        }),
       };
       const refunds: Json = {};
       for (const i of o.items) {

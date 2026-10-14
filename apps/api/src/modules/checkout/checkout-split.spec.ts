@@ -139,6 +139,7 @@ describe('allocateGroupAmounts', () => {
       goodsAfterAll: 276_500,
       // t1: 300.000 − combo 10.000 − mã 20.000 − hạng 13.500 − điểm 25.106; t2 (flash): 50.000 − điểm 4.894.
       linePaid: [231_394, 45_106],
+      linePoints: [25_106, 4_894],
     });
   });
 

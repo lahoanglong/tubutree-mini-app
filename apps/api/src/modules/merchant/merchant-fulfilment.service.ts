@@ -153,8 +153,9 @@ export interface SettlementLine {
 
 /**
  * Một dòng đối soát của đơn đã giao (mục 7 thiết kế): tiền hàng + phí giao − phí sàn − tiền COD đối tác đã tự thu. Tiền hàng là
- * tiền khách thực trả cho hàng (merchantLineBase, cùng nền với hàng Tubu giao hộ): mã giảm giá Tubu, Điểm Xanh, giảm hạng do
- * gian hàng chịu; phí sàn vẫn theo mức chốt trên đơn. Dương: Tubu trả đối tác; âm: đối tác nộp lại Tubu (đơn COD: phí sàn).
+ * tiền khách thực trả cho hàng (merchantLineBase, cùng nền với hàng Tubu giao hộ): mã giảm giá và giảm hạng áp cho hàng của
+ * gian hàng do gian hàng chịu (Điểm Xanh không trả cho hàng đối tác); phí sàn vẫn theo mức chốt trên đơn. Dương: Tubu trả đối
+ * tác; âm: đối tác nộp lại Tubu (đơn COD: phí sàn).
  */
 export function saleLineOf(o: {
   id: string;
