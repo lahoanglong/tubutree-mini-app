@@ -10,6 +10,8 @@ import { CRON_TZ } from '../../common/cron-tz';
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
 export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
+export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
+export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
 
 export interface EffectivePrice {
   flashPrice: number;
@@ -202,13 +204,21 @@ export class FlashSaleService {
     return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
   }
 
-  /** Cập nhật đợt flash sale (admin). */
+  /**
+   * Cập nhật đợt flash sale (admin). Đợt đã bắt đầu không đổi được giờ bắt đầu: đẩy sang tương lai thì giá flash biến mất
+   * khỏi khách đang xem rồi đợt xoá được như đợt chưa bắt đầu (R3-UI-5). Đổi khung giờ cũng không được làm một biến thể
+   * nằm trong hai đợt trùng giờ — addItem chặn điều đó lúc thêm, ở đây chặn lúc dời giờ.
+   */
   async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }) {
     if (dto.startAt !== undefined || dto.endAt !== undefined) {
-      const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id } });
+      const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
       const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
       const end = dto.endAt ? new Date(dto.endAt) : current.endAt;
       assertSaleWindow(start, end, dto.endAt !== undefined);
+      if (current.startAt.getTime() <= Date.now() && start.getTime() !== current.startAt.getTime()) {
+        throw new BadRequestException(FLASH_START_LOCKED_MSG);
+      }
+      await this.assertNoItemClash(id, current.items?.map((it) => it.variationId) ?? [], start, end);
     }
     return this.prisma.flashSale.update({
       where: { id },
@@ -219,6 +229,17 @@ export class FlashSaleService {
         isActive: dto.isActive,
       },
     });
+  }
+
+  /** Không biến thể nào của đợt `saleId` nằm trong đợt khác trùng khung giờ [start, end). */
+  private async assertNoItemClash(saleId: string, variationIds: string[], start: Date, end: Date): Promise<void> {
+    if (variationIds.length === 0) return;
+    const from = new Date(Math.max(start.getTime(), Date.now()));
+    const clash = await this.prisma.flashSaleItem.findFirst({
+      where: { variationId: { in: variationIds }, flashSale: { id: { not: saleId }, startAt: { lt: end }, endAt: { gt: from } } },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
   }
 
   /**
@@ -274,7 +295,7 @@ export class FlashSaleService {
     const clash = await this.prisma.flashSaleItem.findFirst({
       where: { variationId: dto.variationId, flashSale: { startAt: { lt: sale.endAt }, endAt: { gt: from } } },
     });
-    if (clash) throw new BadRequestException('Sản phẩm đã có trong đợt flash khác.');
+    if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
     return this.prisma.flashSaleItem.create({
       data: { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit },

@@ -1353,6 +1353,28 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     expect(mocks.updateFlashSale).toHaveBeenCalledTimes(1);
   });
 
+  it('Sửa đợt đang chạy: khoá ô giờ bắt đầu (API từ chối), vẫn sửa được tên và giờ kết thúc (R3-UI-5)', async () => {
+    mocks.flashSales = [upcoming({ id: 's1', title: 'Đợt đang chạy', startAt: new Date(Date.now() - 3600e3).toISOString() })];
+    const { container } = await openSales();
+    click(btn(container, 'Sửa đợt'));
+    expect(labelledInput(container, 'Bắt đầu lúc (sửa)').disabled).toBe(true);
+    expect(container.textContent).toContain('Đợt đã bắt đầu: không đổi được giờ bắt đầu');
+    expect(labelledInput(container, 'Kết thúc lúc (sửa)').disabled).toBe(false);
+    typeInto(labelledInput(container, 'Tên đợt (sửa)'), 'Đợt đang chạy (đổi tên)');
+    mocks.updateFlashSale.mockResolvedValue({});
+    click(btn(container, 'Lưu thay đổi'));
+    await flush();
+    expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { title: 'Đợt đang chạy (đổi tên)' });
+  });
+
+  it('Sửa đợt chưa bắt đầu: ô giờ bắt đầu mở, không có lời nhắc khoá', async () => {
+    mocks.flashSales = [upcoming()];
+    const { container } = await openSales();
+    click(btn(container, 'Sửa đợt'));
+    expect(labelledInput(container, 'Bắt đầu lúc (sửa)').disabled).toBe(false);
+    expect(container.textContent).not.toContain('không đổi được giờ bắt đầu');
+  });
+
   it('Xoá đợt: chỉ có với đợt CHƯA bắt đầu, hỏi xác nhận rồi mới gọi API', async () => {
     mocks.flashSales = [upcoming(), upcoming({ id: 's1', title: 'Đợt đang chạy', startAt: new Date(Date.now() - 3600e3).toISOString() })];
     const { container } = await openSales();

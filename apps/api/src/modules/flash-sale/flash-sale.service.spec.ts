@@ -243,11 +243,12 @@ describe('FlashSaleService.createSale (ADMINOPS-16)', () => {
 });
 
 describe('FlashSaleService.updateSale', () => {
-  const mkPrisma = (current: Record<string, unknown>) => ({
+  const mkPrisma = (current: Record<string, unknown>, clash: unknown = null) => ({
     flashSale: {
       findUniqueOrThrow: jest.fn().mockResolvedValue(current),
       update: jest.fn().mockResolvedValue({ id: 's1' }),
     },
+    flashSaleItem: { findFirst: jest.fn().mockResolvedValue(clash) },
   });
 
   it('startAt sau endAt (cả 2 đều truyền) → reject, KHÔNG update', async () => {
@@ -278,6 +279,71 @@ describe('FlashSaleService.updateSale', () => {
       new FlashSaleService(prisma, config, notifications, lifecycle).updateSale('s1', { endAt: '2020-02-01T00:00:00Z' }),
     ).rejects.toThrow('Thời gian kết thúc phải ở tương lai.');
     expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  // R3-UI-5: đợt đã bắt đầu mà đổi startAt sang tương lai thì biến mất khỏi khách giữa chừng rồi xoá được như đợt chưa bắt đầu.
+  describe('đợt đã bắt đầu không đổi được giờ bắt đầu (R3-UI-5)', () => {
+    const running = () => ({ id: 's1', startAt: new Date(Date.now() - 3600_000), endAt: new Date(Date.now() + 3600_000), items: [] });
+    const svc = (prisma: unknown) => new FlashSaleService(prisma as any, config, notifications, lifecycle);
+
+    it('startAt sang tương lai → 400, KHÔNG update', async () => {
+      const prisma = mkPrisma(running());
+      await expect(svc(prisma).updateSale('s1', { startAt: new Date(Date.now() + 1800_000).toISOString() })).rejects.toThrow(
+        'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu',
+      );
+      expect(prisma.flashSale.update).not.toHaveBeenCalled();
+    });
+
+    it('startAt sang quá khứ khác đi cũng → 400 (đợt đã bán theo giờ cũ)', async () => {
+      const prisma = mkPrisma(running());
+      await expect(svc(prisma).updateSale('s1', { startAt: new Date(Date.now() - 7200_000).toISOString() })).rejects.toThrow('đã bắt đầu');
+      expect(prisma.flashSale.update).not.toHaveBeenCalled();
+    });
+
+    it('gửi lại đúng startAt hiện tại kèm endAt mới → vẫn sửa được endAt', async () => {
+      const cur = running();
+      const prisma = mkPrisma(cur);
+      const endAt = new Date(Date.now() + 7200_000).toISOString();
+      await svc(prisma).updateSale('s1', { startAt: cur.startAt.toISOString(), endAt });
+      expect(prisma.flashSale.update).toHaveBeenCalled();
+    });
+
+    it('chỉ đổi endAt, title, isActive → vẫn được', async () => {
+      const prisma = mkPrisma(running());
+      await svc(prisma).updateSale('s1', { endAt: new Date(Date.now() + 7200_000).toISOString(), title: 'Mới', isActive: false });
+      expect(prisma.flashSale.update).toHaveBeenCalled();
+    });
+
+    it('đợt chưa bắt đầu vẫn đổi được startAt', async () => {
+      const prisma = mkPrisma({ id: 's1', startAt: new Date('2099-07-01'), endAt: new Date('2099-07-05'), items: [] });
+      await svc(prisma).updateSale('s1', { startAt: '2099-07-02' });
+      expect(prisma.flashSale.update).toHaveBeenCalled();
+    });
+  });
+
+  // Đổi khung giờ không được lách chặn trùng SKU của addItem (hai giá flash cùng lúc cho một biến thể).
+  describe('đổi khung giờ không làm hai đợt trùng giờ cùng một biến thể', () => {
+    const svc = (prisma: unknown) => new FlashSaleService(prisma as any, config, notifications, lifecycle);
+    const upcoming = () => ({ id: 's1', startAt: new Date('2099-07-01'), endAt: new Date('2099-07-05'), items: [{ variationId: 'v1' }, { variationId: 'v2' }] });
+
+    it('trùng giờ với đợt khác có cùng biến thể → 400, KHÔNG update', async () => {
+      const prisma = mkPrisma(upcoming(), { id: 'fi9' });
+      await expect(svc(prisma).updateSale('s1', { endAt: '2099-07-20' })).rejects.toThrow('Sản phẩm đã có trong đợt flash khác.');
+      expect(prisma.flashSale.update).not.toHaveBeenCalled();
+      expect(prisma.flashSaleItem.findFirst.mock.calls[0]![0].where).toMatchObject({
+        variationId: { in: ['v1', 'v2'] },
+        flashSale: { id: { not: 's1' }, startAt: { lt: new Date('2099-07-20') } },
+      });
+    });
+
+    it('không trùng → update; đợt không có item thì không truy vấn trùng', async () => {
+      const prisma = mkPrisma(upcoming(), null);
+      await svc(prisma).updateSale('s1', { endAt: '2099-07-20' });
+      expect(prisma.flashSale.update).toHaveBeenCalled();
+      const empty = mkPrisma({ ...upcoming(), items: [] });
+      await svc(empty).updateSale('s1', { endAt: '2099-07-20' });
+      expect(empty.flashSaleItem.findFirst).not.toHaveBeenCalled();
+    });
   });
 
   it('không đổi startAt/endAt (chỉ title/isActive) → KHÔNG cần validate, update thành công', async () => {
