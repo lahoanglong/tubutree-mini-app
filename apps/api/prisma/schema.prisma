@@ -444,6 +444,8 @@ model Product {
   rejectReason     String?
   communityTags    PostProductTag[]
   contentKit       ProductContentKit?
+  pancakeLinks     MerchantPancakeLink[] @relation("PancakeLinkProduct")
+  pancakeLinkedOut MerchantPancakeLink[] @relation("PancakeLinkOrigin")
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -631,6 +633,8 @@ model Storefront {
   freeShipFrom      Int?
   /// Phí sàn riêng cho gian hàng (phân số, 0.15 = 15%). NULL = merchant.commission_pct. Chỉ admin đặt.
   commissionPct     Decimal?               @db.Decimal(5, 4)
+  /// Đối tác bật "Tạm nghỉ": hàng tự giao của gian hàng không đặt được tới khi tắt (R2-MERCHANT-13). NULL = đang nhận đơn.
+  ordersPausedAt    DateTime?
   isPublished       Boolean                @default(false)
   publishedAt       DateTime?
   collections       StorefrontCollection[]
@@ -717,6 +721,7 @@ model Variation {
   dealerPriceHistory DealerPriceHistory[]
   subscriptions      Subscription[]
   flashSaleItems     FlashSaleItem[]
+  pancakeLinks       MerchantPancakeLink[]
 
   @@index([productId])
   @@map("variations")
@@ -1503,6 +1508,36 @@ enum MerchantPayoutStatus {
 enum MerchantPayoutLineKind {
   SALE
   REVERSAL
+}
+
+/// "Tubu giao hộ" (D4): một lần chuyển biến thể Pancake từ sản phẩm gốc sang sản phẩm đối tác. `unlinkedAt` NULL = đang
+/// liên kết (mỗi biến thể tối đa một dòng như vậy — unique index có điều kiện trong migration). Gỡ liên kết trả biến thể về
+/// sản phẩm gốc; khoảng [linkedAt, unlinkedAt) là các đơn của biến thể đó gian hàng được xem.
+model MerchantPancakeLink {
+  id                String    @id @default(cuid())
+  productId         String
+  product           Product   @relation("PancakeLinkProduct", fields: [productId], references: [id])
+  storefrontId      String
+  variationId       String
+  variation         Variation @relation(fields: [variationId], references: [id])
+  /// NULL = liên kết có từ trước khi lưu lịch sử, không rõ sản phẩm gốc.
+  originProductId   String?
+  originProduct     Product?  @relation("PancakeLinkOrigin", fields: [originProductId], references: [id])
+  /// Lần liên kết làm sản phẩm gốc hết biến thể nên bị tắt: gỡ liên kết thì bật lại.
+  originDeactivated Boolean   @default(false)
+  /// Sản phẩm gốc đang bán lúc liên kết: admin đã xác nhận chuyển nó sang gian hàng.
+  takeover          Boolean   @default(false)
+  linkedAt          DateTime  @default(now())
+  linkedBy          String?
+  unlinkedAt        DateTime?
+  unlinkedBy        String?
+  unlinkReason      String?
+
+  @@index([productId])
+  @@index([storefrontId])
+  @@index([variationId])
+  @@index([originProductId])
+  @@map("merchant_pancake_links")
 }
 
 /// Phiếu đối soát đơn đối tác tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 7). amount > 0: Tubu chuyển cho

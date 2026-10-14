@@ -1,6 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { CTV_CANNOT_CREATE_PRODUCT, MerchantService } from './merchant.service';
-import { linkTubuFulfilledVariation, LINK_TAKEN_MESSAGE } from './merchant-pancake-link';
+import {
+  linkTubuFulfilledVariation,
+  unlinkTubuFulfilledVariation,
+  LINK_TAKEN_MESSAGE,
+  PANCAKE_TAKEOVER_UNCONFIRMED,
+} from './merchant-pancake-link';
 import { assertIdentifierAvailable } from '../storefront/identifier-validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
@@ -14,7 +19,7 @@ const PANCAKE_ROW = {
   retailPrice: 150_000,
   salePrice: 129_000,
   stock: 40,
-  product: { id: 'tubu-shell', name: 'Mật ong rừng' },
+  product: { id: 'tubu-shell', name: 'Mật ong rừng', storefrontId: null, isActive: false, approvalStatus: 'APPROVED' },
 };
 
 function build(opts: { role?: string; store?: Record<string, unknown>; pancakeRow?: unknown } = {}) {
@@ -86,17 +91,38 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     expect(productCreate).not.toHaveBeenCalled();
   });
 
-  it('kiểm mã: chỉ biến thể Pancake đang bán, kho Tubu giao, chưa có chủ hoặc của chính gian hàng', async () => {
+  it('kiểm mã: chỉ biến thể Pancake đang bán, kho Tubu giao, thuộc sản phẩm Tubu chưa có chủ — không lấy mã của gian hàng nào', async () => {
     const { svc, prisma } = build();
     const res = await svc.checkPancakeVariation('u1', 'PK-123');
-    expect(res).toEqual(expect.objectContaining({ variationId: 'var-pk', pancakeId: 'PK-123', retailPrice: 150_000 }));
+    expect(res).toEqual({
+      pancakeId: 'PK-123',
+      productName: 'Mật ong rừng',
+      variationName: '500ml',
+      retailPrice: 150_000,
+      salePrice: 129_000,
+      stock: 40,
+      requiresAdminConfirm: false,
+    });
     const where = prisma.variation.findFirst.mock.calls[0][0].where;
     expect(JSON.stringify(where)).toContain('"fulfilment":"TUBU"');
-    expect(where.AND[1]).toEqual({
-      pancakeId: 'PK-123',
-      isActive: true,
-      product: { OR: [{ storefrontId: null }, { storefrontId: 'sf-a' }] },
-    });
+    expect(where.AND[1]).toEqual({ pancakeId: 'PK-123', isActive: true, product: { OR: [{ storefrontId: null }] } });
+  });
+
+  it('R2-MERCHANT-1: mã của sản phẩm Tubu ĐANG BÁN → đối tác chỉ gửi xin được (cần admin xác nhận), không thấy tồn kho Tubu', async () => {
+    const onSale = { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } };
+    const { svc, productCreate, notify } = build({ pancakeRow: onSale });
+    const res = await svc.checkPancakeVariation('u1', 'PK-123');
+    expect(res.requiresAdminConfirm).toBe(true);
+    expect(res.stock).toBeNull();
+    expect(res).not.toHaveProperty('variationId');
+    expect(res).not.toHaveProperty('productId');
+    await svc.createProduct('u1', { ...BASE, tubuFulfils: true, pancakeCode: 'PK-123' });
+    expect(productCreate.mock.calls[0][0].data.pancakeLinkCode).toBe('PK-123');
+    expect(notify).toHaveBeenCalledWith(
+      'admin-1',
+      'OPS_MERCHANT_PRODUCT_PENDING',
+      expect.objectContaining({ mode: expect.stringContaining('cần admin xác nhận') }),
+    );
   });
 
   it('SELLER-14: giá khuyến mãi cao hơn giá gốc → 400', async () => {
@@ -106,7 +132,7 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
 });
 
 describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => {
-  function tx(opts: { moved?: number; left?: number; row?: unknown } = {}) {
+  function tx(opts: { moved?: number; left?: number; row?: unknown; originActive?: boolean } = {}) {
     return {
       variation: {
         findFirst: jest.fn().mockResolvedValue(opts.row === undefined ? PANCAKE_ROW : opts.row),
@@ -114,14 +140,19 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(opts.left ?? 0),
       },
-      product: { update: jest.fn().mockResolvedValue({}) },
+      product: {
+        update: jest.fn().mockResolvedValue({}),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ isActive: opts.originActive ?? true }),
+      },
+      merchantPancakeLink: { create: jest.fn().mockResolvedValue({}) },
     };
   }
+  const OPTS = { adminId: 'admin-1' };
   const product = { id: 'prod-a', storefrontId: 'sf-a', pancakeLinkCode: 'PK-123' };
 
   it('chuyển CHÍNH dòng biến thể Pancake sang sản phẩm đối tác (có điều kiện productId cũ), xoá biến thể tạm, tắt sản phẩm vỏ', async () => {
     const t = tx();
-    await linkTubuFulfilledVariation(t as never, product);
+    await linkTubuFulfilledVariation(t as never, product, OPTS);
     expect(t.variation.updateMany).toHaveBeenCalledWith({
       where: { id: 'var-pk', productId: 'tubu-shell' },
       data: { productId: 'prod-a' },
@@ -132,23 +163,51 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
       data: { fulfilment: 'TUBU', basePrice: 150_000, salePrice: 129_000 },
     });
     expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'tubu-shell' }, data: { isActive: false } });
+    expect(t.merchantPancakeLink.create).toHaveBeenCalledWith({
+      data: {
+        productId: 'prod-a',
+        storefrontId: 'sf-a',
+        variationId: 'var-pk',
+        originProductId: 'tubu-shell',
+        originDeactivated: true,
+        takeover: false,
+        linkedBy: 'admin-1',
+      },
+    });
   });
 
-  it('sản phẩm vỏ còn biến thể khác → giữ nguyên đang bán', async () => {
+  it('R2-MERCHANT-1: mã của sản phẩm Tubu đang bán, admin chưa xác nhận chuyển → 409 có mã riêng, không chuyển gì', async () => {
+    const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
+    await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: PANCAKE_TAKEOVER_UNCONFIRMED }),
+    });
+    expect(t.variation.updateMany).not.toHaveBeenCalled();
+    expect(t.merchantPancakeLink.create).not.toHaveBeenCalled();
+  });
+
+  it('R2-MERCHANT-1: admin xác nhận chuyển → chuyển và ghi takeover để gỡ liên kết trả về đúng chỗ', async () => {
+    const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
+    await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true });
+    expect(t.variation.updateMany).toHaveBeenCalled();
+    expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originDeactivated: true });
+  });
+
+  it('sản phẩm vỏ còn biến thể khác → giữ nguyên đang bán, gỡ liên kết không tự bật/tắt nó', async () => {
     const t = tx({ left: 2 });
-    await linkTubuFulfilledVariation(t as never, product);
+    await linkTubuFulfilledVariation(t as never, product, OPTS);
     expect(t.product.update).not.toHaveBeenCalledWith({ where: { id: 'tubu-shell' }, data: { isActive: false } });
+    expect(t.merchantPancakeLink.create.mock.calls[0][0].data.originDeactivated).toBe(false);
   });
 
   it('mã vừa bị sản phẩm khác lấy (cập nhật có điều kiện trượt) → ConflictException để rollback cả lần duyệt', async () => {
     const t = tx({ moved: 0 });
-    await expect(linkTubuFulfilledVariation(t as never, product)).rejects.toThrow(new ConflictException(LINK_TAKEN_MESSAGE));
+    await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).rejects.toThrow(new ConflictException(LINK_TAKEN_MESSAGE));
     expect(t.variation.deleteMany).not.toHaveBeenCalled();
   });
 
   it('duyệt lại sau khi đối tác sửa nội dung: biến thể Pancake đã thuộc chính sản phẩm này → không làm gì, không ném lỗi', async () => {
-    const t = tx({ row: { ...PANCAKE_ROW, product: { id: 'prod-a', name: 'Mật ong rừng' } } });
-    await expect(linkTubuFulfilledVariation(t as never, product)).resolves.toBeUndefined();
+    const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, id: 'prod-a', storefrontId: 'sf-a' } } });
+    await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).resolves.toBeUndefined();
     expect(t.variation.updateMany).not.toHaveBeenCalled();
     expect(t.variation.deleteMany).not.toHaveBeenCalled();
     expect(t.product.update).not.toHaveBeenCalled();
@@ -157,7 +216,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
   it('duyệt lại khi biến thể đã liên kết đang tạm ngừng bán (không còn "liên kết được") → vẫn coi là đã liên kết', async () => {
     const t = tx({ row: null });
     t.variation.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'var-pk' });
-    await expect(linkTubuFulfilledVariation(t as never, product)).resolves.toBeUndefined();
+    await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).resolves.toBeUndefined();
     expect(t.variation.findFirst).toHaveBeenLastCalledWith({
       where: { productId: 'prod-a', pancakeId: 'PK-123' },
       select: { id: true },
@@ -167,13 +226,72 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
 
   it('mã không còn trong danh mục và chưa thuộc sản phẩm này → ConflictException', async () => {
     const t = tx({ row: null });
-    await expect(linkTubuFulfilledVariation(t as never, product)).rejects.toThrow(new ConflictException(LINK_TAKEN_MESSAGE));
+    await expect(linkTubuFulfilledVariation(t as never, product, OPTS)).rejects.toThrow(new ConflictException(LINK_TAKEN_MESSAGE));
   });
 
   it('sản phẩm không xin "Tubu giao hộ" → không làm gì', async () => {
     const t = tx();
-    await linkTubuFulfilledVariation(t as never, { ...product, pancakeLinkCode: null });
+    await linkTubuFulfilledVariation(t as never, { ...product, pancakeLinkCode: null }, OPTS);
     expect(t.variation.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể về sản phẩm gốc (R2-MERCHANT-1)', () => {
+  function tx(link: Record<string, unknown> | null, closed = 1) {
+    return {
+      merchantPancakeLink: {
+        findFirst: jest.fn().mockResolvedValue(link),
+        updateMany: jest.fn().mockResolvedValue({ count: closed }),
+      },
+      variation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), create: jest.fn().mockResolvedValue({}) },
+      product: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ basePrice: 150_000, salePrice: null }),
+        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+  }
+  const LINK = { id: 'l1', variationId: 'var-pk', originProductId: 'tubu-shell', originDeactivated: true };
+
+  it('trả biến thể về sản phẩm gốc, bật lại sản phẩm gốc, sản phẩm đối tác nhận biến thể tạm và tắt bán', async () => {
+    const t = tx(LINK);
+    const res = await unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'admin-1', reason: 'Nhầm', deactivate: true });
+    expect(res).toEqual({ id: 'l1', variationId: 'var-pk', originProductId: 'tubu-shell' });
+    expect(t.merchantPancakeLink.updateMany).toHaveBeenCalledWith({
+      where: { id: 'l1', unlinkedAt: null },
+      data: expect.objectContaining({ unlinkedBy: 'admin-1', unlinkReason: 'Nhầm' }),
+    });
+    expect(t.variation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'var-pk', productId: 'prod-a' },
+      data: { productId: 'tubu-shell' },
+    });
+    expect(t.variation.create.mock.calls[0][0].data).toMatchObject({ productId: 'prod-a', pancakeId: null, stock: 0 });
+    expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'prod-a' }, data: { fulfilment: 'MERCHANT', isActive: false } });
+    expect(t.product.updateMany).toHaveBeenCalledWith({ where: { id: 'tubu-shell', isActive: false }, data: { isActive: true } });
+  });
+
+  it('lần liên kết không tắt sản phẩm gốc → gỡ cũng không bật nó (admin có thể đã tắt vì lý do khác)', async () => {
+    const t = tx({ ...LINK, originDeactivated: false });
+    await unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'a', reason: 'x', deactivate: false });
+    expect(t.product.updateMany).not.toHaveBeenCalled();
+    expect(t.product.update).toHaveBeenCalledWith({ where: { id: 'prod-a' }, data: { fulfilment: 'MERCHANT' } });
+  });
+
+  it('không có liên kết mở, hoặc lần gỡ khác vừa đóng nó → không làm gì', async () => {
+    const none = tx(null);
+    await expect(unlinkTubuFulfilledVariation(none as never, 'prod-a', { actorId: 'a', reason: 'x', deactivate: true })).resolves.toBeNull();
+    const raced = tx(LINK, 0);
+    await expect(unlinkTubuFulfilledVariation(raced as never, 'prod-a', { actorId: 'a', reason: 'x', deactivate: true })).resolves.toBeNull();
+    expect(raced.variation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('liên kết cũ không rõ sản phẩm gốc: admin gỡ tay → 400; ngừng bán/từ chối → bỏ qua', async () => {
+    const t = tx({ ...LINK, originProductId: null });
+    await expect(
+      unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'a', reason: 'x', deactivate: true, legacy: 'throw' }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'a', reason: 'x', deactivate: true })).resolves.toBeNull();
+    expect(t.variation.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -228,7 +346,8 @@ describe('SELLER-5: đơn của gian hàng lọc theo khoá ngoại, không so c
     const p = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
       storefront: { findFirst: jest.fn().mockResolvedValue({ ...MERCHANT_STORE, type: 'CTV', slug: 'abc' }) },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
       order: { count, findMany },
     };
     const svc = new MerchantService(p as unknown as PrismaService, orderStatus);

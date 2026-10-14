@@ -231,7 +231,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
           data: { approvalStatus: 'APPROVED' },
         });
         if (flipped.count === 0) throw new Error('đã xử lý');
-        await linkTubuFulfilledVariation(tx, p);
+        await linkTubuFulfilledVariation(tx, p, { adminId: 'admin-it', confirmTakeover: true });
       });
     const results = await Promise.allSettled([approve(pa), approve(pb)]);
     const s = summarize(results);
@@ -284,7 +284,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
           data: { approvalStatus: 'APPROVED' },
         });
         if (flipped.count === 0) throw new Error('đã xử lý');
-        await linkTubuFulfilledVariation(tx, p);
+        await linkTubuFulfilledVariation(tx, p, { adminId: 'admin-it', confirmTakeover: true });
       });
     await approve();
 

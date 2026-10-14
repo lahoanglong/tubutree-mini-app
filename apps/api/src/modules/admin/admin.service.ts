@@ -33,7 +33,11 @@ import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from '
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
-import { linkTubuFulfilledVariation } from '../merchant/merchant-pancake-link';
+import {
+  describePancakeLink,
+  linkTubuFulfilledVariation,
+  unlinkTubuFulfilledVariation,
+} from '../merchant/merchant-pancake-link';
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -1265,10 +1269,78 @@ export class AdminService {
       }),
       this.prisma.product.count({ where }),
     ]);
+    // Màn duyệt phải thấy sản phẩm nào (thương hiệu, tồn, lượt bán) sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1).
+    const data = await Promise.all(
+      items.map(async (p) => ({ ...p, pancakeLink: await describePancakeLink(this.prisma, p) })),
+    );
+    return paginated(data, page, limit, total);
+  }
+
+  /** Sản phẩm đối tác đang giữ biến thể Pancake ("Tubu giao hộ" đã duyệt) — nơi admin gỡ liên kết. */
+  async listLinkedMerchantProducts(page: number, limit: number) {
+    const where = { unlinkedAt: null };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.merchantPancakeLink.findMany({
+        where,
+        orderBy: { linkedAt: 'desc' },
+        ...skipTake(page, limit),
+        select: {
+          id: true,
+          linkedAt: true,
+          takeover: true,
+          originProductId: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              thumbnail: true,
+              isActive: true,
+              approvalStatus: true,
+              storefront: { select: { id: true, title: true, subdomain: true } },
+            },
+          },
+          variation: { select: { pancakeId: true, name: true, stock: true } },
+          originProduct: { select: { id: true, name: true, slug: true, brand: true, isActive: true } },
+        },
+      }),
+      this.prisma.merchantPancakeLink.count({ where }),
+    ]);
     return paginated(items, page, limit, total);
   }
 
-  async reviewMerchantProduct(adminId: string, productId: string, approve: boolean, rejectReason?: string) {
+  /**
+   * "Gỡ liên kết": trả biến thể Pancake về sản phẩm gốc (bật lại nếu lần liên kết đã tắt nó), tắt bán sản phẩm đối tác và báo
+   * đối tác. Đối tác mở bán lại thì sản phẩm về chờ duyệt.
+   */
+  async unlinkMerchantProduct(adminId: string, productId: string, reason: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, storefront: { select: { ownerUserId: true } } },
+    });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    const why = reason.trim() || 'Tubu gỡ liên kết';
+    const link = await this.prisma.$transaction((tx) =>
+      unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: why, deactivate: true, legacy: 'throw' }),
+    );
+    if (!link) throw new BadRequestException('Sản phẩm này không còn liên kết mã Pancake nào.');
+    this.logger.warn(`Admin ${adminId} gỡ liên kết Pancake của sản phẩm đối tác ${productId}: ${why}`);
+    const ownerId = product.storefront?.ownerUserId;
+    if (ownerId) {
+      await this.notifications
+        .notify(ownerId, 'MERCHANT_PRODUCT_UNLINKED', { product_name: product.name, reason: why })
+        .catch((e: unknown) => this.logger.warn(`Báo đối tác gỡ liên kết ${productId} lỗi: ${(e as Error).message}`));
+    }
+    return { ok: true, originProductId: link.originProductId };
+  }
+
+  async reviewMerchantProduct(
+    adminId: string,
+    productId: string,
+    approve: boolean,
+    rejectReason?: string,
+    confirmTakeover = false,
+  ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
       include: { storefront: { select: { ownerUserId: true } } },
@@ -1279,8 +1351,8 @@ export class AdminService {
     // CAS theo trạng thái đã đọc: hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn B bấm
     // Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người
     // thứ hai nhận lỗi rõ ràng thay vì lặng lẽ lật ngược quyết định.
-    // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm trong CÙNG transaction — mã vừa bị sản phẩm khác lấy thì
-    // rollback cả lần duyệt.
+    // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
+    // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
     await this.prisma.$transaction(async (tx) => {
       const moved = await tx.product.updateMany({
         where: { id: productId, approvalStatus: product.approvalStatus },
@@ -1289,7 +1361,9 @@ export class AdminService {
       if (moved.count === 0) {
         throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
       }
-      if (approve) await linkTubuFulfilledVariation(tx, product);
+      if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover });
+      // Sản phẩm đã liên kết bị sửa nội dung rồi bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
+      else await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
     });
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
 

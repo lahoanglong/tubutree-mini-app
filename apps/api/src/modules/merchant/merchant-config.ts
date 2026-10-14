@@ -7,6 +7,8 @@ export const DEFAULT_MERCHANT_SHIPPING_FEE = 30_000;
 export const DEFAULT_MERCHANT_COMMISSION_PCT = 0.15;
 /** Số ngày sau khi giao mới đối soát — trùng hạn đổi/trả mặc định. */
 export const DEFAULT_MERCHANT_SETTLEMENT_HOLD_DAYS = 7;
+/** Phiếu đối soát âm: đối tác nộp lại Tubu trong chừng này ngày kể từ ngày lập phiếu. */
+export const DEFAULT_MERCHANT_NEGATIVE_PAYOUT_DUE_DAYS = 7;
 /** Đối tác phải bấm "Xác nhận" trong chừng này giờ kể từ khi đơn vào hàng chờ. */
 export const DEFAULT_MERCHANT_CONFIRM_SLA_HOURS = 24;
 /** Đối tác phải giao cho đơn vị vận chuyển trong chừng này giờ kể từ khi đơn vào hàng chờ. */
@@ -15,3 +17,5 @@ export const DEFAULT_MERCHANT_SHIP_SLA_HOURS = 48;
 export const DEFAULT_MERCHANT_DELIVER_SLA_DAYS = 7;
 /** Subdomain/tên miền gian hàng vừa nhả chỉ gian hàng khác dùng lại sau chừng này ngày (SELLER-5). */
 export const DEFAULT_IDENTIFIER_COOLDOWN_DAYS = 90;
+/** Vai trò vào được Cổng người bán (MerchantController). Chủ gian hàng đối tác ngoài các vai trò này không xử lý được đơn tự giao. */
+export const MERCHANT_PORTAL_ROLES = ['DEALER', 'AFFILIATE', 'ADMIN'] as const;

@@ -15,8 +15,10 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { OrderStatus } from '@tubutree/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { MERCHANT_PORTAL_ROLES } from './merchant-config';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -32,6 +34,17 @@ const MAX_PRICE = 100_000_000;
 const MAX_STOCK = 100_000;
 /** Phí giao một kiện tối đa đối tác tự đặt. */
 const MAX_SHIPPING_FEE = 500_000;
+/** Giá bán thấp nhất của sản phẩm đối tác — cùng mức với ô giá ở form web. */
+export const MIN_MERCHANT_PRICE = 1_000;
+const MIN_PRICE_MESSAGE = 'Giá bán tối thiểu 1.000đ.';
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+/** Link vận đơn đối tác hay dán thiếu "https://" (ghn.vn/...): tự thêm; chuỗi rỗng coi như không nhập. */
+export const withHttps = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const v = value.trim();
+  if (!v) return undefined;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`;
+};
 
 export class UpdateMerchantStoreDto {
   @IsOptional() @IsString() @MaxLength(120) title?: string;
@@ -61,11 +74,11 @@ export class UpdateMerchantStoreDto {
 }
 
 export class CreateMerchantProductDto {
-  @IsNotEmpty() @IsString() @MaxLength(200) name!: string;
-  @IsNotEmpty() @IsString() @MaxLength(10_000) description!: string;
-  @IsOptional() @IsString() @MaxLength(300) shortDesc?: string;
-  @IsInt() @Min(0) @Max(MAX_PRICE) basePrice!: number;
-  @IsOptional() @IsInt() @Min(0) @Max(MAX_PRICE) salePrice?: number;
+  @Transform(trim) @IsNotEmpty({ message: 'Tên sản phẩm không được để trống.' }) @IsString() @MaxLength(200) name!: string;
+  @Transform(trim) @IsNotEmpty({ message: 'Mô tả sản phẩm không được để trống.' }) @IsString() @MaxLength(10_000) description!: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) shortDesc?: string;
+  @IsInt() @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE }) @Max(MAX_PRICE) basePrice!: number;
+  @IsOptional() @IsInt() @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE }) @Max(MAX_PRICE) salePrice?: number;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) thumbnail?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) categoryIds?: string[];
@@ -79,11 +92,16 @@ export class CreateMerchantProductDto {
 }
 
 export class UpdateMerchantProductDto {
-  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(200) name?: string;
-  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(10_000) description?: string;
-  @IsOptional() @IsString() @MaxLength(300) shortDesc?: string;
-  @IsOptional() @IsInt() @Min(0) @Max(MAX_PRICE) basePrice?: number;
-  @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(0) @Max(MAX_PRICE) salePrice?: number | null;
+  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên sản phẩm không được để trống.' }) @MaxLength(200) name?: string;
+  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Mô tả sản phẩm không được để trống.' }) @MaxLength(10_000) description?: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) shortDesc?: string;
+  @IsOptional() @IsInt() @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE }) @Max(MAX_PRICE) basePrice?: number;
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsInt()
+  @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE })
+  @Max(MAX_PRICE)
+  salePrice?: number | null;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) thumbnail?: string;
   @IsOptional() @IsInt() @Min(0) @Max(MAX_STOCK) stock?: number;
@@ -105,6 +123,10 @@ export class PublishMerchantStoreDto {
   isPublished!: boolean;
 }
 
+export class PauseMerchantOrdersDto {
+  @IsBoolean() paused!: boolean;
+}
+
 export class UpdateMerchantOrderStatusDto {
   @IsNotEmpty()
   @IsString()
@@ -115,7 +137,11 @@ export class UpdateMerchantOrderStatusDto {
 export class ShipMerchantOrderDto {
   @IsString() @IsNotEmpty() @MaxLength(60) carrier!: string;
   @IsString() @IsNotEmpty() @MaxLength(60) trackingCode!: string;
-  @IsOptional() @IsUrl({ require_protocol: true, protocols: ['http', 'https'] }) @MaxLength(500) trackingUrl?: string;
+  @IsOptional()
+  @Transform(withHttps)
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] }, { message: 'Link tra cứu vận đơn không hợp lệ, ví dụ ghn.vn/tra-cuu/GHN123.' })
+  @MaxLength(500)
+  trackingUrl?: string;
 }
 
 export class MerchantOrderReasonDto {
@@ -138,7 +164,7 @@ class MerchantFulfilListQuery extends PaginationQuery {
 
 @Controller('merchant')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('DEALER', 'AFFILIATE', 'ADMIN')
+@Roles(...MERCHANT_PORTAL_ROLES)
 export class MerchantController {
   constructor(
     private readonly merchant: MerchantService,
@@ -159,6 +185,11 @@ export class MerchantController {
   @Post('store/publish')
   publishStore(@CurrentUser('sub') userId: string, @Body() dto: PublishMerchantStoreDto) {
     return this.merchant.publishStore(userId, dto.isPublished);
+  }
+
+  @Post('store/pause')
+  pauseOrders(@CurrentUser('sub') userId: string, @Body() dto: PauseMerchantOrdersDto) {
+    return this.merchant.setOrdersPaused(userId, dto.paused);
   }
 
   @Get('products')
