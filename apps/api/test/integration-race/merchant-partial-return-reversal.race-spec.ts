@@ -188,6 +188,12 @@ describe('Trả một phần dòng hàng gian hàng đã đối soát → REVERS
     const { store, buyer, order, item } = await setup();
     const r1 = await returns.request(buyer.id, order.code, { reasonCode: 'OTHER', reason: 'Trả bớt một quả', items: [{ orderItemId: item.id, quantity: 1 }] });
     await returns.review(admin.id, r1.id, { approve: true });
+    // R2-LIFECYCLE-8 / R2-MONEY-5: chưa đủ hạn thì mục "Sắp đủ hạn" đã trừ lần trả — đối tác thấy đúng số sẽ nhận.
+    const before = await settlement.statementFor(store.id);
+    const upcoming = before.upcoming.filter((l) => l.orderId === order.id);
+    expect(upcoming.map((l) => [l.kind, l.refKey]).sort()).toEqual([['REVERSAL', `RETURN:${r1.id}`], ['SALE', '']]);
+    expect(upcoming.reduce((sum, l) => sum + l.netAmount, 0)).toBe(-57_500);
+    expect(upcoming.every((l) => l.availableAt !== null)).toBe(true);
     await prisma.order.update({ where: { id: order.id }, data: { deliveredAt: new Date(Date.now() - 10 * DAY) } });
 
     const s = summarize(await Promise.allSettled([1, 2, 3].map((i) => settlement.createPayout(`admin-${i}`, store.id))));
