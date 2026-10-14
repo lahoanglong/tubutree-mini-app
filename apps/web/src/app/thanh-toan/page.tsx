@@ -26,6 +26,10 @@ import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { BankTransferPanel } from './bank-transfer-panel';
+import { ApiError } from '@/lib/client-api';
+
+/** Địa chỉ lưu theo địa giới cũ (mã '00' / mã tỉnh trước 2025) — API trả ADDRESS_OUTDATED khi đặt. */
+const isLegacyGeo = (a: AddressDTO) => !a.provinceCode?.startsWith('84_VN') || !a.wardCode || a.wardCode === '00';
 
 const VN_PHONE = /^(0|\+84)\d{9}$/;
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
@@ -112,6 +116,8 @@ export default function CheckoutPage() {
           // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
           // tạo đơn COD có tiền phải trả mà khách không chọn.
           ...(zeroNote ? { quotedZeroTotal: true } : {}),
+          // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
+          ...(quote ? { expectedTotal: quote.total } : {}),
           pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
           referralCode: sfCtx.referralCode ?? undefined,
@@ -123,6 +129,12 @@ export default function CheckoutPage() {
     onSuccess: (order) => {
       setPlaced(order);
       void qc.invalidateQueries({ queryKey: ['cart'] });
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+      }
     },
   });
 
@@ -304,7 +316,9 @@ export default function CheckoutPage() {
           )}
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
-              Không tính được phí ship/tổng tiền.{' '}
+              {quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'
+                ? `${quoteQ.error.message} Hãy thêm địa chỉ mới ở mục Địa chỉ giao hàng.`
+                : 'Không tính được phí ship/tổng tiền.'}{' '}
               <button type="button" onClick={() => void quoteQ.refetch()} className={ui.btnText}>
                 Thử lại
               </button>
@@ -409,6 +423,14 @@ function AddressPicker({
             <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
             <br />
             <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+            {isLegacyGeo(a) && (
+              <>
+                <br />
+                <span className="text-xs font-medium text-warning-fg">
+                  Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, vui lòng thêm địa chỉ mới.
+                </span>
+              </>
+            )}
           </span>
         </label>
       ))}

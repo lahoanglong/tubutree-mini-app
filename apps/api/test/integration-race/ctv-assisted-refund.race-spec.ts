@@ -114,7 +114,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
         ward: 'Phuong IT',
         district: '',
         province: 'Ha Noi',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

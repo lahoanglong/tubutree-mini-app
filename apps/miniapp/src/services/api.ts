@@ -160,6 +160,13 @@ export function getErrorMessage(error: unknown): string {
   return vi.errors.generic;
 }
 
+/** Mã lỗi nghiệp vụ ổn định của API (`code` trong body 4xx, vd TOTAL_CHANGED, ADDRESS_OUTDATED). */
+export function getErrorCode(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) return null;
+  const code = (error.response?.data as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' ? code : null;
+}
+
 // ── Auth endpoints ────────────────────────────────────
 export async function loginZaloMiniApp(
   code: string,

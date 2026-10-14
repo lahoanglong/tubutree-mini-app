@@ -154,7 +154,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
@@ -167,7 +167,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
     province: 'Ha Noi',
     ward: 'Phuong IT',
     street: '1 Duong IT',
-    provinceCode: '01',
+    provinceCode: '84_VN01',
     wardCode: '00001',
   });
 

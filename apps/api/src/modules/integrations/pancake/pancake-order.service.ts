@@ -9,6 +9,7 @@ import { SystemConfigService } from '../../system-config/system-config.service';
 import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
 import { recyclingWeight } from '../gomdon/gomdon-weight';
 import { GOMDON_STATE } from '../gomdon/gomdon-status';
+import { isNewGeoCode } from './geo-code';
 
 /** Tag máy đọc được trên đơn Pancake — kho/automation lọc đơn thu gom, không phải đọc note tự do. */
 export const PANCAKE_TAG_RECYCLING = 'RECYCLING';
@@ -79,7 +80,7 @@ export class PancakeOrderService {
   async pushOrder(orderId: string): Promise<string | null> {
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
-      include: { items: true, user: true },
+      include: { items: true },
     });
     if (order.pancakeOrderId) return order.pancakeOrderId; // đã đẩy
 
@@ -105,9 +106,11 @@ export class PancakeOrderService {
         // Hệ 2 cấp: district có thể rỗng → bỏ phần rỗng (tránh ", ,") và KHÔNG gửi id rỗng.
         address: [addr.street, addr.ward, addr.district, addr.province].filter(Boolean).join(', '),
         ward_id: addr.wardCode || undefined,
-        district_id: addr.districtCode || undefined,
+        // Hệ mới "84_VN*" không còn cấp quận: gửi kèm mã quận cũ là ghép phường mới với quận cũ.
+        district_id: isNewGeoCode(addr.provinceCode) ? undefined : addr.districtCode || undefined,
         province_id: addr.provinceCode || undefined,
-        fb_id: order.user.zaloId ?? undefined,
+        // Không gửi fb_id: đó là Facebook ID — Zalo ID ở đây làm Pancake gộp nhầm khách, và đơn CTV lên hộ
+        // có user là CTV chứ không phải người nhận.
       },
       items: order.items.map((i) => ({
         variation_id: pancakeByLocal.get(i.variationId) ?? i.variationId,

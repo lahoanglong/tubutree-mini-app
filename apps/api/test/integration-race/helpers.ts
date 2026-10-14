@@ -60,7 +60,7 @@ export async function createOrder(
         ward: 'Phuong IT',
         district: '',
         province: 'Ha Noi',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

@@ -140,7 +140,7 @@ describe('Pancake webhook dedupe + cứu sự kiện kẹt (real Postgres)', () 
   it('(f) cron cứu: chỉ enqueue sự kiện kẹt đủ điều kiện; 2 instance chạy đồng thời chỉ 1 instance quét', async () => {
     // Dọn sự kiện kẹt của các ca trên để lô quét chỉ gồm dữ liệu ca này.
     await prisma.pancakeWebhookEvent.updateMany({
-      where: { status: { in: ['RECEIVED', 'FAILED', 'PROCESSING'] } },
+      where: { status: { in: ['RECEIVED', 'FAILED', 'PROCESSING', 'UNMATCHED'] } },
       data: { status: 'PROCESSED' },
     });
     const mk = (data: { status: string; receivedAt: Date; attempts?: number; claimedAt?: Date; eventType?: string }) =>
@@ -155,6 +155,18 @@ describe('Pancake webhook dedupe + cứu sự kiện kẹt (real Postgres)', () 
     const tooOld = await mk({ status: 'FAILED', receivedAt: minutesAgo(60 * 48), attempts: 1 });
     const busy = await mk({ status: 'PROCESSING', receivedAt: minutesAgo(30), claimedAt: minutesAgo(1), attempts: 1 });
     const stock = await mk({ status: 'FAILED', receivedAt: minutesAgo(30), attempts: 1, eventType: 'variation.stock_changed' });
+    // Chưa khớp đơn (webhook tới trước khi lưu pancakeOrderId): đối chiếu lại vài lần trong cửa sổ ngắn rồi thôi.
+    const unmatched = await mk({ status: 'UNMATCHED', receivedAt: minutesAgo(12), attempts: 1 });
+    const unmatchedLate = await mk({
+      status: 'UNMATCHED',
+      receivedAt: minutesAgo(PancakeEventsReconcileService.UNMATCHED_WINDOW_MINUTES + 5),
+      attempts: 1,
+    });
+    const unmatchedDone = await mk({
+      status: 'UNMATCHED',
+      receivedAt: minutesAgo(20),
+      attempts: PancakeEventsReconcileService.UNMATCHED_MAX_ATTEMPTS,
+    });
 
     const q1 = mockQueue();
     const q2 = mockQueue();
@@ -168,8 +180,8 @@ describe('Pancake webhook dedupe + cứu sự kiện kẹt (real Postgres)', () 
     const enqueued = [...q1.add.mock.calls, ...q2.add.mock.calls].map((c) => (c[1] as { eventId: string }).eventId);
     console.log('[f] r1=%j r2=%j enqueued=%d', r1, r2, enqueued.length);
     expect([r1, r2].filter((r) => 'skipped' in r)).toHaveLength(1);
-    expect(new Set(enqueued)).toEqual(new Set([failed.id, received.id, stuck.id]));
-    expect(enqueued).toHaveLength(3);
-    for (const e of [fresh, exhausted, tooOld, busy, stock]) expect(enqueued).not.toContain(e.id);
+    expect(new Set(enqueued)).toEqual(new Set([failed.id, received.id, stuck.id, unmatched.id]));
+    expect(enqueued).toHaveLength(4);
+    for (const e of [fresh, exhausted, tooOld, busy, stock, unmatchedLate, unmatchedDone]) expect(enqueued).not.toContain(e.id);
   });
 });

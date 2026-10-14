@@ -1,4 +1,5 @@
 import { PancakeSyncService } from './pancake-sync.service';
+import { PancakeClient as RealPancakeClient } from './pancake.client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { LifecycleService } from '../../lifecycle/lifecycle.service';
@@ -7,16 +8,29 @@ const notifyPriceDrop = jest.fn().mockResolvedValue(undefined);
 const lifecycle = { notifyWishlistPriceDrop: notifyPriceDrop } as unknown as LifecycleService;
 beforeEach(() => notifyPriceDrop.mockClear());
 
+// Pancake POS kèm thông tin phân trang ở mọi trang — mock tính từ các trang có dữ liệu.
 function makeClient(pages: unknown[][], configured = true): PancakeClient {
   let call = 0;
+  const filled = pages.filter((p) => p.length > 0);
   return {
     isConfigured: () => configured,
     fetchProducts: jest.fn(async () => {
       const data = pages[call] ?? [];
       call++;
-      return { data };
+      return { success: true, data, total_pages: filled.length, total_entries: filled.flat().length };
     }),
   } as unknown as PancakeClient;
+}
+
+/** PancakeClient thật, chỉ thay lớp HTTP — để phản hồi thô của Pancake đi qua đúng đường kiểm tra của client. */
+function realClient(bodies: unknown[]): PancakeClient {
+  const config = { get: (k: string) => ({ PANCAKE_API_KEY: 'k', PANCAKE_SHOP_ID: 's', PANCAKE_BASE_URL: 'http://pancake.invalid' })[k] };
+  const client = new RealPancakeClient(config as never);
+  const get = jest.fn();
+  for (const b of bodies) get.mockResolvedValueOnce({ data: b });
+  get.mockResolvedValue({ data: { success: true, data: [] } });
+  (client as unknown as { http: { get: jest.Mock } }).http.get = get;
+  return client;
 }
 
 function makePrisma(over: Record<string, unknown> = {}) {
@@ -25,16 +39,25 @@ function makePrisma(over: Record<string, unknown> = {}) {
       findUnique: jest.fn().mockResolvedValue(null), // mặc định: tạo mới
       create: jest.fn().mockImplementation(async ({ data }) => ({ id: `prod-${data.pancakeId}`, ...data })),
       update: jest.fn().mockImplementation(async ({ data }) => ({ id: 'existing', ...data })),
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     variation: {
       upsert: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn().mockResolvedValue(null), // mặc định: chưa có giá cũ → không drop
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     wishlist: { findMany: jest.fn().mockResolvedValue([]) },
     // Tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — mock nhận (strings, ...values).
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  const merged: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const b = (base as Record<string, unknown>)[k];
+    merged[k] = b && typeof b === 'object' && v && typeof v === 'object' ? { ...b, ...v } : v;
+  }
+  return merged as unknown as PrismaService;
 }
 
 // Pancake POS trả product với field `id` (KHÔNG phải product_id) — phản ánh API thật.
@@ -229,5 +252,218 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
     const svc = new PancakeSyncService(prisma, makeClient([[prod('a')], []]), lifecycle);
     const [first, second] = await Promise.all([svc.syncProducts(), svc.syncProducts()]);
     expect([first, second].filter((x) => x === 0)).toHaveLength(1);
+  });
+});
+
+type Model = { findMany: jest.Mock; updateMany: jest.Mock; upsert: jest.Mock; create: jest.Mock; update: jest.Mock };
+type M = { variation: Model; product: Model };
+const mk = (prisma: PrismaService) => prisma as unknown as M;
+const variation = (id: string, over: Record<string, unknown> = {}) => ({ id, sku: id, retail_price: 1000, fields: {}, ...over });
+const product = (id: string, variations: unknown[], over: Record<string, unknown> = {}) => ({ id, name: 'Nước rửa chén', variations, ...over });
+
+describe('PANCAKE-11: hàng bị xoá khỏi Pancake thì ngừng bán trên Tubu', () => {
+  const dbVars = [
+    { id: 'db-a', pancakeId: 'v-a' },
+    { id: 'db-b', pancakeId: 'v-b' },
+    { id: 'db-gone', pancakeId: 'v-gone' },
+  ];
+  const dbProds = [
+    { id: 'p-a', pancakeId: 'a' },
+    { id: 'p-b', pancakeId: 'b' },
+    { id: 'p-gone', pancakeId: 'gone' },
+  ];
+  const sweepPrisma = () =>
+    makePrisma({
+      variation: { findMany: jest.fn().mockResolvedValue(dbVars) },
+      product: { findMany: jest.fn().mockResolvedValue(dbProds) },
+    });
+  const catalog = () => [[product('a', [variation('v-a')]), product('b', [variation('v-b')])]];
+
+  it('quét toàn bộ: biến thể/SP không còn trên Pancake → isActive=false, pancakeHold=REMOVED; bỏ qua hàng merchant (MCH_)', async () => {
+    const prisma = sweepPrisma();
+    await new PancakeSyncService(prisma, makeClient(catalog()), lifecycle).syncProducts();
+    const m = mk(prisma);
+    expect(m.variation.findMany.mock.calls[0][0].where).toEqual({ isActive: true, NOT: { pancakeId: { startsWith: 'MCH_' } } });
+    expect(m.product.findMany.mock.calls[0][0].where).toEqual({ isActive: true, NOT: { pancakeId: { startsWith: 'MCH_' } } });
+    expect(m.variation.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['db-gone'] }, isActive: true },
+      data: { isActive: false, pancakeHold: 'REMOVED' },
+    });
+    expect(m.product.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['p-gone'] }, isActive: true },
+      data: { isActive: false, pancakeHold: 'REMOVED' },
+    });
+  });
+
+  it('lượt 15 phút (updated_since) không biết thứ gì đã biến mất → không tắt gì', async () => {
+    const prisma = sweepPrisma();
+    await new PancakeSyncService(prisma, makeClient(catalog()), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+    expect(mk(prisma).variation.findMany).not.toHaveBeenCalled();
+    expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('Pancake trả rỗng hoặc mất quá nửa danh mục → nghi trả thiếu, KHÔNG tắt', async () => {
+    const empty = sweepPrisma();
+    await new PancakeSyncService(empty, makeClient([[]]), lifecycle).syncProducts();
+    expect(mk(empty).variation.updateMany).not.toHaveBeenCalled();
+
+    const half = sweepPrisma();
+    await new PancakeSyncService(half, makeClient([[product('a', [variation('v-a')])]]), lifecycle).syncProducts();
+    expect(mk(half).variation.updateMany).not.toHaveBeenCalled();
+    expect(mk(half).product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('fetch lỗi giữa chừng → ném lỗi, không tắt gì', async () => {
+    const prisma = sweepPrisma();
+    const client = {
+      isConfigured: () => true,
+      fetchProducts: jest.fn().mockResolvedValueOnce({ data: catalog()[0] }).mockRejectedValueOnce(new Error('timeout')),
+    } as unknown as PancakeClient;
+    await expect(new PancakeSyncService(prisma, client, lifecycle).syncProducts()).rejects.toThrow('timeout');
+    expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('quét toàn bộ chỉ tắt hàng khi chứng minh được đã đi hết danh mục', () => {
+    const page = (data: unknown[], extra: Record<string, unknown> = {}) => ({
+      success: true,
+      data,
+      total_pages: 3,
+      total_entries: 3,
+      ...extra,
+    });
+    const p1 = [product('a', [variation('v-a')])];
+    const p2 = [product('b', [variation('v-b')])];
+    const p3 = [product('gone', [variation('v-gone')])];
+    const svc = (prisma: PrismaService, bodies: unknown[]) => new PancakeSyncService(prisma, realClient(bodies), lifecycle);
+
+    it('trang 2/3 trả HTTP 200 kèm success:false → ném lỗi, không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      await expect(svc(prisma, [page(p1), { success: false, message: 'rate limited' }]).syncProducts()).rejects.toThrow();
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('trang 2/3 trả rỗng dù Pancake báo 3 trang → coi là quét dở: ném lỗi, không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      await expect(svc(prisma, [page(p1), page([])]).syncProducts()).rejects.toThrow(/chưa hết danh mục/);
+      expect(mk(prisma).variation.findMany).not.toHaveBeenCalled();
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('đủ số trang nhưng thiếu bản ghi so với total_entries (danh mục xê dịch giữa chừng) → không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      const bodies = [page(p1, { total_entries: 4 }), page(p2, { total_entries: 4 }), page(p3, { total_entries: 4 }), page([])];
+      await expect(svc(prisma, bodies).syncProducts()).rejects.toThrow(/chưa hết danh mục/);
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('lượt sync dở không dời mốc updated_since — lượt 15 phút sau không bỏ sót trang chưa đọc', async () => {
+      const s = svc(makePrisma(), [page(p1), page([])]);
+      const state = s as unknown as { lastRunAt: string | null };
+      state.lastRunAt = '2026-10-13T00:00:00.000Z';
+      await expect(s.syncProducts(state.lastRunAt)).rejects.toThrow(/chưa hết danh mục/);
+      expect(state.lastRunAt).toBe('2026-10-13T00:00:00.000Z');
+    });
+
+    it('đi hết 3/3 trang khớp total_entries → mới tắt hàng không còn trên Pancake', async () => {
+      const prisma = makePrisma({
+        variation: { findMany: jest.fn().mockResolvedValue([...dbVars, { id: 'db-x', pancakeId: 'v-x' }]) },
+        product: { findMany: jest.fn().mockResolvedValue([...dbProds, { id: 'p-x', pancakeId: 'x' }]) },
+      });
+      await svc(prisma, [page(p1), page(p2), page(p3), page([])]).syncProducts();
+      expect(mk(prisma).variation.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['db-x'] }, isActive: true },
+        data: { isActive: false, pancakeHold: 'REMOVED' },
+      });
+    });
+
+    it('Pancake không kèm total_pages/total_entries → không chứng minh được đã hết danh mục: đồng bộ bình thường nhưng không tắt gì', async () => {
+      const prisma = sweepPrisma();
+      const n = await svc(prisma, [{ success: true, data: catalog()[0] }, { success: true, data: [] }]).syncProducts();
+      expect(n).toBe(2);
+      expect(mk(prisma).variation.updateMany).not.toHaveBeenCalled();
+      expect(mk(prisma).product.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  it('biến thể is_removed → tắt; quay lại (đồng bộ đã giữ) → bật lại; admin tự tắt (pancakeHold NULL) → giữ nguyên', async () => {
+    const run = async (prev: unknown, v: Record<string, unknown>) => {
+      const prisma = makePrisma({ variation: { findUnique: jest.fn().mockResolvedValue(prev) } });
+      await new PancakeSyncService(prisma, makeClient([[product('a', [v])]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+      return mk(prisma).variation.upsert.mock.calls[0][0];
+    };
+    const active = { retailPrice: 1000, salePrice: null, isActive: true, pancakeHold: null };
+    expect((await run(active, variation('v-a', { is_removed: true }))).update).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
+    expect((await run(null, variation('v-a', { is_removed: true }))).create).toMatchObject({ isActive: false, pancakeHold: 'REMOVED' });
+
+    const held = { ...active, isActive: false, pancakeHold: 'REMOVED' };
+    expect((await run(held, variation('v-a'))).update).toMatchObject({ isActive: true, pancakeHold: null });
+
+    const adminOff = { ...active, isActive: false };
+    const upd = (await run(adminOff, variation('v-a'))).update;
+    expect(upd).not.toHaveProperty('isActive');
+    expect(upd).not.toHaveProperty('pancakeHold');
+  });
+
+  it('sản phẩm đã bị quét tắt mà Pancake trả lại → bật lại; is_removed ở cấp SP → tắt', async () => {
+    const run = async (existing: unknown, p: unknown) => {
+      const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(existing) } });
+      await new PancakeSyncService(prisma, makeClient([[p]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+      return mk(prisma).product.update.mock.calls[0][0].data;
+    };
+    const base = { id: 'p-a', pancakeId: 'a', forSegment: ['eco'] };
+    expect(await run({ ...base, isActive: false, pancakeHold: 'REMOVED' }, product('a', [variation('v-a')]))).toMatchObject({
+      isActive: true,
+      pancakeHold: null,
+    });
+    expect(await run({ ...base, isActive: true, pancakeHold: null }, product('a', [variation('v-a')], { is_removed: true }))).toMatchObject({
+      isActive: false,
+      pancakeHold: 'REMOVED',
+    });
+  });
+});
+
+describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0đ', () => {
+  const runWith = async (prev: unknown, v: Record<string, unknown>) => {
+    const prisma = makePrisma({ variation: { findUnique: jest.fn().mockResolvedValue(prev) } });
+    await new PancakeSyncService(prisma, makeClient([[product('a', [v])]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+    return { call: mk(prisma).variation.upsert.mock.calls[0][0], prisma };
+  };
+  const prev = { retailPrice: 125000, salePrice: 99000, isActive: true, pancakeHold: null };
+
+  it.each([[undefined], [0], [-5], [Number.NaN]])('đã có giá, Pancake trả retail_price=%p → giữ nguyên giá cũ, vẫn bán', async (retail) => {
+    const { call } = await runWith(prev, variation('v-a', { retail_price: retail }));
+    expect(call.update).not.toHaveProperty('retailPrice');
+    expect(call.update).not.toHaveProperty('salePrice');
+    expect(call.update).not.toHaveProperty('isActive');
+  });
+
+  it('biến thể MỚI thiếu giá → tạo nhưng ngừng bán (NO_PRICE); có giá ở lượt sau → mở bán', async () => {
+    const { call } = await runWith(null, variation('v-new', { retail_price: undefined }));
+    expect(call.create).toMatchObject({ retailPrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
+
+    const held = { retailPrice: 0, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' };
+    expect((await runWith(held, variation('v-new', { retail_price: undefined }))).call.update).not.toHaveProperty('isActive');
+    expect((await runWith(held, variation('v-new', { retail_price: 50000 }))).call.update).toMatchObject({
+      retailPrice: 50000,
+      isActive: true,
+      pancakeHold: null,
+    });
+  });
+
+  it('sale_price 0/âm → null (không bán 0đ); basePrice lấy giá dương đầu tiên', async () => {
+    const { call } = await runWith(prev, variation('v-a', { retail_price: 130000, sale_price: 0 }));
+    expect(call.update).toMatchObject({ retailPrice: 130000, salePrice: null });
+
+    const prisma = makePrisma();
+    const p = product('z', [variation('v-0', { retail_price: undefined }), variation('v-1', { retail_price: 70000 })]);
+    await new PancakeSyncService(prisma, makeClient([[p]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+    expect(mk(prisma).product.create.mock.calls[0][0].data.basePrice).toBe(70000);
+  });
+
+  it('thiếu giá không bị tính là giảm giá (không báo wishlist)', async () => {
+    await runWith(prev, variation('v-a', { retail_price: 0 }));
+    expect(notifyPriceDrop).not.toHaveBeenCalled();
   });
 });

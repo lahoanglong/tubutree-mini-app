@@ -184,7 +184,7 @@ describe('Controller + DTO — issue-invoice / lọc invoice', () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [] }) };
     const ctl = new AdminController(admin as never, {} as never);
     await ctl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, invoice: 'pending' }));
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined, 'pending');
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined, 'pending', undefined);
     expect(await validate(plainToInstance(ListOrdersQuery, { invoice: 'all' }))).toHaveLength(0);
     expect((await validate(plainToInstance(ListOrdersQuery, { invoice: 'hack' }))).some((e) => e.property === 'invoice')).toBe(true);
   });

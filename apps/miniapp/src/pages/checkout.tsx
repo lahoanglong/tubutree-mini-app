@@ -5,7 +5,7 @@ import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react
 import type { OrderDTO } from '@tubutree/shared-types';
 import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
 import { getWallet, getLoyalty } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorCode, getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -71,6 +71,7 @@ export default function CheckoutPage() {
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
+  const [totalChanged, setTotalChanged] = useState<string | null>(null);
   // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
   // 2 sheet số điện thoại + 2 mutate song song (BE chống đơn đôi nhưng UX hỏng).
   const [submitting, setSubmitting] = useState(false);
@@ -184,6 +185,8 @@ export default function CheckoutPage() {
           // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
           // tạo đơn COD có tiền phải trả mà khách không chọn.
           ...(zeroNote ? { quotedZeroTotal: true } : {}),
+          // Tổng khách đang thấy: giá/phí đổi giữa lúc báo giá và lúc bấm đặt thì BE trả TOTAL_CHANGED thay vì thu số mới.
+          ...(quote.data ? { expectedTotal: quote.data.total } : {}),
           note: note.trim() || undefined,
           // Chỉ gửi khi bật + chọn (body mặc định y hệt bản cũ — xem recyclingCheckoutFields).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
@@ -238,6 +241,12 @@ export default function CheckoutPage() {
       idempotencyKey.current = newIdempotencyKey();
       if (getErrorMessage(e) === 'PRICE_CHANGED') {
         setPriceChanged(true);
+        return;
+      }
+      if (getErrorCode(e) === 'TOTAL_CHANGED') {
+        setTotalChanged(getErrorMessage(e));
+        void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
         return;
       }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -812,6 +821,20 @@ export default function CheckoutPage() {
             }}
           >
             {vi.flashSale.priceChangedCta}
+          </Button>
+        }
+      >
+        {null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={totalChanged !== null}
+        onClose={() => setTotalChanged(null)}
+        title={vi.checkout.totalChangedTitle}
+        description={totalChanged ?? undefined}
+        footer={
+          <Button fullWidth onPress={() => setTotalChanged(null)}>
+            {vi.checkout.totalChangedCta}
           </Button>
         }
       >

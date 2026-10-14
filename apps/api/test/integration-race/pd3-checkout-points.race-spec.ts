@@ -127,7 +127,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

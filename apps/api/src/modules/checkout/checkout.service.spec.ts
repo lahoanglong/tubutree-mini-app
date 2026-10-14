@@ -27,7 +27,7 @@ const WINDOW_DAYS = 9;
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
-  ward: 'W', street: 'S', provinceCode: '1', districtCode: '2', wardCode: '3',
+  ward: 'W', street: 'S', provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
 };
 const CART = {
   items: [{ variationId: 'v1', productId: 'prod1', productName: 'P', variationName: 'V', unitPrice: 100, quantity: 1, total: 100 }],
@@ -62,6 +62,7 @@ function build(
     tier?: { discountPct: number } | null;
     /** P0 A3-05: dùng PricingService THẬT thay vì mock cứng — cho test end-to-end freeship/giảm % hạng. */
     pricing?: PricingService;
+    geo?: { checkWard: jest.Mock };
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -155,7 +156,7 @@ function build(
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics);
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics, opts.geo as never);
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
 }
 
@@ -239,7 +240,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       // hiện trên Postgres thật.
       shippingAddress: {
         ward: 'W', phone: '09', street: 'S', district: 'BD', province: 'HN',
-        wardCode: '3', recipient: 'A', districtCode: '2', provinceCode: '1',
+        wardCode: '84_VN01_00003', recipient: 'A', districtCode: '2', provinceCode: '84_VN01',
       },
     });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123');
@@ -268,7 +269,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       paymentMethod: 'COD', // đơn cũ đã tạo bằng COD
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     // Lần gọi lại đổi sang WALLET với CÙNG key (client tưởng lần trước fail).
@@ -286,7 +287,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       paymentMethod: 'COD',
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     // address.findUnique mặc định trả ADDRESS (addr1, HN/BD) — mock đè để mô phỏng đổi sang địa chỉ khác.
@@ -925,7 +926,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       hasRecyclingPickup: false,
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     await expect(
@@ -1231,12 +1232,70 @@ describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0�
         id: 'existing', userId: 'u1', paymentMethod: 'COD', total: 0,
         shippingAddress: {
           recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-          provinceCode: '1', districtCode: '2', wardCode: '3',
+          provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
         },
       });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER' } as never, 'key-0d');
       expect(orderCreate).not.toHaveBeenCalled();
       expect(prisma.order.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'existing' }, include: { items: true } });
     });
+  });
+});
+
+describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa giới', () => {
+  it('PANCAKE-13: tổng tính lại CAO HƠN tổng khách đã thấy → 400 TOTAL_CHANGED, không tạo đơn, không trừ ví', async () => {
+    const { svc, orderCreate } = build({ walletBalance: 1000 });
+    ledger.mockClear();
+    const err = await svc
+      .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET', expectedTotal: 90 } as never)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toMatchObject({
+      code: 'TOTAL_CHANGED',
+      message: expect.stringContaining('Tổng tiền đơn vừa thay đổi từ 90đ thành 100đ'),
+    });
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it('PANCAKE-13: tổng bằng hoặc thấp hơn số đã thấy, hoặc client cũ không gửi → đặt bình thường', async () => {
+    for (const expectedTotal of [100, 150, undefined]) {
+      const { svc, orderCreate } = build();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('PANCAKE-12: dòng giỏ có đơn giá 0đ → không báo giá, không đặt được', async () => {
+    const cartData = {
+      ...CART,
+      items: [{ ...CART.items[0], productName: 'Nước rửa chén 5L', unitPrice: 0, total: 0 }],
+      subtotal: 0,
+    };
+    const { svc, orderCreate } = build({ cartData });
+    await expect(svc.quote('u1', { addressId: 'addr1' })).rejects.toThrow('"Nước rửa chén 5L" đang được cập nhật giá');
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('PANCAKE-16: địa chỉ mã cũ "00" → báo giá và đặt đơn đều 400 ADDRESS_OUTDATED', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.address.findUnique as jest.Mock).mockResolvedValue({ ...ADDRESS, provinceCode: '00', districtCode: '00', wardCode: '00' });
+    const err = await svc.quote('u1', { addressId: 'addr1' }).catch((e: unknown) => e);
+    expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'ADDRESS_OUTDATED' });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('địa giới mới');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('PANCAKE-16: phường không thuộc tỉnh theo danh mục Pancake → 400; danh mục chưa tải được → vẫn đặt', async () => {
+    const bad = build({ geo: { checkWard: jest.fn().mockResolvedValue('invalid') } });
+    await expect(bad.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(
+      'Phường/xã không thuộc tỉnh/thành',
+    );
+    expect(bad.orderCreate).not.toHaveBeenCalled();
+
+    const down = build({ geo: { checkWard: jest.fn().mockResolvedValue('unknown') } });
+    await down.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(down.orderCreate).toHaveBeenCalledTimes(1);
   });
 });

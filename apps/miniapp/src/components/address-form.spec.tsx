@@ -68,9 +68,9 @@ describe('AddressForm', () => {
       phone: '0911111111',
       street: '123 Lê Lợi',
       province: 'HCM',
-      provinceCode: '79',
+      provinceCode: '84_VN79',
       ward: 'P1',
-      wardCode: '00001',
+      wardCode: '84_VN79_001',
       district: '',
       districtCode: '',
       isDefault: false,
@@ -84,6 +84,17 @@ describe('AddressForm', () => {
     fireEvent.click(screen.getByText('Lưu'));
     await waitFor(() => expect(accountApi.updateAddress).toHaveBeenCalledWith('a1', expect.any(Object)));
     expect(shopApi.createAddress).not.toHaveBeenCalled();
+  });
+
+  it('edit mode, địa chỉ theo địa giới cũ (mã tỉnh trước 2025) → bỏ tỉnh/phường cũ, bắt chọn lại trước khi lưu', async () => {
+    const initial = {
+      id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '123 Lê Lợi', province: 'HCM', provinceCode: '79',
+      ward: 'P1', wardCode: '00001', district: 'Q1', districtCode: '760', isDefault: false,
+    } as never;
+    renderForm(<AddressForm initial={initial} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByText('Lưu'));
+    await waitFor(() => expect(screen.getAllByText(/Bạn điền giúp Tubu mục này nhé/).length).toBeGreaterThan(0));
+    expect(accountApi.updateAddress).not.toHaveBeenCalled();
   });
 
   it('create mode: calls createAddress (not updateAddress) once all required fields + geo are valid', async () => {

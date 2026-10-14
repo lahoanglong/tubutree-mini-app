@@ -27,12 +27,12 @@ export const CHECKOUT_ADDRESS: AddressDTO = {
   recipient: 'Nguyễn Văn A',
   phone: '0901234567',
   province: 'TP. Hồ Chí Minh',
-  district: 'Quận 1',
-  ward: 'Phường Bến Nghé',
+  district: '',
+  ward: 'Phường Sài Gòn',
   street: '123 Lê Lợi',
-  provinceCode: '79',
-  districtCode: '760',
-  wardCode: '26734',
+  provinceCode: '84_VN79',
+  districtCode: '',
+  wardCode: '84_VN79_26734',
   isDefault: true,
 };
 

@@ -110,7 +110,7 @@ describe('AdminService lookups (real Postgres)', () => {
     expect((await admin.listReviews(1, 100, 'visible', 1)).data.map((r) => r.id)).not.toContain(review.id);
 
     const addr = await prisma.address.create({
-      data: { userId: u.id, recipient: 'IT', phone: '0900000000', province: 'HN', district: '', ward: 'P', street: '1', provinceCode: '01', districtCode: '', wardCode: '1' },
+      data: { userId: u.id, recipient: 'IT', phone: '0900000000', province: 'HN', district: '', ward: 'P', street: '1', provinceCode: '84_VN01', districtCode: '', wardCode: '1' },
     });
     const sub = await prisma.subscription.create({
       data: { userId: u.id, variationId: v.id, quantity: 2, intervalWeeks: 4, addressId: addr.id, nextRunAt: new Date(Date.now() + 864e5) },

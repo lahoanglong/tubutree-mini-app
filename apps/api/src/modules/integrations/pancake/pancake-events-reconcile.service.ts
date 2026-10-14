@@ -19,6 +19,8 @@ export type RedriveResult = { skipped: 'RUNNING' | 'LOCKED' } | { enqueued: numb
 /**
  * Cứu webhook Pancake kẹt: RECEIVED (enqueue lúc nhận lỗi), FAILED (hết lượt retry BullMQ), PROCESSING
  * quá hạn (worker chết giữa chừng). Không có cron này thì đơn kẹt mãi ở trạng thái cũ khi Redis/DB chập.
+ * Thêm UNMATCHED (chưa khớp được đơn Tubu — webhook tới trước khi pushOrder lưu pancakeOrderId): đối chiếu lại
+ * vài lần trong UNMATCHED_WINDOW_MINUTES rồi thôi — shop Pancake còn đơn của kênh khác, không bao giờ khớp.
  *
  * Không cứu:
  *  - sự kiện đã claim MAX_ATTEMPTS lần (lỗi vĩnh viễn — xem cột error, xử lý tay);
@@ -33,6 +35,8 @@ export class PancakeEventsReconcileService {
   static readonly MAX_ATTEMPTS = 15;
   static readonly MAX_AGE_HOURS = 24;
   static readonly BATCH_SIZE = 100;
+  static readonly UNMATCHED_WINDOW_MINUTES = 60;
+  static readonly UNMATCHED_MAX_ATTEMPTS = 4;
   private running = false;
 
   constructor(
@@ -82,6 +86,11 @@ export class PancakeEventsReconcileService {
         OR: [
           { status: { in: [PANCAKE_EVENT_STATUS.RECEIVED, PANCAKE_EVENT_STATUS.FAILED] } },
           { status: PANCAKE_EVENT_STATUS.PROCESSING, claimedAt: { lt: ago(PANCAKE_CLAIM_STALE_MINUTES) } },
+          {
+            status: PANCAKE_EVENT_STATUS.UNMATCHED,
+            receivedAt: { gte: ago(PancakeEventsReconcileService.UNMATCHED_WINDOW_MINUTES) },
+            attempts: { lt: PancakeEventsReconcileService.UNMATCHED_MAX_ATTEMPTS },
+          },
         ],
       },
       select: { id: true },

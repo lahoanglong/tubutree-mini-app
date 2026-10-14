@@ -20,6 +20,7 @@ import {
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
   type InvoiceFilter,
+  type PancakeFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
@@ -601,9 +602,10 @@ export class AdminService {
     search?: string,
     recycling?: RecyclingFilter,
     invoice?: InvoiceFilter,
+    pancake?: PancakeFilter,
   ) {
     const searchUserIds = await this.findSearchUserIds(search);
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, searchUserIds });
+    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, pancake, searchUserIds });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -819,6 +821,29 @@ export class AdminService {
    * nguyên tử ở GomdonOrderService.markHandled), đơn rời hàng đợi "Cần xử lý thu gom". Ghi chú của admin
    * chỉ vào log vết (không ghi vào lịch sử vận chuyển khách nhìn thấy).
    */
+  /**
+   * "Đã xử lý" cho hàng đợi "Cần xử lý Pancake": người đã xem và xử lý xong việc Pancake báo (đang hoàn, hoàn một
+   * phần, đơn bị xoá, trạng thái mâu thuẫn, hoàn tiền tay...) → đơn rời hàng đợi. Lý do cũ ghi vào log kèm admin.
+   */
+  async resolvePancakeAttention(adminId: string, idOrCode: string, note?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
+      select: { id: true, code: true, pancakeAttention: true },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, pancakeAttentionAt: { not: null } },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
+    this.logger.warn(
+      `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +
+        `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
+    );
+    return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
+  }
+
   async markGomdonHandled(adminId: string, idOrCode: string, note?: string) {
     const order = await this.resolveOrderRef(idOrCode);
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);

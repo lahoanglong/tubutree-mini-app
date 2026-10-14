@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
+import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -69,12 +69,19 @@ import {
   type AcademyLessonContentType,
   type AdminQuickReply,
   countRecyclingAttention,
+  countPancakeAttention,
   listDealerRewardClaims,
   listPayouts,
   type RecyclingFilter,
+  type PancakeFilter,
   type InvoiceFilter,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
+import {
+  PANCAKE_ATTENTION_COUNT_KEY,
+  PancakeAttentionBadge,
+  PancakeAttentionPanel,
+} from '@/components/admin/pancake-attention';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
@@ -176,22 +183,24 @@ const TAB_KEYS = new Set<string>(TABS.map((t) => t.k));
  * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
  * client thuần, tránh bắt buộc Suspense boundary khi build).
  */
-function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | '' } {
-  if (typeof window === 'undefined') return { tab: null, recycling: '' };
+function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pancake: PancakeFilter | '' } {
+  if (typeof window === 'undefined') return { tab: null, recycling: '', pancake: '' };
   const sp = new URLSearchParams(window.location.search);
   const t = sp.get('tab');
   const r = sp.get('recycling');
   return {
     tab: t && TAB_KEYS.has(t) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
+    pancake: sp.get('pancake') === 'attention' ? 'attention' : '',
   };
 }
 
-function writeUrlState(tab: Tab, recycling: RecyclingFilter | '') {
+function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: PancakeFilter | '' = '') {
   if (typeof window === 'undefined') return;
   const sp = new URLSearchParams();
   if (tab !== 'dashboard') sp.set('tab', tab);
   if (tab === 'orders' && recycling) sp.set('recycling', recycling);
+  if (tab === 'orders' && pancake) sp.set('pancake', pancake);
   const qs = sp.toString();
   window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
@@ -200,25 +209,38 @@ export default function AdminPage() {
   const { user, status, initialized } = useAuth();
   const [tab, setTabState] = useState<Tab>('dashboard');
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
+  const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
 
   useEffect(() => {
     const u = readUrlState();
     if (u.tab) setTabState(u.tab);
     if (u.recycling) setOrdersRecycling(u.recycling);
+    if (u.pancake) setOrdersPancake(u.pancake);
   }, []);
 
   const setTab = (t: Tab) => {
     setTabState(t);
-    writeUrlState(t, t === 'orders' ? ordersRecycling : '');
+    writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
   const openRecyclingQueue = () => {
     setOrdersRecycling('attention');
+    setOrdersPancake('');
     setTabState('orders');
     writeUrlState('orders', 'attention');
   };
+  const openPancakeQueue = () => {
+    setOrdersRecycling('');
+    setOrdersPancake('attention');
+    setTabState('orders');
+    writeUrlState('orders', '', 'attention');
+  };
   const onRecyclingFilterChange = (r: RecyclingFilter | '') => {
     setOrdersRecycling(r);
-    writeUrlState('orders', r);
+    writeUrlState('orders', r, ordersPancake);
+  };
+  const onPancakeFilterChange = (pf: PancakeFilter | '') => {
+    setOrdersPancake(pf);
+    writeUrlState('orders', ordersRecycling, pf);
   };
 
   // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
@@ -257,12 +279,17 @@ export default function AdminPage() {
         ))}
       </div>
       <div className="mt-4">
-        {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} />}
+        {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
         {tab === 'dealers' && <DealersTab />}
         {tab === 'dealerClaims' && <DealerClaimsTab />}
         {tab === 'payouts' && <PayoutAdminTab />}
         {tab === 'customerRefunds' && <CustomerRefundsTab />}
-        {tab === 'orders' && <OrdersTab recycling={ordersRecycling} onRecyclingChange={onRecyclingFilterChange} />}
+        {tab === 'orders' && <OrdersTab
+            recycling={ordersRecycling}
+            onRecyclingChange={onRecyclingFilterChange}
+            pancake={ordersPancake}
+            onPancakeChange={onPancakeFilterChange}
+          />}
         {tab === 'returns' && <ReturnsTab />}
         {tab === 'cashback' && <CashbackTab />}
         {tab === 'posCredits' && <PosCreditsTab />}
@@ -419,12 +446,15 @@ function OrderStatusBadge({ status }: { status: string }) {
 function DashboardTab({
   onSelectTab,
   onOpenRecyclingQueue,
+  onOpenPancakeQueue,
 }: {
   onSelectTab: (tab: Tab) => void;
   onOpenRecyclingQueue: () => void;
+  onOpenPancakeQueue: () => void;
 }) {
   const q = useQuery({ queryKey: ['admin-dashboard-stats'], queryFn: getDashboardStats });
   const recyclingQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
+  const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });
   const pendingClaimsQ = useQuery({
     queryKey: ['admin-dealer-claims', 'PENDING', 'count'],
     queryFn: () => listDealerRewardClaims('PENDING', 1, 1).then((r) => r.meta.total),
@@ -443,6 +473,19 @@ function DashboardTab({
 
   return (
     <div className="space-y-6">
+      {(pancakeQ.data ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={onOpenPancakeQueue}
+          className="flex w-full items-center justify-between gap-3 rounded-card border border-danger-fg bg-danger-bg px-4 py-3 text-left text-sm text-danger-fg hover:brightness-95"
+        >
+          <span>
+            <AlertTriangle aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            <b>{pancakeQ.data}</b> đơn cần xử lý theo báo cáo Pancake (đơn bị xoá / đang hoàn / đã nhận tiền khi đơn đã huỷ…)
+          </span>
+          <span className="shrink-0 font-semibold">Xử lý ngay →</span>
+        </button>
+      )}
       {(recyclingQ.data ?? 0) > 0 && (
         <button
           type="button"
@@ -595,9 +638,13 @@ const RECYCLING_FILTERS: { k: RecyclingFilter | ''; label: string }[] = [
 function OrdersTab({
   recycling,
   onRecyclingChange,
+  pancake,
+  onPancakeChange,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
+  pancake: PancakeFilter | '';
+  onPancakeChange: (p: PancakeFilter | '') => void;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -607,10 +654,21 @@ function OrdersTab({
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling, invoice],
-    queryFn: () => listOrders(page, status || undefined, search || undefined, recycling || undefined, 20, invoice || undefined),
+    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake],
+    queryFn: () =>
+      listOrders(
+        page,
+        status || undefined,
+        search || undefined,
+        recycling || undefined,
+        20,
+        invoice || undefined,
+        pancake || undefined,
+      ),
   });
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
+  const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });
+  const pancakeCount = pancakeQ.data ?? 0;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -728,6 +786,34 @@ function OrdersTab({
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-pressed={pancake === 'attention'}
+          onClick={() => {
+            setPage(1);
+            setExpandedId(null);
+            onPancakeChange(pancake === 'attention' ? '' : 'attention');
+          }}
+          className={`min-h-[44px] rounded-full px-3 py-1 text-xs font-medium sm:min-h-[32px] ${
+            pancake === 'attention'
+              ? 'bg-danger-fg text-stone-0'
+              : pancakeCount > 0
+                ? 'bg-danger-bg text-danger-fg ring-1 ring-danger-fg'
+                : 'bg-stone-100 text-stone-700'
+          }`}
+        >
+          <AlertTriangle aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+          Cần xử lý Pancake{pancakeQ.data !== undefined && ` (${pancakeQ.data})`}
+        </button>
+        {pancake === 'attention' && (
+          <span className="text-xs text-stone-500">
+            Pancake báo trạng thái hệ thống không tự áp được: đơn bị xoá, đang hoàn / hoàn một phần, đã nhận tiền khi đơn đã huỷ, báo
+            đã giao khi đơn đang do Gomdon giao…
+          </span>
+        )}
+      </div>
+
       {/* Bộ lọc đơn yêu cầu hoá đơn VAT */}
       <InvoiceFilterChips
         value={invoice}
@@ -775,8 +861,9 @@ function OrdersTab({
                       <tr className="border-t border-stone-100 hover:bg-stone-50">
                         <td className="px-3 py-3">
                           <div className="font-semibold text-stone-800">{o.code}</div>
-                          <div className="mt-0.5">
+                          <div className="mt-0.5 flex flex-wrap gap-1">
                             <RecyclingBadge order={o} />
+                            <PancakeAttentionBadge order={o} />
                           </div>
                         </td>
                         <td className="px-3 py-3">
@@ -822,6 +909,8 @@ function OrdersTab({
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
                             <div className="space-y-3">
+                              <PancakeAttentionPanel order={o} />
+
                               {/* Order items */}
                               <div>
                                 <div className="text-xs font-semibold uppercase text-stone-500">Sản phẩm trong đơn:</div>

@@ -365,6 +365,8 @@ export const placeOrder = (
     pointsToUse?: number;
     /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
     quotedZeroTotal?: boolean;
+    /** Tổng khách đang thấy (từ báo giá): lúc đặt mà tổng cao hơn thì BE trả TOTAL_CHANGED. */
+    expectedTotal?: number;
     note?: string;
     invoiceRequest?: InvoiceRequest;
     referralCode?: string;

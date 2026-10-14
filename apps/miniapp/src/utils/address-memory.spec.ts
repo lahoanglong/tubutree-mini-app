@@ -3,6 +3,7 @@ import {
   LAST_GEO_KEY,
   ZALO_PREFILL_ASKED_KEY,
   hasAskedZaloPrefill,
+  isLegacyGeo,
   markZaloPrefillAsked,
   pickLastGeo,
   recallLastGeo,
@@ -137,5 +138,14 @@ describe('khoá theo tài khoản (máy dùng chung / đổi tài khoản)', () 
     markZaloPrefillAsked(boom, 'u9');
     expect(hasAskedZaloPrefill(boom, 'u9')).toBe(true);
     expect(hasAskedZaloPrefill(boom, 'u10')).toBe(false);
+  });
+});
+
+describe('isLegacyGeo — địa chỉ không gửi được sang Pancake', () => {
+  it('mã "00", mã tỉnh trước 2025, thiếu phường → cũ; mã 84_VN đủ tỉnh + phường → mới', () => {
+    expect(isLegacyGeo({ provinceCode: '00', wardCode: '00' })).toBe(true);
+    expect(isLegacyGeo({ provinceCode: '79', wardCode: '26734' })).toBe(true);
+    expect(isLegacyGeo({ provinceCode: '84_VN79', wardCode: '' })).toBe(true);
+    expect(isLegacyGeo({ provinceCode: '84_VN79', wardCode: '84_VN79_001' })).toBe(false);
   });
 });

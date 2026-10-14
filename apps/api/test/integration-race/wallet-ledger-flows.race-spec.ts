@@ -264,7 +264,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

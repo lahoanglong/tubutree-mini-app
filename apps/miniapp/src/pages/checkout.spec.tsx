@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -63,6 +64,10 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoade
 vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => null }));
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../services/geo-api', () => ({
+  getProvinces: vi.fn().mockResolvedValue([{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }]),
+  getCommunes: vi.fn().mockResolvedValue([]),
+}));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import CheckoutPage from './checkout';
@@ -502,5 +507,56 @@ describe('CheckoutPage — hàng chọn không chứa phần tử focus được
     fireEvent.click(second.querySelector('input')!);
     await waitFor(() => expect(second).toHaveAttribute('aria-checked', 'true'));
     expect(within(box).getAllByRole('radio').filter((r) => r.getAttribute('aria-checked') === 'true')).toHaveLength(1);
+  });
+});
+
+describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và địa chỉ địa giới cũ (PANCAKE-16)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('gửi kèm tổng khách đang thấy (expectedTotal = tổng báo giá)', async () => {
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    renderPage();
+    const body = await placeOrderClick();
+    expect(body.expectedTotal).toBe(70_000);
+  });
+
+  it('BE trả TOTAL_CHANGED → hiện sheet báo tổng mới (không snackbar), tải lại báo giá', async () => {
+    const message = 'Tổng tiền đơn vừa thay đổi từ 70.000đ thành 75.000đ do giá hoặc phí giao vừa cập nhật. Vui lòng xem lại trước khi đặt.';
+    const response = { status: 400, data: { statusCode: 400, code: 'TOTAL_CHANGED', message } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    await placeOrderClick();
+    expect(await screen.findByText('Tổng tiền đơn vừa thay đổi')).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('địa chỉ đang chọn theo địa giới cũ → cảnh báo + nút Cập nhật địa chỉ mở form sửa đúng địa chỉ đó', async () => {
+    mocks.getAddresses.mockResolvedValue([{ ...ADDRESS, provinceCode: '79', wardCode: '26734' }]);
+    renderPage();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('theo địa giới cũ');
+    fireEvent.click(within(alert).getByText('Cập nhật địa chỉ'));
+    await waitFor(() => expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue('Ánh')).toBeInTheDocument();
+  });
+
+  it('địa chỉ hệ mới → không cảnh báo', async () => {
+    renderPage();
+    await screen.findByText('Phương thức thanh toán');
+    expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument();
   });
 });

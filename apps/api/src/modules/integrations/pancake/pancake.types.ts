@@ -9,6 +9,10 @@ export interface PancakeVariationDTO {
   remain_quantity?: number;
   weight?: number;
   images?: string[];
+  /** Pancake POS: biến thể đã bị xoá (vẫn có thể còn trong danh sách trả về). */
+  is_removed?: boolean;
+  /** Pancake POS: ẩn trên website StoreCake — KHÔNG dùng để ngừng bán trên Tubu. */
+  is_hidden?: boolean;
 }
 
 export interface PancakeProductDTO {
@@ -20,12 +24,18 @@ export interface PancakeProductDTO {
   image?: string | null;
   images?: string[];
   variations?: PancakeVariationDTO[];
+  is_removed?: boolean;
 }
 
 export interface PancakeProductsResponse {
+  success?: boolean;
   data?: PancakeProductDTO[];
   products?: PancakeProductDTO[];
   total?: number;
+  page_number?: number;
+  page_size?: number;
+  total_entries?: number;
+  total_pages?: number;
 }
 
 export interface PancakeCreateOrderItem {
@@ -42,7 +52,6 @@ export interface PancakeCreateOrderBody {
     ward_id?: string;
     district_id?: string;
     province_id?: string;
-    fb_id?: string;
   };
   items: PancakeCreateOrderItem[];
   shipping_fee: number;
@@ -83,4 +92,5 @@ export interface PancakeCommuneDTO {
 }
 export interface PancakeGeoResponse<T> {
   data?: T[];
+  success?: boolean;
 }

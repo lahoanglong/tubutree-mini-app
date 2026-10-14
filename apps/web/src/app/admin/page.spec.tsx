@@ -9,6 +9,9 @@ import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
+  pancake: 0,
+  listOrders: vi.fn(),
+  resolvePancakeAttention: vi.fn(),
   claims: 0,
   payouts: 0,
   refundsPending: 0,
@@ -85,13 +88,15 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       recentOrders: STATUSES.map(order),
     }),
     countRecyclingAttention: async () => mocks.recycling,
+    countPancakeAttention: async () => mocks.pancake,
+    resolvePancakeAttention: (...args: unknown[]) => mocks.resolvePancakeAttention(...args),
     listDealerRewardClaims: async () => ({ data: [], meta: { total: mocks.claims, page: 1, limit: 1 } }),
     listPayouts: async () => ({ data: [], meta: { total: mocks.payouts, page: 1, limit: 1 } }),
     listCustomerRefunds: async () => ({ data: [], meta: { total: mocks.refundsPending, page: 1, limit: 1 } }),
-    listOrders: async () => ({
-      data: mocks.orders,
-      meta: { total: 60, page: 1, limit: 20 },
-    }),
+    listOrders: async (...args: unknown[]) => {
+      mocks.listOrders(...args);
+      return { data: mocks.orders, meta: { total: 60, page: 1, limit: 20 } };
+    },
     listDealerApps: async () => ({
       data: [
         {
@@ -188,6 +193,9 @@ const mount = async () => {
 beforeEach(() => {
   mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
   mocks.recycling = 0;
+  mocks.pancake = 0;
+  mocks.listOrders.mockReset();
+  mocks.resolvePancakeAttention.mockReset();
   mocks.claims = 0;
   mocks.payouts = 0;
   mocks.refundsPending = 0;
@@ -418,6 +426,62 @@ describe('admin/page — hàng đơn hàng', () => {
     const pill = [...container.querySelectorAll('span')].find((x) => x.textContent === 'Đặt trước 2')!;
     expect(pill.className).toContain('bg-warning-bg');
     expect(container.textContent).toContain('Ghi chú từ khách: Giao giờ hành chính');
+  });
+});
+
+describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
+  const flagged = {
+    id: 'o9',
+    code: 'TUBU9',
+    status: 'CANCELLED',
+    total: 300000,
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'PAID',
+    createdAt: '2026-10-02T03:00:00.000Z',
+    user: { fullName: 'Khách B', phone: '0933333333' },
+    pancakeAttention: 'Pancake ghi nhận đã nhận tiền chuyển khoản nhưng đơn đã huỷ/trả — CẦN HOÀN TIỀN THỦ CÔNG cho khách.',
+    pancakeAttentionAt: '2026-10-03T03:00:00.000Z',
+  };
+
+  it('biểu ngữ tổng quan đếm đơn cần xử lý, bấm vào mở tab Đơn hàng đã lọc pancake=attention', async () => {
+    mocks.pancake = 3;
+    const { container } = await mount();
+    const banner = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('báo cáo Pancake'))!;
+    expect(banner.textContent).toContain('3 đơn cần xử lý theo báo cáo Pancake');
+    expect(banner.className).toContain('bg-danger-bg');
+    act(() => banner.click());
+    await flush();
+    expect(window.location.search).toBe('?tab=orders&pancake=attention');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention');
+    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý Pancake'))!;
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(chip.textContent).toBe('Cần xử lý Pancake (3)');
+    act(() => chip.click());
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined);
+  });
+
+  it('đơn bị gắn cờ: huy hiệu ở dòng, chi tiết hiện lý do; "Đã xử lý" qua hộp xác nhận rồi gửi ghi chú', async () => {
+    mocks.orders = [flagged];
+    mocks.resolvePancakeAttention.mockResolvedValue({ ok: true, message: 'Đơn TUBU9 đã rời hàng đợi cần xử lý Pancake.' });
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    expect(container.textContent).toContain('Pancake: cần xử lý');
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+    await flush();
+    const panel = container.querySelector('section[aria-label="Cần xử lý Pancake"]')!;
+    expect(panel.textContent).toContain('CẦN HOÀN TIỀN THỦ CÔNG');
+    typeInto(panel.querySelector('input'), '  đã hoàn tay cho khách ');
+    act(() => [...panel.querySelectorAll('button')].find((b) => b.textContent === 'Đã xử lý')!.click());
+    await flush();
+    expect(mocks.resolvePancakeAttention).not.toHaveBeenCalled();
+    const dialog = document.body.querySelector('[role="dialog"], [role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Đơn TUBU9 sẽ rời hàng đợi');
+    act(() => [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Đã xử lý')!.click());
+    await flush();
+    expect(mocks.resolvePancakeAttention).toHaveBeenCalledWith('o9', '  đã hoàn tay cho khách ');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('đã rời hàng đợi');
   });
 });
 

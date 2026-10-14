@@ -65,6 +65,9 @@ export function GeoPicker({
             {errorProvince}
           </p>
         )}
+        {provincesQ.isError && !errorProvince && (
+          <LoadFailed what="tỉnh/thành" onRetry={() => void provincesQ.refetch()} />
+        )}
       </div>
 
       <div>
@@ -95,7 +98,23 @@ export function GeoPicker({
             {errorWard}
           </p>
         )}
+        {communesQ.isError && !errorWard && (
+          <LoadFailed what="phường/xã" onRetry={() => void communesQ.refetch()} />
+        )}
       </div>
     </>
+  );
+}
+
+/** Danh mục lấy từ Pancake có thể lỗi tạm thời: không báo thì ô chọn đứng im ở placeholder và khách bỏ cuộc. */
+function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-danger-fg">
+      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+      <span>Không tải được danh sách {what}.</span>
+      <button type="button" onClick={onRetry} className={ui.btnText}>
+        Thử lại
+      </button>
+    </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
+  ResolvePancakeAttentionDto,
   ReturnRequestsQuery,
   SetUserRoleDto,
 } from './admin.controller';
@@ -282,7 +283,7 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
     await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }));
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined);
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
@@ -292,6 +293,32 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     expect(admin.markGomdonHandled).toHaveBeenCalledWith('admin-1', 'o1', 'đã hẹn lại');
     expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.markGomdonHandled)).toBe('orders/:id/gomdon/mark-handled');
     expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.markGomdonHandled)).toBe(RequestMethod.POST);
+  });
+});
+
+describe('AdminController — hàng đợi "Cần xử lý Pancake"', () => {
+  it('GET /admin/orders nhận ?pancake=attention (giá trị lạ bị chặn) và chuyển xuống listOrders', async () => {
+    await expect(asQuery(ListOrdersQuery, { pancake: 'attention' })).resolves.toMatchObject({ pancake: 'attention' });
+    await expect(asQuery(ListOrdersQuery, { pancake: 'all' })).rejects.toThrow();
+    const admin = { listOrders: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 1, pancake: 'attention' as const }));
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention');
+  });
+
+  it('POST orders/:id/pancake-attention/resolve: chỉ ADMIN, chuyển adminId + id + note; note ≤ 500, chặn field lạ', async () => {
+    const admin = { resolvePancakeAttention: jest.fn().mockResolvedValue({ ok: true, message: 'ok' }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.resolvePancakeAttention('admin-1', 'o1', { note: 'đã gọi khách' });
+    expect(admin.resolvePancakeAttention).toHaveBeenCalledWith('admin-1', 'o1', 'đã gọi khách');
+    expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.resolvePancakeAttention)).toBe(
+      'orders/:id/pancake-attention/resolve',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.resolvePancakeAttention)).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminController.prototype.resolvePancakeAttention)).toBeUndefined();
+    await expect(asBody(ResolvePancakeAttentionDto, {})).resolves.toEqual({});
+    await expect(asBody(ResolvePancakeAttentionDto, { note: 'x'.repeat(501) })).rejects.toThrow();
+    await expect(asBody(ResolvePancakeAttentionDto, { pancakeAttention: null })).rejects.toThrow();
   });
 });
 

@@ -16,6 +16,15 @@ export const RECYCLING_ATTENTION_NO_WAYBILL_STATUSES: readonly string[] = [
 /** Mã Gomdon báo huỷ / hoàn / hỏng / lấy-giao thất bại. */
 export const RECYCLING_ATTENTION_PROBLEM_CODES: readonly string[] = ['2', '6', '8', '9', '10', '11', '12'];
 
+/**
+ * Hàng quay về / mất SAU khi lấy: đang chuyển hoàn (6), đã hoàn (8), hỏng/mất (9), hoàn thất bại (12). Vẫn là việc
+ * cần làm khi đơn đã chốt "Đã giao" (chốt sớm bằng tay/Pancake rồi hàng bị hoàn: điểm đã cộng, hoa hồng đã khoá).
+ */
+const RECYCLING_ATTENTION_RETURN_CODES: readonly string[] = ['6', '8', '9', '12'];
+const RECYCLING_ATTENTION_OPEN_ONLY_CODES: readonly string[] = RECYCLING_ATTENTION_PROBLEM_CODES.filter(
+  (c) => !RECYCLING_ATTENTION_RETURN_CODES.includes(c),
+);
+
 export const RECYCLING_ATTENTION_GOMDON_STATUSES: readonly string[] = [
   ...RECYCLING_ATTENTION_NO_WAYBILL_STATUSES,
   ...RECYCLING_ATTENTION_PROBLEM_CODES,
@@ -28,9 +37,11 @@ export const RECYCLING_ATTENTION_CANCEL_STATUSES: readonly string[] = [GOMDON_CA
  * Trạng thái vận đơn chỉ còn là việc cần làm khi ĐƠN còn mở. Đơn đã giao/huỷ/trả thì vận đơn lỗi cũ
  * không còn gì để làm (vd đơn huỷ → Gomdon báo "2 Đơn hủy" là đúng kết quả mong muốn) — để lại trong
  * hàng đợi thì danh sách "cần xử lý" đầy việc đã xong và việc thật bị chìm. Riêng lỗi HUỶ vận đơn
- * (FAILED/TOO_LATE) luôn cần xử lý, vì nó chỉ xảy ra khi đơn đã huỷ.
+ * (FAILED/TOO_LATE) luôn cần xử lý, vì nó chỉ xảy ra khi đơn đã huỷ; hàng hoàn/mất (RECYCLING_ATTENTION_RETURN_CODES)
+ * thì chỉ hết việc khi đơn đã huỷ/trả.
  */
 const CLOSED_ORDER_STATUSES = ['DELIVERED', 'CANCELLED', 'RETURNED'] as const;
+const ENDED_ORDER_STATUSES = ['CANCELLED', 'RETURNED'] as const;
 
 /**
  * Chưa có vận đơn tự động mà hàng ĐÃ RỜI KHO (đang giao / đã giao) → kho đã tạo vận đơn tay rồi, không
@@ -49,6 +60,8 @@ export const ADMIN_ORDER_STATUSES = [
 ] as const;
 
 export type RecyclingFilter = 'attention' | 'all';
+/** attention = hàng đợi "Cần xử lý Pancake" (Order.pancakeAttention — xem PancakeProcessor.flagAttention). */
+export type PancakeFilter = 'attention';
 
 /**
  * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED) mà đơn còn sống; issued = đã phát hành;
@@ -74,6 +87,7 @@ export interface AdminOrderFilter {
   search?: string;
   recycling?: RecyclingFilter;
   invoice?: InvoiceFilter;
+  pancake?: PancakeFilter;
   /**
    * Id khách khớp `search` theo SĐT/tên, tra trước bằng index trigram trên users. Có thì lọc
    * `userId IN (...)` thay cho lọc theo quan hệ `user` — Prisma dựng quan hệ thành LEFT JOIN users và
@@ -99,7 +113,11 @@ export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
         OR: [{ shippingCode: null }, { shippingPartner: GOMDON_CARRIER }],
       },
       {
-        gomdonStatus: { in: [...RECYCLING_ATTENTION_PROBLEM_CODES] },
+        gomdonStatus: { in: [...RECYCLING_ATTENTION_RETURN_CODES] },
+        status: { notIn: [...ENDED_ORDER_STATUSES] },
+      },
+      {
+        gomdonStatus: { in: [...RECYCLING_ATTENTION_OPEN_ONLY_CODES] },
         status: { notIn: [...CLOSED_ORDER_STATUSES] },
       },
       {
@@ -133,6 +151,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.recycling === 'attention') and.push(recyclingAttentionWhere());
   else if (f.recycling === 'all') and.push({ hasRecyclingPickup: true });
   if (f.invoice) and.push(INVOICE_STATUS_WHERE[f.invoice]);
+  if (f.pancake === 'attention') and.push({ pancakeAttentionAt: { not: null } });
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
 }
