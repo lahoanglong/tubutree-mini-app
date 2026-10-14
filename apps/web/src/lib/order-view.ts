@@ -49,6 +49,25 @@ const PAYMENT_STATUS_LABEL: Record<string, string> = {
 export const paymentStatusLabel = (status: string | undefined): string =>
   status ? (PAYMENT_STATUS_LABEL[status] ?? status) : '';
 
+/** Hãng vận chuyển (qua Pancake) gửi trạng thái dạng mã tiếng Anh; Gomdon gửi sẵn chữ tiếng Việt. */
+const SHIPPING_STATUS_LABEL: Record<string, string> = {
+  ready_to_pick: 'Chờ lấy hàng',
+  picking: 'Đang lấy hàng',
+  picked: 'Đã lấy hàng',
+  storing: 'Đang lưu kho',
+  transporting: 'Đang trung chuyển',
+  delivering: 'Đang giao',
+  delivered: 'Đã giao',
+  delivery_fail: 'Giao không thành công',
+  waiting_to_return: 'Chờ hoàn',
+  returning: 'Đang hoàn',
+  returned: 'Đã hoàn',
+  cancel: 'Đã huỷ',
+  cancelled: 'Đã huỷ',
+};
+export const shippingStatusLabel = (status: string | null | undefined): string =>
+  status ? (SHIPPING_STATUS_LABEL[status.trim().toLowerCase()] ?? status) : '';
+
 interface PaymentView {
   status: string;
   paymentMethod: string;
@@ -67,10 +86,12 @@ export const orderPaymentStatusLabel = (o: PaymentView): string =>
   codCollected(o) ? 'Đã thu tiền khi giao' : paymentStatusLabel(o.paymentStatus);
 
 /** Ô gọn trong danh sách đơn admin. */
+const PAYMENT_STATUS_SHORT: Record<string, string> = { UNPAID: 'Chưa TT', REFUNDED: 'Đã hoàn tiền', FAILED: 'TT lỗi' };
+
 export function orderPaymentStatusShort(o: PaymentView): string {
   if (codCollected(o)) return 'Đã thu COD';
   if (o.paymentStatus === 'PAID') return 'Đã TT';
-  return o.paymentStatus ?? '';
+  return (o.paymentStatus && PAYMENT_STATUS_SHORT[o.paymentStatus]) ?? o.paymentStatus ?? '';
 }
 
 export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${encodeURIComponent(code)}`;

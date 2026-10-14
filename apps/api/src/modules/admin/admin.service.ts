@@ -34,6 +34,10 @@ import { normalizeCouponCode } from '../coupons/coupons.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
 import { linkTubuFulfilledVariation } from '../merchant/merchant-pancake-link';
+import { maskPhone } from '../../common/mask-pii';
+
+/** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
+const COUPON_PERCENT_NEEDS_CAP = 50;
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -413,14 +417,14 @@ export class AdminService {
     // nếu lỗi ở bước này, role đã hạ vẫn đứng, chỉ còn nguy cơ tự phục hồi ở lần refresh sau
     // (best-effort, không rollback role vì role change tự nó luôn đúng ý admin).
     const revoked = await this.rbac.revokeGrantsAbove(normalized, role).catch((err) => {
-      this.logger.error(`revokeGrantsAbove lỗi cho SĐT ${normalized}: ${err instanceof Error ? err.message : err}`);
+      this.logger.error(`revokeGrantsAbove lỗi cho SĐT ${maskPhone(normalized)}: ${err instanceof Error ? err.message : err}`);
       return 0;
     });
     if (revoked > 0) {
-      this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${normalized}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
+      this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
     this.logger.warn(
-      `Admin ${adminId} đổi role user ${user.id} (${normalized}): ${previousRole} → ${role}` +
+      `Admin ${adminId} đổi role user ${user.id} (${maskPhone(normalized)}): ${previousRole} → ${role}` +
         (dealerTierId ? ` (bậc ${dealerTierId})` : ''),
     );
     return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
@@ -1045,6 +1049,11 @@ export class AdminService {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
     if (endAt <= startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+    if (endAt <= new Date()) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
+    if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
+    if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
+      throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
+    }
     const code = normalizeCouponCode(data.code);
     try {
       return await this.prisma.coupon.create({

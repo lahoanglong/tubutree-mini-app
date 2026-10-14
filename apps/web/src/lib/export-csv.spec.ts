@@ -50,3 +50,10 @@ describe('generateOrdersCsvString — đơn trả bằng xu cũ (PD-3)', () => {
     expect(csv).not.toMatch(/TubuXu|Xu Tubu/);
   });
 });
+
+describe('cột SĐT giữ số 0 đầu khi mở bằng Excel (R2-ADMINOPS-7)', () => {
+  it('SĐT toàn số được ghi thành văn bản ="…"', () => {
+    const csv = generateOrdersCsvString([order({ user: { id: 'u1', fullName: 'A', phone: '0910087109' } } as Partial<AdminOrder>)]);
+    expect(csv).toContain('"=""0910087109"""');
+  });
+});

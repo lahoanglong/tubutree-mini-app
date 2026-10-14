@@ -10,6 +10,7 @@ import {
   PANCAKE_CLAIM_STALE_MINUTES,
   PANCAKE_EVENT_STATUS,
   PANCAKE_JOB_EVENT,
+  PANCAKE_STOCK_EVENT,
 } from './pancake-webhook-dedupe';
 
 const LOCK_KEY = 'pancake.events-reconcile';
@@ -26,7 +27,8 @@ export type RedriveResult = { skipped: 'RUNNING' | 'LOCKED' } | { enqueued: numb
  *  - sự kiện đã claim MAX_ATTEMPTS lần (lỗi vĩnh viễn — xem cột error, xử lý tay);
  *  - sự kiện quá MAX_AGE_HOURS: trạng thái/thanh toán cũ áp muộn dễ sai hơn là bỏ;
  *  - variation.stock_changed: số tồn kho cũ áp muộn ghi đè số mới (hồi sinh hàng đã bán) — PancakeSyncService
- *    đồng bộ lại tồn kho định kỳ.
+ *    đồng bộ lại tồn kho định kỳ;
+ *  - sự kiện người vận hành đã bấm "Đã xử lý" (dismissedAt) — họ đã chỉnh tay đơn, chạy lại sẽ đè quyết định đó.
  */
 @Injectable()
 export class PancakeEventsReconcileService {
@@ -82,7 +84,8 @@ export class PancakeEventsReconcileService {
           gte: ago(PancakeEventsReconcileService.MAX_AGE_HOURS * 60),
         },
         attempts: { lt: PancakeEventsReconcileService.MAX_ATTEMPTS },
-        eventType: { not: 'variation.stock_changed' },
+        eventType: { not: PANCAKE_STOCK_EVENT },
+        dismissedAt: null,
         OR: [
           { status: { in: [PANCAKE_EVENT_STATUS.RECEIVED, PANCAKE_EVENT_STATUS.FAILED] } },
           { status: PANCAKE_EVENT_STATUS.PROCESSING, claimedAt: { lt: ago(PANCAKE_CLAIM_STALE_MINUTES) } },

@@ -12,6 +12,9 @@ export const PANCAKE_EVENT_STATUS = {
 /** Worker giữ claim PROCESSING lâu hơn mốc này coi như đã chết (handler thường xong trong vài giây). */
 export const PANCAKE_CLAIM_STALE_MINUTES = 15;
 
+/** Tồn kho tuyệt đối tại thời điểm gửi: áp muộn sẽ đè số mới hơn, nên không bao giờ chạy lại (cron lẫn tay). */
+export const PANCAKE_STOCK_EVENT = 'variation.stock_changed';
+
 /** Job name của queue pancake-events (giữ nguyên tên cũ để job đang chờ lúc deploy vẫn chạy). */
 export const PANCAKE_JOB_EVENT = 'process';
 
@@ -35,4 +38,32 @@ function canonicalJson(value: unknown): string {
 export function pancakeDedupeKey(eventType: string, body: unknown): string {
   const hash = createHash('sha256').update(canonicalJson(body)).digest('hex');
   return `${eventType.slice(0, 120)}|${hash}`;
+}
+
+/** Mã đơn Tubu do pushOrder ghi vào note ("Order code: <mã>") — mọi tiền tố (TUBU, TUBUSUB, DLR). */
+const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
+
+/** Pancake POS gửi nguyên object đơn ở top-level; luồng cũ bọc trong {event, data}. */
+export function pancakeEventData(rawPayload: unknown): Record<string, unknown> {
+  const payload = (rawPayload && typeof rawPayload === 'object' ? rawPayload : {}) as Record<string, unknown>;
+  const data = payload['data'];
+  return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : payload;
+}
+
+/** Mã đơn Tubu mà đơn Pancake mang (extension.external_order_id, hoặc "Order code: …" trong note). */
+export function pancakeEventOrderCode(data: Record<string, unknown>): string | null {
+  const ext = data['extension'] as { external_order_id?: string } | undefined;
+  if (ext?.external_order_id) return ext.external_order_id;
+  const note = typeof data['note'] === 'string' ? data['note'] : '';
+  const m = note.match(NOTE_ORDER_CODE);
+  return m ? m[1]! : null;
+}
+
+/** Nhãn để người vận hành tìm ra việc: mã đơn Tubu, không có thì #id đơn Pancake; null khi payload không có cả hai. */
+export function pancakeEventRef(rawPayload: unknown): string | null {
+  const data = pancakeEventData(rawPayload);
+  const code = pancakeEventOrderCode(data);
+  if (code) return code;
+  const id = data['id'] ?? data['order_id'];
+  return id === null || id === undefined || id === '' ? null : `#${String(id)}`;
 }

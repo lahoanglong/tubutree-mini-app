@@ -15,7 +15,9 @@ const MAX_RECIPIENTS = 20;
  *  - bảng gomdon_alerts gắn đơn: web admin hiện báo động ở chi tiết đơn và giữ đơn trong hàng đợi "Cần xử lý
  *    thu gom" tới khi có người đánh dấu đã xử lý (admin-order-filter.ts). Trước đây chỉ có thông báo in-app trên
  *    mini app — web admin không thấy, và đơn giao trùng vận đơn còn rơi khỏi hàng đợi;
- *  - thông báo in-app tới tài khoản ADMIN qua NotificationsService.
+ *  - thông báo in-app tới ADMIN và nhân viên nhóm KHO (người xử lý vận đơn) qua NotificationsService.
+ * Việc phía Pancake (template OPS_PANCAKE_ALERT) KHÔNG ghi gomdon_alerts: nó đã nằm ở cột pancakeAttention của đơn, tự
+ * gỡ khi lần thử sau thành công và có nút "Đã xử lý" riêng; ghi vào đây làm ô "Gomdon — báo động" đỏ mãi.
  * Best-effort: lỗi lưu/gửi báo động KHÔNG được làm hỏng luồng nghiệp vụ gọi nó.
  *
  * KHÔNG tự hoàn tiền / tự huỷ đơn ở đây — chỉ báo để người quyết định.
@@ -33,7 +35,7 @@ export class GomdonAlertService {
     const source = template === PANCAKE_ALERT_TEMPLATE ? 'PANCAKE' : 'GOMDON';
     this.logger.error(`[${source} CẦN XỬ LÝ] Đơn ${orderCode}: ${message}`);
     try {
-      const order = await this.prisma.order.findUnique({ where: { code: orderCode }, select: { id: true } });
+      const order = source === 'GOMDON' ? await this.prisma.order.findUnique({ where: { code: orderCode }, select: { id: true } }) : null;
       if (order) {
         // Cùng nội dung còn mở (job chạy lại, webhook gửi lại, API khởi động lại) → không báo lặp. Khoá theo đơn
         // để hai worker báo cùng lúc không cùng thấy "chưa có" rồi cùng tạo.
@@ -54,8 +56,9 @@ export class GomdonAlertService {
     }
     try {
       const admins = await this.prisma.user.findMany({
-        where: { role: 'ADMIN' },
+        where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'KHO' } }] },
         select: { id: true },
+        orderBy: { role: 'asc' },
         take: MAX_RECIPIENTS,
       });
       for (const a of admins) {

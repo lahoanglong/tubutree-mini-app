@@ -7,7 +7,7 @@
 #     --build-arg NEXT_PUBLIC_ZALO_APP_ID=<id> .
 # NEXT_PUBLIC_ZALO_APP_ID bắt buộc: build dừng nếu rỗng (xem bước kiểm tra bên dưới).
 # ──────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -42,7 +42,7 @@ RUN if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ]; then \
 RUN pnpm --filter @tubutree/web build
 
 # ──────────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -1,9 +1,10 @@
-import { Controller, Param, Post, Query } from '@nestjs/common';
+import { Controller, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../../common/staff-permissions';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PancakeSyncService } from './pancake-sync.service';
 import { PancakeOrderService } from './pancake-order.service';
+import { pancakeErrorText } from './pancake-outbound';
 
 @Controller('admin/pancake')
 export class PancakeController {
@@ -24,7 +25,15 @@ export class PancakeController {
   @Post('sync')
   async runSync(@Query('withStock') withStock?: string) {
     const overwriteStock = withStock === '1' || withStock === 'true';
-    const count = await this.sync.syncProducts(undefined, { forceStock: overwriteStock });
+    let count: number;
+    try {
+      count = await this.sync.syncProducts(undefined, { forceStock: overwriteStock });
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new ServiceUnavailableException(
+        `Không đồng bộ được danh mục Pancake (${pancakeErrorText(err)}). Thử lại sau ít phút; lỗi kéo dài thì kiểm khoá Pancake.`,
+      );
+    }
     return { synced: count, stockOverwritten: overwriteStock };
   }
 

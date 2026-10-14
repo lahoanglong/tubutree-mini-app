@@ -54,6 +54,8 @@ jobs:
           GOMDON_PHONE: ${{ secrets.GOMDON_PHONE }}
           GOMDON_PASSWORD: ${{ secrets.GOMDON_PASSWORD }}
           GOMDON_WEBHOOK_SECRET: ${{ secrets.GOMDON_WEBHOOK_SECRET }}
+          # Kênh báo động vận hành ngoài app (Slack/Google Chat/n8n) — docs/GO-LIVE-KEYS.md mục báo động vận hành.
+          OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
           # action=crontab: URL dead-man switch (healthchecks.io...) báo khi backup lỗi/không chạy.
           BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
           # Chỉ dùng cho action=grant-admin — SĐT tài khoản cần cấp quyền ADMIN. GitHub tự mask
@@ -64,7 +66,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,BACKUP_HEALTHCHECK_URL
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -130,6 +132,8 @@ jobs:
                 envstate ZALOPAY_APP_ID
                 envstate ZALOPAY_KEY1
                 envstate ZALOPAY_KEY2
+                echo "=== ENV (báo động vận hành) ==="
+                envstate OPS_ALERT_WEBHOOK_URL
                 echo "=== API health (db + redis) ==="
                 $COMPOSE exec -T api node -e 'fetch("http://localhost:3001/api/health").then(async r=>console.log(r.status, await r.text())).catch(e=>console.log("ERR", e.message))' || true
                 echo "=== Redis: policy + bộ nhớ ==="
@@ -218,6 +222,13 @@ jobs:
                 set_if GOMDON_PHONE "${GOMDON_PHONE:-}"
                 set_if GOMDON_PASSWORD "${GOMDON_PASSWORD:-}"
                 set_if GOMDON_WEBHOOK_SECRET "${GOMDON_WEBHOOK_SECRET:-}"
+                echo "=== Báo động vận hành (Slack/Google Chat/n8n) ==="
+                # API từ chối khởi động khi URL sai dạng (thiếu https://) — không ghi giá trị đó vào .env.
+                case "${OPS_ALERT_WEBHOOK_URL:-}" in
+                  "") echo "  OPS_ALERT_WEBHOOK_URL: secret rỗng — giữ nguyên (báo động chỉ in-app)";;
+                  http://*|https://*) set_if OPS_ALERT_WEBHOOK_URL "$OPS_ALERT_WEBHOOK_URL";;
+                  *) echo "  OPS_ALERT_WEBHOOK_URL: secret không bắt đầu bằng https:// (hoặc http://) — KHÔNG ghi, sửa secret rồi chạy lại"; exit 1;;
+                esac
 
                 echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
                 envstate CORS_ORIGINS
@@ -228,6 +239,7 @@ jobs:
                 envstate GOMDON_PHONE
                 envstate GOMDON_PASSWORD
                 envstate GOMDON_WEBHOOK_SECRET
+                envstate OPS_ALERT_WEBHOOK_URL
                 envstate DEEPSEEK_API_KEY
                 envstate GEMINI_API_KEY
                 envstate GEMINI_BASE_URL
@@ -245,6 +257,11 @@ jobs:
               crontab)
                 echo "=== Cài cron backup hằng ngày 02:00 ==="
                 SCRIPT="$(pwd)/tools/backup/backup-db.sh"
+                # Cron chạy bằng user SSH: thư mục backup và file log phải thuộc user này, nếu không shell không mở
+                # được file log để redirect và bỏ qua luôn lệnh backup (không có bản nào, không có log báo lỗi).
+                sudo mkdir -p /var/backups/tubutree
+                sudo touch /var/log/tubutree-backup.log
+                sudo chown "$(id -u):$(id -g)" /var/backups/tubutree /var/log/tubutree-backup.log
                 # Bản ngoài máy (RCLONE_REMOTE, biến repo BACKUP_RCLONE_REMOTE) cần `rclone config` sẵn trên máy
                 # chủ — xem tools/backup/README.md. Trống thì chỉ giữ bản local (cảnh báo bên dưới).
                 REMOTE="${{ vars.BACKUP_RCLONE_REMOTE || '' }}"
@@ -253,9 +270,15 @@ jobs:
                 # trước khi echo dòng mới) → không phải lỗi, || true để không cắt ngang trước `echo "$LINE"`.
                 ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' || true; echo "$LINE" ) | crontab -
                 [ -n "$REMOTE" ] || echo "CẢNH BÁO: chưa đặt biến repo BACKUP_RCLONE_REMOTE — backup chỉ nằm trên cùng đĩa với Postgres."
+                [ -n "${BACKUP_HEALTHCHECK_URL:-}" ] || echo "CẢNH BÁO: chưa đặt secret BACKUP_HEALTHCHECK_URL — backup lỗi hoặc cron không chạy sẽ không ai được báo."
                 echo "=== crontab hiện tại (che URL healthcheck) ==="
                 crontab -l | grep backup | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
-                sudo touch /var/log/tubutree-backup.log 2>/dev/null || true
+                echo "=== Chạy thử backup một lần với đúng biến của cron (ghi vào cùng file log) ==="
+                COMPOSE_FILE="$(pwd)/$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" RCLONE_REMOTE="$REMOTE" \
+                  HEALTHCHECK_URL="${BACKUP_HEALTHCHECK_URL:-}" bash "$SCRIPT" >> /var/log/tubutree-backup.log 2>&1 \
+                  || { tail -20 /var/log/tubutree-backup.log; echo "Backup chạy thử LỖI — xem log ở trên."; exit 1; }
+                tail -5 /var/log/tubutree-backup.log
+                ls -lh /var/backups/tubutree/ | tail -3
                 ;;
 
               *) echo "Action không hợp lệ: $ACTION"; exit 1 ;;

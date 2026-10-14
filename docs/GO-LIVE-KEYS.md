@@ -15,10 +15,12 @@ Tóm tắt việc cần làm (theo độ ưu tiên):
 | **Accesstrade** | Hoàn tiền (cashback) mua sàn ngoài | ~3–7 ngày duyệt publisher | `ACCESSTRADE_TOKEN`, `ACCESSTRADE_PUBLISHER_ID`, `ACCESSTRADE_WEBHOOK_SECRET` |
 | **Pancake POS** (bắt buộc) | Nguồn chân lý catalog, tồn kho, đơn và vận chuyển | Có ngay (tài khoản shop) | `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID`, `PANCAKE_WEBHOOK_SECRET` — mục 6 |
 | **Gomdon** (nếu bật thu gom tái chế) | Vận đơn đổi hàng BestExpress | Liên hệ quản trị Gomdon | `GOMDON_PHONE`, `GOMDON_PASSWORD`, `GOMDON_WEBHOOK_SECRET` — mục 7 |
+| **Kênh báo động vận hành** (khuyến nghị) | Báo sự cố Pancake/Gomdon/hàng đợi ra Slack/Google Chat/n8n | Tạo ngay (incoming webhook) | `OPS_ALERT_WEBHOOK_URL` — mục 8 |
 
-> **Pancake khác các dịch vụ còn lại:** thiếu `PANCAKE_API_KEY`/`PANCAKE_SHOP_ID` thì app vẫn nhận đơn,
-> nhưng đơn **không bao giờ tới kho** (đứng ở trạng thái chờ đồng bộ, chỉ có log cảnh báo). Kiểm mục 6
-> trước khi mở bán.
+> **Pancake khác các dịch vụ còn lại:** production thiếu `PANCAKE_API_KEY`/`PANCAKE_SHOP_ID`/`PANCAKE_WEBHOOK_SECRET`
+> thì **API không khởi động** (không có kho thì không bán được đơn nào). `tools/deploy/deploy.sh` kiểm `.env` bằng
+> image mới trước khi thay container nên thiếu khoá thì deploy dừng, bản đang chạy vẫn phục vụ. Đặt khoá theo
+> mục 6 trước lần deploy đầu tiên.
 
 ---
 
@@ -248,10 +250,36 @@ gh workflow run ops.yml -f action=set-env
 
 ---
 
+## 8) Báo động vận hành (kênh ngoài app)
+
+Cron 5 phút của API so tình trạng Pancake, Gomdon và hàng đợi với ngưỡng ở tab **Cấu hình → ops**
+(`ops.alert_unsynced_minutes`, `ops.alert_stuck_orders`, `ops.alert_webhook_failed`, `ops.alert_queue_failed_1h`,
+`ops.alert_gomdon_backlog_minutes`, `ops.alert_repeat_hours`). Có sự cố mới thì báo **một lần** (nhắc lại sau
+`ops.alert_repeat_hours` giờ nếu chưa hết), hết sự cố thì báo "Vận hành đã ổn trở lại". Báo động luôn có thông báo
+in-app cho admin; `OPS_ALERT_WEBHOOK_URL` thêm một kênh ngoài app để không phụ thuộc việc có người đang mở trang admin.
+Lời báo động nêu tới 5 mã đơn; danh sách đầy đủ, nút **Chạy lại / Đã xử lý** cho webhook lỗi nằm ở màn
+**Sức khoẻ hệ thống** của web admin.
+
+**Định dạng gửi** (POST JSON, timeout 5 giây; gửi lỗi thì lượt kiểm 5 phút sau gửi lại):
+- URL `hooks.slack.com` (Slack incoming webhook) hoặc `chat.googleapis.com` (Google Chat webhook): chỉ `{"text": "..."}`
+  — tiêu đề in đậm, mỗi sự cố một dòng.
+- URL khác (n8n, Zapier, máy chủ riêng): `{"text", "status": "ALERT"|"RECOVERED", "title", "summary",
+  "problems": [{"key", "message"}], "generatedAt"}`.
+
+```bash
+gh secret set OPS_ALERT_WEBHOOK_URL --body "https://hooks.slack.com/services/T.../B.../..."   # phải có https://
+gh workflow run ops.yml -f action=set-env
+gh workflow run ops.yml -f action=audit   # OPS_ALERT_WEBHOOK_URL phải là SET
+```
+URL thiếu `https://` thì `set-env` từ chối ghi và API cũng không khởi động với giá trị đó. Bỏ trống = chỉ báo in-app.
+
+---
+
 ## Thứ tự khuyến nghị go-live
 1. **Zalo OA + ZNS** trước (lead time template lâu nhất ~2 tuần) — đăng ký sớm.
 2. **ZaloPay** (cần cho thanh toán online; trước mắt COD/Ví/TubuXu đã đủ bán hàng).
 3. **Accesstrade** (cashback — tính năng tăng trưởng, có thể bật sau).
 4. **CSKH Quick-reply webhook** (tính năng tăng trưởng, không bắt buộc — bật khi rảnh).
+5. **Kênh báo động vận hành** (mục 8) trước ngày mở bán, để sự cố Pancake/Gomdon không chỉ nằm trong app.
 
 Sau mỗi lần go-live 1 dịch vụ: chạy `ops.yml action=audit` để xác nhận, rồi test 1 giao dịch thật nhỏ.

@@ -37,6 +37,7 @@ import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_PAYMENT_PENDING,
   ATTENTION_PUSH_FAILED,
+  ATTENTION_SETTLED_BY_CANCEL,
   clearPancakeAttention,
   flagPancakeAttention,
 } from './pancake-attention';
@@ -252,16 +253,26 @@ export class PancakeOrderService {
     return pancakeOrderId;
   }
 
+  /**
+   * Lỗi tạm (mạng/5xx/429) trong chừng này phút kể từ lúc đơn được phép lên kho (đặt COD / nhận tiền) chưa đưa vào
+   * "Cần xử lý Pancake": cron 15 phút tự đẩy lại, còn chập kéo dài thì báo động tổng pancake.stuck (30 phút) lo.
+   * Không có ân hạn này thì Pancake chập nửa phút sinh một thông báo cho mỗi đơn × mỗi admin.
+   */
+  static readonly PUSH_ATTENTION_GRACE_MINUTES = 60;
+
   /** Hết lượt thử của job push: chốt FAILED + đưa vào hàng đợi "Cần xử lý Pancake" (cron vẫn thử tiếp). */
   async markPushFailure(orderId: string, err: unknown, final: boolean): Promise<void> {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { id: true, code: true, pancakeOrderId: true } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, code: true, pancakeOrderId: true, createdAt: true, paidAt: true },
+    });
     if (!order || order.pancakeOrderId) return;
     // Đang PUSHING = tiến trình khác giữ quyền đẩy (lần này thua tranh chấp): không ghi đè, kẻo mở khoá cho lần tạo thứ hai.
     await this.prisma.order.updateMany({
       where: { id: order.id, pancakeOrderId: null, OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }] },
       data: { pancakeSyncError: pancakeErrorText(err), ...(final ? { pancakePushStatus: PANCAKE_PUSH.FAILED } : {}) },
     });
-    if (final || err instanceof PancakeOrderDataError) {
+    if (err instanceof PancakeOrderDataError || (final && !this.inTransientGrace(order, err))) {
       await flagPancakeAttention(
         this.prisma,
         this.alerts,
@@ -270,6 +281,12 @@ export class PancakeOrderService {
         this.logger,
       );
     }
+  }
+
+  private inTransientGrace(order: { createdAt?: Date | null; paidAt?: Date | null }, err: unknown): boolean {
+    if (!(err instanceof PancakeApiError) || !err.transient) return false;
+    const since = Math.max(order.createdAt?.getTime() ?? 0, order.paidAt?.getTime() ?? 0);
+    return Date.now() - since < PancakeOrderService.PUSH_ATTENTION_GRACE_MINUTES * 60_000;
   }
 
   /**
@@ -368,6 +385,7 @@ export class PancakeOrderService {
     if (order.pancakeCancelStatus && settled.includes(order.pancakeCancelStatus)) return;
     if (!mayExistOnPancake(order)) {
       await this.setCancelStatus(order.id, PANCAKE_CANCEL.NOT_FOUND);
+      await clearPancakeAttention(this.prisma, order.id, ATTENTION_SETTLED_BY_CANCEL);
       return;
     }
     if (!this.client.isConfigured()) return; // giữ PENDING, cron thử lại khi có cấu hình
@@ -383,6 +401,7 @@ export class PancakeOrderService {
             data: { pancakeCancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakePushClaimedAt: null, pancakeSyncError: null },
           });
           if (r.count === 0) throw new PancakeApiError(`Đơn ${order.code} vừa lên Pancake — huỷ lại theo mã đơn Pancake.`, true);
+          await clearPancakeAttention(this.prisma, order.id, ATTENTION_SETTLED_BY_CANCEL);
           return;
         }
         pancakeId = String(found.id);
@@ -401,7 +420,7 @@ export class PancakeOrderService {
         return;
       }
       await this.setCancelStatus(order.id, outcome.kind === 'NOT_FOUND' ? PANCAKE_CANCEL.NOT_FOUND : PANCAKE_CANCEL.CANCELLED);
-      await clearPancakeAttention(this.prisma, order.id, ATTENTION_CANCEL_PENDING);
+      await clearPancakeAttention(this.prisma, order.id, ATTENTION_SETTLED_BY_CANCEL);
     } catch (err) {
       await this.prisma.order.update({
         where: { id: order.id },

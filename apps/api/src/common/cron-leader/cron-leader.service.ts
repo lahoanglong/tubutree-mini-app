@@ -33,6 +33,7 @@ export class CronLeaderService implements OnApplicationShutdown {
   readonly instanceId = `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
   private timer?: NodeJS.Timeout;
   private leader: boolean | undefined;
+  private readonly leadershipHooks: (() => void)[] = [];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -50,6 +51,23 @@ export class CronLeaderService implements OnApplicationShutdown {
     this.timer.unref();
   }
 
+  /**
+   * Việc chỉ leader được làm ngoài @Cron (vd. đồng bộ catalog lúc khởi động): chạy mỗi lần instance này VỪA giành
+   * được lease — lúc boot, hoặc khi leader cũ chết. Đã là leader thì chạy ngay. Hook tự lo lỗi bất đồng bộ của nó.
+   */
+  onLeadership(fn: () => void): void {
+    this.leadershipHooks.push(fn);
+    if (this.leader) this.runHook(fn);
+  }
+
+  private runHook(fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      this.logger.error(`Việc khi vừa thành leader lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   async tick(): Promise<boolean> {
     let acquired = false;
     try {
@@ -60,8 +78,10 @@ export class CronLeaderService implements OnApplicationShutdown {
     if (acquired !== this.leader) {
       this.logger.log(acquired ? `Instance ${this.instanceId} chạy cron.` : `Instance ${this.instanceId} dừng cron.`);
     }
+    const promoted = acquired && !this.leader;
     this.leader = acquired;
     this.setJobsRunning(acquired);
+    if (promoted) this.leadershipHooks.forEach((fn) => this.runHook(fn));
     return acquired;
   }
 

@@ -113,6 +113,8 @@ describe('validateAdminConfigValue', () => {
     expect(v('shipping.eta_min_days', 5, 4)).toThrow(BadRequestException);
     expect(v('shipping.eta_min_days', 5, 4)).toThrow(/shipping\.eta_max_days/);
     expect(v('shipping.eta_min_days', 3.5, null)).toThrow(BadRequestException);
+    expect(v('shipping.eta_min_days', null, 4)).not.toThrow();
+    expect(v('shipping.eta_max_days', null, 2)).not.toThrow();
   });
 
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {

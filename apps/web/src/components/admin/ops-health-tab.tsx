@@ -1,12 +1,21 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CircleCheck, RefreshCw } from 'lucide-react';
-import { getOpsHealth, recomputeSoldCounts, runPancakeSync, type OpsHealth } from '@/lib/admin-client';
+import {
+  dismissOpsWebhookEvent,
+  getOpsHealth,
+  recomputeSoldCounts,
+  resolveGomdonAlert,
+  retryOpsWebhookEvent,
+  runPancakeSync,
+  type OpsHealth,
+  type OpsWebhookEvent,
+} from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_DANGER_OUTLINE, BTN_SECONDARY, Notice, ScrollRegion } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion } from './ui';
 
 const PUSH_STATUS_LABELS: Record<string, string> = {
   PENDING: 'chờ đẩy',
@@ -28,6 +37,14 @@ const QUEUE_LABELS: Record<string, string> = {
 };
 
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
+const newer = (a: string | null | undefined, b: string | null | undefined) => !!a && (!b || a > b);
+
+/** Số tồn tuyệt đối đã cũ: chạy lại sẽ đè tồn kho mới hơn (hồi sinh hàng đã bán) — API cũng từ chối. */
+const isStaleStockEvent = (e: OpsWebhookEvent) => e.source === 'pancake' && e.eventType === 'variation.stock_changed';
+
+const OPEN_ORDER_BTN = 'min-h-[44px] text-xs font-medium text-forest-700 hover:underline sm:min-h-0';
+
+type Act = (run: () => Promise<{ message?: string } | unknown>, ok: string) => void;
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -61,6 +78,38 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
     void qc.invalidateQueries({ queryKey: ['admin-ops-health'] });
   };
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: e instanceof Error ? e.message : 'Thao tác lỗi.' });
+  const [busy, setBusy] = useState(false);
+  const msgRef = useRef<HTMLDivElement>(null);
+  // Nút thao tác nằm ở các danh sách phía dưới, thông báo kết quả ở đầu trang: kéo thông báo vào tầm nhìn.
+  useEffect(() => {
+    if (msg) msgRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [msg]);
+  const act: Act = (run, ok) => {
+    setBusy(true);
+    setMsg(null);
+    run()
+      .then((r) => done((r as { message?: string } | null)?.message ?? ok))
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+  const askDismiss = async (e: OpsWebhookEvent) => {
+    const ok = await confirm({
+      title: 'Đánh dấu webhook đã xử lý?',
+      message: isStaleStockEvent(e)
+        ? 'Chỉ bấm sau khi đã chạy Đồng bộ danh mục Pancake để tồn kho lấy số mới. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.'
+        : `Chỉ bấm khi đã sửa tay đơn ${e.orderRef ?? 'liên quan'} cho đúng trạng thái. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.`,
+      confirmLabel: 'Đã xử lý',
+    });
+    if (ok) act(() => dismissOpsWebhookEvent(e.source, e.id), 'Đã đánh dấu đã xử lý.');
+  };
+  const askCloseAlert = async (id: string, orderCode: string) => {
+    const ok = await confirm({
+      title: 'Đóng báo động Gomdon?',
+      message: `Đơn ${orderCode} sẽ rời hàng đợi "Cần xử lý thu gom" nếu không còn báo động nào khác. Chỉ đóng khi đã xử lý xong.`,
+      confirmLabel: 'Đóng báo động',
+    });
+    if (ok) act(() => resolveGomdonAlert(id), 'Đã đóng báo động.');
+  };
   const sync = useMutation({
     mutationFn: (withStock: boolean) => runPancakeSync(withStock),
     onSuccess: (r) => done(`Đã đồng bộ ${r.synced} sản phẩm từ Pancake${r.stockOverwritten ? ' (đã ghi đè tồn kho)' : ''}.`),
@@ -108,7 +157,23 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
       </div>
       {q.isLoading && <p className="text-sm text-stone-500">Đang kiểm tra…</p>}
       {q.isError && <p className="text-sm text-danger-fg">Không tải được tình trạng hệ thống.</p>}
-      {q.data && <HealthBody h={q.data} onOpenOrder={onOpenOrder} />}
+      {msg && (
+        <div ref={msgRef}>
+          <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
+            {msg.text}
+          </Notice>
+        </div>
+      )}
+      {q.data && (
+        <HealthBody
+          h={q.data}
+          onOpenOrder={onOpenOrder}
+          busy={busy}
+          onRetry={(e) => act(() => retryOpsWebhookEvent(e.source, e.id), 'Đã đưa sự kiện vào hàng đợi xử lý lại.')}
+          onDismiss={(e) => void askDismiss(e)}
+          onCloseAlert={(id, code) => void askCloseAlert(id, code)}
+        />
+      )}
 
       <section aria-label="Công cụ vận hành" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
         <h3 className="font-display text-sm font-semibold text-stone-900">Công cụ vận hành</h3>
@@ -123,20 +188,45 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
             {recompute.isPending ? 'Đang tính…' : 'Tính lại số đã bán'}
           </button>
         </div>
-        {msg && (
-          <div className="mt-2">
-            <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
-              {msg.text}
-            </Notice>
-          </div>
-        )}
       </section>
     </div>
   );
 }
 
-function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: string) => void }) {
+function ListSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section aria-label={title} className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+      <h3 className="font-display text-sm font-semibold text-stone-900">{title}</h3>
+      <ul className="mt-2 divide-y divide-stone-100 text-sm">{children}</ul>
+    </section>
+  );
+}
+
+function HealthBody({
+  h,
+  onOpenOrder,
+  busy,
+  onRetry,
+  onDismiss,
+  onCloseAlert,
+}: {
+  h: OpsHealth;
+  onOpenOrder?: (code: string) => void;
+  busy: boolean;
+  onRetry: (e: OpsWebhookEvent) => void;
+  onDismiss: (e: OpsWebhookEvent) => void;
+  onCloseAlert: (id: string, orderCode: string) => void;
+}) {
   const t = h.thresholds;
+  const events = [...h.pancake.failedEvents, ...h.gomdon.failedEvents];
+  const eventsTotal = h.pancake.webhookFailedOpen + h.pancake.webhookStuck + h.gomdon.webhookFailedOpen;
+  const openOrder = (code: string) =>
+    onOpenOrder ? (
+      <button type="button" onClick={() => onOpenOrder(code)} className={OPEN_ORDER_BTN}>
+        Mở đơn →
+      </button>
+    ) : null;
+  const gomdonLoginError = newer(h.gomdon.connection?.lastErrorAt, h.gomdon.connection?.lastOkAt);
   return (
     <>
       {h.problems.length > 0 ? (
@@ -164,7 +254,7 @@ function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: str
           <Row label="Đẩy đơn thành công gần nhất" value={ago(h.pancake.lastPushOkAt)} />
           <Row label="Nhận webhook gần nhất" value={ago(h.pancake.lastWebhookAt)} />
           <Row label="Xử lý webhook gần nhất" value={ago(h.pancake.lastWebhookProcessedAt)} />
-          <Row label="Webhook lỗi 24 giờ" value={h.pancake.webhookFailed24h} warn={h.pancake.webhookFailed24h > 0} />
+          <Row label="Webhook lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
           <Row label="Webhook kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
           <Row label="Đơn chưa lên Pancake" value={h.pancake.unsynced} />
           <Row label={`Đơn kẹt quá ${t.unsyncedMinutes} phút`} value={h.pancake.stuck} warn={h.pancake.stuck >= t.stuckOrders} />
@@ -182,10 +272,23 @@ function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: str
         </Card>
         <Card title="Gomdon (thu gom tái chế)">
           <Row label="Cấu hình" value={h.gomdon.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} />
-          <Row label="Đăng nhập Gomdon" value={h.gomdon.credentialsRejected ? 'Bị từ chối' : h.gomdon.connection?.lastOkAt ? `OK ${ago(h.gomdon.connection.lastOkAt)}` : 'chưa gọi'} warn={h.gomdon.credentialsRejected} />
+          <Row
+            label="Kết nối Gomdon"
+            value={
+              h.gomdon.credentialsRejected
+                ? 'Bị từ chối đăng nhập'
+                : gomdonLoginError
+                  ? `Lỗi ${ago(h.gomdon.connection?.lastErrorAt ?? null)}`
+                  : h.gomdon.connection?.lastOkAt
+                    ? `OK ${ago(h.gomdon.connection.lastOkAt)}`
+                    : 'chưa gọi'
+            }
+            warn={h.gomdon.credentialsRejected || gomdonLoginError}
+          />
           <Row label="Nhận webhook gần nhất" value={ago(h.gomdon.lastWebhookAt)} />
-          <Row label="Webhook lỗi 24 giờ" value={h.gomdon.webhookFailed24h} warn={h.gomdon.webhookFailed24h > 0} />
-          <Row label="Báo động chưa xử lý" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
+          <Row label="Webhook lỗi chưa xử lý" value={h.gomdon.webhookFailedOpen} warn={h.gomdon.webhookFailedOpen > 0} />
+          <Row label={`Đơn thu gom chờ vận đơn quá ${t.gomdonBacklogMinutes} phút`} value={h.gomdon.backlog} warn={h.gomdon.backlog > 0} />
+          <Row label="Báo động chưa đóng" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
           {h.gomdon.connection?.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
         </Card>
@@ -225,6 +328,101 @@ function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: str
         )}
       </section>
 
+      {events.length > 0 && (
+        <ListSection title="Webhook lỗi cần xử lý">
+          {events.map((e) => (
+            <li key={`${e.source}-${e.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <span className="text-xs font-medium text-stone-500">{e.source === 'pancake' ? 'Pancake' : 'Gomdon'} · </span>
+                <b className="text-stone-900">{e.orderRef ?? 'Không rõ đơn'}</b>
+                <span className="text-xs text-stone-500">
+                  {' '}
+                  · {e.eventType} · {e.status === 'FAILED' ? 'lỗi' : 'kẹt chưa xử lý'} · {e.attempts} lần thử · nhận {formatDateTime(e.receivedAt)}
+                </span>
+                {e.error && <span className="block break-words text-xs text-danger-fg">{e.error}</span>}
+                {isStaleStockEvent(e) && (
+                  <span className="block text-xs text-stone-500">
+                    Tồn kho cũ không chạy lại được — chạy Đồng bộ danh mục Pancake rồi bấm Đã xử lý.
+                  </span>
+                )}
+              </span>
+              <span className="flex flex-wrap items-center gap-2">
+                {!isStaleStockEvent(e) && (
+                  <button type="button" disabled={busy} onClick={() => onRetry(e)} className={BTN_XS_SECONDARY}>
+                    Chạy lại
+                  </button>
+                )}
+                <button type="button" disabled={busy} onClick={() => onDismiss(e)} className={BTN_XS_SECONDARY}>
+                  Đã xử lý
+                </button>
+                {e.orderRef && !e.orderRef.startsWith('#') && openOrder(e.orderRef)}
+              </span>
+            </li>
+          ))}
+          <li className="py-2 text-xs text-stone-500">
+            Tổng {eventsTotal} sự kiện. Chạy lại khi đã sửa nguyên nhân; Đã xử lý khi đã chỉnh tay đơn cho đúng trạng thái.
+          </li>
+        </ListSection>
+      )}
+
+      {h.pancake.attentionOrders.length > 0 && (
+        <ListSection title="Đơn cần xử lý tay trên Pancake">
+          {h.pancake.attentionOrders.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <b className="text-stone-900">{o.code}</b>
+                {o.pancakeAttentionAt && <span className="text-xs text-stone-500"> · từ {formatDateTime(o.pancakeAttentionAt)}</span>}
+                {o.pancakeAttention && <span className="block break-words text-xs text-danger-fg">{o.pancakeAttention}</span>}
+              </span>
+              {openOrder(o.code)}
+            </li>
+          ))}
+          {h.pancake.attention > h.pancake.attentionOrders.length && (
+            <li className="py-2 text-xs text-stone-500">Còn {h.pancake.attention - h.pancake.attentionOrders.length} đơn khác ở bộ lọc “Cần xử lý Pancake”.</li>
+          )}
+        </ListSection>
+      )}
+
+      {h.gomdon.alerts.length > 0 && (
+        <ListSection title="Báo động Gomdon chưa đóng">
+          {h.gomdon.alerts.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <b className="text-stone-900">{a.orderCode}</b>
+                <span className="text-xs text-stone-500"> · {formatDateTime(a.createdAt)}</span>
+                <span className="block break-words text-xs text-danger-fg">{a.message}</span>
+              </span>
+              <span className="flex flex-wrap items-center gap-2">
+                <button type="button" disabled={busy} onClick={() => onCloseAlert(a.id, a.orderCode)} className={BTN_XS_SECONDARY}>
+                  Đóng báo động
+                </button>
+                {openOrder(a.orderCode)}
+              </span>
+            </li>
+          ))}
+        </ListSection>
+      )}
+
+      {h.gomdon.backlogOrders.length > 0 && (
+        <ListSection title="Đơn thu gom chờ vận đơn Gomdon">
+          {h.gomdon.backlogOrders.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0">
+                <b className="text-stone-900">{o.code}</b>
+                <span className="text-xs text-stone-500">
+                  {' '}
+                  · đặt {formatDateTime(o.createdAt)} · {o.gomdonStatus === 'CREATING' ? 'đang tạo vận đơn' : 'chưa tạo được vận đơn'}
+                </span>
+              </span>
+              {openOrder(o.code)}
+            </li>
+          ))}
+          <li className="py-2 text-xs text-stone-500">
+            Hệ thống tự thử lại; quá 60 phút đơn được đẩy sang kho kèm ghi chú tạo vận đơn tay. Kiểm kết nối Gomdon ở thẻ trên.
+          </li>
+        </ListSection>
+      )}
+
       {h.pancake.stuckOrders.length > 0 && (
         <section aria-label="Đơn kẹt" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold text-stone-900">
@@ -239,11 +437,7 @@ function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: str
                   <span className="text-xs text-stone-500"> · đặt {formatDateTime(o.createdAt)} · {PUSH_STATUS_LABELS[o.pancakePushStatus ?? ''] ?? o.pancakePushStatus ?? 'chưa đẩy'} · {o.pancakePushAttempts} lần thử</span>
                   {o.pancakeSyncError && <span className="block break-words text-xs text-danger-fg">{o.pancakeSyncError}</span>}
                 </span>
-                {onOpenOrder && (
-                  <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] text-xs font-medium text-forest-700 hover:underline sm:min-h-0">
-                    Mở đơn →
-                  </button>
-                )}
+                {openOrder(o.code)}
               </li>
             ))}
           </ul>

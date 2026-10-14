@@ -22,6 +22,7 @@ import {
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import {
   PancakeHandedOverError,
+  PANCAKE_HANDED_OVER_STAFF_MESSAGE,
   PancakeSyncHooks,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
@@ -146,7 +147,7 @@ export class OrderStatusService {
 
     const pancakeDecision =
       targetStatus === 'CANCELLED' && opts.actorType !== 'PANCAKE' && (opts.pancakeGate ?? isHumanActor(opts.actorType))
-        ? await this.precheckPancakeCancel(order, isHumanActor(opts.actorType))
+        ? await this.precheckPancakeCancel(order, isHumanActor(opts.actorType), opts.actorType)
         : undefined;
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
@@ -359,7 +360,7 @@ export class OrderStatusService {
    * Hỏi Pancake trước khi huỷ (D1). Pancake đã gửi hàng → đồng bộ lại trạng thái theo Pancake rồi từ chối huỷ; cron
    * (không có người đọc lỗi) thì đưa đơn vào "Cần xử lý Pancake".
    */
-  async precheckPancakeCancel(order: Order, human: boolean): Promise<PancakeCancelDecision | undefined> {
+  async precheckPancakeCancel(order: Order, human: boolean, actor?: StatusActor): Promise<PancakeCancelDecision | undefined> {
     if (!this.pancakeHooks) return undefined;
     try {
       return await this.pancakeHooks.precheckCancel(order);
@@ -375,7 +376,7 @@ export class OrderStatusService {
           this.logger,
         );
       }
-      throw new BadRequestException(err.message);
+      throw new BadRequestException(actor === 'ADMIN' ? PANCAKE_HANDED_OVER_STAFF_MESSAGE : err.message);
     }
   }
 

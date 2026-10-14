@@ -20,7 +20,25 @@ export function csvCell(value: unknown): string {
   return str;
 }
 
-const row = (cells: unknown[]) => `${cells.map(csvCell).join(',')}\r\n`;
+/** Chỉ gồm chữ số (có thể có + đầu): Excel đọc thành số và bỏ số 0 đầu của SĐT, mã vận đơn. */
+const DIGITS_ONLY = /^\+?\d+$/;
+
+/**
+ * Ô phải giữ nguyên dạng chữ (SĐT, mã vận đơn, mã đơn Pancake): chuỗi toàn số được ghi thành công thức văn bản
+ * `="0910087109"` — Excel và Google Sheets hiện đúng 0910087109 thay vì 910087109. Chuỗi khác đi như csvCell.
+ */
+export function csvText(value: string | null | undefined): string {
+  if (value && DIGITS_ONLY.test(value)) return `"=""${value}"""`;
+  return csvCell(value);
+}
+
+/** Ô đã mã hoá sẵn bằng csvText — row() ghi nguyên. */
+class EncodedCell {
+  constructor(readonly encoded: string) {}
+}
+const text = (value: string | null | undefined) => new EncodedCell(csvText(value));
+
+const row = (cells: unknown[]) => `${cells.map((c) => (c instanceof EncodedCell ? c.encoded : csvCell(c))).join(',')}\r\n`;
 
 const ORDER_STATUS: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
@@ -107,9 +125,9 @@ function orderRow(o: ExportOrder): string {
     o.code,
     formatVnDateTime(o.createdAt),
     o.user?.fullName ?? 'Khách lẻ',
-    o.user?.phone ?? '',
+    text(o.user?.phone),
     addr.recipient ?? '',
-    addr.phone ?? '',
+    text(addr.phone),
     o.type === 'DEALER' ? 'Đại lý' : 'Bán lẻ',
     o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
     PAYMENT_METHOD[o.paymentMethod] ?? o.paymentMethod,
@@ -122,8 +140,8 @@ function orderRow(o: ExportOrder): string {
     o.total,
     o.items.reduce((s, it) => s + it.quantity, 0),
     o.shippingPartner ?? '',
-    o.shippingCode ?? '',
-    o.pancakeOrderId ?? '',
+    text(o.shippingCode),
+    text(o.pancakeOrderId),
     o.deliveredAt ? formatVnDateTime(o.deliveredAt) : '',
     o.hasRecyclingPickup ? ['Có', o.gomdonStatus ?? '', o.gomdonPartnerCode ?? ''].filter(Boolean).join(' · ') : '',
     o.note ?? '',
@@ -198,7 +216,7 @@ export async function* userCsvChunks(
         row([
           u.id,
           u.fullName ?? '',
-          u.phone ?? '',
+          text(u.phone),
           u.role,
           u.pointsBalance + u.pointsConvertedBalance,
           u.pointsConvertedBalance,

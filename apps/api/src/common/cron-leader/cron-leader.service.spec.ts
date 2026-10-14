@@ -52,4 +52,33 @@ describe('CronLeaderService', () => {
     resolveLease(0);
     svc.onApplicationShutdown();
   });
+
+  it('onLeadership: chạy đúng một lần khi vừa giành lease, không chạy khi gia hạn hay khi không phải leader (R2-PLATFORM-8)', async () => {
+    const exec = jest.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1).mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    const { svc } = setup(exec);
+    const hook = jest.fn();
+    svc.onLeadership(hook);
+    await svc.tick();
+    expect(hook).not.toHaveBeenCalled();
+    await svc.tick();
+    await svc.tick();
+    expect(hook).toHaveBeenCalledTimes(1);
+    await svc.tick();
+    await svc.tick();
+    expect(hook).toHaveBeenCalledTimes(2);
+  });
+
+  it('onLeadership đăng ký khi đã là leader → chạy ngay; hook ném lỗi không làm hỏng tick', async () => {
+    const { svc, jobs } = setup(jest.fn().mockResolvedValue(1));
+    await svc.tick();
+    const hook = jest.fn();
+    svc.onLeadership(hook);
+    expect(hook).toHaveBeenCalledTimes(1);
+    const { svc: svc2 } = setup(jest.fn().mockResolvedValue(1));
+    svc2.onLeadership(() => {
+      throw new Error('boom');
+    });
+    await expect(svc2.tick()).resolves.toBe(true);
+    expect(jobs.every((j) => j.running)).toBe(true);
+  });
 });

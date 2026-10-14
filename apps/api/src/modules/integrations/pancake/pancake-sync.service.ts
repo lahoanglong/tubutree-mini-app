@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
@@ -9,6 +9,7 @@ import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-st
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
+import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -40,7 +41,7 @@ function noteExpected(exp: SweepExpected, res: PancakeProductsResponse): void {
 
 /**
  * Đồng bộ catalog Pancake → Tubu (Build Spec §8.2).
- * - Sync ngay khi API khởi động (để catalog có sẵn, không chờ tới mốc cron).
+ * - Sync ngay khi API khởi động (để catalog có sẵn, không chờ tới mốc cron) — chỉ trên instance giữ lease cron.
  * - Cron mỗi 15 phút lấy sản phẩm đã đổi (updated_since).
  * - KHÔNG overwrite các trường Tubu tự quản: brand, slug, forSegment, ingredients,
  *   certifications, SEO meta, isFeatured (chỉ set khi tạo mới).
@@ -51,6 +52,7 @@ export class PancakeSyncService implements OnModuleInit {
   private lastRunAt: string | null = null;
   /** Chặn hai lượt sync chạy chồng lên nhau (boot sync chậm gặp đúng mốc cron 15 phút). */
   private running = false;
+  private bootSyncStarted = false;
   /** Trần số trang — phòng trường hợp API bỏ qua tham số `page` và trả mãi cùng một trang. */
   private static readonly MAX_PAGES = 500;
 
@@ -58,6 +60,7 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly client: PancakeClient,
     private readonly lifecycle: LifecycleService,
+    @Optional() private readonly cronLeader?: CronLeaderService,
   ) {}
 
   /**
@@ -67,9 +70,20 @@ export class PancakeSyncService implements OnModuleInit {
    * độ "không ghi tồn kho", vì ghi `stock` tuyệt đối mỗi lần restart/deploy là hồi sinh hàng vừa
    * bán hết (P0-3). Nay tồn kho đi qua `applyPancakeStock` — ghi theo chênh lệch và trừ phần
    * giữ chỗ — nên quét toàn bộ không còn nguy hiểm, và boot cũng cập nhật tồn kho như mọi lượt.
+   *
+   * Chỉ instance giữ lease cron mới quét: nhiều replica (scale, container cũ/mới chồng nhau lúc deploy) mà cùng quét
+   * thì Pancake bị quét toàn bộ song song, và instance boot sau cùng gặp lỗi sẽ ghi đè trạng thái danh mục chung
+   * (ops_health_states) thành báo động sai.
    */
   onModuleInit(): void {
     if (!this.client.isConfigured()) return;
+    if (this.cronLeader) this.cronLeader.onLeadership(() => this.bootSync());
+    else this.bootSync();
+  }
+
+  private bootSync(): void {
+    if (this.bootSyncStarted) return;
+    this.bootSyncStarted = true;
     void this.syncProducts().catch((e) =>
       this.logger.error(`Sync lúc khởi động lỗi: ${e instanceof Error ? e.message : e}`),
     );

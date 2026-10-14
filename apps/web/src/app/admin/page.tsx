@@ -142,7 +142,7 @@ import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
-import { orderPaymentStatusShort } from '@/lib/order-view';
+import { orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 
 type Tab =
   | 'inbox'
@@ -1332,7 +1332,7 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
       {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
         <div className="text-xs text-stone-600">
           <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
-          {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
+          {o.shippingStatus ? ` · ${shippingStatusLabel(o.shippingStatus)}` : ''}
         </div>
       )}
 
@@ -1379,13 +1379,7 @@ function ReturnsTab({ canReview = true, canReceive = true }: { canReview?: boole
         >
           {['REQUESTED', 'APPROVED', 'REJECTED', ''].map((s) => (
             <option key={s} value={s}>
-              {s === 'REQUESTED'
-                ? 'Chờ duyệt (REQUESTED)'
-                : s === 'APPROVED'
-                  ? 'Đã duyệt (APPROVED)'
-                  : s === 'REJECTED'
-                    ? 'Đã từ chối (REJECTED)'
-                    : 'Tất cả trạng thái'}
+              {s === 'REQUESTED' ? 'Chờ duyệt' : s === 'APPROVED' ? 'Đã duyệt' : s === 'REJECTED' ? 'Đã từ chối' : 'Tất cả trạng thái'}
             </option>
           ))}
         </select>
@@ -1418,6 +1412,7 @@ function ReturnsTab({ canReview = true, canReceive = true }: { canReview?: boole
 }
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
+const USER_ROLE_LABELS: Record<string, string> = { CUSTOMER: 'Khách hàng', AFFILIATE: 'CTV', DEALER: 'Đại lý', STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 
 function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
@@ -1567,7 +1562,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
                   </button>
                 </td>
                 <td className="px-3 py-2">{u.phone ?? '—'}</td>
-                <td className="px-3 py-2">{u.role}</td>
+                <td className="px-3 py-2">{USER_ROLE_LABELS[u.role] ?? u.role}</td>
                 <td className="px-3 py-2">
                   <UserPointsCell user={u} />
                 </td>
@@ -1709,7 +1704,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setRole(e.target.value as UserRole)}
         >
           {ROLES.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>{USER_ROLE_LABELS[r] ?? r}</option>
           ))}
         </select>
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}

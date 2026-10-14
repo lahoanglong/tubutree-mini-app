@@ -14,6 +14,9 @@ import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
 /** Lời báo khách/admin khi Pancake đã bàn giao đơn cho đơn vị vận chuyển (D1). */
 export const PANCAKE_HANDED_OVER_MESSAGE = 'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH';
+/** Cùng tình huống, người đọc là admin/nhân viên CSKH-kho (họ chính là "CSKH"): nói việc cần làm tiếp. */
+export const PANCAKE_HANDED_OVER_STAFF_MESSAGE =
+  'Pancake báo đơn đã giao cho đơn vị vận chuyển nên không huỷ được nữa. Xử lý bằng trả hàng/hoàn tiền khi hàng hoàn về.';
 
 /** Pancake báo đơn đã bàn giao vận chuyển — KHÔNG huỷ ở Tubu, đồng bộ lại trạng thái. */
 export class PancakeHandedOverError extends Error {

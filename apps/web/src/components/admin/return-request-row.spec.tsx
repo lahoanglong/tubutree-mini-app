@@ -271,6 +271,15 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(done.textContent).toContain('Đã nhận hàng về lúc');
   });
 
+  it('hoàn qua chuyển khoản: không ghi "Đã hoàn" khi tiền mới vào hàng chờ chuyển', async () => {
+    const c = await mount(
+      REQ({ status: 'APPROVED', refundAmount: 89_000, shippingRefund: 0, refundMethod: 'BANK', reviewedAt: '2026-10-13T05:00:00Z' }),
+    );
+    expect(c.textContent).toContain('Đã tạo lệnh hoàn 89.000đ (tiền hàng 89.000đ + phí ship 0đ) qua chuyển khoản');
+    expect(c.textContent).toContain('chờ chuyển ở tab "Hoàn tiền khách"');
+    expect(c.textContent).not.toContain('Đã hoàn 89.000đ');
+  });
+
   it('đơn gian hàng tự giao (D4): hàng về gian hàng — xem trước nói rõ, đã duyệt không có nút "Đã nhận hàng về" của kho Tubu', async () => {
     const order = { id: 'o1', code: 'TB-1', total: 282_000, status: 'DELIVERED', paymentMethod: 'COD', pancakeOrderId: null, fulfiller: 'MERCHANT', fulfillerStorefront: { title: 'Mật ong Linh' } };
     mocks.preview.mockResolvedValue(PREVIEW({ returnTo: { kind: 'MERCHANT', name: 'Mật ong Linh' } }));

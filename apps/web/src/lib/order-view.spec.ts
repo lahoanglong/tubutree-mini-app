@@ -14,6 +14,7 @@ import {
   orderPaymentStatusShort,
   paymentStatusLabel,
   safeHttpUrl,
+  shippingStatusLabel,
 } from './order-view';
 
 describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
@@ -83,11 +84,12 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
   });
 
-  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã TT", còn lại giữ mã', () => {
+  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã TT", trạng thái khác ghi tiếng Việt', () => {
     expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu COD');
-    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('UNPAID');
+    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa TT');
     expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã TT');
-    expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('REFUNDED');
+    expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusShort({ status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'FAILED' })).toBe('TT lỗi');
   });
 });
 
@@ -142,5 +144,15 @@ describe('hành trình đơn và mua lại', () => {
       { status: 'DELIVERED' },
       { group: 'closed' },
     ]);
+  });
+});
+
+describe('shippingStatusLabel — trạng thái vận chuyển hãng gửi bằng mã tiếng Anh (R2-ADMINOPS-8)', () => {
+  it('mã thường gặp ra tiếng Việt, chữ đã là tiếng Việt giữ nguyên, rỗng ra rỗng', () => {
+    expect(shippingStatusLabel('delivering')).toBe('Đang giao');
+    expect(shippingStatusLabel('DELIVERED')).toBe('Đã giao');
+    expect(shippingStatusLabel('returning')).toBe('Đang hoàn');
+    expect(shippingStatusLabel('Đã lấy hàng')).toBe('Đã lấy hàng');
+    expect(shippingStatusLabel(null)).toBe('');
   });
 });

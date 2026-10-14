@@ -15,7 +15,8 @@ import { CRON_TZ } from '../../../common/cron-tz';
  * Lưới an toàn cho tích hợp Gomdon — KHÔNG phụ thuộc Pancake đã cấu hình hay chưa (trước đây phần
  * cứu hộ Gomdon nằm sau `if (!pancake.isConfigured()) return` của PancakePushReconcileService).
  *
- *  1. Webhook event kẹt RECEIVED/FAILED (enqueue lỗi, hết lượt retry) → enqueue lại (giới hạn số lần).
+ *  1. Webhook event kẹt RECEIVED/FAILED (enqueue lỗi, hết lượt retry) → enqueue lại (giới hạn số lần), trừ event
+ *     người vận hành đã bấm "Đã xử lý".
  *  2. Đơn thu gom chưa từng tạo vận đơn (gomdonStatus null — enqueue lúc checkout lỗi), hoặc đã PAID mà
  *     còn AWAITING_PAYMENT (enqueue lúc xác nhận thanh toán lỗi) → enqueue tạo vận đơn (có claim, an toàn).
  *  3. CREATING quá lâu (tiến trình chết giữa lúc gọi Gomdon) của đơn còn hiệu lực → NEEDS_MANUAL_CHECK +
@@ -79,6 +80,7 @@ export class GomdonReconcileService {
         status: { in: [GOMDON_EVENT_STATUS.RECEIVED, GOMDON_EVENT_STATUS.FAILED] },
         receivedAt: { lt: this.minutesAgo(GomdonReconcileService.EVENT_STALE_MINUTES) },
         attempts: { lt: GomdonReconcileService.MAX_EVENT_ATTEMPTS },
+        dismissedAt: null,
       },
       select: { id: true },
       orderBy: { receivedAt: 'asc' },

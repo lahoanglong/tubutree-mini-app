@@ -107,6 +107,7 @@ export function configPartnerKey(key: string): string | undefined {
 }
 
 function assertEtaAgainstPartner(key: string, v: unknown, partner: unknown) {
+  if (v === null) return; // đặt lại "chưa đặt" = ẩn dòng giao dự kiến
   assertInteger(key, v);
   if (typeof partner !== 'number') return;
   if (key === ETA_MAX_KEY && (v as number) < partner) {

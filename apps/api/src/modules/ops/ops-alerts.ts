@@ -6,6 +6,8 @@ export interface OpsThresholds {
   webhookFailed: number;
   queueFailed1h: number;
   repeatHours: number;
+  /** Đơn thu gom đã thanh toán được mà quá số phút này chưa có vận đơn Gomdon = tạo vận đơn đang lỗi kéo dài. */
+  gomdonBacklogMinutes: number;
 }
 
 export const OPS_THRESHOLD_KEYS: Record<keyof OpsThresholds, { key: string; fallback: number }> = {
@@ -14,6 +16,7 @@ export const OPS_THRESHOLD_KEYS: Record<keyof OpsThresholds, { key: string; fall
   webhookFailed: { key: 'ops.alert_webhook_failed', fallback: 1 },
   queueFailed1h: { key: 'ops.alert_queue_failed_1h', fallback: 5 },
   repeatHours: { key: 'ops.alert_repeat_hours', fallback: 6 },
+  gomdonBacklogMinutes: { key: 'ops.alert_gomdon_backlog_minutes', fallback: 15 },
 };
 
 export interface CatalogRun {
@@ -22,17 +25,30 @@ export interface CatalogRun {
   lastError: string | null;
 }
 
-/** Phần của ảnh chụp sức khoẻ mà luật báo động cần. */
+/** Phần của ảnh chụp sức khoẻ mà luật báo động cần. `*Refs` = mã đơn (hoặc #id Pancake) của vài việc cũ nhất. */
 export interface ProblemInput {
   pancake: {
     configured: boolean;
     stuck: number;
-    webhookFailed24h: number;
-    /** Webhook nhận trong 24h mà quá 10 phút vẫn chưa xử lý xong (worker không chạy, Redis mất...). */
+    stuckRefs: string[];
+    /** Webhook lỗi CHƯA ai xử lý, không giới hạn tuổi: quá 24 giờ cron thôi chạy lại nhưng đơn vẫn sai trạng thái. */
+    webhookFailedOpen: number;
+    /** Webhook nhận rồi mà quá 10 phút vẫn chưa xử lý xong (worker không chạy, Redis mất...). */
     webhookStuck: number;
+    webhookRefs: string[];
+    /** Đơn trong hàng đợi "Cần xử lý Pancake" (huỷ chưa tới Pancake, nguy cơ thu COD lần nữa...). */
+    attention: number;
+    attentionRefs: string[];
     catalog: CatalogRun;
   };
-  gomdon: { configured: boolean; webhookFailed24h: number; credentialsRejected: boolean };
+  gomdon: {
+    configured: boolean;
+    webhookFailedOpen: number;
+    webhookRefs: string[];
+    credentialsRejected: boolean;
+    backlog: number;
+    backlogRefs: string[];
+  };
   queues: { ok: true; items: { name: string; failedLastHour: number }[] } | { ok: false; error: string };
 }
 
@@ -41,16 +57,38 @@ export interface OpsProblem {
   message: string;
 }
 
+const REFS_SHOWN = 5;
+
+/** ": TUBU1, TUBU2 và 3 việc khác" — rỗng khi không có mã nào. */
+export function refList(refs: string[], total: number): string {
+  const shown = refs.slice(0, REFS_SHOWN);
+  if (shown.length === 0) return '';
+  const more = Math.max(total, refs.length) - shown.length;
+  return `: ${shown.join(', ')}${more > 0 ? ` và ${more} việc khác` : ''}`;
+}
+
 /** Danh sách sự cố đang có, theo thứ tự cố định để so được giữa hai lượt. */
 export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
   const out: OpsProblem[] = [];
   if (s.pancake.configured) {
     if (s.pancake.stuck >= t.stuckOrders) {
-      out.push({ key: 'pancake.stuck', message: `${s.pancake.stuck} đơn quá ${t.unsyncedMinutes} phút chưa lên Pancake` });
+      out.push({
+        key: 'pancake.stuck',
+        message: `${s.pancake.stuck} đơn quá ${t.unsyncedMinutes} phút chưa lên Pancake${refList(s.pancake.stuckRefs, s.pancake.stuck)}`,
+      });
     }
-    const hooks = s.pancake.webhookFailed24h + s.pancake.webhookStuck;
+    const hooks = s.pancake.webhookFailedOpen + s.pancake.webhookStuck;
     if (hooks >= t.webhookFailed) {
-      out.push({ key: 'pancake.webhook', message: `${hooks} webhook Pancake lỗi hoặc chưa xử lý trong 24 giờ` });
+      out.push({
+        key: 'pancake.webhook',
+        message: `${hooks} webhook Pancake lỗi hoặc kẹt chưa xử lý${refList(s.pancake.webhookRefs, hooks)} — chạy lại hoặc đánh dấu đã xử lý ở Sức khoẻ hệ thống`,
+      });
+    }
+    if (s.pancake.attention > 0) {
+      out.push({
+        key: 'pancake.attention',
+        message: `${s.pancake.attention} đơn cần xử lý tay trên Pancake${refList(s.pancake.attentionRefs, s.pancake.attention)}`,
+      });
     }
     const c = s.pancake.catalog;
     if (c.lastErrorAt && (!c.lastOkAt || c.lastErrorAt > c.lastOkAt)) {
@@ -58,11 +96,20 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
     }
   }
   if (s.gomdon.configured) {
-    if (s.gomdon.webhookFailed24h >= t.webhookFailed) {
-      out.push({ key: 'gomdon.webhook', message: `${s.gomdon.webhookFailed24h} webhook Gomdon xử lý lỗi trong 24 giờ` });
+    if (s.gomdon.webhookFailedOpen >= t.webhookFailed) {
+      out.push({
+        key: 'gomdon.webhook',
+        message: `${s.gomdon.webhookFailedOpen} webhook Gomdon lỗi chưa xử lý${refList(s.gomdon.webhookRefs, s.gomdon.webhookFailedOpen)}`,
+      });
     }
     if (s.gomdon.credentialsRejected) {
       out.push({ key: 'gomdon.credentials', message: 'Gomdon từ chối đăng nhập — khách không chọn được thu gom' });
+    }
+    if (s.gomdon.backlog > 0) {
+      out.push({
+        key: 'gomdon.backlog',
+        message: `${s.gomdon.backlog} đơn thu gom quá ${t.gomdonBacklogMinutes} phút chưa tạo được vận đơn Gomdon${refList(s.gomdon.backlogRefs, s.gomdon.backlog)}`,
+      });
     }
   }
   if (!s.queues.ok) {
@@ -103,4 +150,36 @@ export function decideAlert(
   const due = !prev?.alertedAt || now.getTime() - prev.alertedAt.getTime() >= repeatHours * 3_600_000;
   if (hasNew || due) return { send: 'ALERT', next: { keys, alertSince, alertedAt: now } };
   return { send: null, next: { keys, alertSince, alertedAt: prev?.alertedAt ?? null } };
+}
+
+export interface AlertMessage {
+  status: 'ALERT' | 'RECOVERED';
+  title: string;
+  summary: string;
+  problems: OpsProblem[];
+  generatedAt: string;
+}
+
+/** Chat hook chỉ nhận đúng định dạng tin nhắn của nó: Google Chat từ chối trường lạ, Slack đọc `text`. */
+const CHAT_HOSTS = ['hooks.slack.com', 'chat.googleapis.com'];
+
+export function alertText(m: AlertMessage): string {
+  const lines = m.status === 'ALERT' ? m.problems.map((p) => `• ${p.message}`) : [m.summary];
+  return [`*${m.title}*`, ...lines].join('\n');
+}
+
+/**
+ * Thân POST tới OPS_ALERT_WEBHOOK_URL. Slack/Google Chat: chỉ `{text}`. Hook khác (n8n, Zapier...): đủ trường máy đọc
+ * được, kèm `text` để kênh nào chỉ hiển thị trường đó vẫn đọc được.
+ */
+export function alertWebhookBody(url: string, m: AlertMessage): Record<string, unknown> {
+  const text = alertText(m);
+  let host = '';
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    /* URL đã qua env.validation; sai thì gửi dạng chung */
+  }
+  if (CHAT_HOSTS.includes(host)) return { text };
+  return { text, ...m };
 }

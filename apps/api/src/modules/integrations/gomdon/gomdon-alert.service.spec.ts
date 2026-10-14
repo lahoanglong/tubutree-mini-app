@@ -1,4 +1,4 @@
-import { GomdonAlertService, GOMDON_ALERT_TEMPLATE } from './gomdon-alert.service';
+import { GomdonAlertService, GOMDON_ALERT_TEMPLATE, PANCAKE_ALERT_TEMPLATE } from './gomdon-alert.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 
@@ -30,6 +30,24 @@ describe('GomdonAlertService (UAT GOMDON-2: báo động phải xem lại đư�
     });
     expect(notifications.notify).toHaveBeenCalledTimes(2);
     expect(notifications.notify).toHaveBeenCalledWith('admin1', GOMDON_ALERT_TEMPLATE, expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('việc phía Pancake (R2-ADMINOPS-5) → chỉ gửi in-app, không ghi vào bảng báo động Gomdon', async () => {
+    const { svc, prisma, notifications } = build();
+    await svc.alert('TUBU1', 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', PANCAKE_ALERT_TEMPLATE);
+    expect(prisma.order.findUnique).not.toHaveBeenCalled();
+    expect(prisma.gomdonAlert.create).not.toHaveBeenCalled();
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', PANCAKE_ALERT_TEMPLATE, expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('người nhận (GOMDON-2): ADMIN và nhân viên nhóm KHO chưa bị khoá', async () => {
+    const { svc, prisma } = build();
+    await svc.alert('TUBU1', 'x');
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'KHO' } }] },
+      }),
+    );
   });
 
   it('cùng nội dung còn đang mở → không lưu/gửi trùng (chống báo lặp sau khi API khởi động lại)', async () => {

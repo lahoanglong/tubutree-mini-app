@@ -29,6 +29,20 @@ describe('smoke-purchase.yml', () => {
     expect(wf).toMatch(/DELETE "\$B\/cart\/items\//);
     expect(wf).toMatch(/DELETE "\$B\/me\/addresses\//);
   });
+
+  it('địa chỉ thử lấy mã tỉnh/phường theo địa giới mới từ chính API, không gắn cứng mã cũ (R2-PLATFORM-5)', () => {
+    const wf = read('.github/workflows/smoke-purchase.yml');
+    expect(wf).not.toMatch(/"provinceCode":"\d+"/);
+    expect(wf).toContain('$B/geo/provinces');
+    expect(wf).toContain('$B/geo/communes?provinceCode=');
+  });
+
+  it('bước nào không trả 2xx thì job đỏ (dọn dẹp xong mới thoát)', () => {
+    const wf = read('.github/workflows/smoke-purchase.yml');
+    const exit = wf.lastIndexOf('exit 1');
+    expect(exit).toBeGreaterThan(wf.lastIndexOf('DELETE "$B/me/addresses/'));
+    expect(wf).toMatch(/2\?\?\)/);
+  });
 });
 
 describe('ops.yml audit/set-env', () => {
@@ -56,5 +70,43 @@ describe('docs/GO-LIVE-KEYS.md', () => {
     for (const k of ['PANCAKE_API_KEY', 'PANCAKE_SHOP_ID', 'PANCAKE_WEBHOOK_SECRET', 'GOMDON_PHONE', 'GOMDON_PASSWORD', 'GOMDON_WEBHOOK_SECRET']) {
       expect(doc).toContain(k);
     }
+  });
+});
+
+describe('OPS_ALERT_WEBHOOK_URL qua quy trình chuẩn (R2-PLATFORM-3)', () => {
+  const wf = read('.github/workflows/ops.yml');
+  const doc = read('docs/GO-LIVE-KEYS.md');
+
+  it('ops.yml chuyển secret qua SSH, set-env ghi được, audit in SET/EMPTY', () => {
+    expect(wf).toContain('OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}');
+    expect(wf).toMatch(/envs: [^\n]*\bOPS_ALERT_WEBHOOK_URL\b/);
+    const setEnv = wf.slice(wf.indexOf('set-env)'), wf.indexOf('grant-admin)', wf.indexOf('set-env)')));
+    expect(setEnv).toContain('OPS_ALERT_WEBHOOK_URL');
+    const audit = wf.slice(wf.indexOf('audit)'), wf.indexOf('backup)'));
+    expect(audit).toContain('envstate OPS_ALERT_WEBHOOK_URL');
+  });
+
+  it('GO-LIVE-KEYS.md có mục báo động vận hành và không còn nói thiếu khoá Pancake thì app vẫn nhận đơn', () => {
+    expect(doc).toContain('OPS_ALERT_WEBHOOK_URL');
+    expect(doc).toMatch(/^## .*[Bb]áo động vận hành/m);
+    expect(doc).not.toMatch(/thiếu `?PANCAKE_API_KEY`?.{0,80}vẫn nhận đơn/);
+  });
+});
+
+describe('ops.yml crontab (R2-PLATFORM-6)', () => {
+  const wf = read('.github/workflows/ops.yml');
+  const crontab = wf.slice(wf.indexOf('crontab)\n'), wf.indexOf('*) echo "Action không hợp lệ'));
+
+  it('tạo thư mục backup + file log và chown cho user SSH TRƯỚC khi cài cron (redirect lỗi thì cron không chạy)', () => {
+    const chown = crontab.indexOf('sudo chown "$(id -u):$(id -g)" /var/backups/tubutree /var/log/tubutree-backup.log');
+    expect(crontab).toContain('sudo mkdir -p /var/backups/tubutree');
+    expect(chown).toBeGreaterThan(-1);
+    expect(chown).toBeLessThan(crontab.indexOf('| crontab -'));
+  });
+
+  it('chạy thử backup ngay sau khi cài, cảnh báo khi chưa có healthcheck', () => {
+    expect(crontab).toMatch(/bash "\$SCRIPT"/);
+    expect(crontab).toContain('BACKUP_HEALTHCHECK_URL');
+    expect(crontab).toMatch(/CẢNH BÁO: chưa đặt secret BACKUP_HEALTHCHECK_URL/);
   });
 });

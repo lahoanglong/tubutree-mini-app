@@ -496,6 +496,40 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
   });
 });
 
+describe('AdminService.createCoupon — chặn giá trị gõ nhầm (ADMINOPS-8 vòng 2)', () => {
+  const base = { code: 'SALE10', type: 'PERCENT' as const, value: 10, startAt: '2026-01-01T00:00:00.000Z', endAt: '2099-12-31T00:00:00.000Z', scope: 'PUBLIC' as const };
+  const run = (over: Record<string, unknown>) => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    return { create, p: mkAdmin(makePrisma({ coupon: { create } })).createCoupon({ ...base, ...over } as never) };
+  };
+
+  it('giảm 0% / 0đ → 400 (mã hiện "Đang chạy" mà không giảm gì)', async () => {
+    for (const over of [{ value: 0 }, { type: 'AMOUNT', value: 0 }]) {
+      const { create, p } = run(over);
+      await expect(p).rejects.toThrow('Mức giảm phải lớn hơn 0');
+      expect(create).not.toHaveBeenCalled();
+    }
+  });
+
+  it('mã freeship giá trị 0 vẫn hợp lệ', async () => {
+    const { create, p } = run({ type: 'FREESHIP', value: 0 });
+    await p;
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('ngày kết thúc đã qua → 400', async () => {
+    const { p } = run({ startAt: '2026-01-01T00:00:00.000Z', endAt: '2026-02-01T00:00:00.000Z' });
+    await expect(p).rejects.toThrow('Ngày kết thúc đã qua');
+  });
+
+  it('giảm từ 50% mà không đặt Giảm tối đa → 400; có Giảm tối đa thì được', async () => {
+    await expect(run({ value: 100 }).p).rejects.toThrow('Giảm tối đa');
+    const ok = run({ value: 100, maxDiscount: 50_000 });
+    await ok.p;
+    expect(ok.create).toHaveBeenCalled();
+  });
+});
+
 describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
   const couponBase = {
     code: 'SALE10',

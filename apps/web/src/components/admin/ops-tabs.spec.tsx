@@ -21,14 +21,16 @@ const mount = async (ui: React.ReactElement) => {
 
 const HEALTH = {
   generatedAt: '2026-10-14T03:00:00.000Z',
-  thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6 },
+  thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6, gomdonBacklogMinutes: 15 },
   pancake: {
     configured: true,
     lastPushOkAt: '2026-10-14T02:55:00.000Z',
     lastWebhookAt: '2026-10-14T02:58:00.000Z',
     lastWebhookProcessedAt: '2026-10-14T02:58:00.000Z',
     webhookFailed24h: 2,
+    webhookFailedOpen: 0,
     webhookStuck: 0,
+    failedEvents: [],
     unsynced: 4,
     stuck: 1,
     stuckOrders: [
@@ -44,6 +46,7 @@ const HEALTH = {
       },
     ],
     attention: 0,
+    attentionOrders: [],
     catalog: { lastOkAt: '2026-10-14T02:45:00.000Z', lastErrorAt: null, lastError: null, detail: { count: 120, failed: 0 } },
   },
   gomdon: {
@@ -52,8 +55,13 @@ const HEALTH = {
     credentialsRejected: false,
     lastWebhookAt: null,
     webhookFailed24h: 0,
+    webhookFailedOpen: 0,
+    failedEvents: [],
     openAlerts: 0,
+    alerts: [],
     attention: 0,
+    backlog: 0,
+    backlogOrders: [],
   },
   queues: {
     ok: true,
@@ -125,6 +133,120 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, queues: { ok: false, error: 'Redis không phản hồi sau 2000ms' } } } }).fn));
     const c = await mount(<OpsHealthTab />);
     expect(c.textContent).toContain('Không đọc được hàng đợi: Redis không phản hồi sau 2000ms');
+  });
+});
+
+describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-ADMINOPS-5, R2-GOMDON-4)', () => {
+  const ISSUES = {
+    ...HEALTH,
+    pancake: {
+      ...HEALTH.pancake,
+      webhookFailedOpen: 1,
+      failedEvents: [
+        {
+          id: 'evt1',
+          source: 'pancake',
+          eventType: 'order.status_updated',
+          orderRef: 'TUBU2026101411111',
+          status: 'FAILED',
+          attempts: 15,
+          error: 'Không chuyển được trạng thái',
+          receivedAt: '2026-10-13T01:00:00.000Z',
+        },
+      ],
+      attention: 1,
+      attentionOrders: [
+        { id: 'o9', code: 'TUBU2026101414013', pancakeAttention: 'Sửa tay trên Pancake để shipper không thu tiền lần nữa', pancakeAttentionAt: '2026-10-14T02:00:00.000Z' },
+      ],
+    },
+    gomdon: {
+      ...HEALTH.gomdon,
+      connection: { lastOkAt: '2026-10-14T02:00:00.000Z', lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'HTTP 503', credentialsRejected: false },
+      webhookFailedOpen: 1,
+      failedEvents: [
+        { id: 'g1', source: 'gomdon', eventType: 'trạng thái 3', orderRef: 'TUBU2026101422222', status: 'FAILED', attempts: 3, error: 'boom', receivedAt: '2026-10-14T01:00:00.000Z' },
+      ],
+      openAlerts: 1,
+      alerts: [{ id: 'al1', message: 'Gomdon CÓ vận đơn — tránh giao trùng', createdAt: '2026-10-14T01:30:00.000Z', orderCode: 'TUBU2026101433333' }],
+      backlog: 1,
+      backlogOrders: [{ id: 'o7', code: 'TUBU2026101417244', createdAt: '2026-10-14T02:10:00.000Z', gomdonStatus: null, paymentMethod: 'COD' }],
+    },
+  };
+
+  it('liệt kê webhook lỗi (mã đơn, loại sự kiện, số lần thử, lỗi), đơn cần sửa tay Pancake, báo động Gomdon, đơn thu gom chờ vận đơn', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: ISSUES } }).fn));
+    const onOpenOrder = vi.fn();
+    const c = await mount(<OpsHealthTab onOpenOrder={onOpenOrder} />);
+    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    expect(hooks.textContent).toContain('TUBU2026101411111');
+    expect(hooks.textContent).toContain('order.status_updated');
+    expect(hooks.textContent).toContain('15 lần thử');
+    expect(hooks.textContent).toContain('Không chuyển được trạng thái');
+    expect(hooks.textContent).toContain('TUBU2026101422222');
+    const pancake = c.querySelector('section[aria-label="Pancake"]')!;
+    expect(pancake.textContent).toContain('Webhook lỗi chưa xử lý1');
+    const attention = c.querySelector('section[aria-label="Đơn cần xử lý tay trên Pancake"]')!;
+    expect(attention.textContent).toContain('TUBU2026101414013');
+    expect(attention.textContent).toContain('shipper không thu tiền lần nữa');
+    const gomdon = c.querySelector('section[aria-label="Gomdon (thu gom tái chế)"]')!;
+    expect(gomdon.textContent).toContain('Lỗi 09:30 14/10/2026');
+    expect(gomdon.textContent).toContain('Đơn thu gom chờ vận đơn quá 15 phút1');
+    expect(c.querySelector('section[aria-label="Báo động Gomdon chưa đóng"]')!.textContent).toContain('tránh giao trùng');
+    expect(c.querySelector('section[aria-label="Đơn thu gom chờ vận đơn Gomdon"]')!.textContent).toContain('TUBU2026101417244');
+    click(byText(attention, 'button', 'Mở đơn →'));
+    expect(onOpenOrder).toHaveBeenCalledWith('TUBU2026101414013');
+    expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+
+  it('Chạy lại / Đã xử lý (qua xác nhận) / Đóng báo động gọi đúng API', async () => {
+    const api = mockFetch({
+      '/admin/ops/health': { body: ISSUES },
+      '/admin/ops/webhook-events/pancake/evt1/retry': { body: { ok: true, message: 'Đã đưa sự kiện vào hàng đợi xử lý lại.' } },
+      '/admin/ops/webhook-events/gomdon/g1/dismiss': { body: { ok: true, message: 'Đã đánh dấu đã xử lý.' } },
+      '/admin/gomdon/alerts/al1/resolve': { body: { ok: true } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const c = await mount(<OpsHealthTab />);
+    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    click(hooks.querySelectorAll('button')[0]!);
+    await flush();
+    expect(api.calls.some((x) => x.url.endsWith('/admin/ops/webhook-events/pancake/evt1/retry') && x.init?.method === 'POST')).toBe(true);
+    expect(c.textContent).toContain('Đã đưa sự kiện vào hàng đợi xử lý lại.');
+
+    const dismiss = [...hooks.querySelectorAll('button')].filter((b) => b.textContent === 'Đã xử lý')[1]!;
+    click(dismiss);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((x) => x.url.endsWith('/admin/ops/webhook-events/gomdon/g1/dismiss') && x.init?.method === 'POST')).toBe(true);
+
+    click(byText(c.querySelector('section[aria-label="Báo động Gomdon chưa đóng"]')!, 'button', 'Đóng báo động'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((x) => x.url.endsWith('/admin/gomdon/alerts/al1/resolve') && x.init?.method === 'POST')).toBe(true);
+  });
+});
+
+describe('OpsHealthTab — webhook tồn kho Pancake không chạy lại', () => {
+  it('sự kiện variation.stock_changed chỉ có Đã xử lý, kèm hướng dẫn Đồng bộ danh mục', async () => {
+    const STOCK = {
+      ...HEALTH,
+      pancake: {
+        ...HEALTH.pancake,
+        webhookFailedOpen: 1,
+        failedEvents: [
+          { id: 'st1', source: 'pancake', eventType: 'variation.stock_changed', orderRef: null, status: 'FAILED', attempts: 15, error: 'boom', receivedAt: '2026-10-14T01:00:00.000Z' },
+        ],
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: STOCK } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    const labels = [...hooks.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels).toContain('Đã xử lý');
+    expect(labels).not.toContain('Chạy lại');
+    expect(hooks.textContent).toContain('Đồng bộ danh mục');
   });
 });
 

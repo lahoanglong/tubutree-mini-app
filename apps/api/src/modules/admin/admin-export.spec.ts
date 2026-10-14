@@ -1,7 +1,7 @@
 import type { PrismaService } from '../../prisma/prisma.service';
 import { PassThrough } from 'node:stream';
 import type { Response } from 'express';
-import { csvCell, orderCsvChunks, streamCsv, userCsvChunks, EXPORT_BATCH } from './admin-export';
+import { csvCell, csvText, orderCsvChunks, streamCsv, userCsvChunks, EXPORT_BATCH } from './admin-export';
 
 /** ADMINOPS-12: file CSV cho kế toán phải có MỌI đơn khớp bộ lọc, không chỉ 20 đơn của trang đang xem. */
 function fakeOrders(n: number) {
@@ -34,7 +34,7 @@ function fakeOrders(n: number) {
   }));
 }
 
-function cursorPrisma(rows: { id: string }[], model: 'order' | 'user') {
+function cursorPrisma(rows: ({ id: string } & Record<string, unknown>)[], model: 'order' | 'user') {
   const findMany = jest.fn(async (args: { take: number; cursor?: { id: string }; skip?: number }) => {
     const start = args.cursor ? rows.findIndex((r) => r.id === args.cursor!.id) + (args.skip ?? 0) : 0;
     return rows.slice(start, start + args.take);
@@ -67,6 +67,37 @@ describe('orderCsvChunks', () => {
     expect(csv).toContain(`"'=HYPERLINK(""http://x"")"`);
     expect(csv).toContain('"Khách ""Một"""');
     expect(csv).toContain('"A, B"');
+  });
+});
+
+describe('cột SĐT / mã số giữ nguyên số 0 đầu khi mở bằng Excel (R2-ADMINOPS-7)', () => {
+  it('SĐT khách, SĐT người nhận, mã vận đơn và mã Pancake dạng số được xuất là văn bản ="…"', async () => {
+    const [o] = fakeOrders(1);
+    const { prisma } = cursorPrisma([{ ...o!, shippingCode: '0123456789', pancakeOrderId: '00981' }], 'order');
+    const cells = (await collect(orderCsvChunks(prisma, {}))).split('\r\n')[1]!;
+    expect(cells).toContain('"=""0911111111"""');
+    expect(cells).toContain('"=""0900000000"""');
+    expect(cells).toContain('"=""0123456789"""');
+    expect(cells).toContain('"=""00981"""');
+  });
+
+  it('file người dùng: cột SĐT là văn bản', async () => {
+    const { prisma } = cursorPrisma(
+      [{ id: 'u1', fullName: 'A', phone: '0910039595', role: 'CUSTOMER', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0, isBlocked: false, createdAt: new Date() }],
+      'user',
+    );
+    expect(await collect(userCsvChunks(prisma, undefined))).toContain(',"=""0910039595""",');
+  });
+
+  it.each([
+    ['0910087109', '"=""0910087109"""'],
+    ['+84910087109', '"=""+84910087109"""'],
+    ['SPX0900456', 'SPX0900456'],
+    ['=cmd|1', "'=cmd|1"],
+    [null, ''],
+    ['', ''],
+  ])('csvText(%p) → %p', (v, out) => {
+    expect(csvText(v)).toBe(out);
   });
 });
 

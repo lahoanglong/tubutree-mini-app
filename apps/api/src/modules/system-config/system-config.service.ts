@@ -122,13 +122,29 @@ export class SystemConfigService {
     'ops.alert_webhook_failed': { min: 1, max: 10000, note: 'số webhook', integer: true },
     'ops.alert_queue_failed_1h': { min: 1, max: 10000, note: 'số job', integer: true },
     'ops.alert_repeat_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
+    'ops.alert_gomdon_backlog_minutes': { min: 5, max: 1440, note: 'số phút', integer: true },
     'merchant.ship_sla_hours': { min: 1, max: 336, note: 'số giờ', integer: true },
     'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
     'affiliate.pit_withhold_pct': { min: 0, max: 0.35, note: 'phân số (0.1 = 10%)' },
     'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
+    // ADMINOPS-3 (vòng 2): tiền phạt đi trễ đi thẳng vào bảng lương (âm = cộng tiền), giá/thưởng 💧 âm đảo chiều ví game.
+    'attendance.late_fine': { min: 0, max: 500_000, note: 'đồng mỗi lần đi trễ', integer: true },
+    'refill.seeds_per_bottle': { min: 0, max: 10_000, note: '💧 mỗi vỏ chai', integer: true },
+    'game.streak_repair_cost': { min: 1, max: 100_000, note: '💧 hồi sinh chuỗi', integer: true },
+    'game.streak_freeze_cost': { min: 1, max: 100_000, note: '💧 mỗi vé giữ lửa', integer: true },
+    'game.dew_seeds': { min: 0, max: 10_000, note: '💧 giọt sương mỗi ngày', integer: true },
+    'game.daily_login_seeds': { min: 0, max: 10_000, note: '💧 mỗi lần check-in', integer: true },
+    'game.harvest_coupon_min_order': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
+    'groupbuy.target_size': { min: 2, max: 50, note: 'số người', integer: true },
+    'referral.window_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
   };
+
+  /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
+  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days']);
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ (bản xu cũ tối đa 30.000 xu = 30 điểm). */
   private static readonly SEASONPASS_POINTS_MAX = 100;
@@ -143,6 +159,10 @@ export class SystemConfigService {
     // VietQR dựng từ hai khoá này: sai một ký tự là tiền khách chuyển vào tài khoản khác hoặc QR không quét được.
     'payment.bank_account_no': (value) =>
       typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
+    'refill.pickup_phone': (value) =>
+      value === '' || (typeof value === 'string' && /^(0|\+84)\d{9}$/.test(value))
+        ? null
+        : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
     'payment.bank_bin': (value) =>
       typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
     'shipping.tier_freeship_overrides': (value) => {
@@ -231,11 +251,13 @@ export class SystemConfigService {
     }
   }
 
-  async set(key: string, value: object | string | number | boolean, changedBy: string): Promise<void> {
-    if (value === null || value === undefined) {
+  async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
+    const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
+    if ((value === null && !unset) || value === undefined) {
       throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
     }
-    this.assertInRange(key, value);
+    if (!unset) this.assertInRange(key, value);
+    const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');
     const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
     await this.prisma.$transaction(async (tx) => {
@@ -249,7 +271,7 @@ export class SystemConfigService {
         const wasUnset = existing.value === null;
         const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
         const newType = Array.isArray(value) ? 'array' : typeof value;
-        if (!wasUnset && oldType !== newType) {
+        if (!wasUnset && !unset && oldType !== newType) {
           throw new BadRequestException(
             `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
               'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
@@ -259,15 +281,15 @@ export class SystemConfigService {
           data: {
             key,
             oldValue: wasUnset ? Prisma.JsonNull : (existing.value as object),
-            newValue: value as object,
+            newValue: stored,
             changedBy,
           },
         });
       }
       await tx.systemConfig.upsert({
         where: { key },
-        update: { value: value as object, updatedBy: changedBy },
-        create: { key, value: value as object, category, updatedBy: changedBy },
+        update: { value: stored, updatedBy: changedBy },
+        create: { key, value: stored, category, updatedBy: changedBy },
       });
     });
     this.cache.delete(key);
