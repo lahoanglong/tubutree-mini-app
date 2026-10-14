@@ -146,7 +146,17 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     expect(delta('returnsToReceive')).toBe(1);
     expect(delta('refillPending')).toBe(1);
     expect(after.items.map((i) => i.key)).toEqual(
-      expect.arrayContaining(['pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'merchantOverdue', 'dealerApplications', 'payouts']),
+      expect.arrayContaining([
+        'pancakeUnsynced',
+        'gomdonAttention',
+        'customerRefunds',
+        'merchantOverdue',
+        'consignmentPending',
+        'merchantToSettle',
+        'merchantPayoutsPending',
+        'dealerApplications',
+        'payouts',
+      ]),
     );
 
     const cskh = await inbox.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });

@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
+import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 
 export type InboxKey =
@@ -14,6 +15,9 @@ export type InboxKey =
   | 'returnsToReceive'
   | 'merchantOverdue'
   | 'merchantProducts'
+  | 'consignmentPending'
+  | 'merchantToSettle'
+  | 'merchantPayoutsPending'
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
@@ -59,6 +63,9 @@ export class OpsInboxService {
       },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
+      { key: 'consignmentPending', audience: 'ADMIN', count: () => p.merchantPancakeLink.count({ where: CONSIGNMENT_PENDING_LINK_WHERE }) },
+      { key: 'merchantToSettle', audience: 'ADMIN', count: () => this.merchant.countStoresToSettle(now) },
+      { key: 'merchantPayoutsPending', audience: 'ADMIN', count: () => p.merchantPayout.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerApplications', audience: 'ADMIN', count: () => p.dealerApplication.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },

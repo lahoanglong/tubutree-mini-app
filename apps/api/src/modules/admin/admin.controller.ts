@@ -285,6 +285,11 @@ export class ListReviewsQuery extends PaginationQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
+export class ListLinkedMerchantProductsQuery extends PaginationQuery {
+  /** PENDING = liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận hàng ký gửi. */
+  @IsOptional() @IsIn(['PENDING']) consignment?: 'PENDING';
+}
+
 export class ListSubscriptionsQuery extends PaginationQuery {
   @IsOptional() @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
 }
@@ -581,8 +586,8 @@ export class AdminController {
   }
 
   @Get('merchant-products/linked')
-  listLinkedMerchantProducts(@Query() q: PaginationQuery) {
-    return this.admin.listLinkedMerchantProducts(q.page, q.limit);
+  listLinkedMerchantProducts(@Query() q: ListLinkedMerchantProductsQuery) {
+    return this.admin.listLinkedMerchantProducts(q.page, q.limit, q.consignment);
   }
 
   @Post('merchant-products/:id/unlink')

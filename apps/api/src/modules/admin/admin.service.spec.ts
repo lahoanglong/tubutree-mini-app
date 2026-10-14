@@ -3,6 +3,7 @@ import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService } from '../orders/order-status.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
@@ -1196,6 +1197,31 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
   });
 });
 
+describe('AdminService.listLinkedMerchantProducts — lọc liên kết ký gửi chờ xác nhận (R4-ADMIN-7)', () => {
+  const linkedPrisma = () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = makePrisma({
+      merchantPancakeLink: { findMany, count },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+    });
+    return { prisma, findMany, count };
+  };
+
+  it('không lọc: mọi liên kết còn hiệu lực', async () => {
+    const { prisma, findMany, count } = linkedPrisma();
+    await mkAdmin(prisma).listLinkedMerchantProducts(1, 20);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { unlinkedAt: null } }));
+    expect(count).toHaveBeenCalledWith({ where: { unlinkedAt: null } });
+  });
+
+  it('consignment=PENDING: đúng điều kiện số "Việc cần xử lý" đếm', async () => {
+    const { prisma, findMany, count } = linkedPrisma();
+    await mkAdmin(prisma).listLinkedMerchantProducts(1, 20, 'PENDING');
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: CONSIGNMENT_PENDING_LINK_WHERE }));
+    expect(count).toHaveBeenCalledWith({ where: CONSIGNMENT_PENDING_LINK_WHERE });
+  });
+});
 
 /**
  * Portal web render `r.order?.code`, `r.user?.fullName`, tổng đơn và phương thức thanh toán,

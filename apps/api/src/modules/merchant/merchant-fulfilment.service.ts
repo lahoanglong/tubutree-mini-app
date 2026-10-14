@@ -7,7 +7,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type MerchantPayoutStatus } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -1050,8 +1050,8 @@ export class MerchantFulfilmentService {
     return this.prisma.merchantPayout.findUniqueOrThrow({ where: { id: payoutId } });
   }
 
-  async listPayouts(storefrontId: string | undefined, page = 1, limit = 20) {
-    const where: Prisma.MerchantPayoutWhereInput = storefrontId ? { storefrontId } : {};
+  async listPayouts(storefrontId: string | undefined, page = 1, limit = 20, status?: MerchantPayoutStatus) {
+    const where: Prisma.MerchantPayoutWhereInput = { ...(storefrontId ? { storefrontId } : {}), ...(status ? { status } : {}) };
     const [total, rows, dueDays] = await Promise.all([
       this.prisma.merchantPayout.count({ where }),
       this.prisma.merchantPayout.findMany({
@@ -1276,6 +1276,20 @@ export class MerchantFulfilmentService {
   /** Số đơn đối tác đang quá SLA — đếm thẳng, không bị trần `take` như danh sách. */
   async countOverdue(now = new Date()): Promise<number> {
     return this.prisma.order.count({ where: overdueWhere(await this.slaConfig(), now) });
+  }
+
+  /**
+   * Số gian hàng đang có khoản đã đủ hạn chờ lập phiếu — đúng các dòng "Lập phiếu đối soát" bấm được ở tổng quan admin
+   * (settleableLines > 0). Chỉ dựng bảng kê cho gian hàng có khoản chờ (storesWithPending), lần lượt để không chiếm hết pool.
+   */
+  async countStoresToSettle(now = new Date()): Promise<number> {
+    const [candidates, cfg] = await Promise.all([this.storesWithPending(), this.settlementConfig()]);
+    let n = 0;
+    for (const storefrontId of candidates) {
+      const { lines } = await this.statementFor(storefrontId, now, this.prisma, cfg);
+      if (lines.length > 0) n += 1;
+    }
+    return n;
   }
 
   private async notifyOwner(ownerUserId: string | null, template: string, data: Record<string, string>) {

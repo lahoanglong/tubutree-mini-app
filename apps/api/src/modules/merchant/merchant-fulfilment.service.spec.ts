@@ -806,3 +806,30 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     });
   });
 });
+
+describe('R4-ADMIN-7: việc admin phải làm với đối tác', () => {
+  it('listPayouts lọc theo trạng thái để phiếu chờ chuyển/thu cũ không bị đẩy khỏi trang đầu', async () => {
+    const { svc, prisma } = build();
+    const mp = prisma.merchantPayout as unknown as { count: jest.Mock; findMany: jest.Mock };
+    mp.count = jest.fn().mockResolvedValue(1);
+    mp.findMany = jest.fn().mockResolvedValue([]);
+
+    await svc.listPayouts(undefined, 1, 20, 'PENDING');
+    expect(mp.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    expect(mp.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'PENDING' } }));
+
+    await svc.listPayouts('sf-a', 1, 20);
+    expect(mp.count).toHaveBeenLastCalledWith({ where: { storefrontId: 'sf-a' } });
+  });
+
+  it('countStoresToSettle chỉ đếm gian hàng thật sự có dòng đủ hạn trong bảng kê', async () => {
+    const { svc } = build();
+    const internals = svc as unknown as { storesWithPending: jest.Mock; statementFor: jest.Mock; settlementConfig: jest.Mock };
+    internals.storesWithPending = jest.fn().mockResolvedValue(new Set(['sf-a', 'sf-b', 'sf-c']));
+    internals.settlementConfig = jest.fn().mockResolvedValue({ holdDays: 7, defaultCommissionPct: 0.15 });
+    internals.statementFor = jest.fn(async (id: string) => ({ lines: id === 'sf-b' ? [] : [{ netAmount: 1 }] }));
+
+    await expect(svc.countStoresToSettle(NOW)).resolves.toBe(2);
+    expect(internals.statementFor).toHaveBeenCalledWith('sf-a', NOW, expect.anything(), { holdDays: 7, defaultCommissionPct: 0.15 });
+  });
+});

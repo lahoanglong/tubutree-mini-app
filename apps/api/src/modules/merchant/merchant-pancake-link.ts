@@ -97,6 +97,16 @@ export const LINK_TAKEN_MESSAGE =
 
 export const PANCAKE_TAKEOVER_UNCONFIRMED = 'PANCAKE_TAKEOVER_UNCONFIRMED';
 
+/**
+ * Liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận là hàng ký gửi: đơn của biến thể này chưa vào đối soát tự động.
+ * Bộ lọc ở màn "Duyệt SP đối tác" và số "Việc cần xử lý" dùng chung để hai con số luôn khớp.
+ */
+export const CONSIGNMENT_PENDING_LINK_WHERE = {
+  takeover: true,
+  consignmentConfirmedAt: null,
+  unlinkedAt: null,
+} satisfies Prisma.MerchantPancakeLinkWhereInput;
+
 export const LEGACY_LINK_MESSAGE =
   'Liên kết này có từ trước khi hệ thống lưu sản phẩm gốc nên không tự trả biến thể về được. Liên hệ kỹ thuật để xử lý tay.';
 
