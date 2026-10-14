@@ -134,6 +134,22 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       description={`Trong ${returnDays} ngày từ khi nhận hàng. Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24h.`}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {estimated && (
+            <div role="status" aria-live="polite" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                {`Dự kiến hoàn ${formatVnd(estimated.refund)}`}
+              </Text>
+              <Text variant="caption" tone="tertiary" as="div">
+                {[
+                  estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
+                  estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
+                  'Tubu xác nhận số cuối cùng khi duyệt',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </div>
+          )}
           {touched && error && (
             <div role="alert">
               <Text variant="caption" tone="danger" as="div">
@@ -221,22 +237,6 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
 
         <MultiImageUpload value={images} onChange={setImages} max={3} label="Ảnh minh chứng (khuyến khích, tối đa 3)" />
 
-        {estimated && (
-          <div role="status" aria-live="polite" style={{ padding: '10px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
-            <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-              {`Dự kiến hoàn ${formatVnd(estimated.refund)}`}
-            </Text>
-            <Text variant="caption" tone="tertiary" as="div">
-              {[
-                estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
-                estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
-                'Tubu xác nhận số cuối cùng khi duyệt',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-          </div>
-        )}
         {showsMoney &&
           (bankAllowed ? (
             <RefundDestinationPicker

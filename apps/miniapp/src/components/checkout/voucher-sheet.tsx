@@ -245,7 +245,7 @@ export function VoucherSheet({
                           onPress={() => applyMut.mutate(coupon.code)}
                           style={{ minWidth: 0 }}
                         >
-                          {notEligible ? 'Chưa đủ' : 'Dùng mã'}
+                          {wrongProducts ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : 'Dùng mã'}
                         </Button>
                       )}
                     </div>

@@ -213,7 +213,7 @@ describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMI
     mocks.getCoupons.mockResolvedValue([scoped]);
     renderWith(['p-dau-goi']);
     expect(await screen.findByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Chưa đủ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Không áp dụng' })).toBeDisabled();
   });
 
   it('giỏ có sản phẩm của mã: dùng được như thường', async () => {
