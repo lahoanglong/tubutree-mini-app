@@ -20,6 +20,33 @@ describe('AdjustDto.workDate — ngày có thật', () => {
   });
 });
 
+// R4-ADMIN-9: khoản trừ/thưởng 0đ hay không lý do vẫn được ghi → bảng lương có dòng vô nghĩa, mất dấu vết kiểm toán.
+describe('AdjustDto — số tiền khác 0, lý do đủ để đối chiếu', () => {
+  const dto = (over: Record<string, unknown>) =>
+    plainToInstance(AdjustDto, { staffId: 'u1', workDate: '2026-07-03', amount: 20_000, reason: 'trễ ca sáng', ...over });
+  const props = async (over: Record<string, unknown>) => (await validate(dto(over))).map((e) => e.property);
+
+  it('số tiền 0 → lỗi ở amount', async () => {
+    expect(await props({ amount: 0 })).toContain('amount');
+  });
+
+  it.each(['', '   ', 'ab', ' x '])('lý do %p → lỗi ở reason', async (reason) => {
+    expect(await props({ reason })).toContain('reason');
+  });
+
+  it('lý do được cắt khoảng trắng hai đầu trước khi kiểm và lưu', async () => {
+    const d = dto({ reason: '  trễ  ' });
+    expect(await validate(d)).toEqual([]);
+    expect(d.reason).toBe('trễ');
+  });
+
+  it('thưởng (âm) và trừ (dương) đều hợp lệ; allowDuplicate chỉ nhận true/false', async () => {
+    expect(await props({ amount: -50_000 })).toEqual([]);
+    expect(await props({ amount: 50_000, allowDuplicate: true })).toEqual([]);
+    expect(await props({ allowDuplicate: 'yes' })).toContain('allowDuplicate');
+  });
+});
+
 describe('PayrollService — chỉ áp cho nhân viên', () => {
   const config = { get: jest.fn(async (_k: string, d: unknown) => d) } as unknown as SystemConfigService;
   const prismaWith = (user: { role: string; staffProfile: { active: boolean } | null } | null) => {

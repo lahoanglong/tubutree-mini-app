@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -380,19 +380,46 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
       payrollDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     });
 
-  it('cùng ngày + cùng số tiền + cùng lý do trong 5 phút → bỏ qua lần thứ hai', async () => {
+  // R4-ADMIN-9: lần gửi thứ hai trước đây trả {adjusted:true, deduped:true} — admin thấy "thành công" trong khi khoản
+  // phạt thứ hai (hợp lệ, cùng ngày cùng số tiền) không được ghi.
+  it('cùng ngày + cùng số tiền + cùng lý do trong 5 phút → 409 PAYROLL_ADJUST_DUPLICATE, không ghi, không báo thành công', async () => {
     const create = jest.fn();
     const prisma = base();
     (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
-      findFirst: jest.fn().mockResolvedValue({ id: 'adj-1' }),
+      findFirst: jest.fn().mockResolvedValue({ id: 'adj-1', createdAt: new Date('2026-07-03T02:15:00Z') }),
       create,
       findMany: jest.fn().mockResolvedValue([]),
     };
 
-    await expect(mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1')).resolves.toMatchObject({
-      deduped: true,
-    });
+    const err = await mk(prisma)
+      .adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1')
+      .then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    const body = (err as ConflictException).getResponse() as { code: string; message: string; adjustmentId: string };
+    expect(body.code).toBe('PAYROLL_ADJUST_DUPLICATE');
+    expect(body.adjustmentId).toBe('adj-1');
+    expect(body.message).toMatch(/giống hệt/);
+    expect(body.message).toMatch(/09:15/);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('admin xác nhận đây là khoản thứ hai (allowDuplicate) → ghi thêm, không tra trùng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const findFirst = jest.fn().mockResolvedValue({ id: 'adj-1', createdAt: new Date() });
+    const prisma = base();
+    (prisma as unknown as { payrollAdjustment: Record<string, jest.Mock> }).payrollAdjustment = {
+      findFirst,
+      create,
+      findMany: jest.fn().mockResolvedValue([]),
+    };
+
+    await expect(
+      mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1', { allowDuplicate: true }),
+    ).resolves.toEqual({ adjusted: true });
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith({
+      data: { staffId: 'u1', workDate: new Date('2026-07-03'), type: 'MANUAL', amount: 500000, reason: 'trừ tạm ứng', createdBy: 'a1' },
+    });
   });
 
   it('chưa có khoản giống hệt → vẫn tạo bình thường', async () => {
@@ -457,11 +484,10 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
     };
 
     const r1 = await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
-    const r2 = await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
+    const r2 = mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
 
-    expect(r1).toMatchObject({ adjusted: true });
-    expect((r1 as { deduped?: boolean }).deduped).toBeUndefined();
-    expect(r2).toMatchObject({ adjusted: true, deduped: true });
+    expect(r1).toEqual({ adjusted: true });
+    await expect(r2).rejects.toBeInstanceOf(ConflictException);
     expect(create).toHaveBeenCalledTimes(1);
   });
 });
