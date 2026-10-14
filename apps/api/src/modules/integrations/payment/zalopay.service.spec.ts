@@ -402,14 +402,20 @@ describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn 
 });
 
 describe('ZalopayService — tiền về thì đơn mới lên kho Pancake (BUYERMINI-3, PANCAKE-1)', () => {
-  function setup(count = 1) {
+  const unpaid = { id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', total: 100000 };
+  // Bản đọc lại sau khi lật thua: mặc định là callback lặp của lần đã lật PAID.
+  function setup(count = 1, reread: Record<string, unknown> = { ...unpaid, paymentStatus: 'PAID', status: 'CONFIRMED' }) {
+    const createMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = withTx({
       order: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', total: 100000 }),
+        findFirst: jest.fn().mockResolvedValue(unpaid),
+        findUnique: jest.fn().mockResolvedValue(reread),
         update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count }),
       },
       paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      orderCustomerRefund: { createMany },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
     }) as unknown as PrismaService;
     const pancakeHooks = { afterPaid: jest.fn().mockResolvedValue(undefined) };
     const svc = new ZalopayService(
@@ -420,7 +426,7 @@ describe('ZalopayService — tiền về thì đơn mới lên kho Pancake (BUYE
       undefined,
       pancakeHooks as never,
     );
-    return { svc, pancakeHooks };
+    return { svc, pancakeHooks, createMany };
   }
   const raw = JSON.stringify({ app_trans_id: '250101_TUBU1' });
 
@@ -431,9 +437,19 @@ describe('ZalopayService — tiền về thì đơn mới lên kho Pancake (BUYE
   });
 
   it('callback lặp (không lật) → không xếp lại', async () => {
-    const { svc, pancakeHooks } = setup(0);
+    const { svc, pancakeHooks, createMany } = setup(0);
     await svc.handleCallback(raw, sign(raw));
     expect(pancakeHooks.afterPaid).not.toHaveBeenCalled();
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('khách huỷ chen giữa lần đọc và lần lật → vào hàng hoàn tiền, KHÔNG báo Pancake đã thanh toán', async () => {
+    const { svc, pancakeHooks, createMany } = setup(0, { ...unpaid, status: 'CANCELLED' });
+    await svc.handleCallback(raw, sign(raw));
+    expect(pancakeHooks.afterPaid).not.toHaveBeenCalled();
+    expect(createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ kind: 'LATE_PAYMENT', orderId: 'o1' })] }),
+    );
   });
 });
 
