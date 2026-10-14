@@ -94,6 +94,10 @@ export function OrderSuccess({
   // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn (D4): khách phải thấy đủ các mã và tổng thật phải trả.
   const split = order.splitOrders && order.splitOrders.length > 1 ? order.splitOrders : null;
   const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
+  // Màn Thanh toán hứa điểm của cả lần đặt — màn này phải nói cùng con số, không chỉ điểm của đơn đầu.
+  const pointsEarned = split && split.every((o) => o.pointsEarned != null)
+    ? split.reduce((sum, o) => sum + (o.pointsEarned ?? 0), 0)
+    : order.pointsEarned;
 
   return (
     <div style={{ padding: '32px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -139,11 +143,11 @@ export function OrderSuccess({
               {vi.success.prepareCash}
             </Text>
           )}
-          {order.pointsEarned > 0 && (
+          {pointsEarned > 0 && (
             <>
-              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(order.pointsEarned)} tone="success" />
+              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(pointsEarned)} tone="success" />
               <Text variant="caption" tone="tertiary" as="div">
-                {vi.success.pointsComing(order.pointsEarned)}
+                {vi.success.pointsComing(pointsEarned)}
               </Text>
             </>
           )}

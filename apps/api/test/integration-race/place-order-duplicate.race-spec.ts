@@ -209,6 +209,8 @@ describe('Đặt đơn trùng khác Idempotency-Key (real Postgres)', () => {
     const primary = orders.find((o) => o.code === o.checkoutGroup)!;
     expect(new Set(s.fulfilled.map((r) => (r.value as { id: string }).id))).toEqual(new Set([primary.id]));
     expect((await prisma.variation.findUniqueOrThrow({ where: { id: shopVar.id } })).stock).toBe(4);
+    const split = (s.fulfilled[0]!.value as { splitOrders: { pointsEarned: number }[] }).splitOrders;
+    expect(split.reduce((t, o) => t + o.pointsEarned, 0)).toBe(orders.reduce((t, o) => t + o.pointsEarned, 0));
   });
 
   it('bấm lại với key mới ngay sau khi lần đầu đã xong → nhận lại đơn vừa tạo, không báo lỗi giỏ trống', async () => {

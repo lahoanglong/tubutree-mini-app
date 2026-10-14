@@ -104,6 +104,8 @@ export interface SplitOrderDTO {
   id: string;
   code: string;
   total: number;
+  /** Điểm Xanh đơn này sẽ tích (API cũ chưa trả). */
+  pointsEarned?: number;
   status: string;
   fulfiller: 'TUBU' | 'MERCHANT';
   fulfillerName: string;
