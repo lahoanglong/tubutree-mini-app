@@ -51,6 +51,18 @@ describe('Pancake push race (real Postgres)', () => {
     queue.add.mockClear();
   });
 
+  /** Biến thể kho Tubu có mã Pancake thật: dòng không có mã Pancake (hàng gian hàng, biến thể đã xoá) không bao giờ được gửi. */
+  const tubuVariationId = async () => {
+    const tag = randCode(8);
+    const product = await prisma.product.create({
+      data: { pancakeId: `itpp-p-${tag}`, fulfilment: 'TUBU', brand: 'IT', slug: `itpp-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: 100_000 },
+    });
+    const v = await prisma.variation.create({
+      data: { pancakeId: `itpp-v-${tag}`, productId: product.id, sku: `ITPP-${tag}`, name: '1kg', attributes: {}, retailPrice: 100_000, stock: 20 },
+    });
+    return v.id;
+  };
+
   const order = async (data: Record<string, unknown> = {}) => {
     const buyer = await createUser(prisma);
     return createOrder(prisma, {
@@ -59,7 +71,7 @@ describe('Pancake push race (real Postgres)', () => {
       subtotal: 100_000,
       shippingFee: 30_000,
       items: {
-        create: [{ variationId: `var-${randCode(6)}`, productName: 'SP IT', variationName: '1kg', unitPrice: 100_000, quantity: 1, total: 100_000 }],
+        create: [{ variationId: await tubuVariationId(), productName: 'SP IT', variationName: '1kg', unitPrice: 100_000, quantity: 1, total: 100_000 }],
       },
       ...data,
     });
@@ -144,7 +156,7 @@ describe('Pancake push race (real Postgres)', () => {
       createdAt: new Date(Date.now() - 3_600_000),
       items: {
         create: [
-          { variationId: `var-${randCode(6)}`, productName: 'SP IT', variationName: '1kg', unitPrice: 50_000, quantity: 2, total: 100_000, backorderedQty: 1 },
+          { variationId: await tubuVariationId(), productName: 'SP IT', variationName: '1kg', unitPrice: 50_000, quantity: 2, total: 100_000, backorderedQty: 1 },
         ],
       },
     });
