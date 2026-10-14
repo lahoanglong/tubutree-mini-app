@@ -117,7 +117,18 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
 
   // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
-  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; không áp đơn đại lý', createOnly: true },
+  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; đơn đại lý dùng orders.dealer_pending_payment_ttl_hours', createOnly: true },
+  // Gói p8-seller (createOnly): đối tác tự giao (D4), cách ly định danh gian hàng (SELLER-5), đơn đại lý trả trước (SELLER-7), thuế TNCN hoa hồng (SELLER-11).
+  { key: 'merchant.default_shipping_fee', value: 30000, category: 'merchant', description: 'Phí giao một kiện của gian hàng đối tác tự giao khi gian hàng chưa đặt phí riêng (đồng)', createOnly: true },
+  { key: 'merchant.commission_pct', value: 0.15, category: 'merchant', description: 'Phí sàn Tubu thu trên tiền hàng đơn đối tác tự giao khi gian hàng chưa có mức riêng (phân số, 0.15 = 15%)', createOnly: true },
+  { key: 'merchant.settlement_hold_days', value: 7, category: 'merchant', description: 'Số ngày sau khi giao đơn đối tác mới đưa vào bảng kê đối soát (nên bằng hạn đổi/trả)', createOnly: true },
+  { key: 'merchant.confirm_sla_hours', value: 24, category: 'merchant', description: 'Đối tác phải xác nhận đơn tự giao trong chừng này giờ, quá hạn thì nhắc và hiện ở trang quản trị', createOnly: true },
+  { key: 'merchant.ship_sla_hours', value: 48, category: 'merchant', description: 'Đối tác phải gửi hàng (nhập mã vận đơn) trong chừng này giờ kể từ khi khách đặt', createOnly: true },
+  { key: 'merchant.deliver_sla_days', value: 7, category: 'merchant', description: 'Đơn đối tác đang giao quá chừng này ngày chưa xác nhận đã giao thì hiện ở danh sách quá hạn', createOnly: true },
+  { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
+  { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
+  { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },
+  { key: 'affiliate.pit_withhold_threshold', value: 2000000, category: 'affiliate', description: 'Lần rút hoa hồng từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
 
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
@@ -750,6 +761,22 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
   { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể rút ngay trong mục CTV.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
+  // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.
+  { id: 'nt-ctv-payout-approved', code: 'COMMISSION_PAYOUT_APPROVED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} của bạn đã được duyệt, Tubu Tree sẽ chuyển khoản trong thời gian sớm nhất.', createOnly: true },
+  { id: 'nt-ctv-payout-rejected', code: 'COMMISSION_PAYOUT_REJECTED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} chưa được duyệt: {{reason}}. Hoa hồng đã trả lại số dư khả dụng, bạn kiểm tra rồi gửi lệnh mới nhé.', createOnly: true },
+  { id: 'nt-ctv-commission-reversed', code: 'COMMISSION_REVERSED', channel: 'INAPP', bodyTemplate: 'Khoản hoa hồng dự kiến {{amount}} đã bị thu hồi vì đơn của khách bị huỷ hoặc trả hàng.', createOnly: true },
+  { id: 'nt-merchant-order-new', code: 'MERCHANT_ORDER_NEW', channel: 'INAPP', bodyTemplate: '🛒 Gian hàng của bạn có đơn mới {{order_code}} ({{total}}đ). Vào Cổng người bán → Đơn cần giao để xác nhận và gửi hàng.', createOnly: true },
+  { id: 'nt-merchant-order-cancelled', code: 'MERCHANT_ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị huỷ ({{reason}}). Bạn không cần gửi hàng cho đơn này nữa.', createOnly: true },
+  { id: 'nt-merchant-order-overdue', code: 'MERCHANT_ORDER_OVERDUE', channel: 'INAPP', bodyTemplate: '⏰ Đơn {{order_code}} đã quá hạn {{step}}. Vào Cổng người bán → Đơn cần giao để xử lý ngay, tránh khách phải chờ.', createOnly: true },
+  { id: 'nt-merchant-cancelled-by-seller', code: 'MERCHANT_ORDER_CANCELLED_BY_SELLER', channel: 'INAPP', bodyTemplate: 'Rất tiếc, {{store}} đã huỷ đơn {{order_code}}: {{reason}}. Tiền bạn đã trả trước (nếu có) được hoàn theo chính sách của Tubu Tree.', createOnly: true },
+  { id: 'nt-merchant-payout-created', code: 'MERCHANT_PAYOUT_CREATED', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã lập phiếu đối soát {{amount}}đ cho {{count}} đơn của gian hàng. Xem chi tiết ở Cổng người bán → Đối soát.', createOnly: true },
+  { id: 'nt-merchant-payout-paid', code: 'MERCHANT_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: 'Phiếu đối soát {{amount}}đ của gian hàng đã được tất toán (mã giao dịch {{bank_ref}}).', createOnly: true },
+  { id: 'nt-merchant-product-approved', code: 'MERCHANT_PRODUCT_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Sản phẩm "{{product_name}}" đã được duyệt và đang bán trên Tubu Tree.', createOnly: true },
+  { id: 'nt-merchant-product-rejected', code: 'MERCHANT_PRODUCT_REJECTED', channel: 'INAPP', bodyTemplate: 'Sản phẩm "{{product_name}}" chưa được duyệt: {{reason}}. Sửa lại trong Cổng người bán để gửi duyệt lại.', createOnly: true },
+  { id: 'nt-ops-merchant-product', code: 'OPS_MERCHANT_PRODUCT_PENDING', channel: 'INAPP', bodyTemplate: '📦 Gian hàng {{store}} gửi sản phẩm "{{product_name}}" ({{mode}}) chờ duyệt. Vào trang quản trị → Duyệt sản phẩm đối tác.', createOnly: true },
+  { id: 'nt-ops-dealer-application', code: 'OPS_DEALER_APPLICATION_PENDING', channel: 'INAPP', bodyTemplate: '📝 Hồ sơ đại lý mới: {{business}} ({{owner}}, {{phone}}). Vào trang quản trị → Đại lý để duyệt.', createOnly: true },
+  { id: 'nt-dealer-app-approved', code: 'DEALER_APPLICATION_APPROVED', channel: 'INAPP', bodyTemplate: '🎉 Hồ sơ đại lý của bạn đã được duyệt, bậc {{tier}}. Vào mục Đại lý để xem bảng giá sỉ và đặt hàng.', createOnly: true },
+  { id: 'nt-dealer-app-rejected', code: 'DEALER_APPLICATION_REJECTED', channel: 'INAPP', bodyTemplate: 'Hồ sơ đại lý của bạn chưa được duyệt: {{reason}}. Bạn có thể bổ sung thông tin và nộp lại.', createOnly: true },
   // A1-03 (docs/audit-2026-09/01-ia-navigation.md): báo admin khi khách gửi yêu cầu xoá tài khoản
   // (UsersService.requestAccountDeletion) — mirror nt-dealer-credit-reported (chỉ gửi ADMIN).
   { id: 'nt-account-deletion-requested', code: 'ACCOUNT_DELETION_REQUESTED', channel: 'INAPP', bodyTemplate: '🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý.', createOnly: true },

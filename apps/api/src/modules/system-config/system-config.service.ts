@@ -112,6 +112,17 @@ export class SystemConfigService {
     // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
     'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
+    // p8-seller: phí giao/phí sàn đối tác đọc thẳng vào checkout và đối soát; hạn SLA và thời gian chờ đọc vào cron.
+    'merchant.default_shipping_fee': { min: 0, max: 500000, note: 'đồng', integer: true },
+    'merchant.commission_pct': { min: 0, max: 0.5, note: 'phân số (0.15 = 15%)' },
+    'merchant.settlement_hold_days': { min: 0, max: 60, note: 'số ngày', integer: true },
+    'merchant.confirm_sla_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
+    'merchant.ship_sla_hours': { min: 1, max: 336, note: 'số giờ', integer: true },
+    'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
+    'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
+    'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
+    'affiliate.pit_withhold_pct': { min: 0, max: 0.35, note: 'phân số (0.1 = 10%)' },
+    'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
   };
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ (bản xu cũ tối đa 30.000 xu = 30 điểm). */
