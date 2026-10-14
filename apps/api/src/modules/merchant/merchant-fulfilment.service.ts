@@ -551,7 +551,7 @@ export class MerchantFulfilmentService {
         orderBy: { deliveredAt: 'asc' },
       }),
       db.order.findMany({
-        where: { ...base, ...collected, status: 'DELIVERED', deliveredAt: { gt: cutoff } },
+        where: { ...base, ...collected, status: 'DELIVERED', deliveredAt: { gt: cutoff }, merchantPayoutLines: { none: { kind: 'SALE' } } },
         select: saleSelect,
         orderBy: { deliveredAt: 'asc' },
       }),

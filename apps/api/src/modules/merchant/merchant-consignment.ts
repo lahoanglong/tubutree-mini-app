@@ -65,8 +65,9 @@ export interface ConsignmentOrder {
 
 /**
  * Dòng SALE cho các dòng hàng của đơn thuộc gian hàng (`mine`: biến thể liên kết với gian hàng lúc đặt), thứ tự theo id dòng để
- * số luôn như nhau. Phí cố định mỗi đơn chia theo tiền hàng và bị chặn ở phần còn lại sau phí sàn và phí % — không dòng nào âm
- * vì phí cố định; phần vượt Tubu chịu. Dòng 0đ không gánh phí cố định.
+ * số luôn như nhau. Phí % bị chặn ở phần còn lại sau phí sàn (làm tròn hai phí không đẩy dòng xuống âm); phí cố định mỗi đơn
+ * chia theo tiền hàng và bị chặn ở phần còn lại sau phí sàn và phí % — không dòng nào âm vì phí; phần vượt Tubu chịu. Dòng 0đ
+ * không gánh phí cố định.
  */
 export function consignmentSaleLines(
   order: ConsignmentOrder,
@@ -82,7 +83,7 @@ export function consignmentSaleLines(
     terms.feeFixed > 0 && weights.some((w) => w > 0) ? distributeByWeight(terms.feeFixed, weights) : own.map(() => 0);
   return own.map(({ it, goods }, idx) => {
     const commissionAmount = Math.round(goods * terms.commissionPct);
-    const pctFee = Math.round(goods * terms.feePct);
+    const pctFee = Math.min(Math.round(goods * terms.feePct), Math.max(0, goods - commissionAmount));
     const opsFeeAmount = pctFee + Math.min(fixed[idx] ?? 0, Math.max(0, goods - commissionAmount - pctFee));
     return {
       orderId: order.id,
