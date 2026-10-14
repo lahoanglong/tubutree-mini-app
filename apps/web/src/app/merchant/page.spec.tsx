@@ -965,6 +965,145 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(mocks.updateProduct).toHaveBeenLastCalledWith('z', { isActive: true });
   });
 
+  describe('R4-PARTNER-6: sản phẩm đã gỡ liên kết Pancake đổi được mã hoặc chuyển sang tự giao', () => {
+    const UNLINKED = (extra: Record<string, unknown> = {}) =>
+      PRODUCT('u', 'APPROVED', { isActive: false, fulfilment: 'MERCHANT', pancakeLinkCode: 'PCK-OLD', linkState: 'AWAITING', ...extra });
+    const radioOf = (root: ParentNode, label: string) => byText(root, 'label', label)!.querySelector<HTMLInputElement>('input[type="radio"]')!;
+    async function openEdit(product: Record<string, unknown>) {
+      mocks.getProducts = vi.fn(async () => ({ ownProducts: [product], resellProducts: [], meta: { page: 1, limit: 20, ownTotal: 1, resellTotal: 0 } }));
+      const root = await mount();
+      await openTab('Sản phẩm');
+      const open = () => {
+        click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
+        return root.querySelector<HTMLElement>('.fixed.inset-0')!;
+      };
+      return { root, row: root.querySelector('tbody')!, open };
+    }
+
+    it('dòng sản phẩm nói rõ mã Pancake đã gỡ liên kết (không còn ghi "chờ duyệt" khi đã được duyệt)', async () => {
+      const { row } = await openEdit(UNLINKED());
+      expect(row.textContent).toContain('Mã Pancake PCK-OLD');
+      expect(row.textContent).toContain('đã gỡ liên kết');
+      expect(row.textContent).not.toContain('PCK-OLD, chờ duyệt');
+    });
+
+    it('mở Sửa: hiện mã hiện tại, ẩn giá và tồn kho (lấy theo kho Tubu); mặc định giữ mã nên không gửi pancakeCode', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      expect(overlay.textContent).toContain('PCK-OLD');
+      expect(overlay.querySelector('#merchant-edit-price')).toBeNull();
+      expect(overlay.querySelector('#merchant-edit-stock')).toBeNull();
+      expect(radioOf(overlay, 'Giữ mã hiện tại').checked).toBe(true);
+      typeInto(inputByLabel(overlay, 'Mô tả ngắn'), 'Ngắn hơn');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { shortDesc: 'Ngắn hơn' });
+    });
+
+    it('đổi sang mã khác: phải kiểm mã trước, rồi gửi đúng mã đã kiểm', async () => {
+      mocks.checkPancake = vi.fn(async (code: string) => ({
+        pancakeId: code.trim(),
+        productName: 'Bột giặt quế',
+        variationName: '1kg',
+        retailPrice: 150000,
+        salePrice: null,
+        stock: 40,
+      }));
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), ' PCK-NEW ');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Kiểm tra mã');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      expect(mocks.checkPancake).toHaveBeenCalledWith(' PCK-NEW ');
+      expect(overlay.querySelector('[role="status"]')!.textContent).toContain('Bột giặt quế (1kg)');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: 'PCK-NEW' });
+    });
+
+    it('sửa lại ô mã sau khi kiểm thì kết quả kiểm cũ mất hiệu lực', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'PCK-NEW');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'PCK-NEW2');
+      expect(overlay.querySelector('[role="status"]')).toBeNull();
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('mã mới không hợp lệ: hiện lỗi của API dưới ô mã, không gửi', async () => {
+      mocks.checkPancake = vi.fn(async () => {
+        throw new Error('Mã đã được gian hàng khác liên kết');
+      });
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'SAI');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Mã đã được gian hàng khác liên kết');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('chuyển sang tự giao: bỏ mã (pancakeCode null), hiện giá/tồn để nhập, gửi cùng lúc', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      expect(overlay.textContent).toContain('Bạn tự đóng gói');
+      typeInto(inputByLabel(overlay, 'Giá bán (đồng)'), '95000');
+      typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null, basePrice: 95000, stock: 12 });
+    });
+
+    it('chuyển sang tự giao mà chưa sửa giá/tồn vẫn gửi pancakeCode null (không bị coi là không đổi gì)', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null });
+    });
+
+    it('chọn lại "Giữ mã hiện tại" sau khi đổi ý thì ẩn lại giá/tồn và không gửi pancakeCode', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      expect(overlay.querySelector('#merchant-edit-price')).not.toBeNull();
+      click(radioOf(overlay, 'Giữ mã hiện tại'));
+      expect(overlay.querySelector('#merchant-edit-price')).toBeNull();
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm Tubu giao hộ đang liên kết: không có lựa chọn đổi mã', async () => {
+      const { open } = await openEdit(PRODUCT('t', 'APPROVED', { isActive: true, fulfilment: 'TUBU', pancakeLinkCode: 'PCK-1', linkState: 'LINKED' }));
+      const overlay = open();
+      expect(byText(overlay, 'label', 'Đổi sang mã Pancake khác')).toBeNull();
+      expect(byText(overlay, 'label', 'Chuyển sang gian hàng tự giao')).toBeNull();
+    });
+
+    it('sản phẩm tự giao không có mã: không có lựa chọn đổi mã, vẫn sửa được giá/tồn như cũ', async () => {
+      const { open } = await openEdit(PRODUCT('o', 'APPROVED', { isActive: true, fulfilment: 'MERCHANT', pancakeLinkCode: null, linkState: null }));
+      const overlay = open();
+      expect(byText(overlay, 'label', 'Đổi sang mã Pancake khác')).toBeNull();
+      expect(overlay.querySelector('#merchant-edit-price')).not.toBeNull();
+    });
+  });
+
   it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {
     const pendingEdit = { name: 'SP a (tên mới)', description: 'Mô tả mới', shortDesc: 'Ngắn mới', images: [], thumbnail: null, submittedAt: '2026-10-14T03:00:00.000Z' };
     mocks.getProducts = vi.fn(async () => ({

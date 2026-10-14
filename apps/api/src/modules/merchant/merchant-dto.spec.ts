@@ -38,6 +38,13 @@ describe('DTO sản phẩm đối tác (R2-MERCHANT-10)', () => {
     expect(dto.description).toBe('Mô tả');
   });
 
+  it('R4-PARTNER-6: mã Pancake khi sửa — chuỗi được cắt khoảng trắng, null là bỏ mã, không nhận số/đối tượng', async () => {
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: '  PK-9 ' })).resolves.toMatchObject({ pancakeCode: 'PK-9' });
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: null })).resolves.toMatchObject({ pancakeCode: null });
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: 12 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: 'x'.repeat(65) })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('bỏ giá khuyến mãi (null) khi sửa vẫn được', async () => {
     await expect(run(UpdateMerchantProductDto, { salePrice: null })).resolves.toMatchObject({ salePrice: null });
   });

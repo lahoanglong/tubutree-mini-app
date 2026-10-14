@@ -1157,6 +1157,9 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true);
     expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'shell' }, data: { productId: 'p1' } });
+    // R4-PARTNER-6: CAS gồm cả mã đang xin liên kết, đối tác đổi mã giữa lúc admin xem và bấm thì duyệt trượt.
+    const casWhere = (prisma.product.updateMany as jest.Mock).mock.calls[0][0].where;
+    expect(casWhere).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode });
     expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_APPROVED', expect.objectContaining({ product_name: 'Mật ong' }));
   });
 

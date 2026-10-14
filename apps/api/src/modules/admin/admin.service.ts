@@ -1471,12 +1471,13 @@ export class AdminService {
     // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
     // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
     await this.prisma.$transaction(async (tx) => {
+      // Cả mã Pancake đang xin liên kết: đối tác đổi mã giữa lúc admin xem và bấm thì không duyệt nhầm mã admin chưa xem.
       const moved = await tx.product.updateMany({
-        where: { id: productId, approvalStatus: 'PENDING_REVIEW' },
+        where: { id: productId, approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode },
         data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
       });
       if (moved.count === 0) {
-        throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
+        throw new BadRequestException('Sản phẩm vừa được xử lý hoặc đối tác vừa đổi mã Pancake — tải lại danh sách để xem trạng thái mới.');
       }
       if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.

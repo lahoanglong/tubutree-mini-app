@@ -248,4 +248,89 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(seen.items.map((i) => i.productName)).toEqual(['Tiêu']);
     expect(seen).toMatchObject({ total: null, ownTotal: 120_000, partial: true, selfFulfilled: false });
   });
+
+  it('(f) R4-PARTNER-6: sản phẩm đã gỡ liên kết không còn kẹt — đổi sang mã khác (chờ duyệt rồi liên kết lại) hoặc bỏ mã để tự giao và sửa giá/tồn', async () => {
+    const a = await tubuProduct();
+    const b = await tubuProduct();
+    const { owner } = await merchantStore();
+    const p = await requestLink(owner, a.code);
+    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await admin.unlinkMerchantProduct('admin-it', p.id, 'Hết hợp tác');
+
+    // Trước đây: kẹt — không sửa giá/tồn, không đổi được mã.
+    await expect(merchant.updateProduct(owner.id, p.id, { stock: 5 })).rejects.toThrow('theo kho Tubu');
+    await expect(merchant.updateProduct(owner.id, p.id, { pancakeCode: 'khong-co-ma-nay' })).rejects.toBeInstanceOf(BadRequestException);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).pancakeLinkCode).toBe(a.code);
+
+    // Đổi sang mã khác: về chờ duyệt, admin duyệt thì liên kết đúng biến thể mới.
+    await merchant.updateProduct(owner.id, p.id, { pancakeCode: ` ${b.code} ` });
+    const requested = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(requested).toMatchObject({ pancakeLinkCode: b.code, approvalStatus: 'PENDING_REVIEW', fulfilment: 'MERCHANT' });
+    const row = (await admin.listPendingMerchantProducts(1, 100)).data.find((r) => r.id === p.id)!;
+    expect(row.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: b.product.id } });
+    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    const [linked, mine, open] = await Promise.all([
+      prisma.variation.findUniqueOrThrow({ where: { id: b.variation.id } }),
+      prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+      prisma.merchantPancakeLink.findFirst({ where: { productId: p.id, unlinkedAt: null } }),
+    ]);
+    expect(linked.productId).toBe(p.id);
+    expect(mine).toMatchObject({ fulfilment: 'TUBU', approvalStatus: 'APPROVED', pancakeLinkCode: b.code });
+    expect(open).toMatchObject({ variationId: b.variation.id, originProductId: b.product.id });
+    // Đã liên kết lại: không đổi/bỏ mã được nữa nếu chưa gỡ.
+    await expect(merchant.updateProduct(owner.id, p.id, { pancakeCode: null })).rejects.toThrow('đang được Tubu giao hộ');
+    await expect(merchant.updateProduct(owner.id, p.id, { pancakeCode: a.code })).rejects.toThrow('đang được Tubu giao hộ');
+
+    // Bỏ mã: tự giao, sửa giá/tồn và mở bán lại ngay, không cần duyệt lại (nội dung đã được duyệt).
+    const c = await tubuProduct();
+    const q = await requestLink(owner, c.code);
+    await admin.reviewMerchantProduct('admin-it', q.id, true, undefined, true);
+    await admin.unlinkMerchantProduct('admin-it', q.id, 'Hết hợp tác');
+    await merchant.updateProduct(owner.id, q.id, { pancakeCode: null, basePrice: 95_000, stock: 7 });
+    await merchant.updateProduct(owner.id, q.id, { isActive: true });
+    const selfShip = await prisma.product.findUniqueOrThrow({ where: { id: q.id }, include: { variations: true } });
+    expect(selfShip).toMatchObject({ fulfilment: 'MERCHANT', pancakeLinkCode: null, approvalStatus: 'APPROVED', isActive: true, basePrice: 95_000 });
+    expect(selfShip.variations).toHaveLength(1);
+    expect(selfShip.variations[0]).toMatchObject({ pancakeId: null, stock: 7, retailPrice: 95_000, isActive: true });
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: c.variation.id } })).productId).toBe(c.product.id);
+    const listed = (await merchant.listMyProducts(owner.id)).ownProducts.find((x) => x.id === q.id) as unknown as { linkState: unknown };
+    expect(listed.linkState).toBeNull();
+    // Sau khi đã tự giao, các sửa giá/tồn tiếp theo vẫn bình thường.
+    await merchant.updateProduct(owner.id, q.id, { stock: 9 });
+    expect((await prisma.variation.findUnique({ where: { id: selfShip.variations[0]!.id } }))!.stock).toBe(9);
+  });
+
+  it('(g) R4-PARTNER-6: admin duyệt liên kết chồng với đối tác đổi/bỏ mã → không bao giờ có sản phẩm Tubu giao hộ mang mã khác với biến thể đã liên kết', async () => {
+    for (let round = 0; round < 6; round++) {
+      const a = await tubuProduct();
+      const b = await tubuProduct();
+      const { owner } = await merchantStore();
+      const p = await requestLink(owner, a.code);
+      const change = round % 2 === 0 ? { pancakeCode: b.code } : { pancakeCode: null };
+      const results = await Promise.allSettled(
+        round % 3 === 0
+          ? [merchant.updateProduct(owner.id, p.id, change), admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true)]
+          : [admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true), merchant.updateProduct(owner.id, p.id, change)],
+      );
+      const s = summarize(results);
+      console.log('[g] round=%d errors=%j', round, s.errors);
+      const [mine, open, va, vb] = await Promise.all([
+        prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+        prisma.merchantPancakeLink.findMany({ where: { productId: p.id, unlinkedAt: null } }),
+        prisma.variation.findUniqueOrThrow({ where: { id: a.variation.id } }),
+        prisma.variation.findUniqueOrThrow({ where: { id: b.variation.id } }),
+      ]);
+      // Biến thể chỉ ở sản phẩm đối tác khi có đúng một liên kết mở trỏ tới nó, sản phẩm là TUBU và mã khớp.
+      for (const [v, tubu] of [[va, a], [vb, b]] as const) {
+        const movedHere = v.productId === p.id;
+        const links = open.filter((l) => l.variationId === v.id);
+        expect(links).toHaveLength(movedHere ? 1 : 0);
+        if (movedHere) expect(mine).toMatchObject({ fulfilment: 'TUBU', pancakeLinkCode: tubu.code, approvalStatus: 'APPROVED' });
+      }
+      if (mine.fulfilment === 'TUBU') expect(open).toHaveLength(1);
+      else expect(open).toHaveLength(0);
+      if (mine.fulfilment !== 'TUBU') expect([a.code, b.code, null]).toContain(mine.pancakeLinkCode);
+      for (const r of s.rejected) expect([BadRequestException, ConflictException].some((E) => r.reason instanceof E)).toBe(true);
+    }
+  });
 });

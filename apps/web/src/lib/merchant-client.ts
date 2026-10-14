@@ -147,6 +147,8 @@ export interface UpdateMerchantProductInput {
   images?: string[];
   stock?: number;
   isActive?: boolean;
+  /** Chỉ cho sản phẩm chưa liên kết: chuỗi = đổi sang mã Pancake khác (gửi duyệt lại), null = bỏ mã để tự giao. */
+  pancakeCode?: string | null;
 }
 
 /** Biến thể Pancake hợp lệ cho "Tubu giao hộ" (GET /merchant/pancake-variations/:code). */
