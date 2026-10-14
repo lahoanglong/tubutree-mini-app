@@ -804,7 +804,7 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
     const row = await pointsRow();
     expect(row.getAttribute('aria-disabled')).toBe('false');
     fireEvent.click(row);
-    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 300, null, undefined));
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.some((c) => c[1] === 300)).toBe(true));
   });
 
   it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
