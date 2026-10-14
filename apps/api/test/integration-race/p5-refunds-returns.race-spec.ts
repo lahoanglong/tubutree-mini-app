@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -14,7 +15,17 @@ import { recordLatePaymentRefund } from '../../src/modules/orders/refund-queue';
 import { CartService } from '../../src/modules/cart/cart.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { ZalopayService } from '../../src/modules/integrations/payment/zalopay.service';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
+
+const ZALOPAY_KEY2 = 'it-key2';
+function zalopayConfig() {
+  const map: Record<string, string> = { ZALOPAY_APP_ID: '2553', ZALOPAY_KEY1: 'it-key1', ZALOPAY_KEY2, ZALOPAY_ENDPOINT: 'http://127.0.0.1:9' };
+  return { get: (k: string) => map[k] ?? '' };
+}
+function zalopayMac(raw: string) {
+  return createHmac('sha256', ZALOPAY_KEY2).update(raw).digest('hex');
+}
 
 /**
  * P5 (D2/D3) trên Postgres THẬT: trả hàng theo dòng/số lượng, cộng kho khi nhận hàng về, khách chọn nơi nhận tiền
@@ -177,6 +188,19 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     expect(await walletOf(user.id)).toBe(282_000);
   });
 
+  it('trả một phần đã duyệt chưa nhận về, Pancake/admin lật RETURNED, rồi nhận hàng về → kho cộng đúng bằng số chai của dòng', async () => {
+    const adminUser = await createUser(prisma, { role: 'ADMIN' });
+    const { user, v, order, item } = await deliveredCod();
+    const stock0 = await stockOf(v.id);
+    const req = await returns.request(user.id, order.code, { reasonCode: 'OTHER', reason: 'Trả bớt một chai', items: [{ orderItemId: item.id, quantity: 1 }] });
+    await returns.review(adminUser.id, req.id, { approve: true });
+
+    await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'PANCAKE' });
+    expect(await stockOf(v.id)).toBe(stock0 + item.quantity - 1);
+    await returns.markReceived(adminUser.id, req.id);
+    expect(await stockOf(v.id)).toBe(stock0 + item.quantity);
+  });
+
   it('BUYERMINI-11/MONEY-9: khách chọn hoàn về ngân hàng → khoản chờ chuyển khoản, Ví không đổi; admin xác nhận kèm mã GD', async () => {
     const adminUser = await createUser(prisma, { role: 'ADMIN' });
     const { user, order, item } = await deliveredCod();
@@ -248,6 +272,40 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id, kind: 'LATE_PAYMENT' } })).toBe(1);
     expect(notify.mock.calls.filter(([, code]) => code === 'REFUND_LATE_PAYMENT')).toHaveLength(1);
   });
+
+  it.each(['CANCELLED', 'RETURNED'] as const)(
+    'ZaloPay gửi lại callback đã lật PAID sau khi đơn %s và đã hoàn → không tạo khoản hoàn thứ hai, Ví không cộng thêm',
+    async (status) => {
+      const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+      const appTransId = `260101_${randCode(10)}`;
+      const order = await createOrder(prisma, {
+        userId: user.id,
+        status: 'PENDING_PAYMENT',
+        paymentMethod: 'ZALOPAY',
+        paymentStatus: 'UNPAID',
+        total: 150_000,
+        subtotal: 150_000,
+        paymentTxnId: appTransId,
+      });
+      const zalopay = new ZalopayService(prisma, { notify } as never, zalopayConfig() as never);
+      const raw = JSON.stringify({ app_trans_id: appTransId, amount: 150_000 });
+      expect((await zalopay.handleCallback(raw, zalopayMac(raw))).return_code).toBe(1);
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ paymentStatus: 'PAID', status: 'CONFIRMED' });
+
+      if (status === 'CANCELLED') {
+        await orders.cancel(user.id, order.code, { refundMethod: 'WALLET' });
+      } else {
+        await prisma.order.update({ where: { id: order.id }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
+        await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'ADMIN' });
+      }
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status, paymentStatus: 'REFUNDED' });
+      expect(await walletOf(user.id)).toBe(150_000);
+
+      await Promise.all([1, 2].map(() => zalopay.handleCallback(raw, zalopayMac(raw))));
+      expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(0);
+      expect(await walletOf(user.id)).toBe(150_000);
+    },
+  );
 
   it('khách chọn Ví đúng lúc admin bấm "Đã chuyển khoản" → đúng 1 bên thắng; Ví chỉ cộng khi Ví thắng', async () => {
     for (let round = 0; round < 5; round++) {
