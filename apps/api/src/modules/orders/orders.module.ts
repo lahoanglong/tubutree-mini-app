@@ -10,13 +10,14 @@ import { CustomerRefundsService } from './customer-refunds.service';
 import { CustomerRefundsAdminController } from './customer-refunds-admin.controller';
 import { OrderReturnsService } from './order-returns.service';
 import { ReturnsAdminController } from './returns-admin.controller';
+import { ReturnImagesController } from './return-images.controller';
 import { CartModule } from '../cart/cart.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hooks.module';
 
 @Module({
   imports: [CartModule, FlashSaleModule, PancakeSyncHooksModule],
-  controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController, ReturnsAdminController],
+  controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController, ReturnsAdminController, ReturnImagesController],
   providers: [
     OrdersService,
     OrderReversalService,

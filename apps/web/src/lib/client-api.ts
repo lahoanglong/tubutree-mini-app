@@ -13,6 +13,14 @@
 const BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
 
+/**
+ * Ảnh do chính API phục vụ (ảnh minh chứng đổi/trả, ảnh đánh giá base64 → "/returns/:id/images/0?v=…") được trả dạng
+ * đường dẫn tương đối API để JSON nhẹ; ghép với gốc API cho thẻ img.
+ */
+export function apiMediaUrl(path: string): string {
+  return `${BASE.replace(/\/+$/, '')}${path}`;
+}
+
 const SESSION_MARKER = 'tubu_web_session';
 
 let accessToken: string | null = null;
