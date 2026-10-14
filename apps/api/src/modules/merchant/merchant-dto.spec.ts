@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
 import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto } from './merchant.controller';
-import { MerchantStoreTermsDto } from './merchant-admin.controller';
+import { CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -72,5 +72,14 @@ describe('Phí sàn / phí Tubu giao hộ của gian hàng (admin, Q8)', () => {
     await expect(run(MerchantStoreTermsDto, { consignmentFeePct: -0.01 })).rejects.toBeInstanceOf(BadRequestException);
     await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
     await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: -1 })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Lập phiếu kèm tổng bảng kê admin vừa xem (Q8)', () => {
+  it('nhận tổng âm/dương là số nguyên; bỏ trống được; không nhận số lẻ hay chuỗi', async () => {
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: -12_000 })).resolves.toMatchObject({ expectedTotal: -12_000 });
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a' })).resolves.toMatchObject({ storefrontId: 'sf-a' });
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 'abc' })).rejects.toBeInstanceOf(BadRequestException);
   });
 });

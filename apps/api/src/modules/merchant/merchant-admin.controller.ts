@@ -7,9 +7,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationQuery } from '../../common/pagination';
 import { MerchantFulfilmentService } from './merchant-fulfilment.service';
 
-class CreateMerchantPayoutDto {
+export class CreateMerchantPayoutDto {
   @IsString() @IsNotEmpty() storefrontId!: string;
   @IsOptional() @IsString() @MaxLength(300) note?: string;
+  /** Tổng bảng kê admin vừa xem (âm khi đối tác nộp lại); lệch với tổng lúc lập thì từ chối. */
+  @IsOptional() @IsInt() expectedTotal?: number;
 }
 
 class MarkMerchantPayoutPaidDto {
@@ -45,8 +47,13 @@ export class MerchantAdminController {
   }
 
   @Patch('stores/:storefrontId/terms')
-  updateTerms(@Param('storefrontId') storefrontId: string, @Body() dto: MerchantStoreTermsDto) {
-    return this.fulfilment.updateStoreTerms(storefrontId, dto);
+  updateTerms(@CurrentUser('sub') adminId: string, @Param('storefrontId') storefrontId: string, @Body() dto: MerchantStoreTermsDto) {
+    return this.fulfilment.updateStoreTerms(adminId, storefrontId, dto);
+  }
+
+  @Post('links/:id/confirm-consignment')
+  confirmConsignment(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.fulfilment.confirmConsignment(adminId, id);
   }
 
   @Get('payouts')
@@ -56,7 +63,7 @@ export class MerchantAdminController {
 
   @Post('payouts')
   createPayout(@CurrentUser('sub') adminId: string, @Body() dto: CreateMerchantPayoutDto) {
-    return this.fulfilment.createPayout(adminId, dto.storefrontId, dto.note);
+    return this.fulfilment.createPayout(adminId, dto.storefrontId, dto.note, dto.expectedTotal);
   }
 
   @Post('payouts/:id/paid')
