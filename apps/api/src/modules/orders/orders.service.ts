@@ -14,7 +14,7 @@ import { OrderReversalService, type ReversalResult } from './order-reversal.serv
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund } from './refund-queue';
 import { refundNote } from './order-returns.service';
-import { readPendingPaymentTtlHours } from './pending-payment-expiry.cron';
+import { readPendingPaymentTtlHours } from './pending-payment-ttl';
 import { PREPAID_METHODS } from './order-transition';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';

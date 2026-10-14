@@ -173,3 +173,24 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.bank).toMatchObject({ bin: '970407', accountNo: '9984606774' });
   });
 });
+
+describe('BankTransferService.getBankQr — hạn thanh toán (BUYERMINI-8)', () => {
+  const created = new Date('2026-10-13T03:00:00Z');
+
+  it('đơn chờ chuyển khoản → paymentDeadline = lúc đặt + orders.pending_payment_ttl_hours', async () => {
+    const r = await new BankTransferService(
+      makePrisma({ ...ORDER, status: 'PENDING_PAYMENT', createdAt: created }),
+      makeConfig({ 'orders.pending_payment_ttl_hours': 12 }),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(r.paymentDeadline).toBe('2026-10-13T15:00:00.000Z');
+  });
+
+  it('đơn đã trả hoặc đã xác nhận → không có hạn', async () => {
+    const paid = await new BankTransferService(
+      makePrisma({ ...ORDER, status: 'CONFIRMED', paymentStatus: 'PAID', createdAt: created }),
+      makeConfig(),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(paid.paymentDeadline).toBeNull();
+  });
+});
+

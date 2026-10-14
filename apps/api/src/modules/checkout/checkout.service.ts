@@ -23,7 +23,7 @@ import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { readPendingPaymentTtlHours } from '../orders/pending-payment-expiry.cron';
+import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { formatVnd } from '../orders/refund-destination';
 import { formatVnDateTime } from '../../common/vn-time';
 
