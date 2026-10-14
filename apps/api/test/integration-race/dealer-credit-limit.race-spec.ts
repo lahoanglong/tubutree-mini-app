@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createDealer, createUser, randCode, summarize, warmPool } from './helpers';
+import { createDealer, randCode, summarize, warmPool } from './helpers';
 
 /** C-008: hạn mức công nợ đơn CREDIT trên Postgres thật — có tier (trần thật) và không tier (trần 0). */
 describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
