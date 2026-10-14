@@ -38,6 +38,11 @@ import {
 
 type Db = Prisma.TransactionClient;
 
+export interface SettlementConfig {
+  holdDays: number;
+  defaultCommissionPct: number;
+}
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -469,14 +474,26 @@ export class MerchantFulfilmentService {
   }
 
   /**
+   * Cấu hình bảng kê. Lập phiếu đọc trước khi mở transaction: SystemConfigService đọc qua pool chung, đọc trong lúc giữ kết nối
+   * của transaction (và các lần lập phiếu khác đang chờ khoá) có thể cạn pool.
+   */
+  async settlementConfig(): Promise<SettlementConfig> {
+    const [holdDays, defaultCommissionPct] = await Promise.all([
+      this.holdDays(),
+      this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
+    ]);
+    return { holdDays, defaultCommissionPct };
+  }
+
+  /**
    * Bảng kê chưa đối soát của một gian hàng, tính từ đơn lúc xem (không lưu sẵn): đơn đã giao qua hạn đổi/trả chưa vào phiếu
    * nào (SALE), mỗi lần trả một phần đã duyệt của đơn đã/đang vào phiếu (REVERSAL `RETURN:<id>`) và đơn bị trả mà đối tác đã
    * được tính tiền hoặc đang giữ tiền COD (REVERSAL của cả đơn, âm, chỉ phần còn lại sau các lần trả một phần). Hàng "Tubu
    * giao hộ" theo cùng luật nhưng từng dòng hàng (consignmentStatement). Chỉ tính đơn Tubu đã thu tiền (trả trước đã PAID)
    * hoặc COD — cùng luật doanh thu của admin. `db` là transaction khi lập phiếu để bảng kê và phiếu cùng một lần đọc.
    */
-  async statementFor(storefrontId: string, now = new Date(), db: Db = this.prisma) {
-    const holdDays = await this.holdDays();
+  async statementFor(storefrontId: string, now = new Date(), db: Db = this.prisma, cfg?: SettlementConfig) {
+    const { holdDays, defaultCommissionPct } = cfg ?? (await this.settlementConfig());
     const cutoff = new Date(now.getTime() - holdDays * DAY);
     const saleSelect = {
       id: true,
@@ -549,7 +566,7 @@ export class MerchantFulfilmentService {
     const notStored = (stored: { kind: string; refKey: string }[]) => (l: SettlementLine) =>
       !stored.some((x) => x.kind === l.kind && x.refKey === l.refKey);
 
-    const consignment = await this.consignmentStatement(storefrontId, cutoff, holdDays, db);
+    const consignment = await this.consignmentStatement(storefrontId, cutoff, holdDays, db, defaultCommissionPct);
     const lines: SettlementLine[] = [
       // SALE vừa đủ hạn đi cùng phiếu với các lần trả một phần của nó (đối tác không được tính tiền hàng khách đã trả).
       ...sales.flatMap((o) => [saleLineOf(o), ...partialsOf(o)]),
@@ -581,13 +598,13 @@ export class MerchantFulfilmentService {
   }
 
   /** Phí sàn (cùng mức đơn tự giao) và phí Tubu giao hộ hiện tại của gian hàng; phí sàn null = merchant.commission_pct. */
-  async consignmentTerms(storefrontId: string, db: Db = this.prisma): Promise<ConsignmentTerms> {
+  async consignmentTerms(storefrontId: string, db: Db = this.prisma, defaultCommissionPct?: number): Promise<ConsignmentTerms> {
     const [sf, defaultPct] = await Promise.all([
       db.storefront.findUnique({
         where: { id: storefrontId },
         select: { commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
       }),
-      this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
+      defaultCommissionPct ?? this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
     ]);
     return {
       commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
@@ -597,14 +614,11 @@ export class MerchantFulfilmentService {
   }
 
   /** Lịch sử mức phí của gian hàng (mỗi lần admin sửa thêm một dòng) để chốt phí theo lúc đặt đơn. */
-  private async termsHistory(storefrontId: string, db: Db): Promise<ConsignmentTermsRow[]> {
-    const [rows, defaultPct] = await Promise.all([
-      db.storefrontTermsHistory.findMany({
-        where: { storefrontId },
-        select: { commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true, effectiveFrom: true },
-      }),
-      this.num('merchant.commission_pct', DEFAULT_MERCHANT_COMMISSION_PCT),
-    ]);
+  private async termsHistory(storefrontId: string, db: Db, defaultPct: number): Promise<ConsignmentTermsRow[]> {
+    const rows = await db.storefrontTermsHistory.findMany({
+      where: { storefrontId },
+      select: { commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true, effectiveFrom: true },
+    });
     return rows.map((r) => ({
       commissionPct: r.commissionPct != null ? Number(r.commissionPct) : defaultPct,
       feePct: Number(r.consignmentFeePct),
@@ -621,15 +635,15 @@ export class MerchantFulfilmentService {
    * các lần trả một phần đã duyệt). Phí lấy theo mức hiệu lực lúc đặt đơn. Dòng đã có SALE ở phiếu của gian hàng thì thêm dòng
    * đảo cho lần trả một phần mới duyệt và cho đơn bị trả; dòng đảo dùng số đã lưu ở SALE.
    */
-  private async consignmentStatement(storefrontId: string, cutoff: Date, holdDays: number, db: Db) {
+  private async consignmentStatement(storefrontId: string, cutoff: Date, holdDays: number, db: Db, defaultCommissionPct: number) {
     const anyLink = await db.merchantPancakeLink.findMany({ where: { storefrontId }, select: { id: true }, take: 1 });
     if (anyLink.length === 0) {
       return { terms: null, lines: [] as SettlementLine[], upcoming: [] as (SettlementLine & { availableAt: Date | null })[] };
     }
     const itemSelect = { id: true, variationId: true, productName: true, variationName: true, quantity: true, total: true } as const;
     const [terms, history, pendingRows, returnedRows, partialRows] = await Promise.all([
-      this.consignmentTerms(storefrontId, db),
-      this.termsHistory(storefrontId, db),
+      this.consignmentTerms(storefrontId, db, defaultCommissionPct),
+      this.termsHistory(storefrontId, db, defaultCommissionPct),
       db.$queryRaw<{ orderItemId: string; orderId: string; code: string; total: number; shippingFee: number; createdAt: Date; deliveredAt: Date }[]>`
         SELECT oi."id" AS "orderItemId", o."id" AS "orderId", o."code", o."total", o."shippingFee", o."createdAt",
                COALESCE(
@@ -793,12 +807,13 @@ export class MerchantFulfilmentService {
       select: { id: true, type: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true },
     });
     if (!store || store.type !== 'MERCHANT') throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    const cfg = await this.settlementConfig();
     let payout;
     try {
       payout = await this.prisma.$transaction(
         async (tx) => {
           await this.lockStorePayouts(tx, store.id);
-          const { lines, total } = await this.statementFor(store.id, new Date(), tx);
+          const { lines, total } = await this.statementFor(store.id, new Date(), tx, cfg);
           if (lines.length === 0) throw new BadRequestException('Không có đơn nào đủ điều kiện đối soát.');
           if (expectedTotal !== undefined && expectedTotal !== total) {
             throw new ConflictException(
