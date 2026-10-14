@@ -780,6 +780,32 @@ describe('OrderReversalService — nơi nhận tiền hoàn và phần đã tr�
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
+  it('trả một phần đã duyệt nhưng CHƯA nhận hàng về → lần đảo cả đơn không cộng kho phần đó (nhận về sẽ cộng)', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order);
+    tx.returnRequest.findMany.mockResolvedValue([
+      {
+        refundAmount: 40_000,
+        shippingRefund: 0,
+        pointsRefunded: 0,
+        convertedPointsRefunded: 0,
+        pointsReversed: 0,
+        commissionReversed: 0,
+        receivedAt: null,
+        items: [
+          { orderItemId: 'i1', quantity: 1 },
+          { orderItemId: 'i2', quantity: 1 },
+        ],
+      },
+    ]);
+    await service.reverseFinancials(tx as never, order);
+    // i1: 2 - 1 đã duyệt = 1 đơn vị; i2: 1 - 1 = 0 → chỉ một lần cộng kho.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const sqlValues = (tx.$executeRaw.mock.calls[0] as unknown[]).slice(1);
+    expect(sqlValues).toContain(1);
+    expect(sqlValues).toContain('v1');
+  });
+
   it('trả hàng chờ nhận về: restock=false → không cộng kho lúc duyệt', async () => {
     const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
     const tx = makeTx(order);

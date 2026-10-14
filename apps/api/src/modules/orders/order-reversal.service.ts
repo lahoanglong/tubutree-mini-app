@@ -217,8 +217,10 @@ export class OrderReversalService {
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
       // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
       // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
+      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
+      // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
-      const reserved = item.quantity - backordered - (prior.restockedQty.get(item.id) ?? 0);
+      const reserved = item.quantity - backordered - (prior.approvedQty.get(item.id) ?? 0);
       if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
