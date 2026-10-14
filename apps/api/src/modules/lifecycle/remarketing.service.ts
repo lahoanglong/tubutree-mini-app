@@ -6,6 +6,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
 
+/** Khung giờ nhắc giỏ bỏ quên — admin-config-rules so chéo hai khoá này (và mặc định) lúc ghi. */
+export const CART_ABANDON_MIN_HOURS_KEY = 'remarketing.cart_abandon_min_hours';
+export const CART_ABANDON_MAX_HOURS_KEY = 'remarketing.cart_abandon_max_hours';
+export const CART_ABANDON_DEFAULT_MIN_HOURS = 6;
+export const CART_ABANDON_DEFAULT_MAX_HOURS = 72;
+
 /**
  * Remarketing reminders: nhắc user quay lại app.
  *  - Cart-abandonment: giỏ còn món nhưng chưa checkout, bỏ quên đủ lâu.
@@ -36,8 +42,15 @@ export class RemarketingService {
   @Cron('0 * * * *', { timeZone: CRON_TZ })
   async sendCartAbandonReminders(): Promise<void> {
     try {
-      const minH = await this.config.get<number>('remarketing.cart_abandon_min_hours', 6);
-      const maxH = await this.config.get<number>('remarketing.cart_abandon_max_hours', 72);
+      const minH = await this.config.get<number>(CART_ABANDON_MIN_HOURS_KEY, CART_ABANDON_DEFAULT_MIN_HOURS);
+      const maxH = await this.config.get<number>(CART_ABANDON_MAX_HOURS_KEY, CART_ABANDON_DEFAULT_MAX_HOURS);
+      if (!(maxH > minH)) {
+        this.logger.warn(
+          `Nhắc giỏ bỏ quên đang tắt: ${CART_ABANDON_MIN_HOURS_KEY}=${minH} không nhỏ hơn ${CART_ABANDON_MAX_HOURS_KEY}=${maxH} ` +
+            '(khung giờ rỗng). Sửa một trong hai khoá ở trang Cấu hình.',
+        );
+        return;
+      }
       const now = Date.now();
       const carts = await this.prisma.cart.findMany({
         where: {

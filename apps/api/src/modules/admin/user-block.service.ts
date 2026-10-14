@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
+import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
 
 /**
  * Admin khoá / mở khoá tài khoản (farm voucher, lừa COD, spam cộng đồng). Khoá có hiệu lực ngay: thu hồi
@@ -24,8 +25,10 @@ export class UserBlockService {
       throw new BadRequestException('Không thể tự khoá tài khoản của chính mình.');
     }
     const result = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
+      await lockAdminRoster(tx);
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, isBlocked: true } });
       if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+      if (user.role === 'ADMIN' && !user.isBlocked) await assertAnotherActiveAdmin(tx, userId, LAST_ADMIN_MESSAGE.block);
       const now = new Date();
       const updated = await tx.user.update({
         where: { id: userId },

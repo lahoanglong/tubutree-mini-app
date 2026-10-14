@@ -13,6 +13,12 @@ export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
 
+/** Chốt chặn gõ nhầm (R4-ADMIN-11): giá flash 1đ, đợt kéo dài 10 năm vì gõ sai năm. */
+export const FLASH_MAX_DISCOUNT_KEY = 'flashsale.max_discount_pct';
+export const FLASH_MAX_DISCOUNT_DEFAULT = 0.9;
+export const FLASH_MAX_DURATION_KEY = 'flashsale.max_duration_days';
+export const FLASH_MAX_DURATION_DEFAULT_DAYS = 31;
+
 export interface EffectivePrice {
   flashPrice: number;
   itemId: string;
@@ -33,14 +39,25 @@ function isStillDiscounted(it: { flashPrice: number; variation: { salePrice: num
   return it.flashPrice < (it.variation.salePrice ?? it.variation.retailPrice);
 }
 
-/** Khung giờ đợt flash: đọc được, bắt đầu trước kết thúc, và (khi đặt endAt mới) chưa kết thúc. */
-function assertSaleWindow(startAt: Date, endAt: Date, checkEndInFuture = true): void {
+/**
+ * Khung giờ đợt flash: đọc được, bắt đầu trước kết thúc, không dài quá `maxDays` ngày và (khi đặt endAt mới) chưa kết
+ * thúc.
+ */
+function assertSaleWindow(startAt: Date, endAt: Date, maxDays: number, checkEndInFuture = true): void {
   if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
     throw new BadRequestException('Thời gian bắt đầu/kết thúc không hợp lệ.');
   }
   if (!(startAt < endAt)) throw new BadRequestException('Thời gian bắt đầu phải trước thời gian kết thúc.');
+  if (endAt.getTime() - startAt.getTime() > maxDays * 86_400_000) {
+    throw new BadRequestException(
+      `Đợt flash sale dài tối đa ${maxDays} ngày — kiểm tra lại năm/tháng của thời gian kết thúc. ` +
+        `Cần đợt dài hơn thì nâng "${FLASH_MAX_DURATION_KEY}" ở trang Cấu hình.`,
+    );
+  }
   if (checkEndInFuture && endAt.getTime() <= Date.now()) throw new BadRequestException('Thời gian kết thúc phải ở tương lai.');
 }
+
+const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 
 @Injectable()
 export class FlashSaleService {
@@ -200,7 +217,7 @@ export class FlashSaleService {
   async createSale(adminId: string, dto: { title: string; startAt: string; endAt: string }) {
     const startAt = new Date(dto.startAt),
       endAt = new Date(dto.endAt);
-    assertSaleWindow(startAt, endAt);
+    assertSaleWindow(startAt, endAt, await this.maxSaleDays());
     return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
   }
 
@@ -214,7 +231,7 @@ export class FlashSaleService {
       const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
       const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
       const end = dto.endAt ? new Date(dto.endAt) : current.endAt;
-      assertSaleWindow(start, end, dto.endAt !== undefined);
+      assertSaleWindow(start, end, await this.maxSaleDays(), dto.endAt !== undefined);
       if (current.startAt.getTime() <= Date.now() && start.getTime() !== current.startAt.getTime()) {
         throw new BadRequestException(FLASH_START_LOCKED_MSG);
       }
@@ -229,6 +246,10 @@ export class FlashSaleService {
         isActive: dto.isActive,
       },
     });
+  }
+
+  private maxSaleDays(): Promise<number> {
+    return this.config.get<number>(FLASH_MAX_DURATION_KEY, FLASH_MAX_DURATION_DEFAULT_DAYS);
   }
 
   /** Không biến thể nào của đợt `saleId` nằm trong đợt khác trùng khung giờ [start, end). */
@@ -288,6 +309,14 @@ export class FlashSaleService {
     const minPct = await this.config.get<number>('flashsale.min_discount_pct', 0);
     if (minPct > 0 && dto.flashPrice > standing * (1 - minPct)) {
       throw new BadRequestException(`Mức giảm phải ≥ ${Math.round(minPct * 100)}%.`);
+    }
+    const maxPct = await this.config.get<number>(FLASH_MAX_DISCOUNT_KEY, FLASH_MAX_DISCOUNT_DEFAULT);
+    const floor = Math.ceil(standing * (1 - maxPct) - 1e-6);
+    if (maxPct < 1 && dto.flashPrice < floor) {
+      throw new BadRequestException(
+        `Giá flash ${vnd(dto.flashPrice)} giảm quá ${Math.round(maxPct * 100)}% so với giá đang bán ${vnd(standing)} — ` +
+          `giá flash thấp nhất là ${vnd(floor)}. Kiểm tra lại số 0; muốn bán sâu hơn thì nâng "${FLASH_MAX_DISCOUNT_KEY}" ở trang Cấu hình.`,
+      );
     }
     if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
     // Chỉ chặn đợt TRÙNG khung giờ (hai giá flash cùng lúc cho một SKU); đợt kế tiếp không trùng giờ thì xếp được.

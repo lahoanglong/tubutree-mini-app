@@ -231,6 +231,21 @@ describe('FlashSaleService.createSale (ADMINOPS-16)', () => {
     ).rejects.toThrow('Thời gian bắt đầu/kết thúc không hợp lệ.');
   });
 
+  // R4-ADMIN-11: gõ nhầm năm (2036 thay 2026) tạo đợt giá flash kéo dài 10 năm.
+  it('đợt dài hơn flashsale.max_duration_days (mặc định 31 ngày) → 400 nêu số ngày tối đa, không tạo; đúng 31 ngày thì được', async () => {
+    const prisma = mk();
+    const svc = new FlashSaleService(prisma, config, notifications, lifecycle);
+    await expect(
+      svc.createSale('a1', { title: 'Gõ nhầm năm', startAt: '2099-01-01T00:00:00Z', endAt: '2109-01-01T00:00:00Z' }),
+    ).rejects.toThrow(/31 ngày/);
+    await expect(
+      svc.createSale('a1', { title: 'X', startAt: '2099-01-01T00:00:00Z', endAt: '2099-02-01T00:00:01Z' }),
+    ).rejects.toThrow(/flashsale\.max_duration_days/);
+    expect(prisma.flashSale.create).not.toHaveBeenCalled();
+    await svc.createSale('a1', { title: 'Tháng 1', startAt: '2099-01-01T00:00:00Z', endAt: '2099-02-01T00:00:00Z' });
+    expect(prisma.flashSale.create).toHaveBeenCalledTimes(1);
+  });
+
   it('tiêu đề toàn khoảng trắng bị cắt; hợp lệ thì tạo', async () => {
     const prisma = mk();
     await new FlashSaleService(prisma, config, notifications, lifecycle).createSale('a1', {
@@ -271,6 +286,14 @@ describe('FlashSaleService.updateSale', () => {
     const r = await new FlashSaleService(prisma, config, notifications, lifecycle).updateSale('s1', { startAt: '2099-07-02', endAt: '2099-07-08' });
     expect(r).toEqual({ id: 's1' });
     expect(prisma.flashSale.update).toHaveBeenCalled();
+  });
+
+  it('R4-ADMIN-11: dời endAt làm đợt dài quá flashsale.max_duration_days → 400, không cập nhật', async () => {
+    const prisma = mkPrisma({ id: 's1', startAt: new Date('2099-01-01T00:00:00Z'), endAt: new Date('2099-01-02T00:00:00Z'), items: [] }) as any;
+    await expect(
+      new FlashSaleService(prisma, config, notifications, lifecycle).updateSale('s1', { endAt: '2109-01-02T00:00:00Z' }),
+    ).rejects.toThrow(/31 ngày/);
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
   it('ADMINOPS-16: đổi endAt về quá khứ → 400, không cập nhật', async () => {
@@ -479,6 +502,24 @@ describe('FlashSaleService.addItem (validate)', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  // R4-ADMIN-11: giá flash 1đ (gõ thiếu số) trước đây vẫn lên bán; chỉ quota giới hạn thiệt hại.
+  it('giảm quá flashsale.max_discount_pct (mặc định 90%) → reject nêu giá sàn và khoá cấu hình; đúng sàn thì được', async () => {
+    const prisma = base() as any;
+    const svc = new FlashSaleService(prisma, config, notifications, lifecycle);
+    await expect(svc.addItem('s1', { variationId: 'v1', flashPrice: 1, quota: 5 })).rejects.toThrow(/10\.000đ/);
+    await expect(svc.addItem('s1', { variationId: 'v1', flashPrice: 9_999, quota: 5 })).rejects.toThrow(/flashsale\.max_discount_pct/);
+    expect(prisma.flashSaleItem.create).not.toHaveBeenCalled();
+    await svc.addItem('s1', { variationId: 'v1', flashPrice: 10_000, quota: 5 });
+    expect(prisma.flashSaleItem.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin nâng flashsale.max_discount_pct lên 1 (100%) → giá flash rất thấp được nhận', async () => {
+    const prisma = base() as any;
+    const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'flashsale.max_discount_pct' ? 1 : fb) as T } as unknown as SystemConfigService;
+    await new FlashSaleService(prisma, cfg, notifications, lifecycle).addItem('s1', { variationId: 'v1', flashPrice: 1_000, quota: 5 });
+    expect(prisma.flashSaleItem.create).toHaveBeenCalled();
   });
 
   it('hợp lệ → tạo item với perUserLimit default', async () => {

@@ -36,6 +36,7 @@ import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
+import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
 import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
 import {
   describePancakeLink,
@@ -195,6 +196,15 @@ export class AdminService {
       // đọc PENDING trước khi bên nào ghi xong). Không guard → user.update DEALER chạy 2 lần
       // (idempotent nhưng có thể ghi đè dealerTierId của admin thắng race sau).
       await this.prisma.$transaction(async (tx) => {
+        // Duyệt đổi vai trò người nộp sang DEALER: người nộp là admin thì đây cũng là một lần hạ quyền admin.
+        await lockAdminRoster(tx);
+        const applicant = await tx.user.findUnique({ where: { id: app.userId }, select: { role: true } });
+        if (applicant?.role === 'ADMIN') {
+          if (app.userId === adminId) {
+            throw new BadRequestException('Không thể tự duyệt hồ sơ đại lý của chính mình — nhờ một quản trị viên khác thực hiện.');
+          }
+          await assertAnotherActiveAdmin(tx, app.userId, LAST_ADMIN_MESSAGE.dealer);
+        }
         const flipped = await tx.dealerApplication.updateMany({
           where: { id, status: 'PENDING' },
           data: { status: 'APPROVED', reviewedBy: adminId, reviewedAt: new Date() },
@@ -380,7 +390,8 @@ export class AdminService {
    * Cấp/đổi role cho user theo SĐT — THAY cho script SSH grant-admin.js (không audit, đi ngoài
    * hạ tầng quyền). Gọi qua endpoint @Roles('ADMIN') nên chỉ admin đăng nhập mới chạy được;
    * ghi log ai đổi (adminId) + role cũ→mới. KHÔNG tự tạo user (khác script test): SĐT chưa mở app
-   * → NotFound để admin biết đối tác cần đăng nhập Zalo Mini App ít nhất 1 lần trước.
+   * → NotFound để admin biết đối tác cần đăng nhập Zalo Mini App ít nhất 1 lần trước. SĐT dán từ Zalo (+84…, 84…,
+   * có khoảng trắng/chấm) về dạng User.phone đang lưu (0xxxxxxxxx) bằng cùng hàm ô tìm người dùng dùng.
    */
   async setUserRole(
     adminId: string,
@@ -388,62 +399,62 @@ export class AdminService {
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
     tierId?: string,
   ) {
-    const normalized = phone.trim();
-    const user = await this.prisma.user.findUnique({ where: { phone: normalized } });
-    if (!user) throw new NotFoundException('Không tìm thấy user với SĐT này (cần mở Mini App Zalo ≥1 lần).');
-    const previousRole = user.role;
-    // Hai cách khoá cả tổ chức ra ngoài, trước đây đều không có gì chặn — và khôi phục thì chỉ
-    // còn đường vào thẳng DB bằng SQL. Nút "Thu hồi" trong app nằm ngay trên dòng của chính
-    // admin đang đăng nhập, chỉ cần một cú chạm nhầm.
-    if (user.id === adminId && role !== 'ADMIN') {
-      throw new BadRequestException('Không thể tự hạ quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
-    }
-    if (previousRole === 'ADMIN' && role !== 'ADMIN') {
-      const admins = await this.prisma.user.count({ where: { role: 'ADMIN' } });
-      if (admins <= 1) {
-        throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi hạ.');
-      }
-    }
+    const normalized = searchPhone(phone) ?? phone.trim();
+    const dealerTierId = role === 'DEALER' ? tierId?.trim() : undefined;
     // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
     // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
-    // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, lên lại STAFF phải gán lại có chủ đích.
-    const droppedPerms = role !== 'STAFF' ? (user.staffPermissions ?? []) : [];
-    let data: Prisma.UserUpdateInput = { role, ...(droppedPerms.length ? { staffPermissions: [] } : {}) };
-    let dealerTierId: string | undefined;
     if (role === 'DEALER') {
-      dealerTierId = tierId?.trim();
       if (!dealerTierId) throw new BadRequestException('Cần chọn bậc đại lý khi cấp vai trò DEALER.');
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
-      data = {
-        ...data,
-        metadata: {
-          ...((user.metadata as Record<string, unknown> | null) ?? {}),
-          dealerTierId,
-        } as Prisma.InputJsonObject,
-      };
     }
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.user.update({
+    const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
+      await lockAdminRoster(tx);
+      const user = await tx.user.findUnique({ where: { phone: normalized } });
+      if (!user) throw new NotFoundException(`Không tìm thấy người dùng có SĐT ${normalized} (cần mở Mini App Zalo ≥1 lần).`);
+      const previousRole = user.role;
+      // Hai cách khoá cả tổ chức ra ngoài, trước đây đều không có gì chặn — và khôi phục thì chỉ
+      // còn đường vào thẳng DB bằng SQL. Nút "Thu hồi" trong app nằm ngay trên dòng của chính
+      // admin đang đăng nhập, chỉ cần một cú chạm nhầm.
+      if (user.id === adminId && role !== 'ADMIN') {
+        throw new BadRequestException('Không thể tự hạ quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
+      }
+      if (previousRole === 'ADMIN' && role !== 'ADMIN') {
+        await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.demote);
+      }
+      // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, lên lại STAFF phải gán lại có chủ đích.
+      const droppedPerms = role !== 'STAFF' ? (user.staffPermissions ?? []) : [];
+      const data: Prisma.UserUpdateInput = {
+        role,
+        ...(droppedPerms.length ? { staffPermissions: [] } : {}),
+        ...(dealerTierId
+          ? {
+              metadata: {
+                ...((user.metadata as Record<string, unknown> | null) ?? {}),
+                dealerTierId,
+              } as Prisma.InputJsonObject,
+            }
+          : {}),
+      };
+      const updated = await tx.user.update({
         where: { id: user.id },
         data,
         select: { id: true, phone: true, fullName: true, role: true },
-      }),
-      ...(previousRole !== role
-        ? [recordUserAdminEvent(this.prisma, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId })]
-        : []),
-      ...(droppedPerms.length
-        ? [
-            recordUserAdminEvent(this.prisma, {
-              userId: user.id,
-              kind: 'STAFF_PERMISSIONS',
-              from: droppedPerms.join(','),
-              to: '',
-              actorId: adminId,
-            }),
-          ]
-        : []),
-    ]);
+      });
+      if (previousRole !== role) {
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId });
+      }
+      if (droppedPerms.length) {
+        await recordUserAdminEvent(tx, {
+          userId: user.id,
+          kind: 'STAFF_PERMISSIONS',
+          from: droppedPerms.join(','),
+          to: '',
+          actorId: adminId,
+        });
+      }
+      return { updated, previousRole };
+    });
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
@@ -455,10 +466,10 @@ export class AdminService {
       return 0;
     });
     if (revoked > 0) {
-      this.logger.warn(`Admin ${adminId} đổi role user ${user.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
+      this.logger.warn(`Admin ${adminId} đổi role user ${updated.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
     this.logger.warn(
-      `Admin ${adminId} đổi role user ${user.id} (${maskPhone(normalized)}): ${previousRole} → ${role}` +
+      `Admin ${adminId} đổi role user ${updated.id} (${maskPhone(normalized)}): ${previousRole} → ${role}` +
         (dealerTierId ? ` (bậc ${dealerTierId})` : ''),
     );
     return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
@@ -1147,6 +1158,21 @@ export class AdminService {
     if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
     if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
       throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
+    }
+    if (data.type === 'AMOUNT' && data.minOrder && data.value >= data.minOrder) {
+      throw new BadRequestException(
+        `Mức giảm ${formatVnd(data.value)} phải nhỏ hơn đơn tối thiểu ${formatVnd(data.minOrder)} — không thì đơn ở mức tối thiểu được giảm hết tiền hàng. ` +
+          'Kiểm tra lại số 0 của hai ô.',
+      );
+    }
+    // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
+    const tierId = data.scope === 'TIER' ? data.scopeMeta?.tierId : undefined;
+    if (tierId && !(await this.prisma.membershipTier.findUnique({ where: { id: tierId }, select: { id: true } }))) {
+      throw new BadRequestException(`Hạng thành viên "${tierId}" không tồn tại — mã tạo ra sẽ không ai dùng được.`);
+    }
+    const ownerId = data.scope === 'USER_GROUP' ? data.scopeMeta?.userId : undefined;
+    if (ownerId && !(await this.prisma.user.findUnique({ where: { id: ownerId }, select: { id: true } }))) {
+      throw new BadRequestException(`Không tìm thấy người dùng "${ownerId}" — mã cá nhân tạo ra sẽ không ai dùng được.`);
     }
     const code = normalizeCouponCode(data.code);
     try {
