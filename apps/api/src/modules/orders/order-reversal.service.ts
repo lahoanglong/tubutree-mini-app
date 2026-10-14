@@ -12,7 +12,7 @@ import { toLocalPhone } from '../../common/phone';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
 import { createBankRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
-import { distributeByWeight, shareOf, type ReturnShares } from './refund-allocation';
+import { distributeByWeight, remainingPointsBack, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
 import { paidLineTotals } from '../affiliate/commission-base';
 
@@ -198,7 +198,7 @@ export class OrderReversalService {
     // Điểm Xanh lô quy đổi đã tiêu cho đơn này là TIỀN TRẢ TRƯỚC (Q-03a) nên hoàn trong CÙNG tx với lần lật trạng
     // thái, như xu/Ví trước PD-3. Để ở LoyaltyService.reverseOrderPoints (chạy sau commit) thì nó ném lỗi
     // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
-    pointsRefunded += await this.refundConvertedPoints(tx, order, prior.convertedBack);
+    pointsRefunded += await this.refundConvertedPoints(tx, order, prior);
 
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
@@ -537,10 +537,10 @@ export class OrderReversalService {
    * Hoàn phần Điểm Xanh lô CONVERTED mà đơn đã tiêu (`orders.pointsUsedConverted`) về đúng lô, không hết hạn.
    * Một lần: caller đã lật trạng thái đơn bằng guard atomic; `points_transactions_converted_refund_unique`
    * (reason `ORDER_REFUND_CONVERTED:<code>`) là lớp hai, dòng đã có thì skipDuplicates không cộng.
-   * Chặn trên bằng pointsUsed phòng dữ liệu lệch (không hoàn nhiều hơn tổng đã tiêu).
+   * Sau các lần trả một phần chỉ hoàn phần còn lại, không quá phần điểm đã dùng chưa trả (remainingPointsBack).
    */
-  private async refundConvertedPoints(tx: Prisma.TransactionClient, order: OrderWithItems, alreadyBack = 0): Promise<number> {
-    const points = Math.min(order.pointsUsed, order.pointsUsedConverted) - alreadyBack;
+  private async refundConvertedPoints(tx: Prisma.TransactionClient, order: OrderWithItems, prior: PartialReturnTotals): Promise<number> {
+    const points = remainingPointsBack(order, prior).converted;
     if (!(points > 0)) return 0;
     const res = await applyPointsDelta(tx, {
       userId: order.userId,

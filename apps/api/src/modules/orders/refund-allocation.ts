@@ -124,6 +124,22 @@ export function distributeByWeight(amount: number, weights: number[]): number[] 
   return out;
 }
 
+/**
+ * Điểm đã dùng còn phải trả khi đảo cả đơn sau các lần trả một phần (`prior`): đúng phần chưa trả của `pointsUsed`, lô quy đổi
+ * trước (không quá phần quy đổi chưa trả), lô thường nhận phần còn lại. Mỗi lần trả một phần kẹp phần quy đổi theo số điểm của
+ * lần đó, nên các lần trước có thể đã trả nhiều điểm thường hơn phần thường của đơn; trả đủ phần quy đổi còn lại lúc đó sẽ
+ * vượt số khách đã dùng.
+ */
+export function remainingPointsBack(
+  order: { pointsUsed: number; pointsUsedConverted: number },
+  prior: { pointsUsedBack: number; convertedBack: number },
+): { converted: number; standard: number } {
+  const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
+  const left = Math.max(0, order.pointsUsed - prior.pointsUsedBack);
+  const converted = Math.max(0, Math.min(usedConverted - prior.convertedBack, left));
+  return { converted, standard: left - converted };
+}
+
 export function computeReturnShares(
   order: AllocOrder,
   before: ReadonlyMap<string, number>,
