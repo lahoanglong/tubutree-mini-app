@@ -2640,7 +2640,7 @@ model PancakeWebhookEvent {
   rawPayload    Json
   receivedAt    DateTime  @default(now())
   processedAt   DateTime?
-  /// RECEIVED | PROCESSING | PROCESSED | FAILED | UNMATCHED
+  /// RECEIVED | PROCESSING | PROCESSED | FAILED | UNMATCHED | IGNORED (cố ý không áp, lý do ở `error`)
   status        String
   /// Số lần worker đã claim (tăng lúc claim, không phải lúc xong) — tiến trình chết giữa chừng vẫn bị tính.
   attempts      Int       @default(0)

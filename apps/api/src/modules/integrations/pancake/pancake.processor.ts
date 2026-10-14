@@ -17,7 +17,14 @@ import {
   clearPancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
-import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
+import {
+  PANCAKE_CLAIM_STALE_MINUTES,
+  PANCAKE_EVENT_DONE,
+  PANCAKE_EVENT_STATUS,
+  pancakeEventData,
+  pancakeEventOrderCode,
+} from './pancake-webhook-dedupe';
+import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
@@ -48,7 +55,8 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   RETURNED: 'Đã trả hàng',
 };
 
-type HandleOutcome = 'PROCESSED' | 'UNMATCHED';
+/** `ignored`: cố ý không áp — lý do ghi vào sự kiện để người vận hành đọc. */
+type HandleOutcome = 'PROCESSED' | 'UNMATCHED' | { ignored: string };
 
 const CLOSED_ORDER_STATUSES = ['CANCELLED', 'RETURNED'] as const;
 const isClosedOrder = (status: string): boolean => (CLOSED_ORDER_STATUSES as readonly string[]).includes(status);
@@ -132,7 +140,7 @@ export class PancakeProcessor extends WorkerHost {
     const event = await this.prisma.pancakeWebhookEvent.findUnique({
       where: { id: job.data.eventId },
     });
-    if (!event || event.status === PANCAKE_EVENT_STATUS.PROCESSED || event.dismissedAt) return;
+    if (!event || PANCAKE_EVENT_DONE.includes(event.status) || event.dismissedAt) return;
 
     // Claim nguyên tử: cùng một sự kiện có thể tới worker từ nhiều đường (BullMQ retry/stalled, cron cứu,
     // Pancake gửi lại khi lần trước chưa xong) — chỉ một worker được chạy handler. Claim PROCESSING quá hạn
@@ -144,7 +152,7 @@ export class PancakeProcessor extends WorkerHost {
         // "Đã xử lý" sau khi job đã nằm trong hàng đợi (BullMQ retry, Pancake gửi lại) cũng phải chặn được.
         dismissedAt: null,
         OR: [
-          { status: { notIn: [PANCAKE_EVENT_STATUS.PROCESSED, PANCAKE_EVENT_STATUS.PROCESSING] } },
+          { status: { notIn: [...PANCAKE_EVENT_DONE, PANCAKE_EVENT_STATUS.PROCESSING] } },
           {
             status: PANCAKE_EVENT_STATUS.PROCESSING,
             claimedAt: { lt: new Date(claimedAt.getTime() - PANCAKE_CLAIM_STALE_MINUTES * 60_000) },
@@ -164,7 +172,9 @@ export class PancakeProcessor extends WorkerHost {
           outcome === 'UNMATCHED'
             ? // Webhook có thể tới trước khi pushOrder kịp lưu pancakeOrderId — cron cứu đối chiếu lại sau vài phút.
               { status: PANCAKE_EVENT_STATUS.UNMATCHED, processedAt: null, error: 'Chưa khớp được đơn Tubu.' }
-            : { status: PANCAKE_EVENT_STATUS.PROCESSED, processedAt: new Date(), error: null },
+            : typeof outcome === 'object'
+              ? { status: PANCAKE_EVENT_STATUS.IGNORED, processedAt: new Date(), error: outcome.ignored }
+              : { status: PANCAKE_EVENT_STATUS.PROCESSED, processedAt: new Date(), error: null },
       });
     } catch (err) {
       await this.prisma.pancakeWebhookEvent.update({
@@ -186,6 +196,11 @@ export class PancakeProcessor extends WorkerHost {
         return 'PROCESSED';
       }
       if (!match.order) return 'UNMATCHED';
+      // D4: đơn gian hàng đối tác tự giao không bao giờ lên Pancake — đơn Pancake nào mang mã của nó là đơn lạ (nhân viên
+      // tạo tay/đơn bù ghi nhầm mã), không được giao/huỷ/hoàn/cộng điểm hộ đối tác.
+      if (isMerchantFulfilledOrder(match.order)) {
+        return { ignored: await this.flagMerchantOrderOnPancake(match.order, match.pancakeId) };
+      }
     }
     switch (eventType) {
       case 'orders':
@@ -293,6 +308,17 @@ export class PancakeProcessor extends WorkerHost {
       order,
       `Pancake gửi cập nhật của đơn Pancake #${pancakeId ?? '?'} mang mã ${order.code}, nhưng đơn này đã gắn đơn Pancake #${order.pancakeOrderId}. Đã BỎ QUA cập nhật đó (không đổi trạng thái, không hoàn tiền). Kiểm tra đơn trùng/đơn bù trên Pancake.`,
     );
+  }
+
+  /** Trả lý do ghi lên sự kiện IGNORED. */
+  private async flagMerchantOrderOnPancake(order: Order, pancakeId: string | null): Promise<string> {
+    await this.flagAttention(
+      order,
+      `Pancake gửi cập nhật của đơn Pancake #${pancakeId ?? '?'} mang mã ${order.code}, nhưng ${order.code} là đơn gian hàng đối tác tự giao ` +
+        '(không có trên Pancake). Đã BỎ QUA cập nhật đó (không đổi trạng thái, không cộng điểm, không hoàn tiền). Kiểm tra đơn tạo tay/đơn bù ' +
+        'trên Pancake đang ghi nhầm mã này.',
+    );
+    return `Mã ${order.code} là đơn gian hàng đối tác tự giao (không có trên Pancake) — bỏ qua cập nhật của đơn Pancake #${pancakeId ?? '?'}.`;
   }
 
   private async onStatusUpdated(data: Record<string, unknown>): Promise<void> {

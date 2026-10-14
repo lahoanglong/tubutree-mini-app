@@ -1309,3 +1309,84 @@ describe('PancakeProcessor — đơn có vận đơn Gomdon sống: Gomdon là n
     expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'DELIVERED' });
   });
 });
+
+describe('PancakeProcessor — đơn gian hàng đối tác tự giao mang mã đơn trên Pancake (D4, R4-SYNC-1)', () => {
+  const merchantOrder = {
+    id: 'om1', code: 'TUBU2026101446226', userId: 'u1', status: 'CONFIRMED', note: null, total: 120000,
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', pancakeOrderId: null, fulfiller: 'MERCHANT',
+    fulfillerStorefrontId: 'sf1', invoiceStatus: null, shippingHistory: [], items: [],
+  };
+
+  function routeFindFirst(m: jest.Mock, orders: Record<string, unknown>[]) {
+    m.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      if ('pancakeOrderId' in where) return orders.find((o) => o.pancakeOrderId === where.pancakeOrderId) ?? null;
+      if ('code' in where) return orders.find((o) => o.code === where.code) ?? null;
+      const or = (where.OR as Record<string, unknown>[] | undefined) ?? [];
+      return orders.find((o) => or.some((c) => c.id === o.id || c.code === o.code)) ?? null;
+    });
+  }
+
+  function run(rawPayload: Record<string, unknown>, eventType = 'orders') {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const ctx = setup(merchantOrder, undefined, alerts);
+    routeFindFirst(ctx.orderFindFirst, [merchantOrder]);
+    (ctx.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'RECEIVED', eventType, rawPayload });
+    return { ...ctx, alerts, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+  }
+
+  it.each([
+    ['Đã gửi hàng kèm vận đơn', { id: 'unknown-999', status: 2, note: 'Order code: TUBU2026101446226', partner: { partner_name: 'GHN', extend_code: 'GHNSTRAY' } }],
+    ['Đã giao', { id: 'unknown-999', status: 3, note: 'Order code: TUBU2026101446226' }],
+    ['Đã huỷ', { id: 'unknown-999', status: 6, extension: { external_order_id: 'TUBU2026101446226' } }],
+    ['Đã hoàn', { id: 'unknown-999', status: 5, note: 'Order code: TUBU2026101446226' }],
+  ])('Pancake "%s" → không đổi trạng thái/vận đơn, không cộng điểm, không báo khách; sự kiện IGNORED kèm lý do, báo admin', async (_label, payload) => {
+    const { go, prisma, txUpdateMany, orderUpdate, loyalty, notifications, alerts } = run(payload);
+    await go();
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+    const saved = (prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data;
+    expect(saved).toMatchObject({ status: 'IGNORED', error: expect.stringContaining('gian hàng đối tác tự giao') });
+    expect(saved.processedAt).toBeInstanceOf(Date);
+    expect(attentionFlags(txUpdateMany)).toEqual([expect.stringContaining('#unknown-999')]);
+    expect(alerts.alert).toHaveBeenCalledWith(merchantOrder.code, expect.stringContaining('gian hàng đối tác tự giao'), 'OPS_PANCAKE_ALERT');
+  });
+
+  it('hoá đơn Pancake mang mã đơn đối tác → không ghi hoá đơn, không báo khách', async () => {
+    const { go, prisma, orderUpdate, notifications } = run(
+      { id: 'unknown-999', invoice_url: 'https://x/inv.pdf', note: 'Order code: TUBU2026101446226' },
+      'invoice.issued',
+    );
+    await go();
+    expect(orderUpdate).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+    expect((prisma.pancakeWebhookEvent.update as jest.Mock).mock.calls[0][0].data.status).toBe('IGNORED');
+  });
+
+  it('Pancake gửi lại nhiều lần cùng đơn lạ → chỉ báo admin một lần (cùng lý do không gắn lại)', async () => {
+    const { go, txUpdateMany, alerts } = run({ id: 'unknown-999', status: 2, note: 'Order code: TUBU2026101446226' });
+    txUpdateMany.mockResolvedValue({ count: 0 });
+    await go();
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+});
+
+describe('PancakeProcessor.process — sự kiện đã IGNORED (R4-SYNC-1)', () => {
+  it('sự kiện IGNORED không được claim lại (BullMQ retry, Pancake gửi lại, cron cứu)', async () => {
+    const { proc, prisma } = setup(null);
+    (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'IGNORED', eventType: 'orders', rawPayload: {} });
+    await proc.process({ data: { eventId: 'e1' } });
+    expect(prisma.pancakeWebhookEvent.updateMany).not.toHaveBeenCalled();
+    expect(prisma.pancakeWebhookEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('câu claim nguyên tử loại sự kiện IGNORED', async () => {
+    const { proc, prisma } = setup(null);
+    (prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'e1', status: 'RECEIVED', eventType: 'noop', rawPayload: {} });
+    await proc.process({ data: { eventId: 'e1' } });
+    const where = (prisma.pancakeWebhookEvent.updateMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.OR[0].status.notIn).toEqual(expect.arrayContaining(['PROCESSED', 'PROCESSING', 'IGNORED']));
+  });
+});
