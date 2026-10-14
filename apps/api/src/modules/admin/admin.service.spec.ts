@@ -852,20 +852,22 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     items: Record<string, unknown>[],
     debits: { refId: string }[] = [],
     viewer?: { role: string; staffPermissions?: string[] },
+    lateRefunds: { orderId: string }[] = [],
   ) => {
     const prisma = makePrisma({
       order: { findMany: jest.fn().mockResolvedValue(items.map(row)), count: jest.fn().mockResolvedValue(items.length) },
       dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(debits) },
+      orderCustomerRefund: { findMany: jest.fn().mockResolvedValue(lateRefunds) },
       $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
     });
     const res = (await mkAdmin(prisma).listOrders(
       1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, viewer,
     )) as unknown as {
-      data: { code: string; allowedTransitions: string[]; canConfirmPayment: boolean }[];
+      data: { code: string; allowedTransitions: string[]; canConfirmPayment: boolean; canRecordLatePayment: boolean }[];
     };
     return Object.fromEntries(res.data.map((o) => [o.code, o])) as Record<
       string,
-      { allowedTransitions: string[]; canConfirmPayment: boolean }
+      { allowedTransitions: string[]; canConfirmPayment: boolean; canRecordLatePayment: boolean }
     >;
   };
 
@@ -903,6 +905,16 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     expect(by.Z?.allowedTransitions).not.toContain('DELIVERED');
     expect(by.X).toMatchObject({ allowedTransitions: [], canConfirmPayment: false });
     expect(by.D).toMatchObject({ allowedTransitions: ['RETURNED'], canConfirmPayment: false });
+  });
+
+  it('nút "Ghi nhận tiền về muộn" tắt khi đơn đã có khoản tiền về muộn (webhook hay admin khác đã ghi) — R2-ADMINOPS-3', async () => {
+    const orders = [
+      { code: 'X1', status: 'CANCELLED' },
+      { code: 'X2', status: 'CANCELLED' },
+    ];
+    const by = await list(orders, [], undefined, [{ orderId: 'X2' }]);
+    expect(by.X1).toMatchObject({ canRecordLatePayment: true });
+    expect(by.X2).toMatchObject({ canRecordLatePayment: false });
   });
 
   it('đơn đại lý: công nợ giao được; trả trước chưa trả bị khoá giao; nút xác nhận đại lý ở panel riêng', async () => {
@@ -1064,8 +1076,10 @@ describe('AdminService.confirmOrderPayment', () => {
         findFirst: jest.fn().mockResolvedValue(order),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
       },
-      orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     const orderStatus = {
       markPaid: jest.fn().mockResolvedValue({ outcome, order: outcome === 'CLOSED' ? order : { ...order, paymentStatus: 'PAID' } }),
     } as unknown as OrderStatusService;
@@ -1120,11 +1134,23 @@ describe('AdminService.confirmOrderPayment', () => {
     expect(createMany.mock.calls[0][0].data[0]).toMatchObject({
       orderId: 'o1',
       kind: 'LATE_PAYMENT',
-      refKey: 'ADMIN:FT2627001',
+      refKey: 'ADMIN:manual',
       amount: 350000,
       method: 'MANUAL_TRANSFER',
       status: 'PENDING',
+      adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT2627001',
     });
+  });
+
+  it('đơn đã có khoản tiền về muộn (webhook Pancake ghi trước) → admin bấm không tạo khoản thứ hai (R2-ADMINOPS-3)', async () => {
+    const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock } }).orderCustomerRefund;
+    refunds.findFirst.mockResolvedValue({ id: 'r-pancake' });
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT-KHAC' });
+    expect(res).toMatchObject({ ok: true, latePayment: true });
+    expect(res.message).toContain('đã được ghi trước đó');
+    expect(refunds.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'LATE_PAYMENT', refKey: undefined } }));
+    expect(refunds.createMany).not.toHaveBeenCalled();
   });
 
   it('bấm lại cùng mã GD (khoản hoàn đã ghi) → báo đã ghi trước đó, không tạo khoản thứ hai', async () => {

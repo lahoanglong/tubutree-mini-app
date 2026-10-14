@@ -35,8 +35,11 @@ function setup(
   /** Tồn kho (hoàn kho khi huỷ) đi bằng SQL thô — xem catalog/variation-stock.ts. */
   const txExecuteRaw = jest.fn().mockResolvedValue(1);
   const historyCreate = jest.fn().mockResolvedValue({});
+  const orderCustomerRefund = { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null) };
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
+      orderCustomerRefund,
+      $queryRaw: jest.fn().mockResolvedValue([]),
       order: { updateMany: txUpdateMany },
       orderStatusHistory: { create: historyCreate },
       user: { update: txUserUpdate },
@@ -59,7 +62,7 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
-    orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    orderCustomerRefund,
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,

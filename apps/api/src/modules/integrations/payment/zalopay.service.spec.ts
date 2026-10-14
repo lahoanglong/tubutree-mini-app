@@ -34,9 +34,10 @@ function sign(rawData: string): string {
  * vẫn là đúng jest.fn() mà các test đã assert ở top-level (không tạo mock tx tách biệt).
  */
 function withTx<T extends object>(prismaLike: T): T {
-  (prismaLike as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) =>
-    cb(prismaLike),
-  );
+  const p = prismaLike as unknown as Record<string, unknown> & { orderCustomerRefund?: Record<string, unknown> };
+  p.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prismaLike));
+  p.$queryRaw ??= jest.fn().mockResolvedValue([{ '?column?': 1 }]);
+  if (p.orderCustomerRefund) p.orderCustomerRefund.findFirst ??= jest.fn().mockResolvedValue(null);
   return prismaLike;
 }
 
@@ -164,7 +165,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     const notify = jest.fn().mockResolvedValue(undefined);
     const createMany = jest.fn().mockResolvedValue({ count: createdCount });
     const dead = { ...order, status, paymentStatus };
-    const prisma = {
+    const prisma = withTx({
       order: {
         findFirst: jest.fn().mockResolvedValue(dead),
         findUnique: jest.fn().mockResolvedValue(dead),
@@ -174,7 +175,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       paymentAttempt: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
       orderCustomerRefund: { createMany },
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
     return { svc, updateMany, notify, createMany, prisma };
   }

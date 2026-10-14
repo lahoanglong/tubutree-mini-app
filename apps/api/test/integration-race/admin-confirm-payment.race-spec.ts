@@ -8,6 +8,7 @@ import type { AffiliateService } from '../../src/modules/affiliate/affiliate.ser
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { recordLatePaymentRefund } from '../../src/modules/orders/refund-queue';
 import { createOrder, createUser, summarize, warmPool } from './helpers';
 
 /**
@@ -195,5 +196,74 @@ describe('Admin confirm-payment race (real Postgres)', () => {
     expect(refunds[0]).toMatchObject({ kind: 'LATE_PAYMENT', amount: 300_000, status: 'PENDING', method: 'MANUAL_TRANSFER' });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
+  });
+  describe('tiền về muộn: mỗi lần chuyển chỉ thành MỘT khoản hoàn, dù ghi từ webhook Pancake hay admin (R2-ADMINOPS-3)', () => {
+    const lateRefunds = (orderId: string) => prisma.orderCustomerRefund.findMany({ where: { orderId, kind: 'LATE_PAYMENT' } });
+    const ctx = () => ({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } });
+    async function cancelledUnpaid(total = 300_000) {
+      const { order } = await bankTransferOrder(total);
+      return prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    }
+
+    it('webhook Pancake đã ghi khoản tiền về muộn → admin đối soát bấm "Ghi nhận tiền về muộn" không tạo khoản thứ hai, nút tắt', async () => {
+      const order = await cancelledUnpaid();
+      expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p77:300000' })).toBe(true);
+
+      const res = await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT2627009' });
+
+      expect(res).toMatchObject({ ok: true, latePayment: true });
+      expect(res.message).toContain('đã được ghi trước đó');
+      expect(await lateRefunds(order.id)).toHaveLength(1);
+      const listed = await admin.listOrders(1, 20, undefined, order.code);
+      expect(listed.data.find((o) => o.id === order.id)).toMatchObject({ canRecordLatePayment: false });
+    });
+
+    it('admin bấm lại với mã GD khác / viết khác / bỏ trống → vẫn đúng 1 khoản hoàn', async () => {
+      const order = await cancelledUnpaid();
+      const before = await admin.listOrders(1, 20, undefined, order.code);
+      expect(before.data.find((o) => o.id === order.id)).toMatchObject({ canRecordLatePayment: true });
+
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT1' });
+      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'ft1 ' });
+      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'FT2' });
+      await admin.confirmOrderPayment('admin-c', order.code);
+
+      const rows = await lateRefunds(order.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ amount: 300_000, adminNote: expect.stringContaining('FT1') });
+    });
+
+    it('2 admin (mã GD khác nhau) + webhook Pancake cùng lúc → đúng 1 khoản hoàn', async () => {
+      const orders = await Promise.all(Array.from({ length: 5 }, () => cancelledUnpaid(250_000)));
+      const results = await Promise.allSettled(
+        orders.flatMap((order, i) => [
+          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTA${i}` }),
+          admin.confirmOrderPayment('admin-b', order.code, { bankRef: `FTB${i}` }),
+          recordLatePaymentRefund(ctx(), order, { amount: 250_000, source: 'PANCAKE', refKey: `p${i}:250000` }),
+        ]),
+      );
+      expect(summarize(results).rejected).toHaveLength(0);
+      for (const order of orders) expect(await lateRefunds(order.id)).toHaveLength(1);
+    });
+
+    it('admin ghi tay trước, webhook Pancake báo cùng khoản tiền sau → không tạo khoản thứ hai, báo admin kiểm tra', async () => {
+      const order = await cancelledUnpaid();
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT3' });
+      notify.mockClear();
+
+      expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p88:300000' })).toBe(false);
+
+      expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p88:300000' })).toBe(false);
+
+      expect(await lateRefunds(order.id)).toHaveLength(1);
+      expect(notify.mock.calls.filter(([, code]) => code === 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+      const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      expect(after.pancakeAttention).toContain('admin đã ghi tay khoản tiền về muộn');
+      const adminAlerts = notify.mock.calls.filter(([, code]) => code === 'OPS_REFUND_ALERT');
+      expect(adminAlerts.length).toBeGreaterThan(0);
+      const perAdmin = new Map<string, number>();
+      for (const [uid] of adminAlerts) perAdmin.set(uid as string, (perAdmin.get(uid as string) ?? 0) + 1);
+      expect(Math.max(...perAdmin.values())).toBe(1);
+    });
   });
 });
