@@ -180,7 +180,10 @@ opsFee     = round(paid_i × consignmentFeePct)
 net        = paid_i − commission − opsFee            (shippingFee = cod = 0, không âm)
 ```
 
-  `paid_i` nằm sau một hàm (`consignmentLineBase`) để đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ.
+  `paid_i` nằm sau một hàm (`consignmentLineBase`) để đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ. Chủ dự án
+  đã chốt: mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của đối tác (đối tác chịu, Tubu không chịu). Ví Tubu là
+  phương thức thanh toán, không phải giảm giá: đơn trả bằng ví giữ nguyên `order.total`, nên không làm giảm `paid_i`. Công thức
+  đơn tự giao chưa đổi (còn chờ chủ dự án).
 
   Điều kiện một dòng hàng vào bảng kê (lọc trong SQL):
   - Đơn `fulfiller = TUBU`, `DELIVERED`, Tubu đã thu tiền: `paymentStatus = PAID` hoặc `paymentMethod = COD` (cùng luật doanh thu

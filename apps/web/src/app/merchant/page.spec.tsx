@@ -595,8 +595,9 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách');
     expect(root.textContent).toContain('phí sàn 10% − phí Tubu giao hộ 2% + 3.400đ mỗi đơn');
     expect(root.textContent).toContain('Phí giao hàng do Tubu Tree thu và chịu');
-    expect(root.textContent).toContain('mỗi đơn tính theo mức áp dụng lúc khách đặt');
+    expect(root.textContent).toContain('3.400đ mỗi đơn (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt)');
     expect(root.textContent).toContain('chỉ đơn Tubu Tree đã thu được tiền');
+    expect(root.textContent).toContain('Mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của bạn');
     expect(root.textContent).not.toContain('thoả thuận ký gửi');
     expect(root.textContent).not.toContain('Hàng Tubu giao hộ đã bán');
     expect(root.textContent).toContain('Chờ lập phiếu (3 khoản)');

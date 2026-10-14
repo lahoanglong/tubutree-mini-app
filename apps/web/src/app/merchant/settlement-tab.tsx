@@ -35,9 +35,10 @@ export function SettlementTab() {
       {terms && (
         <Notice>
           Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách, mỗi món là một khoản trên cùng phiếu đối soát. Thực nhận =
-          số tiền khách thực trả cho món (đã trừ phần mã giảm giá, Điểm Xanh chia theo giá trị món) − {consignmentFeesText(terms)}
-          (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt). Phí giao hàng do Tubu Tree thu và chịu, không tính vào
-          khoản của bạn. Món được đưa vào bảng kê sau {s.holdDays} ngày kể từ khi giao, chỉ đơn Tubu Tree đã thu được tiền (trả
+          số tiền khách thực trả cho món (đã trừ phần mã giảm giá, Điểm Xanh chia theo giá trị món) − {consignmentFeesText(terms)}{' '}
+          (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt). Mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền
+          của bạn; khách trả bằng Ví Tubu vẫn tính đủ giá trị món. Phí giao hàng do Tubu Tree thu và chịu, không tính vào khoản
+          của bạn. Món được đưa vào bảng kê sau {s.holdDays} ngày kể từ khi giao, chỉ đơn Tubu Tree đã thu được tiền (trả
           trước đã thanh toán hoặc COD); khách trả món đã đối soát thì kỳ sau có khoản trừ lại, hàng trả về kho Tubu Tree.
         </Notice>
       )}
