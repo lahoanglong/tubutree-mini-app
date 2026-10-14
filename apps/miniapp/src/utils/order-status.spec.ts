@@ -54,9 +54,11 @@ describe('orderStamp', () => {
 });
 
 describe('timelineStepsFor', () => {
-  it('COD không có bước chờ thanh toán; phương thức khác giữ đủ 5 bước', () => {
+  it('COD và Ví Tubu không có bước chờ thanh toán (R2-BUYERMINI-5); phương thức khác giữ đủ 5 bước', () => {
     expect(timelineStepsFor('COD')).toEqual(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED']);
+    expect(timelineStepsFor('WALLET')).toEqual(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED']);
     expect(timelineStepsFor('BANK_TRANSFER')).toEqual([...TIMELINE_STEPS]);
+    expect(timelineStepsFor('ZALOPAY')).toEqual([...TIMELINE_STEPS]);
     expect(timelineStepsFor(undefined)).toEqual([...TIMELINE_STEPS]);
   });
   it('timelineIndex tính theo danh sách bước đã chọn; trạng thái ngoài hành trình → -1', () => {

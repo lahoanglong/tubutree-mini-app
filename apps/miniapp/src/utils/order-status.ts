@@ -40,9 +40,13 @@ export const TIMELINE_STEPS = [
   'DELIVERED',
 ] as const;
 
-/** COD không có bước chờ thanh toán (khách trả khi nhận hàng) nên bỏ bước đó khỏi hành trình. */
+/** Đơn không bao giờ chờ thanh toán: COD (trả khi nhận hàng) và Ví Tubu (trừ ví ngay lúc đặt). */
+const NO_PAYMENT_WAIT = new Set(['COD', 'WALLET']);
+
 export function timelineStepsFor(paymentMethod?: string | null): readonly string[] {
-  return paymentMethod === 'COD' ? TIMELINE_STEPS.filter((s) => s !== 'PENDING_PAYMENT') : TIMELINE_STEPS;
+  return paymentMethod && NO_PAYMENT_WAIT.has(paymentMethod)
+    ? TIMELINE_STEPS.filter((s) => s !== 'PENDING_PAYMENT')
+    : TIMELINE_STEPS;
 }
 
 /** Vị trí hiện tại trên timeline; -1 nếu trạng thái nằm ngoài hành trình chuẩn. */
