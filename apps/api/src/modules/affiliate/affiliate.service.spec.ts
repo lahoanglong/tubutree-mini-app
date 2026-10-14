@@ -341,6 +341,18 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(data.items.create[0]).toMatchObject({ variationId: 'v1', unitPrice: 100000, quantity: 2, total: 200000 });
   });
 
+  it('COD quá hạn mức 5.000.000đ/đơn → từ chối, không giữ kho, không tạo đơn; chuyển khoản vẫn đặt được', async () => {
+    const big = { variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 2600000, name: 'Bộ lớn', product: { name: 'Bộ lớn', isActive: true, approvalStatus: 'APPROVED' } }] };
+    const cod = build(big);
+    await expect(cod.svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow(/COD.*5\.000\.000đ.*5\.200\.000đ/);
+    expect(cod.executeRaw).not.toHaveBeenCalled();
+    expect(cod.orderCreate).not.toHaveBeenCalled();
+
+    const bank = build(big);
+    await bank.svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);
+    expect(bank.orderCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('BANK_TRANSFER → đơn PENDING_PAYMENT', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);

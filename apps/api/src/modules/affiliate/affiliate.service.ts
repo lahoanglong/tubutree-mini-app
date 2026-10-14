@@ -9,6 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
+import { COD_MAX_PER_ORDER } from '../checkout/checkout-split';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
@@ -589,6 +590,11 @@ export class AffiliateService {
     }
 
     const { lines, goods, shippingFee, total } = await this.priceCustomerOrder(ctvId, dto.items);
+    if (dto.paymentMethod === 'COD' && total > COD_MAX_PER_ORDER) {
+      throw new BadRequestException(
+        `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${COD_MAX_PER_ORDER.toLocaleString('vi-VN')}đ, đơn này là ${total.toLocaleString('vi-VN')}đ. Vui lòng chọn chuyển khoản.`,
+      );
+    }
 
     // Gian hàng của CTV (nếu có) → gắn slug để analytics theo gian hàng.
     const store = await this.prisma.storefront.findFirst({
