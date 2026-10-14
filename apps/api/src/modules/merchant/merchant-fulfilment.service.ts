@@ -655,6 +655,70 @@ export class MerchantFulfilmentService {
     return at;
   }
 
+  /**
+   * Hàng "Tubu giao hộ" của gian hàng đã bán (kho Tubu giao, Tubu đã thu tiền, biến thể liên kết lúc đặt) mà KHÔNG tự vào bảng
+   * kê: đơn đặt trước mốc bắt đầu đối soát tự động, hoặc biến thể nhận lại (takeover) chưa được admin xác nhận là hàng ký gửi lúc
+   * đặt. Chỉ để xem — đối tác và admin đối chiếu, xử lý ngoài phiếu. Mới nhất trước, tối đa 200 món (`total` = số món thật).
+   */
+  async consignmentExcluded(storefrontId: string, db: Db = this.prisma) {
+    const settleFrom = await this.consignmentSettleFrom(db);
+    const store = Prisma.sql`${storefrontId}`;
+    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; total: number }[]>`
+      SELECT oi."id" AS "orderItemId", o."id" AS "orderId",
+             ${settleFrom ? Prisma.sql`(o."createdAt" < ${settleFrom})` : Prisma.sql`false`} AS "beforeSettleFrom",
+             COUNT(*) OVER ()::int AS "total"
+        FROM "order_items" oi
+        JOIN "orders" o ON o."id" = oi."orderId"
+       WHERE ${CONSIGNMENT_SOLD_SQL}
+         AND ${consignmentLinkedSql(store, false)}
+         AND ${CONSIGNMENT_NO_SALE_SQL}
+         AND NOT (${settleFrom ? Prisma.sql`o."createdAt" >= ${settleFrom} AND ` : Prisma.empty}${consignmentLinkedSql(store, true)})
+       ORDER BY o."createdAt" DESC, oi."id"
+       LIMIT 200`;
+    const orders = rows.length
+      ? await db.order.findMany({
+          where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
+          select: {
+            id: true,
+            code: true,
+            total: true,
+            shippingFee: true,
+            createdAt: true,
+            deliveredAt: true,
+            items: { select: { id: true, productName: true, variationName: true, quantity: true, total: true, paidTotal: true } },
+          },
+        })
+      : [];
+    const byId = new Map(orders.map((o) => [o.id, { order: o, base: merchantLineBase(o) }]));
+    const lines = rows.flatMap((r) => {
+      const found = byId.get(r.orderId);
+      const idx = found?.order.items.findIndex((i) => i.id === r.orderItemId) ?? -1;
+      if (!found || idx < 0) return [];
+      const it = found.order.items[idx]!;
+      return [
+        {
+          orderId: found.order.id,
+          orderCode: found.order.code,
+          orderItemId: it.id,
+          productName: it.productName,
+          variationName: it.variationName,
+          quantity: it.quantity,
+          goodsAmount: found.base[idx] ?? 0,
+          createdAt: found.order.createdAt,
+          deliveredAt: found.order.deliveredAt,
+          reason: r.beforeSettleFrom ? ('BEFORE_SETTLE_FROM' as const) : ('TAKEOVER_UNCONFIRMED' as const),
+        },
+      ];
+    });
+    return { settleFrom, total: rows[0]?.total ?? 0, lines };
+  }
+
+  /** Bảng kê kèm danh sách hàng giao hộ chưa vào đối soát tự động — màn admin xem trước khi lập phiếu. */
+  async adminStatement(storefrontId: string) {
+    const [statement, consignmentExcluded] = await Promise.all([this.statementFor(storefrontId), this.consignmentExcluded(storefrontId)]);
+    return { ...statement, consignmentExcluded };
+  }
+
   /** Phí sàn (cùng mức đơn tự giao) và phí Tubu giao hộ hiện tại của gian hàng; phí sàn null = merchant.commission_pct. */
   async consignmentTerms(storefrontId: string, db: Db = this.prisma, defaultCommissionPct?: number): Promise<ConsignmentTerms> {
     const [sf, defaultPct] = await Promise.all([
@@ -816,7 +880,7 @@ export class MerchantFulfilmentService {
 
   async myStatement(userId: string) {
     const store = await this.merchantStore(userId);
-    const [statement, payouts, dueDays, tubuAccount] = await Promise.all([
+    const [statement, payouts, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
       this.statementFor(store.id),
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: { not: 'CANCELLED' } },
@@ -826,12 +890,14 @@ export class MerchantFulfilmentService {
       }),
       this.negativeDueDays(),
       this.tubuAccount(),
+      this.consignmentExcluded(store.id),
     ]);
     return {
       ...statement,
       payouts: payouts.map((p) => payoutView(withLineItems(p), dueDays)),
       negativeDueDays: dueDays,
       tubuAccount,
+      consignmentExcluded,
     };
   }
 
@@ -1236,19 +1302,33 @@ function overdueWhere(sla: SlaConfig, now: Date): Prisma.OrderWhereInput {
 /** Giá trị mốc bắt đầu sai đã cảnh báo — mỗi giá trị sai chỉ ghi log một lần. */
 const warnedSettleFrom = new Set<string>();
 
+/** Đơn kho Tubu đã giao mà Tubu đã thu tiền (PAID hoặc COD — cùng luật doanh thu admin). */
+const CONSIGNMENT_SOLD_SQL = Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 'DELIVERED'
+    AND (o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')`;
+
+/** Dòng hàng `oi` chưa có SALE. */
+const CONSIGNMENT_NO_SALE_SQL = Prisma.sql`NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderItemId" = oi."id" AND s."kind" = 'SALE')`;
+
 /**
- * Điều kiện SQL cho dòng hàng `oi` của đơn `o` đang chờ đối soát "Tubu giao hộ" của gian hàng `store`: đơn kho Tubu đã giao,
- * Tubu đã thu tiền (PAID hoặc COD — cùng luật doanh thu admin), đặt từ mốc bắt đầu, biến thể liên kết với gian hàng lúc đặt
- * (liên kết takeover: từ lúc admin xác nhận hàng ký gửi), chưa có SALE.
+ * Biến thể của dòng `oi` liên kết với gian hàng `store` lúc đặt đơn `o` ([linkedAt, unlinkedAt)). `confirmedOnly`: liên kết
+ * takeover chỉ tính đơn đặt từ lúc admin xác nhận hàng ký gửi.
  */
-function consignmentPendingSql(store: Prisma.Sql, settleFrom: Date | null): Prisma.Sql {
-  return Prisma.sql`o."fulfiller" = 'TUBU' AND o."status" = 'DELIVERED'
-    AND (o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')
-    ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
-    AND EXISTS (
+function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma.Sql {
+  return Prisma.sql`EXISTS (
       SELECT 1 FROM "merchant_pancake_links" l
        WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
          AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
-         AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt")))
-    AND NOT EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderItemId" = oi."id" AND s."kind" = 'SALE')`;
+         ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
+}
+
+/**
+ * Điều kiện SQL cho dòng hàng `oi` của đơn `o` đang chờ đối soát "Tubu giao hộ" của gian hàng `store`: đơn kho Tubu đã giao,
+ * Tubu đã thu tiền, đặt từ mốc bắt đầu (`settleFrom`, null = không giới hạn), biến thể liên kết với gian hàng lúc đặt (liên kết
+ * takeover: từ lúc admin xác nhận hàng ký gửi), chưa có SALE.
+ */
+function consignmentPendingSql(store: Prisma.Sql, settleFrom: Date | null): Prisma.Sql {
+  return Prisma.sql`${CONSIGNMENT_SOLD_SQL}
+    ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
+    AND ${consignmentLinkedSql(store, true)}
+    AND ${CONSIGNMENT_NO_SALE_SQL}`;
 }

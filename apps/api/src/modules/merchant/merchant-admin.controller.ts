@@ -43,7 +43,7 @@ export class MerchantAdminController {
 
   @Get('statements/:storefrontId')
   statement(@Param('storefrontId') storefrontId: string) {
-    return this.fulfilment.statementFor(storefrontId);
+    return this.fulfilment.adminStatement(storefrontId);
   }
 
   @Patch('stores/:storefrontId/terms')
