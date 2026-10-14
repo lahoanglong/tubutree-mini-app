@@ -125,12 +125,14 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     getOpsAccess: async () => mocks.access,
     getOpsHealth: async () => ({
       generatedAt: '2026-10-14T03:00:00.000Z',
-      thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6 },
+      thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6, gomdonBacklogMinutes: 15 },
       pancake: {
-        configured: true, lastPushOkAt: null, lastWebhookAt: null, lastWebhookProcessedAt: null, webhookFailed24h: 0, webhookStuck: 0,
-        unsynced: 0, stuck: 0, stuckOrders: [], attention: 0, catalog: { lastOkAt: null, lastErrorAt: null, lastError: null, detail: null },
+        configured: true, lastPushOkAt: null, lastWebhookAt: null, lastWebhookProcessedAt: null, webhookFailed24h: 0, webhookFailedOpen: 0, webhookStuck: 0, failedEvents: [],
+        unsynced: 0, stuck: 0, stuckOrders: [], attention: 0, attentionOrders: [], catalog: { lastOkAt: null, lastErrorAt: null, lastError: null, detail: null },
       },
-      gomdon: { configured: false, connection: null, credentialsRejected: false, lastWebhookAt: null, webhookFailed24h: 0, openAlerts: 0, attention: 0 },
+      gomdon: {
+        configured: false, connection: null, credentialsRejected: false, lastWebhookAt: null, webhookFailed24h: 0, webhookFailedOpen: 0, failedEvents: [],
+        openAlerts: 0, alerts: [], attention: 0, backlog: 0, backlogOrders: [] },
       queues: { ok: true, items: [] },
       problems: [],
     }),
@@ -675,7 +677,7 @@ describe('admin/page — tab Người dùng', () => {
     const table = container.querySelector('table')!;
     expect(table.parentElement!.className).toContain('overflow-x-auto');
     const cells = [...table.querySelectorAll('tbody td')];
-    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', '01/09/2026', 'Khoá']);
+    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'Khách hàng', '12', '01/09/2026', 'Khoá']);
     for (const c of cells) expect(c.className).toContain('px-3');
   });
 

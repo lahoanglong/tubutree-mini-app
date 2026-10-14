@@ -14,6 +14,7 @@ import {
   orderPaymentStatusShort,
   paymentStatusLabel,
   safeHttpUrl,
+  shippingStatusLabel,
 } from './order-view';
 
 describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
@@ -142,5 +143,15 @@ describe('hành trình đơn và mua lại', () => {
       { status: 'DELIVERED' },
       { group: 'closed' },
     ]);
+  });
+});
+
+describe('shippingStatusLabel — trạng thái vận chuyển hãng gửi bằng mã tiếng Anh (R2-ADMINOPS-8)', () => {
+  it('mã thường gặp ra tiếng Việt, chữ đã là tiếng Việt giữ nguyên, rỗng ra rỗng', () => {
+    expect(shippingStatusLabel('delivering')).toBe('Đang giao');
+    expect(shippingStatusLabel('DELIVERED')).toBe('Đã giao');
+    expect(shippingStatusLabel('returning')).toBe('Đang hoàn');
+    expect(shippingStatusLabel('Đã lấy hàng')).toBe('Đã lấy hàng');
+    expect(shippingStatusLabel(null)).toBe('');
   });
 });

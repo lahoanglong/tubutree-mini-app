@@ -341,11 +341,9 @@ export function ReturnRow({
           {r.status === 'APPROVED' && r.refundAmount != null && (
             <div className="text-stone-700">
               {paidMoney > 0
-                ? `Đã hoàn ${formatVnd(paidMoney)} (tiền hàng ${formatVnd(r.refundAmount)} + phí ship ${formatVnd(r.shippingRefund ?? 0)}) ${
-                    r.refundMethod === 'BANK'
-                      ? 'qua chuyển khoản (xem tab "Hoàn tiền khách")'
-                      : 'về Ví Tubu'
-                  }`
+                ? r.refundMethod === 'BANK'
+                  ? `Đã tạo lệnh hoàn ${formatVnd(paidMoney)} (tiền hàng ${formatVnd(r.refundAmount)} + phí ship ${formatVnd(r.shippingRefund ?? 0)}) qua chuyển khoản — chờ chuyển ở tab "Hoàn tiền khách".`
+                  : `Đã hoàn ${formatVnd(paidMoney)} (tiền hàng ${formatVnd(r.refundAmount)} + phí ship ${formatVnd(r.shippingRefund ?? 0)}) về Ví Tubu`
                 : 'Không có khoản tiền cần hoàn.'}
             </div>
           )}
