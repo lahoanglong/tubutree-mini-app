@@ -155,6 +155,50 @@ describe('OrderReturnsService.request — chọn dòng/số lượng (BUYERMINI-
   });
 });
 
+describe('OrderReturnsService.estimate — khách thấy số tiền dự kiến hoàn trước khi gửi (R2-BUYERMINI-7)', () => {
+  const order = () =>
+    deliveredOrder({ total: 320_000, shippingFee: 20_000, pointsUsed: 0, pointsUsedConverted: 0, pointsEarned: 30 });
+
+  it('trả một phần, lý do không phải lỗi shop: hoàn phần tiền hàng theo tỉ lệ, không hoàn phí ship', async () => {
+    const { svc, create } = makeService(order());
+    const r = await svc.estimate('u1', 'TUBU1', { reasonCode: 'OTHER', items: [{ orderItemId: 'a', quantity: 1 }] });
+    expect(r).toMatchObject({ goods: 90_000, shipping: 0, refund: 90_000, isFull: false, moneyRefundable: true });
+    expect(r.lines).toEqual([{ orderItemId: 'a', quantity: 1, refundAmount: 90_000 }]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lỗi do shop: hoàn cả phí ship; chưa chọn lý do: chưa tính phí ship', async () => {
+    const { svc } = makeService(order());
+    await expect(svc.estimate('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', items: [{ orderItemId: 'a', quantity: 1 }] })).resolves.toMatchObject({
+      shipping: 20_000,
+      refund: 110_000,
+    });
+    await expect(svc.estimate('u1', 'TUBU1', { items: [{ orderItemId: 'a', quantity: 1 }] })).resolves.toMatchObject({ refund: 90_000 });
+  });
+
+  it('trừ phần đã duyệt trả trước đó; trả nốt toàn bộ thì hoàn cả phí ship', async () => {
+    const { svc } = makeService(order(), {
+      approved: [{ refundAmount: 0, shippingRefund: 0, pointsRefunded: 0, convertedPointsRefunded: 0, pointsReversed: 0, commissionReversed: 0, receivedAt: null, items: [{ orderItemId: 'a', quantity: 2 }] }],
+    });
+    const r = await svc.estimate('u1', 'TUBU1', { reasonCode: 'OTHER', items: [{ orderItemId: 'a', quantity: 1 }, { orderItemId: 'b', quantity: 1 }] });
+    expect(r).toMatchObject({ isFull: true, goods: 120_000, shipping: 20_000, refund: 140_000 });
+  });
+
+  it('đơn của người khác → 404; vượt số còn lại → 400', async () => {
+    const { svc } = makeService(order());
+    await expect(svc.estimate('u2', 'TUBU1', { items: [{ orderItemId: 'a', quantity: 1 }] })).rejects.toThrow('Không tìm thấy đơn hàng.');
+    await expect(svc.estimate('u1', 'TUBU1', { items: [{ orderItemId: 'a', quantity: 4 }] })).rejects.toThrow('vượt số còn lại');
+  });
+
+  it('đơn không thu tiền (Xu) → không có tiền hoàn', async () => {
+    const { svc } = makeService(deliveredOrder({ total: 320_000, shippingFee: 20_000, pointsUsed: 0, pointsUsedConverted: 0, pointsEarned: 0, paymentMethod: 'XU' }));
+    await expect(svc.estimate('u1', 'TUBU1', { items: [{ orderItemId: 'a', quantity: 1 }] })).resolves.toMatchObject({
+      moneyRefundable: false,
+      refund: 0,
+    });
+  });
+});
+
 describe('OrderReturnsService.request — hạn đổi/trả tính từ mốc giao THẬT (deliveredAt), không phải updatedAt', () => {
   it('giao 10 ngày trước, webhook vừa ghi đơn (updatedAt = hôm nay) → QUÁ HẠN 7 ngày', async () => {
     const { svc, create } = makeService(deliveredOrder({ deliveredAt: new Date(Date.now() - 10 * DAY) }));

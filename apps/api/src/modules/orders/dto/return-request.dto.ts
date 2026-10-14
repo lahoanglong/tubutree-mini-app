@@ -40,6 +40,17 @@ export class ReturnLineDto {
   @IsInt() @Min(1) @Max(9999) quantity!: number;
 }
 
+/** Body của POST /orders/:code/return-estimate: dòng + số lượng định trả và lý do (quyết định có hoàn phí ship). */
+export class ReturnEstimateDto {
+  @IsOptional() @IsIn(RETURN_REASON_CODES) reasonCode?: ReturnReasonCode;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ReturnLineDto)
+  items!: ReturnLineDto[];
+}
+
 export class ReturnRequestDto extends RefundDestinationDto {
   /** Lý do chọn sẵn; null = app bản cũ (chỉ có ô mô tả). */
   @IsOptional() @IsIn(RETURN_REASON_CODES) reasonCode?: ReturnReasonCode;
