@@ -42,8 +42,9 @@ export function pctInputToFraction(v: string): number | null {
 }
 
 /**
- * "Đơn đối tác tự giao": admin theo dõi gian hàng tự giao (đơn đang xử lý, quá hạn SLA), lập phiếu đối soát từ bảng kê, đánh
- * dấu đã chuyển (kèm mã giao dịch) hoặc huỷ phiếu chưa chuyển (docs/2026-10-14-merchant-fulfilment-design.md mục 7, 8).
+ * "Đơn đối tác & đối soát": admin theo dõi gian hàng tự giao (đơn đang xử lý, quá hạn SLA), lập phiếu đối soát từ bảng kê (cả
+ * hàng Tubu giao hộ), đánh dấu đã chuyển (kèm mã giao dịch) hoặc huỷ phiếu chưa chuyển, sửa phí sàn/phí giao hộ của gian hàng
+ * (docs/2026-10-14-merchant-fulfilment-design.md mục 7, 8).
  */
 export function MerchantFulfilmentTab() {
   const qc = useQueryClient();
@@ -57,12 +58,17 @@ export function MerchantFulfilmentTab() {
   };
   const onError = (e: unknown) => setError(e instanceof Error ? e.message : 'Không thực hiện được.');
   const createMut = useMutation({ mutationFn: (storefrontId: string) => createAdminMerchantPayout(storefrontId), onSuccess: refresh, onError });
+  const [panel, setPanel] = useState<{ storefrontId: string; kind: 'lines' | 'fees' } | null>(null);
+  const toggle = (storefrontId: string, kind: 'lines' | 'fees') =>
+    setPanel((cur) => (cur?.storefrontId === storefrontId && cur.kind === kind ? null : { storefrontId, kind }));
 
   const o = overviewQ.data;
+  const panelStore = panel ? o?.stores.find((s) => s.storefrontId === panel.storefrontId) : undefined;
+  const defaultPct = o?.defaultCommissionPct ?? 0.15;
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-stone-900">Đơn đối tác tự giao</h2>
+        <h2 className="text-base font-semibold text-stone-900">Đơn đối tác & đối soát</h2>
         <button type="button" onClick={refresh} className={BTN_XS_SECONDARY}>
           Làm mới
         </button>
@@ -103,19 +109,40 @@ export function MerchantFulfilmentTab() {
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {o.stores.map((s) => (
-                    <StoreRows
+                    <StoreRow
                       key={s.storefrontId}
                       store={s}
-                      defaultPct={o.defaultCommissionPct ?? 0.15}
+                      defaultPct={defaultPct}
                       creating={createMut.isPending}
+                      open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
                       onCreate={() => createMut.mutate(s.storefrontId)}
-                      onSaved={refresh}
-                      onError={onError}
+                      onToggle={(kind) => toggle(s.storefrontId, kind)}
                     />
                   ))}
                 </tbody>
               </table>
             </ScrollRegion>
+          )}
+          {panel && panelStore && (
+            <div className="space-y-2 rounded-card border border-stone-200 bg-stone-50 p-3 text-xs">
+              <h4 className="font-semibold text-stone-900">
+                {panel.kind === 'lines' ? `Khoản chờ lập phiếu · ${panelStore.title}` : `Phí của ${panelStore.title}`}
+              </h4>
+              {panel.kind === 'lines' ? (
+                <StatementLines storefrontId={panelStore.storefrontId} title={panelStore.title} />
+              ) : (
+                <StoreTermsForm
+                  key={panelStore.storefrontId}
+                  store={panelStore}
+                  defaultPct={defaultPct}
+                  onSaved={() => {
+                    setPanel(null);
+                    refresh();
+                  }}
+                  onError={onError}
+                />
+              )}
+            </div>
           )}
         </section>
       )}
@@ -156,72 +183,49 @@ export function MerchantFulfilmentTab() {
   );
 }
 
-function StoreRows({
+function StoreRow({
   store: s,
   defaultPct,
   creating,
+  open,
   onCreate,
-  onSaved,
-  onError,
+  onToggle,
 }: {
   store: OverviewStore;
   defaultPct: number;
   creating: boolean;
+  open: 'lines' | 'fees' | null;
   onCreate: () => void;
-  onSaved: () => void;
-  onError: (e: unknown) => void;
+  onToggle: (kind: 'lines' | 'fees') => void;
 }) {
-  const [open, setOpen] = useState<'lines' | 'fees' | null>(null);
-  const toggle = (k: 'lines' | 'fees') => setOpen((cur) => (cur === k ? null : k));
   const consignment = s.consignmentLines ?? 0;
   return (
-    <>
-      <tr>
-        <td className="px-3 py-2">
-          <div className="font-medium text-stone-900">{s.title}</div>
-          <div className="text-stone-500">{[s.owner?.fullName, s.owner?.phone].filter(Boolean).join(' · ')}</div>
-        </td>
-        <td className="px-3 py-2 text-right">{s.activeOrders}</td>
-        <td className={`px-3 py-2 text-right ${s.overdueOrders > 0 ? 'font-semibold text-danger-fg' : ''}`}>{s.overdueOrders}</td>
-        <td className="px-3 py-2 text-right">
-          {s.settleableLines > 0 ? `${s.settleableLines} khoản · ${signed(s.settleableAmount)}` : '—'}
-          {consignment > 0 && <div className="text-stone-500">trong đó {consignment} khoản Tubu giao hộ</div>}
-        </td>
-        <td className="px-3 py-2 text-stone-600">{storeFeesText(s, defaultPct)}</td>
-        <td className="px-3 py-2">
-          <div className="flex flex-wrap justify-end gap-1">
-            <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
-              Lập phiếu đối soát
-            </button>
-            <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => toggle('lines')} className={BTN_XS_SECONDARY}>
-              Xem khoản
-            </button>
-            <button type="button" aria-expanded={open === 'fees'} onClick={() => toggle('fees')} className={BTN_XS_SECONDARY}>
-              Sửa phí
-            </button>
-          </div>
-        </td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={6} className="bg-stone-50 px-3 py-3">
-            {open === 'lines' ? (
-              <StatementLines storefrontId={s.storefrontId} title={s.title} />
-            ) : (
-              <StoreTermsForm
-                store={s}
-                defaultPct={defaultPct}
-                onSaved={() => {
-                  setOpen(null);
-                  onSaved();
-                }}
-                onError={onError}
-              />
-            )}
-          </td>
-        </tr>
-      )}
-    </>
+    <tr>
+      <td className="px-3 py-2">
+        <div className="font-medium text-stone-900">{s.title}</div>
+        <div className="text-stone-500">{[s.owner?.fullName, s.owner?.phone].filter(Boolean).join(' · ')}</div>
+      </td>
+      <td className="px-3 py-2 text-right">{s.activeOrders}</td>
+      <td className={`px-3 py-2 text-right ${s.overdueOrders > 0 ? 'font-semibold text-danger-fg' : ''}`}>{s.overdueOrders}</td>
+      <td className="px-3 py-2 text-right">
+        {s.settleableLines > 0 ? `${s.settleableLines} khoản · ${signed(s.settleableAmount)}` : '—'}
+        {consignment > 0 && <div className="text-stone-500">trong đó {consignment} khoản Tubu giao hộ</div>}
+      </td>
+      <td className="px-3 py-2 text-stone-600">{storeFeesText(s, defaultPct)}</td>
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap justify-end gap-1">
+          <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
+            Lập phiếu đối soát
+          </button>
+          <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => onToggle('lines')} className={BTN_XS_SECONDARY}>
+            Xem khoản
+          </button>
+          <button type="button" aria-expanded={open === 'fees'} onClick={() => onToggle('fees')} className={BTN_XS_SECONDARY}>
+            Sửa phí
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
