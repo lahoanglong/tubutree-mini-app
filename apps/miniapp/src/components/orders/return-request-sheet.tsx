@@ -15,7 +15,6 @@ import { haptic } from '../../utils/haptic';
 import {
   EMPTY_BANK,
   RETURN_REASONS,
-  bankDetailsError,
   canRefundToBank,
   destinationBody,
   remainingByLine,
@@ -208,7 +207,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
 
         {showsMoney &&
           (bankAllowed ? (
-            <RefundDestinationPicker method={method} onMethod={setMethod} bank={bank} onBank={setBank} bankError={touched && method === 'BANK' ? bankDetailsError(bank) : null} />
+            <RefundDestinationPicker method={method} onMethod={setMethod} bank={bank} onBank={setBank} showBankErrors={touched} />
           ) : (
             <Text variant="caption" tone="secondary" as="div">
               Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.

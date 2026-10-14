@@ -43,13 +43,19 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
   return 'none';
 }
 
-/** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts) để báo lỗi ngay trên form. */
+/** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts), lỗi theo từng ô để hiện dưới đúng ô sai. */
+export function bankFieldErrors(b: RefundBankInput): Partial<Record<keyof RefundBankInput, string>> {
+  const errors: Partial<Record<keyof RefundBankInput, string>> = {};
+  if (b.bankName.trim().length < 2) errors.bankName = 'Vui lòng nhập tên ngân hàng.';
+  if (!/^\d{6,24}$/.test(b.accountNumber.replace(/[\s.-]/g, ''))) errors.accountNumber = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
+  if (b.accountName.trim().length < 2) errors.accountName = 'Vui lòng nhập tên chủ tài khoản.';
+  return errors;
+}
+
+/** Lỗi đầu tiên của tài khoản nhận hoàn tiền, null khi hợp lệ. */
 export function bankDetailsError(b: RefundBankInput): string | null {
-  if (b.bankName.trim().length < 2) return 'Vui lòng nhập tên ngân hàng.';
-  const digits = b.accountNumber.replace(/[\s.-]/g, '');
-  if (!/^\d{6,24}$/.test(digits)) return 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
-  if (b.accountName.trim().length < 2) return 'Vui lòng nhập tên chủ tài khoản.';
-  return null;
+  const e = bankFieldErrors(b);
+  return e.bankName ?? e.accountNumber ?? e.accountName ?? null;
 }
 
 /** Body nơi nhận tiền hoàn gửi API: chọn Ví thì không gửi tài khoản. */

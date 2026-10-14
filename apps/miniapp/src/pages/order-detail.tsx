@@ -796,7 +796,7 @@ export default function OrderDetailPage() {
                 onMethod={setCancelMethod}
                 bank={cancelBank}
                 onBank={setCancelBank}
-                bankError={cancelTouched ? cancelBankError : null}
+                showBankErrors={cancelTouched}
                 amountLabel={formatVnd(o.total)}
               />
             </Box>

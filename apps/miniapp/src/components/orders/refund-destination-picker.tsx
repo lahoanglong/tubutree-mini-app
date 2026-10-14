@@ -6,21 +6,22 @@ import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 import { rowKeyboardProps } from '../ui/row-keyboard';
 import { haptic } from '../../utils/haptic';
-import type { RefundBankInput, RefundMethodChoice } from '../../utils/refund-rules';
+import { bankFieldErrors, type RefundBankInput, type RefundMethodChoice } from '../../utils/refund-rules';
 
 interface Props {
   method: RefundMethodChoice;
   onMethod: (m: RefundMethodChoice) => void;
   bank: RefundBankInput;
   onBank: (b: RefundBankInput) => void;
-  /** Lỗi tài khoản (bankDetailsError) — chỉ hiện khi khách đã bấm gửi. */
-  bankError?: string | null;
+  /** Khách đã bấm gửi: hiện lỗi tài khoản dưới từng ô sai. */
+  showBankErrors?: boolean;
   /** Số tiền dự kiến hoàn, để câu chọn nói rõ "nhận 114.000đ". */
   amountLabel?: string;
 }
 
 /** Khách chọn nơi nhận tiền hoàn (D2): Ví Tubu cộng ngay, hoặc tài khoản ngân hàng (admin chuyển 1-3 ngày, miễn phí). */
-export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankError, amountLabel }: Props) {
+export function RefundDestinationPicker({ method, onMethod, bank, onBank, showBankErrors, amountLabel }: Props) {
+  const errors = showBankErrors ? bankFieldErrors(bank) : {};
   return (
     <div role="radiogroup" aria-label="Nơi nhận tiền hoàn" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
@@ -42,13 +43,13 @@ export function RefundDestinationPicker({ method, onMethod, bank, onBank, bankEr
       />
       {method === 'BANK' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
-          <Field label="Tên ngân hàng">
+          <Field label="Tên ngân hàng" error={errors.bankName}>
             <Input placeholder="VD: Techcombank" maxLength={120} value={bank.bankName} onChange={(e) => onBank({ ...bank, bankName: e.target.value })} />
           </Field>
-          <Field label="Số tài khoản">
+          <Field label="Số tài khoản" error={errors.accountNumber}>
             <Input inputMode="numeric" maxLength={40} value={bank.accountNumber} onChange={(e) => onBank({ ...bank, accountNumber: e.target.value })} />
           </Field>
-          <Field label="Chủ tài khoản" error={bankError ?? undefined}>
+          <Field label="Chủ tài khoản" error={errors.accountName}>
             <Input placeholder="Tên in trên thẻ" maxLength={120} value={bank.accountName} onChange={(e) => onBank({ ...bank, accountName: e.target.value })} />
           </Field>
         </div>
