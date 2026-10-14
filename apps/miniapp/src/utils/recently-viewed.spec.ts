@@ -13,7 +13,7 @@ function memoryStorage(initial: Record<string, string> = {}): StorageLike & { da
     removeItem: (k) => { delete data[k]; },
   };
 }
-const item = (slug: string) => ({ slug, name: `SP ${slug}`, thumbnail: null, price: 50000 });
+const item = (slug: string) => ({ slug, name: `SP ${slug}`, thumbnail: null });
 
 describe('recently-viewed (spec 5b.4)', () => {
   it('chưa có gì → []', () => {
@@ -30,18 +30,30 @@ describe('recently-viewed (spec 5b.4)', () => {
     expect(JSON.parse(s.data[RECENTLY_VIEWED_KEY]!)).toEqual(r);
   });
 
-  it('xem lại cùng slug cập nhật tên/giá/ảnh theo lần xem mới nhất', () => {
+  it('xem lại cùng slug cập nhật tên/ảnh theo lần xem mới nhất', () => {
     const s = memoryStorage();
-    recordRecentlyViewed({ slug: 'a', name: 'Tên cũ', thumbnail: null, price: 1000 }, 1, s);
-    const r = recordRecentlyViewed({ slug: 'a', name: 'Tên mới', thumbnail: 'https://x/y.jpg', price: 2000 }, 2, s);
-    expect(r).toEqual([{ slug: 'a', name: 'Tên mới', thumbnail: 'https://x/y.jpg', price: 2000, viewedAt: 2 }]);
+    recordRecentlyViewed({ slug: 'a', name: 'Tên cũ', thumbnail: null }, 1, s);
+    const r = recordRecentlyViewed({ slug: 'a', name: 'Tên mới', thumbnail: 'https://x/y.jpg' }, 2, s);
+    expect(r).toEqual([{ slug: 'a', name: 'Tên mới', thumbnail: 'https://x/y.jpg', viewedAt: 2 }]);
   });
 
-  it('chỉ lưu đúng 5 trường của spec, bỏ trường dư (PDP truyền cả object sản phẩm)', () => {
+  it('chỉ lưu đúng 4 trường, bỏ trường dư — kể cả giá (R4-BUYER-5: giá chụp lúc xem sẽ lệch giá giờ vàng)', () => {
     const s = memoryStorage();
-    const fat = { ...item('a'), description: 'rất dài', variants: [1, 2, 3] };
+    const fat = { ...item('a'), price: 120000, description: 'rất dài', variants: [1, 2, 3] };
     recordRecentlyViewed(fat, 7, s);
     expect(JSON.parse(s.data[RECENTLY_VIEWED_KEY]!)).toEqual([{ ...item('a'), viewedAt: 7 }]);
+  });
+
+  it('mục lưu bởi bản cũ (còn trường price) vẫn đọc được nhưng không còn trả giá cũ, ghi lại thì giá bị bỏ', () => {
+    const s = memoryStorage({
+      [RECENTLY_VIEWED_KEY]: JSON.stringify([{ slug: 'a', name: 'SP a', thumbnail: null, price: 120000, viewedAt: 1 }]),
+    });
+    expect(readRecentlyViewed(s)).toEqual([{ slug: 'a', name: 'SP a', thumbnail: null, viewedAt: 1 }]);
+    recordRecentlyViewed(item('b'), 2, s);
+    expect(JSON.parse(s.data[RECENTLY_VIEWED_KEY]!)).toEqual([
+      { ...item('b'), viewedAt: 2 },
+      { slug: 'a', name: 'SP a', thumbnail: null, viewedAt: 1 },
+    ]);
   });
 
   it('giữ tối đa 20, bỏ cái cũ nhất', () => {
@@ -64,9 +76,9 @@ describe('recently-viewed (spec 5b.4)', () => {
 
   it('bỏ mục có số không hữu hạn hoặc slug rỗng', () => {
     const ok = { ...item('ok'), viewedAt: 1 };
-    // JSON không biểu diễn được NaN/Infinity (thành null) → mục bị loại vì price/viewedAt không phải số.
+    // JSON không biểu diễn được NaN/Infinity (thành null) → mục bị loại vì viewedAt không phải số.
     const raw = JSON.stringify([
-      { ...item('nan'), price: Number.NaN, viewedAt: 1 },
+      { ...item('nan'), viewedAt: Number.NaN },
       { ...item('inf'), viewedAt: Number.POSITIVE_INFINITY },
       { ...item(''), viewedAt: 1 },
       ok,
@@ -94,11 +106,11 @@ describe('recently-viewed (spec 5b.4)', () => {
     expect(readRecentlyViewed(s).map((x) => x.slug)).toEqual(['a']);
   });
 
-  it('mục không hợp lệ (slug rỗng, giá không hữu hạn) không được ghi', () => {
+  it('mục không hợp lệ (slug rỗng, thời điểm không hữu hạn) không được ghi', () => {
     const s = memoryStorage();
     recordRecentlyViewed(item('a'), 1, s);
     expect(recordRecentlyViewed(item(''), 2, s).map((x) => x.slug)).toEqual(['a']);
-    expect(recordRecentlyViewed({ ...item('b'), price: Number.NaN }, 3, s).map((x) => x.slug)).toEqual(['a']);
+    expect(recordRecentlyViewed(item('b'), Number.NaN, s).map((x) => x.slug)).toEqual(['a']);
     expect(readRecentlyViewed(s).map((x) => x.slug)).toEqual(['a']);
   });
 

@@ -12,6 +12,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<s
 vi.mock('../services/shop-api', () => ({
   fetchBrands: vi.fn().mockResolvedValue([{ brand: 'Tubu', count: 3 }, { brand: 'Cỏ Mềm', count: 2 }]),
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-p1', slug: 'p1', brand: 'Tubu', name: 'Xà phòng', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([
     { itemId: 'u1', productSlug: 'nrc', productName: 'Nước rửa chén', thumbnail: null, retailPrice: 100000, flashPrice: 80000, startAt: new Date(Date.now() + 3_600_000).toISOString(), reminded: false },
   ]),
@@ -157,7 +158,7 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
   });
 
   it('"Đã xem gần đây" và khối phụ cuối Trang chủ (thẻ nhỏ, hero, chip thương hiệu, hàng liên kết)', async () => {
-    localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify([{ slug: 'p1', name: 'Xà phòng', thumbnail: null, price: 45000, viewedAt: 1 }]));
+    localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify([{ slug: 'p1', name: 'Xà phòng', thumbnail: null, viewedAt: 1 }]));
     const { container } = wrap(
       <>
         <RecentlyViewedRail />

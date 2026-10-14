@@ -20,7 +20,7 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
     const onError = vi.fn();
 
     const observer = new MutationObserver(client, { mutationFn, onError });
-    await expect(observer.mutate()).rejects.toBe(networkError);
+    await expect(observer.mutate(undefined)).rejects.toBe(networkError);
 
     expect(mutationFn).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledTimes(1);
@@ -33,7 +33,7 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
     onlineManager.setOnline(false);
     const mutationFn = vi.fn().mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
     const observer = new MutationObserver(client, { mutationFn });
-    await observer.mutate().catch(() => undefined);
+    await observer.mutate(undefined).catch(() => undefined);
 
     onlineManager.setOnline(true);
     await client.resumePausedMutations();

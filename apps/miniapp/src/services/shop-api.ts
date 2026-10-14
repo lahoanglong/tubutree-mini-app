@@ -217,6 +217,16 @@ export interface PublicConfig {
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
+/**
+ * Giá và trạng thái HIỆN HÀNH theo slug (dải "Đã xem gần đây" không lưu giá). Sản phẩm đã ẩn hoặc chưa duyệt không có trong kết
+ * quả; tối đa 20 slug một lần.
+ */
+export const fetchProductsBySlugs = async (slugs: string[]): Promise<ProductCard[]> => {
+  const unique = [...new Set(slugs)].slice(0, 20);
+  if (unique.length === 0) return [];
+  const res = await api.get<PageResponse<ProductCard>>('/products', { params: { slugs: unique.join(','), limit: unique.length } });
+  return res.data.data;
+};
 export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
   const homeSlot = homeProductSlot(params);
   if (homeSlot) {

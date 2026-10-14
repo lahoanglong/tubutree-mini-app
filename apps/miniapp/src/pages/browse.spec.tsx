@@ -16,6 +16,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchCatalog: mocks.fetchCatalog, fetchBrands: mocks.fetchBrands, fetchCategories: mocks.fetchCategories,
   suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(),
+  fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-old-1', slug: 'old-1', brand: 'Tubu', name: 'Sản phẩm xem trước', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
 }));
 vi.mock('../services/discovery-events', () => ({
   trackFilterApplied: mocks.trackFilterApplied, trackSearchPerformed: mocks.trackSearchPerformed, trackSearchResultClicked: mocks.trackSearchResultClicked,
@@ -276,7 +277,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
 
   describe('"Đã xem gần đây"', () => {
     beforeEach(() => {
-      recordRecentlyViewed({ slug: 'old-1', name: 'Sản phẩm xem trước', thumbnail: null, price: 45000 }, 1);
+      recordRecentlyViewed({ slug: 'old-1', name: 'Sản phẩm xem trước', thumbnail: null }, 1);
     });
 
     it('trang gốc: hiện dải, và ẩn khi đang tìm có kết quả', async () => {
