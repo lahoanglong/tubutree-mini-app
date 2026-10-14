@@ -170,7 +170,8 @@ describe('Đặt đơn trùng khác Idempotency-Key (real Postgres)', () => {
 
   it('giỏ tách Tubu + gian hàng, 3 lần đặt chồng mỗi lần một key → đúng 1 nhóm 2 đơn, mọi lần trả đơn đầu nhóm', async () => {
     const { u, addr } = await buyerWithCart(0);
-    const owner = await createUser(prisma);
+    // Chủ gian hàng phải còn quyền bán (DEALER): chủ là CUSTOMER thì gian hàng tính là đã đóng (STORE_CLOSED), không nhận đơn.
+    const owner = await createUser(prisma, { role: 'DEALER' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
       data: { type: 'MERCHANT', slug: `itdup-${tag}`, title: `Shop ${tag}`, ownerUserId: owner.id, isPublished: true },

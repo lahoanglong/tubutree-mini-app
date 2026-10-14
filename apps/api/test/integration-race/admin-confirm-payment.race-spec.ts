@@ -8,7 +8,7 @@ import type { AffiliateService } from '../../src/modules/affiliate/affiliate.ser
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
-import { recordLatePaymentRefund } from '../../src/modules/orders/refund-queue';
+import { recordCumulativeLatePayment, recordLatePaymentRefund } from '../../src/modules/orders/refund-queue';
 import { createOrder, createUser, summarize, warmPool } from './helpers';
 
 /**
@@ -264,6 +264,35 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       const perAdmin = new Map<string, number>();
       for (const [uid] of adminAlerts) perAdmin.set(uid as string, (perAdmin.get(uid as string) ?? 0) + 1);
       expect(Math.max(...perAdmin.values())).toBe(1);
+    });
+
+    it('webhook Pancake báo số CỘNG DỒN sau khi admin đã ghi tay → không tạo thêm khoản, vào "Cần xử lý Pancake"; ngược lại Pancake ghi trước thì admin không ghi thêm', async () => {
+      const manualFirst = await cancelledUnpaid();
+      await admin.confirmOrderPayment('admin-a', manualFirst.code, { bankRef: 'FT4' });
+      notify.mockClear();
+      expect(await recordCumulativeLatePayment(ctx(), manualFirst, { reportedTotal: 300_000, source: 'PANCAKE' })).toBe(0);
+      expect(await recordCumulativeLatePayment(ctx(), manualFirst, { reportedTotal: 600_000, source: 'PANCAKE' })).toBe(0);
+      expect(await lateRefunds(manualFirst.id)).toHaveLength(1);
+      expect(notify.mock.calls.filter(([, code]) => code === 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: manualFirst.id } })).pancakeAttention).toContain('admin đã ghi tay');
+
+      const pancakeFirst = await cancelledUnpaid();
+      expect(await recordCumulativeLatePayment(ctx(), pancakeFirst, { reportedTotal: 300_000, source: 'PANCAKE' })).toBe(300_000);
+      const res = await admin.confirmOrderPayment('admin-a', pancakeFirst.code, { bankRef: 'FT5' });
+      expect(res.message).toContain('đã được ghi trước đó');
+      expect(await lateRefunds(pancakeFirst.id)).toHaveLength(1);
+    });
+
+    it('admin ghi tay và webhook Pancake cộng dồn cùng lúc → đúng 1 khoản hoàn mỗi đơn', async () => {
+      const orders = await Promise.all(Array.from({ length: 5 }, () => cancelledUnpaid(250_000)));
+      const results = await Promise.allSettled(
+        orders.flatMap((order, i) => [
+          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTC${i}` }),
+          recordCumulativeLatePayment(ctx(), order, { reportedTotal: 250_000, source: 'PANCAKE' }),
+        ]),
+      );
+      expect(summarize(results).rejected).toHaveLength(0);
+      for (const order of orders) expect(await lateRefunds(order.id)).toHaveLength(1);
     });
   });
 });
