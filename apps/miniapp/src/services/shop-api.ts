@@ -52,6 +52,8 @@ export interface ProductDetail {
   variations: VariationDetail[];
   /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */
   fulfiller?: ProductFulfiller;
+  /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không định kỳ/mua chung. API cũ chưa trả → hàng Tubu. */
+  partnerOwned?: boolean;
 }
 
 export interface ProductFulfiller {
