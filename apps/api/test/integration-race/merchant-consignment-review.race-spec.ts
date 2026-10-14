@@ -200,6 +200,10 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     try {
       expect(await netOf(s.store.id, old.id)).toEqual([]);
       expect(await netOf(s.store.id, fresh.id)).toEqual([90_000]);
+      // Mốc ghi sai (ghi thẳng DB, không qua kiểm tra lúc ghi): bảng kê không lỗi, tạm không giới hạn (Q8 review S6).
+      await setConfig(prisma, 'merchant.consignment_settle_from', '2026-13-01');
+      expect(await netOf(s.store.id, old.id)).toEqual([90_000]);
+      await expect(settlement.adminOverview()).resolves.toBeDefined();
     } finally {
       await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
     }

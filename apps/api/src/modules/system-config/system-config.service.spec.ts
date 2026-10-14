@@ -399,3 +399,16 @@ describe('SystemConfigService.set — phí sàn mặc định của gian hàng �
     expect(same.createMany).not.toHaveBeenCalled();
   });
 });
+
+describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ (Q8 review S6)', () => {
+  it('chặn thời điểm không có thật hoặc sai dạng; nhận ISO 8601 hợp lệ', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '2026-10-14T00:00:00Z' } });
+    const service = new SystemConfigService(prisma);
+    for (const bad of ['2026-13-01', '2026-02-30T00:00:00Z', 'mai']) {
+      await expect(service.set('merchant.consignment_settle_from', bad, 'admin1')).rejects.toThrow(BadRequestException);
+    }
+    expect(upsert).not.toHaveBeenCalled();
+    await service.set('merchant.consignment_settle_from', '2026-11-01T00:00:00+07:00', 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
+});

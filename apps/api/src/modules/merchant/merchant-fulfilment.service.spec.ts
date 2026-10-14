@@ -525,7 +525,20 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     createdAt,
     deliveredAt,
   });
-  const sqlOf = (call: unknown[]) => Prisma.sql(call[0] as readonly string[], ...(call.slice(1) as Prisma.Sql[])).sql;
+  const queryOf = (call: unknown[]) => Prisma.sql(call[0] as readonly string[], ...(call.slice(1) as Prisma.Sql[]));
+  const sqlOf = (call: unknown[]) => queryOf(call).sql;
+
+  it('mốc bắt đầu đối soát giao hộ sai (2026-13-01): không lỗi 500, tạm không giới hạn, ghi cảnh báo một lần (Q8 review S6)', async () => {
+    const { svc, prisma } = withLinks();
+    const warn = jest.spyOn((svc as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-13-01' });
+    await expect(svc.statementFor('sf-a', NOW)).resolves.toMatchObject({ lines: [] });
+    await expect(svc.statementFor('sf-a', NOW)).resolves.toMatchObject({ lines: [] });
+    const pendingSql = prisma.$queryRaw.mock.calls.map((c: unknown[]) => sqlOf(c)).filter((q: string) => q.includes('merchant_pancake_links'));
+    expect(pendingSql.length).toBeGreaterThan(0);
+    for (const q of pendingSql) expect(q).not.toContain('system_configs');
+    expect(warn.mock.calls.filter(([m]) => String(m).includes('merchant.consignment_settle_from'))).toHaveLength(1);
+  });
 
   function withLinks() {
     const b = build();
@@ -543,6 +556,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
       .mockResolvedValueOnce([pending('o1-a', 'o1', dueAt), pending('o1-b', 'o1', dueAt), pending('o2-a', 'o2', soonAt)])
       .mockResolvedValueOnce([]);
     prisma.orderItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([...items('o1'), ...items('o2')]);
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
     const st = await svc.statementFor('sf-a', NOW);
     expect(st.consignmentTerms).toEqual({ commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 });
     expect(st.lines.map((l) => [l.refKey, l.orderItemId, l.goodsAmount, l.commissionAmount, l.opsFeeAmount, l.netAmount])).toEqual([
@@ -553,7 +567,8 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(st.upcoming.map((l) => [l.refKey, l.availableAt])).toEqual([['ITEM:o2-a', new Date(soonAt.getTime() + 7 * 24 * H)]]);
     const sql = sqlOf(prisma.$queryRaw.mock.calls[1]);
     expect(sql).toContain(`(o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')`);
-    expect(sql).toContain(`'merchant.consignment_settle_from'`);
+    expect(sql).toContain(`o."createdAt" >= $`);
+    expect(queryOf(prisma.$queryRaw.mock.calls[1]).values).toContainEqual(new Date('2026-10-01T00:00:00Z'));
     expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
     expect(sql).toContain(`(l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")`);
     expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED'`);
