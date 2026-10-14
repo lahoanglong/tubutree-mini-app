@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { recordUserAdminEvent } from '../../../common/user-admin-events';
+import { maskPhone } from '../../../common/mask-pii';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -38,7 +39,7 @@ export class RbacService {
       'CUSTOMER',
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
-    this.logger.warn(`applyGrants: nâng user ${user.id} (${user.phone}) ${user.role} → ${best}`);
+    this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
     const updated = await db.user.update({ where: { id: user.id }, data: { role: best } });
     await recordUserAdminEvent(db, {
       userId: user.id,
@@ -72,7 +73,7 @@ export class RbacService {
       if (!existing) {
         try {
           await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
-          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
+          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
         } catch (err) {
           // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
           // 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
@@ -136,7 +137,7 @@ export class RbacService {
           });
         }
         downgraded = true;
-        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
+        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
       }
       return { revoked: count, downgraded };
     });

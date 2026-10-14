@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { Env } from '../../../config/env.validation';
 import { ZaloOaTokenService } from './zalo-oa-token.service';
+import { maskPhone } from '../../../common/mask-pii';
 
 /**
  * Client ZNS (Zalo Notification Service) — Build Spec §11.
@@ -28,7 +29,7 @@ export class ZnsClient {
   ): Promise<boolean> {
     const accessToken = await this.tokens.getAccessToken();
     if (!accessToken || !templateId) {
-      this.logger.warn(`ZNS chưa cấu hình — skip gửi template ${templateId} cho ${phone}.`);
+      this.logger.warn(`ZNS chưa cấu hình — skip gửi template ${templateId} cho ${maskPhone(phone)}.`);
       return false;
     }
     try {

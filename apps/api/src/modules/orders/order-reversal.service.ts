@@ -13,6 +13,7 @@ import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './r
 import { createBankRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { shareOf, type ReturnShares } from './refund-allocation';
+import { maskPhone } from '../../common/mask-pii';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -584,7 +585,7 @@ export class OrderReversalService {
       },
     });
     if (!customerUserId) {
-      this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${amount}đ cho khách ${phone ?? '(không có SĐT)'}.`);
+      this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${amount}đ cho khách ${maskPhone(phone)}.`);
     }
     return customerUserId;
   }
