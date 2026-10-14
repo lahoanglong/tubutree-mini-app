@@ -309,6 +309,7 @@ export default function AdminPage() {
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number } | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
+  const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
   const accessQ = useQuery({
@@ -325,6 +326,7 @@ export default function AdminPage() {
   }, []);
 
   const setTab = (t: Tab) => {
+    setConsignmentSeed(0);
     setTabState(t);
     writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
@@ -353,8 +355,14 @@ export default function AdminPage() {
     setTabState('orders');
     writeUrlState('orders', '');
   };
+  const openConsignmentConfirm = () => {
+    setConsignmentSeed(Date.now());
+    setTabState('merchantProducts');
+    writeUrlState('merchantProducts', '');
+  };
   const openInbox = (k: InboxKey) => {
     if (k === 'pancakeAttention') return openPancakeQueue();
+    if (k === 'consignmentPending') return openConsignmentConfirm();
     if (k === 'pancakeUnsynced') return openUnsyncedQueue();
     if (k === 'gomdonAttention') return openRecyclingQueue();
     if (k === 'returnsPending' || k === 'returnsToReceive') {
@@ -362,12 +370,14 @@ export default function AdminPage() {
       return setTab('returns');
     }
     const target: Record<
-      Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention' | 'returnsPending' | 'returnsToReceive'>,
+      Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention' | 'returnsPending' | 'returnsToReceive' | 'consignmentPending'>,
       Tab
     > = {
       customerRefunds: 'customerRefunds',
       merchantOverdue: 'merchantFulfilment',
       merchantProducts: 'merchantProducts',
+      merchantToSettle: 'merchantFulfilment',
+      merchantPayoutsPending: 'merchantFulfilment',
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
@@ -462,8 +472,8 @@ export default function AdminPage() {
           {active === 'attendance' && <AttendanceTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
-          {active === 'merchantProducts' && <MerchantProductsTab />}
-          {active === 'merchantFulfilment' && <MerchantFulfilmentTab />}
+          {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
+          {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} />}
           {active === 'flashSales' && <FlashSalesTab />}
           {active === 'faqs' && <FaqTab />}
           {active === 'contentKit' && <ContentKitTab />}

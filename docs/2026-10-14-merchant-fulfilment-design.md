@@ -272,6 +272,13 @@ net        = paid_i − commission − opsFee            (shippingFee = cod = 0,
   admin đang xem, server tính khác thì từ chối (409). Tổng quan admin chỉ dựng bảng kê cho gian hàng mà một câu SQL thấy có khoản
   chờ.
 
+  Việc admin phải làm với đối tác hiện ở "Việc cần xử lý" (R4-ADMIN-7), chỉ ADMIN thấy, mỗi số đếm đúng điều kiện danh sách mở ra
+  khi bấm vào: `consignmentPending` (liên kết takeover còn hiệu lực chưa xác nhận hàng ký gửi, `CONSIGNMENT_PENDING_LINK_WHERE`;
+  mở "Duyệt SP đối tác" ở chip "Chờ xác nhận ký gửi"), `merchantToSettle` (số gian hàng có dòng đủ hạn trong bảng kê, mở tab
+  "Đơn đối tác & đối soát") và `merchantPayoutsPending` (phiếu `PENDING`: chờ chuyển cho đối tác hoặc chờ đối tác nộp lại; chip
+  "Chờ xử lý" của danh sách phiếu lọc `status=PENDING` nên phiếu cũ không bị đẩy khỏi trang đầu). Món "chưa vào đối soát tự động"
+  vì liên kết takeover chưa xác nhận có nút dẫn thẳng tới màn xác nhận.
+
   Trả một phần: `REVERSAL` khoá `RETURN:<id yêu cầu>:ITEM:<orderItemId>`, phần của các đơn vị trả trên chính số của dòng SALE
   (luỹ kế). Đơn `RETURNED` (trả cả đơn, Pancake "Đã hoàn") sau khi đã vào phiếu: `REVERSAL` khoá `ITEM:<orderItemId>` đảo phần
   còn lại. Hàng trả về kho Tubu. Phí giao hộ (`Storefront.consignmentFeePct`, `consignmentFeeFixed`, mặc định 0) admin sửa ở tab

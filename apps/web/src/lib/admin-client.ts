@@ -1037,8 +1037,11 @@ export const reviewMerchantProduct = (
     },
   );
 
-export const listLinkedMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_SIZE) =>
-  apiFetch<Page<AdminLinkedMerchantProduct>>(`/admin/merchant-products/linked?page=${page}&limit=${limit}`);
+/** `consignment: 'PENDING'`: chỉ liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận hàng ký gửi. */
+export const listLinkedMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_SIZE, consignment?: 'PENDING') =>
+  apiFetch<Page<AdminLinkedMerchantProduct>>(
+    `/admin/merchant-products/linked?page=${page}&limit=${limit}${consignment ? `&consignment=${consignment}` : ''}`,
+  );
 
 /** Gỡ liên kết "Tubu giao hộ": biến thể Pancake về sản phẩm gốc, sản phẩm đối tác tắt bán. */
 export const unlinkMerchantProduct = (productId: string, reason: string) =>
@@ -1467,6 +1470,9 @@ export type InboxKey =
   | 'returnsToReceive'
   | 'merchantOverdue'
   | 'merchantProducts'
+  | 'consignmentPending'
+  | 'merchantToSettle'
+  | 'merchantPayoutsPending'
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'

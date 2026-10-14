@@ -14,6 +14,9 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   returnsToReceive: { title: 'Hàng trả chờ nhận về kho', hint: 'Đã duyệt, kho chưa bấm "Đã nhận hàng"' },
   merchantOverdue: { title: 'Đơn đối tác quá hạn giao', hint: 'Gian hàng tự giao quá hạn xác nhận / gửi / giao' },
   merchantProducts: { title: 'Sản phẩm đối tác chờ duyệt', hint: 'Gian hàng gửi sản phẩm mới hoặc sửa' },
+  consignmentPending: { title: 'Liên kết ký gửi chờ xác nhận', hint: 'Đối tác nhận lại hàng Tubu đang bán: chưa xác nhận thì đơn không vào đối soát' },
+  merchantToSettle: { title: 'Gian hàng có khoản chờ lập phiếu', hint: 'Đơn đối tác đã hết hạn giữ tiền, chờ lập phiếu đối soát' },
+  merchantPayoutsPending: { title: 'Phiếu đối soát chờ chuyển / thu', hint: 'Chờ chuyển cho đối tác hoặc chờ đối tác nộp lại' },
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
@@ -25,7 +28,8 @@ export function OpsInboxTab({ onOpen }: { onOpen: (key: InboxKey) => void }) {
   const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang đếm việc cần xử lý…</p>;
   if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được danh sách việc cần xử lý.</p>;
-  const items = q.data.items;
+  // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
+  const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
   const open = items.filter((i) => i.count > 0);
   const done = items.filter((i) => i.count === 0);
   return (
