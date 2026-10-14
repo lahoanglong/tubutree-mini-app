@@ -37,7 +37,11 @@ const payout = (over: Partial<AdminPayout> = {}): AdminPayout => ({
   ...over,
 });
 
-const LIST = { '/admin/payouts': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } } };
+const EMPTY_PIT = { month: '2026-10', rows: [], totals: { recipients: 0, withheldRecipients: 0, grossAmount: 0, taxWithheld: 0, netAmount: 0 } };
+const LIST = {
+  '/pit-report': { body: EMPTY_PIT },
+  '/admin/payouts': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+};
 
 // C-122: từ chối lệnh rút (hoàn tiền cho CTV) và xác nhận đã chuyển khoản là thao tác tiền, hỏi bằng hộp thoại thống nhất.
 describe('PayoutRow — hộp thoại xác nhận', () => {
@@ -123,6 +127,46 @@ describe('PayoutRow / PayoutAdminTab — DS v2', () => {
     const selected = tabs.filter((t) => t.getAttribute('aria-selected') === 'true');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.className).toContain('bg-forest-600');
-    expect(api.calls[0]!.url).toContain('status=REQUESTED');
+    expect(api.calls.find((c) => !c.url.includes('/pit-report'))!.url).toContain('status=REQUESTED');
+  });
+});
+
+// SELLER-11: lệnh rút hoa hồng hiện số khấu trừ và MST/CCCD; báo cáo khấu trừ theo tháng cho kế toán kê khai.
+describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () => {
+  it('lệnh rút có khấu trừ: hoa hồng gốc, thuế đã khấu trừ và MST/CCCD người nhận', () => {
+    const { container } = mount(
+      <PayoutRow payout={payout({ amount: 2_250_000, grossAmount: 2_500_000, taxWithheld: 250_000, taxId: '079201001234' })} />,
+    );
+    expect(container.textContent).toContain('Hoa hồng 2.500.000');
+    expect(container.textContent).toContain('khấu trừ thuế TNCN 250.000');
+    expect(container.textContent).toContain('MST/CCCD 079201001234');
+  });
+
+  it('báo cáo tháng: gọi đúng tháng, bảng theo người nhận cuộn ngang, tổng tháng, người bị khấu trừ thiếu MST được tô cảnh báo', async () => {
+    const report = {
+      month: '2026-10',
+      rows: [
+        { userId: 'u1', fullName: 'Nguyễn An', phone: '0901234567', taxId: '079201001234', payoutCount: 2, grossAmount: 5_500_000, taxWithheld: 550_000, netAmount: 4_950_000 },
+        { userId: 'u2', fullName: 'Trần Bình', phone: null, taxId: null, payoutCount: 1, grossAmount: 2_100_000, taxWithheld: 210_000, netAmount: 1_890_000 },
+      ],
+      totals: { recipients: 2, withheldRecipients: 2, grossAmount: 7_600_000, taxWithheld: 760_000, netAmount: 6_840_000 },
+    };
+    const api = mockFetch({ ...LIST, '/pit-report': { body: report } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab />);
+    await flush();
+    const monthInput = container.querySelector<HTMLInputElement>('input[aria-label="Tháng báo cáo"]')!;
+    expect(monthInput.type).toBe('month');
+    typeInto(monthInput, '2026-10');
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/admin/payouts/pit-report?month=2026-10'))).toBe(true);
+    const region = container.querySelector('[aria-label="Báo cáo khấu trừ thuế TNCN theo người nhận"]')!;
+    expect(region.className).toContain('overflow-x-auto');
+    expect(region.textContent).toContain('Nguyễn An');
+    expect(region.textContent).toContain('079201001234');
+    expect(region.textContent).toContain('550.000');
+    expect(byText(region as HTMLElement, 'span', 'Thiếu MST/CCCD')?.className).toContain('text-danger-fg');
+    expect(container.textContent).toContain('Tổng tháng 10/2026: 2 người nhận · thu nhập 7.600.000');
+    expect(container.textContent).toContain('thuế đã khấu trừ 760.000');
   });
 });

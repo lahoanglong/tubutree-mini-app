@@ -945,6 +945,11 @@ export interface AdminPayout {
   /** Số thực nhận (đã trừ phí) — xem wallet.service.ts:withdraw / affiliate.service.ts:requestPayout. */
   amount: number;
   fee: number;
+  /** Hoa hồng trước khấu trừ thuế TNCN (null: rút Ví hoặc lệnh cũ). */
+  grossAmount?: number | null;
+  taxWithheld?: number;
+  /** MST/CCCD người nhận chụp lúc khấu trừ. */
+  taxId?: string | null;
   method: string;
   bankInfo: { bankName?: string; accountNumber?: string; accountName?: string } | null;
   status: AdminPayoutStatus;
@@ -958,6 +963,24 @@ export interface AdminPayout {
   adminNote: string | null;
   user: { id: string; fullName: string | null; phone: string | null; referralCode: string | null } | null;
 }
+export interface PitReportRow {
+  userId: string;
+  fullName: string | null;
+  phone: string | null;
+  taxId: string | null;
+  payoutCount: number;
+  grossAmount: number;
+  taxWithheld: number;
+  netAmount: number;
+}
+export interface PitReport {
+  month: string;
+  rows: PitReportRow[];
+  totals: { recipients: number; withheldRecipients: number; grossAmount: number; taxWithheld: number; netAmount: number };
+}
+/** Báo cáo khấu trừ thuế TNCN theo tháng (YYYY-MM, giờ VN): mọi lần chi hoa hồng cho cá nhân, gộp theo người nhận. */
+export const getPitReport = (month: string) =>
+  apiFetch<PitReport>(`/admin/payouts/pit-report?month=${encodeURIComponent(month)}`);
 export const listPayouts = (status?: AdminPayoutStatus, page = 1, limit = 20) =>
   apiFetch<Page<AdminPayout>>(`/admin/payouts?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
 export const approvePayout = (id: string, note?: string) =>

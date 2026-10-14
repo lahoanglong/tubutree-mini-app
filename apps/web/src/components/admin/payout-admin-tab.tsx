@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approvePayout,
+  getPitReport,
   listPayouts,
   markPayoutPaid,
   rejectPayout,
@@ -12,7 +13,19 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
-import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass } from './ui';
+import {
+  BTN_DANGER_OUTLINE,
+  BTN_LINK,
+  BTN_PRIMARY,
+  BTN_SMALL,
+  FIELD_CLASS,
+  INPUT_CLASS,
+  Notice,
+  ScrollRegion,
+  TOUCH_H,
+  ToneBadge,
+  chipClass,
+} from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
@@ -108,7 +121,97 @@ export function PayoutAdminTab() {
           </div>
         </div>
       )}
+
+      <PitReportSection />
     </div>
+  );
+}
+
+/** Tháng hiện tại theo giờ VN, dạng YYYY-MM (mặc định của ô chọn tháng). */
+function currentVnMonth(now = new Date()): string {
+  return new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 7);
+}
+
+/** Báo cáo khấu trừ thuế TNCN theo tháng: số liệu để kế toán kê khai và cấp chứng từ khấu trừ cho CTV (SELLER-11). */
+function PitReportSection() {
+  const [month, setMonth] = useState(currentVnMonth);
+  const valid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+  const q = useQuery({ queryKey: ['admin-pit-report', month], queryFn: () => getPitReport(month), enabled: valid });
+  const [y, m] = month.split('-');
+
+  return (
+    <section className="space-y-2 border-t border-stone-200 pt-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h3 className="text-base font-semibold text-stone-900">Khấu trừ thuế TNCN theo tháng</h3>
+        <input
+          type="month"
+          aria-label="Tháng báo cáo"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
+        />
+      </div>
+      <Notice>
+        Mọi lần chi hoa hồng cho CTV trong tháng (giờ Việt Nam), gộp theo người nhận, để kế toán kê khai thuế TNCN đã khấu trừ và
+        cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc rút.
+      </Notice>
+      {q.isLoading && valid && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
+      {q.isError && <p className="text-sm text-danger-fg">Không tải được báo cáo thuế TNCN.</p>}
+      {q.data && (
+        <>
+          <p className="text-sm text-stone-700">
+            Tổng tháng {m}/{y}: {q.data.totals.recipients} người nhận · thu nhập {formatVnd(q.data.totals.grossAmount)} · thuế đã
+            khấu trừ {formatVnd(q.data.totals.taxWithheld)} · thực chi {formatVnd(q.data.totals.netAmount)}
+          </p>
+          {q.data.rows.length === 0 ? (
+            <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-sm text-stone-500">
+              Không có lần chi hoa hồng nào trong tháng này.
+            </p>
+          ) : (
+            <ScrollRegion
+              label="Báo cáo khấu trừ thuế TNCN theo người nhận"
+              className="rounded-card border border-stone-200 bg-stone-0 shadow-card"
+            >
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="bg-stone-50 text-stone-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Người nhận</th>
+                    <th className="px-3 py-2 font-medium">MST/CCCD</th>
+                    <th className="px-3 py-2 text-right font-medium">Số lần chi</th>
+                    <th className="px-3 py-2 text-right font-medium">Thu nhập</th>
+                    <th className="px-3 py-2 text-right font-medium">Thuế đã khấu trừ</th>
+                    <th className="px-3 py-2 text-right font-medium">Thực nhận</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {q.data.rows.map((r) => (
+                    <tr key={r.userId}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-stone-900">{r.fullName || r.userId}</span>
+                        {r.phone && <span className="block text-stone-500">{r.phone}</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {r.taxId ? (
+                          r.taxId
+                        ) : r.taxWithheld > 0 ? (
+                          <span className="font-medium text-danger-fg">Thiếu MST/CCCD</span>
+                        ) : (
+                          <span className="text-stone-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">{r.payoutCount}</td>
+                      <td className="px-3 py-2 text-right">{formatVnd(r.grossAmount)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{formatVnd(r.taxWithheld)}</td>
+                      <td className="px-3 py-2 text-right">{formatVnd(r.netAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollRegion>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -183,6 +286,12 @@ export function PayoutRow({ payout: p }: { payout: AdminPayout }) {
             CTV: <span className="font-medium text-stone-800">{userLabel}</span>
             {p.user?.referralCode ? ` · mã ${p.user.referralCode}` : ''}
           </div>
+          {(p.taxWithheld ?? 0) > 0 && (
+            <div className="mt-0.5 text-xs text-stone-600">
+              Hoa hồng {formatVnd(p.grossAmount ?? p.amount + (p.taxWithheld ?? 0))} · khấu trừ thuế TNCN {formatVnd(p.taxWithheld ?? 0)}
+              {p.taxId ? ` · MST/CCCD ${p.taxId}` : ''}
+            </div>
+          )}
           {bank && (bank.bankName || bank.accountNumber) && (
             <div className="mt-0.5 text-xs text-stone-600">
               {bank.bankName} · STK {bank.accountNumber} · {bank.accountName}
