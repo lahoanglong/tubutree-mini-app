@@ -25,9 +25,9 @@ CREATE INDEX "storefront_terms_history_storefrontId_effectiveFrom_idx" ON "store
 -- AddForeignKey
 ALTER TABLE "storefront_terms_history" ADD CONSTRAINT "storefront_terms_history_storefrontId_fkey" FOREIGN KEY ("storefrontId") REFERENCES "storefronts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Dòng gốc cho mọi gian hàng đối tác: mức đang có, hiệu lực từ lúc tạo gian hàng — đơn cũ luôn tìm được mức của lúc đặt.
+-- Dòng gốc cho mọi gian hàng đối tác: mức đang có, hiệu lực từ đầu — đơn cũ luôn tìm được mức của lúc đặt.
 INSERT INTO "storefront_terms_history" ("id", "storefrontId", "commissionPct", "consignmentFeePct", "consignmentFeeFixed", "effectiveFrom", "changedById")
-SELECT 'sth0-' || s."id", s."id", s."commissionPct", s."consignmentFeePct", s."consignmentFeeFixed", s."createdAt", NULL
+SELECT 'sth0-' || s."id", s."id", s."commissionPct", s."consignmentFeePct", s."consignmentFeeFixed", to_timestamp(0), NULL
   FROM "storefronts" s
  WHERE s."type" = 'MERCHANT'
 ON CONFLICT DO NOTHING;

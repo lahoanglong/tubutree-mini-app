@@ -1,15 +1,15 @@
 import {
+  consignmentLineBase,
   consignmentPartialReversals,
   consignmentRefKey,
   consignmentReturnRefKey,
   consignmentSaleLines,
   consignmentWholeReversal,
-  linkedAtOrder,
   paidGoodsByLine,
+  termsAt,
 } from './merchant-consignment';
 
 const DAY = 86_400_000;
-const LINKED = new Date('2026-09-01T00:00:00Z');
 const ORDERED = new Date('2026-10-01T03:00:00Z');
 const DELIVERED = new Date('2026-10-03T03:00:00Z');
 
@@ -20,10 +20,7 @@ const DELIVERED = new Date('2026-10-03T03:00:00Z');
  *   A: 120.000 × 85% = 102.000; phí sàn 10.200; phí giao hộ 2.040 + 3.400 × 102.000/144.500 (= 2.400) = 4.440 → 87.360
  *   B:  50.000 × 85% =  42.500; phí sàn  4.250; phí giao hộ   850 + 3.400 ×  42.500/144.500 (= 1.000) = 1.850 → 36.400
  */
-const LINKS = [
-  { variationId: 'vA', linkedAt: LINKED, unlinkedAt: null },
-  { variationId: 'vB', linkedAt: LINKED, unlinkedAt: null },
-];
+const MINE = (it: { variationId: string }) => it.variationId === 'vA' || it.variationId === 'vB';
 const TERMS = { commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 };
 const ORDER = {
   id: 'o1',
@@ -39,24 +36,29 @@ const ORDER = {
   ],
 };
 
-describe('linkedAtOrder — dùng khoảng liên kết lúc đặt đơn, không phải liên kết hiện tại', () => {
-  const links = [
-    { variationId: 'v', linkedAt: new Date('2026-09-01'), unlinkedAt: new Date('2026-09-20') },
-    { variationId: 'v', linkedAt: new Date('2026-10-05'), unlinkedAt: null },
+describe('termsAt — mức phí chốt theo lúc đặt đơn', () => {
+  const current = { commissionPct: 0.2, feePct: 0.05, feeFixed: 9_000 };
+  const history = [
+    { effectiveFrom: new Date('2026-09-01'), commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 },
+    { effectiveFrom: new Date('2026-10-10'), commissionPct: 0.2, feePct: 0.05, feeFixed: 9_000 },
   ];
-  it('trong [linkedAt, unlinkedAt) mới tính; đúng mốc gỡ là đã gỡ', () => {
-    expect(linkedAtOrder(links, 'v', new Date('2026-09-01'))).toBe(true);
-    expect(linkedAtOrder(links, 'v', new Date('2026-09-19T23:59:59Z'))).toBe(true);
-    expect(linkedAtOrder(links, 'v', new Date('2026-09-20'))).toBe(false);
-    expect(linkedAtOrder(links, 'v', new Date('2026-10-01'))).toBe(false);
-    expect(linkedAtOrder(links, 'v', new Date('2026-10-06'))).toBe(true);
-    expect(linkedAtOrder(links, 'other', new Date('2026-10-06'))).toBe(false);
+  it('lấy dòng mới nhất có hiệu lực <= lúc đặt; đúng mốc đổi là mức mới', () => {
+    expect(termsAt(history, current, new Date('2026-10-01'))).toEqual({ commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 });
+    expect(termsAt(history, current, new Date('2026-10-10'))).toEqual(current);
+    expect(termsAt([...history].reverse(), current, new Date('2026-10-09'))).toEqual({ commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 });
+  });
+  it('đơn trước mọi dòng lịch sử → mức hiện tại', () => {
+    expect(termsAt(history, current, new Date('2026-08-01'))).toEqual(current);
+    expect(termsAt([], current, new Date('2026-08-01'))).toEqual(current);
   });
 });
 
 describe('paidGoodsByLine — tiền hàng khách thực trả từng dòng (cùng tỉ lệ với hoàn tiền)', () => {
   it('chia tiền hàng thực trả theo giá trị dòng, cộng lại đúng bằng tổng − phí giao', () => {
     expect(paidGoodsByLine(ORDER)).toEqual([25_500, 102_000, 42_500]);
+  });
+  it('nền tính tiền của dòng giao hộ đi qua một hàm duy nhất', () => {
+    expect(consignmentLineBase(ORDER)).toEqual(paidGoodsByLine(ORDER));
   });
   it('không giảm gì → đúng tiền dòng; phí giao không bao giờ vào tiền hàng', () => {
     expect(paidGoodsByLine({ total: 230_000, shippingFee: 30_000, items: [{ total: 150_000 }, { total: 50_000 }] })).toEqual([150_000, 50_000]);
@@ -69,7 +71,7 @@ describe('paidGoodsByLine — tiền hàng khách thực trả từng dòng (cù
 
 describe('consignmentSaleLines — mỗi dòng hàng giao hộ một dòng SALE', () => {
   it('ví dụ tính tay: A 87.360, B 36.400; dòng hàng Tubu không vào; phí giao 0, COD 0', () => {
-    const lines = consignmentSaleLines(ORDER, LINKS, TERMS);
+    const lines = consignmentSaleLines(ORDER, MINE, TERMS);
     expect(lines).toEqual([
       expect.objectContaining({
         orderId: 'o1',
@@ -99,34 +101,48 @@ describe('consignmentSaleLines — mỗi dòng hàng giao hộ một dòng SALE'
   });
 
   it('phí cố định mỗi đơn chia đủ, không lệch đồng nào vì làm tròn (lần lượt theo id dòng)', () => {
-    const lines = consignmentSaleLines(ORDER, LINKS, { commissionPct: 0, feePct: 0, feeFixed: 5_000 });
+    const lines = consignmentSaleLines(ORDER, MINE, { commissionPct: 0, feePct: 0, feeFixed: 5_000 });
     expect(lines.map((l) => l.opsFeeAmount)).toEqual([3_529, 1_471]);
   });
 
   it('mặc định không phí giao hộ: chỉ trừ phí sàn', () => {
-    const lines = consignmentSaleLines(ORDER, LINKS, { commissionPct: 0.15, feePct: 0, feeFixed: 0 });
+    const lines = consignmentSaleLines(ORDER, MINE, { commissionPct: 0.15, feePct: 0, feeFixed: 0 });
     expect(lines.map((l) => [l.goodsAmount, l.commissionAmount, l.opsFeeAmount, l.netAmount])).toEqual([
       [102_000, 15_300, 0, 86_700],
       [42_500, 6_375, 0, 36_125],
     ]);
   });
 
-  it('đơn đặt trước khi liên kết hoặc sau khi gỡ → không có dòng', () => {
-    expect(consignmentSaleLines({ ...ORDER, createdAt: new Date(LINKED.getTime() - DAY) }, LINKS, TERMS)).toEqual([]);
-    const unlinked = LINKS.map((l) => ({ ...l, unlinkedAt: new Date(ORDERED.getTime() - DAY) }));
-    expect(consignmentSaleLines(ORDER, unlinked, TERMS)).toEqual([]);
+  it('không dòng nào của gian hàng → không có dòng', () => {
+    expect(consignmentSaleLines(ORDER, () => false, TERMS)).toEqual([]);
+  });
+
+  it('phí cố định không làm dòng âm: phần cố định bị chặn ở tiền hàng − phí sàn − phí %', () => {
+    const cheap = { ...ORDER, total: 25_000 + 1_700, items: [{ id: 'iA', variationId: 'vA', productName: 'Kẹo', variationName: null, quantity: 1, total: 2_000 }] };
+    const [line] = consignmentSaleLines(cheap, MINE, { commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 });
+    // 1.700 khách trả; phí sàn 170, phí % 34 → phần cố định tối đa 1.496.
+    expect(line).toMatchObject({ goodsAmount: 1_700, commissionAmount: 170, opsFeeAmount: 34 + 1_496, netAmount: 0 });
+  });
+
+  it('món 0đ (giảm hết) → không gánh phí cố định, không dồn vào dòng đầu', () => {
+    const free = { ...ORDER, total: 25_000 };
+    const lines = consignmentSaleLines(free, MINE, { commissionPct: 0.1, feePct: 0, feeFixed: 3_400 });
+    expect(lines.map((l) => [l.goodsAmount, l.opsFeeAmount, l.netAmount])).toEqual([
+      [0, 0, 0],
+      [0, 0, 0],
+    ]);
   });
 
   it('thứ tự dòng hàng trong đơn không làm đổi số (cùng một đơn luôn ra cùng các dòng)', () => {
     const shuffled = { ...ORDER, items: [...ORDER.items].reverse() };
-    expect(consignmentSaleLines(shuffled, LINKS, { ...TERMS, feeFixed: 5_000 })).toEqual(
-      consignmentSaleLines(ORDER, LINKS, { ...TERMS, feeFixed: 5_000 }),
+    expect(consignmentSaleLines(shuffled, MINE, { ...TERMS, feeFixed: 5_000 })).toEqual(
+      consignmentSaleLines(ORDER, MINE, { ...TERMS, feeFixed: 5_000 }),
     );
   });
 });
 
 describe('dòng đảo hàng giao hộ (trả một phần / cả đơn)', () => {
-  const [saleA, saleB] = consignmentSaleLines(ORDER, LINKS, TERMS);
+  const [saleA, saleB] = consignmentSaleLines(ORDER, MINE, TERMS);
   const sale = (l: NonNullable<typeof saleA>) => ({ ...l, orderItemId: l.orderItemId!, quantity: l.item!.quantity });
 
   it('khoá dòng: SALE/đảo cả đơn ITEM:<dòng>, trả một phần RETURN:<yêu cầu>:ITEM:<dòng>', () => {

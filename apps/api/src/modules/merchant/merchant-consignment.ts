@@ -27,10 +27,18 @@ export interface ConsignmentTerms {
   feeFixed: number;
 }
 
-export interface ConsignmentLink {
-  variationId: string;
-  linkedAt: Date;
-  unlinkedAt: Date | null;
+/** Một dòng lịch sử phí của gian hàng (`commissionPct` đã quy ra số: NULL của gian hàng = mặc định lúc tính). */
+export interface ConsignmentTermsRow extends ConsignmentTerms {
+  effectiveFrom: Date;
+}
+
+/** Mức phí chốt theo lúc đặt đơn: dòng lịch sử mới nhất có hiệu lực <= `at`; đơn trước mọi dòng lịch sử lấy mức hiện tại. */
+export function termsAt(history: ConsignmentTermsRow[], current: ConsignmentTerms, at: Date): ConsignmentTerms {
+  let best: ConsignmentTermsRow | null = null;
+  for (const h of history) {
+    if (h.effectiveFrom <= at && (!best || h.effectiveFrom > best.effectiveFrom)) best = h;
+  }
+  return best ? { commissionPct: best.commissionPct, feePct: best.feePct, feeFixed: best.feeFixed } : current;
 }
 
 export interface ConsignmentItem {
@@ -52,11 +60,6 @@ export interface ConsignmentOrder {
   items: ConsignmentItem[];
 }
 
-/** Biến thể đang liên kết với gian hàng đúng lúc đặt đơn: khoảng [linkedAt, unlinkedAt). */
-export function linkedAtOrder(links: ConsignmentLink[], variationId: string, at: Date): boolean {
-  return links.some((l) => l.variationId === variationId && at >= l.linkedAt && (l.unlinkedAt === null || at < l.unlinkedAt));
-}
-
 /**
  * Tiền khách thực trả từng dòng hàng: tiền hàng thực trả (`total − shippingFee`) chia theo giá trị dòng — cùng tỉ lệ
  * paidLineTotals/refund-allocation dùng cho hoa hồng và hoàn tiền, nhưng chia phần dư cho phần lẻ lớn nhất nên cộng lại đúng
@@ -70,18 +73,35 @@ export function paidGoodsByLine(order: { total: number; shippingFee: number; ite
   return distributeByWeight(paid, totals);
 }
 
-/** Dòng SALE cho mọi dòng hàng của đơn mà biến thể liên kết với gian hàng lúc đặt (thứ tự theo id dòng để số luôn như nhau). */
-export function consignmentSaleLines(order: ConsignmentOrder, links: ConsignmentLink[], terms: ConsignmentTerms): SettlementLine[] {
+/**
+ * Số tiền làm nền cho từng dòng hàng giao hộ (tiền hàng của dòng trên phiếu). Chỗ DUY NHẤT quyết định nền tính: hiện là tiền
+ * khách thực trả cho dòng; đổi sang `OrderItem.total` như đơn tự giao thì chỉ sửa hàm này.
+ */
+export function consignmentLineBase(order: { total: number; shippingFee: number; items: { total: number }[] }): number[] {
+  return paidGoodsByLine(order);
+}
+
+/**
+ * Dòng SALE cho các dòng hàng của đơn thuộc gian hàng (`mine`: biến thể liên kết với gian hàng lúc đặt), thứ tự theo id dòng để
+ * số luôn như nhau. Phí cố định mỗi đơn chia theo tiền hàng và bị chặn ở phần còn lại sau phí sàn và phí % — không dòng nào âm
+ * vì phí cố định; phần vượt Tubu chịu. Dòng 0đ không gánh phí cố định.
+ */
+export function consignmentSaleLines(
+  order: ConsignmentOrder,
+  mine: (item: ConsignmentItem) => boolean,
+  terms: ConsignmentTerms,
+): SettlementLine[] {
   const items = [...order.items].sort((a, b) => a.id.localeCompare(b.id));
-  const paid = paidGoodsByLine({ ...order, items });
-  const mine = items.flatMap((it, idx) =>
-    linkedAtOrder(links, it.variationId, order.createdAt) ? [{ it, goods: paid[idx] ?? 0 }] : [],
-  );
-  if (mine.length === 0) return [];
-  const fixed = terms.feeFixed > 0 ? distributeByWeight(terms.feeFixed, mine.map((m) => m.goods)) : mine.map(() => 0);
-  return mine.map(({ it, goods }, idx) => {
+  const base = consignmentLineBase({ ...order, items });
+  const own = items.flatMap((it, idx) => (mine(it) ? [{ it, goods: base[idx] ?? 0 }] : []));
+  if (own.length === 0) return [];
+  const weights = own.map((m) => Math.max(0, m.goods));
+  const fixed =
+    terms.feeFixed > 0 && weights.some((w) => w > 0) ? distributeByWeight(terms.feeFixed, weights) : own.map(() => 0);
+  return own.map(({ it, goods }, idx) => {
     const commissionAmount = Math.round(goods * terms.commissionPct);
-    const opsFeeAmount = Math.round(goods * terms.feePct) + (fixed[idx] ?? 0);
+    const pctFee = Math.round(goods * terms.feePct);
+    const opsFeeAmount = pctFee + Math.min(fixed[idx] ?? 0, Math.max(0, goods - commissionAmount - pctFee));
     return {
       orderId: order.id,
       orderCode: order.code,
