@@ -1831,6 +1831,40 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     const { container } = await mount();
     expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Xuất CSV'))).toBe(false);
   });
+
+  it('CSKH mở chi tiết đơn: không có thao tác kho (đẩy lại Pancake) mà API chỉ mở cho KHO; KHO thì có', async () => {
+    const failed = {
+      id: 'o9',
+      code: 'TB9',
+      status: 'CONFIRMED',
+      total: 100000,
+      paymentMethod: 'COD',
+      paymentStatus: 'PENDING',
+      fulfiller: 'TUBU',
+      pancakePushStatus: 'FAILED',
+      pancakePushAttempts: 3,
+      pancakeSyncError: 'HTTP 500',
+      createdAt: '2026-10-14T01:00:00.000Z',
+      items: [],
+      allowedTransitions: ['PACKED'],
+    };
+    const openDetail = async (perms: string[]) => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: perms };
+      mocks.orders = [failed];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+      await flush();
+      const labels = [...container.querySelectorAll('button')].map((b) => b.textContent ?? '');
+      return labels;
+    };
+    const cskh = await openDetail(['CSKH']);
+    expect(cskh.some((l) => l.includes('Đẩy lại Pancake'))).toBe(false);
+    expect(cskh).toContain('Đã đóng gói');
+    const kho = await openDetail(['KHO']);
+    expect(kho.some((l) => l.includes('Đẩy lại Pancake'))).toBe(true);
+  });
 });
 
 describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
@@ -1928,6 +1962,18 @@ describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian
       act(() => (dialog.querySelector('button[aria-label="Đóng"]') as HTMLButtonElement).click());
       await flush();
       expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+
+      const heads = [...container.querySelectorAll('thead th')];
+      for (const label of ['Thanh toán', 'Trạng thái', 'Ngày đặt', 'Chi tiết / Cập nhật']) {
+        expect([...heads.find((h) => h.textContent === label)!.classList]).toEqual(expect.arrayContaining(['hidden', 'md:table-cell']));
+      }
+      const firstCell = container.querySelector('tbody td')!;
+      expect(firstCell.querySelector('.md\\:hidden')!.textContent).toContain('Đã xác nhận');
+      const codeBtn = firstCell.querySelector('button[aria-haspopup="dialog"]') as HTMLButtonElement;
+      expect(codeBtn.textContent).toBe('TF5');
+      act(() => codeBtn.click());
+      await flush();
+      expect(document.body.querySelector('[role="dialog"]')!.textContent).toContain('Đơn TF5');
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }

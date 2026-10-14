@@ -80,6 +80,8 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     expect(c.textContent).toContain('OK 09:45 14/10/2026 · 120 SP');
     expect(c.textContent).toContain('Đẩy đơn sang Pancake');
     expect(c.textContent).toContain('HTTP 500');
+    expect(c.textContent).toContain('· đẩy lỗi · 5 lần thử');
+    expect(c.textContent).not.toContain('FAILED');
     click(byText(c, 'button', 'Mở đơn →'));
     expect(onOpenOrder).toHaveBeenCalledWith('TB-77');
     expect(scrollRegionProblems(c)).toEqual([]);

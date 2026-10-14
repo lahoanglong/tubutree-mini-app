@@ -224,6 +224,21 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(mocks.review).toHaveBeenCalledWith('r1', false, 'Ảnh không rõ');
   });
 
+  it('quyền nhân viên: KHO không có nút duyệt/từ chối, CSKH không có nút "Đã nhận hàng về" (API chặn theo nhóm việc)', async () => {
+    const kho = render(<ReturnRow item={REQ()} canReview={false} />);
+    mounted.push(kho);
+    await flush();
+    expect(btn(kho.container, 'Duyệt hoàn tiền')).toBeNull();
+    expect(btn(kho.container, 'Từ chối')).toBeNull();
+    expect(kho.container.textContent).toContain('Chờ CSKH hoặc admin duyệt.');
+
+    const cskh = render(<ReturnRow item={REQ({ status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' })} canReceive={false} />);
+    mounted.push(cskh);
+    await flush();
+    expect(btn(cskh.container, 'Đã nhận hàng về')).toBeNull();
+    expect(cskh.container.textContent).toContain('Chưa nhận hàng trả về — kho chưa cộng.');
+  });
+
   it('đã duyệt, chưa nhận hàng: hiện số đã hoàn và nút "Đã nhận hàng về" (cộng kho); đã nhận thì không còn nút', async () => {
     const approved = REQ({
       status: 'APPROVED',

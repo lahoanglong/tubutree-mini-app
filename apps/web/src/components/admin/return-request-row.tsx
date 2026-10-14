@@ -40,7 +40,15 @@ function errorText(e: unknown, fallback: string) {
  * Một yêu cầu đổi/trả trong tab Đổi / Trả (D3): khách xin trả dòng nào, bao nhiêu; admin xem số tiền BE tính sẵn
  * (phân bổ giảm giá/điểm, phí ship khi trả cả đơn hoặc lỗi do Tubu) rồi xác nhận; kho chỉ cộng khi hàng về.
  */
-export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
+export function ReturnRow({
+  item: r,
+  canReview = true,
+  canReceive = true,
+}: {
+  item: AdminReturnRequest;
+  canReview?: boolean;
+  canReceive?: boolean;
+}) {
   const qc = useQueryClient();
   const [note, setNote] = useState(r.adminNote ?? '');
   const [confirming, setConfirming] = useState(false);
@@ -166,7 +174,10 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
 
       <EvidenceImages images={r.images} />
 
-      {r.status === 'REQUESTED' && (
+      {r.status === 'REQUESTED' && !canReview && (
+        <p className="mt-3 border-t border-stone-200 pt-3 text-xs text-stone-500">Chờ CSKH hoặc admin duyệt.</p>
+      )}
+      {r.status === 'REQUESTED' && canReview && (
         <div className="mt-3 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -355,14 +366,16 @@ export function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
             ) : (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-warning-fg">Chưa nhận hàng trả về — kho chưa cộng.</span>
-                <button
-                  type="button"
-                  onClick={() => received.mutate()}
-                  disabled={received.isPending}
-                  className={BTN_SECONDARY}
-                >
-                  {received.isPending ? 'Đang ghi nhận…' : 'Đã nhận hàng về'}
-                </button>
+                {canReceive && (
+                  <button
+                    type="button"
+                    onClick={() => received.mutate()}
+                    disabled={received.isPending}
+                    className={BTN_SECONDARY}
+                  >
+                    {received.isPending ? 'Đang ghi nhận…' : 'Đã nhận hàng về'}
+                  </button>
+                )}
               </div>
             ))}
           {received.isError && (

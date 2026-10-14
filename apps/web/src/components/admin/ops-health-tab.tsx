@@ -8,6 +8,16 @@ import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, Notice, ScrollRegion } from './ui';
 
+const PUSH_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'chờ đẩy',
+  PUSHING: 'đang đẩy',
+  FAILED: 'đẩy lỗi',
+  STALE: 'quá hạn tự đẩy',
+  NOT_CONFIGURED: 'chưa cấu hình',
+  WAITING_PAYMENT: 'chờ thanh toán',
+  WAITING_STOCK: 'chờ đủ hàng',
+};
+
 const QUEUE_LABELS: Record<string, string> = {
   'pancake-push': 'Đẩy đơn sang Pancake',
   'pancake-events': 'Webhook Pancake',
@@ -226,7 +236,7 @@ function HealthBody({ h, onOpenOrder }: { h: OpsHealth; onOpenOrder?: (code: str
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className="min-w-0">
                   <b className="text-stone-900">{o.code}</b>
-                  <span className="text-xs text-stone-500"> · đặt {formatDateTime(o.createdAt)} · {o.pancakePushStatus ?? 'chưa đẩy'} · {o.pancakePushAttempts} lần thử</span>
+                  <span className="text-xs text-stone-500"> · đặt {formatDateTime(o.createdAt)} · {PUSH_STATUS_LABELS[o.pancakePushStatus ?? ''] ?? o.pancakePushStatus ?? 'chưa đẩy'} · {o.pancakePushAttempts} lần thử</span>
                   {o.pancakeSyncError && <span className="block break-words text-xs text-danger-fg">{o.pancakeSyncError}</span>}
                 </span>
                 {onOpenOrder && (

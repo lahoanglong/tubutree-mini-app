@@ -416,13 +416,19 @@ export default function AdminPage() {
               key={orderSeed?.n ?? 0}
               initialSearch={orderSeed?.search}
               isAdmin={isAdmin}
+              canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
               recycling={ordersRecycling}
               onRecyclingChange={onRecyclingFilterChange}
               pancake={ordersPancake}
               onPancakeChange={onPancakeFilterChange}
             />
           )}
-          {active === 'returns' && <ReturnsTab />}
+          {active === 'returns' && (
+            <ReturnsTab
+              canReview={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')}
+              canReceive={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
+            />
+          )}
           {active === 'cashback' && <CashbackTab />}
           {active === 'posCredits' && <PosCreditsTab />}
           {active === 'users' && <UsersTab isAdmin={isAdmin} />}
@@ -804,6 +810,7 @@ function OrdersTab({
   pancake,
   onPancakeChange,
   isAdmin = true,
+  canWarehouse = true,
   initialSearch,
 }: {
   recycling: RecyclingFilter | '';
@@ -811,6 +818,8 @@ function OrdersTab({
   pancake: PancakeFilter | '';
   onPancakeChange: (p: PancakeFilter | '') => void;
   isAdmin?: boolean;
+  /** Thao tác kho (đẩy lại Pancake, xử lý Pancake/thu gom) — API chỉ mở cho ADMIN và nhân viên KHO. */
+  canWarehouse?: boolean;
   initialSearch?: string;
 }) {
   const [page, setPage] = useState(1);
@@ -1107,9 +1116,9 @@ function OrdersTab({
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
                 <th className="hidden px-3 py-2.5 font-medium md:table-cell">Thanh toán</th>
                 <th className="px-3 py-2.5 font-medium">Tổng tiền</th>
-                <th className="px-3 py-2.5 font-medium">Trạng thái</th>
+                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Trạng thái</th>
                 <th className="hidden px-3 py-2.5 font-medium md:table-cell">Ngày đặt</th>
-                <th className="px-3 py-2.5 font-medium text-right">Chi tiết / Cập nhật</th>
+                <th className="hidden px-3 py-2.5 text-right font-medium md:table-cell">Chi tiết / Cập nhật</th>
               </tr>
             </thead>
             <tbody>
@@ -1129,7 +1138,21 @@ function OrdersTab({
                         onClick={narrow ? () => setExpandedId(o.id || o.code) : undefined}
                       >
                         <td className="px-3 py-3">
-                          <div className="font-semibold text-stone-800">{o.code}</div>
+                          {narrow ? (
+                            <button
+                              type="button"
+                              aria-haspopup="dialog"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedId(o.id || o.code);
+                              }}
+                              className="-my-2 min-h-[44px] text-left font-semibold text-forest-700 underline decoration-forest-300 underline-offset-2"
+                            >
+                              {o.code}
+                            </button>
+                          ) : (
+                            <div className="font-semibold text-stone-800">{o.code}</div>
+                          )}
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {o.fulfiller === 'MERCHANT' && (
                               <ToneBadge tone="info" title={o.fulfillerStorefront?.title ?? undefined}>
@@ -1140,8 +1163,11 @@ function OrdersTab({
                             <PancakeAttentionBadge order={o} />
                             <PancakeSyncBadge order={o} />
                           </div>
-                          <div className="mt-0.5 text-[11px] text-stone-500 md:hidden">
-                            {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
+                          <div className="mt-1 space-y-1 md:hidden">
+                            <OrderStatusBadge status={o.status} />
+                            <div className="text-[11px] text-stone-500">
+                              {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
+                            </div>
                           </div>
                         </td>
                         <td className="px-3 py-3">
@@ -1164,13 +1190,13 @@ function OrdersTab({
                           )}
                         </td>
                         <td className="px-3 py-3 font-semibold text-forest-700">{formatVnd(o.total)}</td>
-                        <td className="px-3 py-3">
+                        <td className="hidden px-3 py-3 md:table-cell">
                           <OrderStatusBadge status={o.status} />
                         </td>
                         <td className="hidden px-3 py-3 text-xs text-stone-500 md:table-cell">
                           {formatDate(o.createdAt)}
                         </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="hidden px-3 py-3 text-right md:table-cell">
                           <button
                             type="button"
                             aria-haspopup={narrow ? 'dialog' : undefined}
@@ -1189,7 +1215,7 @@ function OrdersTab({
                       {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canWarehouse={canWarehouse} />
                           </td>
                         </tr>
                       )}
@@ -1211,7 +1237,7 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canWarehouse={canWarehouse} />
         </SideDrawer>
       )}
 
@@ -1247,11 +1273,11 @@ function OrdersTab({
 }
 
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
-function OrderDetailBody({ o, isAdmin }: { o: AdminOrder; isAdmin: boolean }) {
+function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canWarehouse: boolean }) {
   return (
     <div className="space-y-3">
-      <PancakeAttentionPanel order={o} />
-      <PancakeSyncPanel order={o} />
+      {canWarehouse && <PancakeAttentionPanel order={o} />}
+      {canWarehouse && <PancakeSyncPanel order={o} />}
 
       {/* Order items */}
       <div>
@@ -1298,7 +1324,7 @@ function OrderDetailBody({ o, isAdmin }: { o: AdminOrder; isAdmin: boolean }) {
 
       {isAdmin && <OrderInvoicePanel order={o} />}
 
-      <RecyclingPanel order={o} />
+      {canWarehouse && <RecyclingPanel order={o} />}
 
       {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
       {isAdmin && <DealerPaymentPanel order={o} />}
@@ -1314,7 +1340,7 @@ function OrderDetailBody({ o, isAdmin }: { o: AdminOrder; isAdmin: boolean }) {
   );
 }
 
-function ReturnsTab() {
+function ReturnsTab({ canReview = true, canReceive = true }: { canReview?: boolean; canReceive?: boolean }) {
   const [filter, setFilter] = useState('REQUESTED');
   // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
   // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
@@ -1364,7 +1390,7 @@ function ReturnsTab() {
       <div className="mt-3 space-y-3">
         {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách yêu cầu đổi/trả.</p>}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
-        {view.items.map((r) => <ReturnRow key={r.id} item={r} />)}
+        {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
         {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
       </div>
       <LoadMoreButton
