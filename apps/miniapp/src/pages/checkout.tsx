@@ -36,6 +36,7 @@ import {
   rememberCheckoutSelection,
   type RememberedSelection,
 } from '../utils/checkout-selection';
+import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
@@ -635,7 +636,7 @@ export default function CheckoutPage() {
               )}
               {points.convertedNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                  {points.convertedNote}
+                  {partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote}
                 </Text>
               )}
               {points.lockNote && (
