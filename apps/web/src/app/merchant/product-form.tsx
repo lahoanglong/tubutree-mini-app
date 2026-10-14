@@ -147,7 +147,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
             <input type="radio" name="merchant-product-fulfil" checked={tubuFulfils} onChange={() => setTubuFulfils(true)} className="mt-0.5 h-4 w-4 accent-forest-600" />
             <span>
               <span className="block font-semibold text-stone-900">Tubu giao hộ</span>
-              Hàng đã gửi vào kho Tubu Tree và có mã biến thể trên Pancake. Giá và tồn kho theo kho Tubu; tiền hàng Tubu thanh toán theo thoả thuận ký gửi, không qua tab Đối soát.
+              Hàng đã gửi vào kho Tubu Tree và có mã biến thể trên Pancake. Giá và tồn kho theo kho Tubu. Mỗi món bán được vào tab Đối soát sau khi giao: số khách thực trả cho món trừ phí sàn và phí Tubu giao hộ (nếu có); phí giao do Tubu Tree giữ.
             </span>
           </label>
           {tubuFulfils && (
