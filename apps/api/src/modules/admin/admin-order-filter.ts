@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { GOMDON_CANCEL, GOMDON_CARRIER, GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { DEALER_AWAITING_STOCK_WHERE } from '../dealer/dealer-awaiting-stock';
 import { TUBU_FULFILLED_ORDER_WHERE } from '../integrations/pancake/pancake-fulfilment';
+import { foldVietnamese } from '../catalog/search-text';
 
 // "Cần xử lý thu gom": trạng thái vận đơn Gomdon mà KHÔNG ai tự xử lý được — tạo vận đơn thất bại /
 // không rõ đã tạo / chưa cấu hình (kho phải tạo tay theo ghi chú Pancake), hoặc mã Gomdon báo huỷ /
@@ -118,6 +119,26 @@ export interface AdminOrderFilter {
    * OR xuyên hai bảng không dùng được index nào, Postgres phải quét toàn bảng orders.
    */
   searchUserIds?: string[];
+  /** Id đơn có SĐT người nhận (shippingAddress.phone) khớp `search` — tra trước bằng index biểu thức. */
+  searchOrderIds?: string[];
+}
+
+/**
+ * Chuỗi tìm trông như SĐT (chỉ số, khoảng trắng, chấm, gạch, ngoặc, dấu + đầu) → dạng nội địa 0xxxxxxxxx như
+ * User.phone đang lưu: "+84 901 234 567", "84901234567", "0901.234.567" đều về "0901234567". Không phải SĐT → null.
+ */
+export function searchPhone(raw: string): string | null {
+  const s = raw.trim();
+  if (!/^\+?[\d\s.\-()]+$/.test(s)) return null;
+  const digits = s.replace(/\D/g, '');
+  if (digits.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return null;
+  return digits.replace(/^84(\d{9})$/, '0$1');
+}
+
+/** Các cách SĐT người nhận có thể đã được lưu trong ảnh chụp địa chỉ (form web/miniapp/CTV nhận cả +84). */
+export function recipientPhoneVariants(local: string): string[] {
+  const m = /^0(\d{9})$/.exec(local);
+  return m ? [local, `+84${m[1]}`, `84${m[1]}`] : [];
 }
 
 /** Trigram cần ≥ 3 ký tự mới dùng được index; ngắn hơn thì tra trước chỉ tốn thêm một lượt quét users. */
@@ -162,15 +183,26 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.status) and.push({ status: f.status as never });
   const s = f.search?.trim();
   if (s) {
+    const phone = searchPhone(s);
+    const folded = foldVietnamese(s);
     const byUser: Prisma.OrderWhereInput[] = f.searchUserIds
       ? f.searchUserIds.length > 0
         ? [{ userId: { in: f.searchUserIds } }]
         : []
-      : [{ user: { phone: { contains: s } } }, { user: { fullName: { contains: s, mode: 'insensitive' } } }];
+      : [
+          { user: { phone: { contains: s } } },
+          ...(phone && phone !== s ? [{ user: { phone: { contains: phone } } }] : []),
+          { user: { fullName: { contains: s, mode: 'insensitive' as const } } },
+          ...(folded ? [{ user: { fullNameSearch: { contains: folded } } }] : []),
+        ];
     and.push({
       OR: [
         { code: { contains: s, mode: 'insensitive' } },
         { gomdonPartnerCode: { contains: s, mode: 'insensitive' } },
+        // Mã vận đơn hãng (GHN/GHTK...) Pancake ghi về, và mã đơn bên kho Pancake (CSKH tra từ Pancake POS).
+        { shippingCode: { contains: s, mode: 'insensitive' } },
+        { pancakeOrderId: s },
+        ...(f.searchOrderIds && f.searchOrderIds.length > 0 ? [{ id: { in: f.searchOrderIds } }] : []),
         ...byUser,
       ],
     });

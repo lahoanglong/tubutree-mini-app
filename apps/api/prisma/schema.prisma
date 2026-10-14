@@ -224,6 +224,8 @@ model User {
   phone                  String?         @unique
   email                  String?
   fullName               String?
+  /// Tên đã gấp dấu (vn_search_fold), trigger users_full_name_search_sync giữ đồng bộ với fullName — admin tìm tên không dấu.
+  fullNameSearch         String          @default("")
   /// Mã số thuế cá nhân (10 số) hoặc số CCCD 12 số dùng làm MST, CTV khai khi lần rút hoa hồng đầu tiên bị khấu trừ thuế TNCN.
   personalTaxId          String?
   dob                    DateTime?
@@ -308,6 +310,7 @@ model User {
   // Tìm đơn admin theo SĐT/tên khách (LIKE/ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
   @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_phone_trgm_idx")
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
+  @@index([fullNameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullNameSearch_trgm_idx")
   @@map("users")
 }
 
@@ -990,6 +993,8 @@ model Order {
   // Tìm đơn admin theo mã đơn / mã Gomdon (ILIKE '%x%') — trigram GIN, cần extension pg_trgm.
   @@index([code(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_code_trgm_idx")
   @@index([gomdonPartnerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_gomdonPartnerCode_trgm_idx")
+  // Tìm đơn admin theo mã vận đơn hãng (GHN/GHTK... Pancake ghi vào shippingCode).
+  @@index([shippingCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_shippingCode_trgm_idx")
   // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
   @@index([hasRecyclingPickup, gomdonStatus])
   // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.

@@ -19,6 +19,9 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  recipientPhoneVariants,
+  searchPhone,
+  type AdminOrderFilter,
   type InvoiceFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -41,6 +44,23 @@ function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; 
     o.status !== 'CANCELLED' &&
     o.status !== 'RETURNED'
   );
+}
+
+/** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. */
+export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | undefined {
+  const s = search?.trim();
+  if (!s) return undefined;
+  const phone = searchPhone(s);
+  const folded = foldVietnamese(s);
+  return {
+    OR: [
+      { phone: { contains: s } },
+      ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
+      { fullName: { contains: s, mode: 'insensitive' } },
+      ...(folded ? [{ fullNameSearch: { contains: folded } }] : []),
+      { id: s },
+    ],
+  };
 }
 
 @Injectable()
@@ -166,10 +186,7 @@ export class AdminService {
 
   // ── Users & orders ──
   async listUsers(page: number, limit: number, search?: string) {
-    const s = search?.trim();
-    const where: Prisma.UserWhereInput | undefined = s
-      ? { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }, { id: s }] }
-      : undefined;
+    const where = adminUserSearchWhere(search);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
@@ -449,12 +466,40 @@ export class AdminService {
   private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
     const s = search?.trim();
     if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
+    const phone = searchPhone(s);
+    const folded = foldVietnamese(s);
     const rows = await this.prisma.user.findMany({
-      where: { OR: [{ phone: { contains: s } }, { fullName: { contains: s, mode: 'insensitive' } }] },
+      where: {
+        OR: [
+          { phone: { contains: s } },
+          ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
+          { fullName: { contains: s, mode: 'insensitive' } },
+          ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: folded } }] : []),
+        ],
+      },
       select: { id: true },
       take: ADMIN_SEARCH_USER_CAP + 1,
     });
     return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
+  }
+
+  /** Đơn có SĐT người nhận khớp đúng số (index orders_shippingAddress_phone_idx trên đúng biểu thức này). */
+  private async findSearchOrderIds(search?: string): Promise<string[] | undefined> {
+    const phone = search ? searchPhone(search) : null;
+    const variants = phone ? recipientPhoneVariants(phone) : [];
+    if (variants.length === 0) return undefined;
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM orders WHERE ("shippingAddress" ->> 'phone') = ANY(${variants}::text[]) LIMIT ${ADMIN_SEARCH_USER_CAP}`;
+    return rows.map((r) => r.id);
+  }
+
+  /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
+  async adminOrderWhere(f: Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds'>): Promise<Prisma.OrderWhereInput> {
+    const [searchUserIds, searchOrderIds] = await Promise.all([
+      this.findSearchUserIds(f.search),
+      this.findSearchOrderIds(f.search),
+    ]);
+    return buildAdminOrderWhere({ ...f, searchUserIds, searchOrderIds });
   }
 
   /**
@@ -472,8 +517,7 @@ export class AdminService {
     invoice?: InvoiceFilter,
     pancake?: PancakeFilter,
   ) {
-    const searchUserIds = await this.findSearchUserIds(search);
-    const where: Prisma.OrderWhereInput = buildAdminOrderWhere({ status, search, recycling, invoice, pancake, searchUserIds });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,

@@ -116,15 +116,30 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
     expect(count).toHaveBeenCalledWith({ where: undefined });
   });
 
-  it('có search → lọc OR theo SĐT chứa, tên chứa (không phân biệt hoa thường), id đúng; count dùng cùng where', async () => {
+  it('có search → lọc OR theo SĐT chứa, tên chứa (không phân biệt hoa thường), tên không dấu, id đúng; count dùng cùng where', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
     await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 8, '  0901 ');
     const where = findMany.mock.calls[0]![0].where;
     expect(where).toEqual({
-      OR: [{ phone: { contains: '0901' } }, { fullName: { contains: '0901', mode: 'insensitive' } }, { id: '0901' }],
+      OR: [
+        { phone: { contains: '0901' } },
+        { fullName: { contains: '0901', mode: 'insensitive' } },
+        { fullNameSearch: { contains: '0901' } },
+        { id: '0901' },
+      ],
     });
     expect(count).toHaveBeenCalledWith({ where });
+  });
+
+  it('ADMINOPS-9: SĐT dạng +84 tìm theo dạng nội địa; tên gõ không dấu khớp cột đã gấp dấu', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const admin = mkAdmin({ user: { findMany, count }, $transaction: tx });
+    await admin.listUsers(1, 8, '+84 901 234 567');
+    expect(findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([{ phone: { contains: '0901234567' } }]));
+    await admin.listUsers(1, 8, 'Khách MỘT');
+    expect(findMany.mock.calls[1]![0].where.OR).toEqual(expect.arrayContaining([{ fullNameSearch: { contains: 'khach mot' } }]));
   });
 });
 

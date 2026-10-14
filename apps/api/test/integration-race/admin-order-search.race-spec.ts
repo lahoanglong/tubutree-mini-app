@@ -82,6 +82,50 @@ describe('Admin order search + query indexes (real Postgres)', () => {
     expect(await ids(`thị ${tok.toLowerCase()}`)).toEqual([o1.id, o2.id].sort());
   });
 
+  it('ADMINOPS-9: tìm theo mã vận đơn hãng, mã đơn Pancake, SĐT +84/84, SĐT người nhận và tên không dấu', async () => {
+    const tok = randCode(6);
+    const num = String(randomInt(10_000_000, 99_999_999));
+    const buyer = await createUser(prisma, { phone: `09${num}`, fullName: `Khách Một ${tok}` });
+    const o1 = await createOrder(prisma, { userId: buyer.id, code: `ITP${tok}A`, shippingCode: `GHN${tok}777`, shippingPartner: 'GHN' });
+    const o2 = await createOrder(prisma, { userId: buyer.id, code: `ITP${tok}B`, pancakeOrderId: `98${num}` });
+    const ctv = await createUser(prisma, { phone: `03${num}`, fullName: `CTV ${randCode(6)}` });
+    const recipientPhone = `07${num}`;
+    const o3 = await createOrder(prisma, {
+      userId: ctv.id,
+      code: `ITP${randCode(8)}`,
+      shippingAddress: { recipient: 'Người nhận', phone: recipientPhone, street: '1', ward: 'W', district: '', province: 'HN' },
+    });
+
+    const ids = async (search: string) => {
+      const res = (await admin.listOrders(1, 50, undefined, search)) as unknown as { data: { id: string }[] };
+      return res.data.map((o) => o.id).sort();
+    };
+
+    expect(await ids(`ghn${tok.toLowerCase()}777`)).toEqual([o1.id]);
+    expect(await ids(`98${num}`)).toEqual([o2.id]);
+    expect(await ids(`+849${num}`)).toEqual([o1.id, o2.id].sort());
+    expect(await ids(`84 9${num.slice(0, 4)} ${num.slice(4)}`)).toEqual([o1.id, o2.id].sort());
+    expect(await ids(`khach mot ${tok.toLowerCase()}`)).toEqual([o1.id, o2.id].sort());
+    expect(await ids(`KHACH MOT ${tok}`)).toEqual([o1.id, o2.id].sort());
+    expect(await ids(recipientPhone)).toEqual([o3.id]);
+    expect(await ids(`+847${num}`)).toEqual([o3.id]);
+  });
+
+  it('ADMINOPS-9: cột tên không dấu của users theo trigger, có index trigram', async () => {
+    const u = await createUser(prisma, { fullName: `Đặng Thị ${'Hoà'.normalize('NFD')}` });
+    const read = async () =>
+      (await prisma.$queryRaw<{ s: string }[]>`SELECT "fullNameSearch" AS s FROM users WHERE id = ${u.id}`)[0]!.s;
+    expect(await read()).toBe('dang thi hoa');
+    await prisma.user.update({ where: { id: u.id }, data: { fullName: 'NGUYỄN VĂN ÁNH' } });
+    expect(await read()).toBe('nguyen van anh');
+    const [idx] = await prisma.$queryRaw<{ indexdef: string }[]>`
+      SELECT indexdef FROM pg_indexes WHERE indexname = 'users_fullNameSearch_trgm_idx'`;
+    expect(idx?.indexdef).toMatch(/USING gin \("fullNameSearch" gin_trgm_ops\)/);
+    const [ship] = await prisma.$queryRaw<{ indexdef: string }[]>`
+      SELECT indexdef FROM pg_indexes WHERE indexname = 'orders_shippingCode_trgm_idx'`;
+    expect(ship?.indexdef).toMatch(/USING gin \("shippingCode" gin_trgm_ops\)/);
+  });
+
   it('chuỗi tìm ngắn (< 3 ký tự, trigram không dùng được) vẫn lọc đúng theo cách cũ', async () => {
     const tok = randCode(6);
     const buyer = await createUser(prisma, { fullName: `Zq${tok}` });

@@ -678,7 +678,12 @@ describe('AdminService.listOrders with search', () => {
       $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
     });
 
-    await mkAdmin(prisma).listOrders(1, 20, undefined, '0901234567');
+    await mkAdmin({ ...prisma, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService).listOrders(
+      1,
+      20,
+      undefined,
+      '0901234567',
+    );
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -707,7 +712,11 @@ describe('AdminService.listOrders with search', () => {
     expect(userFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          OR: [{ phone: { contains: '0901' } }, { fullName: { contains: '0901', mode: 'insensitive' } }],
+          OR: [
+            { phone: { contains: '0901' } },
+            { fullName: { contains: '0901', mode: 'insensitive' } },
+            { fullNameSearch: { contains: '0901' } },
+          ],
         },
         select: { id: true },
       }),
@@ -717,6 +726,8 @@ describe('AdminService.listOrders with search', () => {
       OR: [
         { code: { contains: '0901', mode: 'insensitive' } },
         { gomdonPartnerCode: { contains: '0901', mode: 'insensitive' } },
+        { shippingCode: { contains: '0901', mode: 'insensitive' } },
+        { pancakeOrderId: '0901' },
         { userId: { in: ['u1', 'u2'] } },
       ],
     });
@@ -735,6 +746,8 @@ describe('AdminService.listOrders with search', () => {
       OR: [
         { code: { contains: 'TB-123', mode: 'insensitive' } },
         { gomdonPartnerCode: { contains: 'TB-123', mode: 'insensitive' } },
+        { shippingCode: { contains: 'TB-123', mode: 'insensitive' } },
+        { pancakeOrderId: 'TB-123' },
       ],
     });
   });
