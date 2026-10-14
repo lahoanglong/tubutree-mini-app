@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries } from '@tanstack/react-query';
-import { CheckCircle2, Copy, Repeat } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Copy, Repeat } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
-import { fetchProduct } from '../../services/shop-api';
+import { fetchProduct, type PlacedOrder } from '../../services/shop-api';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
@@ -61,7 +61,7 @@ export function OrderSuccess({
   onTrack,
   onContinue,
 }: {
-  order: OrderDTO;
+  order: PlacedOrder;
   onTrack: () => void;
   onContinue: () => void;
 }) {
@@ -91,6 +91,9 @@ export function OrderSuccess({
   // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
   // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   const eta = cfg.isLoaded && cfg.shippingEta ? shippingEtaLabel(cfg.shippingEta) : null;
+  // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn (D4): khách phải thấy đủ các mã và tổng thật phải trả.
+  const split = order.splitOrders && order.splitOrders.length > 1 ? order.splitOrders : null;
+  const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
 
   return (
     <div style={{ padding: '32px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -126,7 +129,11 @@ export function OrderSuccess({
           <IconButton icon={Copy} label={vi.success.copyCode} onPress={copyCode} />
         </div>
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
-          <KeyValueRow label={vi.success.total} value={formatVnd(order.total)} emphasis />
+          <KeyValueRow
+            label={split ? `Tổng ${split.length} đơn` : vi.success.total}
+            value={formatVnd(grandTotal)}
+            emphasis
+          />
           {order.paymentMethod === 'COD' && (
             <Text variant="caption" tone="secondary" as="div">
               {vi.success.prepareCash}
@@ -143,6 +150,47 @@ export function OrderSuccess({
           {eta && <KeyValueRow label={vi.success.etaLabel} value={eta} />}
         </div>
       </Card>
+
+      {split && (
+        <section aria-label="Đơn cùng lần đặt">
+          <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>
+            Hàng do {split.length} nơi giao nên được tách thành {split.length} đơn
+          </Heading>
+          <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
+            Mỗi đơn có mã, phí giao và lộ trình riêng.
+          </Text>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {split.map((o) => (
+              <li key={o.code}>
+                <button
+                  type="button"
+                  className="tubu-press"
+                  aria-label={`Xem đơn ${o.code}, ${o.fulfillerName} giao, ${formatVnd(o.total)}`}
+                  onClick={() => navigate(`/order/${o.code}`, { replace: true })}
+                  style={{
+                    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+                    border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-control)',
+                    background: 'var(--color-bg-surface)', textAlign: 'left', cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 700 }}>
+                      {o.code}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
+                      {o.fulfillerName} giao
+                    </Text>
+                  </span>
+                  <Text variant="body-sm" as="span" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {formatVnd(o.total)}
+                  </Text>
+                  <Icon icon={ChevronRight} size="sm" tone="muted" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-label={vi.success.nextTitle}>
         <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>

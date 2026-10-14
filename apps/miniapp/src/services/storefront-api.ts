@@ -10,7 +10,11 @@ export interface StorefrontItem {
     inStock: boolean;
   };
 }
-export interface StorefrontItemEdit extends StorefrontItem { isPinned: boolean; isHidden: boolean; sortOrder: number; productId: string; }
+export interface StorefrontItemEdit extends StorefrontItem {
+  isPinned: boolean; isHidden: boolean; sortOrder: number; productId: string;
+  /** Lý do khách không thấy món này (null = khách thấy); món vừa thêm chưa có trường này cho tới lần tải lại. */
+  hiddenReason?: string | null;
+}
 export interface StorefrontCollection {
   id: string; title: string; kind: 'NORMAL' | 'COMBO'; layout: 'GRID' | 'CAROUSEL' | 'STACK';
   comboDiscountPct: number | null; items: StorefrontItem[];

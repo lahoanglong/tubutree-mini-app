@@ -41,6 +41,7 @@ vi.mock('../services/affiliate-api', () => ({
   getAffiliateLinks: vi.fn().mockResolvedValue([]),
   createAffiliateLink: vi.fn(),
   getCommissions: vi.fn().mockResolvedValue([]),
+  getMyPayouts: vi.fn().mockResolvedValue([]),
   requestPayout: vi.fn(),
   getStorefrontAnalytics: vi.fn().mockResolvedValue({ storefronts: [] }),
   getProductBreakdown: vi.fn().mockResolvedValue([]),
@@ -49,7 +50,11 @@ vi.mock('../services/affiliate-api', () => ({
   claimCtvMilestone: vi.fn(),
 }));
 vi.mock('../hooks/use-public-config', () => ({
-  usePublicConfig: () => ({ affiliateMinWithdrawBank: 50_000, isLoaded: true }),
+  usePublicConfig: () => ({
+    affiliateMinWithdrawBank: 50_000,
+    affiliatePitWithhold: { pct: 0.1, threshold: 2_000_000 },
+    isLoaded: true,
+  }),
 }));
 
 import AffiliatePage from './affiliate';
@@ -58,6 +63,7 @@ import {
   getAffiliateDashboard,
   getCommissions,
   getCtvMilestones,
+  getMyPayouts,
   getCtvTiers,
   requestPayout,
 } from '../services/affiliate-api';
@@ -260,6 +266,41 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     }
     expect(screen.getAllByText('Có thể rút')).toHaveLength(2);
   });
+
+  it('dòng hoa hồng kèm mã đơn và trạng thái đơn; khoản đang nằm trong lệnh rút hiện "Đang rút", không phải "Đã trả" (SELLER-10)', async () => {
+    vi.mocked(getCommissions).mockResolvedValue([
+      { id: 'c1', amount: 25_000, orderTotal: 500_000, status: 'APPROVED', withdrawing: true, orderCode: 'TB123', orderStatus: 'DELIVERED', createdAt: '2026-10-01T03:00:00.000Z' },
+    ] as Awaited<ReturnType<typeof getCommissions>>);
+    renderPage();
+    expect(await screen.findByText('Đang rút')).toBeInTheDocument();
+    expect(screen.getByText('Đơn TB123 ·', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Giao thành công')).toBeInTheDocument();
+    expect(screen.queryByText('Đã trả')).toBeNull();
+  });
+
+  it('mục Lệnh rút: trạng thái, lý do từ chối, mã giao dịch và thuế TNCN đã khấu trừ', async () => {
+    vi.mocked(getMyPayouts).mockResolvedValue([
+      { id: 'p1', amount: 2_700_000, grossAmount: 3_000_000, taxWithheld: 300_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: 'FT2610', requestedAt: '2026-10-01T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-02T03:00:00.000Z' },
+      { id: 'p2', amount: 60_000, grossAmount: 60_000, taxWithheld: 0, fee: 0, method: 'BANK', status: 'REJECTED', rejectionReason: 'Thiếu số tài khoản', bankRef: null, requestedAt: '2026-10-03T03:00:00.000Z', reviewedAt: '2026-10-04T03:00:00.000Z', paidAt: null },
+    ]);
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Lệnh rút' })).toBeInTheDocument();
+    expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
+    expect(screen.getByText('Mã giao dịch: FT2610')).toBeInTheDocument();
+    expect(screen.getByText(/đã khấu trừ thuế TNCN 300\.000đ/)).toBeInTheDocument();
+    expect(screen.getByText('Bị từ chối')).toBeInTheDocument();
+    expect(screen.getByText(/Lý do: Thiếu số tài khoản/)).toBeInTheDocument();
+  });
+
+  it('có hoa hồng đang rút: báo số đang chờ Tubu Tree chuyển khoản', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, withdrawingCommission: 80_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    expect(await screen.findByText(/Đang rút 80\.000đ về ngân hàng/)).toBeInTheDocument();
+  });
 });
 
 describe('Dashboard CTV — rút hoa hồng', () => {
@@ -296,11 +337,38 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Rút hoa hồng' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ví Tubu/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /Ngân hàng/ })).toHaveAttribute('aria-pressed', 'false');
-    expect(inputNear('Số tiền')).toHaveValue(200000);
-    expect(screen.getByText('Tối đa 200.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Mỗi lần rút là toàn bộ hoa hồng có thể rút.')).toBeInTheDocument();
+    expect(screen.queryByText('Số tiền')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Nhận 200.000đ vào Ví' }));
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(200000, 'WALLET_BALANCE', undefined);
+    expect(requestPayout).toHaveBeenCalledWith(200000, 'WALLET_BALANCE', undefined, expect.any(String));
+  });
+
+  it('gửi lại sau lỗi dùng cùng Idempotency-Key (không tạo lệnh rút thứ hai)', async () => {
+    vi.mocked(requestPayout).mockRejectedValueOnce(new Error('Network Error'));
+    renderPage();
+    await openWithdraw();
+    const submit = await screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' });
+    fireEvent.click(submit);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[3]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('từ ngưỡng thuế TNCN: hiện số khấu trừ và thực nhận trước khi bấm rút (SELLER-11)', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 2.700.000đ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận 2.700.000đ vào Ví' })).toBeInTheDocument();
   });
 
   it('chọn Ngân hàng: khoá nút tới khi nhập đủ thông tin tài khoản, rồi gửi kèm thông tin ngân hàng', async () => {
@@ -316,9 +384,12 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(200000, 'BANK', {
-      bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN A',
-    });
+    expect(requestPayout).toHaveBeenCalledWith(
+      200000,
+      'BANK',
+      { bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN A' },
+      expect.any(String),
+    );
   });
 });
 

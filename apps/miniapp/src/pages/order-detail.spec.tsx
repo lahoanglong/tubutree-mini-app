@@ -300,3 +300,37 @@ describe('OrderDetailPage — tương phản chữ ngày giờ ở khung trạng
     expect(contrast(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('OrderDetailPage — đơn gian hàng tự giao và đơn cùng lần đặt (D4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn gian hàng tự giao: nói rõ ai giao và hotline gian hàng; đơn cùng lần đặt chạm được để mở', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      code: 'TB2',
+      status: 'CONFIRMED',
+      fulfilment: { kind: 'MERCHANT', name: 'Mật ong Linh', phone: '0912000111' },
+      siblings: [{ code: 'TB1', status: 'SHIPPING', total: 130_000, fulfillerName: 'Tubu Tree' }],
+    });
+    renderPage();
+    expect(await screen.findByText('Giao bởi Mật ong Linh')).toBeInTheDocument();
+    expect(screen.getByText(/Liên hệ gian hàng: 0912000111/)).toBeInTheDocument();
+    const region = screen.getByRole('region', { name: 'Đơn cùng lần đặt' });
+    expect(region.textContent).toContain('Tubu Tree giao · Đang giao');
+    expect(region.textContent).toContain('130.000đ');
+    fireEvent.click(screen.getByRole('link', { name: 'Xem đơn TB1, Tubu Tree giao' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TB1');
+  });
+
+  it('đơn Tubu giao không tách: không có khối nơi giao', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, fulfilment: { kind: 'TUBU', name: 'Tubu Tree', phone: null }, siblings: [] });
+    renderPage();
+    await screen.findByText(/Xà bông thảo mộc/);
+    expect(screen.queryByText(/Giao bởi/)).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
+  });
+});

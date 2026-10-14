@@ -161,4 +161,28 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(onTrack).toHaveBeenCalledTimes(1);
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
+
+  it('lần đặt bị tách theo nơi giao: tổng của mọi đơn, liệt kê từng đơn kèm nơi giao, chạm để xem chi tiết (D4)', () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 130000,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    expect(screen.getByText('Tổng 2 đơn')).toBeInTheDocument();
+    expect(screen.getByText('355.000đ')).toBeInTheDocument();
+    const list = screen.getByRole('region', { name: 'Đơn cùng lần đặt' });
+    expect(list.textContent).toContain('Mật ong Linh giao');
+    fireEvent.click(screen.getByRole('button', { name: /Xem đơn TB2, Mật ong Linh giao/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TB2', { replace: true });
+  });
+
+  it('đơn không tách: không có danh sách đơn cùng lần đặt', () => {
+    renderSuccess();
+    expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
+  });
 });

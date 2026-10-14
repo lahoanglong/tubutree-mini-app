@@ -182,6 +182,25 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(screen.getByText('Bộ sưu tập A')).toBeInTheDocument();
   });
 
+  it('món khách không thấy (chưa duyệt, ngừng bán…) được đánh dấu kèm lý do; món bình thường không có nhãn (SELLER-15)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(
+      storefront({
+        collections: [
+          {
+            id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0,
+            items: [
+              item({ hiddenReason: null }),
+              item({ id: 'i2', productId: 'p3', product: { ...product, id: 'p3', name: 'SP chưa duyệt' }, hiddenReason: 'Sản phẩm chưa được duyệt bán' }),
+            ],
+          },
+        ],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText(/Khách không thấy: Sản phẩm chưa được duyệt bán/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Khách không thấy/)).toHaveLength(1);
+  });
+
   it('ghim, ẩn, xoá sản phẩm gọi đúng API (xoá phải qua bước xác nhận)', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Ghim lên đầu' }));
@@ -363,24 +382,46 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
     expect(mocks.updateStorefront).not.toHaveBeenCalled();
   });
 
-  it('cấu hình: không chọn màu thì gửi màu mặc định xanh lá, các trường rỗng thành undefined', async () => {
+  it('cấu hình CTV: gửi màu mặc định xanh lá, không gửi tài khoản ngân hàng hay kho (Tubu thu tiền và giao hàng)', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
     const sheet = await screen.findByTestId('sheet');
+    expect(sheet.textContent).not.toMatch(/VietQR/);
+    expect(within(sheet).queryByRole('textbox', { name: 'Số tài khoản ngân hàng' })).toBeNull();
+    expect(within(sheet).queryByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeNull();
+    expect(sheet.textContent).toContain('Khách luôn thanh toán cho Tubu Tree.');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
     await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
-    expect(mocks.updateStorefront).toHaveBeenCalledWith({
-      title: 'Cửa hàng Xanh',
-      subdomain: undefined,
-      themeColor: '#16a34a',
-      bankName: undefined,
-      bankBin: undefined,
-      bankAccountNo: undefined,
-      bankAccountName: undefined,
-      warehouseAddress: undefined,
-      warehouseCity: undefined,
-      warehousePhone: undefined,
-    });
+    expect(mocks.updateStorefront).toHaveBeenCalledWith({ title: 'Cửa hàng Xanh', subdomain: undefined, themeColor: '#16a34a' });
+  });
+
+  it('cấu hình gian hàng tự giao: xoá trắng kho/hotline gửi chuỗi rỗng để xoá thật, giá trị được cắt khoảng trắng', async () => {
+    mocks.getMyStorefront.mockResolvedValue(
+      storefront({ type: 'MERCHANT', warehouseAddress: '12 Lê Lợi', warehouseCity: 'Huế', warehousePhone: '0912000111' }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    fireEvent.change(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' }), { target: { value: '' } });
+    fireEvent.change(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' }), { target: { value: ' 0912999888 ' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront).toHaveBeenCalledWith(
+      expect.objectContaining({ warehouseAddress: '', warehouseCity: 'Huế', warehousePhone: '0912999888' }),
+    );
+    expect(mocks.updateStorefront.mock.calls[0]![0]).not.toHaveProperty('bankAccountNo');
+  });
+
+  it('tài khoản ngân hàng cũ: báo không dùng để thu tiền và cho gỡ (gửi chuỗi rỗng)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ bankName: 'Vietcombank', bankAccountNo: '0123456789' }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(sheet.textContent).toContain('Vietcombank ****6789');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Gỡ tài khoản đã lưu' }));
+    await waitFor(() =>
+      expect(mocks.updateStorefront).toHaveBeenCalledWith({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
+    );
   });
 
   it('cấu hình: chọn màu "Xanh dương" gửi #2563eb; subdomain được viết thường', async () => {
@@ -407,12 +448,12 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   });
 
   it('ô nhập trong cấu hình đều có tên truy cập (nhãn hoặc aria-label)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
     const sheet = await screen.findByTestId('sheet');
     for (const name of [
-      'Tên gian hàng', 'Subdomain riêng', 'Mã BIN ngân hàng', 'Tên ngân hàng', 'Số tài khoản ngân hàng',
-      'Tên chủ tài khoản', 'Địa chỉ kho xuất hàng', 'Tỉnh / Thành phố', 'Hotline kho liên hệ',
+      'Tên gian hàng', 'Subdomain riêng', 'Địa chỉ kho xuất hàng', 'Tỉnh / Thành phố', 'Hotline kho liên hệ',
     ]) {
       expect(within(sheet).getByRole('textbox', { name }), name).toBeInTheDocument();
     }

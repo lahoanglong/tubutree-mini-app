@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,14 +9,17 @@ import {
   getAffiliateLinks,
   createAffiliateLink,
   getCommissions,
+  getMyPayouts,
   requestPayout,
   getStorefrontAnalytics,
   getProductBreakdown,
   getCtvTiers,
   getCtvMilestones,
   claimCtvMilestone,
+  type AffiliatePayout,
   type Commission,
   type CommissionStatus,
+  type PayoutStatus,
   type CtvMilestoneItem,
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
@@ -24,6 +27,8 @@ import { useShareWithFallback } from '../components/share-sheet';
 import { useAuthStore } from '../store/auth';
 import { formatDate, formatPoints, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { newIdempotencyKey } from '../utils/idempotency';
+import { vi as copy } from '../i18n/vi';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -66,6 +71,25 @@ const COMMISSION_META: Record<CommissionStatus, { label: string; tone: BadgeTone
   PAID: { label: 'Đã trả', tone: 'neutral' },
   REJECTED: { label: 'Từ chối', tone: 'danger' },
 };
+const WITHDRAWING_META = { label: 'Đang rút', tone: 'info' as BadgeTone };
+
+const PAYOUT_META: Record<PayoutStatus, { label: string; tone: BadgeTone }> = {
+  REQUESTED: { label: 'Chờ duyệt', tone: 'promo' },
+  APPROVED: { label: 'Đã duyệt · chờ chuyển', tone: 'info' },
+  PAID: { label: 'Đã chuyển', tone: 'success' },
+  REJECTED: { label: 'Bị từ chối', tone: 'danger' },
+};
+const PAYOUT_METHOD: Record<AffiliatePayout['method'], string> = {
+  BANK: 'Về ngân hàng',
+  WALLET_BALANCE: 'Về Ví Tubu',
+  ZALOPAY: 'Về ZaloPay',
+};
+
+/** Thuế TNCN giữ lại cho một lần rút — cùng công thức affiliate.service.personalIncomeTax. */
+function payoutTax(gross: number, pit: { pct: number; threshold: number } | undefined): number {
+  if (!pit || !(pit.pct > 0) || gross < pit.threshold) return 0;
+  return Math.round(gross * Math.min(pit.pct, 1));
+}
 
 export default function AffiliatePage() {
   // /affiliate/me cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
@@ -229,6 +253,7 @@ function Dashboard() {
   const dashQ = useQuery({ queryKey: ['affiliate-dashboard'], queryFn: getAffiliateDashboard });
   const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks });
   const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions });
+  const payoutsQ = useQuery({ queryKey: ['affiliate-payouts'], queryFn: getMyPayouts });
   const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
   const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
@@ -572,6 +597,11 @@ function Dashboard() {
         >
           Rút hoa hồng
         </Button>
+        {(d?.withdrawingCommission ?? 0) > 0 && (
+          <Text variant="caption" tone="secondary" as="p" style={{ margin: '6px 0 0' }}>
+            Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
+          </Text>
+        )}
       </div>
 
       <div style={BLOCK_GAP}>
@@ -725,7 +755,7 @@ function Dashboard() {
         ) : commQ.data && commQ.data.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {commQ.data.slice(0, 30).map((c: Commission) => {
-              const m = COMMISSION_META[c.status];
+              const m = c.withdrawing ? WITHDRAWING_META : COMMISSION_META[c.status];
               return (
                 <div
                   key={c.id}
@@ -743,9 +773,14 @@ function Dashboard() {
                       +{formatVnd(c.amount)}
                     </Text>
                     <Text variant="caption" tone="tertiary" as="div">
-                      Đơn {formatVnd(c.orderTotal)} ·{' '}
-                      {formatDate(c.createdAt)}
+                      {c.orderCode ? `Đơn ${c.orderCode} · ` : 'Đơn '}
+                      {formatVnd(c.orderTotal)} · {formatDate(c.createdAt)}
                     </Text>
+                    {c.orderStatus && (
+                      <Text variant="caption" tone="tertiary" as="div">
+                        {copy.orderStatus[c.orderStatus] ?? c.orderStatus}
+                      </Text>
+                    )}
                   </div>
                   <Badge tone={m.tone}>{m.label}</Badge>
                 </div>
@@ -761,6 +796,24 @@ function Dashboard() {
             heading="Chưa có hoa hồng"
             body="Chia sẻ link để nhận hoa hồng từ đơn của bạn bè."
           />
+        )}
+      </Section>
+
+      <Section title="Lệnh rút">
+        {payoutsQ.isError ? (
+          <ErrorState variant="inline" message={getErrorMessage(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
+        ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {payoutsQ.data.map((p) => (
+              <PayoutRow key={p.id} p={p} />
+            ))}
+          </div>
+        ) : payoutsQ.isLoading ? (
+          <SectionSkeleton />
+        ) : (
+          <Text variant="body-sm" tone="tertiary" as="p" style={{ margin: 0 }}>
+            Chưa có lệnh rút nào.
+          </Text>
         )}
       </Section>
 
@@ -866,6 +919,7 @@ function Dashboard() {
               setWithdrawing(false);
               void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
+              void qc.invalidateQueries({ queryKey: ['affiliate-payouts'] });
               // Rút về WALLET_BALANCE cộng thẳng vào Ví Tubu — invalidate để trang Ví không
               // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi rút.
               void qc.invalidateQueries({ queryKey: ['wallet'] });
@@ -893,23 +947,28 @@ function WithdrawForm({
 }) {
   const { openSnackbar } = useSnackbar();
   // P0 FIX (A5-07): KHÔNG còn đọc affiliateWalletMultiplier — rút về Ví Tubu là quy đổi 1:1.
-  const { affiliateMinWithdrawBank: minBank, isLoaded: cfgLoaded } = usePublicConfig();
+  const { affiliateMinWithdrawBank: minBank, affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
-  const [amount, setAmount] = useState(String(max));
   const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
+  // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh rút thứ hai.
+  const payKey = useRef(newIdempotencyKey());
 
   const mut = useMutation({
-    mutationFn: () =>
-      requestPayout(Number(amount), method, method === 'BANK' ? bank : undefined),
+    mutationFn: () => requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: r.note ?? 'Đã gửi yêu cầu rút.', type: 'success' });
+      openSnackbar({
+        text: r.note ?? (method === 'BANK' ? 'Đã gửi lệnh rút. Theo dõi trạng thái ở mục Lệnh rút.' : 'Đã gửi yêu cầu rút.'),
+        type: 'success',
+      });
       onDone();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const amountNum = Number(amount) || 0;
+  // BE chỉ nhận rút toàn bộ hoa hồng có thể rút (affiliate.service.requestPayout), nên số tiền không cho sửa.
+  const amountNum = max;
+  const tax = payoutTax(amountNum, pit);
   const bankValid =
     method !== 'BANK' ||
     (bank.bankName.trim() && bank.accountNumber.trim().length >= 6 && bank.accountName.trim());
@@ -917,8 +976,8 @@ function WithdrawForm({
   // sánh với max để không khoá chết nút Gửi; BE vẫn tự validate số dư thật khi submit.
   // !mut.isPending chặn double-submit (Button.loading của zmp-ui KHÔNG tự set thuộc tính disabled).
   const valid =
+    knownMax &&
     amountNum > 0 &&
-    (!knownMax || amountNum <= max) &&
     // Chờ config THẬT trước khi cho gửi lệnh rút về ngân hàng: mốc mặc định (50k) có thể khác
     // config đang chạy, nên trong ~200ms đầu CTV gõ 60k sẽ thấy nút hợp lệ rồi bị BE từ chối,
     // và nhãn "Tối thiểu 50k" cũng hiện sai trong khoảng đó.
@@ -943,15 +1002,30 @@ function WithdrawForm({
         />
       </div>
 
-      <Input
-        label="Số tiền"
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
-      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
-        {knownMax ? `Tối đa ${formatVnd(max)}` : 'Số dư sẽ được máy chủ xác thực khi gửi yêu cầu.'}
-      </Text>
+      {knownMax ? (
+        <div>
+          <Text variant="caption" tone="secondary" as="div">
+            Số tiền rút
+          </Text>
+          <Text variant="price-md" as="div">
+            {formatVnd(amountNum)}
+          </Text>
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+            Mỗi lần rút là toàn bộ hoa hồng có thể rút.
+          </Text>
+          {tax > 0 && (
+            <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
+              Khấu trừ thuế TNCN {formatVnd(tax)} · thực nhận {formatVnd(amountNum - tax)}
+            </Text>
+          )}
+        </div>
+      ) : (
+        <div role="alert">
+          <Text variant="caption" tone="danger" as="p" style={{ margin: 0 }}>
+            Chưa tải được số hoa hồng có thể rút. Đóng lại rồi thử lại sau ít phút.
+          </Text>
+        </div>
+      )}
 
       {method === 'BANK' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
@@ -981,9 +1055,43 @@ function WithdrawForm({
         style={{ marginTop: 20 }}
       >
         {method === 'WALLET_BALANCE'
-          ? `Nhận ${formatVnd(amountNum)} vào Ví`
+          ? `Nhận ${formatVnd(amountNum - tax)} vào Ví`
           : `Rút ${formatVnd(amountNum)}`}
       </Button>
+    </div>
+  );
+}
+
+function PayoutRow({ p }: { p: AffiliatePayout }) {
+  const m = PAYOUT_META[p.status];
+  return (
+    <div style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <Text variant="body-sm" as="div" style={BOLD}>
+            {formatVnd(p.amount)}
+          </Text>
+          <Text variant="caption" tone="tertiary" as="div">
+            {PAYOUT_METHOD[p.method]} · {formatDate(p.requestedAt)}
+          </Text>
+        </div>
+        <Badge tone={m.tone}>{m.label}</Badge>
+      </div>
+      {p.taxWithheld > 0 && (
+        <Text variant="caption" tone="tertiary" as="div">
+          Hoa hồng {formatVnd(p.grossAmount ?? p.amount + p.taxWithheld)} · đã khấu trừ thuế TNCN {formatVnd(p.taxWithheld)}
+        </Text>
+      )}
+      {p.status === 'REJECTED' && (
+        <Text variant="caption" tone="danger" as="div">
+          Lý do: {p.rejectionReason ?? 'không ghi lý do'}. Hoa hồng đã trở lại mục Có thể rút.
+        </Text>
+      )}
+      {p.bankRef && (
+        <Text variant="caption" tone="tertiary" as="div">
+          Mã giao dịch: {p.bankRef}
+        </Text>
+      )}
     </div>
   );
 }

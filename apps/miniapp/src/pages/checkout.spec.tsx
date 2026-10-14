@@ -646,3 +646,76 @@ describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-1
     expect(screen.queryByTestId('checkout-cart-issue')).toBeNull();
   });
 });
+
+describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
+  const TUBU = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' };
+  const SHOP = { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' };
+  const BLOCK_REASON = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+  const SPLIT_CART = {
+    ...CART,
+    items: [
+      { ...CART.items[0]!, fulfiller: TUBU },
+      { id: 'ci2', variationId: 'v2', productName: 'Mật ong rừng', variationName: null, slug: 'mat-ong', thumbnail: null, unitPrice: 200_000, quantity: 1, stock: 5, total: 200_000, fulfiller: SHOP },
+    ],
+    subtotal: 250_000,
+  };
+  const SPLIT_QUOTE = {
+    ...QUOTE,
+    subtotal: 250_000, shippingFee: 45_000, total: 295_000,
+    shipments: [
+      { key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 },
+      { key: 'MERCHANT:sf1', fulfiller: SHOP, itemIds: ['ci2'], subtotal: 200_000, discount: 0, shippingFee: 25_000, total: 225_000 },
+    ],
+    blockedPaymentMethods: { BANK_TRANSFER: BLOCK_REASON },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(SPLIT_CART);
+    mocks.checkoutQuote.mockResolvedValue(SPLIT_QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('món chia theo nơi giao kèm phí giao từng kiện; báo sẽ thành 2 đơn riêng', async () => {
+    renderPage();
+    const tubu = await screen.findByRole('region', { name: 'Tubu Tree giao' });
+    const shop = screen.getByRole('region', { name: 'Mật ong Linh giao' });
+    expect(tubu.textContent).toContain('Xà bông thảo mộc');
+    expect(tubu.textContent).toMatch(/Phí giao\s*20\.000đ/);
+    expect(shop.textContent).toContain('Mật ong rừng');
+    expect(shop.textContent).toMatch(/Phí giao\s*25\.000đ/);
+    expect(screen.getByText(/sẽ thành 2 đơn riêng/)).toBeInTheDocument();
+  });
+
+  it('chuyển khoản bị máy chủ khoá: dòng bị vô hiệu kèm đúng lý do; đặt hàng gửi COD', async () => {
+    renderPage();
+    const bank = await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ });
+    await waitFor(() => expect(bank).toHaveAttribute('aria-disabled', 'true'));
+    expect(document.getElementById(bank.getAttribute('aria-describedby')!)!.textContent).toBe(BLOCK_REASON);
+    fireEvent.click(bank);
+    expect(bank).toHaveAttribute('aria-checked', 'false');
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('COD');
+  });
+
+  it('giỏ toàn hàng Tubu: không chia nhóm, không báo tách đơn', async () => {
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue({
+      ...QUOTE,
+      shipments: [{ key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 }],
+    });
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByRole('region', { name: 'Tubu Tree giao' })).toBeNull();
+    expect(screen.queryByText(/đơn riêng/)).toBeNull();
+  });
+});
