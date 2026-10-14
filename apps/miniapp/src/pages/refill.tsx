@@ -29,7 +29,12 @@ export default function RefillPage() {
   const [qty, setQty] = useState(1);
   // Key giữ nguyên khi lỗi để retry mạng thật không tạo thêm 1 yêu cầu đổi vỏ nữa; chỉ đổi
   // key mới sau khi đã đổi vỏ thành công (lệnh sau là lệnh mới) — mirror pattern checkout/wallet.
-  const returnKey = useRef(newIdempotencyKey());
+  // Key gắn với số vỏ: server từ chối (409) cùng key khác số lượng nên đổi số vỏ = lệnh mới.
+  const returnKey = useRef({ key: newIdempotencyKey(), qty: 1 });
+  const keyFor = (n: number) => {
+    if (returnKey.current.qty !== n) returnKey.current = { key: newIdempotencyKey(), qty: n };
+    return returnKey.current.key;
+  };
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['refill'],
@@ -38,12 +43,12 @@ export default function RefillPage() {
   });
 
   const returnM = useMutation({
-    mutationFn: () => returnBottles(qty, returnKey.current),
+    mutationFn: () => returnBottles(qty, keyFor(qty)),
     onSuccess: () => {
       haptic('heavy');
       openSnackbar({ text: 'Đã gửi yêu cầu! Mang vỏ chai đến điểm nhận để nhân viên đối chiếu và duyệt.', type: 'success' });
       setQty(1);
-      returnKey.current = newIdempotencyKey();
+      returnKey.current = { key: newIdempotencyKey(), qty: 1 };
       void queryClient.invalidateQueries({ queryKey: ['refill'] });
       void queryClient.invalidateQueries({ queryKey: ['garden'] });
       void queryClient.invalidateQueries({ queryKey: ['game'] });
@@ -106,7 +111,7 @@ export default function RefillPage() {
               fullWidth
               loading={returnM.isPending}
               disabled={!eligible}
-              onPress={() => returnM.mutate()}
+              onPress={() => returnM.mutateAsync().catch(() => undefined)}
               style={{ marginTop: 14 }}
             >
               {remaining > 0 ? 'Gửi yêu cầu đổi vỏ' : 'Đã hết lượt đổi tháng này'}
