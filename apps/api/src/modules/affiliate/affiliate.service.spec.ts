@@ -7,6 +7,7 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
@@ -262,10 +263,12 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       ctvPhone?: string | null;
       storefront?: { slug: string } | null;
       shippingFee?: number;
+      flash?: { resolveEffective: jest.Mock; consumeQuota: jest.Mock };
     } = {},
   ) {
     const variations =
       opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }];
+    const flash = opts.flash ?? { resolveEffective: jest.fn().mockResolvedValue(new Map()), consumeQuota: jest.fn() };
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
@@ -308,8 +311,10 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       pancakeOrderLocal,
       coins,
       analyticsLocal as unknown as AnalyticsEventsService,
+      undefined,
+      flash as unknown as FlashSaleService,
     );
-    return { svc, prisma, orderCreate, executeRaw, commissionCreate, pricingLocal, pancakeOrderLocal, analyticsLocal };
+    return { svc, prisma, orderCreate, executeRaw, commissionCreate, pricingLocal, pancakeOrderLocal, analyticsLocal, flash };
   }
 
   const DTO = (over: Record<string, unknown> = {}) => ({
@@ -350,6 +355,81 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.items.create[0].unitPrice).toBe(80000);
     expect(data.subtotal).toBe(160000);
+  });
+
+  describe('R4-CHECKOUT-5: đơn hộ tính giá đúng như khách tự đặt (giờ vàng)', () => {
+    const GRANOLA = [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 140000, name: '500g', product: { name: 'Granola', isActive: true, approvalStatus: 'APPROVED' } }];
+    const offer = (over: Record<string, unknown> = {}) =>
+      new Map([['v1', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, quotaLeft: 9, perUserLeft: 3, allowance: 3, ...over }]]);
+    const flashWith = (map: Map<string, unknown>) => ({ resolveEffective: jest.fn().mockResolvedValue(map), consumeQuota: jest.fn().mockResolvedValue(undefined) });
+
+    it('đang giờ vàng → đơn tính giá giờ vàng, giữ suất trong tx (theo tài khoản CTV), dòng mang flashSaleItemId', async () => {
+      const flash = flashWith(offer());
+      const { svc, orderCreate, prisma } = build({ variations: GRANOLA, flash, shippingFee: 19000 });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(flash.resolveEffective).toHaveBeenCalledWith(['v1'], expect.any(Date), 'ctv');
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data.items.create[0]).toMatchObject({ variationId: 'v1', unitPrice: 120000, quantity: 2, total: 240000, flashSaleItemId: 'fi1' });
+      expect([data.subtotal, data.total]).toEqual([240000, 259000]);
+      expect(flash.consumeQuota).toHaveBeenCalledWith(prisma, 'fi1', 'ctv', 2, expect.any(Date));
+    });
+
+    it('số lượng vượt suất giờ vàng còn mua được → cả dòng giá thường như giỏ, không giữ suất', async () => {
+      const flash = flashWith(offer({ allowance: 1, perUserLeft: 1 }));
+      const { svc, orderCreate } = build({ variations: GRANOLA, flash });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate.mock.calls[0][0].data.items.create[0]).toMatchObject({ unitPrice: 140000, total: 280000, flashSaleItemId: null });
+      expect(flash.consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it('giá đang bán đã hạ dưới giá giờ vàng → lấy giá thấp hơn (min như giỏ)', async () => {
+      const flash = flashWith(offer({ flashPrice: 130000 }));
+      const { svc, orderCreate } = build({ variations: [{ ...GRANOLA[0]!, salePrice: 110000 }], flash });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate.mock.calls[0][0].data.items.create[0].unitPrice).toBe(110000);
+    });
+
+    it('hết suất giữa lúc tính giá và lúc ghi đơn → không tạo đơn, báo giá giờ vàng vừa đổi bằng tiếng Việt', async () => {
+      const flash = flashWith(offer());
+      flash.consumeQuota.mockRejectedValue(new BadRequestException('Hết suất ưu đãi.'));
+      const { svc, orderCreate, commissionCreate } = build({ variations: GRANOLA, flash });
+      const err = await svc.placeOrderForCustomer('ctv', DTO() as never).catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'PRICE_CHANGED' });
+      expect((err as BadRequestException).message).toContain('Granola');
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(commissionCreate).not.toHaveBeenCalled();
+    });
+
+    it('cùng biến thể gửi hai dòng → gộp một dòng, xét suất giờ vàng trên tổng số lượng', async () => {
+      const flash = flashWith(offer({ allowance: 3 }));
+      const { svc, orderCreate } = build({ variations: GRANOLA, flash });
+      await svc.placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }] }) as never);
+      const items = orderCreate.mock.calls[0][0].data.items.create;
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ quantity: 4, unitPrice: 140000, flashSaleItemId: null });
+    });
+
+    it('báo giá đơn hộ trả đúng giá sẽ tính khi tạo đơn (kèm lý do khi vượt suất), không tạo gì', async () => {
+      const flash = flashWith(offer({ allowance: 1, perUserLeft: 1 }));
+      const { svc, orderCreate, executeRaw } = build({ variations: GRANOLA, flash, shippingFee: 19000 });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] });
+      expect(q).toEqual({
+        items: [{ variationId: 'v1', unitPrice: 120000, quantity: 1, total: 120000, isFlash: true, flashLimitNotice: null }],
+        goods: 120000,
+        shippingFee: 19000,
+        total: 139000,
+      });
+      const over = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 2 }] });
+      expect(over.items[0]).toMatchObject({ unitPrice: 140000, isFlash: false, flashLimitNotice: expect.stringContaining('tối đa 1') });
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('báo giá đơn hộ: chỉ CTV/ADMIN', async () => {
+      const { svc } = build({ role: 'CUSTOMER' });
+      await expect(svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] })).rejects.toThrow('Chỉ CTV');
+    });
   });
 
   it('trừ stock ATOMIC từng line (where gte) trước khi tạo đơn', async () => {

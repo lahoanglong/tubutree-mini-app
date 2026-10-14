@@ -39,6 +39,16 @@ export class CtvOrderCustomerDto {
   @IsString() @MaxLength(20) wardCode!: string;
 }
 
+/** Báo giá đơn hộ trước khi tạo: đúng giá sẽ tính khi tạo đơn (giờ vàng, phí giao). */
+export class QuoteOrderForCustomerDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CtvOrderItemDto)
+  items!: CtvOrderItemDto[];
+}
+
 /**
  * CTV lên đơn hộ khách (Build Spec affiliate.*). Chỉ COD / chuyển khoản — đơn hộ
  * KHÔNG dùng Ví/Điểm Xanh của CTV, KHÔNG coupon/điểm (đơn reseller đơn giản).

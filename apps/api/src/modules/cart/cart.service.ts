@@ -4,7 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { freeShipThreshold } from '../pricing/pricing.service';
-import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
@@ -21,15 +22,6 @@ import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessa
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
   return lines.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
-}
-
-/** Lý do dòng giờ vàng đang tính giá thường: số lượng vượt số suất khách còn mua được. */
-function flashLimitMessage(offer: EffectivePrice, quantity: number): string {
-  const allowance = offer.allowance ?? 0;
-  if (allowance <= 0) return 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.';
-  const tail = `Giảm số lượng còn ${allowance} để được giá giờ vàng, hoặc mua ${quantity} sản phẩm với giá thường.`;
-  if ((offer.quotaLeft ?? allowance) <= (offer.perUserLeft ?? allowance)) return `Chỉ còn ${allowance} suất giờ vàng. ${tail}`;
-  return `Giá giờ vàng chỉ áp dụng tối đa ${allowance} sản phẩm cho bạn. ${tail}`;
 }
 
 @Injectable()
@@ -104,12 +96,11 @@ export class CartService {
       userId,
     );
     const lines = sellable.map((it) => {
-      const offer = flashMap.get(it.variationId);
-      const fits = !offer || offer.allowance === undefined || it.quantity <= offer.allowance;
-      const flash = fits ? offer : undefined;
-      const flashLimitNotice = offer && !fits ? flashLimitMessage(offer, it.quantity) : null;
-      const standing = it.variation.salePrice ?? it.variation.retailPrice;
-      const unitPrice = flash ? Math.min(flash.flashPrice, standing) : standing;
+      const { unitPrice, flash, flashLimitNotice } = priceFlashLine(
+        it.variation.salePrice ?? it.variation.retailPrice,
+        it.quantity,
+        flashMap.get(it.variationId),
+      );
       return {
         id: it.id,
         variationId: it.variationId,

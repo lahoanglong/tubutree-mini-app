@@ -19,7 +19,7 @@ import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
 import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN } from './affiliate.service';
-import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
 class CreateLinkDto {
@@ -121,6 +121,12 @@ export class AffiliateController {
   @Get('tax-statement')
   taxStatement(@CurrentUser('sub') userId: string, @Query() q: TaxStatementQuery) {
     return this.affiliate.taxStatement(userId, q.year ?? vnDateParts().year);
+  }
+
+  // Báo giá form lên đơn hộ: đúng giá sẽ tính khi tạo đơn (giờ vàng như khách tự đặt, phí giao).
+  @Post('orders/quote')
+  quoteOrderForCustomer(@CurrentUser('sub') userId: string, @Body() dto: QuoteOrderForCustomerDto) {
+    return this.affiliate.quoteOrderForCustomer(userId, dto);
   }
 
   // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).
