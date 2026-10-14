@@ -7,6 +7,19 @@ export interface ShippingInput {
 }
 
 /**
+ * Ngưỡng tiền hàng được miễn phí giao kho Tubu cho một hạng: ngưỡng toàn cục, hoặc ngưỡng riêng của hạng nếu thấp hơn
+ * (id tier viết hoa: LOC_BIEC / DAI_THU / CO_THU). Giỏ hàng (thanh tiến độ freeship) và checkout cùng dùng hàm này.
+ */
+export async function freeShipThreshold(config: Pick<SystemConfigService, 'get'>, tierId: string | null | undefined): Promise<number> {
+  const global = await config.get<number>('shipping.free_threshold', 200000);
+  if (!tierId) return global;
+  // `?? {}`: get() chỉ áp fallback khi CHƯA có row; admin lỡ lưu value=null thì get() trả null.
+  const overrides = await config.get<Record<string, number> | null>('shipping.tier_freeship_overrides', {});
+  const tier = (overrides ?? {})[tierId];
+  return typeof tier === 'number' ? Math.min(tier, global) : global;
+}
+
+/**
  * Tính phí ship, điểm tích, điểm tối đa được trừ — TẤT CẢ đọc tham số từ SystemConfig.
  * Quy tắc (Build Spec §0.7, §6.6, §15):
  *  - Đơn ≥ shipping.free_threshold (200k) → freeship; ngược lại flat_fee (19k).
@@ -19,26 +32,11 @@ export class PricingService {
   constructor(private readonly config: SystemConfigService) {}
 
   async calcShippingFee(input: ShippingInput): Promise<number> {
-    const [freeThreshold, flatFee] = await Promise.all([
-      this.config.get<number>('shipping.free_threshold', 200000),
+    const [threshold, flatFee] = await Promise.all([
+      freeShipThreshold(this.config, input.tierId),
       this.config.get<number>('shipping.flat_fee_below_threshold', 19000),
     ]);
-
-    // Override theo hạng (id tier viết hoa: LOC_BIEC / DAI_THU / CO_THU).
-    if (input.tierId) {
-      const overrides = await this.config.get<Record<string, number> | null>(
-        'shipping.tier_freeship_overrides',
-        {},
-      );
-      // Guard `?? {}`: SystemConfigService.get() chỉ áp fallback khi CHƯA có row; nếu admin
-      // lỡ lưu value=null cho key này, get() trả về null (không phải {}) → indexing throw.
-      const tierThreshold = (overrides ?? {})[input.tierId];
-      if (tierThreshold !== undefined && input.subtotal >= tierThreshold) {
-        return 0;
-      }
-    }
-
-    return input.subtotal >= freeThreshold ? 0 : flatFee;
+    return input.subtotal >= threshold ? 0 : flatFee;
   }
 
   /** Điểm tích cho giá trị hàng (đã trừ giảm giá), nhân multiplier hạng. */

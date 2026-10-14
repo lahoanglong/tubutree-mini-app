@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -9,13 +9,13 @@ import { QuantitySelector } from '../ui/quantity-selector';
 import { Text } from '../ui/text';
 import { MultiImageUpload } from '../image-upload';
 import { RefundDestinationPicker } from './refund-destination-picker';
-import { fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
+import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
+import { formatVnd } from '../../utils/format';
 import {
   EMPTY_BANK,
   RETURN_REASONS,
-  bankDetailsError,
   canRefundToBank,
   destinationBody,
   remainingByLine,
@@ -79,6 +79,19 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     };
   }, [method, bank.accountNumber]);
 
+  const picked = useMemo(
+    () => lines.filter((l) => l.selected && l.quantity > 0).map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
+    [lines],
+  );
+  const estimate = useQuery({
+    queryKey: ['return-estimate', order.code, picked, reasonCode],
+    queryFn: () => estimateReturn(order.code, { items: picked, reasonCode: reasonCode ?? undefined }),
+    enabled: open && showsMoney && picked.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+  const estimated = picked.length > 0 && estimate.data?.moneyRefundable ? estimate.data : null;
+
   const error = useMemo(
     () => returnFormError({ lines, reasonCode, reason, refundMethod: bankAllowed ? method : 'WALLET', bank }),
     [lines, reasonCode, reason, method, bank, bankAllowed],
@@ -90,7 +103,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
         reasonCode: reasonCode!,
         reason: reason.trim() || undefined,
         images,
-        items: lines.filter((l) => l.selected && l.quantity > 0).map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
+        items: picked,
         ...(showsMoney && bankAllowed ? destinationBody(method, bank) : {}),
       }),
     onSuccess: () => {
@@ -107,6 +120,10 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
 
   const setLine = (id: string, patch: Partial<ReturnLineState>) =>
     setLines((ls) => ls.map((l) => (l.orderItemId === id ? { ...l, ...patch } : l)));
+  const toggleLine = (l: ReturnLineState) => {
+    haptic('light');
+    setLine(l.orderItemId, { selected: !l.selected });
+  };
 
   return (
     <BottomSheet
@@ -117,6 +134,22 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       description={`Trong ${returnDays} ngày từ khi nhận hàng. Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24h.`}
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {estimated && (
+            <div role="status" aria-live="polite" style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)' }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                {`Dự kiến hoàn ${formatVnd(estimated.refund)}`}
+              </Text>
+              <Text variant="caption" tone="tertiary" as="div">
+                {[
+                  estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
+                  estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
+                  'Tubu xác nhận số cuối cùng khi duyệt',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </div>
+          )}
           {touched && error && (
             <div role="alert">
               <Text variant="caption" tone="danger" as="div">
@@ -152,12 +185,10 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
               <Checkbox
                 checked={l.selected}
                 aria-label={`Trả ${l.productName} ${l.variationName}`}
-                onChange={() => {
-                  haptic('light');
-                  setLine(l.orderItemId, { selected: !l.selected });
-                }}
+                onChange={() => toggleLine(l)}
               />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Chạm vào tên cũng chọn dòng; bàn phím và trình đọc màn hình dùng ô tick ngay cạnh. */}
+              <div onClick={() => toggleLine(l)} style={{ flex: 1, minWidth: 0, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 44, cursor: 'pointer' }}>
                 <Text variant="body-sm" as="div">
                   {l.productName}
                 </Text>
@@ -208,7 +239,14 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
 
         {showsMoney &&
           (bankAllowed ? (
-            <RefundDestinationPicker method={method} onMethod={setMethod} bank={bank} onBank={setBank} bankError={touched && method === 'BANK' ? bankDetailsError(bank) : null} />
+            <RefundDestinationPicker
+              method={method}
+              onMethod={setMethod}
+              bank={bank}
+              onBank={setBank}
+              showBankErrors={touched}
+              amountLabel={estimated ? formatVnd(estimated.refund) : undefined}
+            />
           ) : (
             <Text variant="caption" tone="secondary" as="div">
               Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.

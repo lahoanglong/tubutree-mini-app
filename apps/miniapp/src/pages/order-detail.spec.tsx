@@ -153,6 +153,23 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     expect(screen.getByText('08:05 02/10/2026')).toBeInTheDocument();
   });
 
+  it('R2-BUYERMINI-8: tóm tắt tiền tách mã giảm giá và Điểm Xanh bằng số tiền thật, không còn dòng "N điểm" trơ', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      discount: 98_000,
+      couponCode: 'XANH10',
+      couponDiscount: 38_000,
+      pointsDiscount: 60_000,
+      pointsUsed: 60,
+    });
+    renderPage();
+    expect(await screen.findByText('Mã giảm giá (XANH10)')).toBeInTheDocument();
+    expect(screen.getByText('-38.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Điểm Xanh (60 điểm)')).toBeInTheDocument();
+    expect(screen.getByText('-60.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('Điểm Xanh đã dùng')).toBeNull();
+  });
+
   it('điểm đã dùng có dấu nghìn: "12.000 điểm"', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, pointsUsed: 12_000, discount: 12_000 });
     renderPage();

@@ -125,7 +125,7 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
         onMethod={setMethod}
         bank={bank}
         onBank={setBank}
-        bankError={touched ? bankError : null}
+        showBankErrors={touched}
         amountLabel={formatVnd(refund.amount)}
       />
     </BottomSheet>

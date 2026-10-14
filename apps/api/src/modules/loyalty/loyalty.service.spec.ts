@@ -71,6 +71,25 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     expect(guest.map((c) => c.code).sort()).toEqual(['MINE', 'PUB_UNLIM']);
   });
 
+  it('R2-BUYERMINI-3: mã chỉ áp cho sản phẩm cụ thể (mua chung) trả kèm danh sách sản phẩm áp dụng; mã chung trả null', async () => {
+    const coupons = [
+      coupon('PUB', 'PUBLIC', null),
+      { ...coupon('GBUY-1', 'USER_GROUP', { userId: 'me', groupBuyId: 'g1' }), applyTo: { productIds: ['p-chia'] } },
+    ];
+    const productFindMany = jest.fn().mockResolvedValue([{ id: 'p-chia', name: 'Hạt chia Úc' }]);
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },
+      $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
+      coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+      product: { findMany: productFindMany },
+    } as unknown as PrismaService;
+    const result = await new LoyaltyService(prisma, makeConfig()).getAvailableCoupons('me');
+    expect(result.find((c) => c.code === 'PUB')!.products).toBeNull();
+    expect(result.find((c) => c.code === 'GBUY-1')!.products).toEqual([{ id: 'p-chia', name: 'Hạt chia Úc' }]);
+    expect(productFindMany).toHaveBeenCalledWith({ where: { id: { in: ['p-chia'] } }, select: { id: true, name: true } });
+  });
+
   it('không có ứng viên nào từ SQL thì không nạp coupon nào', async () => {
     const findMany = jest.fn();
     const prisma = {

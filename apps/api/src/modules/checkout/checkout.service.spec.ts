@@ -120,6 +120,10 @@ function build(
       ...cartData,
       items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
     })),
+    // Khoá giỏ trong tx đọc lại đúng các dòng giỏ hiện tại (không ai đổi giỏ giữa chừng).
+    lockForCheckout: jest.fn().mockImplementation(async () =>
+      cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
+    ),
     clear: jest.fn(),
     removeItems: jest.fn(),
   } as unknown as CartService;
@@ -324,6 +328,46 @@ describe('CheckoutService.placeOrder — money safety', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr2', paymentMethod: 'COD' } as never, 'key-123'),
     ).rejects.toThrow('thông tin khác đã được xử lý');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('CheckoutService.placeOrder — giỏ đổi khi chờ khoá giỏ (R2-MONEY-2)', () => {
+  const CART_I1 = {
+    items: [{ id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 }],
+    subtotal: 100, discount: 0, freeship: false, couponCode: null,
+  };
+
+  it('số lượng dòng vừa đổi ở tab khác → CART_CHANGED, không tạo đơn, không trừ ví', async () => {
+    const { svc, cart, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([{ id: 'i1', variationId: 'v1', quantity: 3 }]);
+    ledger.mockClear();
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never, 'k1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(((err as BadRequestException).getResponse() as { code?: string }).code).toBe('CART_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it('dòng đã biến mất (lần bấm trước vừa đặt xong) và không có đơn mới khớp → CART_CHANGED', async () => {
+    const { svc, cart, prisma, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.order as unknown as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue(null);
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'k2').catch((e: unknown) => e);
+    expect(((err as BadRequestException).getResponse() as { code?: string }).code).toBe('CART_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('dòng đã biến mất và có đơn vừa đặt cùng địa chỉ + cách trả → trả lại đơn đó', async () => {
+    const { svc, cart, prisma, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([]);
+    const { id: _id, userId: _u, ...snapshot } = ADDRESS;
+    (prisma.order as unknown as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue({
+      id: 'o-prev', code: 'TUBU1', checkoutGroup: null, paymentMethod: 'COD', total: 100, shippingAddress: snapshot, hasRecyclingPickup: false,
+    });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-prev', items: [] });
+    const res = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'k3');
+    expect(res.id).toBe('o-prev');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });
@@ -775,10 +819,10 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
   });
 
   it('placeOrder itemIds=[i2] → chỉ xoá món đã mua (removeItems), KHÔNG clear cả giỏ', async () => {
-    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i2'] } as never);
     const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
-    expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2']);
+    expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2'], prisma);
     expect(cartMock.clear).not.toHaveBeenCalled();
   });
 
@@ -799,10 +843,10 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
   });
 
   it('full cart (không itemIds) → clear cả giỏ như cũ (không regression)', async () => {
-    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
-    expect(cartMock.clear).toHaveBeenCalledWith('u1');
+    expect(cartMock.clear).toHaveBeenCalledWith('u1', prisma);
     expect(cartMock.removeItems).not.toHaveBeenCalled();
   });
 
@@ -1119,6 +1163,9 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     expect(data.total).toBeGreaterThan(0);
     expect(data.discount).toBeLessThan(data.subtotal);
     expect(data.discount + data.total).toBe(data.subtotal);
+    // R2-BUYERMINI-8: lưu từng phần để chi tiết đơn tách "Mã giảm giá" và "Điểm Xanh" bằng số tiền thật.
+    expect(data).toMatchObject({ comboDiscount: 50000, couponDiscount: 45000, tierDiscount: 20250, pointsDiscount: 76000 });
+    expect(data.comboDiscount + data.couponDiscount + data.tierDiscount + data.pointsDiscount).toBe(data.discount);
   });
 });
 
@@ -1394,6 +1441,13 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     const { svc, orderCreate } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new Error('db timeout')) });
     await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('db timeout');
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('R2-BUYERMINI-3: mã áp được trên giỏ có hàng giờ vàng → couponNotice nói mã chỉ giảm trên phần hàng còn lại', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockResolvedValue({ discount: 8900, freeship: false }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 89.000đ hàng còn lại.');
   });
 
   it('mã áp được → couponApplied true, couponNotice null', async () => {

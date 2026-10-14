@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "orders" ADD COLUMN     "comboDiscount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "couponDiscount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "pointsDiscount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "tierDiscount" INTEGER NOT NULL DEFAULT 0;

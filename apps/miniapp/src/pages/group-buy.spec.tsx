@@ -292,4 +292,27 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     const hints = await screen.findAllByText(`Đủ nhóm: nhận mã giảm ${formatVnd(20_000)}, dùng cho đơn từ ${formatVnd(80_000)}`);
     expect(hints).toHaveLength(2);
   });
+
+  it('R2-BUYERMINI-4: người mở nhóm vào nhóm của chính mình không thấy banner "Bạn được mời"', async () => {
+    mocks.params = { id: 'mine' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('mine', { joined: true, isOwner: true }));
+    mocks.listGroupBuys.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhóm của bạn' })).toBeInTheDocument();
+    expect(screen.queryByText('Bạn được mời vào nhóm này')).toBeNull();
+  });
+
+  it('R2-BUYERMINI-4: nhóm của mình đã đủ người: mục riêng, hiện mã giảm và nút mua ngay sang trang sản phẩm', async () => {
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('a'),
+      GROUP('done', { joined: true, isOwner: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME' }),
+    ]);
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Nhóm đã đủ người của bạn' })).toBeInTheDocument();
+    expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
+    expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: `Mua ngay với mã giảm ${formatVnd(20_000)}` }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
+    expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();
+  });
 });

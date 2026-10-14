@@ -25,6 +25,7 @@ import {
   returnWindowState,
   timelineIndex,
   timelineStepsFor,
+  discountRows,
 } from '../utils/order-status';
 import {
   openExternal,
@@ -246,6 +247,7 @@ export default function OrderDetailPage() {
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
   const stamp = orderStamp(o);
   const timelineSteps = timelineStepsFor(o.paymentMethod);
+  const discounts = discountRows(o);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const returnWindow = returnWindowState(o, returnDays);
@@ -363,10 +365,11 @@ export default function OrderDetailPage() {
       {/* ── Tóm tắt tiền ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <KeyValueRow label={vi.cart.subtotal} value={formatVnd(o.subtotal)} />
-        {o.discount > 0 && <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(o.discount)}`} tone="success" />}
-        {/* BE gộp voucher + combo + điểm vào cùng cột `discount`; nếu không tách dòng này thì
-            khách tiêu Điểm Xanh xong không thấy điểm mình đi đâu (checkout có tách, chi tiết đơn thì không). */}
-        {o.pointsUsed > 0 && (
+        {discounts.map((d) => (
+          <KeyValueRow key={d.label} label={d.label} value={`-${formatVnd(d.amount)}`} tone="success" />
+        ))}
+        {/* Đơn cũ chỉ có tổng giảm giá: nói số điểm đã dùng nằm trong dòng trên, không phải một khoản trừ nữa. */}
+        {o.pointsUsed > 0 && !o.pointsDiscount && (
           <KeyValueRow label={vi.orders.pointsUsed} value={formatPoints(o.pointsUsed)} />
         )}
         <KeyValueRow
@@ -796,7 +799,7 @@ export default function OrderDetailPage() {
                 onMethod={setCancelMethod}
                 bank={cancelBank}
                 onBank={setCancelBank}
-                bankError={cancelTouched ? cancelBankError : null}
+                showBankErrors={cancelTouched}
                 amountLabel={formatVnd(o.total)}
               />
             </Box>

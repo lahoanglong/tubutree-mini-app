@@ -2,7 +2,7 @@
 
 import type { BadgeTone } from '../components/ui/badge';
 import { vi } from '../i18n/vi';
-import { formatNumber } from './format';
+import { formatNumber, formatPoints } from './format';
 
 /** Cùng nguồn token với Badge's TONE_STYLE (audit A4-08: trước đây map này dùng hex chép tay
  * "gần giống" — SHIPPING `#EAF2FA` gần nhưng KHÁC `--info-bg` thật, CANCELLED `#FAEAEA` tương tự
@@ -40,9 +40,13 @@ export const TIMELINE_STEPS = [
   'DELIVERED',
 ] as const;
 
-/** COD không có bước chờ thanh toán (khách trả khi nhận hàng) nên bỏ bước đó khỏi hành trình. */
+/** Đơn không bao giờ chờ thanh toán: COD (trả khi nhận hàng) và Ví Tubu (trừ ví ngay lúc đặt). */
+const NO_PAYMENT_WAIT = new Set(['COD', 'WALLET']);
+
 export function timelineStepsFor(paymentMethod?: string | null): readonly string[] {
-  return paymentMethod === 'COD' ? TIMELINE_STEPS.filter((s) => s !== 'PENDING_PAYMENT') : TIMELINE_STEPS;
+  return paymentMethod && NO_PAYMENT_WAIT.has(paymentMethod)
+    ? TIMELINE_STEPS.filter((s) => s !== 'PENDING_PAYMENT')
+    : TIMELINE_STEPS;
 }
 
 /** Vị trí hiện tại trên timeline; -1 nếu trạng thái nằm ngoài hành trình chuẩn. */
@@ -96,4 +100,38 @@ export function isReorderable(status: string): boolean {
 /** Số MÓN của đơn (tổng số lượng) — trước đây thẻ đơn đếm số dòng (A2-47). */
 export function orderUnitCount(items: { quantity: number }[]): number {
   return items.reduce((s, it) => s + it.quantity, 0);
+}
+
+export interface OrderDiscountParts {
+  discount: number;
+  pointsUsed: number;
+  couponCode?: string | null;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
+}
+
+/**
+ * Các dòng giảm giá ở tóm tắt tiền chi tiết đơn, cùng cách tách của màn Thanh toán. Đơn tạo trước khi API lưu từng khoản
+ * chỉ có tổng `discount` (đã gồm tiền Điểm Xanh) nên hiện một dòng và ghi rõ đã gồm điểm.
+ */
+export function discountRows(o: OrderDiscountParts): { label: string; amount: number }[] {
+  const coupon = o.couponDiscount ?? 0;
+  const combo = o.comboDiscount ?? 0;
+  const tier = o.tierDiscount ?? 0;
+  const points = o.pointsDiscount ?? 0;
+  const known = coupon + combo + tier + points;
+  if (known === 0) {
+    if (o.discount <= 0) return [];
+    return [{ label: o.pointsUsed > 0 ? 'Giảm giá (gồm Điểm Xanh)' : 'Giảm giá', amount: o.discount }];
+  }
+  const rows = [
+    { label: o.couponCode ? `Mã giảm giá (${o.couponCode})` : 'Mã giảm giá', amount: coupon },
+    { label: 'Ưu đãi combo', amount: combo },
+    { label: 'Ưu đãi hạng thành viên', amount: tier },
+    { label: `Điểm Xanh (${formatPoints(o.pointsUsed)})`, amount: points },
+    { label: 'Giảm giá khác', amount: o.discount - known },
+  ];
+  return rows.filter((r) => r.amount > 0);
 }

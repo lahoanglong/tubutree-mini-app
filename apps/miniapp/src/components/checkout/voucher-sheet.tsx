@@ -19,6 +19,8 @@ export interface VoucherSheetProps {
   onClose: () => void;
   currentCode?: string | null;
   subtotal: number;
+  /** Sản phẩm của các dòng đang mua — mã chỉ áp cho sản phẩm khác thì báo "Chỉ áp cho ..." và khoá nút dùng. */
+  productIds?: string[];
   onCouponApplied?: () => void;
 }
 
@@ -27,6 +29,7 @@ export function VoucherSheet({
   onClose,
   currentCode,
   subtotal,
+  productIds,
   onCouponApplied,
 }: VoucherSheetProps) {
   const queryClient = useQueryClient();
@@ -155,7 +158,10 @@ export function VoucherSheet({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {couponsQ.data.map((coupon) => {
                 const isApplied = currentCode?.toUpperCase() === coupon.code.toUpperCase();
-                const notEligible = coupon.minOrder != null && subtotal < coupon.minOrder;
+                const scope = coupon.products?.length ? coupon.products : null;
+                const wrongProducts = !!scope && !!productIds && !scope.some((x) => productIds.includes(x.id));
+                const belowMin = coupon.minOrder != null && subtotal < coupon.minOrder;
+                const notEligible = wrongProducts || belowMin;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
@@ -202,10 +208,16 @@ export function VoucherSheet({
                       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                         {formatCouponDesc(coupon)}
                       </Text>
+                      {scope && (
+                        <Text variant="caption" tone={wrongProducts ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
+                          {wrongProducts && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
+                          {`Chỉ áp cho ${scope.map((x) => x.name).join(', ')}`}
+                        </Text>
+                      )}
                       {coupon.minOrder != null && (
-                        <Text variant="caption" tone={notEligible ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
-                          {notEligible && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
-                          {notEligible
+                        <Text variant="caption" tone={belowMin ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
+                          {belowMin && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
+                          {belowMin
                             ? `Cần đơn tối thiểu ${formatVnd(coupon.minOrder)}`
                             : `Đơn tối thiểu ${formatVnd(coupon.minOrder)}`}
                         </Text>
@@ -233,7 +245,7 @@ export function VoucherSheet({
                           onPress={() => applyMut.mutate(coupon.code)}
                           style={{ minWidth: 0 }}
                         >
-                          {notEligible ? 'Chưa đủ' : 'Dùng mã'}
+                          {wrongProducts ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : 'Dùng mã'}
                         </Button>
                       )}
                     </div>

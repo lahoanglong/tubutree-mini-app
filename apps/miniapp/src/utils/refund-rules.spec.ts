@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bankDetailsError,
+  bankFieldErrors,
   cancelRefundMode,
   destinationBody,
   maskedBank,
@@ -41,6 +42,18 @@ describe('bankDetailsError', () => {
     expect(bankDetailsError({ ...BANK, bankName: '' })).toBe('Vui lòng nhập tên ngân hàng.');
     expect(bankDetailsError({ ...BANK, accountNumber: '12ab' })).toBe('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
     expect(bankDetailsError({ ...BANK, accountName: ' ' })).toBe('Vui lòng nhập tên chủ tài khoản.');
+  });
+});
+
+describe('bankFieldErrors (R2-BUYERMINI-6: lỗi nằm dưới đúng ô sai)', () => {
+  it('trả lỗi theo từng ô, ô đúng không có lỗi', () => {
+    expect(bankFieldErrors(BANK)).toEqual({});
+    expect(bankFieldErrors({ ...BANK, accountNumber: 'abc' })).toEqual({ accountNumber: 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.' });
+    expect(bankFieldErrors({ bankName: '', accountNumber: '', accountName: '' })).toEqual({
+      bankName: 'Vui lòng nhập tên ngân hàng.',
+      accountNumber: 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.',
+      accountName: 'Vui lòng nhập tên chủ tài khoản.',
+    });
   });
 });
 

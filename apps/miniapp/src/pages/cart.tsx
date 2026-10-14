@@ -11,6 +11,7 @@ import {
   type CartLine,
   type UnavailableCartLine,
 } from '../services/shop-api';
+import { cartProductIds } from '../utils/coupon-scope';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { QuantitySelector } from '../components/ui/quantity-selector';
@@ -243,7 +244,7 @@ export default function CartPage() {
             </section>
           ))}
 
-          <CouponBlock summary={summary} selectedSubtotal={selectedSubtotal} />
+          <CouponBlock summary={summary} selectedSubtotal={selectedSubtotal} selectedProductIds={cartProductIds(selectedItems)} />
         </>
       )}
 
@@ -489,7 +490,15 @@ function CartLineRow({
   );
 }
 
-function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; selectedSubtotal: number }) {
+function CouponBlock({
+  summary,
+  selectedSubtotal,
+  selectedProductIds,
+}: {
+  summary: CartSummary;
+  selectedSubtotal: number;
+  selectedProductIds?: string[];
+}) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
@@ -575,6 +584,7 @@ function CouponBlock({ summary, selectedSubtotal }: { summary: CartSummary; sele
         // summary.subtotal (toàn giỏ) ở đây từng khiến voucher hiện "đủ điều kiện" sai khi user
         // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
         subtotal={selectedSubtotal}
+        productIds={selectedProductIds}
       />
     </>
   );

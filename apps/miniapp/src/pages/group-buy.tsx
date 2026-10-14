@@ -13,7 +13,7 @@ import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
-import { Text } from '../components/ui/text';
+import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
 
 function timeLeft(iso: string): string {
@@ -50,7 +50,9 @@ export default function GroupBuyPage() {
     retry: false,
   });
   const invited = invitedQ.data;
-  const others = (groups ?? []).filter((g) => g.id !== invited?.id);
+  const rest = (groups ?? []).filter((g) => g.id !== invited?.id);
+  const others = rest.filter((g) => g.status !== 'SUCCESS');
+  const done = rest.filter((g) => g.status === 'SUCCESS');
 
   const joinM = useMutation({
     mutationFn: (id: string) => joinGroupBuy(id),
@@ -99,10 +101,18 @@ export default function GroupBuyPage() {
         </div>
       ) : isError ? (
         <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
-      ) : invited || others.length > 0 ? (
+      ) : invited || others.length > 0 || done.length > 0 ? (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {invited && renderCard(invited, true)}
+          {invited && renderCard(invited, !invited.isOwner && !invited.joined)}
           {others.map((g) => renderCard(g))}
+          {done.length > 0 && (
+            <section aria-label="Nhóm đã đủ người của bạn" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Heading variant="title-sm" as="h2" style={{ marginTop: 4 }}>
+                Nhóm đã đủ người của bạn
+              </Heading>
+              {done.map((g) => renderCard(g))}
+            </section>
+          )}
         </div>
       ) : (
         <EmptyState
@@ -197,19 +207,38 @@ function GroupCard({
             <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
           </div>
           <Text variant="caption" tone="tertiary" as="div">
-            {g.currentSize}/{g.targetSize} người · {timeLeft(g.expiresAt)}
+            {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </Text>
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
         <ProgressBar value={pct} max={100} />
       </div>
-      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-        {`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
-      </Text>
-      <Button fullWidth disabled={!isOpen || member} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
-        {label}
-      </Button>
+      {g.status !== 'SUCCESS' && (
+        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
+          {`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
+        </Text>
+      )}
+      {g.status === 'SUCCESS' && member ? (
+        <>
+          {g.couponCode && (
+            <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
+              Mã của bạn:{' '}
+              <Text variant="caption" tone="brand" style={{ fontWeight: 700 }}>
+                {g.couponCode}
+              </Text>
+              {' '}· chọn trong “Chọn mã” ở giỏ hàng, dùng trong 30 ngày.
+            </Text>
+          )}
+          <Button fullWidth onPress={onOpen} style={{ marginTop: 10 }}>
+            {`Mua ngay với mã giảm ${formatVnd(g.basePrice - g.unitPrice)}`}
+          </Button>
+        </>
+      ) : (
+        <Button fullWidth disabled={!isOpen || member} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
+          {label}
+        </Button>
+      )}
       {member && isOpen && (
         <Button fullWidth variant="secondary" icon={Share2} onPress={onShare} style={{ marginTop: 8 }}>
           Mời bạn bè

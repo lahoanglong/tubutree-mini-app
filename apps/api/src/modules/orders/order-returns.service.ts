@@ -20,7 +20,7 @@ import {
 import { announceBankRefund } from './refund-queue';
 import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
-import type { ReturnRequestDto } from './dto/return-request.dto';
+import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
 
 type OrderWithItems = Order & { items: OrderItem[] };
@@ -46,6 +46,17 @@ export interface ReturnPreview {
   pancakeTask: boolean;
   /** Hàng trả về đâu: kho Tubu, hay gian hàng đối tác tự giao (D4) — gian hàng xác nhận nhận hàng và tự cộng kho. */
   returnTo: { kind: 'TUBU' | 'MERCHANT'; name: string };
+}
+
+/** Số tiền dự kiến hoàn khách thấy trong form đổi/trả, trước khi gửi yêu cầu. */
+export interface ReturnEstimate {
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  pointsUsedBack: number;
+  lines: { orderItemId: string; quantity: number; refundAmount: number }[];
 }
 
 /** Đối tác chỉ thấy phần cần để nhận hàng trả về — không thấy tài khoản ngân hàng nhận hoàn tiền của khách. */
@@ -167,6 +178,30 @@ export class OrderReturnsService {
     }
     await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
     return req;
+  }
+
+  /**
+   * Số tiền dự kiến hoàn cho dòng/số lượng khách đang chọn, cùng cách tính lúc admin duyệt (D3). Chưa chọn lý do thì
+   * chưa tính phí ship: phí ship chỉ hoàn khi trả cả đơn hoặc lỗi do shop.
+   */
+  async estimate(userId: string, code: string, dto: ReturnEstimateDto): Promise<ReturnEstimate> {
+    const order = await this.prisma.order.findUnique({ where: { code }, include: { items: true } });
+    if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'DELIVERED') throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
+    const prior = await partialReturnTotals(this.prisma, order.id);
+    const lines = this.requestedLines(order, prior.approvedQty, dto.items);
+    const shopFault = dto.reasonCode ? defaultShopFault(dto.reasonCode) : false;
+    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+    const moneyRefundable = isMoneyBackable(order);
+    return {
+      isFull: shares.isFull,
+      goods: moneyRefundable ? shares.goods : 0,
+      shipping: moneyRefundable ? shares.shipping : 0,
+      refund: moneyRefundable ? shares.goods + shares.shipping : 0,
+      moneyRefundable,
+      pointsUsedBack: shares.pointsUsedBack,
+      lines: shares.lines.map((l) => ({ ...l, refundAmount: moneyRefundable ? l.refundAmount : 0 })),
+    };
   }
 
   listMine(userId: string) {

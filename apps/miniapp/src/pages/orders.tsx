@@ -21,8 +21,8 @@ import { SubscriptionsPanel } from '../components/subscriptions-panel';
 const PAGE_LIMIT = 20;
 
 /**
- * Tab gốc "Đơn hàng" (spec 4a.1/4a.2): kệ Mua lại → tab trạng thái (+ Định kỳ) → thẻ đơn có ảnh,
- * số món, nút Mua lại. Trang gốc: không nút back, đệm đáy cho tab bar.
+ * Tab gốc "Đơn hàng" (spec 4a.1/4a.2): tab trạng thái (+ Định kỳ) → thẻ đơn có ảnh, số món, nút Mua lại → kệ Mua lại
+ * (chỉ tab "Tất cả"). Trang gốc: không nút back, đệm đáy cho tab bar.
  */
 export default function OrdersPage() {
   const navigate = useNavigate();
@@ -51,11 +51,8 @@ export default function OrdersPage() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
       <PageHeader title={vi.orders.tabTitle} back={false} />
-      <div style={{ paddingTop: 8 }}>
-        <PurchasedRail source="orders_tab" />
-      </div>
 
-      <div style={{ padding: '0 12px 8px' }}>
+      <div style={{ padding: '8px 12px' }}>
         <SegmentedTabs
           items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
           value={tab}
@@ -115,6 +112,9 @@ export default function OrdersPage() {
           )}
         </>
       )}
+
+      {/* Khách vào tab này chủ yếu để xem đơn đang giao: kệ Mua lại đứng sau danh sách, chỉ ở "Tất cả". */}
+      {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail source="orders_tab" />}
 
       <ReorderSheet target={reorderTarget} source="order_card" navigateToCart onClose={() => setReorderTarget(null)} />
     </Page>

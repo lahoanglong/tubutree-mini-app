@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
-import { CancelOrderDto, ChooseRefundDestinationDto, ReturnRequestDto } from './dto/return-request.dto';
+import { CancelOrderDto, ChooseRefundDestinationDto, ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { OrdersService } from './orders.service';
 import { OrderReturnsService } from './order-returns.service';
 import { CustomerRefundsService } from './customer-refunds.service';
@@ -54,6 +54,16 @@ export class OrdersController {
     @Body() dto: ReturnRequestDto,
   ) {
     return this.returns.request(userId, code, dto);
+  }
+
+  /** Số tiền dự kiến hoàn cho các dòng khách đang chọn trong form đổi/trả (không ghi gì). */
+  @Post(':code/return-estimate')
+  estimateReturn(
+    @CurrentUser('sub') userId: string,
+    @Param('code') code: string,
+    @Body() dto: ReturnEstimateDto,
+  ) {
+    return this.returns.estimate(userId, code, dto);
   }
 
   @Get('me/returns')

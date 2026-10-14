@@ -15,6 +15,7 @@ import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
+import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser } from '../../common/real-user';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
@@ -629,6 +630,16 @@ export class LoyaltyService {
         })
       : [];
     const usedMap = new Map(grouped.map((g) => [g.couponId, g._count._all]));
+    // Mã chỉ áp cho vài sản phẩm (mã mua chung): trả kèm sản phẩm áp dụng để trang sản phẩm/giỏ chỉ mời dùng đúng chỗ.
+    const scopedIds = [...new Set(filtered.flatMap((c) => couponProductIds(c.applyTo) ?? []))];
+    const productNames = scopedIds.length
+      ? new Map(
+          (await this.prisma.product.findMany({ where: { id: { in: scopedIds } }, select: { id: true, name: true } })).map((p) => [
+            p.id,
+            p.name,
+          ]),
+        )
+      : new Map<string, string>();
 
     const result = [];
     for (const c of filtered) {
@@ -643,6 +654,7 @@ export class LoyaltyService {
         minOrder: c.minOrder,
         maxDiscount: c.maxDiscount,
         endAt: c.endAt,
+        products: couponProductIds(c.applyTo)?.map((id) => ({ id, name: productNames.get(id) ?? 'Sản phẩm của chương trình' })) ?? null,
       });
     }
     return result;

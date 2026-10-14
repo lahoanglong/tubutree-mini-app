@@ -65,6 +65,23 @@ describe('OrdersPage (tab gốc)', () => {
     expect(mocks.fetchOrders).toHaveBeenCalledWith({}, 1, 20);
   });
 
+  it('R2-BUYERMINI-10: tab trạng thái đứng trước kệ Mua lại; kệ chỉ ở tab "Tất cả", nằm dưới danh sách đơn', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({
+      items: [{ productId: 'p1', variationId: 'v1', slug: 'nrc', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu', thumbnail: null, price: 65000, salePrice: null, inStock: true, timesBought: 2 }],
+      nextCursor: null,
+    });
+    renderPage();
+    const rail = await screen.findByRole('region', { name: 'Mua lại' });
+    const tabs = screen.getByRole('tablist');
+    const card = await screen.findByRole('button', { name: 'Đơn TUBU-777' });
+    expect(tabs.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Định kỳ' }));
+    expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đang giao' }));
+    expect(screen.queryByRole('region', { name: 'Mua lại' })).toBeNull();
+  });
+
   it('tab "Đang xử lý" gửi group=processing', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Đang xử lý' }));

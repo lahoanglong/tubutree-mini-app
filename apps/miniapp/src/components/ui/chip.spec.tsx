@@ -16,6 +16,10 @@ describe('Chip', () => {
     render(<Chip>x</Chip>);
     expect(screen.getByRole('button').style.minHeight).toBe('36px');
   });
+  it('không co lại trong hàng cuộn ngang: flexShrink 0 để nhãn đủ chữ, hàng cuộn thay vì bóp chip còn 44px (R2-ENGAGE-5)', () => {
+    render(<Chip>🌿 Mẹ và bé</Chip>);
+    expect(screen.getByRole('button').style.flexShrink).toBe('0');
+  });
   it('fires onPress', () => {
     const onPress = vi.fn();
     render(<Chip onPress={onPress}>x</Chip>);

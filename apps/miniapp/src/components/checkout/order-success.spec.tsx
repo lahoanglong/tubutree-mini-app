@@ -181,6 +181,22 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TB2', { replace: true });
   });
 
+  it('lần đặt bị tách: Điểm Xanh sẽ nhận là tổng điểm mọi đơn, khớp số màn Thanh toán đã hứa (R2-BUYERMINI-2)', () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 134000,
+      pointsEarned: 11,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 134000, pointsEarned: 11, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 172000, pointsEarned: 15, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Cô Lan' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    expect(screen.getByText('+26 điểm')).toBeInTheDocument();
+    expect(screen.getByText('26 Điểm Xanh sẽ về tay khi đơn giao thành công')).toBeInTheDocument();
+  });
+
   it('đơn không tách: không có danh sách đơn cùng lần đặt', () => {
     renderSuccess();
     expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();

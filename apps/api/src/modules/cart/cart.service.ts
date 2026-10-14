@@ -1,12 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
+import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { freeShipThreshold } from '../pricing/pricing.service';
 import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
-import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
+import {
+  COUPON_ZERO_DISCOUNT_REASON,
+  couponFlashExcludedNotice,
+  couponNotAppliedNotice,
+  couponRejectedWithFlash,
+} from '../coupons/coupon-notice';
 import { fulfillerOf } from '../checkout/checkout-split';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
@@ -47,6 +54,7 @@ export class CartService {
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
       include: {
+        user: { select: { tierId: true } },
         items: {
           include: {
             variation: {
@@ -126,6 +134,8 @@ export class CartService {
         freeship = r.freeship;
         if (lines.length > 0 && discount === 0 && !freeship) {
           couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash));
+        } else if (discount > 0 && lines.some((l) => l.isFlash)) {
+          couponNotice = couponFlashExcludedNotice(couponBase);
         }
       } catch (err) {
         // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
@@ -149,8 +159,8 @@ export class CartService {
       }
     }
 
-    // Ngưỡng freeship (config-driven §15.2) để FE hiển thị progress khích lệ.
-    const freeshipThreshold = await this.config.get<number>('shipping.free_threshold', 200000);
+    // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
+    const freeshipThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
 
     return {
       items: lines,
@@ -239,11 +249,27 @@ export class CartService {
   }
 
   /** Xoá nhiều dòng (dùng sau khi đặt đơn checkout TẬP CON — chỉ dọn món đã mua, giữ phần còn lại). */
-  async removeItems(userId: string, itemIds: string[]): Promise<void> {
+  async removeItems(userId: string, itemIds: string[], db: Prisma.TransactionClient = this.prisma): Promise<void> {
     if (itemIds.length === 0) return;
-    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+    const cart = await db.cart.findUnique({ where: { userId } });
     if (!cart) return;
-    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
+    await db.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
+  }
+
+  /**
+   * Khoá giỏ của user tới hết transaction đặt đơn rồi đọc lại các dòng: mọi lần đặt của cùng một giỏ xếp hàng sau nhau, và
+   * lần đến sau thấy giỏ đã được lần trước dọn (đặt đơn dọn giỏ ngay trong transaction đó), không đặt lại từ bản giỏ đã đọc.
+   * NO KEY UPDATE: không chặn thêm dòng giỏ (khoá KEY SHARE của khoá ngoại cart_items → carts).
+   */
+  async lockForCheckout(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<{ id: string; variationId: string; quantity: number }[]> {
+    await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "userId" = ${userId} FOR NO KEY UPDATE`;
+    return tx.cartItem.findMany({
+      where: { cart: { userId } },
+      select: { id: true, variationId: true, quantity: true },
+    });
   }
 
   async applyCoupon(userId: string, code: string) {
@@ -251,9 +277,32 @@ export class CartService {
     // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
     const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
     const normalized = normalizeCouponCode(code);
-    await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    try {
+      await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    } catch (err) {
+      if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart))) {
+        throw new BadRequestException(couponRejectedWithFlash(err.message, err.base));
+      }
+      throw err;
+    }
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId);
+  }
+
+  /** Hàng giờ vàng mới là lý do chưa đạt đơn tối thiểu: tính cả các dòng giờ vàng thì mã hợp lệ. */
+  private async meetsMinOrderWithFlash(
+    code: string,
+    userId: string,
+    cart: { subtotal: number; items: { productId: string; total: number; isFlash: boolean }[] },
+  ): Promise<boolean> {
+    if (!cart.items.some((l) => l.isFlash)) return false;
+    try {
+      await this.coupons.validateAndCompute(code, userId, cart.subtotal, cart.items.map((l) => ({ productId: l.productId, total: l.total })));
+      return true;
+    } catch (err) {
+      if (err instanceof BadRequestException) return false;
+      throw err;
+    }
   }
 
   async removeCoupon(userId: string) {
@@ -264,10 +313,10 @@ export class CartService {
     return this.getCart(userId);
   }
 
-  async clear(userId: string): Promise<void> {
-    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+  async clear(userId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
+    const cart = await db.cart.findUnique({ where: { userId } });
     if (!cart) return;
-    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await this.prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
+    await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+    await db.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
   }
 }

@@ -6,6 +6,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { isCouponEligible, requiresRealUser } from '../../src/modules/coupons/coupon-scope';
+import { couponProductIds } from '../../src/modules/coupons/coupons.service';
 import { isRealUser } from '../../src/common/real-user';
 import { createUser, randCode, warmPool } from './helpers';
 
@@ -64,8 +65,20 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
     return filtered
       .filter((c) => !(c.perUserLimit > 0 && (used.get(c.id) ?? 0) >= c.perUserLimit))
-      .map((c) => ({ code: c.code, type: c.type, value: c.value, minOrder: c.minOrder, maxDiscount: c.maxDiscount, endAt: c.endAt }));
+      .map((c) => ({
+        code: c.code,
+        type: c.type,
+        value: c.value,
+        minOrder: c.minOrder,
+        maxDiscount: c.maxDiscount,
+        endAt: c.endAt,
+        productIds: couponProductIds(c.applyTo),
+      }));
   }
+
+  /** Bản mới kèm tên sản phẩm áp dụng; so với thuật toán cũ theo id sản phẩm. */
+  const withProductIds = (xs: Awaited<ReturnType<LoyaltyService['getAvailableCoupons']>>) =>
+    xs.map(({ products, ...rest }) => ({ ...rest, productIds: products?.map((p) => p.id) ?? null }));
 
   const byCode = <T extends { code: string }>(xs: T[]) => [...xs].sort((a, b) => a.code.localeCompare(b.code));
 
@@ -104,7 +117,7 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     const ours = (xs: { code: string }[]) => xs.filter((x) => x.code.startsWith(`T${tag}-`)).map((x) => x.code);
     for (const u of [a, b, c]) {
       const [fresh, old] = await Promise.all([loyalty.getAvailableCoupons(u.id), legacy(u.id)]);
-      expect(byCode(fresh)).toEqual(byCode(old));
+      expect(byCode(withProductIds(fresh))).toEqual(byCode(old));
       console.log('[compare] user=%s mới=%j', u.id.slice(-4), ours(byCode(fresh)));
     }
 

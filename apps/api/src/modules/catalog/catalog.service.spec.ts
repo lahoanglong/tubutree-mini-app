@@ -804,3 +804,29 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
     expect(productFindMany).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
+  const base = { id: 'p1', slug: 'xa-phong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, variations: [], reviews: [] };
+  const config = { get: jest.fn(async <T>(k: string, fb?: T) => (k === 'merchant.default_shipping_fee' ? (27_000 as T) : (fb as T))) };
+
+  it('hàng Tubu giao → fulfiller TUBU, không lộ đối tượng storefront', async () => {
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null });
+    expect(r).not.toHaveProperty('storefront');
+  });
+
+  it('hàng gian hàng tự giao → tên gian hàng, phí giao và ngưỡng miễn phí của gian hàng', async () => {
+    const storefront = { title: 'Xà phòng Cô Lan', type: 'MERCHANT', shippingFee: 22_000, freeShipFrom: 300_000 };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 });
+  });
+
+  it('gian hàng chưa đặt phí giao → phí mặc định merchant.default_shipping_fee', async () => {
+    const storefront = { title: 'Shop A', type: 'MERCHANT', shippingFee: null, freeShipFrom: null };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Shop A', shippingFee: 27_000, freeShipFrom: null });
+  });
+});

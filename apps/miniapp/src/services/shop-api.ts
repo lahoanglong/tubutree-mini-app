@@ -50,11 +50,22 @@ export interface ProductDetail {
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
   sold?: number;
   variations: VariationDetail[];
+  /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */
+  fulfiller?: ProductFulfiller;
+}
+
+export interface ProductFulfiller {
+  kind: 'TUBU' | 'MERCHANT';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
 }
 
 export interface CartLine {
   id: string;
   variationId: string;
+  /** API cũ chưa trả. */
+  productId?: string;
   productName: string;
   variationName: string;
   slug: string;
@@ -95,6 +106,8 @@ export interface SplitOrderDTO {
   id: string;
   code: string;
   total: number;
+  /** Điểm Xanh đơn này sẽ tích (API cũ chưa trả). */
+  pointsEarned?: number;
   status: string;
   fulfiller: 'TUBU' | 'MERCHANT';
   fulfillerName: string;
@@ -504,6 +517,12 @@ export interface OrderItemMedia {
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
 export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
+  /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
+  couponCode?: string | null;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
   /** Ai giao đơn này (D4). API cũ chưa trả. */
   fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
   /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
@@ -613,6 +632,18 @@ export interface ReturnRequestBody {
 }
 export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
   api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body).then((r) => r.data);
+/** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt). */
+export interface ReturnEstimateDTO {
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  pointsUsedBack: number;
+  lines: { orderItemId: string; quantity: number; refundAmount: number }[];
+}
+export const estimateReturn = (code: string, body: { reasonCode?: ReturnReasonCode; items: { orderItemId: string; quantity: number }[] }) =>
+  api.post<ReturnEstimateDTO>(`/orders/${code}/return-estimate`, body).then((r) => r.data);
 export interface ReturnRequestDTO {
   id: string;
   orderId: string;

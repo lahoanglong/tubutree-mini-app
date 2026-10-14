@@ -892,6 +892,11 @@ model Order {
   status                 OrderStatus
   subtotal               Int
   discount               Int                   @default(0)
+  // Các phần của `discount` để khách đối chiếu từng khoản giảm. Đơn tạo trước khi có các cột này để 0 cả bốn.
+  couponDiscount         Int                   @default(0)
+  comboDiscount          Int                   @default(0)
+  tierDiscount           Int                   @default(0)
+  pointsDiscount         Int                   @default(0)
   shippingFee            Int                   @default(0)
   total                  Int
   pointsEarned           Int                   @default(0)

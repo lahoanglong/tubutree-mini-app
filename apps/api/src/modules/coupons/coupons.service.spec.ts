@@ -1,4 +1,4 @@
-import { CouponsService } from './coupons.service';
+import { CouponMinOrderError, CouponsService } from './coupons.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 
@@ -138,6 +138,28 @@ describe('CouponsService.validateAndCompute — chống lạm dụng mã (UAT p6
       { productId: 'pG', total: 329000 },
     ]);
     expect(r.discount).toBe(49350);
+  });
+
+  it('lỗi đơn tối thiểu mang mã lỗi riêng kèm mức tối thiểu và phần hàng đã dùng để xét (mã gắn sản phẩm: chỉ dòng sản phẩm đó)', async () => {
+    const plain = makeService(coupon({ minOrder: 200000 }));
+    const e1 = await plain.validateAndCompute('SALE', 'u1', 150000).catch((e: unknown) => e);
+    expect(e1).toBeInstanceOf(CouponMinOrderError);
+    expect(e1).toMatchObject({ minOrder: 200000, base: 150000, message: 'Đơn tối thiểu 200.000đ để dùng mã này.' });
+
+    const scoped = makeService(coupon({ type: 'AMOUNT', value: 49350, minOrder: 279650, applyTo: { productIds: ['pG'] } }));
+    const e2 = await scoped
+      .validateAndCompute('SALE', 'u1', 600000, [
+        { productId: 'pX', total: 400000 },
+        { productId: 'pG', total: 200000 },
+      ])
+      .catch((e: unknown) => e);
+    expect(e2).toBeInstanceOf(CouponMinOrderError);
+    expect(e2).toMatchObject({ minOrder: 279650, base: 200000 });
+  });
+
+  it('lỗi khác (không tồn tại, hết hạn) không phải lỗi đơn tối thiểu', async () => {
+    const e = await makeService(null).validateAndCompute('X', 'u1', 100000).catch((x: unknown) => x);
+    expect(e).not.toBeInstanceOf(CouponMinOrderError);
   });
 });
 
