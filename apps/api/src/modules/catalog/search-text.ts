@@ -77,6 +77,14 @@ export function escapeLike(s: string): string {
   return s.replace(/[!%_]/g, (c) => `${LIKE_ESCAPE}${c}`);
 }
 
+/**
+ * Chuỗi người dùng gõ đưa vào `contains`/`startsWith` của Prisma: Prisma dựng `LIKE '%' || $1 || '%'` mà không thêm
+ * ESCAPE và không tự escape, nên `%`/`_` thành ký tự đại diện ("%" khớp mọi dòng). Postgres mặc định escape bằng `\`.
+ */
+export function escapePrismaLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 /** Mẫu "chứa" cho `... LIKE <mẫu> ESCAPE '!'`. */
 export function likeContainsPattern(q: string): string {
   return `%${escapeLike(foldVietnamese(q))}%`;

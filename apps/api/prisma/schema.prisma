@@ -920,6 +920,9 @@ model Order {
   paymentStatus          PaymentStatus
   paymentTxnId           String?
   shippingAddress        Json
+  /// Tên người nhận đã gấp dấu (vn_search_fold của shippingAddress.recipient), trigger orders_recipient_search_sync giữ
+  /// đồng bộ — admin tìm đơn tặng theo tên người nhận, có hoặc không dấu.
+  recipientSearch        String                @default("")
   shippingPartner        String?
   shippingCode           String?
   shippingStatus         String?
@@ -1033,6 +1036,8 @@ model Order {
   @@index([gomdonPartnerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_gomdonPartnerCode_trgm_idx")
   // Tìm đơn admin theo mã vận đơn hãng (GHN/GHTK... Pancake ghi vào shippingCode).
   @@index([shippingCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_shippingCode_trgm_idx")
+  // Tìm đơn admin theo tên người nhận không dấu ("recipientSearch" LIKE '%x%').
+  @@index([recipientSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_recipientSearch_trgm_idx")
   // Cron cứu hộ Gomdon (gomdon-reconcile.service.ts) quét đơn thu gom theo gomdonStatus.
   @@index([hasRecyclingPickup, gomdonStatus])
   // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.

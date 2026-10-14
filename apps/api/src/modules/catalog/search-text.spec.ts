@@ -1,4 +1,13 @@
-import { LIKE_ESCAPE, VN_FOLD_FROM, VN_FOLD_TO, escapeLike, foldVietnamese, likeContainsPattern, SQL_WHITESPACE_RE } from './search-text';
+import {
+  LIKE_ESCAPE,
+  VN_FOLD_FROM,
+  VN_FOLD_TO,
+  escapeLike,
+  escapePrismaLike,
+  foldVietnamese,
+  likeContainsPattern,
+  SQL_WHITESPACE_RE,
+} from './search-text';
 
 /** Đúng ngữ nghĩa translate() của Postgres: ký tự của `from` không có cặp ở `to` thì bị XOÁ. */
 function pgTranslate(s: string, from: string, to: string): string {
@@ -94,6 +103,11 @@ describe('LIKE', () => {
   it('escape %, _ và chính ký tự escape', () => {
     expect(LIKE_ESCAPE).toBe('!');
     expect(escapeLike('50%_off!')).toBe('50!%!_off!!');
+  });
+
+  it('escapePrismaLike: escape \\ % _ bằng \\ (Prisma contains không có ESCAPE, Postgres mặc định \\)', () => {
+    expect(escapePrismaLike(String.raw`50%_off\x`)).toBe(String.raw`50\%\_off\\x`);
+    expect(escapePrismaLike('TUBU-2026!')).toBe('TUBU-2026!');
   });
 
   it('likeContainsPattern = %<gấp dấu + escape>%', () => {
