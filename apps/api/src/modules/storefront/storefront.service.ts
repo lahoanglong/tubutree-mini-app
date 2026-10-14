@@ -3,12 +3,24 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
-import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
+import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
 const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
+
+/** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
+export function buyerHiddenReason(item: {
+  isHidden: boolean;
+  product: { isActive: boolean; affiliateBlocked: boolean; approvalStatus: string | null };
+}): string | null {
+  if (item.isHidden) return 'Bạn đang ẩn món này';
+  if (item.product.approvalStatus && item.product.approvalStatus !== 'APPROVED') return 'Sản phẩm chưa được duyệt bán';
+  if (!item.product.isActive) return 'Sản phẩm đã ngừng bán';
+  if (item.product.affiliateBlocked) return 'Sản phẩm không còn cho CTV bán';
+  return null;
+}
 
 @Injectable()
 export class StorefrontService {
@@ -88,6 +100,7 @@ export class StorefrontService {
                     reviewCount: true,
                     isActive: true,
                     affiliateBlocked: true,
+                    approvalStatus: true,
                   },
                 },
               },
@@ -97,7 +110,14 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
-    return sf;
+    // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
+    return {
+      ...sf,
+      collections: sf.collections.map((c) => ({
+        ...c,
+        items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
+      })),
+    };
   }
 
   async updateMine(
@@ -138,6 +158,9 @@ export class StorefrontService {
       if (v === undefined) continue;
       data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
     }
+    if (dto.subdomain && dto.subdomain !== sf.subdomain) {
+      await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);
+    }
     return this.prisma.storefront.update({ where: { id: sf.id }, data });
   }
 
@@ -162,6 +185,8 @@ export class StorefrontService {
       where: {
         isActive: true,
         affiliateBlocked: false,
+        // SELLER-15: sản phẩm đối tác chờ duyệt/bị từ chối gắn vào gian hàng thì khách không thấy — không mời CTV chọn.
+        approvalStatus: 'APPROVED',
         ...(q.search ? { name: { contains: q.search, mode: 'insensitive' } } : {}),
       },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
@@ -200,6 +225,7 @@ export class StorefrontService {
         isPublished: true,
       },
       include: {
+        owner: { select: { referralCode: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -231,6 +257,8 @@ export class StorefrontService {
     return {
       id: sf.id,
       slug: sf.slug,
+      // SELLER-4: mã giới thiệu lấy từ chủ gian hàng, không suy từ slug/subdomain trên URL (subdomain riêng không phải mã).
+      referralCode: sf.type === 'CTV' ? (sf.owner?.referralCode ?? null) : null,
       ownerTier,
       subdomain: sf.subdomain,
       customDomain: sf.customDomain,
@@ -510,9 +538,9 @@ export class StorefrontService {
     await this.assertOwnedCollection(userId, collectionId);
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
-      select: { id: true, isActive: true, affiliateBlocked: true },
+      select: { id: true, isActive: true, affiliateBlocked: true, approvalStatus: true },
     });
-    if (!product || !product.isActive || product.affiliateBlocked) {
+    if (!product || !product.isActive || product.affiliateBlocked || product.approvalStatus !== 'APPROVED') {
       throw new BadRequestException('Sản phẩm không khả dụng để thêm vào gian hàng.');
     }
     if (dto.variationId) {
