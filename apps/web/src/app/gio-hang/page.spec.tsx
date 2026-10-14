@@ -133,3 +133,26 @@ describe('/gio-hang — tên dài không làm vỡ bố cục 390px (BUYERWEB-11
     expect(container.querySelector('li button')!.className).toContain('shrink-0');
   });
 });
+
+describe('/gio-hang — chia theo nơi giao (D4)', () => {
+  it('giỏ toàn hàng Tubu: không có tiêu đề nơi giao (giữ giao diện cũ)', async () => {
+    state.cart = cartOf([line({ fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } })]);
+    const { container } = await mount();
+    expect(container.querySelector('section h2')).toBeNull();
+    expect(container.textContent).not.toContain('nhiều nơi giao');
+  });
+
+  it('có hàng gian hàng tự giao: mỗi nơi giao một nhóm (Tubu trước), báo tách đơn, freeship chỉ cho phần Tubu', async () => {
+    state.cart = cartOf([
+      line({ id: 'm1', productName: 'Mật ong rừng', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }),
+      line({ id: 't1', productName: 'Dầu gội bồ kết', fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } }),
+    ]);
+    const { container } = await mount();
+    const sections = Array.from(container.querySelectorAll('section'));
+    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['Tubu Tree giao', 'Mật ong Linh giao']);
+    expect(sections[0]!.textContent).toContain('Dầu gội bồ kết');
+    expect(sections[1]!.textContent).toContain('Mật ong rừng');
+    expect(container.textContent).toContain('mỗi nơi giao thành một đơn riêng');
+    expect(container.textContent).toContain('miễn phí vận chuyển phần hàng Tubu Tree giao');
+  });
+});

@@ -825,6 +825,8 @@ export interface AdminPendingProduct {
   ecoBadges: string[];
   approvalStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
   rejectReason?: string | null;
+  /** Mã biến thể Pancake xin "Tubu giao hộ"; duyệt thì biến thể đó chuyển sang sản phẩm này. */
+  pancakeLinkCode?: string | null;
   createdAt: string;
   storefront?: {
     id: string;

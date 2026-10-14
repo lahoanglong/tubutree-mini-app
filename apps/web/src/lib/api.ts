@@ -193,6 +193,8 @@ export interface StorefrontDetail {
   warehouseWard?: string | null;
   warehousePhone?: string | null;
   ownerTier?: { name: string; emoji: string } | null;
+  /** Mã giới thiệu của chủ gian hàng CTV (null với gian hàng khác) — không suy từ slug/subdomain. */
+  referralCode?: string | null;
   collections: StorefrontCollection[];
 }
 

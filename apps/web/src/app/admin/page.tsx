@@ -96,6 +96,7 @@ import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
 import { MerchantProductsTab } from '@/components/admin/merchant-products-tab';
+import { MerchantFulfilmentTab } from '@/components/admin/merchant-fulfilment-tab';
 import { NotificationTemplatesTab } from '@/components/admin/notification-templates-tab';
 import { PayoutAdminTab } from '@/components/admin/payout-admin-tab';
 import { PosCreditsTab } from '@/components/admin/pos-credits-tab';
@@ -153,6 +154,7 @@ type Tab =
   | 'quickReplies'
   | 'notificationTemplates'
   | 'merchantProducts'
+  | 'merchantFulfilment'
   | 'cashback'
   | 'posCredits'
   | 'reviews'
@@ -175,6 +177,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'coupons', label: 'Voucher' },
   { k: 'brands', label: 'Nhãn hàng' },
   { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+  { k: 'merchantFulfilment', label: 'Đơn đối tác tự giao' },
   { k: 'flashSales', label: 'Flash Sale' },
   { k: 'faqs', label: 'Câu hỏi thường gặp' },
   { k: 'contentKit', label: 'Content Kit CTV' },
@@ -309,6 +312,7 @@ export default function AdminPage() {
         {tab === 'coupons' && <CouponsTab />}
         {tab === 'brands' && <BrandsTab />}
         {tab === 'merchantProducts' && <MerchantProductsTab />}
+        {tab === 'merchantFulfilment' && <MerchantFulfilmentTab />}
         {tab === 'flashSales' && <FlashSalesTab />}
         {tab === 'faqs' && <FaqTab />}
         {tab === 'contentKit' && <ContentKitTab />}

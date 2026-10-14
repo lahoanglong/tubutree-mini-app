@@ -30,6 +30,7 @@ import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { BankTransferPanel } from './bank-transfer-panel';
+import { fulfillerLabel } from '@/lib/shipments';
 
 const NOTE_MAX = 300;
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
@@ -102,6 +103,14 @@ export default function CheckoutPage() {
   const quote = quoteQ.isError ? undefined : quoteQ.data;
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
+  // Giỏ có hàng gian hàng tự giao: BE chỉ nhận COD/Ví cho phần đó (D4) và nói lý do; FE khoá lựa chọn tương ứng.
+  const blocked: Record<string, string> = quote?.blockedPaymentMethods ?? {};
+  const shipments = quote?.shipments ?? [];
+  const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
+  const paymentBlocked = !!quote?.blockedPaymentMethods?.[payment];
+  useEffect(() => {
+    if (paymentBlocked) setPayment('COD');
+  }, [paymentBlocked]);
 
   const place = useMutation({
     mutationFn: () =>
@@ -159,9 +168,28 @@ export default function CheckoutPage() {
             <CheckCircle2 className="h-9 w-9" aria-hidden="true" />
           </div>
           <h2 className="mt-5 font-display text-2xl font-semibold text-stone-900">Đặt hàng thành công!</h2>
-          <p className="mt-2 text-stone-700">
-            Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
-          </p>
+          {placed.splitOrders && placed.splitOrders.length > 1 ? (
+            <div className="mx-auto mt-3 max-w-md text-left">
+              <p className="text-center text-stone-700">Hàng do nhiều nơi giao nên được tách thành {placed.splitOrders.length} đơn:</p>
+              <ul className="mt-2 space-y-2">
+                {placed.splitOrders.map((o) => (
+                  <li key={o.code} className={`flex flex-wrap items-center justify-between gap-2 p-3 text-sm ${ui.card}`}>
+                    <span>
+                      <Link href={orderDetailHref(o.code)} className="font-semibold text-forest-700 underline">
+                        {o.code}
+                      </Link>{' '}
+                      · {o.fulfillerName} giao
+                    </span>
+                    <span className="font-semibold text-stone-900">{formatVnd(o.total)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="mt-2 text-stone-700">
+              Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
+            </p>
+          )}
           {placed.hasRecyclingPickup && (
             <div className="mx-auto mt-3 max-w-md text-left">
               <RecyclingStatus order={placed} />
@@ -228,18 +256,30 @@ export default function CheckoutPage() {
                 {[
                   { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
                   { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
-                ].map((p) => (
-                  <label key={p.k} className={optionClass(payment === p.k)}>
-                    <input
-                      type="radio"
-                      name="pay"
-                      checked={payment === p.k}
-                      onChange={() => setPayment(p.k)}
-                      className="h-4 w-4 accent-forest-600"
-                    />
-                    {p.label}
-                  </label>
-                ))}
+                ].map((p) => {
+                  const reason = blocked[p.k];
+                  return (
+                    <div key={p.k}>
+                      <label className={`${optionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
+                        <input
+                          type="radio"
+                          name="pay"
+                          checked={payment === p.k}
+                          onChange={() => setPayment(p.k)}
+                          disabled={!!reason}
+                          aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
+                          className="h-4 w-4 accent-forest-600"
+                        />
+                        {p.label}
+                      </label>
+                      {reason && (
+                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-xs text-stone-600">
+                          {reason}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -285,13 +325,36 @@ export default function CheckoutPage() {
             tabIndex={0}
             className="mt-2 max-h-40 space-y-1 overflow-auto text-sm"
           >
-            {cart?.items.map((it) => (
-              <div key={it.id} className="flex justify-between gap-2">
-                <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                <span className="text-stone-900">{formatVnd(it.total)}</span>
-              </div>
-            ))}
+            {split
+              ? shipments.map((sh) => (
+                  <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
+                    <p className="text-xs font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
+                    {cart?.items
+                      .filter((it) => sh.itemIds.includes(it.id))
+                      .map((it) => (
+                        <div key={it.id} className="flex justify-between gap-2">
+                          <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
+                          <span className="text-stone-900">{formatVnd(it.total)}</span>
+                        </div>
+                      ))}
+                    <div className="flex justify-between gap-2 text-xs text-stone-600">
+                      <span>Phí giao</span>
+                      <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+                    </div>
+                  </div>
+                ))
+              : cart?.items.map((it) => (
+                  <div key={it.id} className="flex justify-between gap-2">
+                    <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
+                    <span className="text-stone-900">{formatVnd(it.total)}</span>
+                  </div>
+                ))}
           </div>
+          {split && (
+            <p className="mt-2 text-xs text-stone-600">
+              Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
+            </p>
+          )}
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />

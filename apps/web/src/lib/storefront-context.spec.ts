@@ -15,9 +15,17 @@ describe('ngữ cảnh gian hàng trên web', () => {
     expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null });
   });
 
-  it('gian hàng CTV → suy ra mã giới thiệu từ slug (slug là referralCode viết thường)', () => {
-    rememberStorefront('abc123', 'CTV');
+  it('gian hàng CTV → mã giới thiệu là của chủ gian hàng do API trả', () => {
+    rememberStorefront('abc123', 'CTV', 'abc123');
     expect(getStorefrontContext()).toEqual({ slug: 'abc123', referralCode: 'ABC123', kind: 'CTV' });
+  });
+
+  it('SELLER-4: CTV đổi subdomain → mã giới thiệu vẫn là của chủ, không suy từ slug/subdomain', () => {
+    rememberStorefront('ctvone1', 'CTV', 'CTVONE1');
+    expect(getStorefrontContext()).toEqual({ slug: 'ctvone1', referralCode: 'CTVONE1', kind: 'CTV' });
+    sessionStorage.clear();
+    rememberStorefront('greenshop', 'CTV');
+    expect(getStorefrontContext().referralCode).toBeNull();
   });
 
   it('gian hàng nhãn hàng → giữ slug nhưng KHÔNG bịa mã giới thiệu', () => {
@@ -42,7 +50,7 @@ describe('ngữ cảnh gian hàng trên web', () => {
   });
 
   it('xoá xong quay về rỗng', () => {
-    rememberStorefront('abc123', 'CTV');
+    rememberStorefront('abc123', 'CTV', 'ABC123');
     clearStorefrontContext();
     expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null });
   });
@@ -56,7 +64,7 @@ describe('ctvSlugFor — chỉ gian hàng CTV mới gắn vào đơn', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('gian hàng CTV → trả slug', () => {
-    rememberStorefront('abc123', 'CTV');
+    rememberStorefront('abc123', 'CTV', 'ABC123');
     expect(ctvSlugFor(getStorefrontContext())).toBe('abc123');
   });
 
@@ -66,7 +74,7 @@ describe('ctvSlugFor — chỉ gian hàng CTV mới gắn vào đơn', () => {
   });
 
   it('khách vào link CTV rồi lướt sang trang nhãn → KHÔNG gửi slug nhãn, vẫn giữ mã giới thiệu', () => {
-    rememberStorefront('abc123', 'CTV');
+    rememberStorefront('abc123', 'CTV', 'ABC123');
     rememberStorefront('visante', 'BRAND');
     const ctx = getStorefrontContext();
     expect(ctvSlugFor(ctx)).toBeUndefined();

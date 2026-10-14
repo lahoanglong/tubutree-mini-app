@@ -13,6 +13,12 @@ const mocks = vi.hoisted(() => ({
   removeResell: vi.fn(),
   listOrders: vi.fn(),
   setOrderStatus: vi.fn(),
+  listFulfil: vi.fn(),
+  fulfilAction: vi.fn(),
+  settlement: vi.fn(),
+  updateProduct: vi.fn(),
+  stopSelling: vi.fn(),
+  checkPancake: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -26,6 +32,17 @@ vi.mock('@/lib/merchant-client', async (importOriginal) => ({
   countMerchantOrders: async () => 3,
   listMerchantOrders: (status: string | undefined, page: number) => mocks.listOrders(status, page),
   updateMerchantOrderStatus: (id: string, status: string) => mocks.setOrderStatus(id, status),
+  listFulfilOrders: (status: string | undefined, page: number) => mocks.listFulfil(status, page),
+  acceptFulfilOrder: (id: string) => mocks.fulfilAction('accept', id),
+  packFulfilOrder: (id: string) => mocks.fulfilAction('pack', id),
+  shipFulfilOrder: (id: string, body: unknown) => mocks.fulfilAction('ship', id, body),
+  deliverFulfilOrder: (id: string) => mocks.fulfilAction('deliver', id),
+  failFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('fail', id, reason),
+  cancelFulfilOrder: (id: string, reason: string) => mocks.fulfilAction('cancel', id, reason),
+  getMerchantSettlement: () => mocks.settlement(),
+  updateMerchantProduct: (id: string, dto: unknown) => mocks.updateProduct(id, dto),
+  stopSellingMerchantProduct: (id: string) => mocks.stopSelling(id),
+  checkPancakeVariation: (code: string) => mocks.checkPancake(code),
 }));
 
 const STORE = {
@@ -48,6 +65,8 @@ const STORE = {
   warehouseDistrict: null,
   warehouseWard: null,
   warehousePhone: null,
+  shippingFee: null,
+  freeShipFrom: null,
   isPublished: true,
 };
 
@@ -76,6 +95,26 @@ const ORDER = (id: string, status: string, extra: Record<string, unknown> = {}) 
   ...extra,
 });
 
+const FULFIL = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  code: `TF${id}`,
+  status,
+  subtotal: 200000,
+  discount: 0,
+  shippingFee: 30000,
+  total: 230000,
+  paymentMethod: 'COD',
+  paymentStatus: 'UNPAID',
+  shippingAddress: { recipient: 'Hà My', phone: '0900000003', street: '9 Hai Bà Trưng', ward: 'Bến Nghé', district: 'Quận 1', province: 'TP.HCM' },
+  note: null,
+  merchantAcceptedAt: null,
+  createdAt: '2026-10-13T03:00:00.000Z',
+  items: [{ id: `fi${id}`, productName: 'Mật ong rừng', variationName: 'Mặc định', unitPrice: 200000, quantity: 1, total: 200000 }],
+  user: { fullName: 'Hà My', phone: '0900000003' },
+  sla: { state: null, dueAt: '2026-10-14T03:00:00.000Z' },
+  ...extra,
+});
+
 let ui: Rendered | undefined;
 const mount = async () => {
   ui = render(<MerchantPage />);
@@ -83,11 +122,15 @@ const mount = async () => {
   return ui.container;
 };
 const openTab = async (label: string) => {
-  click(byText(ui!.container, 'button', label));
+  click(byText(ui!.container, '[role="tab"]', label));
   await flush();
 };
-const inputByLabel = (root: ParentNode, label: string) =>
-  byText(root, 'label', label)!.parentElement!.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input,textarea,select')!;
+const FIELD = 'input,textarea,select';
+const inputByLabel = (root: ParentNode, label: string) => {
+  const l = byText(root, 'label', label)!;
+  return (l.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(FIELD) ??
+    l.parentElement!.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(FIELD))!;
+};
 
 beforeEach(() => {
   mocks.auth = { user: { role: 'DEALER' }, status: 'authenticated', initialized: true };
@@ -105,8 +148,38 @@ beforeEach(() => {
     meta: { page: 1, limit: 20, total: 4 },
   }));
   mocks.setOrderStatus = vi.fn(async () => ({}));
+  mocks.listFulfil = vi.fn(async () => ({
+    data: [FULFIL('1', 'CONFIRMED'), FULFIL('2', 'CONFIRMED', { merchantAcceptedAt: '2026-10-13T04:00:00.000Z', sla: { state: 'SHIP_OVERDUE', dueAt: '2026-10-13T05:00:00.000Z' } }), FULFIL('3', 'SHIPPING', { shippingPartner: 'GHN', shippingCode: 'GHN123', shippedAt: '2026-10-13T06:00:00.000Z' })],
+    meta: { page: 1, limit: 20, total: 3 },
+    counts: { CONFIRMED: 3, PACKED: 2, SHIPPING: 1 },
+    slaConfig: { confirmHours: 24, shipHours: 48, deliverDays: 7 },
+  }));
+  mocks.fulfilAction = vi.fn(async () => ({}));
+  mocks.settlement = vi.fn(async () => ({
+    holdDays: 7,
+    lines: [
+      { orderId: 'o1', orderCode: 'TF1', kind: 'SALE', goodsAmount: 200000, shippingFee: 30000, commissionAmount: 30000, codCollected: 0, netAmount: 200000, deliveredAt: '2026-10-01T03:00:00.000Z' },
+      { orderId: 'o2', orderCode: 'TF2', kind: 'SALE', goodsAmount: 100000, shippingFee: 30000, commissionAmount: 15000, codCollected: 130000, netAmount: -15000, deliveredAt: '2026-10-02T03:00:00.000Z' },
+    ],
+    total: 185000,
+    upcoming: [],
+    payouts: [{ id: 'p1', storefrontId: 's1', amount: 500000, status: 'PAID', createdAt: '2026-09-20T03:00:00.000Z', paidAt: '2026-09-21T03:00:00.000Z', bankRef: 'FT123', lines: [{ id: 'l1' }] }],
+  }));
+  mocks.updateProduct = vi.fn(async () => ({}));
+  mocks.stopSelling = vi.fn(async () => ({}));
+  mocks.checkPancake = vi.fn(async (code: string) => ({
+    variationId: 'pv',
+    pancakeId: code,
+    productId: 'pp',
+    productName: 'Bột giặt quế',
+    variationName: '1kg',
+    retailPrice: 150000,
+    salePrice: null,
+    stock: 40,
+  }));
 });
 afterEach(() => {
+  window.history.replaceState(null, '', '/');
   vi.restoreAllMocks();
   ui?.unmount();
   ui = undefined;
@@ -133,7 +206,9 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
   it('thẻ số liệu đọc tổng từ meta; huy hiệu xuất bản theo token success, chưa xuất bản theo token warning', async () => {
     const root = await mount();
     const kpi = Array.from(root.querySelectorAll('p.text-2xl')).map((p) => p.textContent);
-    expect(kpi).toEqual(['4', '2', '3']);
+    // Gian hàng tự giao: "Đơn cần giao" = chờ xử lý (3) + đã đóng gói (2) của chính gian hàng.
+    expect(kpi).toEqual(['4', '2', '5']);
+    expect(root.textContent).not.toContain('Cần xuất kho ngay');
     const published = byText(root, 'span', 'Đang xuất bản')!;
     expect(published.className).toContain('bg-success-bg');
     ui!.unmount();
@@ -144,11 +219,44 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
 
   it('thanh tab cuộn ngang trong khung riêng, mỗi tab cao 44px và tab đang chọn dùng viền forest', async () => {
     const root = await mount();
-    const store = byText(root, 'button', 'Gian hàng & Subdomain')!;
+    const store = byText(root, '[role="tab"]', 'Gian hàng & Subdomain')!;
     expect(store.parentElement!.className).toContain('overflow-x-auto');
     expect(store.className).toContain('min-h-[44px]');
     expect(store.className).toContain('border-forest-600');
-    expect(byText(root, 'button', 'Tài khoản VietQR')!.className).toContain('text-stone-500');
+    expect(store.getAttribute('aria-selected')).toBe('true');
+    expect(byText(root, '[role="tab"]', 'Sản phẩm')!.className).toContain('text-stone-500');
+    expect(root.textContent).not.toContain('VietQR');
+  });
+
+  it('SELLER-17: tab nằm trên URL (?tab=), tải lại vẫn mở đúng tab; tab lạ thì về tab đầu', async () => {
+    window.history.replaceState(null, '', '/merchant?tab=settlement');
+    let root = await mount();
+    expect(byText(root, '[role="tab"]', 'Đối soát')!.getAttribute('aria-selected')).toBe('true');
+    expect(root.textContent).toContain('Chờ lập phiếu');
+    await openTab('Đơn cần giao');
+    expect(window.location.search).toBe('?tab=fulfil');
+    await openTab('Gian hàng & Subdomain');
+    expect(window.location.search).toBe('');
+    ui!.unmount();
+    window.history.replaceState(null, '', '/merchant?tab=bogus');
+    root = await mount();
+    expect(byText(root, '[role="tab"]', 'Gian hàng & Subdomain')!.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('SELLER-8: gian hàng CTV không thấy tab tự giao, tài khoản nhận đối soát, giao hàng; thẻ đơn ghi rõ kho Tubu xử lý', async () => {
+    mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
+    mocks.store = { ...STORE, type: 'CTV' };
+    const root = await mount();
+    const tabs = Array.from(root.querySelectorAll('[role="tab"]')).map((t) => t.textContent);
+    expect(tabs).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
+    expect(Array.from(root.querySelectorAll('p.text-2xl')).map((p) => p.textContent)).toEqual(['2', '3']);
+    expect(root.textContent).toContain('Kho Tubu đóng gói và giao');
+    expect(root.textContent).not.toContain('Sản phẩm riêng');
+    expect(mocks.listFulfil).not.toHaveBeenCalled();
+    await openTab('Sản phẩm');
+    expect(byText(root, 'button', 'Đăng sản phẩm mới')).toBeNull();
+    expect(root.textContent).toContain('Gian hàng CTV bán lại sản phẩm của Tubu Tree');
+    expect(root.textContent).toContain('SP r1');
   });
 });
 
@@ -219,20 +327,32 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
     expect(html).toContain('var(--color-bg-inverse)');
     expect(html).not.toContain('#1e293b');
   });
+
+  it('SELLER-8: khung xem trước hiện sản phẩm thật đang bán của gian hàng, không có sản phẩm mẫu giả', async () => {
+    const root = await mount();
+    expect(root.textContent).not.toContain('Sản phẩm mẫu của Shop');
+    expect(root.textContent).toContain('SP a');
+    expect(root.textContent).not.toContain('SP c');
+    ui!.unmount();
+    mocks.getProducts = vi.fn(async () => ({ ownProducts: [], resellProducts: [], meta: { page: 1, limit: 20, ownTotal: 0, resellTotal: 0 } }));
+    const empty = await mount();
+    expect(empty.textContent).toContain('Gian hàng chưa có sản phẩm nào đang bán.');
+  });
 });
 
-describe('cổng đối tác — tab Tài khoản VietQR', () => {
-  it('chọn ngân hàng đổi BIN, lưu gửi tên chủ tài khoản viết hoa và hiện mã QR mẫu khi có số tài khoản', async () => {
+describe('cổng đối tác — tab Tài khoản nhận đối soát (SELLER-8)', () => {
+  it('nói rõ khách trả tiền cho Tubu, không có mã VietQR mẫu; lưu gửi BIN theo ngân hàng chọn và tên viết hoa', async () => {
     const root = await mount();
-    await openTab('Tài khoản VietQR');
-    expect(root.textContent).toContain('Vui lòng nhập số tài khoản');
-    selectValue(inputByLabel(root, 'Ngân hàng thụ hưởng'), 'BIDV');
+    await openTab('Tài khoản nhận đối soát');
+    expect(root.textContent).toContain('Khách luôn thanh toán cho Tubu Tree');
+    expect(root.querySelector('img')).toBeNull();
+    selectValue(inputByLabel(root, 'Ngân hàng'), '970418');
     typeInto(inputByLabel(root, 'Số tài khoản'), '0123456789');
     typeInto(inputByLabel(root, 'Tên chủ tài khoản'), 'nguyen van a');
-    const qr = root.querySelector<HTMLImageElement>('img[alt="VietQR Mẫu"]')!;
-    expect(qr.src).toContain('970418-0123456789');
-    expect(qr.className).toContain('max-w-full');
-    click(byText(root, 'button', 'Lưu tài khoản ngân hàng'));
+    const save = byText(root, 'button', 'Lưu tài khoản')!;
+    expect(save.className).toContain('min-h-[44px]');
+    expect(inputByLabel(root, 'Số tài khoản').className).toContain('min-h-[44px]');
+    click(save);
     await flush();
     expect(mocks.updateStore).toHaveBeenCalledWith({
       bankName: 'BIDV',
@@ -242,42 +362,110 @@ describe('cổng đối tác — tab Tài khoản VietQR', () => {
     });
   });
 
-  it('ô nhập và nút Lưu dùng token DS v2, cao 44px', async () => {
+  it('gỡ được tài khoản đã lưu: gửi chuỗi rỗng để BE xoá', async () => {
+    mocks.store = { ...STORE, bankName: 'BIDV', bankBin: '970418', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN VAN A' };
     const root = await mount();
-    await openTab('Tài khoản VietQR');
-    expect(inputByLabel(root, 'Số tài khoản').className).toContain('min-h-[44px]');
-    expect(inputByLabel(root, 'Ngân hàng thụ hưởng').className).toContain('bg-stone-0');
-    expect(byText(root, 'button', 'Lưu tài khoản ngân hàng')!.className).toContain('min-h-[44px]');
+    await openTab('Tài khoản nhận đối soát');
+    click(byText(root, 'button', 'Gỡ tài khoản'));
+    await flush();
+    expect(mocks.updateStore).toHaveBeenCalledWith({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' });
+    expect(root.querySelector('[role="status"]')!.textContent).toContain('Đã gỡ tài khoản nhận đối soát.');
   });
 });
 
-describe('cổng đối tác — tab Kho hàng & Giao nhận', () => {
-  it('lưu địa chỉ kho gửi giá trị đã cắt khoảng trắng; ô nhập cao 44px', async () => {
+describe('cổng đối tác — tab Giao hàng & liên hệ (SELLER-8)', () => {
+  it('phí giao, mức miễn phí (trống = null) và SĐT khách thấy trên đơn; không hứa tính ship theo địa chỉ kho', async () => {
     const root = await mount();
-    await openTab('Kho Hàng & Giao Nhận');
-    const addr = inputByLabel(root, 'Số nhà, tên đường');
-    expect(addr.className).toContain('min-h-[44px]');
-    typeInto(addr, ' 45 Đường số 8 ');
-    typeInto(inputByLabel(root, 'Tỉnh / Thành phố'), ' TP. Hồ Chí Minh ');
-    typeInto(inputByLabel(root, 'Quận / Huyện'), 'Quận 7');
-    typeInto(inputByLabel(root, 'Phường / Xã'), 'Tân Hưng');
-    typeInto(inputByLabel(root, 'Số điện thoại liên hệ kho'), '0912345678');
-    click(byText(root, 'button', 'Lưu địa chỉ kho hàng'));
+    await openTab('Giao hàng & liên hệ');
+    expect(root.textContent).not.toContain('tính toán phí ship');
+    const fee = inputByLabel(root, 'Phí giao mỗi đơn');
+    expect(fee.className).toContain('min-h-[44px]');
+    typeInto(fee, '25000');
+    typeInto(inputByLabel(root, 'Số điện thoại khách liên hệ'), ' 0912345678 ');
+    typeInto(inputByLabel(root, 'Địa chỉ gửi hàng'), ' 45 Đường số 8 ');
+    click(byText(root, 'button', 'Lưu cài đặt giao hàng'));
     await flush();
     expect(mocks.updateStore).toHaveBeenCalledWith({
-      warehouseAddress: '45 Đường số 8',
-      warehouseCity: 'TP. Hồ Chí Minh',
-      warehouseDistrict: 'Quận 7',
-      warehouseWard: 'Tân Hưng',
+      shippingFee: 25000,
+      freeShipFrom: null,
       warehousePhone: '0912345678',
+      warehouseAddress: '45 Đường số 8',
+      warehouseWard: '',
+      warehouseDistrict: '',
+      warehouseCity: '',
     });
+  });
+});
+
+describe('cổng đối tác — tab Đơn cần giao (D4)', () => {
+  it('đủ người nhận, địa chỉ, tiền thu hộ; quá hạn hiện huy hiệu; nút theo bước gọi đúng API', async () => {
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    expect(mocks.listFulfil).toHaveBeenLastCalledWith('CONFIRMED', 1);
+    const first = root.querySelector('article[aria-label="Đơn TF1"]')!;
+    expect(first.textContent).toContain('Hà My · 0900000003');
+    expect(first.textContent).toContain('9 Hai Bà Trưng, Bến Nghé, Quận 1, TP.HCM');
+    expect(first.textContent).toContain('Thu hộ khi giao: 230.000');
+    expect(first.textContent).toContain('Chờ bạn xác nhận');
+    click(byText(first, 'button', 'Xác nhận đơn'));
+    await flush();
+    expect(mocks.fulfilAction).toHaveBeenLastCalledWith('accept', '1');
+
+    const second = root.querySelector('article[aria-label="Đơn TF2"]')!;
+    expect(byText(second, 'span', 'Quá hạn gửi hàng')!.className).toContain('bg-danger-bg');
+    click(byText(second, 'button', 'Nhập mã vận đơn'));
+    typeInto(inputByLabel(second, 'Đơn vị vận chuyển'), ' GHN ');
+    typeInto(inputByLabel(second, 'Mã vận đơn'), 'GHN999');
+    click(byText(second, 'button', 'Xác nhận đã gửi hàng'));
+    await flush();
+    expect(mocks.fulfilAction).toHaveBeenLastCalledWith('ship', '2', { carrier: 'GHN', trackingCode: 'GHN999', trackingUrl: undefined });
+
+    const third = root.querySelector('article[aria-label="Đơn TF3"]')!;
+    expect(third.textContent).toContain('GHN · GHN123');
+    expect(byText(third, 'button', 'Huỷ đơn')).toBeNull();
+    click(byText(third, 'button', 'Khách đã nhận hàng'));
+    await flush();
+    expect(mocks.fulfilAction).toHaveBeenLastCalledWith('deliver', '3');
+  });
+
+  it('huỷ đơn cần lý do và lỗi API hiện role alert; bộ lọc hiện số đơn từng trạng thái', async () => {
+    mocks.fulfilAction = vi.fn(async () => {
+      throw new Error('Đơn vừa được cập nhật ở nơi khác.');
+    });
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    expect(byText(root, 'button', 'Chờ xử lý (3)')!.getAttribute('aria-pressed')).toBe('true');
+    expect(byText(root, 'button', 'Đã đóng gói (2)')).not.toBeNull();
+    const first = root.querySelector('article[aria-label="Đơn TF1"]')!;
+    click(byText(first, 'button', 'Huỷ đơn'));
+    typeInto(inputByLabel(first, 'Lý do huỷ'), ' Hết hàng ');
+    click(byText(first, 'button', 'Xác nhận huỷ đơn'));
+    await flush();
+    expect(mocks.fulfilAction).toHaveBeenLastCalledWith('cancel', '1', 'Hết hàng');
+    expect(first.querySelector('[role="alert"]')!.textContent).toContain('Đơn vừa được cập nhật ở nơi khác.');
+    click(byText(root, 'button', 'Đang giao'));
+    await flush();
+    expect(mocks.listFulfil).toHaveBeenLastCalledWith('SHIPPING', 1);
+  });
+});
+
+describe('cổng đối tác — tab Đối soát', () => {
+  it('công thức thực nhận, số âm hiện dấu trừ, phiếu đã chuyển kèm mã giao dịch', async () => {
+    const root = await mount();
+    await openTab('Đối soát');
+    expect(root.textContent).toContain('thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
+    expect(root.textContent).toContain('sau 7 ngày');
+    expect(root.textContent).toContain('Chờ lập phiếu (2 đơn)');
+    expect(root.textContent).toContain('−15.000');
+    expect(root.textContent).toContain('mã GD FT123');
+    expect(scrollRegionProblems(root)).toEqual([]);
   });
 });
 
 describe('cổng đối tác — tab Quản lý sản phẩm', () => {
   it('hai nút danh sách xuống dòng được ở 390px, cao 44px, tô forest khi chọn và báo aria-pressed', async () => {
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     const own = byText(root, 'button', 'Sản phẩm do tôi đăng')!;
     const resell = byText(root, 'button', 'Sản phẩm Tubu Tree bán lại')!;
     expect(own.parentElement!.className).toContain('flex-wrap');
@@ -293,12 +481,12 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
 
   it('huy hiệu kiểm duyệt theo token success / danger / warning, bảng cuộn ngang trong khung riêng', async () => {
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     expect(byText(root, 'span', 'Đã duyệt')!.className).toContain('bg-success-bg');
     const rejected = byText(root, 'span', 'Từ chối: Thiếu chứng nhận')!;
     expect(rejected.className).toContain('bg-danger-bg');
     expect(rejected.getAttribute('title')).toBe('Thiếu chứng nhận');
-    expect(byText(root, 'span', 'Chờ Admin duyệt')!.className).toContain('bg-warning-bg');
+    expect(byText(root, 'span', 'Chờ Tubu Tree duyệt')!.className).toContain('bg-warning-bg');
     const frame = root.querySelector('table')!.parentElement!;
     expect(frame.className).toContain('overflow-x-auto');
     expect(frame.className).toContain('rounded-card');
@@ -307,7 +495,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
 
   it('Gỡ khỏi shop: hỏi xác nhận, từ chối thì không gọi API, đồng ý gọi đúng sản phẩm; lỗi hiện thông báo danger', async () => {
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     click(byText(root, 'button', 'Sản phẩm Tubu Tree bán lại'));
     const remove = byText(root, 'button', 'Gỡ khỏi shop')!;
     expect(remove.className).toContain('min-h-[44px]');
@@ -335,7 +523,7 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       meta: { page, limit: 20, ownTotal: 45, resellTotal: 0 },
     }));
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     expect(root.textContent).toContain('Hiển thị 1–1/45');
     const prev = byText(root, 'button', 'Trang trước')!;
     const next = byText(root, 'button', 'Trang sau')!;
@@ -348,15 +536,19 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
 
   it('Đăng sản phẩm mới: hộp thoại theo token (nền stone-900/40, rounded-sheet), nút Đóng có tên và cao 44px, gửi đúng dữ liệu', async () => {
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     click(byText(root, 'button', 'Đăng sản phẩm mới'));
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     expect(overlay.className).toContain('bg-stone-900/40');
     expect(overlay.firstElementChild!.className).toContain('rounded-sheet');
     const close = root.querySelector<HTMLButtonElement>('button[aria-label="Đóng"]')!;
     expect(close.className).toContain('h-11');
+    expect(overlay.textContent).not.toContain('24h');
     typeInto(inputByLabel(overlay, 'Tên sản phẩm'), '  Nước rửa chén  ');
+    typeInto(inputByLabel(overlay, 'Giá bán'), '100000');
+    typeInto(inputByLabel(overlay, 'Tồn kho bạn đang có'), '50');
     typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Chiết xuất bồ hòn');
+    typeInto(inputByLabel(overlay, 'Tiêu chuẩn'), 'Thuần chay, Hữu cơ, ');
     typeInto(inputByLabel(overlay, 'URL hình ảnh'), ' https://img/x.png ');
     const submit = byText(overlay, 'button', 'Gửi kiểm duyệt')!;
     expect(submit.className).toContain('min-h-[44px]');
@@ -369,9 +561,81 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       basePrice: 100000,
       stock: 50,
       images: ['https://img/x.png'],
-      certifications: ['Thuần chay', 'Hữu cơ', 'Không thử nghiệm trên động vật'],
+      certifications: ['Thuần chay', 'Hữu cơ'],
     });
     expect(root.querySelector('.fixed.inset-0')).toBeNull();
+  });
+
+  it('D4 Tubu giao hộ: phải kiểm mã Pancake trước khi gửi; gửi mã đã kiểm, giá theo kho Tubu, không gửi tồn kho', async () => {
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'Bột giặt quế');
+    typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Bột giặt sinh học');
+    click(overlay.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]!);
+    expect(overlay.querySelector('#merchant-product-price')).toBeNull();
+    typeInto(inputByLabel(overlay, 'Mã biến thể Pancake'), ' PCK-77 ');
+    click(byText(overlay, 'button', 'Gửi kiểm duyệt'));
+    await flush();
+    expect(mocks.createProduct).not.toHaveBeenCalled();
+    expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Kiểm tra mã');
+    click(byText(overlay, 'button', 'Kiểm tra mã'));
+    await flush();
+    expect(mocks.checkPancake).toHaveBeenCalledWith(' PCK-77 ');
+    expect(overlay.querySelector('[role="status"]')!.textContent).toContain('Bột giặt quế (1kg)');
+    expect(overlay.querySelector('[role="status"]')!.textContent).toContain('còn 40 trong kho Tubu');
+    typeInto(inputByLabel(overlay, 'Mã biến thể Pancake'), 'PCK-77');
+    click(byText(overlay, 'button', 'Kiểm tra mã'));
+    await flush();
+    click(byText(overlay, 'button', 'Gửi kiểm duyệt'));
+    await flush();
+    expect(mocks.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Bột giặt quế', basePrice: 150000, tubuFulfils: true, pancakeCode: 'PCK-77' }),
+    );
+    expect(mocks.createProduct.mock.calls[0]![0]).not.toHaveProperty('stock');
+  });
+
+  it('D4 mã Pancake không hợp lệ: hiện lỗi của API ngay dưới ô mã', async () => {
+    mocks.checkPancake = vi.fn(async () => {
+      throw new Error('Không tìm thấy mã biến thể này trong danh mục Pancake của Tubu Tree');
+    });
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    click(overlay.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]!);
+    typeInto(inputByLabel(overlay, 'Mã biến thể Pancake'), 'SAI');
+    click(byText(overlay, 'button', 'Kiểm tra mã'));
+    await flush();
+    expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Không tìm thấy mã biến thể');
+  });
+
+  it('sửa sản phẩm chỉ gửi trường đã đổi; ngừng bán hỏi xác nhận rồi gọi API; sản phẩm ngừng bán mở bán lại được', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('a', 'APPROVED', { isActive: true }), PRODUCT('z', 'APPROVED', { isActive: false })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 2, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    expect(overlay.textContent).toContain('chờ Tubu Tree duyệt lại');
+    typeInto(inputByLabel(overlay, 'Tồn kho'), '12');
+    click(byText(overlay, 'button', 'Lưu thay đổi'));
+    await flush();
+    expect(mocks.updateProduct).toHaveBeenCalledWith('a', { stock: 12 });
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    click(byText(root, 'button', 'Ngừng bán'));
+    await flush();
+    expect(confirm).toHaveBeenCalled();
+    expect(mocks.stopSelling).toHaveBeenCalledWith('a');
+    expect(root.textContent).toContain('Đã ngừng bán');
+    click(byText(root, 'button', 'Mở bán lại'));
+    await flush();
+    expect(mocks.updateProduct).toHaveBeenLastCalledWith('z', { isActive: true });
   });
 
   it('Đăng sản phẩm mới: lỗi từ API hiện thông báo danger và hộp thoại vẫn mở; Hủy đóng hộp thoại', async () => {
@@ -379,10 +643,12 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       throw new Error('Giá không hợp lệ');
     });
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     click(byText(root, 'button', 'Đăng sản phẩm mới'));
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'SP');
+    typeInto(inputByLabel(overlay, 'Giá bán'), '5000');
+    typeInto(inputByLabel(overlay, 'Tồn kho bạn đang có'), '1');
     typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Mô tả');
     click(byText(overlay, 'button', 'Gửi kiểm duyệt'));
     await flush();
@@ -394,12 +660,13 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
   });
 });
 
-describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
+describe('cổng đối tác — tab Đơn qua gian hàng', () => {
   it('đối tác không phải ADMIN: ghi chú thông tin theo token info, không có nút chuyển trạng thái', async () => {
     const root = await mount();
-    await openTab('Đơn Hàng Thuộc Kho');
-    const notice = Array.from(root.querySelectorAll('div')).find((d) => d.children.length === 0 && d.textContent?.includes('Đơn do kho Tubu Tree xử lý'))!;
+    await openTab('Đơn qua gian hàng');
+    const notice = Array.from(root.querySelectorAll('div')).find((d) => d.children.length === 0 && d.textContent?.includes('Hàng của kho Tubu Tree do Tubu đóng gói và giao'))!;
     expect(notice.className).toContain('bg-info-bg');
+    expect(notice.textContent).toContain('nằm ở tab Đơn cần giao');
     expect(root.textContent).toContain('Do kho Tubu xử lý');
     expect(byText(root, 'button', 'Đã đóng gói')).toBeNull();
     expect(byText(root, 'button', 'Bắt đầu giao')).toBeNull();
@@ -408,7 +675,7 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
 
   it('địa chỉ giao, huy hiệu trạng thái và chip Đặt trước giữ nội dung, dùng token DS v2', async () => {
     const root = await mount();
-    await openTab('Đơn Hàng Thuộc Kho');
+    await openTab('Đơn qua gian hàng');
     expect(root.textContent).toContain('Lan · 0900000002');
     expect(root.textContent).toContain('1 Lê Lợi, Bến Nghé, Quận 1, TP.HCM');
     expect(byText(root, 'span', 'Đặt trước 1')!.className).toContain('bg-warning-bg');
@@ -418,7 +685,7 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
 
   it('bộ lọc trạng thái có tên truy cập, cao 44px và gọi lại danh sách ở trang 1 theo trạng thái chọn', async () => {
     const root = await mount();
-    await openTab('Đơn Hàng Thuộc Kho');
+    await openTab('Đơn qua gian hàng');
     const select = root.querySelector<HTMLSelectElement>('select#merchant-orders-status')!;
     expect(select.className).toContain('min-h-[44px]');
     expect(select.labels?.[0]?.textContent).toBe('Lọc theo trạng thái đơn');
@@ -430,7 +697,7 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
   it('ADMIN: mỗi trạng thái có đúng một nút chuyển bước, cao 44px, gọi đúng trạng thái kế tiếp', async () => {
     mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
     const root = await mount();
-    await openTab('Đơn Hàng Thuộc Kho');
+    await openTab('Đơn qua gian hàng');
     const packed = byText(root, 'button', 'Đã đóng gói')!;
     const shipping = byText(root, 'button', 'Bắt đầu giao')!;
     const delivered = byText(root, 'button', 'Đã giao')!;
@@ -456,7 +723,7 @@ describe('cổng đối tác — tab Đơn hàng thuộc kho', () => {
       throw new Error('Đơn đã bị huỷ');
     });
     const root = await mount();
-    await openTab('Đơn Hàng Thuộc Kho');
+    await openTab('Đơn qua gian hàng');
     click(byText(root, 'button', 'Đã đóng gói'));
     await flush();
     const alert = root.querySelector('[role="alert"]')!;
@@ -490,10 +757,12 @@ function labelPairProblems(root: ParentNode): string[] {
 describe('cổng đối tác — truy cập', () => {
   it.each([
     ['Gian hàng & Subdomain'],
-    ['Tài khoản VietQR'],
-    ['Kho Hàng & Giao Nhận'],
-    ['Quản Lý Sản Phẩm'],
-    ['Đơn Hàng Thuộc Kho'],
+    ['Đơn cần giao'],
+    ['Sản phẩm'],
+    ['Đơn qua gian hàng'],
+    ['Đối soát'],
+    ['Giao hàng & liên hệ'],
+    ['Tài khoản nhận đối soát'],
   ])('tab %s: mọi ô nhập và select có nhãn gắn đúng (label for/id), bảng có khung cuộn focus được', async (tabLabel) => {
     const root = await mount();
     await openTab(tabLabel);
@@ -504,7 +773,7 @@ describe('cổng đối tác — truy cập', () => {
 
   it('form thêm sản phẩm mở ra cũng có nhãn cho mọi ô', async () => {
     const root = await mount();
-    await openTab('Quản Lý Sản Phẩm');
+    await openTab('Sản phẩm');
     const open = Array.from(root.querySelectorAll('button')).find((b) => /Thêm sản phẩm|Đăng sản phẩm/.test(b.textContent ?? ''));
     expect(open, 'nút mở form thêm sản phẩm').toBeDefined();
     click(open!);
@@ -539,7 +808,7 @@ describe('cổng đối tác — truy cập', () => {
 
 // PG-3 (axe heading-order): tiêu đề từng tab là h2 ngay dưới h1 của trang; các tiêu đề con nối tiếp không nhảy cấp.
 describe('cổng đối tác — thứ bậc heading của các tab', () => {
-  it.each(['Gian hàng & Subdomain', 'Tài khoản VietQR', 'Kho Hàng & Giao Nhận', 'Quản Lý Sản Phẩm', 'Đơn Hàng Thuộc Kho'])(
+  it.each(['Gian hàng & Subdomain', 'Đơn cần giao', 'Sản phẩm', 'Đơn qua gian hàng', 'Đối soát', 'Giao hàng & liên hệ', 'Tài khoản nhận đối soát'])(
     'tab %s: không nhảy cấp heading',
     async (label) => {
       await mount();

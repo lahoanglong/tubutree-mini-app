@@ -282,3 +282,29 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(headingProblems(container)).toEqual([]);
   });
 });
+
+describe('/tai-khoan/don-hang/[code] — đơn tách theo nơi giao (D4)', () => {
+  it('đơn gian hàng tự giao: ghi rõ ai giao và SĐT gian hàng; liệt kê đơn cùng lần đặt kèm liên kết', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER),
+      status: 'CONFIRMED',
+      paymentMethod: 'COD',
+      fulfilment: { kind: 'MERCHANT', name: 'Mật ong Linh', phone: '0900000009' },
+      siblings: [{ code: 'TB-8', status: 'SHIPPING', total: 130000, fulfillerName: 'Tubu Tree' }],
+    };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Giao bởi Mật ong Linh (gian hàng đối tác tự đóng gói và giao)');
+    expect(container.textContent).toContain('Liên hệ gian hàng: 0900000009');
+    const siblings = container.querySelector('section[aria-label="Đơn cùng lần đặt"]')!;
+    expect(siblings.textContent).toContain('TB-8 · Tubu Tree giao');
+    expect(siblings.querySelector('a')!.getAttribute('href')).toContain('TB-8');
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
+  it('đơn Tubu giao không tách: không hiện dòng nơi giao hay danh sách đơn cùng lần đặt', async () => {
+    mocks.order = { ...structuredClone(ORDER), fulfilment: { kind: 'TUBU', name: 'Tubu Tree', phone: null }, siblings: [] };
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Giao bởi');
+    expect(container.querySelector('section[aria-label="Đơn cùng lần đặt"]')).toBeNull();
+  });
+});

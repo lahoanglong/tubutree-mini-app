@@ -105,6 +105,9 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold text-stone-900">{p.name}</h3>
               <ToneBadge tone="warning">Chờ duyệt</ToneBadge>
+              <ToneBadge tone={p.pancakeLinkCode ? 'info' : 'neutral'}>
+                {p.pancakeLinkCode ? `Tubu giao hộ · mã Pancake ${p.pancakeLinkCode}` : 'Gian hàng tự giao'}
+              </ToneBadge>
             </div>
             <p className="text-xs text-stone-500">Slug: /{p.slug} · Thương hiệu: {p.brand || 'Riêng'} · Danh mục: {p.category}</p>
             {p.storefront && (

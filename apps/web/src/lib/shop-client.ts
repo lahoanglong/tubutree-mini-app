@@ -13,6 +13,23 @@ export interface CartLine {
   quantity: number;
   stock: number;
   total: number;
+  /** Nơi giao dòng này (D4): kho Tubu, gian hàng đối tác tự giao, hoặc không giao được. API cũ chưa trả. */
+  fulfiller?: LineFulfiller;
+}
+export interface LineFulfiller {
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  storefrontId: string | null;
+  name: string;
+}
+/** Một kiện của lần đặt: mỗi nơi giao thành một đơn riêng với phí giao và tổng riêng. */
+export interface QuoteShipment {
+  key: string;
+  fulfiller: LineFulfiller;
+  itemIds: string[];
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  total: number;
 }
 export interface CartSummary {
   items: CartLine[];
@@ -58,6 +75,18 @@ export interface CheckoutQuote {
   pointsUsedConverted?: number;
   pointsConvertedBalance?: number;
   redeemableConvertedPoints?: number;
+  shipments?: QuoteShipment[];
+  /** Phương thức không dùng được cho giỏ này → câu giải thích (ví dụ có hàng đối tác tự giao). */
+  blockedPaymentMethods?: Record<string, string>;
+}
+/** Đơn cùng lần đặt bị tách theo nơi giao (kể cả chính đơn này). */
+export interface SplitOrderDTO {
+  id: string;
+  code: string;
+  total: number;
+  status: string;
+  fulfiller: 'TUBU' | 'MERCHANT';
+  fulfillerName: string;
 }
 export interface OrderDTO {
   code: string;
@@ -76,6 +105,12 @@ export interface OrderDTO {
   gomdonStatus?: string | null;
   gomdonPartnerCode?: string | null;
   gomdonCancelStatus?: string | null;
+  /** Có khi đặt hàng bị tách theo nơi giao (response của place-order). */
+  splitOrders?: SplitOrderDTO[];
+  /** Ai giao đơn này (chi tiết đơn). */
+  fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
+  /** Các đơn khác cùng lần đặt (chi tiết đơn). */
+  siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
 }
 
 /** GET /config/public — chỉ những giá trị vốn đã hiển thị công khai (xem system-config.controller.ts). */
