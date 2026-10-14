@@ -28,7 +28,7 @@ import { ApiError, NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
-import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { fulfillerLabel } from '@/lib/shipments';
 
@@ -148,6 +148,14 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <AuthLoading />
+      </Shell>
+    );
+  }
+
+  if (phase === 'unavailable') {
+    return (
+      <Shell>
+        <SessionUnavailable />
       </Shell>
     );
   }

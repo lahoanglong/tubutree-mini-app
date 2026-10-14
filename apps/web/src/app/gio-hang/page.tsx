@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-client';
 import { CouponBox } from '@/components/coupon-box';
-import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 
@@ -34,6 +34,14 @@ export default function CartPage() {
     return (
       <Shell>
         <AuthLoading />
+      </Shell>
+    );
+  }
+
+  if (phase === 'unavailable') {
+    return (
+      <Shell>
+        <SessionUnavailable />
       </Shell>
     );
   }

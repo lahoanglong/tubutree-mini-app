@@ -22,7 +22,7 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { RecyclingStatus } from '@/components/recycling-status';
-import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
@@ -60,6 +60,14 @@ export default function OrderDetailPage() {
     return (
       <Shell title="Chi tiết đơn hàng">
         <AuthLoading />
+      </Shell>
+    );
+  }
+
+  if (phase === 'unavailable') {
+    return (
+      <Shell title="Chi tiết đơn hàng">
+        <SessionUnavailable />
       </Shell>
     );
   }
