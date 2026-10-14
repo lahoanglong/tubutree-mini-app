@@ -1,7 +1,8 @@
 /**
- * Cột của Order chỉ dùng nội bộ: phí sàn đối tác, hoa hồng CTV, khoá khách lên-hộ, khoá chống đặt trùng, mã đơn bên Pancake và
- * trạng thái đẩy/đồng bộ Pancake, Gomdon. Không trả cho khách (R2-MERCHANT-14, R3-MERCHANT-1). Mã và trạng thái vận đơn Gomdon
- * (gomdonOrderId, gomdonPartnerCode, gomdonStatus, gomdonCancelStatus) ở lại vì màn thu gom tái chế của khách đọc chúng.
+ * Cột của Order chỉ dùng nội bộ: phí sàn đối tác, hoa hồng CTV, khoá khách lên-hộ, khoá chống đặt trùng, mã đơn bên Pancake,
+ * trạng thái đẩy/đồng bộ Pancake, Gomdon và mốc hệ thống thôi tự huỷ đơn. Không trả cho khách (R2-MERCHANT-14, R3-MERCHANT-1).
+ * Mã và trạng thái vận đơn Gomdon (gomdonOrderId, gomdonPartnerCode, gomdonStatus, gomdonCancelStatus) ở lại vì màn thu gom tái
+ * chế của khách đọc chúng.
  */
 export const BUYER_HIDDEN_ORDER_FIELDS = [
   'idempotencyKey',
@@ -13,6 +14,7 @@ export const BUYER_HIDDEN_ORDER_FIELDS = [
   'reviewInvitedAt',
   'pancakeAttention',
   'pancakeAttentionAt',
+  'autoCancelBlockedAt',
   'pancakePushStatus',
   'pancakeSyncError',
   'pancakePushAttempts',
