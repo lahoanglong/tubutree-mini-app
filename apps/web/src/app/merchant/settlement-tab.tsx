@@ -99,7 +99,9 @@ export function SettlementTab() {
 
       {s.upcoming.length > 0 && (
         <section className="space-y-2">
-          <h2 className="font-display font-semibold text-stone-900">Sắp đủ hạn ({s.upcoming.length} đơn)</h2>
+          <h2 className="font-display font-semibold text-stone-900">
+            Sắp đủ hạn ({new Set(s.upcoming.map((l) => l.orderId)).size} đơn)
+          </h2>
           <SettlementTable
             lines={s.upcoming}
             label="Đơn sắp đủ hạn đối soát"

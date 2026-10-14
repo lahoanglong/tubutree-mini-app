@@ -80,6 +80,12 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
     expect(orderPaymentStatusLabel({ status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
     expect(orderPaymentStatusLabel({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
+    // BUYERWEB-4: còn khoản chuyển khoản chưa chuyển xong thì chưa được nói "Đã hoàn tiền".
+    const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }])).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' })).toBe('Đã thanh toán');
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
   });

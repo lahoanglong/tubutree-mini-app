@@ -3,28 +3,32 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { markCustomerRefundPaid, type AdminCustomerRefund } from '@/lib/admin-client';
-import { CUSTOMER_REFUNDS_QUERY_KEY, markPaidFailure, needsBankAccount } from '@/lib/customer-refunds-admin';
+import { claimCustomerRefund, markCustomerRefundPaid, type AdminCustomerRefund } from '@/lib/admin-client';
+import { CUSTOMER_REFUNDS_QUERY_KEY, markPaidFailure, needsBankAccount, type RefundAction } from '@/lib/customer-refunds-admin';
 import { formatVnd } from '@/lib/shop-client';
 import { EMPTY_BANK, bankDetailsError, type RefundBankInput } from '@/lib/refund-rules';
 import { INPUT_CLASS, Notice } from './ui';
 
-export type MarkPaidOutcome = { kind: 'paid' } | { kind: 'stale'; message: string };
+export type MarkPaidOutcome = { kind: 'paid' } | { kind: 'claimed' } | { kind: 'stale'; message: string };
 
 /**
- * Hộp xác nhận "Đã chuyển khoản" cho một khoản hoàn tiền khách. Không dùng useConfirm: hộp đó đóng ngay khi người
+ * Hộp xác nhận "Đã chuyển khoản" (mode paid) hoặc "Bắt đầu chuyển khoản" (mode claim: khoá nơi nhận trước khi chuyển
+ * tiền để khách không rút về Ví giữa chừng) cho một khoản hoàn tiền khách. Không dùng useConfirm: hộp đó đóng ngay khi người
  * dùng bấm xác nhận và chỉ có một ô nhập, còn ở đây phải giữ hộp mở (kèm thông báo) khi lỗi mạng/5xx để admin thử
  * lại mà không nhập lại, và tự sở hữu lời gọi ghi để khoá nút đúng lúc đang gửi. Chỉ ghi sổ, không chuyển tiền.
  */
 export function CustomerRefundPaidDialog({
   refund,
+  mode = 'paid',
   onClose,
   onDone,
 }: {
   refund: AdminCustomerRefund;
+  mode?: RefundAction;
   onClose: () => void;
   onDone: (outcome: MarkPaidOutcome) => void;
 }) {
+  const claiming = mode === 'claim';
   const qc = useQueryClient();
   const titleId = useId();
   const bodyId = useId();
@@ -48,13 +52,16 @@ export function CustomerRefundPaidDialog({
   const inFlight = useRef(false);
 
   const mut = useMutation({
-    mutationFn: () => markCustomerRefundPaid(refund.id, { bankRef, note, ...(needsEntry ? bank : {}) }),
+    mutationFn: () =>
+      claiming
+        ? claimCustomerRefund(refund.id, needsEntry ? bank : {})
+        : markCustomerRefundPaid(refund.id, { bankRef, note, ...(needsEntry ? bank : {}) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      onDone({ kind: 'paid' });
+      onDone({ kind: claiming ? 'claimed' : 'paid' });
     },
     onError: (e) => {
-      const failure = markPaidFailure(e);
+      const failure = markPaidFailure(e, mode);
       if (failure.stale) {
         void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
         onDone({ kind: 'stale', message: failure.message });
@@ -70,7 +77,7 @@ export function CustomerRefundPaidDialog({
 
   const submit = () => {
     if (inFlight.current || busy) return;
-    if (!bankRef.trim()) {
+    if (!claiming && !bankRef.trim()) {
       setRefMissing(true);
       setError('Nhập mã giao dịch ngân hàng của lần chuyển khoản.');
       bankRefRef.current?.focus();
@@ -101,7 +108,7 @@ export function CustomerRefundPaidDialog({
   onCloseRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    bankRefRef.current?.focus();
+    (bankRefRef.current ?? bankEntryRef.current?.querySelector('input') ?? acceptRef.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -149,13 +156,20 @@ export function CustomerRefundPaidDialog({
         className="max-h-full w-full max-w-md overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised outline-none"
       >
         <h2 id={titleId} className="font-display text-base font-semibold text-stone-900">
-          Xác nhận đã chuyển khoản
+          {claiming ? 'Bắt đầu chuyển khoản' : 'Xác nhận đã chuyển khoản'}
         </h2>
         <div id={bodyId} className="mt-2 space-y-2 text-sm leading-relaxed text-stone-600">
-          <p>
-            Chỉ xác nhận sau khi bạn đã chuyển tiền cho khách bên ngoài hệ thống. Hệ thống chỉ ghi sổ, không tự chuyển tiền
-            và không hoàn tác được.
-          </p>
+          {claiming ? (
+            <p>
+              Bấm trước khi chuyển tiền: nơi nhận được khoá, khách không đổi sang Ví Tubu được nữa. Chuyển khoản xong, bấm
+              &quot;Đã chuyển khoản&quot; kèm mã giao dịch. Chưa chuyển được thì &quot;Trả về hàng chờ&quot;.
+            </p>
+          ) : (
+            <p>
+              Chỉ xác nhận sau khi bạn đã chuyển tiền cho khách bên ngoài hệ thống. Hệ thống chỉ ghi sổ, không tự chuyển tiền
+              và không hoàn tác được.
+            </p>
+          )}
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-control bg-stone-50 p-3">
             <dt className="text-stone-500">Số tiền</dt>
             <dd className="font-semibold text-stone-900">{formatVnd(refund.amount)}</dd>
@@ -213,41 +227,45 @@ export function CustomerRefundPaidDialog({
               ))}
             </div>
           )}
-          <div>
-            <label htmlFor={bankRefId} className="mb-1 block text-xs font-medium text-stone-700">
-              Mã giao dịch ngân hàng
-            </label>
-            <input
-              id={bankRefId}
-              ref={bankRefRef}
-              name="bankRef"
-              type="text"
-              maxLength={100}
-              autoComplete="off"
-              value={bankRef}
-              disabled={busy}
-              required
-              aria-invalid={refMissing ? true : undefined}
-              onChange={(e) => setBankRef(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </div>
-          <div>
-            <label htmlFor={noteId} className="mb-1 block text-xs font-medium text-stone-700">
-              Ghi chú (tuỳ chọn)
-            </label>
-            <textarea
-              id={noteId}
-              ref={noteRef}
-              name="note"
-              rows={3}
-              maxLength={500}
-              value={note}
-              disabled={busy}
-              onChange={(e) => setNote(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </div>
+          {!claiming && (
+            <>
+              <div>
+                <label htmlFor={bankRefId} className="mb-1 block text-xs font-medium text-stone-700">
+                  Mã giao dịch ngân hàng
+                </label>
+                <input
+                  id={bankRefId}
+                  ref={bankRefRef}
+                  name="bankRef"
+                  type="text"
+                  maxLength={100}
+                  autoComplete="off"
+                  value={bankRef}
+                  disabled={busy}
+                  required
+                  aria-invalid={refMissing ? true : undefined}
+                  onChange={(e) => setBankRef(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              </div>
+              <div>
+                <label htmlFor={noteId} className="mb-1 block text-xs font-medium text-stone-700">
+                  Ghi chú (tuỳ chọn)
+                </label>
+                <textarea
+                  id={noteId}
+                  ref={noteRef}
+                  name="note"
+                  rows={3}
+                  maxLength={500}
+                  value={note}
+                  disabled={busy}
+                  onChange={(e) => setNote(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {error && (
@@ -277,7 +295,7 @@ export function CustomerRefundPaidDialog({
             onClick={submit}
             className="min-h-[44px] rounded-control bg-warning-fg px-4 text-sm font-medium text-stone-0 hover:brightness-90 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
           >
-            {busy ? 'Đang lưu…' : 'Đã chuyển khoản'}
+            {busy ? 'Đang lưu…' : claiming ? 'Bắt đầu chuyển khoản' : 'Đã chuyển khoản'}
           </button>
         </div>
       </div>

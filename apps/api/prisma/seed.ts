@@ -698,7 +698,8 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.{{refund_note}}' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
-  { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
+  // {{refund_note}}: tiền hoàn bao nhiêu, về đâu — rỗng khi đơn không có tiền để hoàn.
+  { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.{{refund_note}}' },
   // Báo động vận hành (chỉ gửi tài khoản ADMIN) — vận đơn thu gom Gomdon cần người xử lý.
   { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
   { id: 'nt-ops-health', code: 'OPS_HEALTH_ALERT', channel: 'INAPP', bodyTemplate: '{{title}}: {{summary}}' },
@@ -726,6 +727,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-refund-late-payment', code: 'REFUND_LATE_PAYMENT', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{amount}} cho đơn {{order_code}} nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).', createOnly: true },
   { id: 'nt-refund-wallet-credited', code: 'REFUND_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: 'Đã hoàn {{amount}} của đơn {{order_code}} vào Ví Tubu 🌿', createOnly: true },
   { id: 'nt-ops-refund', code: 'OPS_REFUND_ALERT', channel: 'INAPP', bodyTemplate: '💸 Hoàn tiền đơn {{order_code}}: {{message}}', createOnly: true },
+  // Q1 (R2-MONEY-4, R2-LIFECYCLE-3): tiền khách trả không khớp đơn. Cùng lời với migration 20261014160100_q1_money_refunds_templates.
+  { id: 'nt-ops-payment', code: 'OPS_PAYMENT_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Thanh toán đơn {{order_code}}: {{message}}', createOnly: true },
+  { id: 'nt-order-underpaid', code: 'ORDER_UNDERPAID', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{paid}} cho đơn {{order_code}}, còn thiếu {{missing}} (tổng {{total}}). Vui lòng chuyển thêm phần còn thiếu với nội dung {{order_code}}. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },

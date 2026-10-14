@@ -119,9 +119,12 @@ export interface MyRefund {
   orderId: string;
   orderCode: string;
   kind: 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
+  /** Khoản trả hàng: id yêu cầu trả. API cũ chưa trả. */
+  refKey?: string;
   amount: number;
   method: 'WALLET' | 'MANUAL_TRANSFER';
-  status: 'PENDING' | 'COMPLETED';
+  /** PROCESSING: Tubu đã bắt đầu chuyển khoản — nơi nhận đã chốt. */
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED';
   bankName: string | null;
   bankAccountNo: string | null;
   bankAccountName: string | null;
@@ -146,9 +149,16 @@ export function refundStatusText(r: MyRefund): { title: string; detail: string; 
   if (!r.bankAccountNo) {
     return { title: `${lead}: chờ bạn chọn nơi nhận`, detail: 'Nhận về Ví Tubu ngay, hoặc tài khoản ngân hàng trong 1-3 ngày làm việc (miễn phí).', tone: 'warning' };
   }
+  if (r.status === 'PROCESSING') {
+    return {
+      title: `${lead}: Tubu đang chuyển khoản`,
+      detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)} trong 1-3 ngày làm việc, miễn phí. Nơi nhận đã chốt, không đổi được nữa.`,
+      tone: 'muted',
+    };
+  }
   return {
-    title: `${lead}: Tubu đang chuyển khoản`,
-    detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)} trong 1-3 ngày làm việc, miễn phí.`,
+    title: `${lead}: chờ Tubu chuyển khoản`,
+    detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)} trong 1-3 ngày làm việc, miễn phí. Bạn vẫn đổi sang Ví Tubu được tới khi Tubu bắt đầu chuyển.`,
     tone: 'muted',
   };
 }
@@ -170,17 +180,40 @@ export interface ReturnLike {
   items?: { orderItemId: string; quantity: number }[];
 }
 
-/** Câu trạng thái một yêu cầu đổi/trả: đã duyệt thì nói rõ hoàn bao nhiêu, về đâu (D2/D3). */
-export function returnStatusLabel(r: ReturnLike): string {
+/** Khoản hoàn thật của một yêu cầu trả (khoản RETURN có refKey = id yêu cầu) trong danh sách khoản hoàn của đơn. */
+export function refundOfReturn<T extends Pick<MyRefund, 'kind' | 'refKey'>>(
+  refunds: readonly T[] | undefined,
+  returnId: string | undefined,
+): T | undefined {
+  if (!returnId) return undefined;
+  return refunds?.find((f) => f.kind === 'RETURN' && f.refKey === returnId);
+}
+
+/**
+ * Câu trạng thái một yêu cầu đổi/trả: đã duyệt thì nói rõ hoàn bao nhiêu, về đâu (D2/D3). Có khoản hoàn thật thì nơi nhận
+ * và trạng thái lấy từ khoản đó (khách có thể đã đổi ngân hàng → Ví, Tubu có thể chưa chuyển), không theo lựa chọn lúc gửi.
+ */
+export function returnStatusLabel(
+  r: ReturnLike,
+  refund?: Pick<MyRefund, 'method' | 'status' | 'bankName' | 'bankAccountNo'>,
+): string {
   if (r.status === 'REJECTED') return `Đổi/trả bị từ chối${r.adminNote ? `: ${r.adminNote}` : ''}`;
   if (r.status !== 'APPROVED') return 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
   // Yêu cầu duyệt trước khi có trả theo dòng không lưu số tiền.
   if (r.refundAmount == null) return 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu';
-  const money = r.refundAmount + (r.shippingRefund ?? 0);
-  if (money <= 0) return 'Đổi/trả đã duyệt';
+  const money = formatVnd(r.refundAmount + (r.shippingRefund ?? 0));
+  if (r.refundAmount + (r.shippingRefund ?? 0) <= 0) return 'Đổi/trả đã duyệt';
+  if (refund) {
+    if (refund.method === 'WALLET') return `Đổi/trả đã duyệt — đã hoàn ${money} vào Ví Tubu`;
+    if (!refund.bankAccountNo) return `Đổi/trả đã duyệt — hoàn ${money}, chờ bạn chọn nơi nhận`;
+    const bank = maskedBank(refund.bankName, refund.bankAccountNo);
+    return refund.status === 'COMPLETED'
+      ? `Đổi/trả đã duyệt — Tubu đã chuyển khoản ${money} về ${bank}`
+      : `Đổi/trả đã duyệt — Tubu chuyển khoản ${money} về ${bank} (1-3 ngày làm việc)`;
+  }
   return r.refundMethod === 'BANK' && r.bankAccountNo
-    ? `Đổi/trả đã duyệt — Tubu chuyển khoản ${formatVnd(money)} về ${maskedBank(r.bankName, r.bankAccountNo)} (1-3 ngày làm việc)`
-    : `Đổi/trả đã duyệt — đã hoàn ${formatVnd(money)} vào Ví Tubu`;
+    ? `Đổi/trả đã duyệt — Tubu chuyển khoản ${money} về ${maskedBank(r.bankName, r.bankAccountNo)} (1-3 ngày làm việc)`
+    : `Đổi/trả đã duyệt — đã hoàn ${money} vào Ví Tubu`;
 }
 
 /** "Nước giặt ×1, Xịt khoáng ×2" — các dòng của một yêu cầu trả. */

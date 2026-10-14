@@ -35,6 +35,10 @@ function setup(
   /** Tồn kho (hoàn kho khi huỷ) đi bằng SQL thô — xem catalog/variation-stock.ts. */
   const txExecuteRaw = jest.fn().mockResolvedValue(1);
   const historyCreate = jest.fn().mockResolvedValue({});
+  const refundCreateMany = jest.fn().mockResolvedValue({ count: 1 });
+  /** Tổng LATE_PAYMENT Pancake đã ghi của đơn (khoản hoàn tiền về muộn tính theo phần tăng thêm). */
+  const refundAggregate = jest.fn().mockResolvedValue({ _sum: { amount: null } });
+  const txQueryRaw = jest.fn().mockResolvedValue([]);
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany: txUpdateMany },
@@ -42,7 +46,9 @@ function setup(
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      orderCustomerRefund: { createMany: refundCreateMany, aggregate: refundAggregate },
       $executeRaw: txExecuteRaw,
+      $queryRaw: txQueryRaw,
     }),
   );
   const prisma = {
@@ -59,7 +65,8 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
-    orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    orderCustomerRefund: { createMany: refundCreateMany, aggregate: refundAggregate },
+    returnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
@@ -103,6 +110,8 @@ function setup(
     orderFindFirst,
     historyCreate,
     analytics,
+    refundAggregate,
+    txQueryRaw,
   };
 }
 
@@ -388,7 +397,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(analytics.record).not.toHaveBeenCalled();
     expect(lateRefunds(prisma)).toEqual([
       expect.objectContaining({
-        orderId: 'o1', kind: 'LATE_PAYMENT', refKey: 'PANCAKE:p1:100000', amount: 100000,
+        orderId: 'o1', kind: 'LATE_PAYMENT', refKey: 'PANCAKE:paid:100000', amount: 100000,
         method: 'MANUAL_TRANSFER', status: 'PENDING', userId: 'u1',
       }),
     ]);
@@ -406,6 +415,64 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     (prisma.orderCustomerRefund.createMany as jest.Mock).mockResolvedValue({ count: 0 });
     await proc.onPaymentReconcile(paidPayload);
     expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  // R2-LIFECYCLE-3: prepaid/bank_payment của Pancake là số CỘNG DỒN của đơn, không phải số của lần chuyển mới.
+  it('đơn đã huỷ: Pancake báo cộng dồn 236.000 khi đã ghi 118.000 → chỉ tạo khoản 118.000 phần tăng thêm, khoá dòng đơn', async () => {
+    const { proc, prisma, refundAggregate, txQueryRaw, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 118000,
+    });
+    refundAggregate.mockResolvedValue({ _sum: { amount: 118000 } });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 236000 });
+    expect(txQueryRaw).toHaveBeenCalledTimes(1);
+    expect(refundAggregate).toHaveBeenCalledWith({
+      where: { orderId: 'o1', kind: 'LATE_PAYMENT', refKey: { startsWith: 'PANCAKE:' } },
+      _sum: { amount: true },
+    });
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ refKey: 'PANCAKE:paid:236000', amount: 118000 })]);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '118.000đ' });
+  });
+
+  it('đơn đã huỷ: Pancake báo lại cùng số (hoặc số nhỏ hơn) đã ghi → không tạo khoản, không báo', async () => {
+    const { proc, prisma, refundAggregate, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 118000,
+    });
+    refundAggregate.mockResolvedValue({ _sum: { amount: 236000 } });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 236000 });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 118000 });
+    expect(lateRefunds(prisma)).toEqual([]);
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('đơn đã huỷ chuyển thiếu (50.000/98.000) → vẫn tạo yêu cầu hoàn 50.000', async () => {
+    const { proc, prisma, orderUpdateMany } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 98000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', status: 6, prepaid: 50000 });
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 50000 })]);
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+  });
+
+  it('đơn còn sống chuyển thiếu → KHÔNG lật PAID; gắn "Khách chuyển thiếu", báo admin và báo khách số còn thiếu (một lần)', async () => {
+    const { proc, prisma, orderUpdateMany, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 98000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('Khách chuyển thiếu: Pancake ghi nhận 50.000đ/98.000đ, còn thiếu 48.000đ')]);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_UNDERPAID', {
+      order_code: 'TUBU1', paid: '50.000đ', missing: '48.000đ', total: '98.000đ',
+    });
+    expect(lateRefunds(prisma)).toEqual([]);
+
+    (notifications.notify as jest.Mock).mockClear();
+    orderUpdateMany.mockResolvedValue({ count: 0 });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_UNDERPAID', expect.anything());
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {
@@ -807,6 +874,25 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     const { proc, txUpdateMany } = setup({ ...base, total: 0, status: 'DELIVERED' });
     await proc.onStatusUpdated({ id: 'p1', status: 'returned' });
     expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'RETURNED' });
+  });
+
+  // R2-LIFECYCLE-4 / R2-MONEY-3: "Đã hoàn" (cả đơn) sau một lần trả một phần đã duyệt thường là kho làm sai loại phiếu.
+  it.each([
+    ['APPROVED', 'đã duyệt trả một phần'],
+    ['REQUESTED', 'đang có yêu cầu đổi/trả chờ duyệt'],
+  ])('"Đã hoàn" (5) trên đơn ĐÃ GIAO có yêu cầu trả %s → KHÔNG lật RETURNED, không hoàn/cộng kho; vào hàng cần xử lý', async (status, phrase) => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, prisma, txUpdateMany, txExecuteRaw, orderUpdateMany } = setup({ ...base, status: 'DELIVERED' }, undefined, alerts);
+    (prisma.returnRequest.findFirst as jest.Mock).mockResolvedValue({ status });
+    await proc.onStatusUpdated({ id: 'p1', status: 5 });
+    expect(prisma.returnRequest.findFirst).toHaveBeenCalledWith({
+      where: { orderId: 'o1', OR: [{ status: 'APPROVED', fullReturn: false }, { status: 'REQUESTED' }] },
+      select: { status: true },
+    });
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(txExecuteRaw).not.toHaveBeenCalled();
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining(phrase)]);
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
   });
 
   it('"Đang hoàn" (4) → KHÔNG hoàn tiền sớm, KHÔNG đổi trạng thái; vào hàng đợi "Cần xử lý Pancake" + báo admin (template Pancake)', async () => {

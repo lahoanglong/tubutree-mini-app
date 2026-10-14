@@ -20,7 +20,10 @@ import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
 import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
-import { recordLatePaymentRefund } from '../../orders/refund-queue';
+import { OPS_PAYMENT_TEMPLATE, recordLatePaymentRefund } from '../../orders/refund-queue';
+import { formatVnd } from '../../orders/refund-destination';
+import { notifyAdmins } from '../../../common/notify-admins';
+import type { Order } from '@prisma/client';
 
 interface ZalopayCreateResponse {
   return_code?: number;
@@ -29,6 +32,16 @@ interface ZalopayCreateResponse {
   sub_return_message?: string;
   order_url?: string;
   zp_trans_token?: string;
+}
+
+export interface ZalopayQueryResponse {
+  return_code?: number;
+  return_message?: string;
+  sub_return_code?: number;
+  sub_return_message?: string;
+  is_processing?: boolean;
+  amount?: number;
+  zp_trans_id?: number;
 }
 
 /**
@@ -65,6 +78,10 @@ export class ZalopayService {
 
   private isConfigured(): boolean {
     return Boolean(this.appId && this.key1 && this.key2);
+  }
+
+  get configured(): boolean {
+    return this.isConfigured();
   }
 
   async createPayment(userId: string, orderCode: string) {
@@ -136,96 +153,169 @@ export class ZalopayService {
     return data;
   }
 
-  /** Webhook ZaloPay: verify MAC key2 → set PAID. */
-  async handleCallback(rawData: string, reqMac: string) {
+  /**
+   * Webhook ZaloPay: verify MAC key2 → set PAID. `type` 1 = thanh toán đơn, 2 = liên kết (agreement) — Tubu không dùng
+   * liên kết nên chỉ ghi nhận cho ZaloPay khỏi gửi lại.
+   */
+  async handleCallback(rawData: string, reqMac: string, type?: number) {
     if (!this.isConfigured()) return { return_code: 2, return_message: 'not configured' };
     const mac = createHmac('sha256', this.key2).update(rawData).digest('hex');
     if (!this.safeEqual(mac, reqMac)) {
       this.logger.warn('ZaloPay callback MAC mismatch.');
       return { return_code: -1, return_message: 'mac not equal' };
     }
-    const data = JSON.parse(rawData) as { app_trans_id: string; amount?: number };
+    if (type !== undefined && type !== 1) {
+      this.logger.warn(`Callback ZaloPay type=${type} (không phải thanh toán đơn) — bỏ qua.`);
+      return { return_code: 1, return_message: 'success' };
+    }
+    let data: { app_trans_id?: unknown; amount?: unknown };
+    try {
+      data = JSON.parse(rawData) as typeof data;
+    } catch {
+      this.logger.error('Callback ZaloPay có MAC đúng nhưng data không phải JSON — bỏ qua.');
+      return { return_code: 1, return_message: 'success' };
+    }
+    if (typeof data.app_trans_id !== 'string' || !data.app_trans_id) {
+      this.logger.error('Callback ZaloPay thiếu app_trans_id — bỏ qua.');
+      return { return_code: 1, return_message: 'success' };
+    }
+    await this.applyGatewayPayment(data.app_trans_id, data.amount, 'callback');
+    return { return_code: 1, return_message: 'success' };
+  }
+
+  /**
+   * Ghi nhận một giao dịch ZaloPay đã thành công (callback, hoặc cron đối soát tra trạng thái khi callback thất lạc). Một
+   * đường duy nhất cho cả hai nguồn nên cùng guard: số tiền phải khớp, đơn đã huỷ/trả thì tạo khoản hoàn thay vì lật PAID.
+   */
+  async applyGatewayPayment(appTransId: string, rawAmount: unknown, source: 'callback' | 'query'): Promise<void> {
     // Tra theo sổ lần-thử trước (khớp được CẢ lần thử cũ); đơn tạo TRƯỚC bản vá chưa có dòng
     // attempt nào nên fallback về cách cũ (orders.paymentTxnId).
     const attempt = await this.prisma.paymentAttempt.findUnique({
-      where: { appTransId: data.app_trans_id },
+      where: { appTransId },
       include: { order: true },
     });
-    if (attempt && typeof data.amount === 'number' && data.amount !== attempt.amount) {
-      // MAC chỉ chứng minh callback đến từ ZaloPay, KHÔNG chứng minh số tiền khớp đơn.
-      // Lệch tiền → không ghi nhận PAID, để người đối soát xử lý tay.
-      this.logger.error(
-        `Callback ZaloPay lệch số tiền cho ${data.app_trans_id}: nhận ${data.amount}, kỳ vọng ${attempt.amount} — KHÔNG lật PAID.`,
-      );
-      return { return_code: 1, return_message: 'success' };
-    }
     const order =
       attempt?.order ??
       (await this.prisma.order.findFirst({
-        where: { paymentTxnId: data.app_trans_id },
+        where: { paymentTxnId: appTransId },
       }));
-    if (order) {
-      // P1-3 (docs/2026-09-08-review-progress.md): trước đây chỉ check paymentStatus, không
-      // check status — callback tới sau khi đơn đã hủy/trả vẫn bị lật PAID êm, đơn đứng
-      // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
-      // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
-      // ghi nhận PAID vào đơn đã chết.
-      const paidAmount = data.amount ?? attempt?.amount ?? order.total;
-      if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
-        return { return_code: 1, return_message: 'success' };
-      }
-      // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
-      // tới gần nhau có thể cùng đọc order còn UNPAID rồi cùng ghi đè, hoặc tệ hơn "hồi sinh" đơn
-      // đã bị hủy ở giữa 2 lần đọc/ghi thành CONFIRMED+PAID sau khi kho đã nhả bán chỗ đó cho đơn
-      // khác. Mirror pattern onPaymentReconcile (pancake.processor.ts): updateMany guard cả
-      // paymentStatus:'UNPAID' lẫn status not-in CANCELLED/RETURNED, chỉ notify khi count>0.
-      // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc
-      // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
-      const flip = await this.prisma.$transaction(async (tx) => {
-        // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()`
-        // duy nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
-        const paidAt = new Date();
-        const r = await tx.order.updateMany({
-          where: {
-            id: order.id,
-            paymentStatus: 'UNPAID',
-            status: { notIn: ['CANCELLED', 'RETURNED'] },
-          },
-          data: {
-            paymentStatus: 'PAID',
-            paidAt,
-            ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
-          },
-        });
-        if (r.count > 0 && this.analytics) {
-          await this.analytics.record(tx, {
-            eventName: 'order_paid',
-            userId: order.userId,
-            platform: order.platform === 'web' ? 'web' : 'miniapp',
-            occurredAt: paidAt,
-            props: { orderId: order.id, method: 'ZALOPAY', amount: order.total },
-          });
-        }
-        return r;
-      });
-      if (flip.count > 0) {
-        this.logger.log(`ZaloPay xác nhận thanh toán đơn ${order.code} → PAID`);
-        if (order.hasRecyclingPickup && this.gomdonQueue) {
-          // Lỗi enqueue không được làm ZaloPay gửi lại callback (đã lật PAID) — GomdonReconcileService
-          // quét đơn AWAITING_PAYMENT đã PAID và enqueue lại.
-          await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
-            this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
-          );
-        }
-        await this.pancakeHooks?.afterPaid(order.id);
-        await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
-      } else {
-        // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
-        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
-      }
+    if (!order) {
+      this.logger.error(`ZaloPay (${source}) báo đã thanh toán ${appTransId} nhưng không khớp đơn nào — cần đối soát tay.`);
+      return;
     }
-    return { return_code: 1, return_message: 'success' };
+    // MAC chỉ chứng minh callback đến từ ZaloPay, KHÔNG chứng minh số tiền khớp đơn. Thiếu, sai kiểu hay lệch số tiền
+    // → không ghi nhận gì (không PAID, không khoản hoàn), đưa đơn vào hàng cần xử lý để người đối soát xử lý tay.
+    const expected = attempt?.amount ?? order.total;
+    if (typeof rawAmount !== 'number' || !Number.isInteger(rawAmount) || rawAmount !== expected) {
+      await this.flagAmountMismatch(order, appTransId, rawAmount, expected, source);
+      await this.resolveAttempt(attempt?.id);
+      return;
+    }
+    const paidAmount = rawAmount;
+    // P1-3 (docs/2026-09-08-review-progress.md): trước đây chỉ check paymentStatus, không
+    // check status — callback tới sau khi đơn đã hủy/trả vẫn bị lật PAID êm, đơn đứng
+    // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
+    // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
+    // ghi nhận PAID vào đơn đã chết.
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+      await this.recordLatePayment(order.id, paidAmount, appTransId);
+      await this.resolveAttempt(attempt?.id);
+      return;
+    }
+    // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
+    // tới gần nhau có thể cùng đọc order còn UNPAID rồi cùng ghi đè, hoặc tệ hơn "hồi sinh" đơn
+    // đã bị hủy ở giữa 2 lần đọc/ghi thành CONFIRMED+PAID sau khi kho đã nhả bán chỗ đó cho đơn
+    // khác. Mirror pattern onPaymentReconcile (pancake.processor.ts): updateMany guard cả
+    // paymentStatus:'UNPAID' lẫn status not-in CANCELLED/RETURNED, chỉ notify khi count>0.
+    // order_paid phải ghi ATOMIC cùng lần lật PAID (Task 5, docs analytics-foundation): bọc
+    // updateMany trong $transaction, chỉ ghi event khi count>0 (guard where thật sự khớp).
+    const flip = await this.prisma.$transaction(async (tx) => {
+      // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()`
+      // duy nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
+      const paidAt = new Date();
+      const r = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          paymentStatus: 'UNPAID',
+          status: { notIn: ['CANCELLED', 'RETURNED'] },
+        },
+        data: {
+          paymentStatus: 'PAID',
+          paidAt,
+          ...(order.status === 'PENDING_PAYMENT' ? { status: 'CONFIRMED' } : {}),
+        },
+      });
+      if (r.count > 0 && this.analytics) {
+        await this.analytics.record(tx, {
+          eventName: 'order_paid',
+          userId: order.userId,
+          platform: order.platform === 'web' ? 'web' : 'miniapp',
+          occurredAt: paidAt,
+          props: { orderId: order.id, method: 'ZALOPAY', amount: order.total },
+        });
+      }
+      return r;
+    });
+    await this.resolveAttempt(attempt?.id);
+    if (flip.count > 0) {
+      this.logger.log(`ZaloPay (${source}) xác nhận thanh toán đơn ${order.code} → PAID`);
+      if (order.hasRecyclingPickup && this.gomdonQueue) {
+        // Lỗi enqueue không được làm ZaloPay gửi lại callback (đã lật PAID) — GomdonReconcileService
+        // quét đơn AWAITING_PAYMENT đã PAID và enqueue lại.
+        await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+          this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
+        );
+      }
+      await this.pancakeHooks?.afterPaid(order.id);
+      await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+    } else {
+      // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
+      await this.recordLatePayment(order.id, paidAmount, appTransId);
+    }
+  }
+
+  /**
+   * Tra trạng thái một lần thử ở ZaloPay (POST {endpoint}/query, mac = HMAC-SHA256(key1, app_id|app_trans_id|key1)).
+   * return_code 1 = đã thanh toán (kèm amount), 2 = thất bại/hết hạn, 3 = chưa thanh toán hoặc đang xử lý.
+   */
+  async queryOrderStatus(appTransId: string): Promise<ZalopayQueryResponse> {
+    if (!this.isConfigured()) throw new ServiceUnavailableException('ZaloPay chưa được cấu hình.');
+    const mac = createHmac('sha256', this.key1).update(`${this.appId}|${appTransId}|${this.key1}`).digest('hex');
+    const body = new URLSearchParams({ app_id: this.appId, app_trans_id: appTransId, mac });
+    const { data } = await axios.post<ZalopayQueryResponse>(`${this.endpoint}/query`, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 12000,
+    });
+    return data ?? {};
+  }
+
+  /** Lần thử đã có kết quả cuối — cron đối soát thôi hỏi ZaloPay. */
+  async resolveAttempt(attemptId: string | undefined): Promise<void> {
+    if (!attemptId) return;
+    await this.prisma.paymentAttempt.updateMany({ where: { id: attemptId, resolvedAt: null }, data: { resolvedAt: new Date() } });
+  }
+
+  private async flagAmountMismatch(
+    order: Pick<Order, 'id' | 'code'>,
+    appTransId: string,
+    rawAmount: unknown,
+    expected: number,
+    source: 'callback' | 'query',
+  ): Promise<void> {
+    const got = rawAmount === undefined ? 'không có số tiền' : JSON.stringify(rawAmount);
+    this.logger.error(
+      `ZaloPay (${source}) báo thanh toán ${appTransId} lệch số tiền cho đơn ${order.code}: nhận ${got}, kỳ vọng ${expected} — KHÔNG lật PAID.`,
+    );
+    const reason = `ZaloPay báo đã thanh toán lần ${appTransId} nhưng số tiền (${got}) không khớp ${formatVnd(expected)} — chưa ghi nhận tiền. Đối soát với ZaloPay rồi xử lý tay.`;
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
+    });
+    if (r.count === 0) return;
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      { template: OPS_PAYMENT_TEMPLATE, subject: `lệch tiền ZaloPay đơn ${order.code}`, data: () => ({ order_code: order.code, message: reason }) },
+    ).catch((err) => this.logger.warn(`Không báo được admin lệch tiền ZaloPay đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
   }
 
   /**

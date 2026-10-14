@@ -7,6 +7,7 @@ import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelOrder,
+  fetchMyRefunds,
   fetchMyReturns,
   formatVnd,
   repurchaseOrder,
@@ -23,8 +24,10 @@ import {
   cancelRefundMode,
   destinationBody,
   remainingByLine,
+  refundOfReturn,
   returnLinesText,
   returnStatusLabel,
+  type MyRefund,
   type RefundBankInput,
   type RefundMethodChoice,
 } from '@/lib/refund-rules';
@@ -63,6 +66,13 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
 
   const returnsQ = useQuery({ queryKey: ['my-returns'], queryFn: fetchMyReturns, enabled: showsReturns, retry: 0 });
   const orderReturns: ReturnRequestDTO[] = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
+  // Cùng khoá với khối Hoàn tiền (OrderRefunds): thẻ đổi/trả nói nơi nhận theo khoản hoàn thật (khách có thể đã đổi sang Ví).
+  const refundsQ = useQuery({
+    queryKey: ['my-refunds', o.id],
+    queryFn: () => fetchMyRefunds(o.id!),
+    enabled: !!o.id && orderReturns.some((r) => r.status === 'APPROVED'),
+    retry: 0,
+  });
   const remaining = remainingByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
@@ -209,7 +219,9 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
         </div>
       )}
 
-      {showsReturns && orderReturns.map((r) => <ReturnStatus key={r.id} request={r} items={o.items} />)}
+      {showsReturns && orderReturns.map((r) => (
+          <ReturnStatus key={r.id} request={r} items={o.items} refund={refundOfReturn(refundsQ.data, r.id)} />
+        ))}
       {returnSent && (
         <p role="status" className="mt-3 text-sm font-medium text-success-fg">
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
@@ -232,7 +244,15 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   );
 }
 
-function ReturnStatus({ request: r, items }: { request: ReturnRequestDTO; items: OrderDetailDTO['items'] }) {
+function ReturnStatus({
+  request: r,
+  items,
+  refund,
+}: {
+  request: ReturnRequestDTO;
+  items: OrderDetailDTO['items'];
+  refund?: MyRefund;
+}) {
   const view =
     r.status === 'APPROVED'
       ? { Icon: CheckCircle2, tone: 'text-success-fg' }
@@ -247,7 +267,7 @@ function ReturnStatus({ request: r, items }: { request: ReturnRequestDTO; items:
     <div role="status" className="mt-3 text-sm">
       <p className={`flex items-start gap-2 ${view.tone}`}>
         <view.Icon className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-        <span className="min-w-0 break-words">{returnStatusLabel(r)}</span>
+        <span className="min-w-0 break-words">{returnStatusLabel(r, refund)}</span>
       </p>
       {lines && <p className="ml-6 text-xs text-stone-600">Trả: {lines}</p>}
       {r.status === 'APPROVED' && !!r.items?.length && (

@@ -5,6 +5,7 @@ import {
   cancelRefundMode,
   destinationBody,
   maskedBank,
+  refundOfReturn,
   refundStatusText,
   remainingByLine,
   returnLinesText,
@@ -126,10 +127,20 @@ describe('refundStatusText', () => {
   it('tiền về muộn chưa có tài khoản → nhắc khách chọn nơi nhận', () => {
     expect(refundStatusText(r())).toMatchObject({ title: 'Tiền về sau khi đơn đã huỷ: chờ bạn chọn nơi nhận', tone: 'warning' });
   });
-  it('đang chuyển khoản / đã chuyển kèm mã giao dịch / đã vào Ví', () => {
-    expect(refundStatusText(r({ kind: 'CANCEL', bankName: 'VCB', bankAccountNo: '0071000123456' })).detail).toBe(
-      'Về VCB ••• 3456 trong 1-3 ngày làm việc, miễn phí.',
-    );
+  it('chờ chuyển (còn đổi sang Ví được) / đang chuyển (đã chốt) / đã chuyển kèm mã giao dịch / đã vào Ví', () => {
+    expect(refundStatusText(r({ kind: 'CANCEL', bankName: 'VCB', bankAccountNo: '0071000123456' }))).toEqual({
+      title: 'Hoàn tiền huỷ đơn: chờ Tubu chuyển khoản',
+      detail: 'Về VCB ••• 3456 trong 1-3 ngày làm việc, miễn phí. Bạn vẫn đổi sang Ví Tubu được tới khi Tubu bắt đầu chuyển.',
+      tone: 'muted',
+    });
+    // R2-LIFECYCLE-2: Tubu đã bắt đầu chuyển thì nơi nhận chốt — nói rõ để khách không tìm nút đổi.
+    expect(
+      refundStatusText(r({ kind: 'CANCEL', status: 'PROCESSING', canChooseDestination: false, bankName: 'VCB', bankAccountNo: '0071000123456' })),
+    ).toEqual({
+      title: 'Hoàn tiền huỷ đơn: Tubu đang chuyển khoản',
+      detail: 'Về VCB ••• 3456 trong 1-3 ngày làm việc, miễn phí. Nơi nhận đã chốt, không đổi được nữa.',
+      tone: 'muted',
+    });
     expect(
       refundStatusText(r({ kind: 'RETURN', status: 'COMPLETED', bankName: 'VCB', bankAccountNo: '0071000123456', bankRef: 'FT1' })).detail,
     ).toBe('Về VCB ••• 3456 · Mã GD FT1');
@@ -154,6 +165,30 @@ describe('returnStatusLabel / returnLinesText', () => {
     ).toBe('Đổi/trả đã duyệt — Tubu chuyển khoản 89.000đ về VCB ••• 3456 (1-3 ngày làm việc)');
     expect(returnStatusLabel({ status: 'APPROVED', refundAmount: null })).toBe('Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu');
     expect(returnStatusLabel({ status: 'APPROVED', refundAmount: 0 })).toBe('Đổi/trả đã duyệt');
+  });
+  // R2-LIFECYCLE-6: nơi nhận theo khoản hoàn thật, không theo lựa chọn lúc gửi yêu cầu.
+  it('có khoản hoàn thật: khách đã đổi sang Ví → nói Ví; chờ/đang chuyển → chuyển khoản; đã chuyển → "đã chuyển khoản"', () => {
+    const ret = { status: 'APPROVED', refundAmount: 19_500, refundMethod: 'BANK' as const, bankName: 'MB Bank', bankAccountNo: '0123453456' };
+    const bank = { bankName: 'MB Bank', bankAccountNo: '0123453456' };
+    expect(returnStatusLabel(ret, { method: 'WALLET', status: 'COMPLETED', ...bank })).toBe('Đổi/trả đã duyệt — đã hoàn 19.500đ vào Ví Tubu');
+    expect(returnStatusLabel(ret, { method: 'MANUAL_TRANSFER', status: 'PROCESSING', ...bank })).toBe(
+      'Đổi/trả đã duyệt — Tubu chuyển khoản 19.500đ về MB Bank ••• 3456 (1-3 ngày làm việc)',
+    );
+    expect(returnStatusLabel(ret, { method: 'MANUAL_TRANSFER', status: 'COMPLETED', ...bank })).toBe(
+      'Đổi/trả đã duyệt — Tubu đã chuyển khoản 19.500đ về MB Bank ••• 3456',
+    );
+    expect(returnStatusLabel(ret, { method: 'MANUAL_TRANSFER', status: 'PENDING', bankName: null, bankAccountNo: null })).toBe(
+      'Đổi/trả đã duyệt — hoàn 19.500đ, chờ bạn chọn nơi nhận',
+    );
+  });
+  it('refundOfReturn: khớp khoản RETURN theo refKey = id yêu cầu', () => {
+    const list = [
+      { kind: 'CANCEL' as const, refKey: 'x', id: 'a' },
+      { kind: 'RETURN' as const, refKey: 'ret1', id: 'b' },
+    ];
+    expect(refundOfReturn(list, 'ret1')?.id).toBe('b');
+    expect(refundOfReturn(list, 'x')).toBeUndefined();
+    expect(refundOfReturn(undefined, 'ret1')).toBeUndefined();
   });
   it('liệt kê dòng trả kèm số lượng', () => {
     expect(

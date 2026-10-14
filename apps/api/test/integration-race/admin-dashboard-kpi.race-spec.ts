@@ -78,4 +78,17 @@ describe('ADMINOPS-14 — KPI doanh thu (real Postgres)', () => {
     expect(after.totalRevenue - before.totalRevenue).toBe(0);
     expect(after.dealerDebtOutstanding - before.dealerDebtOutstanding).toBe(4_000_000);
   });
+
+  it('R2-ADMINOPS-6: COD đơn gian hàng tự giao (đối tác thu tiền mặt) không vào doanh thu đã thu; đơn gian hàng trả trước vẫn vào', async () => {
+    const before = await admin.getDashboardStats();
+    const u = await createUser(prisma);
+    await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 200_000, fulfiller: 'MERCHANT' });
+    const partial = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 99_000, fulfiller: 'MERCHANT' });
+    await prisma.returnRequest.create({ data: { orderId: partial.id, userId: u.id, reason: 'IT', status: 'APPROVED', refundAmount: 50_000 } });
+    await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 120_000, fulfiller: 'MERCHANT' });
+    await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 70_000 });
+
+    const after = await admin.getDashboardStats();
+    expect(after.totalRevenue - before.totalRevenue).toBe(120_000 + 70_000);
+  });
 });

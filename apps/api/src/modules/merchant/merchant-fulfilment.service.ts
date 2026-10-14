@@ -457,7 +457,7 @@ export class MerchantFulfilmentService {
           select: { ...saleSelect, merchantPayoutLines: { select: storedSelect } },
         })
       : [];
-    const partialOrderIds = [...sales, ...returned, ...settled].map((o) => o.id);
+    const partialOrderIds = [...sales, ...returned, ...settled, ...upcoming].map((o) => o.id);
     const partialRows = partialOrderIds.length
       ? await this.prisma.returnRequest.findMany({
           where: { orderId: { in: partialOrderIds }, status: 'APPROVED', fullReturn: false },
@@ -488,10 +488,11 @@ export class MerchantFulfilmentService {
       holdDays,
       lines,
       total: lines.reduce((s, l) => s + l.netAmount, 0),
-      upcoming: upcoming.map((o) => ({
-        ...saleLineOf(o),
-        availableAt: o.deliveredAt ? new Date(o.deliveredAt.getTime() + holdDays * DAY) : null,
-      })),
+      // Sắp đủ hạn: tiền bán kèm các lần trả một phần đã duyệt (đối tác thấy đúng số sẽ nhận, R2-LIFECYCLE-8).
+      upcoming: upcoming.flatMap((o) => {
+        const availableAt = o.deliveredAt ? new Date(o.deliveredAt.getTime() + holdDays * DAY) : null;
+        return [saleLineOf(o), ...partialsOf(o)].map((l) => ({ ...l, availableAt }));
+      }),
     };
   }
 

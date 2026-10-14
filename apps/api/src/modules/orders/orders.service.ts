@@ -334,10 +334,12 @@ export class OrdersService {
       await announceBankRefund(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { orderCode: code, amount: refund.amount, userId, ...bank },
+        { notifyCustomer: false },
       );
     }
+    const pointsBack = (reversed as ReversalResult | null)?.pointsRefunded ?? 0;
     await this.notifications
-      .notify(userId, 'ORDER_CANCELLED', { order_code: code, refund_note: refundNote(refund, bank) })
+      .notify(userId, 'ORDER_CANCELLED', { order_code: code, refund_note: refundNote(refund, bank, pointsBack) })
       .catch(() => undefined);
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,

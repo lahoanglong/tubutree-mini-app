@@ -151,7 +151,7 @@ export class AccountDeletionService {
         _count: { _all: true },
       }),
       db.orderCustomerRefund.findMany({
-        where: { status: 'PENDING', OR: [{ customerUserId: { in: ids } }, { order: { userId: { in: ids } } }] },
+        where: { status: { in: ['PENDING', 'PROCESSING'] }, OR: [{ customerUserId: { in: ids } }, { order: { userId: { in: ids } } }] },
         select: { customerUserId: true, order: { select: { userId: true } } },
       }),
       db.subscription.groupBy({

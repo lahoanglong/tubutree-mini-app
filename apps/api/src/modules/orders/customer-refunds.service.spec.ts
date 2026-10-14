@@ -59,10 +59,10 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
   });
 
   it('xác nhận xong → báo khách kèm số tiền, tài khoản che số và mã giao dịch', async () => {
-    const { service, prisma, notifications } = setup();
+    const { service, prisma, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PENDING' },
+      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PROCESSING' },
       data: expect.objectContaining({ status: 'COMPLETED', bankRef: 'FT123', completedBy: 'a1' }),
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_BANK_COMPLETED', {
@@ -73,15 +73,72 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     });
   });
 
-  it('khoản vừa được khách chuyển sang Ví (guard thua) → báo tải lại, không báo khách', async () => {
+  it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
     const { service, prisma, notifications } = setup();
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('khoản khách cuối đơn CTV (không có tài khoản khách) → xác nhận thẳng từ hàng chờ được', async () => {
+    const { service, prisma } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
+    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', status: { in: ['PENDING', 'PROCESSING'] } } }),
+    );
+  });
+
+  it('khoản vừa được xử lý (guard thua) → báo tải lại, không báo khách', async () => {
+    const { service, prisma, notifications } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
     prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('tải lại');
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 });
 
+describe('CustomerRefundsService.claim (R2-LIFECYCLE-2: "Đang chuyển khoản" khoá nơi nhận)', () => {
+  it('khoá khoản PENDING có tài khoản → PROCESSING, ghi ai nhận', async () => {
+    const { service, prisma } = setup();
+    await service.claim('a1', 'r1');
+    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PENDING' },
+      data: expect.objectContaining({ status: 'PROCESSING', claimedBy: 'a1', claimedAt: expect.any(Date) }),
+    });
+  });
+
+  it('khách đã chọn Ví trước → báo rõ thời điểm, dặn KHÔNG chuyển khoản', async () => {
+    const { service, prisma } = setup();
+    prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    prisma.orderCustomerRefund.findUnique
+      .mockResolvedValueOnce(pending())
+      .mockResolvedValueOnce(pending({ method: 'WALLET', status: 'COMPLETED', completedAt: new Date('2026-10-14T03:05:00Z') }));
+    await expect(service.claim('a1', 'r1')).rejects.toThrow('Khách đã chọn nhận khoản này về Ví Tubu lúc 10:05 14/10/2026');
+  });
+
+  it('chưa có tài khoản và admin không nhập → không cho nhận', async () => {
+    const { service, prisma } = setup(pending({ bankAccountNo: null }));
+    await expect(service.claim('a1', 'r1')).rejects.toThrow('chưa có tài khoản nhận');
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('trả về hàng chờ → PENDING, xoá người nhận', async () => {
+    const { service, prisma } = setup(pending({ status: 'PROCESSING' }));
+    await service.release('a1', 'r1');
+    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PROCESSING' },
+      data: { status: 'PENDING', claimedBy: null, claimedAt: null },
+    });
+  });
+});
+
 describe('CustomerRefundsService.chooseDestination (khách chọn nơi nhận khoản chờ)', () => {
+  it('admin đang chuyển khoản (PROCESSING) → khách không đổi được sang Ví, nói rõ lý do', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING' }));
+    await expect(service.chooseDestination('u1', 'r1', { refundMethod: 'WALLET' })).rejects.toThrow('Tubu đang chuyển khoản');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => (applyWalletDelta as jest.Mock).mockClear());
 
   it('chọn Ví Tubu → đóng khoản và cộng Ví đúng số tiền, khoá theo id khoản', async () => {

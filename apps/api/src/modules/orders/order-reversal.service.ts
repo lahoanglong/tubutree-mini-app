@@ -12,8 +12,9 @@ import { toLocalPhone } from '../../common/phone';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
 import { createBankRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
-import { shareOf, type ReturnShares } from './refund-allocation';
+import { distributeByWeight, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
+import { paidLineTotals } from '../affiliate/commission-base';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -371,15 +372,27 @@ export class OrderReversalService {
       }
     }
 
-    // Hoa hồng CTV còn chờ (PENDING/LOCKED) giảm cùng tỉ lệ giá trị trả. Đã duyệt/đã chi thì không đụng — giống lần
-    // đảo cả đơn (reverseCommissionsForOrder chỉ huỷ PENDING/LOCKED).
+    // Hoa hồng CTV còn chờ (PENDING/LOCKED) giảm đúng phần của các dòng trả, theo mức % của chính dòng đó (R2-MONEY-1):
+    // trả món 10% thì cắt hoa hồng món đó, trả món 0% thì không cắt gì. Mỗi dòng tính luỹ kế sau trừ luỹ kế trước nên trả
+    // nốt một dòng cắt đúng bằng hoa hồng của dòng. Đã duyệt/đã chi thì không đụng — giống lần đảo cả đơn
+    // (reverseCommissionsForOrder chỉ huỷ PENDING/LOCKED).
     const rows = await tx.commission.findMany({
       where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED'] } },
-      select: { id: true, amount: true },
+      select: { id: true, amount: true, lineAmounts: true },
     });
+    const itemById = new Map(order.items.map((i) => [i.id, i]));
     for (const row of rows) {
-      const original = row.amount + input.prior.commissionReversed;
-      const cut = Math.min(row.amount, Math.max(0, shareOf(original, shares.ratioAfter) - shareOf(original, shares.ratioBefore)));
+      const perLine = await this.commissionByLine(tx, order, row, input.prior.commissionReversed);
+      let cut = 0;
+      for (const line of shares.lines) {
+        const item = itemById.get(line.orderItemId);
+        const lineCommission = perLine.get(line.orderItemId) ?? 0;
+        if (!item || item.quantity <= 0 || lineCommission <= 0 || line.quantity <= 0) continue;
+        const before = Math.min(item.quantity, input.prior.approvedQty.get(item.id) ?? 0);
+        const after = Math.min(item.quantity, before + line.quantity);
+        cut += Math.max(0, shareOf(lineCommission, after / item.quantity) - shareOf(lineCommission, before / item.quantity));
+      }
+      cut = Math.min(row.amount, cut);
       if (cut <= 0) continue;
       const res = await tx.commission.updateMany({
         where: { id: row.id, amount: row.amount, status: { in: ['PENDING', 'LOCKED'] } },
@@ -396,6 +409,39 @@ export class OrderReversalService {
       }
     }
     return result;
+  }
+
+  /**
+   * Hoa hồng ban đầu của từng dòng. Hoa hồng tạo từ khi có cột lineAmounts lưu sẵn (mức % lúc đặt). Hoa hồng cũ thì chia
+   * số ban đầu (còn lại + đã cắt ở các lần trả trước) theo hoa hồng tính lại bằng mức % hiện tại của biến thể; không dòng
+   * nào còn mức % thì chia theo giá trị dòng như trước.
+   */
+  private async commissionByLine(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    row: { amount: number; lineAmounts: Prisma.JsonValue | null },
+    priorReversed: number,
+  ): Promise<Map<string, number>> {
+    const stored = row.lineAmounts;
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+      const out = new Map<string, number>();
+      for (const [id, v] of Object.entries(stored)) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) out.set(id, Math.floor(n));
+      }
+      return out;
+    }
+    const original = row.amount + priorReversed;
+    const variations = await tx.variation.findMany({
+      where: { id: { in: order.items.map((i) => i.variationId) } },
+      select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
+    });
+    const rate = new Map(variations.map((v) => [v.id, v.product?.affiliateBlocked ? 0 : v.affiliateRate ? Number(v.affiliateRate) : 0]));
+    const paid = paidLineTotals(order, order.items);
+    let weights = order.items.map((it, idx) => Math.floor(((paid[idx] ?? 0) * (rate.get(it.variationId) ?? 0)) / 100));
+    if (weights.every((w) => w <= 0)) weights = paid;
+    const split = distributeByWeight(original, weights);
+    return new Map(order.items.map((it, idx) => [it.id, split[idx] ?? 0]));
   }
 
   /**

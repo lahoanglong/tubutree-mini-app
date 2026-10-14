@@ -9,7 +9,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { OrderReversalService } from './order-reversal.service';
+import { OrderReversalService, type ReversalResult } from './order-reversal.service';
+import { refundNote } from './order-returns.service';
 import {
   assertPaidBeforeFulfilment,
   assertTransition,
@@ -152,6 +153,7 @@ export class OrderStatusService {
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
+    let reversed: ReversalResult | null = null;
     const won = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.order.updateMany({
         // Đã PAID lúc đọc mà bị hoàn/huỷ thanh toán chen giữa thì không được giao tiếp trên ảnh chụp cũ.
@@ -210,7 +212,7 @@ export class OrderStatusService {
       }
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
-        await this.reversal.reverseFinancials(tx, order);
+        reversed = await this.reversal.reverseFinancials(tx, order);
       }
       return true;
     });
@@ -255,6 +257,11 @@ export class OrderStatusService {
     const notifyData: Record<string, string> = { ...opts.notifyData, order_code: order.code };
     if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {
       notifyData.points_note = ` Bạn được cộng ${order.pointsEarned} Điểm Xanh.`;
+    }
+    // Admin/hệ thống/Pancake huỷ hoặc trả đơn đã trả tiền: khách được báo số tiền hoàn và nơi tiền về (R2-LIFECYCLE-5).
+    if ((targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && notifyData.refund_note === undefined) {
+      const r = reversed as ReversalResult | null;
+      notifyData.refund_note = refundNote(r?.refund ?? null, null, r?.pointsRefunded ?? 0);
     }
     await this.notifications
       .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)

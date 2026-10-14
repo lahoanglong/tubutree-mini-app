@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listCustomerRefunds,
+  releaseCustomerRefund,
   type AdminCustomerRefund,
   type AdminCustomerRefundKind,
   type AdminCustomerRefundStatus,
@@ -16,10 +17,13 @@ import {
   CUSTOMER_REFUND_KINDS,
   CUSTOMER_REFUND_STALE_HINT,
   customerRefundView,
+  markPaidFailure,
   needsBankAccount,
+  needsClaim,
   refundKindLabel,
   refundReasonLabel,
   type CustomerRefundView,
+  type RefundAction,
 } from '@/lib/customer-refunds-admin';
 import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
@@ -29,9 +33,10 @@ import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
 
-const VIEW_TONE: Record<CustomerRefundView, Tone> = { PENDING: 'warning', COMPLETED: 'success', WALLET: 'info' };
+const VIEW_TONE: Record<CustomerRefundView, Tone> = { PENDING: 'warning', PROCESSING: 'info', COMPLETED: 'success', WALLET: 'info' };
 const VIEW_LABEL: Record<CustomerRefundView, string> = {
   PENDING: 'Chờ chuyển khoản',
+  PROCESSING: 'Đang chuyển khoản',
   COMPLETED: 'Đã chuyển khoản',
   WALLET: 'Đã hoàn vào ví',
 };
@@ -66,13 +71,14 @@ export function CustomerRefundsPendingBadge() {
  * - khách cuối của đơn CTV lên hộ (PA-1 / Q-01), chuyển theo SĐT;
  * - khách chọn "Tài khoản ngân hàng" khi huỷ/trả đơn đã trả tiền (D2), chuyển về tài khoản khách đã nhập;
  * - tiền về sau khi đơn đã huỷ/hết hạn (D2), chờ khách chọn nơi nhận hoặc admin nhập tài khoản khách cung cấp.
- * Admin chuyển khoản bên ngoài rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
+ * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
+ * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
 export function CustomerRefundsTab() {
   const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
-  const [target, setTarget] = useState<AdminCustomerRefund | null>(null);
+  const [target, setTarget] = useState<{ refund: AdminCustomerRefund; mode: RefundAction } | null>(null);
   const [flash, setFlash] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
   // Dòng vừa ghi xong: BE đã COMPLETED nhưng danh sách chưa tải lại xong, ẩn nút để không mở hộp lần hai.
   const [recorded, setRecorded] = useState<ReadonlySet<string>>(() => new Set());
@@ -91,9 +97,29 @@ export function CustomerRefundsTab() {
 
   const rows = outOfRange ? [] : (q.data?.data ?? []);
 
+  const qc = useQueryClient();
+  const release = useMutation({
+    mutationFn: (r: AdminCustomerRefund) => releaseCustomerRefund(r.id),
+    onSuccess: (_d, r) => {
+      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      setFlash({ tone: 'success', text: `Đã trả khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) về hàng chờ. Khách lại đổi được nơi nhận.` });
+    },
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      setFlash({ tone: 'warning', text: markPaidFailure(e, 'claim').message });
+    },
+  });
+
   const onDone = (r: AdminCustomerRefund, outcome: MarkPaidOutcome) => {
     setTarget(null);
-    if (outcome.kind === 'paid') {
+    if (outcome.kind === 'claimed') {
+      setFlash({
+        tone: 'success',
+        text: `Đã khoá nơi nhận khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}). Chuyển khoản rồi bấm "Đã chuyển khoản" ở mục Đang chuyển khoản.`,
+      });
+      setFilter('PROCESSING');
+      setPage(1);
+    } else if (outcome.kind === 'paid') {
       setRecorded((prev) => new Set(prev).add(r.id));
       setFlash({
         tone: 'success',
@@ -144,8 +170,9 @@ export function CustomerRefundsTab() {
         </div>
       </div>
       <p className="text-xs text-stone-600">
-        Chuyển khoản tay về tài khoản khách đã chọn (đơn CTV lên hộ: theo SĐT khách cuối), miễn phí và không giới hạn số tiền,
-        rồi bấm &quot;Đã chuyển khoản&quot; kèm mã giao dịch. Màn này chỉ ghi sổ, không tự chuyển tiền.
+        Bấm &quot;Bắt đầu chuyển khoản&quot; để khoá nơi nhận (khách không đổi sang Ví được nữa), chuyển khoản tay về tài khoản
+        khách đã chọn (đơn CTV lên hộ: theo SĐT khách cuối), miễn phí và không giới hạn số tiền, rồi bấm &quot;Đã chuyển
+        khoản&quot; kèm mã giao dịch. Màn này chỉ ghi sổ, không tự chuyển tiền.
       </p>
 
       {flash && (
@@ -183,9 +210,14 @@ export function CustomerRefundsTab() {
             key={r.id}
             refund={r}
             recorded={recorded.has(r.id)}
-            onMarkPaid={() => {
+            releasing={release.isPending && release.variables?.id === r.id}
+            onAction={(mode) => {
               setFlash(null);
-              setTarget(r);
+              setTarget({ refund: r, mode });
+            }}
+            onRelease={() => {
+              setFlash(null);
+              release.mutate(r);
             }}
           />
         ))}
@@ -228,7 +260,12 @@ export function CustomerRefundsTab() {
       )}
 
       {target && (
-        <CustomerRefundPaidDialog refund={target} onClose={() => setTarget(null)} onDone={(outcome) => onDone(target, outcome)} />
+        <CustomerRefundPaidDialog
+          refund={target.refund}
+          mode={target.mode}
+          onClose={() => setTarget(null)}
+          onDone={(outcome) => onDone(target.refund, outcome)}
+        />
       )}
     </div>
   );
@@ -237,11 +274,15 @@ export function CustomerRefundsTab() {
 export function CustomerRefundRow({
   refund: r,
   recorded = false,
-  onMarkPaid,
+  releasing = false,
+  onAction,
+  onRelease,
 }: {
   refund: AdminCustomerRefund;
   recorded?: boolean;
-  onMarkPaid: () => void;
+  releasing?: boolean;
+  onAction: (mode: RefundAction) => void;
+  onRelease?: () => void;
 }) {
   const view = customerRefundView(r);
   const manual = r.method === 'MANUAL_TRANSFER';
@@ -293,14 +334,31 @@ export function CustomerRefundRow({
         <div>Phương thức: {manual ? 'Chuyển khoản thủ công' : 'Ví Tubu'}</div>
       </div>
 
-      {view === 'PENDING' && (
+      {(view === 'PENDING' || view === 'PROCESSING') && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
           {recorded ? (
             <span className="text-xs text-stone-500">Đã ghi nhận, đang cập nhật danh sách…</span>
+          ) : view === 'PENDING' && needsClaim(r) ? (
+            <>
+              <button type="button" className={BTN_WARNING} onClick={() => onAction('claim')}>
+                Bắt đầu chuyển khoản
+              </button>
+              <span className="text-xs text-stone-500">Khoá nơi nhận trước khi chuyển tiền.</span>
+            </>
           ) : (
-            <button type="button" className={BTN_WARNING} onClick={onMarkPaid}>
-              Đã chuyển khoản
-            </button>
+            <>
+              {view === 'PROCESSING' && r.claimedAt && (
+                <span className="w-full text-xs text-stone-500">Bắt đầu chuyển lúc {fmtDate(r.claimedAt)} — khách không đổi được nơi nhận.</span>
+              )}
+              <button type="button" className={BTN_WARNING} onClick={() => onAction('paid')}>
+                Đã chuyển khoản
+              </button>
+              {view === 'PROCESSING' && onRelease && (
+                <button type="button" className={BTN_SECONDARY} disabled={releasing} onClick={onRelease}>
+                  {releasing ? 'Đang trả…' : 'Trả về hàng chờ'}
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -337,7 +395,7 @@ function BankAccountLines({ refund: r }: { refund: AdminCustomerRefund }) {
   if (!r.bankAccountNo) {
     return (
       <div className="text-warning-fg">
-        Khách chưa chọn nơi nhận. Khách tự chọn ở chi tiết đơn; nếu khách gửi tài khoản qua hỗ trợ, nhập khi xác nhận đã chuyển.
+        Khách chưa chọn nơi nhận. Khách tự chọn ở chi tiết đơn; nếu khách gửi tài khoản qua hỗ trợ, nhập khi bấm &quot;Bắt đầu chuyển khoản&quot;.
       </div>
     );
   }

@@ -296,6 +296,13 @@ export interface AdminReturnRequest {
     id: string;
     fullName: string | null;
     phone: string | null;
+  } | null;  /** Khoản hoàn thật của yêu cầu (khoản RETURN): khách có thể đã đổi ngân hàng → Ví, Tubu có thể chưa chuyển. */
+  refund?: {
+    method: 'WALLET' | 'MANUAL_TRANSFER';
+    status: AdminCustomerRefundStatus;
+    amount: number;
+    bankName: string | null;
+    bankAccountNo: string | null;
   } | null;
 }
 export const listReturnRequests = (status?: string, page = 1, limit = ADMIN_QUEUE_PAGE_SIZE, order?: QueueOrder) =>
@@ -1100,7 +1107,8 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
   });
 
 // ── Hoàn tiền khách: hàng đợi chuyển khoản tay (khách cuối đơn CTV lên hộ, khách chọn ngân hàng khi huỷ/trả, tiền về muộn) ──
-export type AdminCustomerRefundStatus = 'PENDING' | 'COMPLETED';
+/** PROCESSING: admin đã bấm "Bắt đầu chuyển khoản" — nơi nhận bị khoá, khách không đổi sang Ví được nữa. */
+export type AdminCustomerRefundStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED';
 export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
 export type AdminCustomerRefundKind = 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
 /** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
@@ -1128,11 +1136,24 @@ export interface AdminCustomerRefund {
   bankName: string | null;
   bankAccountNo: string | null;
   bankAccountName: string | null;
+  /** adminId đang chuyển khoản (PROCESSING) và lúc bấm; API cũ chưa trả. */
+  claimedBy?: string | null;
+  claimedAt?: string | null;
 }
 export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
   apiFetch<Page<AdminCustomerRefund>>(
     `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${kind ? `&kind=${kind}` : ''}`,
   );
+const bankBody = (input: { bankName?: string; accountNumber?: string; accountName?: string }) =>
+  input.accountNumber?.trim()
+    ? { bankName: input.bankName?.trim() ?? '', accountNumber: input.accountNumber.trim(), accountName: input.accountName?.trim() ?? '' }
+    : {};
+/** "Bắt đầu chuyển khoản": PENDING -> PROCESSING, khoá nơi nhận trước khi admin chuyển tiền (khách vừa chọn Ví thì 400). */
+export const claimCustomerRefund = (id: string, input: { bankName?: string; accountNumber?: string; accountName?: string } = {}) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/claim`, { method: 'POST', body: bankBody(input) });
+/** Chưa chuyển được: PROCESSING -> PENDING, khách lại đổi được nơi nhận. */
+export const releaseCustomerRefund = (id: string) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} });
 /** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
 export const markCustomerRefundPaid = (
   id: string,

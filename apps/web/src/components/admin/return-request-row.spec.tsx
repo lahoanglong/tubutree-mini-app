@@ -12,7 +12,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => ({
   markReturnReceived: mocks.received,
 }));
 
-import { ReturnRow } from './return-request-row';
+import { ReturnRow, approvedRefundText } from './return-request-row';
 
 const REQ = (over: Partial<AdminReturnRequest> = {}): AdminReturnRequest => ({
   id: 'r1',
@@ -275,8 +275,7 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     const c = await mount(
       REQ({ status: 'APPROVED', refundAmount: 89_000, shippingRefund: 0, refundMethod: 'BANK', reviewedAt: '2026-10-13T05:00:00Z' }),
     );
-    expect(c.textContent).toContain('Đã tạo lệnh hoàn 89.000đ (tiền hàng 89.000đ + phí ship 0đ) qua chuyển khoản');
-    expect(c.textContent).toContain('chờ chuyển ở tab "Hoàn tiền khách"');
+    expect(c.textContent).toContain('Chờ chuyển khoản 89.000đ (tiền hàng 89.000đ + phí ship 0đ) — xử lý ở tab "Hoàn tiền khách"');
     expect(c.textContent).not.toContain('Đã hoàn 89.000đ');
   });
 
@@ -297,5 +296,32 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(approved.textContent).toContain('chờ gian hàng xác nhận đã nhận');
     const received = await mount(REQ({ order, status: 'APPROVED', refundAmount: 89_000, receivedAt: '2026-10-14T00:00:00Z' }));
     expect(received.textContent).toContain('Mật ong Linh đã nhận hàng trả lúc');
+  });
+});
+
+// R2-LIFECYCLE-6: chuyển khoản chưa xong không được ghi "Đã hoàn"; khách đổi sang Ví thì nói Ví.
+describe('approvedRefundText — theo khoản hoàn thật', () => {
+  const base = REQ({ status: 'APPROVED', refundMethod: 'BANK', bankName: 'MB', bankAccountNo: '123456', refundAmount: 42_000, shippingRefund: 0 });
+  const refund = (method: 'WALLET' | 'MANUAL_TRANSFER', status: 'PENDING' | 'PROCESSING' | 'COMPLETED') => ({
+    method,
+    status,
+    amount: 42_000,
+    bankName: 'MB',
+    bankAccountNo: '123456',
+  });
+  it('khoản chuyển khoản còn chờ / đang chuyển / đã chuyển', () => {
+    expect(approvedRefundText({ ...base, refund: refund('MANUAL_TRANSFER', 'PENDING') }, 42_000)).toBe(
+      'Chờ chuyển khoản 42.000đ (tiền hàng 42.000đ + phí ship 0đ) — xử lý ở tab "Hoàn tiền khách"',
+    );
+    expect(approvedRefundText({ ...base, refund: refund('MANUAL_TRANSFER', 'PROCESSING') }, 42_000)).toContain('Đang chuyển khoản 42.000đ');
+    expect(approvedRefundText({ ...base, refund: refund('MANUAL_TRANSFER', 'COMPLETED') }, 42_000)).toBe(
+      'Đã chuyển khoản 42.000đ (tiền hàng 42.000đ + phí ship 0đ) cho khách',
+    );
+  });
+  it('khách đã đổi sang Ví → "Đã hoàn … về Ví Tubu" dù lúc gửi chọn ngân hàng; API cũ không có khoản thì theo lựa chọn lúc gửi', () => {
+    expect(approvedRefundText({ ...base, refund: refund('WALLET', 'COMPLETED') }, 42_000)).toBe(
+      'Đã hoàn 42.000đ (tiền hàng 42.000đ + phí ship 0đ) về Ví Tubu',
+    );
+    expect(approvedRefundText(base, 42_000)).toContain('Chờ chuyển khoản');
   });
 });

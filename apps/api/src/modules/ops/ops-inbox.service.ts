@@ -43,7 +43,7 @@ export class OpsInboxService {
       { key: 'pancakeAttention', audience: ['KHO'], count: () => p.order.count({ where: { pancakeAttentionAt: { not: null } } }) },
       { key: 'pancakeUnsynced', audience: ['KHO'], count: () => p.order.count({ where: pancakeUnsyncedWhere(now) }) },
       { key: 'gomdonAttention', audience: ['KHO'], count: () => p.order.count({ where: recyclingAttentionWhere() }) },
-      { key: 'customerRefunds', audience: 'ADMIN', count: () => p.orderCustomerRefund.count({ where: { status: 'PENDING' } }) },
+      { key: 'customerRefunds', audience: 'ADMIN', count: () => p.orderCustomerRefund.count({ where: { status: { in: ['PENDING', 'PROCESSING'] } } }) },
       { key: 'returnsPending', audience: ['CSKH'], count: () => p.returnRequest.count({ where: { status: 'REQUESTED' } }) },
       {
         key: 'returnsToReceive',

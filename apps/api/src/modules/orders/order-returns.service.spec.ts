@@ -264,6 +264,32 @@ describe('OrderReturnsService.listForAdmin — kèm đơn, khách, tên dòng tr
   });
 });
 
+describe('OrderReturnsService.listForAdmin — khoản hoàn thật của từng yêu cầu (R2-LIFECYCLE-6)', () => {
+  it('kèm khoản RETURN theo refKey = id yêu cầu (khách có thể đã đổi sang Ví, admin có thể chưa chuyển)', async () => {
+    const refundFindMany = jest.fn().mockResolvedValue([
+      { refKey: 'r1', method: 'WALLET', status: 'COMPLETED', amount: 19_500, bankName: 'MB', bankAccountNo: '123456', completedAt: null },
+    ]);
+    const prisma = {
+      returnRequest: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'r1', orderId: 'o1', userId: 'u1', reasonCode: null, items: [] },
+          { id: 'r2', orderId: 'o1', userId: 'u1', reasonCode: null, items: [] },
+        ]),
+        count: jest.fn().mockResolvedValue(2),
+      },
+      order: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      orderCustomerRefund: { findMany: refundFindMany },
+      $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
+    } as unknown as PrismaService;
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
+    const res = (await svc.listForAdmin(undefined, 1, 20)) as { data: { refund: { method: string } | null }[] };
+    expect(refundFindMany.mock.calls[0][0].where).toEqual({ kind: 'RETURN', refKey: { in: ['r1', 'r2'] } });
+    expect(res.data[0]!.refund).toMatchObject({ method: 'WALLET', status: 'COMPLETED' });
+    expect(res.data[1]!.refund).toBeNull();
+  });
+});
+
 describe('refundNote — khách được báo số tiền và nơi nhận (D2)', () => {
   it('Ví, ngân hàng (che số tài khoản), điểm, không có tiền', () => {
     expect(refundNote({ amount: 114_000, to: 'WALLET' }, null)).toBe(' Đã hoàn 114.000đ vào Ví Tubu.');

@@ -349,6 +349,7 @@ export class OrderReturnsService {
       await announceBankRefund(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { orderCode: order.code, amount: money.amount, userId: order.userId, bankName: req.bankName, bankAccountNo: req.bankAccountNo },
+        { notifyCustomer: false },
       );
     }
     await this.flagPancakeReturn(order, shares);
@@ -569,7 +570,7 @@ export class OrderReturnsService {
     const what = shares.lines
       .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
       .join(', ');
-    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. Tạo phiếu trả hàng trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
     try {
       await this.prisma.order.updateMany({
         where: { id: order.id },
@@ -593,7 +594,7 @@ export class OrderReturnsService {
   private async withContext<T extends RequestWithItems>(input: T | T[]): Promise<unknown> {
     const rows = Array.isArray(input) ? input : [input];
     if (rows.length === 0) return [];
-    const [orders, users] = await Promise.all([
+    const [orders, users, refunds] = await Promise.all([
       this.prisma.order.findMany({
         where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
         select: {
@@ -618,7 +619,14 @@ export class OrderReturnsService {
         where: { id: { in: [...new Set(rows.map((r) => r.userId))] } },
         select: { id: true, fullName: true, phone: true },
       }),
+      // Khoản hoàn thật của yêu cầu (khách có thể đã đổi ngân hàng → Ví, admin có thể chưa chuyển): admin thấy đúng
+      // trạng thái tiền thay vì nơi nhận lúc khách gửi yêu cầu.
+      (this.prisma.orderCustomerRefund?.findMany({
+        where: { kind: 'RETURN', refKey: { in: rows.map((r) => r.id) } },
+        select: { refKey: true, method: true, status: true, amount: true, bankName: true, bankAccountNo: true, completedAt: true },
+      }) ?? Promise.resolve([])),
     ]);
+    const refundMap = new Map(refunds.map((f) => [f.refKey, f]));
     const orderMap = new Map(orders.map((o) => [o.id, o]));
     const userMap = new Map(users.map((u) => [u.id, u]));
     const decorated = rows.map((r) => {
@@ -635,6 +643,7 @@ export class OrderReturnsService {
         })),
         order,
         user: userMap.get(r.userId) ?? null,
+        refund: refundMap.get(r.id) ?? null,
       };
     });
     return Array.isArray(input) ? decorated : decorated[0];

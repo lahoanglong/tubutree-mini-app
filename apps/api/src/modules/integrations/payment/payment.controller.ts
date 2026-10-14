@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { IsString } from 'class-validator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -8,11 +8,6 @@ import { BankTransferService } from './bank-transfer.service';
 
 class CreatePaymentDto {
   @IsString() orderCode!: string;
-}
-
-class ZaloPayCallbackDto {
-  @IsString() data!: string;
-  @IsString() mac!: string;
 }
 
 @Controller()
@@ -33,11 +28,19 @@ export class PaymentController {
     return this.bankTransfer.getBankQr(code, userId);
   }
 
-  /** Webhook ZaloPay (server-to-server). MAC (key2) đã chặn giả mạo → bỏ qua rate limit. */
+  /**
+   * Webhook ZaloPay (server-to-server). MAC (key2) đã chặn giả mạo → bỏ qua rate limit. Body là object thường (không DTO):
+   * ValidationPipe toàn cục chặn trường lạ, mà ZaloPay gửi kèm `type` và có thể thêm trường khác — bị 400 là mất callback.
+   */
   @Public()
   @SkipThrottle()
+  @HttpCode(200)
   @Post('webhooks/zalopay')
-  webhook(@Body() body: ZaloPayCallbackDto) {
-    return this.zalopay.handleCallback(body.data, body.mac);
+  webhook(@Body() body: Record<string, unknown>) {
+    const { data, mac, type } = body ?? {};
+    if (typeof data !== 'string' || typeof mac !== 'string') {
+      throw new BadRequestException('Callback ZaloPay thiếu data hoặc mac.');
+    }
+    return this.zalopay.handleCallback(data, mac, type === undefined || type === null ? undefined : Number(type));
   }
 }
