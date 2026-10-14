@@ -200,8 +200,10 @@ class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
   status!: 'PENDING_PAYMENT' | 'CONFIRMED' | 'PACKED' | 'SHIPPING' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
 
+  /** Huỷ/trả: khách đọc nguyên văn trong thông báo (customerReason), nên giới hạn độ dài. */
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   note?: string;
 }
 

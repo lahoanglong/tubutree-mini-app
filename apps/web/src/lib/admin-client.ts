@@ -528,12 +528,12 @@ export const confirmDealerOrderPayment = (orderId: string, input: { bankRef?: st
  * POST /admin/orders/:id/confirm-payment — "Đã nhận tiền" cho đơn lẻ chuyển khoản (C-024): UNPAID → PAID
  * (PENDING_PAYMENT → CONFIRMED), idempotent; luật nằm ở AdminService.confirmOrderPayment, lỗi 400 hiện nguyên văn.
  */
-export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string } = {}) => {
+export const confirmOrderPayment = (orderId: string, input: { bankRef?: string; note?: string; amount?: number } = {}) => {
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX);
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX);
   return apiFetch<ConfirmDealerPaymentResult>(`/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
     method: 'POST',
-    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+    body: { ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.amount !== undefined ? { amount: input.amount } : {}) },
   });
 };
 

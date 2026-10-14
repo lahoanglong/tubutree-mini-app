@@ -9,6 +9,7 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { parseVndInput } from '@/lib/loyalty-pos';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, TOUCH_H } from './ui';
 
@@ -58,6 +59,16 @@ function cancelConsequences(order: AdminOrder): string[] {
   return lines;
 }
 
+/** "450000" → "450.000" để admin đọc đúng số tiền đang nhập. */
+const groupDigits = (n: number | null) => (n == null ? '' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+
+/** Số tiền thực nhận của khoản tiền về muộn: 1đ..tổng đơn (khớp AdminService.confirmOrderPayment). */
+export function receivedAmountError(n: number | null, total: number): string | null {
+  if (n == null || n <= 0) return 'Nhập số tiền thực nhận trên sao kê (lớn hơn 0đ).';
+  if (n > total) return `Số tiền thực nhận không vượt quá tổng đơn ${formatVnd(total)}. Khách chuyển dư thì ghi đúng tổng đơn rồi hoàn tay phần dư.`;
+  return null;
+}
+
 function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
   if (status === 'DELIVERED') {
     return {
@@ -76,6 +87,11 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
     confirmLabel: 'Huỷ đơn',
     cancelLabel: 'Giữ đơn',
     tone: 'danger',
+    input: {
+      label: 'Lý do huỷ (tuỳ chọn) — khách sẽ đọc trong thông báo huỷ đơn',
+      placeholder: 'Vd: Hết hàng nhà cung cấp',
+      maxLength: 300,
+    },
   };
 }
 
@@ -86,10 +102,11 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
 export function OrderStatusActions({ order, canConfirmPayment = true }: { order: AdminOrder; canConfirmPayment?: boolean }) {
   const qc = useQueryClient();
   const [bankRef, setBankRef] = useState('');
+  const [received, setReceived] = useState<number | null>(order.total);
   const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render nút disabled.
   const payInFlight = useRef(false);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, ask, dialog } = useConfirm();
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
@@ -98,12 +115,16 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
   };
 
   const statusMut = useMutation({
-    mutationFn: (status: string) => updateOrderStatus(order.id || order.code, status),
+    mutationFn: ({ status, note }: { status: string; note?: string }) => updateOrderStatus(order.id || order.code, status, note),
     onSuccess: refresh,
   });
 
+  // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
+  const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
+
   const payMut = useMutation({
-    mutationFn: () => confirmOrderPayment(order.id || order.code, { bankRef }),
+    mutationFn: (amount: number | undefined) =>
+      confirmOrderPayment(order.id || order.code, { bankRef, ...(amount !== undefined ? { amount } : {}) }),
     onSuccess: (r) => {
       setPayMsg({ ok: true, text: r.message });
       setBankRef('');
@@ -115,18 +136,21 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
     },
   });
 
-  // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
-  const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
-
   const onConfirmPayment = async () => {
     if (payInFlight.current || payMut.isPending) return;
+    const amountError = latePayment ? receivedAmountError(received, order.total) : null;
+    if (amountError) {
+      setPayMsg({ ok: false, text: amountError });
+      return;
+    }
+    const amount = latePayment && received != null ? received : undefined;
     const ok = await confirm(
       latePayment
         ? {
             title: 'Ghi nhận tiền về muộn',
             message:
-              `Ghi nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code} sau khi đơn đã huỷ?\n\n` +
-              `Đơn giữ nguyên trạng thái huỷ. Hệ thống ghi khoản hoàn ${formatVnd(order.total)} vào hàng đợi Hoàn tiền khách; ` +
+              `Ghi nhận đã nhận ${formatVnd(amount ?? order.total)} chuyển khoản cho đơn ${order.code} sau khi đơn đã huỷ?\n\n` +
+              `Đơn giữ nguyên trạng thái huỷ. Hệ thống ghi khoản hoàn ${formatVnd(amount ?? order.total)} vào hàng đợi Hoàn tiền khách; ` +
               'khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. Chỉ bấm khi đã thấy tiền về tài khoản.',
             confirmLabel: 'Ghi nhận',
             cancelLabel: 'Đóng',
@@ -143,12 +167,22 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
     if (!ok || payInFlight.current || payMut.isPending) return;
     payInFlight.current = true;
     setPayMsg(null);
-    payMut.mutate();
+    payMut.mutate(amount);
   };
 
   const onStatus = async (a: OrderStatusAction) => {
-    if (a.confirm && !(await confirm(confirmQuestion(order, a.status)))) return;
-    statusMut.mutate(a.status);
+    if (!a.confirm) {
+      statusMut.mutate({ status: a.status });
+      return;
+    }
+    const question = confirmQuestion(order, a.status);
+    if (question.input) {
+      const reason = await ask(question);
+      if (reason === null) return;
+      statusMut.mutate({ status: a.status, ...(reason ? { note: reason } : {}) });
+      return;
+    }
+    if (await confirm(question)) statusMut.mutate({ status: a.status });
   };
 
   const actions = orderStatusActions(order);
@@ -163,10 +197,26 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
         >
           <p className="text-xs text-warning-fg">
             {latePayment
-              ? 'Đơn đã huỷ khi chưa nhận tiền. Nếu sao kê có khoản chuyển của đơn này, bấm "Ghi nhận tiền về muộn" để đưa vào hàng đợi Hoàn tiền khách.'
+              ? 'Đơn đã huỷ khi chưa nhận tiền. Nếu sao kê có khoản chuyển của đơn này, nhập đúng số tiền thực nhận rồi bấm "Ghi nhận tiền về muộn" để đưa vào hàng đợi Hoàn tiền khách.'
               : 'Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm "Đã nhận tiền".'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            {latePayment && (
+              <label className="flex w-full items-center gap-1.5 text-xs text-stone-700 sm:w-auto">
+                <span className="shrink-0">Số tiền thực nhận</span>
+                <input
+                  type="text"
+                  name="receivedAmount"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={groupDigits(received)}
+                  onChange={(e) => setReceived(parseVndInput(e.target.value))}
+                  disabled={busy}
+                  className={`${FIELD_XS} w-36 text-right`}
+                />
+                <span className="shrink-0">đ</span>
+              </label>
+            )}
             <input
               type="text"
               aria-label="Mã giao dịch ngân hàng"
