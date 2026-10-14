@@ -144,9 +144,20 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
 
 - COD trên đơn đối tác: đối tác thu của khách. Trả trước (Ví Tubu): Tubu giữ.
 - Mã giảm giá Tubu, giảm hạng, Điểm Xanh áp cho món được trừ vào tiền của gian hàng (chủ dự án chốt, Q8): đơn tự giao và hàng
-  Tubu giao hộ cùng một nền tiền dòng `merchantLineBase` (`merchant-line-base.ts`) = tiền hàng khách thực trả
-  (`order.total − shippingFee`) chia theo `OrderItem.total` (đã trừ combo của gian hàng). Ví Tubu là cách trả, không làm giảm
-  `order.total`. Phí giao giữ như cũ.
+  Tubu giao hộ cùng một nền tiền dòng `merchantLineBase` (`merchant-line-base.ts`) = tiền khách thực trả cho dòng. Ví Tubu là
+  cách trả, không làm giảm `order.total`. Phí giao giữ như cũ.
+- Mỗi khoản giảm chỉ rơi vào dòng được hưởng (review M1): checkout (`allocateLineAmounts`/`allocateGroupAmounts`,
+  `checkout-split.ts`) chia combo về đúng dòng của nó → mã giảm giá trên các dòng không flash mà mã áp được (mã gắn sản phẩm
+  `Coupon.applyTo.productIds`, kể cả mã mua chung: chỉ dòng sản phẩm đó; chỉ kiện có sản phẩm đó), sau combo → giảm hạng trên
+  phần còn lại không flash → Điểm Xanh trên phần còn lại cộng hàng flash, rồi lưu `OrderItem.paidTotal` = `total` − phần mã,
+  hạng, điểm của dòng (cộng lại = `order.total − shippingFee`). `merchantLineBase`, hoàn tiền khách (`refund-allocation`) và
+  hoa hồng CTV (`paidLineTotals`) đọc cùng số này, nên tiền hoàn cho khách và dòng đảo của gian hàng khớp nhau. Đơn cũ (không có
+  `paidTotal`, hoặc tổng không khớp) chia tiền hàng thực trả theo `OrderItem.total` như trước; khách vẫn trả đúng tổng như trước,
+  phiếu đã lập giữ số đã lưu. Ví dụ (phí sàn 10%, phí giao 30.000):
+  - (a) T 200.000 (Tubu) có mã 50.000 chỉ cho T, C 100.000 (giao hộ): C 100.000, thực nhận 90.000 (chia đều: 83.333 / 75.000).
+  - (b) mã 20% (40.000) trên T không flash, C mua giá flash 100.000: C 100.000 (chia đều: 86.667).
+  - (c) mã 50.000 gắn sản phẩm Tubu P 200.000, M 100.000 của gian hàng tự giao: đơn gian hàng 130.000, hàng 100.000 (chia đều:
+    mã 16.667 vào kiện gian hàng → đơn 113.333, gian hàng thu thiếu 16.667).
 - Đơn `DELIVERED` quá `merchant.settlement_hold_days` ngày (mặc định 7 = hạn đổi/trả), Tubu đã thu tiền (PAID hoặc COD) thành
   "có thể đối soát":
 
@@ -163,7 +174,11 @@ net        = goods + shippingFee − commission − cod   (> 0: Tubu trả đố
   +20.000 vì Tubu chịu 50.000 giảm giá. Trả 1 × A: −(83.334 − 8.333) = −75.001; trả nốt: −(166.666 + 30.000 − 16.667) =
   −179.999. Cộng lại: goods, phí giao, phí sàn về 0; net COD = −280.000 (tiền mặt gian hàng giữ, Tubu đã hoàn khách), ví = 0.
 - Phiếu đã lập giữ số đã lưu. Dòng đảo của đơn đã có SALE tính trên tiền hàng đã lưu ở SALE: khớp nền hiện tại thì dùng thẳng,
-  khác (SALE lập theo nền cũ) thì chia số đã lưu theo `OrderItem.total`, nên SALE + mọi dòng đảo vẫn cộng về đúng như trên.
+  khác (SALE lập theo nền cũ) thì chia số đã lưu theo `OrderItem.total` (phần dư theo thứ tự id dòng), nên SALE + mọi dòng đảo
+  vẫn cộng về đúng như trên.
+- Bảng kê đọc bằng nhiều truy vấn READ COMMITTED: đơn lật DELIVERED → RETURNED giữa lúc đọc đơn đủ hạn và lúc đọc đơn bị trả
+  chỉ được tính như đơn còn đã giao (SALE); bảng kê sau thấy SALE đã lưu và đảo đúng phần còn lại (review S4). "Sắp đủ hạn" bỏ
+  đơn đã có SALE.
 
 - Đơn bị `RETURNED` (Tubu đã hoàn tiền cho khách, hàng về đối tác) → dòng `REVERSAL`, trừ vào phiếu kế tiếp:
 
@@ -184,10 +199,10 @@ chưa đối soát, trả trước:        không lên bảng kê (Tubu giữ ti
   là một dòng phiếu riêng, khoá `ITEM:<orderItemId>`, cùng hạn giữ và cùng phiếu với đơn tự giao:
 
 ```
-paid_i     = (order.total − shippingFee) chia theo OrderItem.total (distributeByWeight; phí giao là của Tubu)
+paid_i     = OrderItem.paidTotal (đơn cũ: (order.total − shippingFee) chia theo OrderItem.total; phí giao là của Tubu)
 commission = round(paid_i × phí sàn của gian hàng)
-opsFee     = round(paid_i × consignmentFeePct)
-           + min(phần của consignmentFeeFixed, max(0, paid_i − commission − round(paid_i × consignmentFeePct)))
+pctFee     = min(round(paid_i × consignmentFeePct), max(0, paid_i − commission))
+opsFee     = pctFee + min(phần của consignmentFeeFixed, max(0, paid_i − commission − pctFee))
              (phần cố định chia theo paid_i giữa các món giao hộ của gian hàng trong đơn; mọi paid_i = 0 thì không thu)
 net        = paid_i − commission − opsFee            (shippingFee = cod = 0, không âm)
 ```
@@ -200,7 +215,10 @@ net        = paid_i − commission − opsFee            (shippingFee = cod = 0,
   Điều kiện một dòng hàng vào bảng kê (lọc trong SQL):
   - Đơn `fulfiller = TUBU`, `DELIVERED`, Tubu đã thu tiền: `paymentStatus = PAID` hoặc `paymentMethod = COD` (cùng luật doanh thu
     admin). Đơn công nợ đại lý (chuyển khoản, chưa trả) chờ tới khi PAID. Luật này áp cả cho đơn tự giao.
-  - Đơn đặt từ mốc `merchant.consignment_settle_from` (migration đặt bằng lúc triển khai): đơn cũ hơn không tự đối soát.
+  - Đơn đặt từ mốc `merchant.consignment_settle_from` (migration đặt bằng lúc triển khai): đơn cũ hơn không tự đối soát. Mốc là
+    chuỗi ISO 8601 (không ghi múi giờ thì UTC), đọc và kiểm bằng code rồi truyền vào SQL làm tham số; system-config chặn ghi
+    thời điểm không có thật. Giá trị sai đã nằm trong DB (vd `2026-13-01`) không làm lỗi bảng kê: tạm không giới hạn và ghi
+    cảnh báo một lần (review S6).
   - Biến thể liên kết với gian hàng lúc đặt. Liên kết takeover (nhận lại mã của sản phẩm Tubu đang bán) chỉ tính đơn đặt từ lúc
     admin bấm "Xác nhận hàng ký gửi" (`consignmentConfirmedAt`); màn liên kết hiện tồn lúc liên kết (`stockAtLink`) để đối chiếu.
   - Hạn giữ tính từ `deliveredAt`; đơn DELIVERED thiếu `deliveredAt` lấy lần chuyển DELIVERED cuối trong
@@ -208,8 +226,16 @@ net        = paid_i − commission − opsFee            (shippingFee = cod = 0,
 
   Phí chốt theo lúc đặt đơn: mỗi lần admin sửa phí ghi một dòng `storefront_terms_history` (`effectiveFrom` = lúc sửa, người
   sửa); dòng hàng lấy mức có `effectiveFrom` lớn nhất không sau `order.createdAt`. Gian hàng chưa có lịch sử dùng mức hiện tại
-  (lần sửa đầu ghi mức cũ làm mốc gốc `effectiveFrom = 0`). Phí sàn để trống trong lịch sử theo `merchant.commission_pct` lúc
-  tính (mức mặc định không được chụp lại).
+  (lần sửa đầu ghi mức cũ làm mốc gốc `effectiveFrom = 0`). Lịch sử lưu phí sàn đã quy ra số (review S1): gian hàng theo mặc
+  định lưu `merchant.commission_pct` lúc ghi (đọc thẳng DB trong transaction); đổi `merchant.commission_pct` qua system-config
+  ghi, trong cùng transaction và dưới khoá từng gian hàng, một dòng mức mới cho mọi gian hàng đang theo mặc định (chưa có lịch
+  sử thì thêm mốc gốc mức cũ). Nâng mặc định 15% → 20% trước khi lập phiếu: món đặt trước giữ 15%. Migration
+  `q8_consignment_settlement_terms_resolved` quy ra các dòng NULL bằng mặc định hiện tại.
+
+  Danh sách chỉ đọc "Hàng Tubu giao hộ chưa vào đối soát tự động" (review S5, tab Đối soát của đối tác và bảng kê gian hàng
+  của admin): món đã bán (kho Tubu giao, Tubu đã thu tiền, biến thể liên kết lúc đặt) mà không vào bảng kê vì đặt trước mốc
+  bắt đầu hoặc liên kết takeover chưa xác nhận lúc đặt; kèm lý do và tiền khách trả cho món, không cộng vào phiếu, tối đa 200
+  món mới nhất.
 
   Lập và huỷ phiếu khoá theo gian hàng (`pg_advisory_xact_lock`), bảng kê tính lại trong transaction; "Lập phiếu" gửi tổng
   admin đang xem, server tính khác thì từ chối (409). Tổng quan admin chỉ dựng bảng kê cho gian hàng mà một câu SQL thấy có khoản
