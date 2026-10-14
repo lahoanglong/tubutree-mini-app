@@ -123,9 +123,15 @@ describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () =>
         'Khách dặn: Gọi trước khi giao, nhà có chó, để hàng ở thùng thư',
       );
       expect(customerDeliveryNote('Thứ 7 thu dọn nhà, giao Chủ nhật 🙏')).toBe('Khách dặn: Thứ 7 thu dọn nhà, giao Chủ nhật 🙏');
-      expect(customerDeliveryNote('Giao cho ck em, nhờ bảo vệ lấy hộ, gần ngân hàng ACB')).toBe(
-        'Khách dặn: Giao cho ck em, nhờ bảo vệ lấy hộ, gần ngân hàng ACB',
-      );
+      for (const note of [
+        'Giao cho ck em, nhờ bảo vệ lấy hộ, gần ngân hàng ACB',
+        'Đã chuyển nhà, giao về 12 Lê Lợi',
+        'Hộp móp thì không lấy.',
+        'Cho mình dùng thử.',
+        'Đã trả lời tin nhắn shop rồi',
+      ]) {
+        expect(customerDeliveryNote(note)).toBe(`Khách dặn: ${note}`);
+      }
     });
 
     it('chữ tổ hợp (NFD, bàn phím iOS/macOS) cũng bị ẩn', () => {

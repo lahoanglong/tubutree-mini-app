@@ -154,14 +154,17 @@ const WORD_END = '(?![\\p{L}\\p{N}_])';
 const MONEY_WORD = '(?:tien|cod|ho|phi)';
 /**
  * Cụm khách tự viết kiểu chỉ dẫn thu tiền (trên bản đã gấp không dấu). Cụm dài đứng trước. Tránh từ dễ nhầm với lời dặn
- * giao hàng: "ck" một mình (= "chồng"), "lấy hộ" (nhờ người nhận hộ), "ngân hàng" (mốc địa chỉ).
+ * giao hàng: "ck" một mình (= "chồng"), "lấy hộ" (nhờ người nhận hộ), "không lấy." (từ chối nhận), "dùng thử", "đã chuyển"
+ * (chuyển nhà), "đã trả lời", "ngân hàng" (mốc địa chỉ).
  */
 const PAYMENT_HINT = new RegExp(
   WORD_START +
     '(?:' +
     [
-      `(?:khong|ko|k|kg|hong|hok|khoi|dung|mien)\\s+(?:can\\s+|duoc\\s+|phai\\s+)?(?:thu|lay)(?:(?:\\s+${MONEY_WORD})+|(?=\\s*(?:[^\\p{L}\\p{N}\\s]|$)))`,
-      `(?:da|dc)\\s+(?:thanh\\s+toan|chuyen\\s+khoan|chuyen\\s+tien|chuyen|tra\\s+tien|tra\\s+truoc|tra|tt|ck|bank(?:ing)?|nop\\s+tien)`,
+      `(?:khong|ko|k|kg|hong|hok|khoi|dung|mien)\\s+(?:can\\s+|duoc\\s+|phai\\s+)?thu(?:\\s+${MONEY_WORD})+`,
+      '(?:khong|ko|k|kg|hong|hok|khoi|dung|mien)\\s+(?:can\\s+|duoc\\s+|phai\\s+)?lay(?:\\s+(?:tien|cod|phi))+',
+      '(?:khong|ko|k|kg|hong|hok)\\s+(?:can\\s+|phai\\s+)?thu(?=\\s*(?:[^\\p{L}\\p{N}\\s]|$))',
+      `(?:da|dc)\\s+(?:thanh\\s+toan|chuyen\\s+khoan|chuyen\\s+tien|chuyen\\s+ck|tra\\s+(?:tien|truoc|roi|du|het|bang)|tt|ck|bank(?:ing)?|nop\\s+tien)`,
       `thu(?:\\s+${MONEY_WORD})+`,
       'lay(?:\\s+(?:tien|cod|phi))+',
       'ck\\s+(?:roi|du|truoc)',
