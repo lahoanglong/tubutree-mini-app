@@ -77,6 +77,8 @@ export interface AdminOrder {
   paymentStatus?: string;
   shippingFee?: number;
   discountTotal?: number;
+  /** Điểm Xanh khách đã dùng cho đơn — trả lại khi huỷ. */
+  pointsUsed?: number;
   note?: string | null;
   createdAt: string;
   updatedAt?: string;

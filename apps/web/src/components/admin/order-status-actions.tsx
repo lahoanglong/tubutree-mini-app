@@ -45,6 +45,19 @@ export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>
   return ACTIONS.filter((a) => allowed.has(a.status));
 }
 
+const PREPAID_METHODS = new Set(['WALLET', 'ZALOPAY', 'BANK_TRANSFER', 'VNPAY', 'XU']);
+
+/** Hệ quả tiền/điểm của lần huỷ do admin bấm — admin/hệ thống huỷ luôn hoàn vào Ví Tubu (D2). */
+function cancelConsequences(order: AdminOrder): string[] {
+  const lines =
+    order.paymentStatus === 'PAID' && PREPAID_METHODS.has(order.paymentMethod)
+      ? [`Hoàn ${formatVnd(order.total)} vào Ví Tubu của khách ngay khi huỷ.`]
+      : ['Khách chưa trả tiền — không có khoản hoàn tiền.'];
+  if ((order.pointsUsed ?? 0) > 0) lines.push(`Trả lại ${order.pointsUsed} Điểm Xanh khách đã dùng.`);
+  if (order.pancakeOrderId) lines.push('Hệ thống sẽ huỷ cả đơn trên kho Pancake.');
+  return lines;
+}
+
 function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
   if (status === 'DELIVERED') {
     return {
@@ -59,7 +72,7 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
       : '';
   return {
     title: 'Huỷ đơn hàng',
-    message: `Xác nhận huỷ đơn ${order.code}?${gomdonNote}`,
+    message: [`Xác nhận huỷ đơn ${order.code}?`, ...cancelConsequences(order)].join('\n') + gomdonNote,
     confirmLabel: 'Huỷ đơn',
     cancelLabel: 'Giữ đơn',
     tone: 'danger',
