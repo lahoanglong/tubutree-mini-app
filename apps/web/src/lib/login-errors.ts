@@ -38,3 +38,9 @@ export function loginFailureMessage(e: unknown): string {
   if (UPSTREAM_ZALO_FAILURE.test(message)) return CODE_REJECTED;
   return message && VIETNAMESE_CHARS.test(message) ? message : GENERIC;
 }
+
+/** Lỗi tạm (mất mạng, Zalo/API bận, quá nhiều lần thử): lần đăng nhập kế tiếp nhiều khả năng thành công nên nút hiện "Thử lại". */
+export function isTransientLoginFailure(e: unknown): boolean {
+  if (e instanceof NetworkError) return true;
+  return e instanceof ApiError && (e.status === 429 || e.status >= 500);
+}

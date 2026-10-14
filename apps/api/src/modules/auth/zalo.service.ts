@@ -1,8 +1,16 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
 import type { Env } from '../../config/env.validation';
 import { normalizeZaloPhone } from '../../common/phone';
+
+const ZALO_BUSY_MESSAGE = 'Zalo đang bận, vui lòng thử lại sau ít phút.';
+
+/** Zalo không trả lời được (mất kết nối, quá hạn chờ, 5xx, quá tải 429): lỗi tạm của Zalo, không phải lỗi của khách. */
+function isZaloUnavailable(err: AxiosError): boolean {
+  const status = err.response?.status;
+  return status === undefined || status >= 500 || status === 429;
+}
 
 export interface ZaloUserInfo {
   zaloId: string; // openId / id
@@ -54,7 +62,8 @@ export class ZaloService {
       if (err instanceof UnauthorizedException) throw err;
       const ax = err as AxiosError;
       this.logger.error(`Zalo exchangeOAuthCode error: ${ax.message}`);
-      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo.');
+      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
+      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo. Vui lòng đăng nhập lại.');
     }
   }
 
@@ -89,6 +98,7 @@ export class ZaloService {
       if (err instanceof UnauthorizedException) throw err;
       const ax = err as AxiosError;
       this.logger.error(`Zalo getUserInfo error: ${ax.message}`);
+      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
       throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
     }
   }
