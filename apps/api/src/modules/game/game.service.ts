@@ -169,6 +169,7 @@ export class GameService {
       });
 
       let rewardRefId: string | null = null;
+      let coupon: { code: string; minOrder: number; expiresAt: Date } | undefined;
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
@@ -190,7 +191,8 @@ export class GameService {
           data: { totalSeeds: tankCap },
         });
       } else if (prize.rewardType === 'COUPON') {
-        rewardRefId = await this.grantCoupon(userId, prize.value, tx, voucherMinOrder);
+        coupon = await this.grantCouponWithTerms(userId, prize.value, tx, voucherMinOrder);
+        rewardRefId = coupon.code;
       }
 
       await tx.gameSpin.create({
@@ -211,7 +213,9 @@ export class GameService {
         props: { action: 'spin', prizeId: prize.id, rewardType: prize.rewardType, rewardRefId },
       });
 
-      return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
+      return {
+        prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value, ...(coupon ? { coupon } : {}) },
+      };
     });
   }
 
@@ -715,16 +719,26 @@ export class GameService {
     tx?: Prisma.TransactionClient,
     minOrder: number = amount,
   ): Promise<string> {
+    return (await this.grantCouponWithTerms(userId, amount, tx, minOrder)).code;
+  }
+
+  private async grantCouponWithTerms(
+    userId: string,
+    amount: number,
+    tx?: Prisma.TransactionClient,
+    minOrder: number = amount,
+  ): Promise<{ code: string; minOrder: number; expiresAt: Date }> {
     const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
+    const effectiveMinOrder = Math.max(amount, minOrder);
     const db = tx ?? this.prisma;
     await db.coupon.create({
       data: {
         code,
         type: 'AMOUNT',
         value: amount,
-        minOrder: Math.max(amount, minOrder),
+        minOrder: effectiveMinOrder,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,
@@ -732,7 +746,7 @@ export class GameService {
         scopeMeta: { userId } as object,
       },
     });
-    return code;
+    return { code, minOrder: effectiveMinOrder, expiresAt: end };
   }
 
   private pickWeighted(prizes: SpinPrize[]): SpinPrize {

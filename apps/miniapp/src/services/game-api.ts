@@ -57,7 +57,13 @@ export interface StreakRepairResult {
   totalSeeds: number;
 }
 export interface SpinResult {
-  prize: { id: string; name: string; rewardType: string; value: number };
+  prize: {
+    id: string;
+    name: string;
+    rewardType: string;
+    value: number;
+    coupon?: { code: string; minOrder: number; expiresAt: string };
+  };
 }
 export interface LeaderRow {
   rank: number;

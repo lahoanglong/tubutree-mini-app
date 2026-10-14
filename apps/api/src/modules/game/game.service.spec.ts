@@ -319,6 +319,23 @@ describe('GameService.spin', () => {
       expect((prisma3.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(120000);
     });
 
+    // R2-ENGAGE-6: sheet kết quả cần mã, đơn tối thiểu và hạn dùng của voucher vừa trúng để khách biết dùng thế nào.
+    it('R2-ENGAGE-6: trúng voucher → kết quả kèm mã, đơn tối thiểu và hạn dùng của chính coupon vừa tạo; giải khác không có coupon', async () => {
+      const prizes = [{ id: 'v', name: 'Voucher 20k', weight: 1, rewardType: 'COUPON', value: 20000 }];
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const prisma = makePrisma();
+      const res = (await spinWith(prisma, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': prizes }).spin('u1')) as {
+        prize: { coupon?: { code: string; minOrder: number; expiresAt: Date } };
+      };
+      const created = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+      expect(res.prize.coupon).toEqual({ code: created.code, minOrder: 120000, expiresAt: created.endAt });
+
+      const prisma2 = makePrisma();
+      const none = [{ id: 'n', name: 'Chúc may mắn', weight: 1, rewardType: 'NONE', value: 0 }];
+      const res2 = (await spinWith(prisma2, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': none }).spin('u1')) as { prize: object };
+      expect(res2.prize).not.toHaveProperty('coupon');
+    });
+
     it('PF-6a (b): trúng giải không phải SEEDS → không đọc game.tank_capacity', async () => {
       const prisma = makePrisma();
       jest.spyOn(Math, 'random').mockReturnValue(0.9); // giải 'b' (NONE)

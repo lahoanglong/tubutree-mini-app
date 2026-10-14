@@ -16,12 +16,20 @@ vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 import { WheelOfFortune as Wheel } from './wheel';
 
 /** Vòng quay + hộp kết quả nối đúng như trang Vườn Xanh (hộp do cấp trang dựng, không còn nằm trong vòng quay). */
-function WheelOfFortune({ cost, onSpin }: { cost: number; onSpin: () => Promise<SpinResult> }) {
+function WheelOfFortune({
+  cost,
+  onSpin,
+  onUseCoupon = () => {},
+}: {
+  cost: number;
+  onSpin: () => Promise<SpinResult>;
+  onUseCoupon?: () => void;
+}) {
   const { onResult, sheet } = useWheelPrize();
   return (
     <>
       <Wheel cost={cost} onSpin={onSpin} onResult={onResult} />
-      <WheelPrizeSheet {...sheet} />
+      <WheelPrizeSheet {...sheet} onUseCoupon={onUseCoupon} />
     </>
   );
 }
@@ -157,13 +165,78 @@ describe('WheelOfFortune — hộp kết quả', () => {
     expect(screen.queryByText(/đã vào tài khoản/)).not.toBeInTheDocument();
   });
 
-  it('thưởng điểm nhưng giá trị 0: không có dòng cộng Điểm Xanh', async () => {
+  it('thưởng điểm nhưng giá trị 0: không chúc mừng, không có dòng cộng Điểm Xanh', async () => {
     const prize: SpinResult = { prize: { id: 'p3', name: 'Chúc may mắn lần sau', rewardType: 'POINTS', value: 0 } };
     render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} />);
     fireEvent.click(spinButton());
     await advance(SPIN_MS);
     expect(screen.getByText('Chúc may mắn lần sau')).toBeInTheDocument();
+    expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
+    expect(screen.queryByText('🎉')).not.toBeInTheDocument();
     expect(screen.queryByText(/đã vào tài khoản/)).not.toBeInTheDocument();
+  });
+
+  // R2-ENGAGE-6
+  it('không trúng gì (NONE): câu động viên, không "Chúc mừng!", không pháo hoa, nút đóng "Quay tiếp nhé"', async () => {
+    const prize: SpinResult = { prize: { id: 'p8', name: 'Chúc may mắn lần sau', rewardType: 'NONE', value: 0 } };
+    render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
+    expect(screen.queryByText('🎉')).not.toBeInTheDocument();
+    expect(screen.getByText('Lần này chưa trúng quà, thử lại lần sau nhé!')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quay tiếp nhé' })).toBeInTheDocument();
+  });
+
+  it('giải hạt (SEEDS): nói rõ số giọt nước đã cộng vào bình', async () => {
+    const prize: SpinResult = { prize: { id: 'p5', name: '30 💧', rewardType: 'SEEDS', value: 30 } };
+    render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(screen.getByText('Chúc mừng!')).toBeInTheDocument();
+    expect(screen.getByText('+30💧 đã vào bình nước của bạn')).toBeInTheDocument();
+  });
+
+  it('voucher (COUPON): hiện mã, đơn tối thiểu, hạn dùng; "Dùng ngay" đóng hộp và gọi onUseCoupon', async () => {
+    const prize: SpinResult = {
+      prize: {
+        id: 'p4',
+        name: 'Voucher 20k',
+        rewardType: 'COUPON',
+        value: 20000,
+        coupon: { code: 'GAME20000-ABCDE-1234', minOrder: 120000, expiresAt: '2026-11-13T09:00:00.000Z' },
+      },
+    };
+    const onUseCoupon = vi.fn();
+    render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} onUseCoupon={onUseCoupon} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(screen.getByText('Chúc mừng!')).toBeInTheDocument();
+    expect(screen.getByText('GAME20000-ABCDE-1234')).toBeInTheDocument();
+    expect(screen.getByText('Đơn tối thiểu 120.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/Hạn dùng \d{2}\/\d{2}\/2026/)).toBeInTheDocument();
+    expect(screen.getByText('Mã đã vào mục Mã giảm giá của tôi')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
+    await advance(500);
+    expect(onUseCoupon).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
+  });
+
+  it('voucher: "Để sau" chỉ đóng hộp, không điều hướng', async () => {
+    const prize: SpinResult = {
+      prize: {
+        id: 'p4', name: 'Voucher 20k', rewardType: 'COUPON', value: 20000,
+        coupon: { code: 'GAME20000-ABCDE-1234', minOrder: 120000, expiresAt: '2026-11-13T09:00:00.000Z' },
+      },
+    };
+    const onUseCoupon = vi.fn();
+    render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(prize)} onUseCoupon={onUseCoupon} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    fireEvent.click(screen.getByRole('button', { name: 'Để sau' }));
+    await advance(500);
+    expect(onUseCoupon).not.toHaveBeenCalled();
+    expect(screen.queryByText('GAME20000-ABCDE-1234')).not.toBeInTheDocument();
   });
 
   it('"Tuyệt vời!" đóng hộp kết quả; sau đó quay lại được và gọi onSpin lần 2', async () => {

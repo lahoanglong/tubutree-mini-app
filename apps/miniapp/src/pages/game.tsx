@@ -225,7 +225,7 @@ export default function GamePage() {
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
-      <WheelPrizeSheet {...wheelPrize.sheet} />
+      <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => navigate('/browse')} />
 
       {/* Harvest celebration */}
       <HarvestCelebration
