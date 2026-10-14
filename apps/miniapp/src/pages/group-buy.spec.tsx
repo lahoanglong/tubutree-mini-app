@@ -310,6 +310,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     renderPage();
     expect(await screen.findByRole('heading', { name: 'Nhóm đã đủ người của bạn' })).toBeInTheDocument();
     expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
+    expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: `Mua ngay với mã giảm ${formatVnd(20_000)}` }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
     expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();

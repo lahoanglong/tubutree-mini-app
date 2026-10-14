@@ -207,16 +207,18 @@ function GroupCard({
             <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
           </div>
           <Text variant="caption" tone="tertiary" as="div">
-            {g.currentSize}/{g.targetSize} người · {timeLeft(g.expiresAt)}
+            {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </Text>
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
         <ProgressBar value={pct} max={100} />
       </div>
-      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-        {`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
-      </Text>
+      {g.status !== 'SUCCESS' && (
+        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
+          {`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
+        </Text>
+      )}
       {g.status === 'SUCCESS' && member ? (
         <>
           {g.couponCode && (
