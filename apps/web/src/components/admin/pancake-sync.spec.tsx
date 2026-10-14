@@ -71,6 +71,21 @@ describe('pancakeSyncState', () => {
     expect(canRetryPancakePush(order({ pancakeOrderId: '1' }))).toBe(false);
     expect(canRetryPancakePush(order({ pancakePushStatus: 'WAITING_PAYMENT' }))).toBe(false);
   });
+
+  it('đơn đại lý còn hàng đặt trước → "chờ đủ hàng", không badge ở danh sách, không nút đẩy lại (R1)', () => {
+    const items = [{ id: 'i1', productName: 'Sen đá', unitPrice: 40000, quantity: 5, total: 200000, backorderedQty: 3 }];
+    const legacy = order({ type: 'DEALER', pancakePushStatus: null, pancakeSyncError: null, items });
+    expect(pancakeSyncState(legacy)).toMatchObject({ label: 'Pancake: chờ đủ hàng', flag: false });
+    expect(canRetryPancakePush(legacy)).toBe(false);
+    expect(pancakeSyncState(order({ pancakePushStatus: 'WAITING_STOCK', pancakeSyncError: null }))).toMatchObject({
+      label: 'Pancake: chờ đủ hàng',
+      flag: false,
+    });
+    expect(canRetryPancakePush(order({ pancakePushStatus: 'WAITING_STOCK' }))).toBe(false);
+    expect(canRetryPancakePush(order({ type: 'DEALER', items: [{ ...items[0]!, backorderedQty: 0 }] }))).toBe(true);
+    const filled = order({ type: 'DEALER', pancakePushStatus: 'WAITING_STOCK', items: [{ ...items[0]!, backorderedQty: 0 }] });
+    expect(canRetryPancakePush(filled)).toBe(true);
+  });
 });
 
 describe('PancakeSyncBadge', () => {

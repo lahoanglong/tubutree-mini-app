@@ -103,7 +103,7 @@ export interface AdminOrder {
   pancakeAttentionAt?: string | null;
   /** Mã đơn bên kho Pancake; null = chưa lên kho. */
   pancakeOrderId?: string | null;
-  /** WAITING_PAYMENT | PENDING | PUSHING | SYNCED | FAILED | NOT_CONFIGURED | SKIPPED | STALE (PancakeOrderService). */
+  /** WAITING_PAYMENT | WAITING_STOCK | PENDING | PUSHING | SYNCED | FAILED | NOT_CONFIGURED | SKIPPED | STALE (PancakeOrderService). */
   pancakePushStatus?: string | null;
   /** Lỗi gần nhất khi đẩy / cập nhật / huỷ đơn bên Pancake. */
   pancakeSyncError?: string | null;

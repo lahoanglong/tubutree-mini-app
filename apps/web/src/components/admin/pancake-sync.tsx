@@ -20,6 +20,15 @@ export interface PancakeSyncState {
   flag: boolean;
 }
 
+/**
+ * Đơn đại lý còn hàng đặt trước: chỉ lên kho khi đủ hàng (API: dealer-awaiting-stock.ts). Có dòng hàng thì tin dòng
+ * hàng — cờ WAITING_STOCK có thể còn sót sau khi đã lấp đủ mà lệnh đẩy chưa chạy.
+ */
+function awaitingStock(order: AdminOrder): boolean {
+  if (!order.items) return order.pancakePushStatus === 'WAITING_STOCK';
+  return order.type === 'DEALER' && order.items.some((i) => (i.backorderedQty ?? 0) > 0);
+}
+
 /** Tình trạng đồng bộ đơn với kho Pancake, theo các cột PancakeOrderService ghi. */
 export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
   switch (order.pancakeCancelStatus) {
@@ -35,6 +44,9 @@ export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
       return null;
   }
   if (order.pancakeOrderId) return { tone: 'success', label: 'Đã lên Pancake', flag: false };
+  if (IN_WAREHOUSE.has(order.status) && awaitingStock(order)) {
+    return { tone: 'neutral', label: 'Pancake: chờ đủ hàng', flag: false };
+  }
   switch (order.pancakePushStatus) {
     case 'FAILED':
       return { tone: 'danger', label: 'Pancake: đẩy lỗi', flag: true };
@@ -54,7 +66,7 @@ export function pancakeSyncState(order: AdminOrder): PancakeSyncState | null {
 
 export function canRetryPancakePush(order: AdminOrder): boolean {
   if (order.pancakeOrderId || !IN_WAREHOUSE.has(order.status)) return false;
-  return order.pancakePushStatus !== 'WAITING_PAYMENT';
+  return order.pancakePushStatus !== 'WAITING_PAYMENT' && !awaitingStock(order);
 }
 
 export function PancakeSyncBadge({ order }: { order: AdminOrder }) {
