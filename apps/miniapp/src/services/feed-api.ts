@@ -215,6 +215,26 @@ export const eventPosts = (id: string, cursor?: string) =>
     .get<FeedPage>(`/feed/events/${id}/posts`, { params: cursor ? { cursor } : undefined })
     .then((r) => r.data);
 
+/** Sự kiện cho quản trị kèm người thắng (đã chốt thì CLOSED); danh sách công khai chỉ có sự kiện đang mở. */
+export interface AdminCommunityEvent extends CommunityEvent {
+  winner: { id: string; name: string; avatar: string | null } | null;
+}
+export const adminEvents = (status: 'OPEN' | 'CLOSED') =>
+  api.get<AdminCommunityEvent[]>('/feed/admin/events', { params: { status } }).then((r) => r.data);
+
+/** Người dự thi (một dòng/người, bài mới nhất) để quản trị chọn người thắng thay vì dán userId. */
+export interface EventParticipant {
+  userId: string;
+  name: string;
+  avatar: string | null;
+  postId: string;
+  postTitle: string;
+  postedAt: string;
+  postCount: number;
+}
+export const adminEventParticipants = (id: string) =>
+  api.get<EventParticipant[]>(`/feed/admin/events/${id}/participants`).then((r) => r.data);
+
 export const createEvent = (dto: CreateEventInput) =>
   api.post<CommunityEvent>('/feed/events', dto).then((r) => r.data);
 

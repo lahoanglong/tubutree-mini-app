@@ -119,6 +119,10 @@ export function notificationAction(templateCode: string, data: Record<string, st
   if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
   if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
   if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
+  // Nhóm hết hạn không đủ người: về trang sản phẩm, nơi vừa mua được với giá thường vừa mở được nhóm mới.
+  if (templateCode === 'GROUP_BUY_FAILED' && productSlug) {
+    return { kind: 'link', label: 'Xem sản phẩm', to: `/product/${enc(productSlug)}` };
+  }
   if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
   if (templateCode.startsWith('REFILL')) return { kind: 'link', label: 'Xem đổi vỏ chai', to: '/refill' };
   return null;

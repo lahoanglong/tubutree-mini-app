@@ -127,6 +127,16 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     expect(to(code)).toBe(path);
   });
 
+  it('nhóm mua chung hết hạn → trang sản phẩm (mua giá thường hoặc mở nhóm mới); thành công/thiếu slug → trang Mua chung', () => {
+    expect(to('GROUP_BUY_FAILED', { product: 'Nước rửa chén', product_slug: 'nuoc-rua-chen' })).toBe('/product/nuoc-rua-chen');
+    expect(to('GROUP_BUY_FAILED', { product: 'X' })).toBe('/group-buy');
+    expect(to('GROUP_BUY_SUCCESS', { discount: '15.000' })).toBe('/group-buy');
+  });
+
+  it('người thắng sự kiện cộng đồng → Cộng đồng', () => {
+    expect(to('COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' })).toBe('/feed');
+  });
+
   it('FLASH có slug → sản phẩm; REORDER_REMINDER → luồng mua lại', () => {
     expect(to('FLASH_STARTING', { product_slug: 'a b' })).toBe('/product/a%20b');
     expect(notificationAction('REORDER_REMINDER', { product: 'X' })?.kind).toBe('reorder');

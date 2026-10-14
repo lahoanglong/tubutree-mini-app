@@ -1056,6 +1056,59 @@ export class CommunityFeedService {
     };
   }
 
+  /**
+   * Danh sách sự kiện cho quản trị: mặc định đang mở; "CLOSED" cho sự kiện đã đóng (kèm người thắng) để còn xem lại lịch
+   * sử, vì listEvents công khai chỉ trả OPEN nên chốt người thắng xong sự kiện biến khỏi mọi màn.
+   */
+  async adminEvents(status: 'OPEN' | 'CLOSED' = 'OPEN', take = 50) {
+    const closed = status === 'CLOSED';
+    const events = await this.prisma.communityEvent.findMany({
+      where: { status: closed ? 'CLOSED' : 'OPEN' },
+      orderBy: { endAt: closed ? 'desc' : 'asc' },
+      take,
+    });
+    const winnerIds = [...new Set(events.map((e) => e.winnerUserId).filter((id): id is string => !!id))];
+    const winners = winnerIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: winnerIds } }, select: { id: true, fullName: true, avatarUrl: true } })
+      : [];
+    const byId = new Map(winners.map((u) => [u.id, u]));
+    return events.map((e) => {
+      const w = e.winnerUserId ? byId.get(e.winnerUserId) : undefined;
+      return { ...e, winner: w ? { id: w.id, name: w.fullName ?? 'Bạn Tubu', avatar: w.avatarUrl } : null };
+    });
+  }
+
+  /**
+   * Người dự thi của một sự kiện (quản trị chọn người thắng từ đây, không phải dán userId): mỗi người một dòng với bài
+   * mới nhất và số bài đã đăng. Chỉ bài PUBLISHED vì bài chờ duyệt/bị từ chối chưa được công nhận là dự thi.
+   */
+  async adminEventParticipants(eventId: string) {
+    const posts = await this.prisma.feedPost.findMany({
+      where: { status: 'PUBLISHED', meta: { path: ['eventId'], equals: eventId } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 500,
+      select: { id: true, userId: true, title: true, body: true, createdAt: true, user: { select: { fullName: true, avatarUrl: true } } },
+    });
+    const byUser = new Map<string, { userId: string; name: string; avatar: string | null; postId: string; postTitle: string; postedAt: Date; postCount: number }>();
+    for (const p of posts) {
+      const seen = byUser.get(p.userId);
+      if (seen) {
+        seen.postCount += 1;
+        continue;
+      }
+      byUser.set(p.userId, {
+        userId: p.userId,
+        name: p.user.fullName ?? 'Bạn Tubu',
+        avatar: p.user.avatarUrl,
+        postId: p.id,
+        postTitle: previewTitle(p.title, p.body),
+        postedAt: p.createdAt,
+        postCount: 1,
+      });
+    }
+    return [...byUser.values()];
+  }
+
   /** Tạo sự kiện mới (admin). */
   async createEvent(dto: CreateEventInput) {
     if (new Date(dto.startAt) >= new Date(dto.endAt)) {
@@ -1084,7 +1137,7 @@ export class CommunityFeedService {
   async pickWinner(eventId: string, userId: string) {
     const event = await this.prisma.communityEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, status: true, rewardPoints: true },
+      select: { id: true, title: true, status: true, rewardPoints: true },
     });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
@@ -1100,6 +1153,13 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
     }
+    // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); lỗi thông báo không đảo việc đã chốt.
+    await this.notifications
+      ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
+        title: event.title,
+        reward: event.rewardPoints > 0 ? ` Bạn được thưởng ${event.rewardPoints} Điểm Xanh.` : '',
+      })
+      .catch((e: unknown) => this.logger.warn(`Không báo được người thắng sự kiện ${eventId}/${userId}: ${(e as Error).message}`));
     return { ok: true };
   }
 }

@@ -37,6 +37,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
 }
 
 const HOUR = 3600 * 1000;
+const expired = (id: string) => ({ id, product: { name: 'Nước rửa chén', slug: 'nuoc-rua-chen' } });
 function group(extra: Record<string, unknown> = {}) {
   return {
     id: 'gb1',
@@ -318,12 +319,55 @@ describe('GroupBuyService.listOpen / expireGroups', () => {
 
   it('expireGroups: đánh dấu OPEN quá hạn → FAILED, trả số lượng', async () => {
     const prisma = makePrisma();
-    (prisma.groupBuy.updateMany as jest.Mock).mockResolvedValue({ count: 4 });
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([expired('gbA'), expired('gbB')]);
     const n = await new GroupBuyService(prisma, makeConfig()).expireGroups();
-    expect(n).toBe(4);
+    expect(n).toBe(2);
     const call = (prisma.groupBuy.updateMany as jest.Mock).mock.calls[0][0];
-    expect(call.where.status).toBe('OPEN');
+    expect(call.where).toMatchObject({ id: 'gbA', status: 'OPEN' });
+    expect(call.where.expiresAt).toHaveProperty('lte');
     expect(call.data.status).toBe('FAILED');
+  });
+
+  // R2-ENGAGE-10: nhóm hết hạn chuyển FAILED trong im lặng, khách chờ mà không biết kết quả.
+  describe('báo thành viên khi nhóm hết hạn (R2-ENGAGE-10)', () => {
+    it('mỗi thành viên (kể cả người mở nhóm) nhận GROUP_BUY_FAILED kèm tên sản phẩm và slug', async () => {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([expired('gbA')]);
+      (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }]);
+      const notify = jest.fn().mockResolvedValue(undefined);
+      await new GroupBuyService(prisma, makeConfig(), { notify } as never).expireGroups();
+      expect(notify).toHaveBeenCalledTimes(2);
+      expect(notify).toHaveBeenCalledWith('u0', 'GROUP_BUY_FAILED', { product: 'Nước rửa chén', product_slug: 'nuoc-rua-chen' });
+      expect(notify).toHaveBeenCalledWith('uA', 'GROUP_BUY_FAILED', { product: 'Nước rửa chén', product_slug: 'nuoc-rua-chen' });
+    });
+
+    it('chỉ báo nhóm do CHÍNH lần quét này chuyển FAILED (cron/instance khác đã chuyển rồi thì không báo lại)', async () => {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([expired('gbA'), expired('gbB')]);
+      (prisma.groupBuy.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+      (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }]);
+      const notify = jest.fn().mockResolvedValue(undefined);
+      const n = await new GroupBuyService(prisma, makeConfig(), { notify } as never).expireGroups();
+      expect(n).toBe(1);
+      expect(prisma.groupBuyMember.findMany).toHaveBeenCalledTimes(1);
+      expect((prisma.groupBuyMember.findMany as jest.Mock).mock.calls[0][0].where).toEqual({ groupBuyId: 'gbB' });
+    });
+
+    it('thông báo lỗi không làm hỏng việc đóng nhóm và không chặn thành viên còn lại', async () => {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([expired('gbA')]);
+      (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }, { userId: 'uA' }]);
+      const notify = jest.fn().mockRejectedValueOnce(new Error('db')).mockResolvedValueOnce(undefined);
+      const n = await new GroupBuyService(prisma, makeConfig(), { notify } as never).expireGroups();
+      expect(n).toBe(1);
+      expect(notify).toHaveBeenCalledTimes(2);
+    });
+
+    it('không có dịch vụ thông báo (khởi tạo trực tiếp) vẫn đóng nhóm bình thường', async () => {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([expired('gbA')]);
+      expect(await new GroupBuyService(prisma, makeConfig()).expireGroups()).toBe(1);
+    });
   });
 });
 

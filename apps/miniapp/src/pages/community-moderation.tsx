@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Page, Input, useSnackbar } from 'zmp-ui';
+import { Page, Input, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, X, EyeOff, Gift } from 'lucide-react';
+import { Check, X, EyeOff, Gift, Trophy } from 'lucide-react';
 import {
   adminPendingPosts,
   adminApprovePost,
@@ -10,14 +10,15 @@ import {
   adminResolveReport,
   adminHidePost,
   removeComment,
-  listEvents,
+  adminEvents,
+  adminEventParticipants,
   createEvent,
   closeEvent,
   pickEventWinner,
   type AdminPendingPost,
   type AdminReport,
+  type AdminCommunityEvent,
   type FeedPostKind,
-  type CommunityEvent,
   type CreateEventInput,
 } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
@@ -303,7 +304,8 @@ function ReportCard({
 function EventsSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  const eventsQ = useQuery({ queryKey: ['admin-community-events'], queryFn: listEvents });
+  const [view, setView] = useState<'OPEN' | 'CLOSED'>('OPEN');
+  const eventsQ = useQuery({ queryKey: ['admin-community-events', view], queryFn: () => adminEvents(view) });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-community-events'] });
 
   const [title, setTitle] = useState('');
@@ -394,26 +396,71 @@ function EventsSection() {
         </div>
       </Card>
 
+      <SegmentedTabs
+        items={[
+          { key: 'OPEN', label: vi.community.eventsOpen },
+          { key: 'CLOSED', label: vi.community.eventsClosed },
+        ]}
+        value={view}
+        onChange={(key) => setView(key as 'OPEN' | 'CLOSED')}
+      />
+
       {eventsQ.isLoading ? (
         <Skeleton height={120} radius="var(--radius-card)" />
       ) : eventsQ.isError ? (
         <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />
       ) : !eventsQ.data || eventsQ.data.length === 0 ? (
-        <EmptyState art="leaf" heading={vi.community.noEvents} />
+        <EmptyState art="leaf" heading={view === 'OPEN' ? vi.community.noEvents : vi.community.noClosedEvents} />
       ) : (
         <div style={LIST_STYLE}>
-          {eventsQ.data.map((event) => (
-            <AdminEventCard key={event.id} event={event} onDone={invalidate} />
-          ))}
+          {eventsQ.data.map((event) =>
+            view === 'OPEN' ? (
+              <AdminEventCard key={event.id} event={event} onDone={invalidate} />
+            ) : (
+              <ClosedEventCard key={event.id} event={event} />
+            ),
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () => void }) {
+function ClosedEventCard({ event }: { event: AdminCommunityEvent }) {
+  return (
+    <Card padding={12}>
+      <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{event.title}</Text>
+      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+        {vi.community.eventEnds}: {formatDate(event.endAt)} ·
+        <Icon icon={Gift} size="sm" tone="muted" />
+        {formatPoints(event.rewardPoints)}
+      </Text>
+      {event.winner ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <Avatar size={32} src={event.winner.avatar ?? undefined} />
+          <div style={{ minWidth: 0 }}>
+            <Text variant="caption" tone="tertiary" as="div">{vi.community.winnerIs}</Text>
+            <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{event.winner.name}</Text>
+          </div>
+        </div>
+      ) : (
+        <Text variant="body-sm" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.community.noWinner}</Text>
+      )}
+    </Card>
+  );
+}
+
+function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone: () => void }) {
   const { openSnackbar } = useSnackbar();
-  const [winnerUserId, setWinnerUserId] = useState('');
+  const [choosing, setChoosing] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const participantsQ = useQuery({
+    queryKey: ['admin-community-event-participants', event.id],
+    queryFn: () => adminEventParticipants(event.id),
+    enabled: choosing,
+  });
+  const participants = participantsQ.data ?? [];
+  const chosen = participants.find((p) => p.userId === selected) ?? null;
 
   const closeM = useMutation({
     mutationFn: () => closeEvent(event.id),
@@ -424,7 +471,7 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const winnerM = useMutation({
-    mutationFn: () => pickEventWinner(event.id, winnerUserId.trim()),
+    mutationFn: (userId: string) => pickEventWinner(event.id, userId),
     onSuccess: () => {
       openSnackbar({ text: vi.community.winnerPicked, type: 'success' });
       onDone();
@@ -445,18 +492,75 @@ function AdminEventCard({ event, onDone }: { event: CommunityEvent; onDone: () =
         <Icon icon={Gift} size="sm" tone="muted" />
         {formatPoints(event.rewardPoints)}
       </Text>
-      <div style={{ ...ACTION_ROW_STYLE, alignItems: 'center' }}>
-        <Input
-          aria-label={vi.community.winnerUserIdPlaceholder}
-          placeholder={vi.community.winnerUserIdPlaceholder}
-          value={winnerUserId}
-          onChange={(e) => setWinnerUserId(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <Button loading={winnerM.isPending} disabled={!winnerUserId.trim()} onPress={() => winnerM.mutate()}>
+
+      {choosing ? (
+        <div style={{ marginTop: 10 }}>
+          <Text variant="label" as="div">{vi.community.chooseWinner}</Text>
+          {participantsQ.isLoading ? (
+            <Skeleton height={56} radius="var(--radius-card)" style={{ marginTop: 8 }} />
+          ) : participantsQ.isError ? (
+            <ErrorState message={getErrorMessage(participantsQ.error)} onRetry={() => void participantsQ.refetch()} />
+          ) : participants.length === 0 ? (
+            <Text variant="body-sm" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.community.noParticipants}</Text>
+          ) : (
+            <div role="radiogroup" aria-label={vi.community.chooseWinner} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {participants.map((p) => {
+                const active = p.userId === selected;
+                return (
+                  <button
+                    key={p.userId}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setSelected(p.userId)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      minHeight: 56,
+                      padding: '8px 10px',
+                      textAlign: 'left',
+                      font: 'inherit',
+                      cursor: 'pointer',
+                      border: `1px solid ${active ? 'var(--color-action-primary-bg)' : 'var(--color-border-default)'}`,
+                      borderRadius: 'var(--radius-control)',
+                      background: active ? 'var(--color-bg-subtle)' : 'var(--color-bg-surface)',
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    <Avatar size={36} src={p.avatar ?? undefined} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{p.name}</Text>
+                      <Text variant="caption" tone="tertiary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.postTitle}
+                      </Text>
+                      <Text variant="caption" tone="tertiary" as="div">
+                        {vi.community.participantPosts(p.postCount)} · {timeAgo(p.postedAt)}
+                      </Text>
+                    </span>
+                    {active && <Icon icon={Check} size="sm" tone="brand" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div style={ACTION_ROW_STYLE}>
+            <Button
+              fullWidth
+              icon={Trophy}
+              loading={winnerM.isPending}
+              disabled={!chosen}
+              onPress={() => chosen && winnerM.mutate(chosen.userId)}
+            >
+              {chosen ? vi.community.confirmWinner(chosen.name) : vi.community.pickWinner}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="secondary" fullWidth icon={Trophy} onPress={() => setChoosing(true)} style={{ marginTop: 10 }}>
           {vi.community.pickWinner}
         </Button>
-      </div>
+      )}
       <Button variant="danger" fullWidth loading={closeM.isPending} onPress={() => closeM.mutate()} style={{ marginTop: 8 }}>
         {vi.community.closeEvent}
       </Button>
