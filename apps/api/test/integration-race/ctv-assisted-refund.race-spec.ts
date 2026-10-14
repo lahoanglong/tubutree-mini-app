@@ -336,6 +336,10 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
 
     expect(await walletOf(buyer.id)).toBe(120_000);
-    expect(await prisma.orderCustomerRefund.findFirst({ where: { orderId: order.id } })).toBeNull();
+    expect(await prisma.orderCustomerRefund.findFirst({ where: { orderId: order.id, kind: 'END_CUSTOMER' } })).toBeNull();
+    const rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: 'CANCEL', method: 'WALLET', status: 'COMPLETED', amount: 120_000, userId: buyer.id }),
+    ]);
   });
 });

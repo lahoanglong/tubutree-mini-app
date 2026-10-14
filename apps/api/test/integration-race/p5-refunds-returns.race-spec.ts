@@ -304,9 +304,13 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
       }
       expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status, paymentStatus: 'REFUNDED' });
       expect(await walletOf(user.id)).toBe(150_000);
+      const walletTrace = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+      expect(walletTrace).toEqual([
+        expect.objectContaining({ kind: status === 'CANCELLED' ? 'CANCEL' : 'RETURN', method: 'WALLET', status: 'COMPLETED', amount: 150_000 }),
+      ]);
 
       await Promise.all([1, 2].map(() => zalopay.handleCallback(raw, zalopayMac(raw))));
-      expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(0);
+      expect(await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } })).toEqual(walletTrace);
       expect(await walletOf(user.id)).toBe(150_000);
     },
   );
