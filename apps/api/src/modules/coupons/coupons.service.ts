@@ -24,6 +24,19 @@ export function normalizeCouponCode(code: string): string {
   return code.replace(/\s+/g, '').toUpperCase();
 }
 
+/**
+ * Mã bị từ chối vì chưa đạt đơn tối thiểu. `base` = phần hàng đã dùng để xét (đã loại flash; mã gắn sản phẩm thì chỉ
+ * các dòng sản phẩm đó), để caller giải thích đúng phần được tính thay vì đoán từ thông điệp lỗi.
+ */
+export class CouponMinOrderError extends BadRequestException {
+  constructor(
+    readonly minOrder: number,
+    readonly base: number,
+  ) {
+    super(`Đơn tối thiểu ${minOrder.toLocaleString('vi-VN')}đ để dùng mã này.`);
+  }
+}
+
 /** Sản phẩm mà mã bị giới hạn (null = áp cho mọi sản phẩm). */
 export function couponProductIds(applyTo: unknown): string[] | null {
   if (!applyTo || typeof applyTo !== 'object') return null;
@@ -70,11 +83,7 @@ export class CouponsService {
       }
       subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
     }
-    if (coupon.minOrder && subtotal < coupon.minOrder) {
-      throw new BadRequestException(
-        `Đơn tối thiểu ${coupon.minOrder.toLocaleString('vi-VN')}đ để dùng mã này.`,
-      );
-    }
+    if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);
 
     const usedByUser = await this.prisma.couponRedemption.count({
       where: { couponId: coupon.id, userId },

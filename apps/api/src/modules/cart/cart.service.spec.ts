@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { CartService } from './cart.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { CouponsService } from '../coupons/coupons.service';
+import { CouponMinOrderError, CouponsService } from '../coupons/coupons.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -481,13 +481,83 @@ describe('CartService guard tồn kho', () => {
       resolveEffective: jest.fn().mockResolvedValue(new Map([['v1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
     } as any;
 
-    it('applyCoupon bị từ chối khi giỏ có hàng giờ vàng: lỗi nói hàng giờ vàng không được tính và phần được tính là bao nhiêu', async () => {
-      const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 250.000đ để dùng mã này.')) } as any;
+    it('applyCoupon bị từ chối vì đơn tối thiểu mà tính cả hàng giờ vàng thì đủ: lỗi nói hàng giờ vàng không được tính và phần được tính là bao nhiêu', async () => {
+      const validateAndCompute = jest
+        .fn()
+        .mockRejectedValueOnce(new CouponMinOrderError(250000, 165000))
+        .mockResolvedValueOnce({ discount: 25000, freeship: false });
       const prisma = flashCart(null);
-      await expect(new CartService(prisma, couponsSvc, config, flashSvc, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
+      await expect(new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
         'Đơn tối thiểu 250.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 165.000đ.',
       );
+      expect(validateAndCompute).toHaveBeenLastCalledWith('XANH10', 'u1', 303000, [
+        { productId: 'p1', total: 138000 },
+        { productId: 'p2', total: 165000 },
+      ]);
       expect(prisma.cart.update).not.toHaveBeenCalled();
+    });
+
+    it('applyCoupon: mã không tồn tại / hết hạn / hết lượt khi giỏ có hàng giờ vàng → giữ nguyên lỗi, không nhắc giờ vàng', async () => {
+      for (const reason of ['Mã giảm giá không tồn tại.', 'Mã giảm giá đã hết hạn hoặc chưa hiệu lực.', 'Bạn đã dùng hết lượt cho mã này.']) {
+        const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException(reason)) } as any;
+        const err = await new CartService(flashCart(null), couponsSvc, config, flashSvc, analytics).applyCoupon('u1', 'XANH10').catch((e: Error) => e);
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect((err as Error).message).toBe(reason);
+      }
+    });
+
+    it('applyCoupon: chưa đủ đơn tối thiểu cả khi tính hàng giờ vàng → giữ nguyên lỗi, không nhắc giờ vàng', async () => {
+      const validateAndCompute = jest.fn().mockRejectedValue(new CouponMinOrderError(400000, 165000));
+      const err = await new CartService(flashCart(null), { validateAndCompute } as any, config, flashSvc, analytics)
+        .applyCoupon('u1', 'XANH10')
+        .catch((e: Error) => e);
+      expect((err as Error).message).toBe('Đơn tối thiểu 400.000đ để dùng mã này.');
+    });
+
+    describe('mã mua chung gắn sản phẩm (GBUY) khi giỏ có hàng giờ vàng', () => {
+      const line = (id: string, productId: string, quantity: number, price: number) => ({
+        id: `ci-${id}`,
+        variationId: id,
+        quantity,
+        variation: { isActive: true, productId, salePrice: null, retailPrice: price, stock: 9, name: id, product: { name: id, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+      });
+      const cartOf = (items: unknown[]) =>
+        ({
+          cart: {
+            upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }),
+            update: jest.fn().mockResolvedValue({}),
+          },
+        }) as any;
+      const realCoupons = () =>
+        new CouponsService({
+          coupon: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'cg', code: 'GBUY1', type: 'AMOUNT', value: 30000, minOrder: 200000, maxDiscount: null, isActive: true,
+              scope: 'PUBLIC', scopeMeta: null, applyTo: { productIds: ['pG'] },
+              startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null,
+            }),
+          },
+          couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+          user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', tierId: null, phone: '0912345678', zaloId: 'z1' }) },
+        } as unknown as PrismaService);
+
+      it('sản phẩm của mã không có giá giờ vàng, hàng khác đang giờ vàng → lỗi đơn tối thiểu nguyên văn, không nêu số tiền mâu thuẫn', async () => {
+        const prisma = cartOf([line('vF', 'pF', 2, 90000), line('vG', 'pG', 1, 165000), line('vX', 'pX', 1, 100000)]);
+        const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vF', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        expect((err as Error).message).toBe('Đơn tối thiểu 200.000đ để dùng mã này.');
+        expect(prisma.cart.update).not.toHaveBeenCalled();
+      });
+
+      it('chính sản phẩm của mã có dòng giờ vàng → nhắc giờ vàng, phần được tính là dòng sản phẩm đó giá thường', async () => {
+        const prisma = cartOf([line('vG1', 'pG', 2, 90000), line('vG2', 'pG', 1, 100000), line('vX', 'pX', 1, 300000)]);
+        const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        expect((err as Error).message).toBe(
+          'Đơn tối thiểu 200.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 100.000đ.',
+        );
+      });
     });
 
     it('applyCoupon bị từ chối khi giỏ không có hàng giờ vàng: giữ nguyên lỗi', async () => {

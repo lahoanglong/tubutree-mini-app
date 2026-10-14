@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
+import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { freeShipThreshold } from '../pricing/pricing.service';
 import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
@@ -280,13 +280,29 @@ export class CartService {
     try {
       await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
     } catch (err) {
-      if (err instanceof BadRequestException && cart.items.some((l) => l.isFlash)) {
-        throw new BadRequestException(couponRejectedWithFlash(err.message, couponBase));
+      if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart))) {
+        throw new BadRequestException(couponRejectedWithFlash(err.message, err.base));
       }
       throw err;
     }
     await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId);
+  }
+
+  /** Hàng giờ vàng mới là lý do chưa đạt đơn tối thiểu: tính cả các dòng giờ vàng thì mã hợp lệ. */
+  private async meetsMinOrderWithFlash(
+    code: string,
+    userId: string,
+    cart: { subtotal: number; items: { productId: string; total: number; isFlash: boolean }[] },
+  ): Promise<boolean> {
+    if (!cart.items.some((l) => l.isFlash)) return false;
+    try {
+      await this.coupons.validateAndCompute(code, userId, cart.subtotal, cart.items.map((l) => ({ productId: l.productId, total: l.total })));
+      return true;
+    } catch (err) {
+      if (err instanceof BadRequestException) return false;
+      throw err;
+    }
   }
 
   async removeCoupon(userId: string) {
