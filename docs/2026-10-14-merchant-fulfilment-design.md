@@ -69,7 +69,9 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
 
 1. Giỏ trả thêm `fulfiller` cho mỗi dòng: `{ kind: 'TUBU' }` hoặc `{ kind: 'MERCHANT', storefrontId, name }`.
    Dòng `TUBU` phải qua `isPancakeFulfilledLine`; dòng không thuộc nơi giao nào (không có mã Pancake và không phải hàng đối
-   tác tự giao) bị chặn với lỗi "đang cập nhật, tạm chưa đặt được".
+   tác tự giao) bị chặn với lỗi "đang cập nhật, tạm chưa đặt được". Hàng `MERCHANT` chỉ có nơi giao khi gian hàng sở hữu là
+   loại `MERCHANT`: chỉ chủ gian hàng loại này mới vào được tab "Đơn cần giao", nên hàng tự giao nằm ở gian hàng CTV/thương
+   hiệu (dữ liệu cũ, hoặc gian hàng đổi loại) cũng bị chặn như trên thay vì sinh đơn không ai xử lý được.
 2. Gom dòng theo nơi giao: kiện Tubu (nếu có) đứng đầu, sau đó từng gian hàng đối tác.
 3. Giảm giá tính trên TOÀN lần đặt như hiện tại (combo → mã → hạng → Điểm Xanh), rồi phân bổ về từng kiện:
    combo theo đúng dòng; mã, giảm hạng và Điểm Xanh chia theo tỉ lệ giá trị hàng của kiện (phần dư làm tròn dồn theo phương
@@ -79,7 +81,10 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
    ưu đãi hạng) trên tiền hàng của kiện; kiện đối tác dùng `Storefront.shippingFee` (trống thì `merchant.default_shipping_fee`),
    miễn phí khi tiền hàng của kiện đạt `Storefront.freeShipFrom`. Ngưỡng miễn phí của Tubu và mã freeship (Tubu tài trợ) chỉ
    áp cho kiện Tubu: phí giao của kiện đối tác là tiền của đối tác, chỉ được miễn theo ngưỡng của chính gian hàng. Giỏ và trang
-   thanh toán vì vậy tính tiến độ "mua thêm để được miễn phí vận chuyển" trên tiền hàng phần Tubu giao.
+   thanh toán vì vậy tính tiến độ "mua thêm để được miễn phí vận chuyển" trên tiền hàng phần Tubu giao. Mã freeship chỉ tính
+   là đã áp (và chỉ tiêu lượt) khi thật sự miễn được phí giao của kiện Tubu; giỏ chỉ hàng đối tác tự giao, hoặc kiện Tubu vốn
+   đã miễn phí giao, thì báo "Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao
+   đó." và không ghi lượt dùng.
 5. Thanh toán: kiện đối tác chỉ nhận **COD** (đối tác thu) hoặc **Ví Tubu** (Tubu giữ tiền). Chuyển khoản được Pancake đối soát
    theo mã đơn Pancake nên không có đường xác nhận cho đơn đối tác; ZaloPay đang ẩn ở cả hai app. Lần đặt bị tách cũng chỉ nhận
    COD/Ví vì một lệnh thanh toán ngoài chỉ trỏ được một mã đơn. Báo giá trả `blockedPaymentMethods` (phương thức → câu lý do)
@@ -87,7 +92,10 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
 6. Thu gom vỏ tái chế (Gomdon) chỉ gắn vào đơn Tubu; lần đặt không có hàng Tubu mà bật thu gom bị từ chối.
 7. Ghi đơn: một transaction tạo mọi đơn con, giữ tồn từng dòng, trừ điểm một lần dưới khoá dòng user rồi ghi sổ điểm theo
    từng đơn, trừ ví theo từng đơn, tạo hoa hồng CTV theo từng đơn. Mã giảm giá ghi nhận lượt dùng trên đơn đầu tiên
-   (`CouponRedemption.orderId`). Idempotency-Key gắn vào đơn đầu; gửi lại cùng key trả lại cả nhóm.
+   (`CouponRedemption.orderId`). Idempotency-Key gắn vào đơn đầu; gửi lại cùng key trả lại cả nhóm. Phần giảm của mã nằm ở
+   mọi đơn con, nên huỷ/trả một đơn con chỉ trả lượt dùng mã khi **mọi** đơn cùng `checkoutGroup` đã `CANCELLED`/`RETURNED`
+   (huỷ đơn đầu khi đơn gian hàng còn sống thì mã vẫn tính là đã dùng). Bước này khoá theo nhóm
+   (`pg_advisory_xact_lock('checkout-group-coupon:<group>')`) để hai lần huỷ cùng lúc trả lượt đúng một lần.
 8. Sau commit: đơn Tubu → hàng đợi Pancake/Gomdon như cũ; đơn đối tác → báo đối tác `MERCHANT_ORDER_NEW`. Khách nhận
    `ORDER_CONFIRMED` cho từng đơn.
 
@@ -145,8 +153,16 @@ cod        = paymentMethod = COD ? order.total : 0
 net        = goods + shippingFee − commission − cod   (> 0: Tubu trả đối tác, < 0: đối tác nộp lại Tubu)
 ```
 
-- Đơn đã đối soát rồi bị `RETURNED` → dòng `REVERSAL` âm, trừ vào phiếu kế tiếp. Đơn bị trả trước khi đối soát thì không bao
-  giờ lên bảng kê.
+- Đơn bị `RETURNED` (Tubu đã hoàn tiền cho khách, hàng về đối tác) → dòng `REVERSAL`, trừ vào phiếu kế tiếp:
+
+```
+đã đối soát (có dòng SALE):      goods/ship/commission đảo dấu, cod = 0, net = −(goods + ship − commission)
+chưa đối soát, COD đã hoàn tiền: goods = ship = commission = 0, cod = order.total, net = −order.total
+chưa đối soát, trả trước:        không lên bảng kê (Tubu giữ tiền và tự hoàn)
+```
+
+  Đơn COD đối tác đã thu tiền mặt của khách nhưng tiền hoàn cho khách do Tubu chi, nên đối tác nộp lại đúng số tiền mặt đã thu
+  dù đơn chưa từng vào phiếu. Bảng kê ở /merchant giải thích dòng này cho đối tác.
 - Admin lập phiếu theo gian hàng (gom mọi dòng đủ điều kiện), chuyển khoản tay vào tài khoản gian hàng khai ở tab "Tài khoản
   nhận đối soát", rồi bấm "Đã chuyển" kèm mã giao dịch. Phiếu âm là "đối tác cần nộp" và được đánh dấu "Đã thu".
 - Phí sàn: `Storefront.commissionPct` (admin đặt) hoặc `merchant.commission_pct` (mặc định 0,15). Hoa hồng CTV giới thiệu (nếu
@@ -168,10 +184,15 @@ net        = goods + shippingFee − commission − cod   (> 0: Tubu trả đố
 - Admin duyệt: trong một transaction, chuyển biến thể Pancake đó sang sản phẩm của đối tác (cùng một dòng `Variation`, nên giữ
   chỗ tồn, hoàn kho, đồng bộ tồn Pancake đều không đổi), xoá biến thể tạm, sản phẩm Tubu cũ hết biến thể thì tắt. Đồng bộ Pancake
   về sau chỉ cập nhật giá/tồn của biến thể theo `pancakeId`, không kéo nó về sản phẩm cũ. Hai đối tác xin cùng mã: lần duyệt sau
-  bị từ chối (cập nhật có điều kiện `productId = sản phẩm cũ`).
+  bị từ chối (cập nhật có điều kiện `productId = sản phẩm cũ`). Đối tác sửa nội dung sản phẩm đã liên kết đưa nó về chờ duyệt;
+  lần duyệt lại thấy biến thể đã thuộc chính sản phẩm này thì không chuyển gì nữa (kể cả hai admin duyệt lại cùng lúc), chỉ
+  báo trùng mã khi biến thể đang thuộc sản phẩm khác.
 - Không tích "Tubu giao hộ" (hoặc không nhập mã): sản phẩm `MERCHANT`, không có `pancakeId`, đối tác tự khai và tự sửa tồn.
+  Chỉ gian hàng loại `MERCHANT` được tạo sản phẩm (kể cả admin vào gian hàng CTV cũng không), vì chỉ loại này có tab giao đơn.
 - Migration `p8_seller_merchant_fulfilment`: `pancakeId` thành nullable; mọi `pancakeId LIKE 'MCH\_%'` (sản phẩm và biến thể) đổi
-  về `NULL`, sản phẩm đó thành `MERCHANT`. Chạy lại không đổi gì; không đụng dòng khác.
+  về `NULL`, sản phẩm đó thành `MERCHANT`. Sản phẩm `MERCHANT` nằm ở gian hàng không phải loại `MERCHANT` bị tắt bán (không ai
+  giao được); đơn cũ chỉ chuyển sang `fulfiller = MERCHANT` khi mọi dòng là hàng tự giao của gian hàng loại `MERCHANT`. Chạy lại
+  không đổi gì; không đụng dòng khác.
 - Kênh khác cũng đẩy Pancake (đơn đại lý, gói định kỳ, CTV lên đơn hộ) chỉ nhận hàng `isPancakeFulfilledLine`; bảng giá đại lý
   không hiện hàng đối tác tự giao.
 - Cron cứu hộ đẩy Pancake chỉ quét đơn `fulfiller = TUBU`.
