@@ -529,7 +529,8 @@ export class GameService {
   /**
    * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách: đơn đặt rồi huỷ không còn giữ được thưởng. INVITE_3 dùng đúng
    * số lượt giới thiệu thành công của chương trình giới thiệu (bạn được mời mua thành công, trừ lượt bị thu hồi), không
-   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1).
+   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1). REVIEW_3 chỉ đếm đánh giá có ảnh,
+   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh").
    */
   private async missionMetrics(userId: string) {
     const [profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
@@ -538,7 +539,7 @@ export class GameService {
         where: { userId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
       }),
       this.prisma.review.count({
-        where: { userId },
+        where: { userId, NOT: { images: { isEmpty: true } } },
       }),
       countReferralSuccesses(this.prisma, userId),
     ]);

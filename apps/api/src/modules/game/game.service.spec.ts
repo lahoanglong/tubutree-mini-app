@@ -1273,6 +1273,22 @@ describe('GameService.getMissions', () => {
     ]);
   });
 
+  // R2-ENGAGE-7: mô tả nhiệm vụ REVIEW_3 là "Viết 3 đánh giá có ảnh" nên chỉ đánh giá có ít nhất 1 ảnh được tính.
+  it('REVIEW_3 chỉ đếm đánh giá có ảnh (khớp mô tả nhiệm vụ)', async () => {
+    const reviewCount = jest.fn().mockResolvedValue(1);
+    const prisma = makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
+      order: { count: jest.fn().mockResolvedValue(0) },
+      review: { count: reviewCount },
+      user: { count: jest.fn().mockResolvedValue(0) },
+      mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
+      missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
+    expect(reviewCount).toHaveBeenCalledWith({ where: { userId: 'u1', NOT: { images: { isEmpty: true } } } });
+    expect(res.find((m) => m.code === 'REVIEW_3')).toMatchObject({ progress: 1, goal: 3, completed: false });
+  });
+
   it('A1-02: nhiệm vụ đã có dòng mission_progress khớp (missionId, cycleKey hiện tại) → claimed=true', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
