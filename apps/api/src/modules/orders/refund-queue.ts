@@ -10,6 +10,16 @@ export interface RefundNotifier {
   notify(userId: string, templateCode: string, data: Record<string, string>): Promise<void>;
 }
 
+/**
+ * Khoản chuyển khoản Tubu còn nợ khách: chưa ai chuyển (PENDING) hoặc admin đang chuyển (PROCESSING). Đơn đã lật REFUNDED
+ * mà còn khoản này thì tiền chưa tới tay khách — "Đang hoàn tiền" ở CSV đơn admin, cùng luật với web (order-view.ts,
+ * isRefundInProgress) cho danh sách đơn admin và chi tiết đơn của khách.
+ */
+export const BANK_REFUND_IN_PROGRESS = {
+  method: 'MANUAL_TRANSFER',
+  status: { in: ['PENDING', 'PROCESSING'] },
+} satisfies Prisma.OrderCustomerRefundWhereInput;
+
 export const OPS_REFUND_TEMPLATE = 'OPS_REFUND_ALERT';
 /** Báo admin tiền khách trả không khớp đơn (lệch số tiền ZaloPay). */
 export const OPS_PAYMENT_TEMPLATE = 'OPS_PAYMENT_ALERT';

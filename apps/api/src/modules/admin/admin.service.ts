@@ -94,6 +94,16 @@ export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | u
   };
 }
 
+/**
+ * Khoản hoàn của đơn cho danh sách/chi tiết đơn admin (nhãn "Đang hoàn tiền", dòng khoản hoàn ở ngăn kéo). Không gồm
+ * tài khoản ngân hàng: nhân viên CSKH/kho cũng xem danh sách này. DISMISSED không phải tiền Tubu nợ khách.
+ */
+const ORDER_LIST_REFUNDS = {
+  where: { status: { not: 'DISMISSED' } },
+  orderBy: { createdAt: 'asc' },
+  select: { id: true, kind: true, method: true, status: true, amount: true, createdAt: true, completedAt: true },
+} satisfies Prisma.Order$customerRefundsArgs;
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -735,6 +745,7 @@ export class AdminService {
           items: true,
           user: { select: { id: true, phone: true, fullName: true } },
           fulfillerStorefront: { select: { title: true } },
+          customerRefunds: ORDER_LIST_REFUNDS,
           gomdonAlerts: {
             where: { resolvedAt: null },
             orderBy: { createdAt: 'desc' },

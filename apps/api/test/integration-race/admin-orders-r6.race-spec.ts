@@ -5,7 +5,7 @@ import { createOrder, createUser, randCode } from './helpers';
 
 /**
  * Danh sách / CSV đơn admin trên Postgres THẬT (UAT vòng 4): tìm theo người nhận và SĐT người nhận thiếu số 0, mã Pancake
- * dán kèm '#', ký tự % và _ khớp đúng nghĩa đen (đơn, người dùng, mã giảm giá).
+ * dán kèm '#', ký tự % và _ khớp đúng nghĩa đen (đơn, người dùng, mã giảm giá), và trạng thái hoàn tiền thật của đơn.
  */
 describe('Admin orders — tìm kiếm và trạng thái hoàn tiền (real Postgres)', () => {
   let prisma: PrismaService;
@@ -127,5 +127,58 @@ describe('Admin orders — tìm kiếm và trạng thái hoàn tiền (real Post
     expect(await couponsOf(`ITC${tok}A`)).toEqual([coupon.id]);
     expect(await couponsOf(`ITC${tok}%`)).toEqual([]);
     expect(await couponsOf(`ITC${tok}_`)).toEqual([]);
+  });
+
+  it('R4-ADMIN-1: danh sách trả các khoản hoàn của đơn; CSV ghi "Đang hoàn tiền" khi khoản chuyển khoản còn Chờ/Đang chuyển', async () => {
+    const tok = randCode(6);
+    const buyer = await createUser(prisma, { fullName: `Hoàn ${tok}` });
+    const mk = (suffix: string) =>
+      createOrder(prisma, {
+        userId: buyer.id,
+        code: `ITH${tok}${suffix}`,
+        status: 'CANCELLED',
+        paymentMethod: 'BANK_TRANSFER',
+        paymentStatus: 'REFUNDED',
+      });
+    const pending = await mk('P');
+    const processing = await mk('R');
+    const done = await mk('C');
+    const wallet = await mk('W');
+    const refund = (o: { id: string; code: string }, method: 'MANUAL_TRANSFER' | 'WALLET', status: 'PENDING' | 'PROCESSING' | 'COMPLETED') =>
+      prisma.orderCustomerRefund.create({
+        data: { orderId: o.id, orderCode: o.code, kind: 'CANCEL', userId: buyer.id, amount: 178_000, method, status, reason: 'CANCELLED' },
+      });
+    await refund(pending, 'MANUAL_TRANSFER', 'PENDING');
+    await refund(processing, 'MANUAL_TRANSFER', 'PROCESSING');
+    await refund(done, 'MANUAL_TRANSFER', 'COMPLETED');
+    await refund(wallet, 'WALLET', 'COMPLETED');
+    await prisma.orderCustomerRefund.create({
+      data: {
+        orderId: done.id,
+        orderCode: done.code,
+        kind: 'OVERPAYMENT',
+        refKey: `x-${tok}`,
+        userId: buyer.id,
+        amount: 5_000,
+        method: 'MANUAL_TRANSFER',
+        status: 'DISMISSED',
+        reason: 'CANCELLED',
+      },
+    });
+
+    const rows = await list(`ITH${tok}`);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(pending.id)?.customerRefunds).toEqual([expect.objectContaining({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 178_000 })]);
+    expect(byId.get(processing.id)?.customerRefunds).toEqual([expect.objectContaining({ status: 'PROCESSING' })]);
+    expect(byId.get(done.id)?.customerRefunds).toEqual([expect.objectContaining({ method: 'MANUAL_TRANSFER', status: 'COMPLETED' })]);
+    expect(byId.get(wallet.id)?.customerRefunds).toEqual([expect.objectContaining({ method: 'WALLET', status: 'COMPLETED' })]);
+    expect(JSON.stringify(byId.get(pending.id)?.customerRefunds)).not.toMatch(/bankAccountNo/);
+
+    const csv = await csvOf(`ITH${tok}`);
+    const line = (code: string) => csv.split('\r\n').find((l) => l.startsWith(code)) ?? '';
+    expect(line(pending.code)).toContain(',Đang hoàn tiền,');
+    expect(line(processing.code)).toContain(',Đang hoàn tiền,');
+    expect(line(done.code)).toContain(',Đã hoàn tiền,');
+    expect(line(wallet.code)).toContain(',Đã hoàn tiền,');
   });
 });
