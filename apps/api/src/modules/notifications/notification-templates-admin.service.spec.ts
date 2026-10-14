@@ -21,8 +21,13 @@ function setup() {
     },
     notificationLog: {
       groupBy: jest.fn().mockResolvedValue([
-        { templateCode: 'ORDER_CONFIRMED', channel: 'INAPP', _count: { _all: 40 } },
-        { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', _count: { _all: 12 } },
+        { templateCode: 'ORDER_CONFIRMED', channel: 'INAPP', status: 'SENT', _count: { _all: 40 } },
+        { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', status: 'SENT', _count: { _all: 12 } },
+        { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', status: 'FAILED', _count: { _all: 3 } },
+        { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', status: 'RETRYING', _count: { _all: 1 } },
+      ]),
+      findMany: jest.fn().mockResolvedValue([
+        { templateCode: 'ORDER_SHIPPING', error: 'ZNS lỗi -118: user not exist', sentAt: new Date('2026-10-01T00:00:00Z') },
       ]),
     },
   } as unknown as PrismaService;
@@ -38,6 +43,17 @@ describe('NotificationTemplatesAdminService', () => {
     expect(byCode.ORDER_SHIPPING).toMatchObject({ delivery: 'ZNS', sent30d: { INAPP: 0, ZNS: 12 } });
     expect(byCode.GAME_STREAK).toMatchObject({ delivery: 'INAPP' });
     expect(rows[0]!.code).toBe('ORDER_CONFIRMED');
+  });
+
+  it('R2-ENGAGE-1: lượt ZNS lỗi không tính vào "đã gửi", admin thấy số lỗi và lý do gần nhất', async () => {
+    const { svc } = setup();
+    const byCode = Object.fromEntries((await svc.list()).map((r) => [r.code, r]));
+    expect(byCode.ORDER_SHIPPING).toMatchObject({
+      sent30d: { ZNS: 12 },
+      znsFailed30d: 3,
+      znsLastError: { text: 'ZNS lỗi -118: user not exist' },
+    });
+    expect(byCode.GAME_STREAK).toMatchObject({ znsFailed30d: 0, znsLastError: null });
   });
 
   it('điền mã mẫu ZNS (Zalo đã duyệt) → lưu, chuẩn hoá khoảng trắng', async () => {

@@ -80,7 +80,7 @@ describe('NotificationsService.notify', () => {
         }),
       },
     });
-    const sendTemplate = jest.fn().mockResolvedValue(true);
+    const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
     const zns = { sendTemplate } as unknown as ZnsClient;
     const analytics = makeAnalytics();
     await new NotificationsService(prisma, zns, analytics).notify('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU9' });
@@ -139,7 +139,7 @@ describe('NotificationsService.notify', () => {
     );
   });
 
-  it('ZNS gửi thất bại (false) → log ZNS status FAILED', async () => {
+  it('ZNS gửi thất bại → log ZNS status FAILED kèm mã lỗi và lý do của Zalo', async () => {
     const { prisma, create } = makePrisma({
       notificationTemplate: {
         findUnique: jest.fn().mockResolvedValue({
@@ -150,10 +150,13 @@ describe('NotificationsService.notify', () => {
         }),
       },
     });
-    const zns = { sendTemplate: jest.fn().mockResolvedValue(false) } as unknown as ZnsClient;
+    const failure = { ok: false, retryable: false, code: -124, reason: 'template not approved' };
+    const zns = { sendTemplate: jest.fn().mockResolvedValue(failure) } as unknown as ZnsClient;
     const analytics = makeAnalytics();
     await new NotificationsService(prisma, zns, analytics).notify('u1', 'C', {});
     expect(create.mock.calls[1][0].data.status).toBe('FAILED');
+    expect(create.mock.calls[1][0].data.error).toContain('-124');
+    expect(create.mock.calls[1][0].data.error).toContain('template not approved');
     // Event notification_sent bắn cho ZNS vô điều kiện — status gửi thành công/thất bại đã nằm
     // trong NotificationLog.status riêng, không lẫn vào việc "event có xảy ra" hay không.
     expect(analytics.recordBestEffort).toHaveBeenCalledTimes(2);

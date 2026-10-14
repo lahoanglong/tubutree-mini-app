@@ -891,6 +891,9 @@ export interface AdminNotificationTemplate {
   bodyTemplate: string;
   delivery: NotificationDelivery;
   sent30d: { INAPP: number; ZNS: number };
+  /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
+  znsFailed30d?: number;
+  znsLastError?: { text: string; at: string } | null;
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (

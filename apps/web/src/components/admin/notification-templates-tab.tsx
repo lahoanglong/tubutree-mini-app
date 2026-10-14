@@ -10,6 +10,7 @@ import {
 } from '@/lib/admin-client';
 import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge } from './ui';
 import type { Tone } from '@/lib/recycling';
+import { formatDateTime } from '@/lib/format-date';
 
 const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
   ZNS: { tone: 'success', label: 'Gửi ZNS + trong app' },
@@ -73,6 +74,7 @@ function TemplateRow({ item }: { item: AdminNotificationTemplate }) {
     f.bodyTemplate.trim() !== item.bodyTemplate;
   const d = DELIVERY[item.delivery];
   const sent = item.sent30d.INAPP + item.sent30d.ZNS;
+  const failed = item.znsFailed30d ?? 0;
 
   return (
     <div data-template={item.code} className="rounded-card border border-stone-200 bg-stone-0 p-3">
@@ -119,6 +121,14 @@ function TemplateRow({ item }: { item: AdminNotificationTemplate }) {
         />
       </label>
       {needsId && <p className="mt-1 text-xs text-warning-fg">Kênh ZNS cần mã mẫu Zalo đã duyệt.</p>}
+      {failed > 0 && (
+        <div data-zns-failure className="mt-2">
+          <Notice tone="danger" role="status">
+            {failed} lượt ZNS lỗi trong 30 ngày, khách chưa nhận tin Zalo
+            {item.znsLastError ? `. Lần gần nhất (${formatDateTime(item.znsLastError.at)}): ${item.znsLastError.text}` : '.'}
+          </Notice>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"

@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
+import { znsFailureText, type ZnsSendResult } from '../integrations/zns/zns-result';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -11,14 +12,26 @@ import { isAllowedByPrefs, type NotificationPrefs } from './notification-categor
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
 
-/** Job data cho retry gửi ZNS qua BullMQ khi lần gửi đồng bộ trong notify() thất bại
- * (xem notifications.processor.ts). */
-export interface ZnsRetryJobData {
+/** Job gửi ZNS qua BullMQ (xem notifications.processor.ts): lần gửi đầu và mọi lần thử lại. */
+export interface ZnsSendJobData {
   notificationLogId: string;
   phone: string;
   templateId: string;
   templateData: Record<string, string>;
 }
+
+/**
+ * Lần gửi ZNS đầu tiên cũng đi qua queue để request đặt hàng/thanh toán không phải chờ Zalo (timeout 10s mỗi lần
+ * gọi). Backoff dài hơn mặc định của queue (2s): ZNS lỗi tạm thời thường là Zalo gián đoạn hoặc access token chờ làm
+ * mới nên thử lại sau vài chục giây là vô ích. 6 lần ≈ 15 phút.
+ */
+export const ZNS_SEND_JOB_OPTIONS = {
+  attempts: 6,
+  backoff: { type: 'exponential' as const, delay: 30_000 },
+};
+
+/** Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch. */
+export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED';
 
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).
@@ -71,52 +84,80 @@ export class NotificationsService {
 
     // ZNS nếu template là kênh ZNS + user có phone.
     if (tpl?.channel === 'ZNS' && user?.phone && tpl.zaloTemplateId) {
-      const ok = await this.zns.sendTemplate(user.phone, tpl.zaloTemplateId, data);
-      const log = await this.prisma.notificationLog.create({
-        data: {
-          userId,
-          templateCode,
-          channel: 'ZNS',
-          payload: { data },
-          status: ok ? 'SENT' : 'FAILED',
-        },
-      });
-      await this.analytics.recordBestEffort({
-        eventName: 'notification_sent',
-        userId,
-        platform: 'system',
-        notificationId: log.id,
-        props: { templateCode, channel: 'ZNS' },
-      });
-      // Trước đây gửi ZNS lỗi mạng 1 lần là mất thông báo vĩnh viễn (chỉ ghi FAILED rồi thôi,
-      // không ai gửi lại). Enqueue job retry qua BullMQ (5 lần, backoff exponential — xem
-      // defaultJobOptions trong jobs/queue.module.ts); processor notifications.processor.ts sẽ
-      // gọi lại zns.sendTemplate() và lật log này sang SENT nếu thành công.
-      if (!ok && this.notificationsQueue) {
-        await withQueueTimeout(
-          this.notificationsQueue.add('zns-retry', {
-            notificationLogId: log.id,
-            phone: user.phone,
-            templateId: tpl.zaloTemplateId,
-            templateData: data,
-          } satisfies ZnsRetryJobData),
-          `${QUEUE_NOTIFICATIONS} ${log.id}`,
-        );
-      }
+      await this.dispatchZns(userId, templateCode, user.phone, tpl.zaloTemplateId, data);
     }
   }
 
-  /** Gọi bởi NotificationsProcessor để retry gửi ZNS cho 1 NotificationLog đã FAILED.
-   * Trả về true/false thay vì throw — processor tự quyết định khi nào rethrow cho BullMQ đếm attempt. */
-  async retryZnsSend(job: ZnsRetryJobData): Promise<boolean> {
-    const ok = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData);
-    if (ok) {
-      await this.prisma.notificationLog.update({
-        where: { id: job.notificationLogId },
-        data: { status: 'SENT' },
-      });
+  /**
+   * Có queue: ghi log PENDING rồi xếp job — người gọi (checkout, thanh toán...) không chờ Zalo. Trạng thái cuối
+   * (SENT/RETRYING/FAILED kèm mã + lý do trong cột `error`) do deliverZns() ghi. Không có queue (test, khởi tạo trực
+   * tiếp): gửi ngay tại chỗ và ghi kết quả, lỗi tạm thời không ai thử lại nên ghi FAILED.
+   */
+  private async dispatchZns(
+    userId: string,
+    templateCode: string,
+    phone: string,
+    templateId: string,
+    data: Record<string, string>,
+  ): Promise<void> {
+    const queue = this.notificationsQueue;
+    let result: ZnsSendResult | null = null;
+    if (!queue) result = await this.zns.sendTemplate(phone, templateId, data);
+
+    const log = await this.prisma.notificationLog.create({
+      data: {
+        userId,
+        templateCode,
+        channel: 'ZNS',
+        payload: { data },
+        status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
+        error: result && !result.ok ? znsFailureText(result) : null,
+      },
+    });
+    await this.analytics.recordBestEffort({
+      eventName: 'notification_sent',
+      userId,
+      platform: 'system',
+      notificationId: log.id,
+      props: { templateCode, channel: 'ZNS' },
+    });
+    if (!queue) return;
+
+    const job: ZnsSendJobData = { notificationLogId: log.id, phone, templateId, templateData: data };
+    try {
+      await withQueueTimeout(
+        queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}` }),
+        `${QUEUE_NOTIFICATIONS} ${log.id}`,
+      );
+    } catch (err) {
+      const reason = `Không xếp được hàng đợi gửi ZNS: ${err instanceof Error ? err.message : String(err)}`;
+      this.logger.error(`${reason} (log ${log.id})`);
+      await this.prisma.notificationLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: reason } });
     }
-    return ok;
+  }
+
+  /**
+   * Gọi bởi NotificationsProcessor cho mỗi lượt gửi ZNS của một NotificationLog (lượt đầu lẫn thử lại). Ghi kết quả vào
+   * log: SENT; RETRYING (lỗi tạm thời, còn lượt); FAILED (lỗi vĩnh viễn hoặc hết lượt) kèm mã + lý do để admin lọc.
+   * Trả kết cục thay vì ném — processor tự quyết định khi nào ném cho BullMQ xếp lịch thử lại.
+   */
+  async deliverZns(job: ZnsSendJobData, finalAttempt: boolean): Promise<ZnsDeliveryOutcome> {
+    const where = { id: job.notificationLogId };
+    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
+    if (current?.status === 'SENT') return 'SENT';
+
+    const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData);
+    if (result.ok) {
+      await this.prisma.notificationLog.update({ where, data: { status: 'SENT', error: null } });
+      return 'SENT';
+    }
+    const error = znsFailureText(result);
+    if (result.retryable && !finalAttempt) {
+      await this.prisma.notificationLog.update({ where, data: { status: 'RETRYING', error } });
+      return 'RETRY';
+    }
+    await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error } });
+    return 'FAILED';
   }
 
   async getPrefs(userId: string): Promise<NotificationPrefs> {

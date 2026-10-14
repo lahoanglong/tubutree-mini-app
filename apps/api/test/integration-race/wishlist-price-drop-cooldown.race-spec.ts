@@ -24,7 +24,7 @@ describe('Báo giảm giá wishlist: cooldown và ngưỡng (real Postgres)', ()
         SystemConfigService,
         LifecycleService,
         { provide: AnalyticsEventsService, useValue: { recordBestEffort: jest.fn() } },
-        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue(true) } },
+        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue({ ok: true }) } },
         {
           provide: NotificationsService,
           inject: [PrismaService, ZnsClient, AnalyticsEventsService],
