@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   checkoutPoints,
   isInvoiceValid,
+  partnerPointsState,
   walletUnavailableReason,
   pointsEarnLabel,
   pointsUseLabel,
@@ -212,5 +213,26 @@ describe('pointsUseLabel / pointsEarnLabel (C-080)', () => {
   it('điểm sẽ tích có dấu nghìn: "Nhận +1.250 Điểm Xanh khi giao thành công"', () => {
     expect(pointsEarnLabel(1250)).toBe('Nhận +1.250 Điểm Xanh khi giao thành công');
     expect(pointsEarnLabel(35)).toBe('Nhận +35 Điểm Xanh khi giao thành công');
+  });
+});
+
+const PARTNER_NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
+
+describe('partnerPointsState (Q8 S7)', () => {
+  it('giỏ không có hàng đối tác (hoặc API cũ): không đổi gì', () => {
+    expect(partnerPointsState(undefined)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+    expect(partnerPointsState({ pointsMax: 20, pointsPartnerNote: null })).toEqual({ disabled: false, capNote: null, partnerNote: null });
+  });
+
+  it('giỏ có hàng đối tác: nêu trần điểm của đơn và câu giải thích', () => {
+    expect(partnerPointsState({ pointsMax: 1250, pointsPartnerNote: PARTNER_NOTE })).toEqual({
+      disabled: false,
+      capNote: 'Đơn này dùng tối đa 1.250 Điểm Xanh',
+      partnerNote: PARTNER_NOTE,
+    });
+  });
+
+  it('giỏ chỉ hàng đối tác: tắt ô Điểm Xanh, giữ câu giải thích', () => {
+    expect(partnerPointsState({ pointsMax: 0, pointsPartnerNote: PARTNER_NOTE })).toEqual({ disabled: true, capNote: null, partnerNote: PARTNER_NOTE });
   });
 });
