@@ -639,7 +639,7 @@ describe('cổng đối tác — tab Đối soát', () => {
       lines: [
         { orderId: 'o1', orderCode: 'TF1', kind: 'SALE', refKey: '', goodsAmount: 200000, shippingFee: 30000, commissionAmount: 30000, codCollected: 0, netAmount: 200000, deliveredAt: '2026-10-01T03:00:00.000Z' },
         sale,
-        { ...sale, kind: 'REVERSAL', refKey: 'RETURN:r1:ITEM:i1', goodsAmount: -51000, commissionAmount: -5100, opsFeeAmount: -2220, netAmount: -43680, deliveredAt: null },
+        { ...sale, kind: 'REVERSAL', refKey: 'RETURN:r1:ITEM:i1', units: 1, goodsAmount: -51000, commissionAmount: -5100, opsFeeAmount: -2220, netAmount: -43680, deliveredAt: null },
       ],
       total: 243680,
       upcoming: [{ ...sale, orderId: 'o8', orderCode: 'TT8', refKey: 'ITEM:i9', orderItemId: 'i9', availableAt: '2026-10-20T03:00:00.000Z' }],
@@ -671,10 +671,32 @@ describe('cổng đối tác — tab Đối soát', () => {
     const rows = Array.from(pending.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(rows[0]).toEqual(['TF1', '01/10/2026', '200.000đ', '30.000đ', '−30.000đ', '—', '0đ', '200.000đ']);
     expect(rows[1]).toEqual(['TT7Tubu giao hộMật ong (Hũ 500g) × 2', '01/10/2026', '102.000đ', '—', '−10.200đ', '−4.440đ', '—', '87.360đ']);
-    expect(rows[2]).toEqual(['TT7(trả một phần)Tubu giao hộMật ong (Hũ 500g) × 2', '—', '−51.000đ', '—', '5.100đ', '2.220đ', '—', '−43.680đ']);
+    // R4-PARTNER-2: dòng đảo ghi số đơn vị trả (1/2), không phải "× 2" của cả dòng hàng.
+    expect(rows[2]).toEqual(['TT7(trả một phần)Tubu giao hộMật ong (Hũ 500g) · trả 1/2', '—', '−51.000đ', '—', '5.100đ', '2.220đ', '—', '−43.680đ']);
     const payout = root.querySelector('li[aria-label^="Phiếu"]')!;
     expect(payout.querySelector('table')!.textContent).toContain('Tubu giao hộ');
     expect(scrollRegionProblems(root)).toEqual([]);
+  });
+
+  it('R4-PARTNER-2: dòng đảo trả cả đơn hiện số đơn vị còn lại; dòng đảo cũ chưa có số đơn vị không hiện số lượng sai', async () => {
+    const item = { productName: 'Trà Shan', variationName: null, quantity: 3 };
+    const reversal = { orderId: 'o3', orderCode: 'TT3', kind: 'REVERSAL', orderItemId: 'i3', item, goodsAmount: -30000, shippingFee: 0, commissionAmount: -3000, opsFeeAmount: 0, codCollected: 0, netAmount: -27000, deliveredAt: null };
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      consignmentTerms: { commissionPct: 0.1, feePct: 0, feeFixed: 0 },
+      lines: [
+        { ...reversal, refKey: 'ITEM:i3', units: 2 },
+        { ...reversal, orderId: 'o4', orderCode: 'TT4', refKey: 'ITEM:i4', orderItemId: 'i4' },
+      ],
+      total: -54000,
+      upcoming: [],
+      payouts: [],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const pending = root.querySelector('[aria-label="Khoản chờ lập phiếu đối soát"]')!;
+    const rows = Array.from(pending.querySelectorAll('tbody tr')).map((tr) => tr.querySelector('td')!.textContent);
+    expect(rows).toEqual(['TT3(trả hàng)Tubu giao hộTrà Shan · trả 2/3', 'TT4(trả hàng)Tubu giao hộTrà Shan']);
   });
 
   it('Q8 review S5: món Tubu giao hộ chưa vào đối soát tự động — danh sách chỉ đọc kèm lý do, không cộng vào bảng kê', async () => {

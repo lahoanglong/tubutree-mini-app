@@ -1663,6 +1663,9 @@ model MerchantPayoutLine {
   /// REVERSAL khi đơn RETURNED), `RETURN:<id yêu cầu trả>:ITEM:<orderItemId>` (trả một phần). Mỗi khoá một dòng duy nhất trên
   /// mọi phiếu.
   refKey           String                 @default("")
+  /// Số đơn vị của dòng hàng giao hộ mà dòng đảo này trả lại (trả một phần hoặc phần còn lại khi đơn bị trả); NULL = dòng SALE,
+  /// dòng đơn tự giao, hoặc dòng đảo lập trước khi có cột này.
+  units            Int?
   createdAt        DateTime               @default(now())
 
   @@unique([orderId, kind, refKey])

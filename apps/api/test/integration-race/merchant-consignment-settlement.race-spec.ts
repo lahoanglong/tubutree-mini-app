@@ -212,6 +212,9 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
     expect(partial.map((l) => [l.refKey, l.orderItemId, l.goodsAmount, l.commissionAmount, l.opsFeeAmount, l.netAmount])).toEqual([
       [`RETURN:${r1.id}:ITEM:${iA.id}`, iA.id, -51_000, -5_100, -2_220, -43_680],
     ]);
+    // R4-PARTNER-2: dòng đảo ghi số đơn vị trả (1 trong 2 hũ), không phải số lượng cả dòng hàng.
+    expect(partial.map((l) => l.units)).toEqual([1]);
+    expect(sales.map((l) => l.units)).toEqual([null, null]);
     expect(await walletOf(buyer.id)).toBe(51_000);
     expect((await settlement.statementFor(store.id)).lines).toHaveLength(0);
 
@@ -244,6 +247,12 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
       [
         [`ITEM:${iA.id}`, -43_680],
         [`ITEM:${iB.id}`, -36_400],
+      ].sort(),
+    );
+    expect(all.filter((l) => l.kind === 'REVERSAL' && l.refKey.startsWith('ITEM:')).map((l) => [l.refKey, l.units]).sort()).toEqual(
+      [
+        [`ITEM:${iA.id}`, 1],
+        [`ITEM:${iB.id}`, 1],
       ].sort(),
     );
     expect(new Set(all.map((l) => `${l.kind}|${l.refKey}`)).size).toBe(all.length);

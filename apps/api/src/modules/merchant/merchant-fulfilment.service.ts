@@ -154,7 +154,10 @@ export interface SettlementLine {
   deliveredAt: Date | null;
   /** Dòng hàng "Tubu giao hộ" của đơn kho Tubu; null = đơn gian hàng tự giao. */
   orderItemId: string | null;
+  /** `quantity` là số lượng của cả dòng hàng (OrderItem.quantity), không phải số đơn vị của dòng đảo. */
   item?: { productName: string; variationName: string | null; quantity: number } | null;
+  /** Dòng đảo của hàng giao hộ: số đơn vị trả lại; null ở các dòng khác và dòng đảo lập trước khi có cột này. */
+  units?: number | null;
 }
 
 /**
@@ -1012,6 +1015,7 @@ export class MerchantFulfilmentService {
                   codCollected: l.codCollected,
                   netAmount: l.netAmount,
                   orderItemId: l.orderItemId,
+                  units: l.units ?? null,
                 })),
               },
             },

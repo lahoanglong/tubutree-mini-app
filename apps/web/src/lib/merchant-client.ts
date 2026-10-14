@@ -351,7 +351,10 @@ export interface SettlementLine {
   deliveredAt: string | null;
   /** Dòng hàng "Tubu giao hộ"; null/thiếu = đơn gian hàng tự giao. */
   orderItemId?: string | null;
+  /** `quantity` là số lượng của cả dòng hàng; dòng đảo dùng `units` cho số đơn vị trả. */
   item?: { productName: string; variationName: string | null; quantity: number } | null;
+  /** Dòng đảo của hàng giao hộ: số đơn vị trả lại. null/thiếu ở dòng khác và dòng đảo lập trước khi có cột này. */
+  units?: number | null;
 }
 
 /** Mức phí áp cho hàng "Tubu giao hộ": phần trăm là phân số (0.1 = 10%), phí cố định tính mỗi đơn. */

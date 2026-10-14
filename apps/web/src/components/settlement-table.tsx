@@ -29,6 +29,15 @@ export function consignmentFeesText(t: ConsignmentTerms): string {
   return `phí sàn ${formatPct(t.commissionPct)}${ops.length ? ` − phí Tubu giao hộ ${ops.join(' + ')}` : ''}`;
 }
 
+/**
+ * Số lượng hiện cạnh tên món: dòng bán ghi số lượng của dòng hàng; dòng đảo ghi số đơn vị trả trên tổng ("trả 1/2"), vì số lượng
+ * cả dòng không phải số tiền bị trừ. Dòng đảo cũ chưa lưu số đơn vị thì không ghi số nào còn hơn ghi số sai.
+ */
+function itemQuantityText(l: Pick<SettlementLine, 'kind' | 'units'>, quantity: number): string {
+  if (l.kind !== 'REVERSAL') return ` × ${quantity}`;
+  return l.units != null ? ` · trả ${l.units}/${quantity}` : '';
+}
+
 const dash = <span className="text-stone-400">—</span>;
 
 /**
@@ -80,7 +89,8 @@ export function SettlementTable<L extends SettlementLine>({
                       {l.item && (
                         <span>
                           {l.item.productName}
-                          {l.item.variationName ? ` (${l.item.variationName})` : ''} × {l.item.quantity}
+                          {l.item.variationName ? ` (${l.item.variationName})` : ''}
+                          {itemQuantityText(l, l.item.quantity)}
                         </span>
                       )}
                     </div>

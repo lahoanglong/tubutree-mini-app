@@ -189,6 +189,24 @@ describe('dòng đảo hàng giao hộ (trả một phần / cả đơn)', () =>
     expect(consignmentWholeReversal(sale(saleB!), [])!.netAmount).toBe(-36_400);
   });
 
+  it('R4-PARTNER-2: dòng đảo mang SỐ ĐƠN VỊ trả (không phải số lượng cả dòng hàng): trả 1/2 → units 1; trả nốt cả đơn → units phần còn lại', () => {
+    const partials = consignmentPartialReversals(sale(saleA!), [{ id: 'rr1', reviewedAt: DELIVERED, quantity: 1 }]);
+    expect(partials[0]!.units).toBe(1);
+    expect(partials[0]!.item).toMatchObject({ quantity: 2 });
+    expect(consignmentWholeReversal(sale(saleA!), partials)!.units).toBe(1);
+    expect(consignmentWholeReversal(sale(saleA!), [])!.units).toBe(2);
+  });
+
+  it('R4-PARTNER-2: yêu cầu trả vượt số còn lại bị chặn ở phần còn lại; trả hai lần mỗi lần 1 đơn vị → units 1 và 1', () => {
+    const odd = sale(saleA!);
+    const out = consignmentPartialReversals(odd, [
+      { id: 'rr1', reviewedAt: DELIVERED, quantity: 1 },
+      { id: 'rr2', reviewedAt: new Date(DELIVERED.getTime() + DAY), quantity: 5 },
+    ]);
+    expect(out.map((l) => l.units)).toEqual([1, 1]);
+    expect(consignmentWholeReversal(odd, out)).toBeNull();
+  });
+
   it('đã trả hết bằng các lần trả một phần → không còn gì để đảo cả đơn', () => {
     const partials = consignmentPartialReversals(sale(saleB!), [{ id: 'rr1', reviewedAt: DELIVERED, quantity: 1 }]);
     expect(consignmentWholeReversal(sale(saleB!), partials)).toBeNull();
