@@ -489,6 +489,30 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
     expect(mk(prisma).product.create.mock.calls[0][0].data.basePrice).toBe(70000);
   });
 
+  it('sản phẩm MỚI mà không biến thể nào có giá → tạo nhưng ngừng bán (NO_PRICE), không hiện 0đ; có giá lượt sau → mở bán (R2-PANCAKE-6)', async () => {
+    const prisma = makePrisma();
+    await new PancakeSyncService(prisma, makeClient([[product('np', [variation('v-np', { retail_price: undefined })])]]), lifecycle).syncProducts(
+      '2026-10-13T00:00:00.000Z',
+    );
+    expect(mk(prisma).product.create.mock.calls[0][0].data).toMatchObject({ basePrice: 0, isActive: false, pancakeHold: 'NO_PRICE' });
+
+    const held = { id: 'prod-np', pancakeId: 'np', basePrice: 0, isActive: false, pancakeHold: 'NO_PRICE', forSegment: ['x'], images: [] };
+    const again = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(held) } });
+    await new PancakeSyncService(again, makeClient([[product('np', [variation('v-np', { retail_price: 45000 })])]]), lifecycle).syncProducts(
+      '2026-10-13T00:00:00.000Z',
+    );
+    expect(mk(again).product.update.mock.calls[0][0].data).toMatchObject({ basePrice: 45000, isActive: true, pancakeHold: null });
+  });
+
+  it('sản phẩm đang bán, Pancake tạm trả thiếu giá → vẫn bán theo giá cũ (không tự ngừng)', async () => {
+    const selling = { id: 'prod-a', pancakeId: 'a', basePrice: 125000, isActive: true, pancakeHold: null, forSegment: ['x'], images: [] };
+    const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(selling) } });
+    await new PancakeSyncService(prisma, makeClient([[product('a', [variation('v-a', { retail_price: 0 })])]]), lifecycle).syncProducts(
+      '2026-10-13T00:00:00.000Z',
+    );
+    expect(mk(prisma).product.update.mock.calls[0][0].data).not.toHaveProperty('isActive');
+  });
+
   it('thiếu giá không bị tính là giảm giá (không báo wishlist)', async () => {
     await runWith(prev, variation('v-a', { retail_price: 0 }));
     expect(notifyPriceDrop).not.toHaveBeenCalled();
