@@ -92,6 +92,8 @@ export interface SettlementLine {
   orderId: string;
   orderCode: string;
   kind: 'SALE' | 'REVERSAL';
+  /** '' = dòng của cả đơn; `RETURN:<id>` = đảo một lần trả một phần (D3). */
+  refKey: string;
   goodsAmount: number;
   shippingFee: number;
   commissionAmount: number;
@@ -122,6 +124,7 @@ export function saleLineOf(o: {
     orderId: o.id,
     orderCode: o.code,
     kind: 'SALE',
+    refKey: '',
     goodsAmount,
     shippingFee: o.shippingFee,
     commissionAmount,
@@ -133,24 +136,89 @@ export function saleLineOf(o: {
 
 type PayoutAmounts = Pick<SettlementLine, 'goodsAmount' | 'shippingFee' | 'commissionAmount' | 'codCollected' | 'netAmount'>;
 
+export const RETURN_REF_PREFIX = 'RETURN:';
+
+/** Lần trả một phần đã duyệt (p5, D3) của một đơn đối tác — đủ để tính phần đối tác trả lại. */
+export interface ApprovedPartialReturn {
+  id: string;
+  reviewedAt: Date | null;
+  /** Phí giao Tubu đã hoàn khách ở lần trả này (lỗi do shop). */
+  shippingRefund: number;
+  items: { orderItemId: string; quantity: number }[];
+}
+
+/**
+ * Dòng REVERSAL cho từng lần trả một phần của đơn đối tác (cùng công thức với dòng đảo cả đơn, áp lên phần hàng trả): đối tác
+ * nhận hàng về nên trả lại tiền hàng của các đơn vị trả + phí giao Tubu đã hoàn khách − phí sàn của phần đó. COD không đảo
+ * (tiền mặt đối tác thu đã nằm trong dòng SALE). Tính luỹ kế theo thứ tự duyệt rồi lấy hiệu, nên nhiều lần trả cộng lại đúng
+ * bằng trả cả dòng, không lệch làm tròn.
+ */
+export function partialReversalLinesOf(
+  o: { id: string; code: string; merchantCommissionPct: Prisma.Decimal | number | null; items: { id: string; total: number; quantity: number }[] },
+  requests: ApprovedPartialReturn[],
+): SettlementLine[] {
+  if (requests.length === 0) return [];
+  const pct = o.merchantCommissionPct == null ? 0 : Number(o.merchantCommissionPct);
+  const items = new Map(o.items.map((i) => [i.id, i]));
+  const returned = new Map<string, number>();
+  const goodsOf = () =>
+    [...returned].reduce((s, [id, q]) => {
+      const it = items.get(id);
+      return it && it.quantity > 0 ? s + Math.round((it.total * Math.min(q, it.quantity)) / it.quantity) : s;
+    }, 0);
+  const ordered = [...requests].sort(
+    (a, b) => (a.reviewedAt?.getTime() ?? 0) - (b.reviewedAt?.getTime() ?? 0) || a.id.localeCompare(b.id),
+  );
+  const out: SettlementLine[] = [];
+  let goodsBefore = 0;
+  for (const r of ordered) {
+    for (const it of r.items) returned.set(it.orderItemId, (returned.get(it.orderItemId) ?? 0) + it.quantity);
+    const goodsAfter = goodsOf();
+    const goods = goodsAfter - goodsBefore;
+    const commission = Math.round(goodsAfter * pct) - Math.round(goodsBefore * pct);
+    goodsBefore = goodsAfter;
+    const ship = Math.max(0, r.shippingRefund);
+    if (goods === 0 && ship === 0) continue;
+    out.push({
+      orderId: o.id,
+      orderCode: o.code,
+      kind: 'REVERSAL',
+      refKey: `${RETURN_REF_PREFIX}${r.id}`,
+      goodsAmount: -goods,
+      shippingFee: -ship,
+      commissionAmount: -commission,
+      codCollected: 0,
+      netAmount: -(goods + ship - commission),
+      deliveredAt: null,
+    });
+  }
+  return out;
+}
+
 /**
  * Dòng đảo của đơn đối tác bị trả (Tubu đã hoàn khách). Đối tác nhận hàng về nên trả lại phần đã được tính cho đơn: đã đối soát
  * thì đảo tiền hàng + phí giao − phí sàn; tiền COD đối tác tự thu vẫn nằm ở đối tác nên không đảo, tổng SALE + REVERSAL của đơn
  * COD = −số tiền đã thu. Chưa đối soát thì đơn trả trước không có gì để đảo, còn đơn COD là đúng số tiền mặt đối tác đang giữ.
+ * Các lần trả một phần trước đó đã có dòng REVERSAL riêng (`partials`, số âm) nên dòng của cả đơn chỉ đảo phần còn lại.
  */
 export function reversalLineOf(
   o: { id: string; code: string; paymentMethod: string; paymentStatus: string; total: number },
   sale: PayoutAmounts | null,
+  partials: PayoutAmounts[] = [],
 ): SettlementLine | null {
-  const base = { orderId: o.id, orderCode: o.code, kind: 'REVERSAL' as const, deliveredAt: null };
+  const base = { orderId: o.id, orderCode: o.code, kind: 'REVERSAL' as const, refKey: '', deliveredAt: null };
   if (sale) {
+    const sum = (k: 'goodsAmount' | 'shippingFee' | 'commissionAmount') => sale[k] + partials.reduce((s, p) => s + p[k], 0);
+    const goods = sum('goodsAmount');
+    const ship = sum('shippingFee');
+    const commission = sum('commissionAmount');
     return {
       ...base,
-      goodsAmount: -sale.goodsAmount,
-      shippingFee: -sale.shippingFee,
-      commissionAmount: -sale.commissionAmount,
+      goodsAmount: -goods,
+      shippingFee: -ship,
+      commissionAmount: -commission,
       codCollected: 0,
-      netAmount: -(sale.goodsAmount + sale.shippingFee - sale.commissionAmount),
+      netAmount: -(goods + ship - commission),
     };
   }
   if (o.paymentMethod !== 'COD' || o.paymentStatus !== 'REFUNDED' || o.total <= 0) return null;
@@ -328,7 +396,8 @@ export class MerchantFulfilmentService {
 
   /**
    * Bảng kê chưa đối soát của một gian hàng, tính từ đơn lúc xem (không lưu sẵn): đơn đã giao qua hạn đổi/trả chưa vào phiếu
-   * nào (SALE) và đơn bị trả mà đối tác đã được tính tiền hoặc đang giữ tiền COD (REVERSAL, âm, xem reversalLineOf).
+   * nào (SALE), mỗi lần trả một phần đã duyệt của đơn đã/đang vào phiếu (REVERSAL `RETURN:<id>`) và đơn bị trả mà đối tác đã
+   * được tính tiền hoặc đang giữ tiền COD (REVERSAL của cả đơn, âm, chỉ phần còn lại sau các lần trả một phần).
    */
   async statementFor(storefrontId: string, now = new Date()) {
     const holdDays = await this.holdDays();
@@ -341,10 +410,11 @@ export class MerchantFulfilmentService {
       shippingFee: true,
       merchantCommissionPct: true,
       deliveredAt: true,
-      items: { select: { total: true } },
+      items: { select: { id: true, total: true, quantity: true } },
     } satisfies Prisma.OrderSelect;
+    const storedSelect = { kind: true, refKey: true, goodsAmount: true, shippingFee: true, commissionAmount: true, codCollected: true, netAmount: true } as const;
     const base = { fulfiller: 'MERCHANT' as const, fulfillerStorefrontId: storefrontId };
-    const [sales, upcoming, returned] = await Promise.all([
+    const [sales, upcoming, returned, settledWithReturns] = await Promise.all([
       this.prisma.order.findMany({
         where: { ...base, status: 'DELIVERED', deliveredAt: { lte: cutoff }, merchantPayoutLines: { none: { kind: 'SALE' } } },
         select: saleSelect,
@@ -359,22 +429,60 @@ export class MerchantFulfilmentService {
         where: {
           ...base,
           status: 'RETURNED',
-          merchantPayoutLines: { none: { kind: 'REVERSAL' } },
+          merchantPayoutLines: { none: { kind: 'REVERSAL', refKey: '' } },
           OR: [{ merchantPayoutLines: { some: { kind: 'SALE' } } }, { paymentMethod: 'COD', paymentStatus: 'REFUNDED' }],
         },
         select: {
-          id: true,
-          code: true,
-          paymentMethod: true,
+          ...saleSelect,
           paymentStatus: true,
-          total: true,
-          merchantPayoutLines: { where: { kind: 'SALE' }, select: { goodsAmount: true, shippingFee: true, commissionAmount: true, codCollected: true, netAmount: true } },
+          merchantPayoutLines: { select: storedSelect },
         },
       }),
+      // Đơn đã vào phiếu (có SALE) còn lần trả một phần đã duyệt chưa có dòng đảo.
+      this.prisma.$queryRaw<{ orderId: string }[]>`
+        SELECT DISTINCT rr."orderId" FROM "return_requests" rr
+          JOIN "orders" o ON o."id" = rr."orderId"
+         WHERE o."fulfiller" = 'MERCHANT' AND o."fulfillerStorefrontId" = ${storefrontId}
+           AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
+           AND EXISTS (SELECT 1 FROM "merchant_payout_lines" s WHERE s."orderId" = o."id" AND s."kind" = 'SALE')
+           AND NOT EXISTS (
+             SELECT 1 FROM "merchant_payout_lines" l
+              WHERE l."orderId" = o."id" AND l."kind" = 'REVERSAL' AND l."refKey" = ${RETURN_REF_PREFIX} || rr."id")`,
     ]);
+    const returnedIds = new Set(returned.map((o) => o.id));
+    const settledIds = settledWithReturns.map((r) => r.orderId).filter((id) => !returnedIds.has(id));
+    const settled = settledIds.length
+      ? await this.prisma.order.findMany({
+          where: { id: { in: settledIds }, ...base },
+          select: { ...saleSelect, merchantPayoutLines: { select: storedSelect } },
+        })
+      : [];
+    const partialOrderIds = [...sales, ...returned, ...settled].map((o) => o.id);
+    const partialRows = partialOrderIds.length
+      ? await this.prisma.returnRequest.findMany({
+          where: { orderId: { in: partialOrderIds }, status: 'APPROVED', fullReturn: false },
+          select: { id: true, orderId: true, reviewedAt: true, shippingRefund: true, items: { select: { orderItemId: true, quantity: true } } },
+        })
+      : [];
+    const partialsOf = (order: Parameters<typeof partialReversalLinesOf>[0]) =>
+      partialReversalLinesOf(
+        order,
+        partialRows.filter((r) => r.orderId === order.id),
+      );
+    const notStored = (stored: { kind: string; refKey: string }[]) => (l: SettlementLine) =>
+      !stored.some((x) => x.kind === l.kind && x.refKey === l.refKey);
+
     const lines: SettlementLine[] = [
-      ...sales.map(saleLineOf),
-      ...returned.flatMap((o) => reversalLineOf(o, o.merchantPayoutLines[0] ?? null) ?? []),
+      // SALE vừa đủ hạn đi cùng phiếu với các lần trả một phần của nó (đối tác không được tính tiền hàng khách đã trả).
+      ...sales.flatMap((o) => [saleLineOf(o), ...partialsOf(o)]),
+      ...settled.flatMap((o) => partialsOf(o).filter(notStored(o.merchantPayoutLines))),
+      ...returned.flatMap((o) => {
+        const sale = o.merchantPayoutLines.find((l) => l.kind === 'SALE') ?? null;
+        if (!sale) return reversalLineOf(o, null) ?? [];
+        const partials = partialsOf(o);
+        const whole = reversalLineOf(o, sale, partials);
+        return [...partials.filter(notStored(o.merchantPayoutLines)), ...(whole ? [whole] : [])];
+      }),
     ];
     return {
       holdDays,
@@ -427,6 +535,7 @@ export class MerchantFulfilmentService {
               orderId: l.orderId,
               orderCode: l.orderCode,
               kind: l.kind,
+              refKey: l.refKey,
               goodsAmount: l.goodsAmount,
               shippingFee: l.shippingFee,
               commissionAmount: l.commissionAmount,
@@ -473,7 +582,10 @@ export class MerchantFulfilmentService {
     return payout;
   }
 
-  /** Huỷ phiếu chưa chuyển: các đơn trong phiếu quay lại bảng kê. */
+  /**
+   * Huỷ phiếu chưa chuyển: các đơn trong phiếu quay lại bảng kê. Không huỷ được phiếu chứa dòng SALE của đơn đã có dòng đảo ở
+   * phiếu khác: huỷ thì đối tác bị trừ lại tiền của một đơn chưa từng được trả.
+   */
   async cancelPayout(adminId: string, payoutId: string) {
     const done = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.merchantPayout.updateMany({
@@ -481,6 +593,18 @@ export class MerchantFulfilmentService {
         data: { status: 'CANCELLED', note: `Huỷ bởi ${adminId}` },
       });
       if (flipped.count === 0) return false;
+      const sales = await tx.merchantPayoutLine.findMany({ where: { payoutId, kind: 'SALE' }, select: { orderId: true } });
+      if (sales.length > 0) {
+        const elsewhere = await tx.merchantPayoutLine.findFirst({
+          where: { orderId: { in: sales.map((l) => l.orderId) }, kind: 'REVERSAL', payoutId: { not: payoutId } },
+          select: { orderCode: true },
+        });
+        if (elsewhere) {
+          throw new ConflictException(
+            `Đơn ${elsewhere.orderCode} trong phiếu này đã có dòng đảo ở phiếu khác — huỷ phiếu chứa dòng đảo trước.`,
+          );
+        }
+      }
       await tx.merchantPayoutLine.deleteMany({ where: { payoutId } });
       return true;
     });

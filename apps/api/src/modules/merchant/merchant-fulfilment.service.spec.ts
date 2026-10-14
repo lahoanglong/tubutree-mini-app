@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { MerchantFulfilmentService, reversalLineOf, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
+import { MerchantFulfilmentService, partialReversalLinesOf, reversalLineOf, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
 import { MerchantSlaCron } from './merchant-sla.cron';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
@@ -22,7 +22,9 @@ function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1'
       findMany: jest.fn().mockResolvedValue([]),
     },
     merchantPayout: { create: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
-    merchantPayoutLine: { deleteMany: jest.fn() },
+    merchantPayoutLine: { deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
@@ -181,7 +183,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     shippingFee: 30_000,
     merchantCommissionPct: 0.15,
     deliveredAt: new Date(NOW.getTime() - 10 * 24 * H),
-    items: [{ total: 200_000 }],
+    items: [{ id: 'i9', total: 200_000, quantity: 1 }],
   };
 
   it('bảng kê: đơn giao quá hạn giữ chưa đối soát (SALE) + đơn đã đối soát rồi bị trả (REVERSAL âm)', async () => {
@@ -196,7 +198,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
           paymentMethod: 'WALLET',
           paymentStatus: 'REFUNDED',
           total: 110,
-          merchantPayoutLines: [{ goodsAmount: 100, shippingFee: 10, commissionAmount: 15, codCollected: 0, netAmount: 95 }],
+          merchantPayoutLines: [{ kind: 'SALE', refKey: '', goodsAmount: 100, shippingFee: 10, commissionAmount: 15, codCollected: 0, netAmount: 95 }],
         },
         { id: 'o6', code: 'TUBU6', paymentMethod: 'COD', paymentStatus: 'REFUNDED', total: 130_000, merchantPayoutLines: [] },
       ]);
@@ -210,7 +212,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     expect(prisma.order.findMany.mock.calls[2][0].where).toEqual(
       expect.objectContaining({
         status: 'RETURNED',
-        merchantPayoutLines: { none: { kind: 'REVERSAL' } },
+        merchantPayoutLines: { none: { kind: 'REVERSAL', refKey: '' } },
         OR: [{ merchantPayoutLines: { some: { kind: 'SALE' } } }, { paymentMethod: 'COD', paymentStatus: 'REFUNDED' }],
       }),
     );
@@ -257,6 +259,89 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     prisma.merchantPayout.findUniqueOrThrow.mockResolvedValue({ id: 'p1', status: 'CANCELLED' });
     await svc.cancelPayout('admin-1', 'p1');
     expect(prisma.merchantPayoutLine.deleteMany).toHaveBeenCalledWith({ where: { payoutId: 'p1' } });
+  });
+
+  it('không huỷ được phiếu chứa SALE của đơn đã có dòng đảo ở phiếu khác (đối tác sẽ bị trừ tiền chưa từng nhận)', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+    prisma.merchantPayoutLine.findMany.mockResolvedValue([{ orderId: 'o9' }]);
+    prisma.merchantPayoutLine.findFirst.mockResolvedValue({ orderCode: 'TUBU9' });
+    await expect(svc.cancelPayout('admin-1', 'p1')).rejects.toThrow(ConflictException);
+    expect(prisma.merchantPayoutLine.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('trả một phần (p5) đơn đã vào phiếu → thêm một dòng REVERSAL RETURN:<id> cho phần trả; SALE không lặp lại', async () => {
+    const { svc, prisma } = build();
+    const settledOrder = {
+      id: 'o7',
+      code: 'TUBU7',
+      paymentMethod: 'COD',
+      total: 230_000,
+      shippingFee: 30_000,
+      merchantCommissionPct: 0.1,
+      deliveredAt: NOW,
+      items: [{ id: 'i1', total: 200_000, quantity: 4 }],
+      merchantPayoutLines: [{ kind: 'SALE', refKey: '', goodsAmount: 200_000, shippingFee: 30_000, commissionAmount: 20_000, codCollected: 230_000, netAmount: -20_000 }],
+    };
+    prisma.$queryRaw.mockResolvedValue([{ orderId: 'o7' }]);
+    prisma.order.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([settledOrder]);
+    prisma.returnRequest.findMany.mockResolvedValue([
+      { id: 'rr1', orderId: 'o7', reviewedAt: NOW, shippingRefund: 0, items: [{ orderItemId: 'i1', quantity: 1 }] },
+    ]);
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.lines).toEqual([
+      expect.objectContaining({ orderCode: 'TUBU7', kind: 'REVERSAL', refKey: 'RETURN:rr1', goodsAmount: -50_000, commissionAmount: -5_000, codCollected: 0, netAmount: -45_000 }),
+    ]);
+  });
+
+  it('SALE vừa đủ hạn của đơn có lần trả một phần → SALE và dòng đảo đi cùng phiếu', async () => {
+    const { svc, prisma } = build();
+    prisma.order.findMany.mockResolvedValueOnce([{ ...delivered, items: [{ id: 'i9', total: 200_000, quantity: 2 }] }]);
+    prisma.returnRequest.findMany.mockResolvedValue([
+      { id: 'rr2', orderId: 'o9', reviewedAt: NOW, shippingRefund: 30_000, items: [{ orderItemId: 'i9', quantity: 1 }] },
+    ]);
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.lines.map((l) => [l.kind, l.refKey, l.netAmount])).toEqual([
+      ['SALE', '', 200_000 + 30_000 - 30_000],
+      ['REVERSAL', 'RETURN:rr2', -(100_000 + 30_000 - 15_000)],
+    ]);
+  });
+
+  it('đơn RETURNED sau một lần trả một phần đã đảo → dòng đảo cả đơn chỉ lấy phần còn lại; SALE + mọi dòng đảo = 0', async () => {
+    const { svc, prisma } = build();
+    const sale = { kind: 'SALE', refKey: '', goodsAmount: 200_000, shippingFee: 30_000, commissionAmount: 20_000, codCollected: 0, netAmount: 210_000 };
+    const order = {
+      id: 'o8',
+      code: 'TUBU8',
+      paymentMethod: 'WALLET',
+      paymentStatus: 'REFUNDED',
+      total: 230_000,
+      shippingFee: 30_000,
+      merchantCommissionPct: 0.1,
+      deliveredAt: NOW,
+      items: [{ id: 'i1', total: 200_000, quantity: 3 }],
+      merchantPayoutLines: [sale, { kind: 'REVERSAL', refKey: 'RETURN:rr3', goodsAmount: -66_667, shippingFee: 0, commissionAmount: -6_667, codCollected: 0, netAmount: -60_000 }],
+    };
+    prisma.order.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([order]);
+    prisma.returnRequest.findMany.mockResolvedValue([
+      { id: 'rr3', orderId: 'o8', reviewedAt: NOW, shippingRefund: 0, items: [{ orderItemId: 'i1', quantity: 1 }] },
+    ]);
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.lines).toHaveLength(1);
+    const whole = st.lines[0]!;
+    expect(whole).toMatchObject({ kind: 'REVERSAL', refKey: '', goodsAmount: -133_333, shippingFee: -30_000, commissionAmount: -13_333 });
+    expect(sale.netAmount - 60_000 + whole.netAmount).toBe(0);
+  });
+});
+
+describe('partialReversalLinesOf — trả nhiều lần cộng lại đúng bằng trả cả dòng', () => {
+  it('ba lần trả 1/3 → tổng tiền hàng đảo = tổng dòng, phí sàn không lệch làm tròn', () => {
+    const order = { id: 'o', code: 'C', merchantCommissionPct: new Prisma.Decimal('0.15'), items: [{ id: 'i', total: 100_000, quantity: 3 }] };
+    const reqs = ['a', 'b', 'c'].map((id, n) => ({ id, reviewedAt: new Date(NOW.getTime() + n), shippingRefund: 0, items: [{ orderItemId: 'i', quantity: 1 }] }));
+    const lines = partialReversalLinesOf(order, reqs);
+    expect(lines.map((l) => l.refKey)).toEqual(['RETURN:a', 'RETURN:b', 'RETURN:c']);
+    expect(lines.reduce((s, l) => s + l.goodsAmount, 0)).toBe(-100_000);
+    expect(lines.reduce((s, l) => s + l.commissionAmount, 0)).toBe(-15_000);
   });
 });
 

@@ -1518,9 +1518,12 @@ model MerchantPayoutLine {
   commissionAmount Int
   codCollected     Int
   netAmount        Int
+  /// Khoá dòng trong đơn: '' = dòng của cả đơn (SALE, REVERSAL khi đơn RETURNED); `RETURN:<id yêu cầu trả>` = REVERSAL của
+  /// một lần trả một phần (D3) trên đơn đã/đang đối soát. Mỗi khoá một dòng duy nhất trên mọi phiếu.
+  refKey           String                 @default("")
   createdAt        DateTime               @default(now())
 
-  @@unique([orderId, kind])
+  @@unique([orderId, kind, refKey])
   @@index([payoutId])
   @@map("merchant_payout_lines")
 }
