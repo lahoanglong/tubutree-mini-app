@@ -135,6 +135,8 @@ import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { RefillTab } from '@/components/admin/refill-tab';
+import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
+import { EngagementTab } from '@/components/admin/engagement-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
@@ -150,6 +152,8 @@ type Tab =
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
+  | 'dealerPrices'
+  | 'engagement'
   | 'payouts'
   | 'customerRefunds'
   | 'orders'
@@ -204,6 +208,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'dealers', label: 'Đại lý' },
       { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'brands', label: 'Nhãn hàng' },
@@ -224,6 +229,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'coupons', label: 'Voucher' },
       { k: 'flashSales', label: 'Flash Sale' },
+      { k: 'engagement', label: 'Nhiệm vụ & quà đổi điểm' },
     ],
   },
   {
@@ -409,6 +415,8 @@ export default function AdminPage() {
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab />}
+          {active === 'dealerPrices' && <DealerPriceHistoryTab />}
+          {active === 'engagement' && <EngagementTab />}
           {active === 'payouts' && <PayoutAdminTab />}
           {active === 'customerRefunds' && <CustomerRefundsTab />}
           {active === 'orders' && (

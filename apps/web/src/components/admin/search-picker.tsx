@@ -26,7 +26,7 @@ export interface PickerResult {
   more?: number;
 }
 
-function useDebounced<T>(value: T, ms: number): T {
+export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
   useEffect(() => {
     if (ms <= 0) {
