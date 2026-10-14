@@ -73,10 +73,10 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
    loại `MERCHANT`: chỉ chủ gian hàng loại này mới vào được tab "Đơn cần giao", nên hàng tự giao nằm ở gian hàng CTV/thương
    hiệu (dữ liệu cũ, hoặc gian hàng đổi loại) cũng bị chặn như trên thay vì sinh đơn không ai xử lý được.
 2. Gom dòng theo nơi giao: kiện Tubu (nếu có) đứng đầu, sau đó từng gian hàng đối tác.
-3. Giảm giá tính trên TOÀN lần đặt như hiện tại (combo → mã → hạng → Điểm Xanh), rồi phân bổ về từng kiện:
-   combo theo đúng dòng; mã, giảm hạng và Điểm Xanh chia theo tỉ lệ giá trị hàng của kiện (phần dư làm tròn dồn theo phương
-   pháp số dư lớn nhất để tổng khớp từng đồng). Điểm đã dùng (lô thường và lô quy đổi) chia theo cùng tỉ lệ để huỷ một đơn
-   con hoàn đúng phần điểm của đơn đó.
+3. Giảm giá tính trên TOÀN lần đặt như hiện tại (combo → mã → hạng → Điểm Xanh), rồi phân bổ về từng dòng và từng kiện theo
+   mục 7: mỗi khoản chỉ vào dòng được hưởng, Điểm Xanh chỉ vào hàng của Tubu (phần dư làm tròn dồn theo phương pháp số dư lớn
+   nhất để tổng khớp từng đồng). Điểm đã dùng (lô thường và lô quy đổi) chia theo phần Điểm Xanh của từng kiện để huỷ một đơn
+   con hoàn đúng phần điểm của đơn đó; kiện chỉ có hàng của gian hàng đối tác không dùng điểm.
 4. Phí giao **theo từng kiện**: kiện Tubu dùng luật hiện có (`shipping.free_threshold`, `shipping.flat_fee_below_threshold`,
    ưu đãi hạng) trên tiền hàng của kiện; kiện đối tác dùng `Storefront.shippingFee` (trống thì `merchant.default_shipping_fee`),
    miễn phí khi tiền hàng của kiện đạt `Storefront.freeShipFrom`. Ngưỡng miễn phí của Tubu và mã freeship (Tubu tài trợ) chỉ
@@ -143,14 +143,34 @@ Mọi bước đi qua `OrderStatusService.setStatus` (một nguồn ghi trạng 
 ## 7. Tiền
 
 - COD trên đơn đối tác: đối tác thu của khách. Trả trước (Ví Tubu): Tubu giữ.
-- Mã giảm giá Tubu, giảm hạng, Điểm Xanh áp cho món được trừ vào tiền của gian hàng (chủ dự án chốt, Q8): đơn tự giao và hàng
-  Tubu giao hộ cùng một nền tiền dòng `merchantLineBase` (`merchant-line-base.ts`) = tiền khách thực trả cho dòng. Ví Tubu là
-  cách trả, không làm giảm `order.total`. Phí giao giữ như cũ.
+- Hàng của gian hàng đối tác (sản phẩm có `Product.storefrontId`, cả tự giao lẫn Tubu giao hộ) chỉ bán theo giá lẻ niêm yết
+  cộng mã giảm giá của khách (chủ dự án chốt, Q8 S2/S7). Một luật dùng chung `isPartnerOwnedVariation`/`isPartnerOwnedProduct`
+  (`cart/partner-goods.ts`, lỗi mã `PARTNER_GOODS_NOT_ELIGIBLE` kèm câu tiếng Việt) cho mọi chương trình:
+  - Giá đại lý: bảng giá đại lý bỏ biến thể của gian hàng (`TUBU_OWNED_VARIATION_WHERE`), đặt đơn đại lý có món đó bị từ chối.
+  - Đặt định kỳ (giảm giá định kỳ): trang sản phẩm ẩn lựa chọn; tạo hoặc bật lại gói bị từ chối; gói cũ đến kỳ thì tạm dừng
+    (lý do `partner_goods`), không lên đơn.
+  - Combo CTV: không thêm món vào bộ sưu tập loại COMBO; món đã nằm trong combo bị bỏ khỏi combo khi hiển thị và khi tính giảm
+    giá combo (`combo.service.ts`), nên giảm combo không bao giờ rơi vào món của gian hàng.
+  - Mua chung: không mở nhóm mua chung cho món của gian hàng (trang sản phẩm ẩn nút).
+  - Điểm Xanh: không trả hàng của gian hàng bằng điểm. Số điểm tối đa của lần đặt bằng `pointsRedeemBase` (`checkout-split.ts`):
+    tiền các dòng hàng Tubu sau combo, mã, giảm hạng, cộng hàng Tubu giá flash; giỏ chỉ hàng Tubu thì đúng bằng nền cũ. Gửi
+    điểm quá mức thì checkout kẹp về mức tối đa, báo giá trả `pointsMax`, `pointsPartnerNote` ("Điểm Xanh chỉ dùng cho hàng của
+    Tubu, không dùng cho hàng của gian hàng đối tác") và `pointsNotice` (chỉ khi luật này làm giảm số điểm dùng); tổng đổi so
+    với tổng khách thấy thì vẫn trả `TOTAL_CHANGED`. Giỏ chỉ hàng đối tác: ô Điểm Xanh tắt kèm câu giải thích (web, miniapp).
+  - Giá giờ vàng do admin đặt vẫn áp (admin chủ động chọn): món bán giá flash thì nền đối soát là giá flash khách thực trả.
+  - Giảm hạng thành viên vẫn áp như mọi món; phần giảm hạng và phần mã giảm giá của khách áp cho món được trừ vào tiền của gian
+    hàng. Mã chỉ áp cho món khác (mã gắn sản phẩm Tubu) không trừ vào món của gian hàng.
+- Đơn tự giao và hàng Tubu giao hộ cùng một nền tiền dòng `merchantLineBase` (`merchant-line-base.ts`) = tiền khách thực trả
+  cho dòng: giá lẻ hoặc giá flash, trừ phần mã của khách và giảm hạng của chính dòng đó (không có Điểm Xanh). Ví Tubu là cách
+  trả, không làm giảm `order.total`. Phí giao giữ như cũ.
 - Mỗi khoản giảm chỉ rơi vào dòng được hưởng (review M1): checkout (`allocateLineAmounts`/`allocateGroupAmounts`,
   `checkout-split.ts`) chia combo về đúng dòng của nó → mã giảm giá trên các dòng không flash mà mã áp được (mã gắn sản phẩm
   `Coupon.applyTo.productIds`, kể cả mã mua chung: chỉ dòng sản phẩm đó; chỉ kiện có sản phẩm đó), sau combo → giảm hạng trên
-  phần còn lại không flash → Điểm Xanh trên phần còn lại cộng hàng flash, rồi lưu `OrderItem.paidTotal` = `total` − phần mã,
-  hạng, điểm của dòng (cộng lại = `order.total − shippingFee`). `merchantLineBase`, hoàn tiền khách (`refund-allocation`) và
+  phần còn lại không flash → Điểm Xanh trên phần còn lại của các dòng hàng Tubu cộng hàng Tubu giá flash (dòng hàng đối tác
+  nhận 0 điểm), rồi lưu `OrderItem.paidTotal` = `total` − phần mã, hạng, điểm của dòng (cộng lại = `order.total − shippingFee`)
+  và `OrderItem.pointsDiscount` = phần Điểm Xanh của dòng. Trả một phần hoàn điểm theo phần điểm của chính các dòng được trả
+  (trả hàng đối tác không hoàn điểm vì dòng đó không dùng điểm); đơn cũ không có `pointsDiscount` hoàn theo tỉ lệ giá trị như
+  trước. `merchantLineBase`, hoàn tiền khách (`refund-allocation`) và
   hoa hồng CTV (`paidLineTotals`) đọc cùng số này, nên tiền hoàn cho khách và dòng đảo của gian hàng khớp nhau. Đơn cũ (không có
   `paidTotal`, hoặc tổng không khớp) chia tiền hàng thực trả theo `OrderItem.total` như trước; khách vẫn trả đúng tổng như trước,
   phiếu đã lập giữ số đã lưu. Ví dụ (phí sàn 10%, phí giao 30.000):
@@ -168,7 +188,7 @@ cod        = paymentMethod = COD ? order.total : 0
 net        = goods + shippingFee − commission − cod   (> 0: Tubu trả đối tác, < 0: đối tác nộp lại Tubu)
 ```
 
-  Ví dụ tính tay (race spec `merchant-selfship-paid-base`): A 2 × 100.000, B 1 × 100.000; mã giảm 30.000 + Điểm Xanh 20.000;
+  Ví dụ tính tay (race spec `merchant-selfship-paid-base`): A 2 × 100.000, B 1 × 100.000; mã giảm 50.000;
   phí giao 30.000 → khách trả 280.000; phí sàn 10%. goods 250.000 (A 166.667, B 83.333), commission 25.000.
   COD: 250.000 + 30.000 − 25.000 − 280.000 = −25.000 (gian hàng nộp phí sàn); ví: 255.000. Nền cũ (Σ OrderItem.total) cho COD
   +20.000 vì Tubu chịu 50.000 giảm giá. Trả 1 × A: −(83.334 − 8.333) = −75.001; trả nốt: −(166.666 + 30.000 − 16.667) =
@@ -208,7 +228,8 @@ net        = paid_i − commission − opsFee            (shippingFee = cod = 0,
 ```
 
   `paid_i` là `merchantLineBase`, cùng hàm với đơn tự giao: đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ. Chủ dự án
-  đã chốt: mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của đối tác (đối tác chịu, Tubu không chịu). Ví Tubu là
+  đã chốt: mã giảm giá của khách và giảm hạng áp cho món được trừ vào số tiền của đối tác (đối tác chịu, Tubu không chịu);
+  Điểm Xanh không dùng cho hàng của đối tác nên không bao giờ trừ vào `paid_i`. Ví Tubu là
   phương thức thanh toán, không phải giảm giá: đơn trả bằng ví giữ nguyên `order.total`, nên không làm giảm `paid_i`. Đơn tự
   giao cũng theo nền này (đầu mục 7).
 
