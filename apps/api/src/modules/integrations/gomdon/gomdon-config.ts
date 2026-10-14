@@ -76,10 +76,12 @@ export function hasGomdonCredentials(cfg: Pick<GomdonConfig, 'baseUrl' | 'phone'
 export async function isGomdonRecyclingEnabled(
   systemConfig: Pick<SystemConfigService, 'get'>,
   env: NodeJS.ProcessEnv = process.env,
-  health: Pick<GomdonHealth, 'credentialsRejected'> = gomdonHealth,
+  health: Pick<GomdonHealth, 'credentialsRejected'> & Partial<Pick<GomdonHealth, 'refresh'>> = gomdonHealth,
 ): Promise<boolean> {
   const toggle = await systemConfig.get<unknown>(GOMDON_RECYCLING_TOGGLE_KEY, false);
   if (toggle !== true) return false;
+  // Trạng thái chung của mọi replica: replica khác đã đăng nhập lại được thì bật lại ở đây (R4-SYNC-4).
+  await health.refresh?.();
   if (health.credentialsRejected) return false;
   return hasGomdonCredentials(await loadGomdonConfig(systemConfig, env));
 }

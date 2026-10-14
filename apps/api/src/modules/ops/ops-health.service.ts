@@ -325,7 +325,7 @@ export class OpsHealthService {
         select: { id: true, code: true, createdAt: true, gomdonStatus: true, paymentMethod: true },
       }),
     ]);
-    const connection = this.gomdon?.getHealth() ?? null;
+    const connection = (await this.gomdon?.getHealth()) ?? null;
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     return {
       configured: cfg ? hasGomdonCredentials(cfg) : false,

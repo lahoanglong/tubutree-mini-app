@@ -381,7 +381,7 @@ describe('GomdonClient', () => {
       const err = await c.createOrder(body).catch((e) => e);
       expect(err).toBeInstanceOf(GomdonRejectedError);
       expect((err as GomdonRejectedError).transient).toBe(true);
-      expect(c.getHealth()).toMatchObject({ credentialsRejected: true, lastError: expect.stringContaining('mật khẩu') });
+      expect(await c.getHealth()).toMatchObject({ credentialsRejected: true, lastError: expect.stringContaining('mật khẩu') });
     });
 
     it('vừa bị từ chối tài khoản → không đăng nhập lại liên tục (chống khoá tài khoản), vẫn Rejected TẠM', async () => {
@@ -413,8 +413,8 @@ describe('GomdonClient', () => {
       const c = makeClient();
       mockHttp.post.mockRejectedValueOnce(axiosErr({ code: 'ECONNREFUSED' }));
       await c.createOrder(body).catch(() => undefined);
-      expect(c.getHealth().credentialsRejected).toBe(false);
-      expect(c.getHealth().lastError).toBeTruthy();
+      expect((await c.getHealth()).credentialsRejected).toBe(false);
+      expect((await c.getHealth()).lastError).toBeTruthy();
     });
 
     it('checkConnection: luôn đăng nhập thật (bỏ token cache) và trả kết quả cho admin', async () => {
@@ -428,11 +428,29 @@ describe('GomdonClient', () => {
       expect(mockHttp.post).toHaveBeenCalledTimes(2);
     });
 
+    it('cron dò lại (chỉ leader chạy) thấy lần từ chối của replica KHÁC qua bản ghi chung → đăng nhập thử, được thì ghi chung để mọi replica bật lại thu gom (R4-SYNC-4)', async () => {
+      const shared = { okAt: null as Date | null, rejectedAt: new Date(Date.now() - 31 * 60_000), rejectedMessage: 'sai mật khẩu' };
+      const store = {
+        load: jest.fn(async () => ({ ...shared })),
+        recordOk: jest.fn(async (okAt: Date) => {
+          shared.okAt = okAt;
+        }),
+        recordRejected: jest.fn().mockResolvedValue(undefined),
+      };
+      gomdonHealth.attachStore(store);
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+      await c.probeRejectedLogin(30 * 60_000);
+      expect(mockHttp.post).toHaveBeenCalledWith('/api/v2/auth/login', expect.anything());
+      expect(store.recordOk).toHaveBeenCalledTimes(1);
+      expect((await c.getHealth()).credentialsRejected).toBe(false);
+    });
+
     it('tạo đơn thành công → ghi nhận lần gọi tốt gần nhất', async () => {
       const c = makeClient();
       mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CREATE_OK);
       await c.createOrder(body);
-      expect(c.getHealth().lastOkAt).not.toBeNull();
+      expect((await c.getHealth()).lastOkAt).not.toBeNull();
     });
   });
 });

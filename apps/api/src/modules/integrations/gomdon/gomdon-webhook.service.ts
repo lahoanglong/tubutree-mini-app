@@ -220,7 +220,7 @@ export class GomdonWebhookService {
     const keys = Object.keys(body).slice(0, 20).join(', ') || 'không có';
     const message = `Webhook Gomdon không đọc được (Content-Type: ${contentType ?? 'không có'}; trường nhận được: ${keys}) — đã trả 400 để Gomdon gửi lại. Báo Gomdon kiểm tra định dạng webhook (cần JSON hoặc form có trường status).`;
     this.logger.error(message);
-    gomdonHealth.recordError(message);
+    await gomdonHealth.recordError(message);
     const now = Date.now();
     const last = this.unreadableAlertedAt.get(ct);
     if (last != null && now - last < UNREADABLE_ALERT_GAP_MS) return;
