@@ -1,16 +1,20 @@
-import { decideAlert, opsProblems, type OpsThresholds, type ProblemInput } from './ops-alerts';
+import { alertWebhookBody, decideAlert, opsProblems, type OpsThresholds, type ProblemInput } from './ops-alerts';
 
-const T: OpsThresholds = { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6 };
+const T: OpsThresholds = { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6, gomdonBacklogMinutes: 15 };
 
 const healthy: ProblemInput = {
   pancake: {
     configured: true,
     stuck: 0,
-    webhookFailed24h: 0,
+    stuckRefs: [],
+    webhookFailedOpen: 0,
     webhookStuck: 0,
+    webhookRefs: [],
+    attention: 0,
+    attentionRefs: [],
     catalog: { lastOkAt: '2026-10-14T01:00:00.000Z', lastErrorAt: null, lastError: null },
   },
-  gomdon: { configured: true, webhookFailed24h: 0, credentialsRejected: false },
+  gomdon: { configured: true, webhookFailedOpen: 0, webhookRefs: [], credentialsRejected: false, backlog: 0, backlogRefs: [] },
   queues: { ok: true, items: [{ name: 'pancake-push', failedLastHour: 0 }] },
 };
 
@@ -23,13 +27,14 @@ describe('opsProblems (PLATFORM-5)', () => {
     const keys = opsProblems(
       {
         pancake: {
-          configured: true,
+          ...healthy.pancake,
           stuck: 3,
-          webhookFailed24h: 2,
+          webhookFailedOpen: 2,
           webhookStuck: 1,
+          attention: 1,
           catalog: { lastOkAt: '2026-10-14T01:00:00.000Z', lastErrorAt: '2026-10-14T02:00:00.000Z', lastError: 'timeout' },
         },
-        gomdon: { configured: true, webhookFailed24h: 1, credentialsRejected: true },
+        gomdon: { ...healthy.gomdon, webhookFailedOpen: 1, credentialsRejected: true, backlog: 2 },
         queues: { ok: true, items: [{ name: 'pancake-push', failedLastHour: 5 }, { name: 'notifications', failedLastHour: 4 }] },
       },
       T,
@@ -37,9 +42,11 @@ describe('opsProblems (PLATFORM-5)', () => {
     expect(keys).toEqual([
       'pancake.stuck',
       'pancake.webhook',
+      'pancake.attention',
       'pancake.catalog',
       'gomdon.webhook',
       'gomdon.credentials',
+      'gomdon.backlog',
       'queue.pancake-push',
     ]);
   });
@@ -54,8 +61,8 @@ describe('opsProblems (PLATFORM-5)', () => {
     const p = opsProblems(
       {
         ...healthy,
-        pancake: { ...healthy.pancake, configured: false, stuck: 9, webhookFailed24h: 9 },
-        gomdon: { configured: false, webhookFailed24h: 9, credentialsRejected: true },
+        pancake: { ...healthy.pancake, configured: false, stuck: 9, webhookFailedOpen: 9, attention: 3 },
+        gomdon: { ...healthy.gomdon, configured: false, webhookFailedOpen: 9, credentialsRejected: true, backlog: 4 },
       },
       T,
     );
@@ -65,6 +72,61 @@ describe('opsProblems (PLATFORM-5)', () => {
   it('ngưỡng lấy từ cấu hình: dưới ngưỡng thì chưa báo', () => {
     const p = opsProblems({ ...healthy, pancake: { ...healthy.pancake, stuck: 4 } }, { ...T, stuckOrders: 5 });
     expect(p).toEqual([]);
+  });
+});
+
+describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)', () => {
+  it('webhook lỗi, đơn kẹt, đơn cần xử lý Pancake, đơn thu gom chờ vận đơn → kèm mã đơn, tối đa 5 mã', () => {
+    const p = opsProblems(
+      {
+        ...healthy,
+        pancake: {
+          ...healthy.pancake,
+          stuck: 7,
+          stuckRefs: ['TUBU1', 'TUBU2', 'TUBU3', 'TUBU4', 'TUBU5', 'TUBU6'],
+          webhookFailedOpen: 1,
+          webhookRefs: ['TUBU9 (order.status_updated)'],
+          attention: 1,
+          attentionRefs: ['TUBU8'],
+        },
+        gomdon: { ...healthy.gomdon, backlog: 1, backlogRefs: ['TUBU7'] },
+      },
+      T,
+    );
+    const msg = Object.fromEntries(p.map((x) => [x.key, x.message]));
+    expect(msg['pancake.stuck']).toBe('7 đơn quá 30 phút chưa lên Pancake: TUBU1, TUBU2, TUBU3, TUBU4, TUBU5 và 2 việc khác');
+    expect(msg['pancake.webhook']).toContain('TUBU9 (order.status_updated)');
+    expect(msg['pancake.attention']).toContain('TUBU8');
+    expect(msg['gomdon.backlog']).toBe('1 đơn thu gom quá 15 phút chưa tạo được vận đơn Gomdon: TUBU7');
+  });
+});
+
+describe('alertWebhookBody (R2-PLATFORM-2)', () => {
+  const m = {
+    status: 'ALERT' as const,
+    title: '⚠️ Sự cố vận hành',
+    summary: 'a; b',
+    problems: [
+      { key: 'pancake.stuck', message: '2 đơn kẹt: TUBU1, TUBU2' },
+      { key: 'queues.down', message: 'Hàng đợi không phản hồi' },
+    ],
+    generatedAt: '2026-10-14T10:00:00.000Z',
+  };
+
+  it('Slack và Google Chat chỉ nhận {text}, mỗi sự cố một dòng', () => {
+    for (const url of ['https://hooks.slack.com/services/T0/B0/X', 'https://chat.googleapis.com/v1/spaces/AAA/messages?key=k&token=t']) {
+      expect(alertWebhookBody(url, m)).toEqual({ text: '*⚠️ Sự cố vận hành*\n• 2 đơn kẹt: TUBU1, TUBU2\n• Hàng đợi không phản hồi' });
+    }
+  });
+
+  it('hook khác (n8n...) nhận đủ trường máy đọc kèm text', () => {
+    const body = alertWebhookBody('https://n8n.example.test/webhook/ops', m);
+    expect(body).toMatchObject({ status: 'ALERT', problems: m.problems, text: expect.stringContaining('TUBU1') });
+  });
+
+  it('báo đã ổn: text là câu tóm tắt', () => {
+    const body = alertWebhookBody('https://hooks.slack.com/x', { ...m, status: 'RECOVERED', title: '✅ Vận hành đã ổn trở lại', problems: [], summary: 'Hết sự cố.' });
+    expect(body).toEqual({ text: '*✅ Vận hành đã ổn trở lại*\nHết sự cố.' });
   });
 });
 

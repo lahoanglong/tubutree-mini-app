@@ -122,6 +122,7 @@ export class SystemConfigService {
     'ops.alert_webhook_failed': { min: 1, max: 10000, note: 'số webhook', integer: true },
     'ops.alert_queue_failed_1h': { min: 1, max: 10000, note: 'số job', integer: true },
     'ops.alert_repeat_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
+    'ops.alert_gomdon_backlog_minutes': { min: 5, max: 1440, note: 'số phút', integer: true },
     'merchant.ship_sla_hours': { min: 1, max: 336, note: 'số giờ', integer: true },
     'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },

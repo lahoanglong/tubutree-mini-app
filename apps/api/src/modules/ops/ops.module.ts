@@ -14,6 +14,7 @@ import { MerchantModule } from '../merchant/merchant.module';
 import { OpsController } from './ops.controller';
 import { OPS_QUEUES, OpsHealthService } from './ops-health.service';
 import { OpsInboxService } from './ops-inbox.service';
+import { OpsWebhookEventsService } from './ops-webhook-events.service';
 
 const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS];
 
@@ -24,6 +25,7 @@ const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUE
     { provide: OPS_QUEUES, inject: QUEUES.map((q) => getQueueToken(q)), useFactory: (...queues: Queue[]) => queues },
     OpsHealthService,
     OpsInboxService,
+    OpsWebhookEventsService,
   ],
   exports: [OpsHealthService],
 })

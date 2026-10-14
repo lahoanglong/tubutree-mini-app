@@ -10,17 +10,11 @@ import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-ale
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
-import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS } from './pancake-webhook-dedupe';
+import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordLatePaymentRefund } from '../../orders/refund-queue';
 import { applyPancakeStock } from '../../catalog/variation-stock';
-
-interface EventData {
-  event?: string;
-  data?: Record<string, unknown>;
-  [key: string]: unknown;
-}
 
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
@@ -45,9 +39,6 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   CANCELLED: 'Đã huỷ',
   RETURNED: 'Đã trả hàng',
 };
-
-/** Mã đơn Tubu do pushOrder ghi vào note ("Order code: <mã>") — mọi tiền tố (TUBU, TUBUSUB, DLR). */
-const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
 
 type HandleOutcome = 'PROCESSED' | 'UNMATCHED';
 
@@ -133,9 +124,7 @@ export class PancakeProcessor extends WorkerHost {
     if (claim.count === 0) return;
 
     try {
-      const payload = event.rawPayload as unknown as EventData;
-      // Pancake POS gửi nguyên object đơn ở top-level; luồng cũ dùng {event,data}.
-      const data = (payload.data as Record<string, unknown>) ?? (payload as Record<string, unknown>);
+      const data = pancakeEventData(event.rawPayload);
       const outcome = await this.handle(event.eventType, data);
       await this.prisma.pancakeWebhookEvent.update({
         where: { id: event.id },
@@ -236,11 +225,7 @@ export class PancakeProcessor extends WorkerHost {
   }
 
   private extractOrderCode(data: Record<string, unknown>): string | null {
-    const ext = data['extension'] as { external_order_id?: string } | undefined;
-    if (ext?.external_order_id) return ext.external_order_id;
-    const note = typeof data['note'] === 'string' ? (data['note'] as string) : '';
-    const m = note.match(NOTE_ORDER_CODE);
-    return m ? m[1]! : null;
+    return pancakeEventOrderCode(data);
   }
 
   /**

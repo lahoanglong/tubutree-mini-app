@@ -12,14 +12,17 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
-import { PANCAKE_EVENT_STATUS } from '../integrations/pancake/pancake-webhook-dedupe';
+import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
+import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import {
+  alertWebhookBody,
   decideAlert,
   OPS_THRESHOLD_KEYS,
   opsProblems,
   type AlertMemory,
+  type AlertMessage,
   type CatalogRun,
   type OpsProblem,
   type OpsThresholds,
@@ -39,6 +42,8 @@ type FetchLike = (url: string, init: { method: string; headers: Record<string, s
 
 const ALERT_STATE_KEY = 'alert';
 const STUCK_LIST = 20;
+/** Số mã đơn đưa vào lời báo động (phần còn lại xem ở màn Sức khoẻ hệ thống). */
+const REFS_IN_ALERT = 5;
 /** Webhook nhận rồi mà quá chừng này vẫn RECEIVED/PROCESSING = worker không chạy. */
 const WEBHOOK_STUCK_MS = 10 * 60_000;
 const DAY_MS = 24 * 3_600_000;
@@ -48,6 +53,58 @@ const WEBHOOK_TIMEOUT_MS = 5000;
 
 const PANCAKE_STATUSES = Object.values(PANCAKE_EVENT_STATUS);
 const GOMDON_STATUSES = Object.values(GOMDON_EVENT_STATUS);
+
+/** Webhook cần người xem: lỗi (mọi tuổi) hoặc nhận rồi mà quá WEBHOOK_STUCK_MS chưa xử lý xong, chưa ai "Đã xử lý". */
+export function pancakeOpenEventWhere(now: Date): Prisma.PancakeWebhookEventWhereInput {
+  return {
+    dismissedAt: null,
+    OR: [
+      { status: PANCAKE_EVENT_STATUS.FAILED },
+      {
+        status: { in: [PANCAKE_EVENT_STATUS.RECEIVED, PANCAKE_EVENT_STATUS.PROCESSING] },
+        receivedAt: { lt: new Date(now.getTime() - WEBHOOK_STUCK_MS) },
+      },
+    ],
+  };
+}
+
+export const GOMDON_OPEN_EVENT_WHERE: Prisma.GomdonWebhookEventWhereInput = { status: GOMDON_EVENT_STATUS.FAILED, dismissedAt: null };
+
+/**
+ * Đơn thu gom đã được phép đặt bưu tá (COD, hoặc đã nhận tiền) mà quá `minutes` vẫn chưa có vận đơn Gomdon và chưa
+ * rơi vào nhánh tạo tay — Gomdon lỗi/chập kéo dài. Mốc tính từ lúc đặt (COD) hoặc lúc nhận tiền (trả trước).
+ */
+export function gomdonBacklogWhere(now: Date, minutes: number): Prisma.OrderWhereInput {
+  const cutoff = new Date(now.getTime() - minutes * 60_000);
+  return {
+    hasRecyclingPickup: true,
+    status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] },
+    gomdonOrderId: null,
+    gomdonPartnerCode: null,
+    AND: [
+      {
+        OR: [
+          { gomdonStatus: null },
+          { gomdonStatus: GOMDON_STATE.CREATING },
+          { gomdonStatus: GOMDON_STATE.AWAITING_PAYMENT, paymentStatus: 'PAID' },
+        ],
+      },
+      {
+        OR: [
+          { paymentMethod: 'COD', createdAt: { lt: cutoff } },
+          { paymentStatus: 'PAID', paidAt: { lt: cutoff } },
+        ],
+      },
+    ],
+  };
+}
+
+function refs<T>(rows: T[], ref: (r: T) => string | null): string[] {
+  return rows
+    .map(ref)
+    .filter((r): r is string => Boolean(r))
+    .slice(0, REFS_IN_ALERT);
+}
 
 export type QueueHealth =
   | { ok: true; items: { name: string; waiting: number; active: number; delayed: number; failed: number; failedLastHour: number }[] }
@@ -86,8 +143,24 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues] = await Promise.all([this.pancakeHealth(now, t), this.gomdonHealth(now), this.queueHealth(now)]);
-    const problems = opsProblems({ pancake, gomdon, queues }, t);
+    const [pancake, gomdon, queues] = await Promise.all([this.pancakeHealth(now, t), this.gomdonHealth(now, t), this.queueHealth(now)]);
+    const problems = opsProblems(
+      {
+        pancake: {
+          ...pancake,
+          stuckRefs: refs(pancake.stuckOrders, (o) => o.code),
+          webhookRefs: refs(pancake.failedEvents, (e) => (e.orderRef ? `${e.orderRef} (${e.eventType})` : null)),
+          attentionRefs: refs(pancake.attentionOrders, (o) => o.code),
+        },
+        gomdon: {
+          ...gomdon,
+          webhookRefs: refs(gomdon.failedEvents, (e) => e.orderRef),
+          backlogRefs: refs(gomdon.backlogOrders, (o) => o.code),
+        },
+        queues,
+      },
+      t,
+    );
     return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, problems };
   }
 
@@ -100,8 +173,21 @@ export class OpsHealthService {
     const stuckWhere: Prisma.OrderWhereInput = {
       AND: [pancakeUnsyncedWhere(now), { createdAt: { lt: new Date(now.getTime() - t.unsyncedMinutes * 60_000) } }],
     };
-    const [lastPush, lastByStatus, lastProcessed, webhookFailed24h, webhookStuck, unsynced, stuck, stuckOrders, attention, catalog] =
-      await Promise.all([
+    const [
+      lastPush,
+      lastByStatus,
+      lastProcessed,
+      webhookFailed24h,
+      webhookFailedOpen,
+      webhookStuck,
+      failedEvents,
+      unsynced,
+      stuck,
+      stuckOrders,
+      attention,
+      attentionOrders,
+      catalog,
+    ] = await Promise.all([
         this.prisma.$queryRaw<{ at: Date | null }[]>`
           SELECT max("pancakeLastAttemptAt") AS "at" FROM "orders"
            WHERE "pancakePushStatus" = 'SYNCED' AND "createdAt" >= ${new Date(now.getTime() - 30 * DAY_MS)}`,
@@ -116,11 +202,19 @@ export class OpsHealthService {
           select: { processedAt: true, receivedAt: true },
         }),
         this.prisma.pancakeWebhookEvent.count({ where: { status: PANCAKE_EVENT_STATUS.FAILED, receivedAt: { gte: since } } }),
+        this.prisma.pancakeWebhookEvent.count({ where: { status: PANCAKE_EVENT_STATUS.FAILED, dismissedAt: null } }),
         this.prisma.pancakeWebhookEvent.count({
           where: {
+            dismissedAt: null,
             status: { in: [PANCAKE_EVENT_STATUS.RECEIVED, PANCAKE_EVENT_STATUS.PROCESSING] },
-            receivedAt: { gte: since, lt: new Date(now.getTime() - WEBHOOK_STUCK_MS) },
+            receivedAt: { lt: new Date(now.getTime() - WEBHOOK_STUCK_MS) },
           },
+        }),
+        this.prisma.pancakeWebhookEvent.findMany({
+          where: pancakeOpenEventWhere(now),
+          orderBy: { receivedAt: 'asc' },
+          take: STUCK_LIST,
+          select: { id: true, eventType: true, status: true, attempts: true, error: true, receivedAt: true, rawPayload: true },
         }),
         this.prisma.order.count({ where: pancakeUnsyncedWhere(now) }),
         this.prisma.order.count({ where: stuckWhere }),
@@ -140,6 +234,12 @@ export class OpsHealthService {
           },
         }),
         this.prisma.order.count({ where: { pancakeAttentionAt: { not: null } } }),
+        this.prisma.order.findMany({
+          where: { pancakeAttentionAt: { not: null } },
+          orderBy: { pancakeAttentionAt: 'asc' },
+          take: STUCK_LIST,
+          select: { id: true, code: true, pancakeAttention: true, pancakeAttentionAt: true },
+        }),
         this.prisma.opsHealthState.findUnique({ where: { key: CATALOG_STATE_KEY } }),
       ]);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
@@ -155,18 +255,28 @@ export class OpsHealthService {
       lastWebhookAt: lastWebhook?.toISOString() ?? null,
       lastWebhookProcessedAt: (lastProcessed?.processedAt ?? lastProcessed?.receivedAt)?.toISOString() ?? null,
       webhookFailed24h,
+      webhookFailedOpen,
       webhookStuck,
+      failedEvents: failedEvents.map(({ rawPayload, error, ...e }) => ({
+        ...e,
+        source: 'pancake' as const,
+        orderRef: pancakeEventRef(rawPayload),
+        error: error?.slice(0, 300) ?? null,
+      })),
       unsynced,
       stuck,
       stuckOrders,
       attention,
+      attentionOrders,
       catalog: catalogRun,
     };
   }
 
-  private async gomdonHealth(now: Date) {
+  private async gomdonHealth(now: Date, t: OpsThresholds) {
     const since = new Date(now.getTime() - DAY_MS);
-    const [cfg, lastByStatus, webhookFailed24h, openAlerts, attention] = await Promise.all([
+    const backlogWhere = gomdonBacklogWhere(now, t.gomdonBacklogMinutes);
+    const [cfg, lastByStatus, webhookFailed24h, webhookFailedOpen, failedEvents, openAlerts, alerts, attention, backlog, backlogOrders] =
+      await Promise.all([
       this.gomdon?.getConfig().catch(() => null) ?? Promise.resolve(null),
       Promise.all(
         GOMDON_STATUSES.map((status) =>
@@ -174,8 +284,28 @@ export class OpsHealthService {
         ),
       ),
       this.prisma.gomdonWebhookEvent.count({ where: { status: GOMDON_EVENT_STATUS.FAILED, receivedAt: { gte: since } } }),
+      this.prisma.gomdonWebhookEvent.count({ where: GOMDON_OPEN_EVENT_WHERE }),
+      this.prisma.gomdonWebhookEvent.findMany({
+        where: GOMDON_OPEN_EVENT_WHERE,
+        orderBy: { receivedAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, gomdonStatus: true, orderCode: true, status: true, attempts: true, error: true, receivedAt: true },
+      }),
       this.prisma.gomdonAlert.count({ where: { resolvedAt: null } }),
+      this.prisma.gomdonAlert.findMany({
+        where: { resolvedAt: null },
+        orderBy: { createdAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, message: true, createdAt: true, order: { select: { code: true } } },
+      }),
       this.prisma.order.count({ where: recyclingAttentionWhere() }),
+      this.prisma.order.count({ where: backlogWhere }),
+      this.prisma.order.findMany({
+        where: backlogWhere,
+        orderBy: { createdAt: 'asc' },
+        take: STUCK_LIST,
+        select: { id: true, code: true, createdAt: true, gomdonStatus: true, paymentMethod: true },
+      }),
     ]);
     const connection = this.gomdon?.getHealth() ?? null;
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
@@ -185,8 +315,19 @@ export class OpsHealthService {
       credentialsRejected: connection?.credentialsRejected ?? false,
       lastWebhookAt: lastWebhook?.toISOString() ?? null,
       webhookFailed24h,
+      webhookFailedOpen,
+      failedEvents: failedEvents.map(({ gomdonStatus, orderCode, error, ...e }) => ({
+        ...e,
+        source: 'gomdon' as const,
+        eventType: gomdonStatus == null ? 'không rõ trạng thái' : `trạng thái ${gomdonStatus}`,
+        orderRef: orderCode,
+        error: error?.slice(0, 300) ?? null,
+      })),
       openAlerts,
+      alerts: alerts.map(({ order, ...a }) => ({ ...a, orderCode: order.code })),
       attention,
+      backlog,
+      backlogOrders,
     };
   }
 
@@ -236,43 +377,66 @@ export class OpsHealthService {
     }
   }
 
+  /**
+   * Báo in-app một lần cho mỗi quyết định ALERT/RECOVERED. Webhook ngoài gửi không được (lỗi mạng, HTTP lỗi) thì nhớ
+   * `webhookPending` và lượt cron sau (5 phút) gửi lại với tình trạng mới nhất, không chờ tới giờ nhắc lại.
+   */
   async checkAndAlert(now = new Date()): Promise<{ sent: 'ALERT' | 'RECOVERED' | null; problems: OpsProblem[] }> {
     const snap = await this.snapshot(now);
     const row = await this.prisma.opsHealthState.findUnique({ where: { key: ALERT_STATE_KEY } });
-    const prev: AlertMemory | null = row
-      ? { keys: ((row.detail as { keys?: string[] } | null)?.keys ?? []).slice(), alertSince: row.alertSince, alertedAt: row.alertedAt }
-      : null;
+    const detail = (row?.detail ?? null) as { keys?: string[]; webhookPending?: boolean } | null;
+    const prev: AlertMemory | null = row ? { keys: (detail?.keys ?? []).slice(), alertSince: row.alertSince, alertedAt: row.alertedAt } : null;
     const { send, next } = decideAlert(prev, snap.problems, now, snap.thresholds.repeatHours);
-    const data = { detail: { keys: next.keys }, alertSince: next.alertSince, alertedAt: next.alertedAt };
+    let webhookPending = false;
+    if (send) {
+      await this.notifyInApp(send, snap.problems, prev?.alertSince ?? null, now);
+      webhookPending = !(await this.sendWebhook(send, snap.problems, prev?.alertSince ?? null, now));
+    } else if (detail?.webhookPending) {
+      webhookPending = !(await this.sendWebhook(snap.problems.length > 0 ? 'ALERT' : 'RECOVERED', snap.problems, null, now));
+    }
+    const data = {
+      detail: { keys: next.keys, ...(webhookPending ? { webhookPending: true } : {}) },
+      alertSince: next.alertSince,
+      alertedAt: next.alertedAt,
+    };
     await this.prisma.opsHealthState.upsert({ where: { key: ALERT_STATE_KEY }, create: { key: ALERT_STATE_KEY, ...data }, update: data });
-    if (send) await this.dispatch(send, snap.problems, prev?.alertSince ?? null, now);
     return { sent: send, problems: snap.problems };
   }
 
-  private async dispatch(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date) {
+  private message(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date): AlertMessage {
     const title = kind === 'ALERT' ? '⚠️ Sự cố vận hành' : '✅ Vận hành đã ổn trở lại';
     const summary =
       kind === 'ALERT'
         ? problems.map((p) => p.message).join('; ')
         : `Hết sự cố${since ? ` bắt đầu lúc ${formatVnDateTime(since)}` : ''} (kiểm lúc ${formatVnDateTime(now)}).`;
+    return { status: kind, title, summary, problems, generatedAt: now.toISOString() };
+  }
+
+  private async notifyInApp(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date) {
+    const { title, summary } = this.message(kind, problems, since, now);
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       { template: 'OPS_HEALTH_ALERT', subject: `sức khoẻ vận hành (${kind})`, data: () => ({ title, summary }) },
     ).catch((e: unknown) => this.logger.warn(`Báo admin sức khoẻ vận hành lỗi: ${e instanceof Error ? e.message : e}`));
+  }
 
+  /** true = đã gửi được, hoặc không cần gửi (chưa đặt URL). */
+  private async sendWebhook(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date): Promise<boolean> {
     const url = String(this.config.get('OPS_ALERT_WEBHOOK_URL', { infer: true }) ?? '').trim();
     const send = this.fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined);
-    if (!url || !send) return;
+    if (!url || !send) return true;
     try {
       const res = await send(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: kind, title, summary, problems, generatedAt: now.toISOString() }),
+        body: JSON.stringify(alertWebhookBody(url, this.message(kind, problems, since, now))),
         signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       });
-      if (!res.ok) this.logger.warn(`Webhook báo động vận hành trả HTTP ${res.status}.`);
+      if (res.ok) return true;
+      this.logger.warn(`Webhook báo động vận hành trả HTTP ${res.status} — gửi lại ở lượt kiểm sau.`);
     } catch (e) {
-      this.logger.warn(`Webhook báo động vận hành lỗi: ${e instanceof Error ? e.message : e}`);
+      this.logger.warn(`Webhook báo động vận hành lỗi: ${e instanceof Error ? e.message : e} — gửi lại ở lượt kiểm sau.`);
     }
+    return false;
   }
 }
