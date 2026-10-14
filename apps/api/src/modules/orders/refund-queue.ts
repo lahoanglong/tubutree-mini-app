@@ -46,13 +46,18 @@ export async function createBankRefund(
   });
 }
 
-/** Báo khách + admin sau khi khoản chuyển khoản đã commit. Best-effort: lỗi gửi tin không đổi được sổ. */
+/**
+ * Báo khách + admin sau khi khoản chuyển khoản đã commit. Best-effort: lỗi gửi tin không đổi được sổ. Caller đã báo khách
+ * bằng tin của chính sự kiện (huỷ đơn / duyệt trả kèm refund_note nói rõ số tiền và tài khoản) thì tắt `notifyCustomer` —
+ * một lần huỷ chỉ một tin (R2-BUYERMINI-9).
+ */
 export async function announceBankRefund(
   ctx: { prisma: Pick<PrismaClient, 'user'>; notifications?: RefundNotifier; logger: Pick<Logger, 'warn'> },
   refund: { orderCode: string; amount: number; userId: string | null; bankName: string | null; bankAccountNo: string | null },
+  opts: { notifyCustomer?: boolean } = {},
 ): Promise<void> {
   const amount = formatVnd(refund.amount);
-  if (refund.userId && refund.bankAccountNo) {
+  if ((opts.notifyCustomer ?? true) && refund.userId && refund.bankAccountNo) {
     await ctx.notifications
       ?.notify(refund.userId, 'REFUND_BANK_REQUESTED', {
         order_code: refund.orderCode,

@@ -314,6 +314,7 @@ export class OrderReturnsService {
       await announceBankRefund(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { orderCode: order.code, amount: money.amount, userId: order.userId, bankName: req.bankName, bankAccountNo: req.bankAccountNo },
+        { notifyCustomer: false },
       );
     }
     await this.flagPancakeReturn(order, shares);
