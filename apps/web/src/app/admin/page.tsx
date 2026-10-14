@@ -6,7 +6,6 @@ import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recyc
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
-import { pointsSummary } from '@/lib/checkout-points';
 import {
   listDealerApps,
   reviewDealerApp,
@@ -141,6 +140,7 @@ import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-t
 import { EngagementTab } from '@/components/admin/engagement-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
+import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
@@ -1444,7 +1444,6 @@ function ReturnsTab({
 }
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
-const USER_ROLE_LABELS: Record<string, string> = { CUSTOMER: 'Khách hàng', AFFILIATE: 'CTV', DEALER: 'Đại lý', STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 
 function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
@@ -1458,6 +1457,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const narrow = useNarrowScreen();
   const { confirm, ask, dialog } = useConfirm();
 
   const exportAll = async () => {
@@ -1579,62 +1579,16 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
         <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
       ) : (
         <>
-          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái']} label="Danh sách người dùng">
-            {q.data?.data.map((u) => (
-              <tr key={u.id} className="border-t border-stone-100">
-                <td className="px-3 py-2 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setDetailId(u.id)}
-                    aria-haspopup="dialog"
-                    className={`${BTN_LINK} text-left`}
-                    aria-label={`Xem chi tiết ${u.fullName ?? u.phone ?? u.id}`}
-                  >
-                    {u.fullName ?? '—'}
-                  </button>
-                </td>
-                <td className="px-3 py-2">{u.phone ?? '—'}</td>
-                <td className="px-3 py-2">{USER_ROLE_LABELS[u.role] ?? u.role}</td>
-                <td className="px-3 py-2">
-                  <UserPointsCell user={u} />
-                </td>
-                <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
-                <td className="min-w-[16rem] px-3 py-2">
-                  {!isAdmin ? (
-                    u.isBlocked ? (
-                      <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
-                    ) : (
-                      <span className="text-stone-500">Đang hoạt động</span>
-                    )
-                  ) : u.isBlocked ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
-                      <button
-                        type="button"
-                        onClick={() => askUnblock(u)}
-                        disabled={unblock.isPending}
-                        className={BTN_SMALL}
-                        aria-label={`Mở khoá ${u.fullName ?? u.phone ?? u.id}`}
-                      >
-                        Mở khoá
-                      </button>
-                      {u.blockedReason && <p className="w-full text-xs text-stone-500">Lý do: {u.blockedReason}</p>}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => askBlock(u)}
-                      disabled={block.isPending}
-                      className={BTN_DANGER_OUTLINE}
-                      aria-label={`Khoá ${u.fullName ?? u.phone ?? u.id}`}
-                    >
-                      Khoá
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </Table>
+          <UsersList
+            users={q.data?.data ?? []}
+            isAdmin={isAdmin}
+            narrow={narrow}
+            blockBusy={block.isPending}
+            unblockBusy={unblock.isPending}
+            onOpenDetail={setDetailId}
+            onBlock={askBlock}
+            onUnblock={askUnblock}
+          />
           {q.data && q.data.data.length === 0 && (
             <p className="text-sm text-stone-500">
               {search ? `Không có người dùng nào khớp “${search}”.` : 'Chưa có người dùng nào.'}
@@ -1676,17 +1630,6 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
 }
 
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
-/** Tổng Điểm Xanh khách thấy; phần quy đổi từ xu cũ (tiền trả trước, không hết hạn) ghi riêng để xử lý khiếu nại. */
-function UserPointsCell({ user }: { user: { pointsBalance: number; pointsConvertedBalance?: number } }) {
-  const pts = pointsSummary(user);
-  return (
-    <>
-      {pts.total}
-      {pts.convertedNote && <div className="text-xs text-stone-500">{pts.convertedNote}</div>}
-    </>
-  );
-}
-
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
   // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho
