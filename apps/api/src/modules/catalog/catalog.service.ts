@@ -197,6 +197,8 @@ export class CatalogService {
       where: { slug },
       include: {
         variations: { where: { isActive: true }, select: this.publicVariationSelect },
+        // Chỉ slug + cờ công khai của nhãn (không kéo cả bản ghi Brand: có ownerUserId): để tên nhãn ở PDP dẫn sang /brand/:slug.
+        brandRef: { select: { slug: true, isPublished: true } },
         // take:20 — trang chi tiết không phân trang review; sản phẩm nhiều review sẽ load hết
         // nếu không giới hạn. FE cần xem thêm thì gọi endpoint /products/:slug/reviews riêng.
         reviews: {
@@ -215,8 +217,10 @@ export class CatalogService {
     // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
     // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
     // (variations đã loại qua publicVariationSelect).
-    const { pancakeId: _pancakeId, ...publicProduct } = product;
-    return { ...publicProduct, sold: product.soldExternal + product.soldApp };
+    const { pancakeId: _pancakeId, brandRef, ...publicProduct } = product;
+    // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
+    const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
+    return { ...publicProduct, brandSlug, sold: product.soldExternal + product.soldApp };
   }
 
   async related(slug: string) {
@@ -346,7 +350,13 @@ export class CatalogService {
       where: { isActive: true },
       _count: { _all: true },
     });
-    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all }));
+    // Slug của nhãn đã công khai (khớp theo tên) để trang chủ dẫn tới /brand/:slug; nhãn chưa có trang thì null.
+    const published = await this.prisma.brand.findMany({
+      where: { isPublished: true, name: { in: rows.map((r) => r.brand) } },
+      select: { name: true, slug: true },
+    });
+    const slugByName = new Map(published.map((b) => [b.name, b.slug]));
+    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all, slug: slugByName.get(r.brand) ?? null }));
     this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }
