@@ -65,6 +65,14 @@ describe('Merchant product edit draft (real Postgres)', () => {
     return row.editVersion!;
   }
 
+  /**
+   * Tin do admin duyệt/từ chối gửi đi. Bỏ tin báo admin "có bản sửa mới" (OPS_MERCHANT_PRODUCT_EDIT_PENDING) vì nó tới mọi
+   * ADMIN đang có trong DB — số admin do các race spec khác tạo trước tuỳ thứ tự chạy.
+   */
+  function reviewNotices() {
+    return notify.mock.calls.map((c) => c[1] as string).filter((t) => t !== 'OPS_MERCHANT_PRODUCT_EDIT_PENDING');
+  }
+
   async function expectUntouched(productId: string, liveName: string, rejectReason: string | null = null) {
     const after = await prisma.product.findUniqueOrThrow({ where: { id: productId } });
     expect(after).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, rejectReason });
@@ -173,7 +181,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, v1)).rejects.toBeInstanceOf(BadRequestException);
     await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v1)).rejects.toBeInstanceOf(BadRequestException);
     await expectUntouched(product.id, product.name, 'Không đạt');
-    expect(notify.mock.calls.map((c) => c[1])).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED']);
+    expect(reviewNotices()).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED']);
 
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên chờ 2' });
     const v2 = await viewedVersion(product.id);
@@ -181,7 +189,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await expect(admin.reviewMerchantProduct('admin-b', product.id, false, 'Không đạt', false, v2)).rejects.toBeInstanceOf(BadRequestException);
     await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v2)).rejects.toBeInstanceOf(BadRequestException);
     await expectUntouched(product.id, 'Tên chờ 2');
-    expect(notify.mock.calls.map((c) => c[1])).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED', 'MERCHANT_PRODUCT_EDIT_APPROVED']);
+    expect(reviewNotices()).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED', 'MERCHANT_PRODUCT_EDIT_APPROVED']);
   });
 
   it('(g) đối tác sửa rồi sửa lại đúng nội dung đang bán (bản chờ bị xoá), admin bấm trên dòng cũ: 400, sản phẩm vẫn bán', async () => {
@@ -194,7 +202,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, version)).rejects.toBeInstanceOf(BadRequestException);
     await expect(admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, version)).rejects.toBeInstanceOf(BadRequestException);
     await expectUntouched(product.id, product.name);
-    expect(notify).not.toHaveBeenCalled();
+    expect(reviewNotices()).toEqual([]);
   });
 
   it('(h) dòng cũ không mang phiên bản (client cũ, hoặc dòng chờ duyệt lần đầu đã được xử lý) không bao giờ đổi sản phẩm APPROVED', async () => {
@@ -206,7 +214,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await expect(admin.reviewMerchantProduct('admin-a', product.id, true)).rejects.toBeInstanceOf(BadRequestException);
     await expectUntouched(product.id, product.name);
     expect(await prisma.productEditDraft.count({ where: { productId: product.id } })).toBe(1);
-    expect(notify).not.toHaveBeenCalled();
+    expect(reviewNotices()).toEqual([]);
   });
 
   it('(i) đối tác sửa tiếp giữa lúc admin mở danh sách và bấm: bản mới không bị duyệt khi chưa ai xem, admin tải lại rồi duyệt đúng bản mới', async () => {
