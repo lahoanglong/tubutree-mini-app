@@ -440,6 +440,35 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
   });
 });
 
+describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.slug = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getWallet.mockResolvedValue({ balance: 0 });
+    mocks.getLoyalty.mockResolvedValue(null);
+  });
+
+  it('báo giá có couponNotice → hiện câu giải thích dưới chip mã, không hiện dòng giảm', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này (hàng giờ vàng không được tính vào điều kiện của mã): Đơn tối thiểu 150.000đ để dùng mã này.';
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'UAT50K', couponNotice: notice });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: notice });
+    renderPage();
+    const el = await screen.findByTestId('coupon-notice');
+    expect(el.textContent).toBe(notice);
+    expect(screen.getByText('UAT50K')).toBeTruthy();
+  });
+
+  it('mã áp bình thường → không có câu giải thích', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });
+    renderPage();
+    await screen.findByText('SALE');
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+  });
+});
+
 describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -558,5 +587,53 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     renderPage();
     await screen.findByText('Phương thức thanh toán');
     expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument();
+  });
+});
+
+const badRequest = (message: string) =>
+  Object.assign(new Error(message), { isAxiosError: true, response: { status: 400, data: { message } } });
+
+describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-18)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('đặt đơn bị từ chối vì không đủ tồn → banner cố định (không chỉ toast) có nút "Về giỏ hàng"', async () => {
+    mocks.placeOrder.mockRejectedValue(badRequest('Sản phẩm "Xà bông thảo mộc" không đủ tồn kho.'));
+    renderPage();
+    await placeOrderClick();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(banner).toHaveAttribute('role', 'alert');
+    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" không đủ tồn kho.')).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
+  it('giỏ đang có dòng vượt tồn → báo ngay và khoá nút Đặt hàng', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 }] });
+    renderPage();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" chỉ còn 1 sản phẩm. Vui lòng sửa số lượng trong giỏ.')).toBeInTheDocument();
+    const btn = await screen.findByText(/Đặt hàng · /);
+    expect(btn.closest('button')).toBeDisabled();
+  });
+
+  it('lỗi khác (không phải tồn kho) vẫn báo bằng thông báo nhanh như cũ', async () => {
+    mocks.placeOrder.mockRejectedValue(badRequest('Mã giảm giá đã hết hạn.'));
+    renderPage();
+    await placeOrderClick();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết hạn.', type: 'error' }));
+    expect(screen.queryByTestId('checkout-cart-issue')).toBeNull();
   });
 });

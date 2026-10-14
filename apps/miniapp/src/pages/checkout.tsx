@@ -72,6 +72,8 @@ export default function CheckoutPage() {
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   const [totalChanged, setTotalChanged] = useState<string | null>(null);
+  // Lỗi đặt đơn chỉ sửa được ở giỏ (hết tồn, vượt suất giờ vàng): giữ trên màn kèm đường về giỏ, không để toast trôi mất.
+  const [cartIssue, setCartIssue] = useState<string | null>(null);
   // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
   // 2 sheet số điện thoại + 2 mutate song song (BE chống đơn đôi nhưng UX hỏng).
   const [submitting, setSubmitting] = useState(false);
@@ -249,6 +251,11 @@ export default function CheckoutPage() {
         void queryClient.invalidateQueries({ queryKey: ['cart'] });
         return;
       }
+      if (isCartFixableError(getErrorMessage(e))) {
+        setCartIssue(getErrorMessage(e));
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+        return;
+      }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
@@ -304,7 +311,12 @@ export default function CheckoutPage() {
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
-  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid;
+  const checkoutItems = itemIds
+    ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
+    : (cart.data?.items ?? []);
+  const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
+  const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
+  const canPlace = !!addressId && quote.isSuccess && !!invoiceValid && !overStockLine;
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const walletReason = quote.isSuccess ? walletUnavailableReason(walletBalance, total) : null;
@@ -326,6 +338,35 @@ export default function CheckoutPage() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
       <PageHeader title="Thanh toán" />
+
+      {shownCartIssue && (
+        <Box
+          role="alert"
+          data-testid="checkout-cart-issue"
+          p={3}
+          mx={3}
+          mt={2}
+          style={{
+            background: 'var(--color-status-warning-bg)',
+            borderRadius: 'var(--radius-card)',
+            display: 'flex',
+            gap: 10,
+            alignItems: 'flex-start',
+          }}
+        >
+          <AlertCircle size={18} color="var(--color-text-warning)" aria-hidden style={{ flex: '0 0 auto', marginTop: 2 }} />
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="small" style={{ color: 'var(--color-text-primary)' }}>
+              {shownCartIssue}
+            </Text>
+            <Box mt={2}>
+              <Button variant="secondary" onPress={() => navigate('/cart')}>
+                {vi.checkout.backToCart}
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
 
       <AddressSection
         addresses={addresses.data ?? []}
@@ -440,6 +481,16 @@ export default function CheckoutPage() {
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
+        {cart.data?.couponCode && (quote.data?.couponNotice ?? cart.data.couponNotice) && (
+          <Text
+            size="xSmall"
+            role="status"
+            data-testid="coupon-notice"
+            style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
+          >
+            {quote.data?.couponNotice ?? cart.data.couponNotice}
+          </Text>
+        )}
       </Box>
 
       {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}
@@ -938,4 +989,9 @@ function CheckoutSkeleton() {
       </Box>
     </Shell>
   );
+}
+
+/** Lỗi đặt đơn mà khách chỉ sửa được bằng cách đổi số lượng trong giỏ. */
+function isCartFixableError(message: string): boolean {
+  return /không đủ tồn kho/.test(message) || message === 'Vượt giới hạn mua ưu đãi.' || message === 'Hết suất ưu đãi.';
 }

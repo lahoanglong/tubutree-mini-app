@@ -523,6 +523,32 @@ export interface CreateCouponInput {
 export const createCoupon = (input: CreateCouponInput) =>
   apiFetch('/admin/coupons', { method: 'POST', body: input });
 
+export interface AdminCoupon {
+  id: string;
+  code: string;
+  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';
+  value: number;
+  minOrder: number | null;
+  maxDiscount: number | null;
+  startAt: string;
+  endAt: string;
+  usageLimit: number | null;
+  perUserLimit: number;
+  scope: string;
+  isActive: boolean;
+  /** Số lượt đã dùng (đếm theo đơn đã đặt bằng mã, đã trừ đơn huỷ/trả được hoàn mã). */
+  redeemedCount: number;
+}
+export type CouponStatusFilter = '' | 'active' | 'inactive' | 'expired';
+export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {
+  const qs = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+  if (params.q?.trim()) qs.set('q', params.q.trim());
+  if (params.status) qs.set('status', params.status);
+  return asPage(await apiFetch<AdminCoupon[] | Page<AdminCoupon>>(`/admin/coupons?${qs}`), params.page, params.limit);
+}
+export const updateCoupon = (id: string, patch: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) =>
+  apiFetch<AdminCoupon>(`/admin/coupons/${id}`, { method: 'PATCH', body: patch });
+
 // ── Nhãn hàng (storefront Lớp 3) ──
 export interface BrandCert {
   code: string;

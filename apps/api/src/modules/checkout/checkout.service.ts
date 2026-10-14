@@ -19,6 +19,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 
@@ -106,6 +107,8 @@ export class CheckoutService {
     return {
       subtotal: cart.subtotal,
       discount: computed.discount,
+      couponApplied: computed.couponApplied,
+      couponNotice: computed.couponNotice,
       comboDiscount: computed.comboDiscount,
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
@@ -607,6 +610,7 @@ export class CheckoutService {
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
       nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+      userId,
     );
     const nonFlashSubtotal = nonFlash.reduce((s, l) => s + l.total, 0);
     const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)
@@ -614,27 +618,29 @@ export class CheckoutService {
     let discount = 0; // coupon (sau combo)
     let freeship = false;
     let couponApplied = false; // coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true
+    let couponNotice: string | null = null;
     if (cart.couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo);
+        const couponLines = nonFlash.map((l) => ({
+          productId: l.productId,
+          total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
+        }));
+        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         freeship = r.freeship;
-        couponApplied = true;
-      } catch {
-        if (subset) {
-          // Subset không đạt điều kiện coupon (vd < minOrder của mã) → BỎ coupon: không giảm,
-          // KHÔNG redeem (tránh tiêu lượt dùng coupon của khách mà không được giảm).
-          discount = 0;
-          freeship = false;
-          couponApplied = false;
-        } else {
-          // Full cart (hành vi cũ giữ nguyên): coupon không còn hợp lệ trên base sau-combo (vd
-          // combo kéo xuống dưới minOrder) → GIỮ theo cart.discount đã validate trên gross, kẹp
-          // vào phần còn lại; vẫn redeem theo cart.couponCode (khớp bước redeem placeOrder).
-          discount = Math.min(cart.discount, goodsAfterCombo);
-          freeship = cart.freeship;
-          couponApplied = true;
+        // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ
+        // hết) → giảm 0đ. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
+        couponApplied = discount > 0 || freeship;
+        if (!couponApplied) {
+          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, flashSubtotal > 0, combo.total > 0);
         }
+      } catch (err) {
+        // Mã không đạt điều kiện trên phần hàng được tính (đã loại flash, trừ combo; hoặc tập con đã
+        // chọn) → KHÔNG giảm và KHÔNG redeem, kể cả khi đặt toàn giỏ: trước đây toàn giỏ rơi về
+        // cart.discount (0đ khi flash kéo phần còn lại dưới minOrder) mà vẫn redeem → đốt mất mã một lần
+        // của khách cho đơn không được giảm đồng nào (MONEY-3). Lỗi hạ tầng thì báo lỗi, không âm thầm bỏ mã.
+        if (!(err instanceof BadRequestException)) throw err;
+        couponNotice = couponNotAppliedNotice(err.message, flashSubtotal > 0, combo.total > 0);
       }
     }
     const goodsAfterCoupon = Math.max(0, goodsAfterCombo - discount);
@@ -689,6 +695,7 @@ export class CheckoutService {
       computed: {
         discount,
         couponApplied,
+        couponNotice,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
         tierDiscount,

@@ -3,23 +3,37 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
+import { useConfirm } from './confirm-dialog';
+
+/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví và tài khoản nhận tiền: sửa nhầm là sai tiền ngay ở đơn kế tiếp. */
+const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.'];
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
   const [val, setVal] = useState(JSON.stringify(row.value));
   const [err, setErr] = useState<string | null>(null);
   const dead = row.deprecated === true;
+  const { confirm, dialog } = useConfirm();
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(val);
       } catch {
         throw new Error('JSON không hợp lệ');
       }
+      if (MONEY_PREFIXES.some((p) => row.key.startsWith(p))) {
+        const ok = await confirm({
+          title: 'Xác nhận đổi cấu hình tiền/điểm',
+          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\nÁp dụng ngay cho mọi đơn, ví và điểm của khách.`,
+          confirmLabel: 'Lưu thay đổi',
+        });
+        if (!ok) return null;
+      }
       return setConfig(row.key, parsed);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (res === null) return;
       setErr(null);
       onSaved();
     },
@@ -55,6 +69,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
         )}
       </div>
       {err && <div className="text-xs text-danger-fg">{err}</div>}
+      {dialog}
     </div>
   );
 }

@@ -94,6 +94,18 @@ export class SystemConfigService {
     'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
+    'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số (6 = voucher 20.000đ cho đơn từ 120.000đ)' },
+    // ADMINOPS-3: các khoá tiền/điểm đọc thẳng vào checkout, ví, rút tiền. Phí âm làm tổng đơn nhỏ hơn tiền hàng;
+    // 1đ = 1 điểm là tích điểm gấp 10.000 lần. Chặn ngay lúc ghi.
+    'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
+    'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
+    'loyalty.vnd_per_point': { min: 1000, max: 1_000_000, note: 'đồng chi tiêu cho 1 Điểm Xanh (10000 = 10.000đ/điểm)', integer: true },
+    'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
+    'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
+    'affiliate.min_withdraw_bank': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
+    'referral.min_order_amount': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
+    'groupbuy.max_open_per_user': { min: 1, max: 100, note: 'số nhóm', integer: true },
+    'game.max_plots': { min: 1, max: 50, note: 'số lô đất', integer: true },
     // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
     'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
@@ -109,6 +121,28 @@ export class SystemConfigService {
    * PD-3: chặn ghi dạng xu cũ ({bonus} / type 'XU') hay giá trị xu dưới tên điểm.
    */
   private static readonly JSON_RULES: Record<string, (value: unknown) => string | null> = {
+    // VietQR dựng từ hai khoá này: sai một ký tự là tiền khách chuyển vào tài khoản khác hoặc QR không quét được.
+    'payment.bank_account_no': (value) =>
+      typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
+    'payment.bank_bin': (value) =>
+      typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
+    'shipping.tier_freeship_overrides': (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
+      for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {
+        if (!Number.isInteger(threshold) || (threshold as number) < 0 || (threshold as number) > 50_000_000) {
+          return `ngưỡng của hạng ${tier} phải là số đồng nguyên 0–50.000.000`;
+        }
+      }
+      return null;
+    },
+    'subscribe.discount_tiers': (value) => {
+      if (!Array.isArray(value)) return 'phải là mảng bậc [{ minActive, pct }]';
+      for (const t of value as Record<string, unknown>[]) {
+        if (!Number.isInteger(t?.minActive) || (t.minActive as number) < 1) return 'mỗi bậc cần minActive là số nguyên ≥ 1';
+        if (typeof t.pct !== 'number' || !(t.pct >= 0 && t.pct <= 1)) return 'mỗi bậc cần pct là phân số 0–1 (0.12 = 12%)';
+      }
+      return null;
+    },
     'referral.milestones_points': (value) => {
       if (!Array.isArray(value)) return 'phải là mảng [{ count, bonusPoints }]';
       const max = SystemConfigService.REFERRAL_MILESTONE_POINTS_MAX;
@@ -150,6 +184,11 @@ export class SystemConfigService {
       return null;
     },
   };
+
+  /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
+  static hasWriteRule(key: string): boolean {
+    return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
+  }
 
   private assertInRange(key: string, value: unknown): void {
     const jsonRule = SystemConfigService.JSON_RULES[key];

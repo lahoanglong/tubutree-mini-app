@@ -33,3 +33,12 @@ export function isCouponEligible(coupon: CouponScopeInfo, user: EligibilityUser)
   // BIRTHDAY / INVITE / scope chưa biết → default DENY (tránh leak voucher cá nhân).
   return false;
 }
+
+/**
+ * Mã công khai có giới hạn lượt/người chỉ có nghĩa khi "người" là tài khoản thật: tài khoản khách
+ * (deviceId mới = tài khoản mới) dùng lại được mã "khách mới" vô hạn (MONEY-16). Mã công khai không
+ * giới hạn theo người (perUserLimit <= 0) thì ai dùng cũng như nhau nên không cần.
+ */
+export function requiresRealUser(coupon: CouponScopeInfo & { perUserLimit?: number | null }): boolean {
+  return (coupon.scope === 'PUBLIC' || coupon.scope == null) && (coupon.perUserLimit ?? 0) > 0;
+}

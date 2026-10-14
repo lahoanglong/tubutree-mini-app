@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Optional } 
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 
 interface GroupRow {
   id: string;
@@ -30,13 +31,24 @@ export class GroupBuyService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
+  /**
+   * Mua chung chỉ dành cho tài khoản thật (SĐT hoặc Zalo thật): tài khoản khách tạo vô hạn bằng deviceId mới,
+   * nên trước đây một người tự mở nhóm rồi lấp đủ bằng 2 tài khoản khách là có 3 mã giảm (MONEY-4, ENGAGE-8).
+   */
+  private async assertRealUser(userId: string): Promise<void> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(u)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+  }
+
   async create(userId: string, productId: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
-    if (!product || !product.isActive) throw new NotFoundException('Sản phẩm không khả dụng.');
+    if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
+      throw new NotFoundException('Sản phẩm không khả dụng.');
+    }
+    await this.assertRealUser(userId);
 
-    // Chống spam mở nhóm hàng loạt (mỗi nhóm tự làm đủ member bằng tài khoản phụ để lấy coupon
-    // — xem grantCoupon() ở dưới về vì sao minOrder đã chặn phần "tiền miễn phí"; trần này chặn
-    // thêm việc rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ).
+    // Chống spam mở nhóm hàng loạt: rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ
+    // (tài khoản phụ đã bị chặn ở assertRealUser, mã chỉ áp cho đúng sản phẩm — xem grantCoupon()).
     const maxOpenPerUser = await this.config.get<number>('groupbuy.max_open_per_user', 3);
     const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN' } });
     if (openCount >= maxOpenPerUser) {
@@ -95,6 +107,7 @@ export class GroupBuyService {
       where: { groupBuyId_userId: { groupBuyId, userId } },
     });
     if (existing) throw new BadRequestException('Bạn đã tham gia nhóm này rồi.');
+    await this.assertRealUser(userId);
 
     const result = await this.prisma.$transaction(async (tx) => {
       try {
@@ -146,7 +159,7 @@ export class GroupBuyService {
     for (const m of members) {
       let newlyGranted = false;
       try {
-        await this.grantCoupon(group.id, m.userId, discount, group.unitPrice);
+        await this.grantCoupon(group.id, m.userId, discount, group.unitPrice, group.productId);
         newlyGranted = true;
       } catch (e) {
         if (this.isAlreadyGranted(e)) {
@@ -257,15 +270,17 @@ export class GroupBuyService {
 
   /** Mã TẤT ĐỊNH theo (nhóm, user) → cấp lại an toàn: coupon.code @unique chặn trùng (P2002). */
   /**
-   * @param minOrder Giá của chính nhóm mua chung (unitPrice) — BẮT BUỘC, không phải tuỳ chọn.
-   *   Thiếu ràng buộc này, coupon AMOUNT không có product/minOrder restriction dùng được trên
-   *   BẤT KỲ đơn nào (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không
-   *   xét sản phẩm) → mở nhóm rồi tự làm đủ member (sockpuppet) là in coupon miễn phí, không
-   *   cần mua gì (P0-2, docs/2026-09-08-review-progress.md). minOrder buộc phải có đơn thật
-   *   ≥ đúng giá nhóm mua chung mới đổi được — coupon còn lại đúng nghĩa "giảm giá", không
-   *   còn là tiền free.
+   * Mã chỉ áp cho đúng sản phẩm của nhóm (`applyTo.productIds`) và đơn tối thiểu = giá nhóm tính trên
+   * chính dòng sản phẩm đó: "mua với giá nhóm" là giá của sản phẩm này, không phải mã giảm ~15% cho mọi
+   * đơn (MONEY-4). Trước đây chỉ có minOrder trên tổng giỏ (P0-2, docs/2026-09-08-review-progress.md).
    */
-  private async grantCoupon(groupBuyId: string, userId: string, amount: number, minOrder: number): Promise<string> {
+  private async grantCoupon(
+    groupBuyId: string,
+    userId: string,
+    amount: number,
+    minOrder: number,
+    productId: string,
+  ): Promise<string> {
     const code = `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
@@ -280,6 +295,7 @@ export class GroupBuyService {
         perUserLimit: 1,
         scope: 'USER_GROUP',
         scopeMeta: { userId, groupBuyId } as object,
+        applyTo: { productIds: [productId] } as object,
       },
     });
     return code;

@@ -29,6 +29,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
+import { paidLineTotals } from './commission-base';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -498,12 +499,14 @@ export class AffiliateService {
     let weightedRate = 0;
     // Nền doanh số bậc/mốc: chỉ dòng CÓ hưởng hoa hồng (loại hàng bị chặn/rate 0 + phí ship).
     let commissionableTotal = 0;
-    for (const item of order.items) {
+    const paid = paidLineTotals(order, order.items);
+    order.items.forEach((item, idx) => {
       const rate = rateMap.get(item.variationId) ?? 0;
-      amount += Math.floor((item.total * rate) / 100);
+      const base = paid[idx] ?? 0;
+      amount += Math.floor((base * rate) / 100);
       weightedRate += rate;
-      if (rate > 0) commissionableTotal += item.total;
-    }
+      if (rate > 0) commissionableTotal += base;
+    });
     if (amount <= 0) return;
 
     await db.commission.createMany({
@@ -890,10 +893,12 @@ export class AffiliateService {
     // Đếm đơn theo orderId riêng biệt (Set) — 1 đơn có 2 item cùng SP vẫn tính 1 đơn.
     const acc = new Map<string, { productName: string; commission: number; orderIds: Set<string> }>();
     for (const c of commissions) {
-      for (const it of c.order?.items ?? []) {
+      const items = c.order?.items ?? [];
+      const paid = c.order ? paidLineTotals(c.order, items) : [];
+      for (const [idx, it] of items.entries()) {
         const r = rate.get(it.variationId) ?? 0;
         if (r <= 0) continue;
-        const amount = Math.floor((it.total * r) / 100);
+        const amount = Math.floor(((paid[idx] ?? 0) * r) / 100);
         const cur =
           acc.get(it.productName) ?? { productName: it.productName, commission: 0, orderIds: new Set<string>() };
         cur.commission += amount;

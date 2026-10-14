@@ -180,6 +180,8 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí ship 🌿',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí ship`,
     stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
+    outOfStock: 'Sản phẩm đã hết hàng',
+    overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
     discontinuedHeading: (n: number) => `${n} sản phẩm đã ngừng bán`,
     discontinuedBody: 'Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.',
     discontinuedRemove: 'Xoá',
@@ -190,6 +192,11 @@ export const vi = {
 
   checkout: {
     title: 'Thanh toán',
+    overStock: (name: string, stock: number) =>
+      stock > 0
+        ? `Sản phẩm "${name}" chỉ còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
+        : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
+    backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
     addressEmpty: 'Bạn chưa thêm địa chỉ',
     addAddress: 'Thêm địa chỉ mới',

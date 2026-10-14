@@ -134,6 +134,11 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
 };
 
+/** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */
+export function hasAdminConfigRule(key: string): boolean {
+  return key in RULES || key in CROSS_CHECK_PARTNER;
+}
+
 /**
  * Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. `partnerValue` là giá trị hiện lưu
  * của khoá đối ứng (configPartnerKey) cho luật so chéo; không truyền hoặc null/undefined = chưa có gì để so.

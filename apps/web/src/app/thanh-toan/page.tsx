@@ -286,7 +286,14 @@ export default function CheckoutPage() {
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
-          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} disabled={place.isPending} />}
+          {cart && (
+            <CouponBox
+              currentCode={cart.couponCode}
+              subtotal={cart.subtotal}
+              notice={quote?.couponNotice ?? cart.couponNotice}
+              disabled={place.isPending}
+            />
+          )}
           {usablePoints > 0 && (
             <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
               <input

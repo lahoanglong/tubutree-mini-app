@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 // Import trực tiếp — không phải qua @nestjs/platform-express — nên PHẢI là dependency trực
@@ -12,6 +12,7 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { createValidationPipe } from './common/validation-pipe';
 
 async function bootstrap() {
   const isProd = process.env.NODE_ENV === 'production';
@@ -64,13 +65,7 @@ async function bootstrap() {
   app.use(urlencoded({ limit: '10mb', extended: true }));
   app.use(helmet());
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
   // Map Prisma errors → HTTP status nhất quán (tránh 500 trần khi P2025/P2002/...).
   app.useGlobalFilters(new PrismaExceptionFilter());
 

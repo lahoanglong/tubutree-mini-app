@@ -11,7 +11,8 @@ function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigServic
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
-    product: { findUnique: jest.fn().mockResolvedValue({ id: 'prod1', isActive: true, basePrice: 100000, salePrice: null, name: 'X', slug: 'x', thumbnail: null }) },
+    product: { findUnique: jest.fn().mockResolvedValue({ id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 100000, salePrice: null, name: 'X', slug: 'x', thumbnail: null }) },
+    user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
     groupBuy: {
       findUnique: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
@@ -50,6 +51,39 @@ function group(extra: Record<string, unknown> = {}) {
     ...extra,
   };
 }
+
+describe('GroupBuyService — chống tự làm đủ nhóm bằng tài khoản khách (MONEY-4, ENGAGE-8)', () => {
+  const guest = { phone: null, zaloId: 'guest_dev1' };
+
+  it('tài khoản khách (chưa đăng nhập Zalo/chưa SĐT) không mở được nhóm', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(guest);
+    await expect(new GroupBuyService(prisma, makeConfig()).create('g1', 'prod1')).rejects.toThrow('đăng nhập Zalo');
+    expect(prisma.groupBuy.create).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản khách không tham gia được nhóm (không được đếm là thành viên)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue(group());
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(guest);
+    await expect(new GroupBuyService(prisma, makeConfig()).join('g2', 'gb1')).rejects.toThrow('đăng nhập Zalo');
+    expect(prisma.groupBuyMember.create).not.toHaveBeenCalled();
+  });
+
+  it('sản phẩm chưa duyệt (PENDING_REVIEW) không mở được nhóm', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({ id: 'prod1', isActive: true, approvalStatus: 'PENDING_REVIEW', basePrice: 100000, salePrice: null });
+    await expect(new GroupBuyService(prisma, makeConfig()).create('u1', 'prod1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('mã cấp khi nhóm thành công chỉ áp cho đúng sản phẩm của nhóm (applyTo.productIds)', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    const data = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+    expect(data).toMatchObject({ type: 'AMOUNT', value: 15000, minOrder: 85000, applyTo: { productIds: ['prod1'] } });
+  });
+});
 
 describe('GroupBuyService.create', () => {
   it('sản phẩm không tồn tại/ngừng bán → NotFound', async () => {

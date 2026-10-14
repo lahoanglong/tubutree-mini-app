@@ -20,10 +20,13 @@ export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
 export function CouponBox({
   currentCode,
   subtotal,
+  notice = null,
   disabled = false,
 }: {
   currentCode: string | null;
   subtotal: number;
+  /** Mã đang giữ nhưng chưa áp cho đơn (server giải thích lý do, vd hàng giờ vàng không tính vào điều kiện). */
+  notice?: string | null;
   /** Trang chứa đang đặt hàng: đổi mã lúc này làm đơn lấy mã khác với con số khách đã thấy. */
   disabled?: boolean;
 }) {
@@ -116,6 +119,11 @@ export function CouponBox({
             </div>
           )}
         </>
+      )}
+      {currentCode && notice && (
+        <p role="status" data-testid="coupon-notice" className="mt-2 text-xs text-warning-fg">
+          {notice}
+        </p>
       )}
       {err && (
         <p role="alert" className="mt-2 text-xs text-danger-fg">

@@ -1,11 +1,26 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CouponsService } from '../coupons/coupons.service';
+import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
+import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
+
+/** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
+function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
+  return lines.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
+}
+
+/** Lý do dòng giờ vàng đang tính giá thường: số lượng vượt số suất khách còn mua được. */
+function flashLimitMessage(offer: EffectivePrice, quantity: number): string {
+  const allowance = offer.allowance ?? 0;
+  if (allowance <= 0) return 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.';
+  const tail = `Giảm số lượng còn ${allowance} để được giá giờ vàng, hoặc mua ${quantity} sản phẩm với giá thường.`;
+  if ((offer.quotaLeft ?? allowance) <= (offer.perUserLeft ?? allowance)) return `Chỉ còn ${allowance} suất giờ vàng. ${tail}`;
+  return `Giá giờ vàng chỉ áp dụng tối đa ${allowance} sản phẩm cho bạn. ${tail}`;
+}
 
 @Injectable()
 export class CartService {
@@ -53,9 +68,13 @@ export class CartService {
     const flashMap = await this.flashSale.resolveEffective(
       sellable.map((it) => it.variationId),
       now,
+      userId,
     );
     const lines = sellable.map((it) => {
-      const flash = flashMap.get(it.variationId);
+      const offer = flashMap.get(it.variationId);
+      const fits = !offer || offer.allowance === undefined || it.quantity <= offer.allowance;
+      const flash = fits ? offer : undefined;
+      const flashLimitNotice = offer && !fits ? flashLimitMessage(offer, it.quantity) : null;
       const standing = it.variation.salePrice ?? it.variation.retailPrice;
       const unitPrice = flash ? Math.min(flash.flashPrice, standing) : standing;
       return {
@@ -75,6 +94,7 @@ export class CartService {
         flashSaleItemId: flash?.itemId ?? null,
         flashEndAt: flash?.endAt ?? null,
         soldPct: flash ? (flash.quota > 0 ? Math.round((flash.soldCount / flash.quota) * 100) : 0) : null,
+        flashLimitNotice,
       };
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
@@ -84,14 +104,18 @@ export class CartService {
     let discount = 0;
     let freeship = false;
     let couponCode = cart.couponCode;
+    let couponNotice: string | null = null;
     if (couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase);
+        const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase, couponLinesOf(lines));
         // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
         // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
         // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
         discount = Math.min(r.discount, couponBase);
         freeship = r.freeship;
+        if (lines.length > 0 && discount === 0 && !freeship) {
+          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash));
+        }
       } catch (err) {
         // Chỉ coi là "coupon không hợp lệ" khi CouponsService từ chối bằng business rule
         // (luôn ném BadRequestException — coupons.service.ts). Lỗi hạ tầng khác (DB timeout,
@@ -102,9 +126,10 @@ export class CartService {
         // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
         // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
         try {
-          await this.coupons.validateAndCompute(couponCode, userId, subtotal);
+          await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
           discount = 0;
           freeship = false;
+          couponNotice = couponNotAppliedNotice(err.message, true);
         } catch (err2) {
           if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
@@ -119,6 +144,7 @@ export class CartService {
     return {
       items: lines,
       couponCode,
+      couponNotice,
       subtotal,
       discount,
       freeship,
@@ -213,8 +239,9 @@ export class CartService {
     const cart = await this.getCart(userId);
     // Validate trên base KHÔNG flash (khớp getCart) — tránh apply rồi bị strip ngay.
     const couponBase = cart.items.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0);
-    await this.coupons.validateAndCompute(code, userId, couponBase);
-    await this.prisma.cart.update({ where: { userId }, data: { couponCode: code } });
+    const normalized = normalizeCouponCode(code);
+    await this.coupons.validateAndCompute(normalized, userId, couponBase, couponLinesOf(cart.items));
+    await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
     return this.getCart(userId);
   }
 
