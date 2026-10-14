@@ -16,6 +16,7 @@ import {
   type PancakeLinkPreview,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge } from './ui';
 
 /**
@@ -172,7 +173,7 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
           </p>
           <p className="mt-0.5">
             Mã {l.variation.pancakeId} ({l.variation.name}) · tồn kho Tubu {l.variation.stock} sp · liên kết{' '}
-            {new Date(l.linkedAt).toLocaleDateString('vi-VN')}
+            {formatDate(l.linkedAt)}
           </p>
           <p className="mt-0.5 text-stone-500">
             Sản phẩm gốc:{' '}
