@@ -167,6 +167,21 @@ chưa đối soát, trả trước:        không lên bảng kê (Tubu giữ ti
   nhận đối soát", rồi bấm "Đã chuyển" kèm mã giao dịch. Phiếu âm là "đối tác cần nộp" và được đánh dấu "Đã thu".
 - Phí sàn: `Storefront.commissionPct` (admin đặt) hoặc `merchant.commission_pct` (mặc định 0,15). Hoa hồng CTV giới thiệu (nếu
   có) là chi phí của Tubu, không trừ đối tác.
+- Hàng "Tubu giao hộ" (Q8, `merchant-consignment.ts`): đơn kho Tubu, tiền khách luôn về Tubu (COD hãng thu hộ Tubu hoặc trả
+  trước). Mỗi dòng hàng có biến thể liên kết với gian hàng lúc đặt đơn (`merchant_pancake_links`, khoảng `[linkedAt, unlinkedAt)`)
+  là một dòng phiếu riêng, khoá `ITEM:<orderItemId>`, cùng hạn giữ và cùng phiếu với đơn tự giao:
+
+```
+paid_i     = (order.total − shippingFee) chia theo OrderItem.total (distributeByWeight; phí giao là của Tubu)
+commission = round(paid_i × phí sàn của gian hàng)
+opsFee     = round(paid_i × consignmentFeePct) + phần của consignmentFeeFixed (chia theo paid_i giữa các món giao hộ của gian hàng trong đơn)
+net        = paid_i − commission − opsFee            (shippingFee = cod = 0)
+```
+
+  Trả một phần: `REVERSAL` khoá `RETURN:<id yêu cầu>:ITEM:<orderItemId>`, phần của các đơn vị trả trên chính số của dòng SALE
+  (luỹ kế). Đơn `RETURNED` (trả cả đơn, Pancake "Đã hoàn") sau khi đã vào phiếu: `REVERSAL` khoá `ITEM:<orderItemId>` đảo phần
+  còn lại. Hàng trả về kho Tubu. Phí giao hộ (`Storefront.consignmentFeePct`, `consignmentFeeFixed`, mặc định 0) admin sửa ở tab
+  "Đơn đối tác" cùng phí sàn.
 
 ## 8. Trả hàng, giám sát
 
