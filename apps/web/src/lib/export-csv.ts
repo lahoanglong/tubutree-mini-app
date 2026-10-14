@@ -21,6 +21,12 @@ function escapeCsvCell(value: unknown): string {
   return str;
 }
 
+/** SĐT toàn số: ghi thành văn bản ="0910087109" để Excel không đọc thành số rồi bỏ số 0 đầu. */
+function escapeCsvText(value: string | null | undefined): string {
+  if (value && /^\+?\d+$/.test(value)) return `"=""${value}"""`;
+  return escapeCsvCell(value ?? '');
+}
+
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán',
   CONFIRMED: 'Đã xác nhận',
@@ -64,7 +70,7 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
     return [
       escapeCsvCell(o.code),
       escapeCsvCell(o.user?.fullName ?? 'Khách lẻ'),
-      escapeCsvCell(o.user?.phone ?? ''),
+      escapeCsvText(o.user?.phone),
       escapeCsvCell(o.total),
       escapeCsvCell(PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod),
       escapeCsvCell(ORDER_STATUS_LABELS[o.status] ?? o.status),
@@ -86,7 +92,7 @@ export function generateUsersCsvString(users: AdminUser[]): string {
     return [
       escapeCsvCell(u.id),
       escapeCsvCell(u.fullName ?? 'Chưa cập nhật'),
-      escapeCsvCell(u.phone ?? ''),
+      escapeCsvText(u.phone),
       escapeCsvCell(u.role),
       escapeCsvCell(pts.total),
       escapeCsvCell(pts.converted),
