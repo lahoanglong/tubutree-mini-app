@@ -275,6 +275,8 @@ export default function ProductDetailPage() {
   // freeship, đặt định kỳ hay mua chung.
   const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
   const fromStore = merchant ?? unavailable;
+  // Hàng của gian hàng đối tác (kể cả Tubu giao hộ) chỉ bán giá lẻ: không đặt định kỳ, không mua chung (Q8 S2).
+  const retailOnly = !!fromStore || p.partnerOwned === true;
 
   const handleAdd = async () => {
     if (status !== 'authenticated') {
@@ -439,6 +441,12 @@ export default function ProductDetailPage() {
           </Box>
         )}
 
+        {!fromStore && p.partnerOwned && (
+          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 10 }}>
+            Hàng của gian hàng đối tác chỉ bán theo giá lẻ, chưa đặt định kỳ hay mua chung được.
+          </Text>
+        )}
+
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
         {!fromStore && freeshipFrom != null && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
@@ -522,7 +530,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && !fromStore && (
+        {selected && inStock && !retailOnly && (
           <Box
             role="button"
             className="tubu-press"
@@ -594,7 +602,7 @@ export default function ProductDetailPage() {
       </Box>
 
       {/* ── Mua chung (§6.14.8) ── */}
-      {!fromStore && (
+      {!retailOnly && (
         <Box
           className="tubu-press"
           p={4}

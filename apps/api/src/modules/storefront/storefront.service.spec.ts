@@ -421,6 +421,36 @@ describe('StorefrontService items', () => {
     expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
   });
 
+  it('Q8 S2: không thêm hàng của gian hàng đối tác vào combo (báo rõ lý do); bộ sưu tập thường vẫn thêm được', async () => {
+    const partner = { id: 'p9', name: 'Mật ong rừng', isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED', storefrontId: 'sf-doi-tac' };
+    const combo = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', kind: 'COMBO', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue(partner) },
+      storefrontItem: { count: jest.fn(), create: jest.fn() },
+    });
+    await expect(new StorefrontService(combo, config, affiliate).addItem('u1', 'c1', { productId: 'p9' })).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không thêm vào combo được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect(combo.storefrontItem.create).not.toHaveBeenCalled();
+
+    const normal = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c2', kind: 'NORMAL', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue(partner) },
+      storefrontItem: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i1', ...data })) },
+    });
+    expect((await new StorefrontService(normal, config, affiliate).addItem('u1', 'c2', { productId: 'p9' })).productId).toBe('p9');
+
+    const tubu = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', kind: 'COMBO', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ ...partner, id: 'p1', storefrontId: null }) },
+      storefrontItem: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
+    });
+    expect((await new StorefrontService(tubu, config, affiliate).addItem('u1', 'c1', { productId: 'p1' })).productId).toBe('p1');
+  });
+
   it('addItem chặn productId không tồn tại', async () => {
     const prisma = makePrisma({
       storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
@@ -635,6 +665,28 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(update.mock.calls[0][0].data).toEqual({
       title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: null,
     });
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác đã nằm trong combo thì không hiện trong combo (không được giảm); bộ sưu tập thường vẫn hiện', async () => {
+    const item = (id: string, storefrontId: string | null) => ({
+      id: `i-${id}`, note: null, variationId: null, isHidden: false,
+      product: {
+        id, name: `SP ${id}`, slug: id, thumbnail: null, brand: 'B', basePrice: 100_000, salePrice: null, ratingAvg: 0, reviewCount: 0,
+        isActive: true, affiliateBlocked: false, soldExternal: 0, soldApp: 0, approvalStatus: 'APPROVED', storefrontId, variations: [{ stock: 1 }],
+      },
+    });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctv', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', owner: { referralCode: 'ABCD1234' },
+        collections: [
+          { id: 'c1', title: 'Combo', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, items: [item('p1', null), item('p2', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c2', title: 'Gợi ý', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, items: [item('p9', 'sf-doi-tac')] },
+        ],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctv');
+    expect(r.collections.map((c) => c.items.map((i) => i.product.id))).toEqual([['p1', 'p2'], ['p9']]);
+    expect(JSON.stringify(r)).not.toContain('sf-doi-tac');
   });
 
   it('404 nếu chưa publish', async () => {

@@ -194,7 +194,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Đơn hàng & giao vận',
     items: [
       { k: 'orders', label: 'Đơn hàng' },
-      { k: 'merchantFulfilment', label: 'Đơn đối tác tự giao' },
+      { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
     ],
   },
   {

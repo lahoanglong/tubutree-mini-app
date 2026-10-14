@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Leaf, X } from 'lucide-react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  confirmMerchantConsignment,
   listLinkedMerchantProducts,
   listPendingMerchantProducts,
   reviewMerchantProduct,
@@ -17,7 +18,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge } from './ui';
 
 /**
  * "Duyệt SP đối tác" — P0 A6-07 (docs/audit-2026-09/06-web.md): API `/admin/merchant-products/pending`
@@ -209,6 +210,7 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
           </div>
         )}
       </div>
+      {l.takeover && <ConsignmentConfirm link={l} />}
       {mut.isError && <p className="mt-2 text-danger-fg">{(mut.error as Error).message}</p>}
     </div>
   );
@@ -240,6 +242,59 @@ function EditComparison({ live, next }: { live: NonNullable<AdminPendingProduct[
             </div>
           ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Liên kết nhận lại mã của sản phẩm Tubu đang bán: hàng đang có trong kho có thể là hàng Tubu đã mua, nên chỉ đối soát tự động
+ * cho gian hàng sau khi admin đối chiếu tồn lúc liên kết và xác nhận đó là hàng ký gửi.
+ */
+function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
+  const qc = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const mut = useMutation({
+    mutationFn: () => confirmMerchantConsignment(l.id),
+    onSuccess: () => {
+      setAsking(false);
+      void qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
+    },
+  });
+  const store = l.product.storefront?.title ?? 'gian hàng';
+  return (
+    <div className="mt-2 rounded-control border border-stone-200 bg-stone-50 p-2.5">
+      <p>
+        Nhận lại mã của sản phẩm Tubu đang bán · Tồn lúc liên kết: {l.stockAtLink ?? '—'} sp
+      </p>
+      {l.consignmentConfirmedAt ? (
+        <p className="mt-0.5 text-stone-500">
+          Đã xác nhận hàng ký gửi {formatDate(l.consignmentConfirmedAt)} — đơn đặt từ mốc này vào đối soát của {store}.
+        </p>
+      ) : (
+        <>
+          <p className="mt-0.5 text-stone-500">
+            Chưa đối soát tự động: xác nhận khi số hàng này là hàng ký gửi của {store}, không phải hàng Tubu đã mua.
+          </p>
+          {!asking ? (
+            <button type="button" onClick={() => setAsking(true)} className={`${BTN_XS_SECONDARY} mt-2`}>
+              Xác nhận hàng ký gửi
+            </button>
+          ) : (
+            <div className="mt-2 space-y-1.5">
+              <p className="font-medium text-stone-900">Đơn đặt từ lúc xác nhận sẽ vào đối soát của {store}. Không hoàn tác được.</p>
+              <div className="flex gap-1.5">
+                <button type="button" onClick={() => mut.mutate()} disabled={mut.isPending} className={BTN_XS_PRIMARY}>
+                  {mut.isPending ? 'Đang xác nhận…' : 'Xác nhận ký gửi'}
+                </button>
+                <button type="button" onClick={() => setAsking(false)} className={BTN_XS_SECONDARY}>
+                  Huỷ
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {mut.isError && <p className="mt-1 text-danger-fg">{(mut.error as Error).message}</p>}
     </div>
   );
 }

@@ -8,6 +8,8 @@ export interface CouponResult {
   code: string;
   discount: number;
   freeship: boolean;
+  /** Sản phẩm mã gắn vào (null = mọi sản phẩm) — checkout chia phần giảm chỉ vào các dòng đó. */
+  productIds: string[] | null;
 }
 
 /** Một dòng hàng (đã loại flash) dùng để xét mã gắn sản phẩm (`Coupon.applyTo.productIds`). */
@@ -119,7 +121,7 @@ export class CouponsService {
         freeship = true;
         break;
     }
-    return { code: coupon.code, discount, freeship };
+    return { code: coupon.code, discount, freeship, productIds };
   }
 
   /**

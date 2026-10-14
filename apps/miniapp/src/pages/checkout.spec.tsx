@@ -777,3 +777,44 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
     await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 });
+
+describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () => {
+  const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 300, redeemablePoints: 300 });
+  });
+
+  const pointsRow = async () => (await screen.findByText('Điểm Xanh', { selector: 'span, div, p' })).closest('[role="checkbox"]') as HTMLElement;
+
+  it('giỏ có hàng của gian hàng đối tác: nêu trần điểm của đơn và câu giải thích, vẫn bật được', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 12, pointsPartnerNote: NOTE });
+    renderPage();
+    expect(await screen.findByText('Đơn này dùng tối đa 12 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    const row = await pointsRow();
+    expect(row.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.some((c) => c[1] === 300)).toBe(true));
+  });
+
+  it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
+    renderPage();
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    const row = await pointsRow();
+    expect(row.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(row);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.checkoutQuote.mock.calls.every((c) => c[1] === 0)).toBe(true);
+  });
+});

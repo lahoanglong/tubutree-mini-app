@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { isPartnerOwnedProduct } from '../cart/partner-goods';
 
 export interface ComboLine {
   variationId: string;
@@ -73,7 +74,7 @@ export class ComboService {
           where: { kind: 'COMBO' },
           select: {
             comboDiscountPct: true,
-            items: { select: { productId: true, isHidden: true } },
+            items: { select: { productId: true, isHidden: true, product: { select: { storefrontId: true } } } },
           },
         },
       },
@@ -88,8 +89,9 @@ export class ComboService {
     const combos = sf.collections
       .map((c) => ({
         pct: Math.min(c.comboDiscountPct ?? 0, maxPct),
-        // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại).
-        productIds: c.items.filter((i) => !i.isHidden).map((i) => i.productId),
+        // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại). Hàng của gian hàng đối tác
+        // cũng vậy: chỉ bán giá lẻ, không được giảm combo (partner-goods.ts).
+        productIds: c.items.filter((i) => !i.isHidden && !isPartnerOwnedProduct(i.product)).map((i) => i.productId),
       }))
       .filter((c) => c.productIds.length > 0);
     return allocateComboDiscounts(combos, lines);

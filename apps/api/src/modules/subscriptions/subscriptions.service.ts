@@ -26,6 +26,7 @@ import {
 import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -76,6 +77,8 @@ interface UpdateSubInput {
 class SubscriptionOutOfStockError extends Error {}
 /** Địa chỉ của gói đã mất/không còn thuộc khách lúc sinh đơn kỳ. */
 class SubscriptionAddressError extends Error {}
+/** Sản phẩm của gói đã thành hàng của gian hàng đối tác: không có giảm giá định kỳ, gói tạm dừng. */
+class SubscriptionPartnerGoodsError extends Error {}
 /** Ví Tubu không đủ trả đơn kỳ: không sinh đơn nợ, gói tạm dừng. */
 class SubscriptionWalletShortError extends Error {}
 /** Đơn kỳ trả COD vượt hạn mức COD: không sinh đơn, gói tạm dừng. */
@@ -178,10 +181,11 @@ export class SubscriptionsService {
     const firstRunAt = this.parseStartDate(dto.startDate);
     const variation = await this.prisma.variation.findUnique({
       where: { id: dto.variationId },
-      include: { product: { select: { name: true, isActive: true, approvalStatus: true, fulfilment: true } } },
+      include: { product: { select: { name: true, isActive: true, approvalStatus: true, fulfilment: true, storefrontId: true } } },
     });
     if (!variation) throw new BadRequestException('Sản phẩm không khả dụng.');
     if (!isSellableVariation(variation)) throw productDiscontinuedError(variation.product.name);
+    if (isPartnerOwnedVariation(variation)) throw partnerGoodsError('SUBSCRIPTION', variation.product.name);
     // Đơn định kỳ đẩy thẳng kho Tubu (Pancake); hàng đối tác tự giao không đăng ký định kỳ được (D4).
     if (!isPancakeFulfilledLine({ pancakeId: variation.pancakeId, fulfilment: variation.product.fulfilment })) {
       throw new BadRequestException('Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ giao định kỳ.');
@@ -445,6 +449,13 @@ export class SubscriptionsService {
   async setStatus(userId: string, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
     const sub = await this.prisma.subscription.findUnique({ where: { id } });
     if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
+    if (status === 'ACTIVE') {
+      const variation = await this.prisma.variation.findUnique({
+        where: { id: sub.variationId },
+        select: { product: { select: { name: true, storefrontId: true } } },
+      });
+      if (isPartnerOwnedVariation(variation)) throw partnerGoodsError('SUBSCRIPTION', variation?.product.name);
+    }
     // Khi bật lại từ PAUSED, dời nextRunAt tới chu kỳ kế nếu đã quá hạn.
     const nextRunAt =
       status === 'ACTIVE' && sub.nextRunAt < new Date()
@@ -563,6 +574,10 @@ export class SubscriptionsService {
         await this.pauseSubscription(sub, `Địa chỉ giao hàng không còn hợp lệ${missed}`, 'invalid_address');
         return false;
       }
+      if (err instanceof SubscriptionPartnerGoodsError) {
+        await this.pauseSubscription(sub, err.message, 'partner_goods');
+        return false;
+      }
       if (err instanceof SubscriptionWalletShortError) {
         await this.pauseSubscription(sub, `Số dư Ví Tubu không đủ để thanh toán đơn kỳ này${missed}`, 'insufficient_wallet');
         return false;
@@ -655,9 +670,12 @@ export class SubscriptionsService {
     if (!sub || sub.status !== 'ACTIVE') return null;
     const variation = await tx.variation.findUnique({
       where: { id: sub.variationId },
-      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true, storefrontId: true } } },
     });
     if (!variation || !isSellableVariation(variation)) throw productDiscontinuedError(variation?.product.name);
+    if (isPartnerOwnedVariation(variation)) {
+      throw new SubscriptionPartnerGoodsError(partnerGoodsMessage('SUBSCRIPTION', variation.product.name));
+    }
     const addr = await tx.address.findUnique({ where: { id: sub.addressId } });
     if (!addr || addr.userId !== sub.userId) throw new SubscriptionAddressError('invalid address');
     const address: Prisma.InputJsonValue = {

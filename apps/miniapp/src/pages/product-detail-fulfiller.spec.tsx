@@ -133,6 +133,17 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     expect(screen.queryByText(/tự giao/)).toBeNull();
   });
 
+  it('Q8 S2: hàng Tubu giao hộ của gian hàng đối tác: vẫn hứa freeship của Tubu nhưng không có "Đặt định kỳ" và mua chung, có câu giải thích', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } }),
+    );
+    renderPdp();
+    expect(await screen.findByText('Miễn phí vận chuyển cho đơn từ 200.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Hàng của gian hàng đối tác chỉ bán theo giá lẻ, chưa đặt định kỳ hay mua chung được.')).toBeInTheDocument();
+    expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();
+    expect(screen.queryByText(/Mở nhóm mua chung/)).toBeNull();
+  });
+
   it('API cũ chưa trả fulfiller → coi như hàng Tubu (hành vi cũ)', async () => {
     mocks.fetchProduct.mockResolvedValue(product());
     renderPdp();

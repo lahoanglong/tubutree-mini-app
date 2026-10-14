@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
+import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -237,7 +238,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
-                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true,
+                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true, storefrontId: true,
                     // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
                     // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
                     variations: { where: { isActive: true }, select: { stock: true } },
@@ -288,7 +289,9 @@ export class StorefrontService {
               !i.isHidden &&
               i.product.isActive &&
               !i.product.affiliateBlocked &&
-              (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED'),
+              (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED') &&
+              // Hàng của gian hàng đối tác không được giảm combo (combo.service.ts) nên không hiện như một phần của combo.
+              !(c.kind === 'COMBO' && isPartnerOwnedProduct(i.product)),
           )
           .map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
@@ -541,14 +544,15 @@ export class StorefrontService {
     collectionId: string,
     dto: { productId: string; variationId?: string; note?: string },
   ) {
-    await this.assertOwnedCollection(userId, collectionId);
+    const collection = await this.assertOwnedCollection(userId, collectionId);
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
-      select: { id: true, isActive: true, affiliateBlocked: true, approvalStatus: true },
+      select: { id: true, name: true, isActive: true, affiliateBlocked: true, approvalStatus: true, storefrontId: true },
     });
     if (!product || !product.isActive || product.affiliateBlocked || product.approvalStatus !== 'APPROVED') {
       throw new BadRequestException('Sản phẩm không khả dụng để thêm vào gian hàng.');
     }
+    if (collection.kind === 'COMBO' && isPartnerOwnedProduct(product)) throw partnerGoodsError('COMBO', product.name);
     if (dto.variationId) {
       const variation = await this.prisma.variation.findUnique({
         where: { id: dto.variationId },

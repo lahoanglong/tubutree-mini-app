@@ -98,3 +98,17 @@ export function checkoutPoints(
   if (held === 0) return { ...base, label: `Bạn đang có ${formatPoints(usable)}`, lockNote: null };
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
 }
+
+/**
+ * Ô Điểm Xanh khi giỏ có hàng của gian hàng đối tác (Điểm Xanh chỉ trả cho hàng Tubu): nêu trần điểm của đơn và câu giải thích
+ * báo giá trả về; trần 0 (giỏ chỉ hàng đối tác) thì tắt ô. Giỏ chỉ hàng Tubu hoặc API cũ: không đổi gì.
+ */
+export function partnerPointsState(
+  quote: { pointsMax?: number; pointsPartnerNote?: string | null } | undefined,
+): { disabled: boolean; capNote: string | null; partnerNote: string | null } {
+  const partnerNote = quote?.pointsPartnerNote ?? null;
+  if (!partnerNote) return { disabled: false, capNote: null, partnerNote: null };
+  const max = Math.max(0, Number.isFinite(quote?.pointsMax) ? (quote!.pointsMax as number) : 0);
+  if (max === 0) return { disabled: true, capNote: null, partnerNote };
+  return { disabled: false, capNote: `Đơn này dùng tối đa ${groupThousands(max)} Điểm Xanh`, partnerNote };
+}

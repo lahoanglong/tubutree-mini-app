@@ -1,7 +1,11 @@
 /**
- * Số tiền/điểm một lần trả hàng được hoàn (D3). Tiền của một dòng = giá trị dòng sau khi chia đều giảm giá cấp đơn
- * và Điểm Xanh theo tỉ lệ giá trị (cùng cách paidLineTotals tính nền hoa hồng): tiền hàng thực trả là
- * `total − shippingFee`, phần của các đơn vị trả là tiền đó nhân tỉ lệ giá trị của chúng trên tổng `OrderItem.total`.
+ * Số tiền/điểm một lần trả hàng được hoàn (D3). Tiền hàng của một dòng = tiền khách thực trả cho dòng đó lúc đặt
+ * (`OrderItem.paidTotal`, mỗi khoản giảm đã chia về đúng dòng được hưởng — cùng số paidLineTotals và phiếu đối soát đối tác
+ * dùng); phần của các đơn vị trả = paidTotal × số trả / số lượng, làm tròn từng dòng. Đơn cũ không có paidTotal: tiền hàng
+ * thực trả `total − shippingFee` nhân tỉ lệ giá trị các đơn vị trả trên tổng `OrderItem.total`.
+ *
+ * Điểm Xanh đã dùng trả lại theo phần điểm của từng dòng (`OrderItem.pointsDiscount`; dòng hàng của gian hàng đối tác không
+ * nhận điểm nên trả nó không hoàn điểm); đơn cũ chưa lưu thì theo tỉ lệ giá trị.
  *
  * Mỗi đại lượng (tiền hàng, điểm đã dùng, điểm lô quy đổi, điểm tích) tính theo kiểu "luỹ kế sau trừ luỹ kế trước":
  * phần của lần này = share(đã trả sau lần này) − share(đã trả trước đó). Nhờ vậy trả nhiều lần cộng lại đúng bằng
@@ -11,6 +15,33 @@ export interface AllocItem {
   id: string;
   total: number;
   quantity: number;
+  /** Tiền khách thực trả cho dòng lúc đặt (OrderItem.paidTotal); null ở đơn đặt trước khi có cột này. */
+  paidTotal?: number | null;
+  /** Phần Điểm Xanh (đồng) trừ vào dòng lúc đặt (OrderItem.pointsDiscount); hàng của gian hàng đối tác luôn 0. */
+  pointsDiscount?: number | null;
+}
+
+/**
+ * Tiền khách thực trả từng dòng đã lưu lúc đặt, khi mọi dòng đều có và cộng lại đúng bằng tiền hàng thực trả của đơn;
+ * không thì null — caller chia theo giá trị dòng như đơn cũ.
+ */
+export function storedLinePaid(goodsPaid: number, items: readonly { paidTotal?: number | null }[]): number[] | null {
+  if (items.length === 0) return null;
+  const paid: number[] = [];
+  for (const i of items) {
+    if (i.paidTotal == null || !Number.isInteger(i.paidTotal) || i.paidTotal < 0) return null;
+    paid.push(i.paidTotal);
+  }
+  return paid.reduce((s, v) => s + v, 0) === goodsPaid ? paid : null;
+}
+
+/** Phần tiền thực trả của các đơn vị đã trả trên từng dòng (luỹ kế), làm tròn từng dòng; trả hết dòng = đúng paidTotal. */
+function returnedPaidByLine(items: AllocItem[], paid: number[], qty: ReadonlyMap<string, number>): number[] {
+  return items.map((i, k) => {
+    const q = Math.min(qty.get(i.id) ?? 0, i.quantity);
+    if (q <= 0 || i.quantity <= 0) return 0;
+    return q >= i.quantity ? paid[k]! : Math.round((paid[k]! * q) / i.quantity);
+  });
 }
 
 export interface AllocOrder {
@@ -52,6 +83,23 @@ function returnedRatio(items: AllocItem[], qty: ReadonlyMap<string, number>): nu
   return Math.min(1, value / gross);
 }
 
+/**
+ * Tỉ lệ Điểm Xanh của các đơn vị đã trả khi đơn lưu phần điểm từng dòng: điểm chỉ nằm trên dòng hàng Tubu, nên trả hàng của
+ * gian hàng đối tác không hoàn điểm. Đơn cũ chưa lưu (một dòng thiếu) → null, dùng tỉ lệ giá trị như trước.
+ */
+function returnedPointsRatio(items: AllocItem[], qty: ReadonlyMap<string, number>): number | null {
+  if (items.length === 0 || items.some((i) => i.pointsDiscount == null || i.pointsDiscount < 0)) return null;
+  if (items.every((i) => (qty.get(i.id) ?? 0) >= i.quantity)) return 1;
+  const total = items.reduce((s, i) => s + i.pointsDiscount!, 0);
+  if (total <= 0) return 0;
+  let value = 0;
+  for (const i of items) {
+    const q = Math.min(qty.get(i.id) ?? 0, i.quantity);
+    if (q > 0 && i.quantity > 0) value += (i.pointsDiscount! * q) / i.quantity;
+  }
+  return Math.min(1, value / total);
+}
+
 /** Phần của `amount` ứng với tỉ lệ; tỉ lệ 1 trả đúng `amount` để luỹ kế khép kín. */
 export function shareOf(amount: number, ratio: number): number {
   if (amount <= 0 || ratio <= 0) return 0;
@@ -91,19 +139,35 @@ export function computeReturnShares(
   const delta = (amount: number) => Math.max(0, shareOf(amount, ra) - shareOf(amount, rb));
 
   const goodsPaid = Math.max(0, order.total - Math.max(0, order.shippingFee));
-  const goods = delta(goodsPaid);
+  const linePaid = storedLinePaid(goodsPaid, order.items);
   const shippingLeft = Math.max(0, order.shippingFee - opts.priorShipping);
   const shipping = isFull || opts.shopFault ? shippingLeft : 0;
   const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
-  const pointsUsedBack = delta(order.pointsUsed);
-  const convertedBack = Math.min(pointsUsedBack, delta(usedConverted));
+  const prb = returnedPointsRatio(order.items, before) ?? rb;
+  const pra = returnedPointsRatio(order.items, after) ?? ra;
+  const pointsDelta = (amount: number) => Math.max(0, shareOf(amount, pra) - shareOf(amount, prb));
+  const pointsUsedBack = pointsDelta(order.pointsUsed);
+  const convertedBack = Math.min(pointsUsedBack, pointsDelta(usedConverted));
 
   const lineIds = [...request.keys()].filter((id) => (request.get(id) ?? 0) > 0);
-  const weights = lineIds.map((id) => {
-    const it = order.items.find((i) => i.id === id);
-    return it && it.quantity > 0 ? (Math.max(0, it.total) * (request.get(id) ?? 0)) / it.quantity : 0;
-  });
-  const perLine = distributeByWeight(goods, weights);
+  let goods: number;
+  let perLine: number[];
+  if (linePaid) {
+    const pb = returnedPaidByLine(order.items, linePaid, before);
+    const pa = returnedPaidByLine(order.items, linePaid, after);
+    perLine = lineIds.map((id) => {
+      const k = order.items.findIndex((i) => i.id === id);
+      return k < 0 ? 0 : Math.max(0, pa[k]! - pb[k]!);
+    });
+    goods = perLine.reduce((s, v) => s + v, 0);
+  } else {
+    goods = delta(goodsPaid);
+    const weights = lineIds.map((id) => {
+      const it = order.items.find((i) => i.id === id);
+      return it && it.quantity > 0 ? (Math.max(0, it.total) * (request.get(id) ?? 0)) / it.quantity : 0;
+    });
+    perLine = distributeByWeight(goods, weights);
+  }
   return {
     isFull,
     goods,

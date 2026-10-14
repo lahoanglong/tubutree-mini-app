@@ -124,7 +124,13 @@ function allocOrder(order: OrderWithItems): AllocOrder {
     pointsUsed: order.pointsUsed,
     pointsUsedConverted: order.pointsUsedConverted,
     pointsEarned: order.pointsEarned,
-    items: order.items.map((i) => ({ id: i.id, total: i.total, quantity: i.quantity })),
+    items: order.items.map((i) => ({
+      id: i.id,
+      total: i.total,
+      quantity: i.quantity,
+      paidTotal: i.paidTotal,
+      pointsDiscount: i.pointsDiscount,
+    })),
   };
 }
 

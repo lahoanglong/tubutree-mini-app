@@ -10,6 +10,7 @@ import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
 import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+import { isPartnerOwnedProduct } from '../cart/partner-goods';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -265,6 +266,8 @@ export class CatalogService {
       brandSlug,
       sold: product.soldExternal + product.soldApp,
       fulfiller: await this.fulfillerOf(product.fulfilment, storefront),
+      // Hàng của gian hàng đối tác chỉ bán giá lẻ: trang chi tiết ẩn đặt định kỳ và mua chung (partner-goods.ts).
+      partnerOwned: isPartnerOwnedProduct(product),
     };
   }
 

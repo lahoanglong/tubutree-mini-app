@@ -605,50 +605,55 @@ model ReferralTouch {
 }
 
 model Storefront {
-  id                String                 @id @default(cuid())
-  type              StorefrontType
-  slug              String                 @unique
-  subdomain         String?                @unique
-  customDomain      String?                @unique
-  ownerUserId       String?
-  owner             User?                  @relation(fields: [ownerUserId], references: [id])
-  brandId           String?                @unique
-  brand             Brand?                 @relation(fields: [brandId], references: [id])
-  title             String
-  headerNote        String?
-  avatarUrl         String?
-  coverUrl          String?
-  theme             String                 @default("leaf-orange")
-  themeColor        String?                @default("#16a34a")
-  bankName          String?
-  bankBin           String?
-  bankAccountNo     String?
-  bankAccountName   String?
-  warehouseAddress  String?
-  warehouseCity     String?
-  warehouseDistrict String?
-  warehouseWard     String?
-  warehousePhone    String?
+  id                  String                   @id @default(cuid())
+  type                StorefrontType
+  slug                String                   @unique
+  subdomain           String?                  @unique
+  customDomain        String?                  @unique
+  ownerUserId         String?
+  owner               User?                    @relation(fields: [ownerUserId], references: [id])
+  brandId             String?                  @unique
+  brand               Brand?                   @relation(fields: [brandId], references: [id])
+  title               String
+  headerNote          String?
+  avatarUrl           String?
+  coverUrl            String?
+  theme               String                   @default("leaf-orange")
+  themeColor          String?                  @default("#16a34a")
+  bankName            String?
+  bankBin             String?
+  bankAccountNo       String?
+  bankAccountName     String?
+  warehouseAddress    String?
+  warehouseCity       String?
+  warehouseDistrict   String?
+  warehouseWard       String?
+  warehousePhone      String?
   /// Phí giao mỗi kiện của đối tác tự giao (NULL = merchant.default_shipping_fee).
-  shippingFee       Int?
+  shippingFee         Int?
   /// Kiện của đối tác có tiền hàng từ mức này được miễn phí giao (NULL = không miễn phí).
-  freeShipFrom      Int?
+  freeShipFrom        Int?
   /// Phí sàn riêng cho gian hàng (phân số, 0.15 = 15%). NULL = merchant.commission_pct. Chỉ admin đặt.
-  commissionPct     Decimal?               @db.Decimal(5, 4)
+  commissionPct       Decimal?                 @db.Decimal(5, 4)
+  /// Phí vận hành "Tubu giao hộ" theo tiền hàng khách thực trả (phân số), trừ thêm ngoài phí sàn khi đối soát. Chỉ admin đặt.
+  consignmentFeePct   Decimal                  @default(0) @db.Decimal(5, 4)
+  /// Phí vận hành "Tubu giao hộ" cố định mỗi đơn (đồng), chia cho các dòng hàng giao hộ của gian hàng trong đơn. Chỉ admin đặt.
+  consignmentFeeFixed Int                      @default(0)
   /// Đối tác bật "Tạm nghỉ": hàng tự giao của gian hàng không đặt được tới khi tắt (R2-MERCHANT-13). NULL = đang nhận đơn.
-  ordersPausedAt    DateTime?
-  isPublished       Boolean                @default(false)
-  publishedAt       DateTime?
-  collections       StorefrontCollection[]
-  products          Product[]              @relation("StorefrontProducts")
-  fulfilledOrders   Order[]                @relation("OrderFulfiller")
-  attributedOrders  Order[]                @relation("OrderStorefront")
-  merchantPayouts   MerchantPayout[]
+  ordersPausedAt      DateTime?
+  isPublished         Boolean                  @default(false)
+  publishedAt         DateTime?
+  collections         StorefrontCollection[]
+  products            Product[]                @relation("StorefrontProducts")
+  fulfilledOrders     Order[]                  @relation("OrderFulfiller")
+  attributedOrders    Order[]                  @relation("OrderStorefront")
+  merchantPayouts     MerchantPayout[]
+  termsHistory        StorefrontTermsHistory[]
   /// Mốc lần cuối nhắc CTV thêm sản phẩm nổi bật còn thiếu vào gian hàng (storefront-reminder.service.ts).
   /// Null = chưa từng nhắc. Chỉ dùng cho guard chống gửi trùng, không phải mốc nghiệp vụ khác.
-  lastReminderAt    DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  lastReminderAt      DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
   @@unique([ownerUserId])
   @@index([ownerUserId])
@@ -1042,24 +1047,32 @@ model Order {
 }
 
 model OrderItem {
-  id              String  @id @default(cuid())
-  orderId         String
-  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variationId     String
-  productName     String
+  id                  String               @id @default(cuid())
+  orderId             String
+  order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variationId         String
+  productName         String
   // Slug SP tại thời điểm mua — snapshot như productName. Không có nó thì từ đơn hàng không
   // mở được trang sản phẩm: khách nhận hàng xong KHÔNG có lối nào để đánh giá (P1-2, audit
   // mạch lạc B2C), và "mua lại từng món" cũng không dẫn đi đâu được. Nullable cho đơn cũ.
-  productSlug     String?
-  variationName   String
-  unitPrice       Int
-  quantity        Int
-  total           Int
-  flashSaleItemId String?
+  productSlug         String?
+  variationName       String
+  unitPrice           Int
+  quantity            Int
+  total               Int
+  /// Tiền khách thực trả cho dòng lúc đặt: `total` trừ phần mã giảm giá, giảm hạng, Điểm Xanh mà checkout chia về đúng
+  /// dòng được hưởng (mã gắn sản phẩm chỉ dòng sản phẩm đó; mã/hạng không vào hàng flash; Điểm Xanh chỉ vào dòng hàng Tubu). Nền hoàn tiền, hoa hồng CTV và
+  /// đối soát đối tác. Null ở đơn cũ và đơn không qua checkout — các nơi đọc chia `total − shippingFee` theo giá trị dòng.
+  paidTotal           Int?
+  /// Phần Điểm Xanh (đồng) checkout trừ vào dòng lúc đặt — chỉ dòng hàng Tubu nhận điểm, hàng của gian hàng đối tác luôn 0.
+  /// Trả hàng hoàn điểm theo đúng phần này. Null ở đơn cũ và đơn không qua checkout — trả hàng chia điểm theo giá trị dòng.
+  pointsDiscount      Int?
+  flashSaleItemId     String?
   /// Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ khi đặt vượt
   /// tồn (§ DealerService.placeOrder cho đặt trước thay vì từ chối). Với mọi đơn khác luôn 0.
   /// `quantity - backorderedQty` là số đã thực sự trừ kho (dùng khi hoàn kho lúc huỷ/trả).
-  backorderedQty  Int     @default(0)
+  backorderedQty      Int                  @default(0)
+  merchantPayoutLines MerchantPayoutLine[]
 
   @@index([orderId])
   // Đối soát đặt trước quét OrderItem theo variation + còn thiếu hàng — cần nhanh, chạy mỗi
@@ -1176,13 +1189,13 @@ model PosPointCredit {
 // đơn vẫn UNPAID. Lưu từng lần thử + khoá unique theo appTransId để callback nào cũng khớp
 // đúng đơn, và đối chiếu được số tiền (P2, docs/2026-09-08-review-progress.md).
 model PaymentAttempt {
-  id         String   @id @default(cuid())
-  orderId    String
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider   String // ZALOPAY | VNPAY ...
-  appTransId String   @unique
-  amount     Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider      String // ZALOPAY | VNPAY ...
+  appTransId    String    @unique
+  amount        Int // số tiền kỳ vọng lúc tạo lệnh — dùng đối chiếu với callback
+  createdAt     DateTime  @default(now())
   /// Cổng đã cho kết quả cuối (callback hoặc tra trạng thái: đã trả / thất bại / hết hạn) — cron đối soát thôi hỏi.
   resolvedAt    DateTime?
   lastQueriedAt DateTime?
@@ -1562,24 +1575,30 @@ model ProductEditDraft {
 /// liên kết (mỗi biến thể tối đa một dòng như vậy — unique index có điều kiện trong migration). Gỡ liên kết trả biến thể về
 /// sản phẩm gốc; khoảng [linkedAt, unlinkedAt) là các đơn của biến thể đó gian hàng được xem.
 model MerchantPancakeLink {
-  id                String    @id @default(cuid())
-  productId         String
-  product           Product   @relation("PancakeLinkProduct", fields: [productId], references: [id])
-  storefrontId      String
-  variationId       String
-  variation         Variation @relation(fields: [variationId], references: [id])
+  id                     String    @id @default(cuid())
+  productId              String
+  product                Product   @relation("PancakeLinkProduct", fields: [productId], references: [id])
+  storefrontId           String
+  variationId            String
+  variation              Variation @relation(fields: [variationId], references: [id])
   /// NULL = liên kết có từ trước khi lưu lịch sử, không rõ sản phẩm gốc.
-  originProductId   String?
-  originProduct     Product?  @relation("PancakeLinkOrigin", fields: [originProductId], references: [id])
+  originProductId        String?
+  originProduct          Product?  @relation("PancakeLinkOrigin", fields: [originProductId], references: [id])
   /// Lần liên kết làm sản phẩm gốc hết biến thể nên bị tắt: gỡ liên kết thì bật lại.
-  originDeactivated Boolean   @default(false)
+  originDeactivated      Boolean   @default(false)
   /// Sản phẩm gốc đang bán lúc liên kết: admin đã xác nhận chuyển nó sang gian hàng.
-  takeover          Boolean   @default(false)
-  linkedAt          DateTime  @default(now())
-  linkedBy          String?
-  unlinkedAt        DateTime?
-  unlinkedBy        String?
-  unlinkReason      String?
+  takeover               Boolean   @default(false)
+  linkedAt               DateTime  @default(now())
+  linkedBy               String?
+  unlinkedAt             DateTime?
+  unlinkedBy             String?
+  unlinkReason           String?
+  /// Tồn kho Tubu của biến thể lúc liên kết — hàng Tubu đã sở hữu; admin xem khi xác nhận hàng ký gửi (liên kết takeover).
+  stockAtLink            Int?
+  /// Liên kết takeover chỉ đối soát tự động sau khi admin xác nhận hàng đang bán là hàng ký gửi của gian hàng; đơn đặt từ
+  /// mốc này mới tính. NULL với takeover = chưa đối soát; liên kết thường tính từ linkedAt.
+  consignmentConfirmedAt DateTime?
+  consignmentConfirmedBy String?
 
   @@index([productId])
   @@index([storefrontId])
@@ -1625,14 +1644,41 @@ model MerchantPayoutLine {
   commissionAmount Int
   codCollected     Int
   netAmount        Int
+  /// Phí vận hành "Tubu giao hộ" của dòng (phần % cộng phần cố định của đơn); 0 với đơn gian hàng tự giao.
+  opsFeeAmount     Int                    @default(0)
+  /// Dòng hàng "Tubu giao hộ" (đơn kho Tubu giao qua Pancake) mà dòng đối soát này thuộc về; NULL = đơn gian hàng tự giao.
+  orderItemId      String?
+  orderItem        OrderItem?             @relation(fields: [orderItemId], references: [id])
   /// Khoá dòng trong đơn: '' = dòng của cả đơn (SALE, REVERSAL khi đơn RETURNED); `RETURN:<id yêu cầu trả>` = REVERSAL của
-  /// một lần trả một phần (D3) trên đơn đã/đang đối soát. Mỗi khoá một dòng duy nhất trên mọi phiếu.
+  /// một lần trả một phần (D3) trên đơn đã/đang đối soát. Hàng "Tubu giao hộ" khoá theo dòng hàng: `ITEM:<orderItemId>` (SALE,
+  /// REVERSAL khi đơn RETURNED), `RETURN:<id yêu cầu trả>:ITEM:<orderItemId>` (trả một phần). Mỗi khoá một dòng duy nhất trên
+  /// mọi phiếu.
   refKey           String                 @default("")
   createdAt        DateTime               @default(now())
 
   @@unique([orderId, kind, refKey])
   @@index([payoutId])
+  @@index([orderItemId])
   @@map("merchant_payout_lines")
+}
+
+/// Lịch sử phí sàn / phí "Tubu giao hộ" của gian hàng: mỗi lần admin sửa thêm một dòng. Khoản giao hộ lấy mức của dòng mới
+/// nhất có effectiveFrom <= lúc đặt đơn (giống đơn tự giao chốt merchantCommissionPct lúc đặt).
+model StorefrontTermsHistory {
+  id                  String     @id @default(cuid())
+  storefrontId        String
+  storefront          Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  /// Phí sàn đã quy ra số (gian hàng theo merchant.commission_pct thì lưu mặc định lúc ghi; đổi mặc định ghi thêm dòng).
+  /// NULL chỉ còn ở dòng cũ chưa quy ra — nơi đọc coi là mặc định hiện tại.
+  commissionPct       Decimal?   @db.Decimal(5, 4)
+  consignmentFeePct   Decimal    @db.Decimal(5, 4)
+  consignmentFeeFixed Int
+  effectiveFrom       DateTime   @default(now())
+  /// NULL = dòng gốc (mức có trước khi lưu lịch sử).
+  changedById         String?
+
+  @@index([storefrontId, effectiveFrom])
+  @@map("storefront_terms_history")
 }
 
 /// Subdomain/tên miền vừa bị gian hàng nhả: gian hàng KHÁC chỉ dùng lại sau thời gian chờ (SELLER-5) — link cũ khách lưu

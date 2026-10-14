@@ -204,4 +204,37 @@ describe('Trả một phần dòng hàng gian hàng đã đối soát → REVERS
     // SALE −15.000 (phí sàn cả đơn, COD đã thu 130.000) + REVERSAL −42.500 (gian hàng nộp lại 50.000 − phí sàn 7.500).
     expect(lines.reduce((sum, l) => sum + l.netAmount, 0)).toBe(-57_500);
   });
+
+  it('đơn COD lật DELIVERED → RETURNED (đã hoàn khách) giữa lúc đọc đơn đủ hạn và lúc đọc đơn bị trả → bảng kê chỉ tính đơn một lần; sổ cuối cùng −130.000 (Q8 review S4)', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const { store, order } = await setup();
+    await prisma.order.update({ where: { id: order.id }, data: { deliveredAt: new Date(Date.now() - 10 * DAY) } });
+    const original = prisma.order.findMany.bind(prisma.order);
+    let flipped!: () => void;
+    const gate = new Promise<void>((r) => (flipped = r));
+    type FindManyArgs = Parameters<typeof original>[0] & { where?: { status?: unknown; deliveredAt?: { lte?: Date } } };
+    const spy = jest.spyOn(prisma.order, 'findMany').mockImplementation((async (args: FindManyArgs) => {
+      if (args?.where?.status === 'RETURNED') await gate;
+      const res = await original(args);
+      if (args?.where?.status === 'DELIVERED' && args.where.deliveredAt?.lte) {
+        await prisma.order.update({ where: { id: order.id }, data: { status: 'RETURNED', paymentStatus: 'REFUNDED' } });
+        flipped();
+      }
+      return res;
+    }) as never);
+    let raced: Awaited<ReturnType<typeof settlement.statementFor>>;
+    try {
+      raced = await settlement.statementFor(store.id);
+    } finally {
+      spy.mockRestore();
+    }
+    const mine = raced.lines.filter((l) => l.orderId === order.id);
+    // Trước: SALE −15.000 cộng dòng đảo cả đơn −130.000 cùng một bảng kê = −145.000, lập phiếu thì lệch vĩnh viễn 15.000.
+    expect(mine.map((l) => [l.kind, l.refKey, l.netAmount])).toEqual([['SALE', '', -15_000]]);
+
+    await settlement.createPayout(admin.id, store.id);
+    await settlement.createPayout(admin.id, store.id).catch((e: unknown) => expect(e).toBeInstanceOf(BadRequestException));
+    const lines = await linesOf(order.id);
+    expect(lines.map((l) => [l.kind, l.refKey, l.netAmount])).toEqual([['REVERSAL', '', -130_000]]);
+  });
 });

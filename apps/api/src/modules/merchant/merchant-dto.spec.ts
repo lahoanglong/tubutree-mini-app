@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
 import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
+import { CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -73,5 +74,28 @@ describe('DTO gian hàng đối tác (R3-MERCHANT-5)', () => {
 
   it('không gửi tên (chỉ đổi trường khác) vẫn hợp lệ', async () => {
     await expect(run(UpdateMerchantStoreDto, { headerNote: 'Xin chào' })).resolves.toMatchObject({ headerNote: 'Xin chào' });
+  });
+});
+
+describe('Phí sàn / phí Tubu giao hộ của gian hàng (admin, Q8)', () => {
+  it('phân số 0–0,5; bỏ phí sàn riêng (null) được; phí cố định là số nguyên không âm', async () => {
+    await expect(run(MerchantStoreTermsDto, { commissionPct: null, consignmentFeePct: 0.025, consignmentFeeFixed: 3_400 })).resolves.toMatchObject({
+      commissionPct: null,
+      consignmentFeePct: 0.025,
+      consignmentFeeFixed: 3_400,
+    });
+    await expect(run(MerchantStoreTermsDto, { commissionPct: 0.6 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeePct: -0.01 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(MerchantStoreTermsDto, { consignmentFeeFixed: -1 })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Lập phiếu kèm tổng bảng kê admin vừa xem (Q8)', () => {
+  it('nhận tổng âm/dương là số nguyên; bỏ trống được; không nhận số lẻ hay chuỗi', async () => {
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: -12_000 })).resolves.toMatchObject({ expectedTotal: -12_000 });
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a' })).resolves.toMatchObject({ storefrontId: 'sf-a' });
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 'abc' })).rejects.toBeInstanceOf(BadRequestException);
   });
 });

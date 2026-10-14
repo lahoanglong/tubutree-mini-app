@@ -99,3 +99,86 @@ describe('distributeByWeight', () => {
     expect(distributeByWeight(10, [0, 0])).toEqual([10, 0]);
   });
 });
+
+describe('computeReturnShares — đơn có tiền thực trả từng dòng (OrderItem.paidTotal, Q8 review M1)', () => {
+  // T 2 × 100.000 có mã 50.000 riêng cho T; C 100.000 không có mã; phí giao 30.000 → khách trả 280.000.
+  const o = order({
+    total: 280_000,
+    shippingFee: 30_000,
+    pointsUsed: 0,
+    pointsEarned: 0,
+    items: [
+      { id: 't', total: 200_000, quantity: 2, paidTotal: 150_000 },
+      { id: 'c', total: 100_000, quantity: 1, paidTotal: 100_000 },
+    ],
+  });
+
+  it('trả C hoàn đúng 100.000 khách đã trả cho C (trước: chia theo giá trị dòng 83.333)', () => {
+    const r = computeReturnShares(o, new Map(), new Map([['c', 1]]), { shopFault: false, priorShipping: 0 });
+    expect(r.goods).toBe(100_000);
+    expect(r.lines).toEqual([{ orderItemId: 'c', quantity: 1, refundAmount: 100_000 }]);
+  });
+
+  it('trả 1 × T hoàn 75.000, trả nốt khép đúng tiền hàng thực trả', () => {
+    const first = computeReturnShares(o, new Map(), new Map([['t', 1]]), { shopFault: false, priorShipping: 0 });
+    expect(first.goods).toBe(75_000);
+    const rest = computeReturnShares(o, new Map([['t', 1]]), new Map([['t', 1], ['c', 1]]), { shopFault: false, priorShipping: 0 });
+    expect(rest.isFull).toBe(true);
+    expect(first.goods + rest.goods).toBe(250_000);
+    expect(rest.lines).toEqual([
+      { orderItemId: 't', quantity: 1, refundAmount: 75_000 },
+      { orderItemId: 'c', quantity: 1, refundAmount: 100_000 },
+    ]);
+  });
+
+  it('paidTotal thiếu ở một dòng hoặc không cộng ra tiền hàng thực trả → chia theo giá trị dòng như đơn cũ', () => {
+    const legacy = order({ ...o, items: [{ id: 't', total: 200_000, quantity: 2, paidTotal: 150_000 }, { id: 'c', total: 100_000, quantity: 1, paidTotal: null }] });
+    expect(computeReturnShares(legacy, new Map(), new Map([['c', 1]]), { shopFault: false, priorShipping: 0 }).goods).toBe(83_333);
+  });
+});
+
+describe('computeReturnShares — Điểm Xanh chỉ nằm trên dòng hàng Tubu (OrderItem.pointsDiscount, Q8 S7)', () => {
+  // T 100.000 (Tubu) trả hết bằng 100 Điểm Xanh; C 100.000 hàng giao hộ của gian hàng không nhận điểm; phí giao 19.000.
+  const o = order({
+    total: 119_000,
+    shippingFee: 19_000,
+    pointsUsed: 100,
+    pointsUsedConverted: 40,
+    pointsEarned: 10,
+    items: [
+      { id: 't', total: 100_000, quantity: 1, paidTotal: 0, pointsDiscount: 100_000 },
+      { id: 'c', total: 100_000, quantity: 1, paidTotal: 100_000, pointsDiscount: 0 },
+    ],
+  });
+
+  it('trả hàng của gian hàng: hoàn 100.000 tiền, không hoàn Điểm Xanh (trước: chia điểm theo giá trị dòng, hoàn 50 điểm)', () => {
+    const r = computeReturnShares(o, new Map(), new Map([['c', 1]]), { shopFault: false, priorShipping: 0 });
+    expect([r.goods, r.pointsUsedBack, r.convertedBack]).toEqual([100_000, 0, 0]);
+  });
+
+  it('trả hàng Tubu: hoàn đủ 100 điểm (40 điểm lô quy đổi), không hoàn tiền vì dòng trả bằng điểm', () => {
+    const r = computeReturnShares(o, new Map(), new Map([['t', 1]]), { shopFault: false, priorShipping: 0 });
+    expect([r.goods, r.pointsUsedBack, r.convertedBack]).toEqual([0, 100, 40]);
+  });
+
+  it('trả nhiều lần: điểm hoàn cộng lại đúng bằng điểm đã dùng', () => {
+    const multi = order({
+      ...o,
+      items: [
+        { id: 't', total: 90_000, quantity: 3, paidTotal: 30_000, pointsDiscount: 60_000 },
+        { id: 'c', total: 100_000, quantity: 1, paidTotal: 100_000, pointsDiscount: 0 },
+      ],
+      total: 149_000,
+      pointsUsed: 60,
+      pointsUsedConverted: 0,
+    });
+    const a = computeReturnShares(multi, new Map(), new Map([['t', 1]]), { shopFault: false, priorShipping: 0 });
+    const b = computeReturnShares(multi, new Map([['t', 1]]), new Map([['t', 2], ['c', 1]]), { shopFault: false, priorShipping: 0 });
+    expect([a.pointsUsedBack, b.pointsUsedBack]).toEqual([20, 40]);
+  });
+
+  it('đơn cũ chưa lưu điểm từng dòng → chia điểm theo giá trị dòng như trước', () => {
+    const legacy = order({ ...o, items: o.items.map(({ pointsDiscount: _p, ...i }) => i) });
+    expect(computeReturnShares(legacy, new Map(), new Map([['c', 1]]), { shopFault: false, priorShipping: 0 }).pointsUsedBack).toBe(50);
+  });
+});

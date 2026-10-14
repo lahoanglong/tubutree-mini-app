@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, pointsSummary, zeroTotalNote } from './checkout-points';
+import { checkoutPointsOffer, partnerPointsState, pointsSummary, zeroTotalNote } from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -101,5 +101,26 @@ describe('zeroTotalNote', () => {
 
   it('còn tiền phải trả → null (vẫn chọn phương thức thanh toán)', () => {
     expect(zeroTotalNote({ total: 1000, pointsDiscount: 0 })).toBeNull();
+  });
+});
+
+const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
+
+describe('partnerPointsState (Q8 S7)', () => {
+  it('giỏ không có hàng đối tác (hoặc API cũ): không đổi gì', () => {
+    expect(partnerPointsState(undefined)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+    expect(partnerPointsState({ pointsMax: 20, pointsPartnerNote: null })).toEqual({ disabled: false, capNote: null, partnerNote: null });
+  });
+
+  it('giỏ có hàng đối tác: nêu trần điểm của đơn và câu giải thích', () => {
+    expect(partnerPointsState({ pointsMax: 1250, pointsPartnerNote: NOTE })).toEqual({
+      disabled: false,
+      capNote: 'Đơn này dùng tối đa 1.250 Điểm Xanh',
+      partnerNote: NOTE,
+    });
+  });
+
+  it('giỏ chỉ hàng đối tác: tắt ô Điểm Xanh, giữ câu giải thích', () => {
+    expect(partnerPointsState({ pointsMax: 0, pointsPartnerNote: NOTE })).toEqual({ disabled: true, capNote: null, partnerNote: NOTE });
   });
 });

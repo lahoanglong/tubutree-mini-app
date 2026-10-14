@@ -52,6 +52,8 @@ export interface ProductDetail {
   variations: VariationDetail[];
   /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */
   fulfiller?: ProductFulfiller;
+  /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không định kỳ/mua chung. API cũ chưa trả → hàng Tubu. */
+  partnerOwned?: boolean;
 }
 
 export interface ProductFulfiller {
@@ -157,6 +159,12 @@ export interface CheckoutQuote {
   total: number;
   pointsEarned: number;
   pointsBalance: number;
+  /** Số Điểm Xanh tối đa dùng được cho lần đặt này (chỉ trên hàng Tubu). API cũ chưa trả. */
+  pointsMax?: number;
+  /** Câu giải thích khi giỏ có hàng của gian hàng đối tác (Điểm Xanh không trả cho hàng đó); null = không có. */
+  pointsPartnerNote?: string | null;
+  /** Số điểm khách chọn bị kẹp vì hàng của gian hàng đối tác. */
+  pointsNotice?: string | null;
   shipments?: QuoteShipment[];
   /** Phương thức không dùng được cho giỏ này → câu giải thích (ví dụ có hàng đối tác tự giao). */
   blockedPaymentMethods?: Record<string, string>;

@@ -509,11 +509,22 @@ describe('cổng đối tác — tab Đối soát', () => {
   it('công thức thực nhận, số âm hiện dấu trừ, phiếu đã chuyển kèm mã giao dịch', async () => {
     const root = await mount();
     await openTab('Đối soát');
-    expect(root.textContent).toContain('thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
+    const selfShip = root.textContent!.slice(root.textContent!.indexOf('Mỗi đơn bạn tự giao'), root.textContent!.indexOf('Chờ lập phiếu'));
+    expect(selfShip).toContain('thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu');
+    // Q8 review S3: nêu cả giảm giá hạng thành viên; mỗi khoản giảm chỉ trừ vào món được hưởng khoản đó.
+    // Q8 S2/S7: hàng đối tác bán giá lẻ (giờ vàng nếu Tubu đưa vào), chỉ chịu mã của khách và giảm hạng; không Điểm Xanh.
+    expect(selfShip).toContain('Hàng của bạn bán theo giá lẻ niêm yết (hoặc giá giờ vàng khi Tubu Tree đưa món vào giờ vàng)');
+    expect(selfShip).toContain('Phần mã giảm giá của khách và giảm giá hạng thành viên áp cho món của bạn được trừ vào số tiền của bạn');
+    expect(selfShip).toContain('mã chỉ áp cho món khác không trừ vào món của bạn');
+    expect(selfShip).toContain('Khách không trả hàng của bạn bằng Điểm Xanh; hàng của bạn không bán giá đại lý, không đặt định kỳ, không vào combo hay mua chung');
+    expect(selfShip).not.toContain('Điểm Xanh áp cho');
     expect(root.textContent).toContain('sau 7 ngày');
     expect(root.textContent).toContain('Chờ lập phiếu (2 khoản)');
     expect(root.textContent).toContain('−15.000');
     expect(root.textContent).toContain('mã GD FT123');
+    // Gian hàng không có hàng Tubu giao hộ: không có cột/ghi chú giao hộ.
+    expect(root.textContent).not.toContain('Phí giao hộ');
+    expect(root.textContent).not.toContain('Hàng Tubu giao hộ:');
     expect(scrollRegionProblems(root)).toEqual([]);
   });
 
@@ -558,25 +569,96 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('trong 7 ngày');
   });
 
-  it('R2-MERCHANT-2: hàng Tubu giao hộ đã bán hiện riêng, ghi rõ không vào phiếu đối soát', async () => {
+  it('Q8: khoản hàng Tubu giao hộ nằm cùng bảng kê với đơn tự giao — nhãn, tên món, phí giao hộ; bỏ câu "thoả thuận ký gửi"', async () => {
+    const item = { productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2 };
+    const sale = {
+      orderId: 'o7',
+      orderCode: 'TT7',
+      kind: 'SALE',
+      refKey: 'ITEM:i1',
+      orderItemId: 'i1',
+      item,
+      goodsAmount: 102000,
+      shippingFee: 0,
+      commissionAmount: 10200,
+      opsFeeAmount: 4440,
+      codCollected: 0,
+      netAmount: 87360,
+      deliveredAt: '2026-10-01T03:00:00.000Z',
+    };
     mocks.settlement = vi.fn(async () => ({
       holdDays: 7,
+      consignmentTerms: { commissionPct: 0.1, feePct: 0.02, feeFixed: 3400 },
+      lines: [
+        { orderId: 'o1', orderCode: 'TF1', kind: 'SALE', refKey: '', goodsAmount: 200000, shippingFee: 30000, commissionAmount: 30000, codCollected: 0, netAmount: 200000, deliveredAt: '2026-10-01T03:00:00.000Z' },
+        sale,
+        { ...sale, kind: 'REVERSAL', refKey: 'RETURN:r1:ITEM:i1', goodsAmount: -51000, commissionAmount: -5100, opsFeeAmount: -2220, netAmount: -43680, deliveredAt: null },
+      ],
+      total: 243680,
+      upcoming: [{ ...sale, orderId: 'o8', orderCode: 'TT8', refKey: 'ITEM:i9', orderItemId: 'i9', availableAt: '2026-10-20T03:00:00.000Z' }],
+      payouts: [{ id: 'p1', storefrontId: 's1', amount: 87360, status: 'PAID', createdAt: '2026-09-20T03:00:00.000Z', paidAt: '2026-09-21T03:00:00.000Z', bankRef: 'FT1', lines: [{ ...sale, id: 'l1', createdAt: '2026-09-20T03:00:00.000Z' }] }],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    expect(root.textContent).toContain('Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách');
+    expect(root.textContent).toContain('phí sàn 10% − phí Tubu giao hộ 2% + 3.400đ mỗi đơn');
+    expect(root.textContent).toContain('Phí giao hàng do Tubu Tree thu và chịu');
+    expect(root.textContent).toContain('3.400đ mỗi đơn (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt)');
+    expect(root.textContent).toContain('chỉ đơn Tubu Tree đã thu được tiền');
+    const consignmentNote = root.textContent!.slice(root.textContent!.indexOf('Hàng Tubu giao hộ: kho Tubu Tree'), root.textContent!.indexOf('Chờ lập phiếu'));
+    expect(consignmentNote).toContain('giá bán của món, kể cả giá giờ vàng, đã trừ phần mã giảm giá của khách và giảm giá hạng thành viên áp cho chính món đó');
+    expect(consignmentNote).toContain('mã chỉ áp cho món khác không trừ vào món của bạn');
+    expect(consignmentNote).toContain('Điểm Xanh không dùng cho hàng của bạn');
+    expect(consignmentNote).not.toContain('Điểm Xanh áp cho');
+    expect(consignmentNote).not.toContain('chia theo giá trị món');
+    expect(root.textContent).not.toContain('thoả thuận ký gửi');
+    expect(root.textContent).not.toContain('chưa vào đối soát tự động');
+    expect(root.textContent).not.toContain('Hàng Tubu giao hộ đã bán');
+    expect(root.textContent).toContain('Chờ lập phiếu (3 khoản)');
+    expect(root.textContent).toContain('Sắp đủ hạn (1 khoản)');
+
+    const pending = root.querySelector('[aria-label="Khoản chờ lập phiếu đối soát"]')!;
+    expect(Array.from(pending.querySelectorAll('th')).map((th) => th.textContent)).toEqual([
+      'Đơn', 'Ngày giao', 'Tiền hàng', 'Phí giao', 'Phí sàn', 'Phí giao hộ', 'COD bạn đã thu', 'Thực nhận',
+    ]);
+    const rows = Array.from(pending.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
+    expect(rows[0]).toEqual(['TF1', '01/10/2026', '200.000đ', '30.000đ', '−30.000đ', '—', '0đ', '200.000đ']);
+    expect(rows[1]).toEqual(['TT7Tubu giao hộMật ong (Hũ 500g) × 2', '01/10/2026', '102.000đ', '—', '−10.200đ', '−4.440đ', '—', '87.360đ']);
+    expect(rows[2]).toEqual(['TT7(trả một phần)Tubu giao hộMật ong (Hũ 500g) × 2', '—', '−51.000đ', '—', '5.100đ', '2.220đ', '—', '−43.680đ']);
+    const payout = root.querySelector('li[aria-label^="Phiếu"]')!;
+    expect(payout.querySelector('table')!.textContent).toContain('Tubu giao hộ');
+    expect(scrollRegionProblems(root)).toEqual([]);
+  });
+
+  it('Q8 review S5: món Tubu giao hộ chưa vào đối soát tự động — danh sách chỉ đọc kèm lý do, không cộng vào bảng kê', async () => {
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      consignmentTerms: { commissionPct: 0.1, feePct: 0, feeFixed: 0 },
       lines: [],
       total: 0,
       upcoming: [],
       payouts: [],
-      tubuFulfilled: {
-        goods: 240000,
-        lines: [{ orderCode: 'TT77', deliveredAt: '2026-10-10T03:00:00.000Z', productName: 'Tiêu đen', variationName: '200g', quantity: 2, total: 240000 }],
+      consignmentExcluded: {
+        settleFrom: '2026-10-01T00:00:00.000Z',
+        total: 2,
+        lines: [
+          { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2, goodsAmount: 180000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: '2026-10-07T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED' },
+          { orderId: 'o4', orderCode: 'TT4', orderItemId: 'i4', productName: 'Trà Shan', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-09-20T03:00:00.000Z', deliveredAt: null, reason: 'BEFORE_SETTLE_FROM' },
+        ],
       },
     }));
     const root = await mount();
     await openTab('Đối soát');
-    const sec = byText(root, 'section', 'Hàng Tubu giao hộ đã bán')!;
-    expect(sec.textContent).toContain('TT77');
-    expect(sec.textContent).toContain('Tiêu đen (200g)');
-    expect(sec.textContent).toContain('240.000');
-    expect(sec.textContent).toContain('không vào phiếu đối soát');
+    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (2 món)');
+    expect(root.textContent).toContain('Chờ lập phiếu (0 khoản)');
+    const region = root.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động"]')!;
+    expect(Array.from(region.querySelectorAll('th')).map((th) => th.textContent)).toEqual(['Đơn', 'Ngày đặt', 'Món', 'Tiền khách trả cho món', 'Lý do']);
+    const rows = Array.from(region.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
+    expect(rows).toEqual([
+      ['TT5', '05/10/2026', 'Mật ong (Hũ 500g) × 2', '180.000đ', 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn'],
+      ['TT4', '20/09/2026', 'Trà Shan × 1', '90.000đ', 'Đặt trước 01/10/2026 — trước khi đối soát tự động'],
+    ]);
+    expect(scrollRegionProblems(root)).toEqual([]);
   });
 
   it('đơn bị trả: giải thích phần nộp lại (COD là số tiền mặt đã thu), dòng ghi "(trả hàng)"', async () => {
@@ -756,14 +838,15 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(status.textContent).not.toContain('null');
   });
 
-  it('R2-MERCHANT-2: lựa chọn "Tubu giao hộ" nói rõ tiền hàng theo thoả thuận ký gửi, không qua tab Đối soát', async () => {
+  it('Q8: lựa chọn "Tubu giao hộ" nói rõ tiền từng món vào tab Đối soát sau khi giao, phí giao Tubu giữ', async () => {
     const root = await mount();
     await openTab('Sản phẩm');
     click(byText(root, 'button', 'Đăng sản phẩm mới'));
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
     const option = byText(overlay, 'label', 'Tubu giao hộ')!;
-    expect(option.textContent).toContain('thoả thuận ký gửi');
-    expect(option.textContent).toContain('không qua tab Đối soát');
+    expect(option.textContent).toContain('vào tab Đối soát sau khi giao');
+    expect(option.textContent).toContain('phí giao do Tubu Tree giữ');
+    expect(option.textContent).not.toContain('thoả thuận ký gửi');
   });
 
   it('D4 mã Pancake không hợp lệ: hiện lỗi của API ngay dưới ô mã', async () => {

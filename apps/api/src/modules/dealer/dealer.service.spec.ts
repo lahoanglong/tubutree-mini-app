@@ -2,6 +2,7 @@ import { DealerService } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
+import { TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -63,7 +64,14 @@ describe('DealerService.pricelist', () => {
     );
     await new DealerService(prisma, makeConfig()).pricelist('d1');
     const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
-    expect(findMany.mock.calls[0]![0].where).toEqual(SELLABLE_PANCAKE_VARIATION_WHERE);
+    expect(findMany.mock.calls[0]![0].where).toEqual({ AND: [SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] });
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ) không lên bảng giá đại lý', async () => {
+    const prisma = prismaForPricelist({ id: 'd1', role: 'DEALER', metadata: null }, null, []);
+    await new DealerService(prisma, makeConfig()).pricelist('d1');
+    const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
+    expect(findMany.mock.calls[0]![0].where.AND).toContainEqual({ product: { storefrontId: null } });
   });
 });
 
@@ -316,6 +324,24 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
       'idem-key-1',
     );
     expect((r as { id: string }).id).toBe('o-existing');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('Q8 S2: đặt hàng của gian hàng đối tác theo giá đại lý → PARTNER_GOODS_NOT_ELIGIBLE, không giữ kho, không tạo đơn', async () => {
+    const { prisma, orderCreate, queryRaw } = prismaForOrder();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { id: 'v1', isActive: true, retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'Mật ong rừng', isActive: true, approvalStatus: 'APPROVED', storefrontId: 'sf-doi-tac' } },
+    ]);
+    await expect(
+      new DealerService(prisma, makeConfig()).placeOrder('d1', { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không bán theo giá đại lý. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect((prisma.variation.findMany as jest.Mock).mock.calls[0]![0].include.product.select.storefrontId).toBe(true);
+    expect(queryRaw).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();
   });
 

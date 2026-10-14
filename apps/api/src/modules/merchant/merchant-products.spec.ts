@@ -171,6 +171,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
         originProductId: 'tubu-shell',
         originDeactivated: true,
         takeover: false,
+        stockAtLink: 40,
         linkedBy: 'admin-1',
       },
     });

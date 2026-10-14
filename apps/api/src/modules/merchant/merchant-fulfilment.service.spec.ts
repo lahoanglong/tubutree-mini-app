@@ -15,17 +15,34 @@ function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1'
   const setStatus = jest.fn().mockImplementation((_id: string, target: string) => Promise.resolve({ id: 'o1', status: target }));
   const notify = jest.fn().mockResolvedValue(undefined);
   const prisma = {
-    storefront: { findFirst: jest.fn().mockResolvedValue(STORE), findUnique: jest.fn() },
+    storefront: { findFirst: jest.fn().mockResolvedValue(STORE), findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
     order: {
       findFirst: jest.fn().mockResolvedValue(order),
       findUniqueOrThrow: jest.fn().mockResolvedValue(order),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
     },
-    merchantPayout: { create: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
+    merchantPayout: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({ storefrontId: 'sf-a' }),
+      findUniqueOrThrow: jest.fn(),
+    },
     merchantPayoutLine: { deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
+    merchantPancakeLink: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({}),
+    },
+    storefrontTermsHistory: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), create: jest.fn() },
+    systemConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+    orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+    returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(0),
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
@@ -56,16 +73,70 @@ describe('slaStateOf', () => {
 });
 
 describe('saleLineOf — công thức đối soát (thiết kế mục 7)', () => {
-  const items = [{ total: 180_000 }, { total: 20_000 }];
-  it('COD: đối tác đã thu cả tổng đơn → net = phần Tubu tài trợ − phí sàn (có thể âm)', () => {
-    // hàng 200k (sau combo), mã Tubu 30k, phí giao 30k → khách trả 200k; phí sàn 15% = 30k.
+  const items = [{ id: 'a', total: 180_000 }, { id: 'b', total: 20_000 }];
+  it('COD: tiền hàng = tiền khách thực trả cho hàng; gian hàng đã thu cả tổng đơn → nộp phí sàn trên phần đó', () => {
+    // hàng 200k (sau combo), mã Tubu 30k, phí giao 30k → khách trả 200k, tiền hàng thực trả 170k; phí sàn 15% = 25,5k.
     const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'COD', total: 200_000, shippingFee: 30_000, merchantCommissionPct: new Prisma.Decimal('0.15'), deliveredAt: NOW, items });
-    expect(l).toEqual(expect.objectContaining({ goodsAmount: 200_000, commissionAmount: 30_000, codCollected: 200_000, netAmount: 0 }));
+    expect(l).toEqual(expect.objectContaining({ goodsAmount: 170_000, shippingFee: 30_000, commissionAmount: 25_500, codCollected: 200_000, netAmount: -25_500 }));
   });
-  it('Ví Tubu: Tubu giữ tiền → trả đối tác hàng + phí giao − phí sàn', () => {
+  it('Ví Tubu: Tubu giữ tiền → trả gian hàng tiền hàng khách trả + phí giao − phí sàn; ví là cách trả, không phải giảm giá', () => {
     const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'WALLET', total: 200_000, shippingFee: 30_000, merchantCommissionPct: 0.1, deliveredAt: NOW, items });
-    expect(l.netAmount).toBe(200_000 + 30_000 - 20_000);
+    expect(l.goodsAmount).toBe(170_000);
+    expect(l.netAmount).toBe(170_000 + 30_000 - 17_000);
     expect(l.codCollected).toBe(0);
+  });
+  it('đơn không giảm giá: tiền hàng = tổng dòng như trước', () => {
+    const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'WALLET', total: 230_000, shippingFee: 30_000, merchantCommissionPct: 0.1, deliveredAt: NOW, items });
+    expect(l).toMatchObject({ goodsAmount: 200_000, commissionAmount: 20_000, netAmount: 210_000 });
+  });
+});
+
+describe('Đơn tự giao — ví dụ tính tay (giống race spec merchant-selfship-paid-base)', () => {
+  // A 2 × 100k, B 1 × 100k; mã giảm 50k; phí giao 30k → khách trả 280k; phí sàn 10%.
+  const order = {
+    id: 'o',
+    code: 'C',
+    paymentMethod: 'COD',
+    paymentStatus: 'REFUNDED',
+    total: 280_000,
+    shippingFee: 30_000,
+    merchantCommissionPct: 0.1,
+    deliveredAt: NOW,
+    items: [
+      { id: 'iA', total: 200_000, quantity: 2 },
+      { id: 'iB', total: 100_000, quantity: 1 },
+    ],
+  };
+  const r1 = { id: 'r1', reviewedAt: NOW, shippingRefund: 0, items: [{ orderItemId: 'iA', quantity: 1 }] };
+
+  it('SALE −25.000; trả 1 × A −75.001; trả nốt −179.999; hàng/phí giao/phí sàn cộng lại = 0, thực nhận = −280.000 tiền COD', () => {
+    const sale = saleLineOf(order);
+    expect(sale).toMatchObject({ goodsAmount: 250_000, shippingFee: 30_000, commissionAmount: 25_000, codCollected: 280_000, netAmount: -25_000 });
+    const [partial] = partialReversalLinesOf(order, [r1]);
+    expect(partial).toMatchObject({ refKey: 'RETURN:r1', goodsAmount: -83_334, shippingFee: 0, commissionAmount: -8_333, netAmount: -75_001 });
+    const whole = reversalLineOf(order, sale, [partial!])!;
+    expect(whole).toMatchObject({ goodsAmount: -166_666, shippingFee: -30_000, commissionAmount: -16_667, codCollected: 0, netAmount: -179_999 });
+    const all = [sale, partial!, whole];
+    const total = (k: 'goodsAmount' | 'shippingFee' | 'commissionAmount' | 'netAmount') => all.reduce((s, l) => s + l[k], 0);
+    expect([total('goodsAmount'), total('shippingFee'), total('commissionAmount')]).toEqual([0, 0, 0]);
+    expect(total('netAmount')).toBe(-280_000);
+  });
+
+  it('SALE đã lưu theo nền cũ (tiền hàng 300.000) → dòng đảo chia trên số đã lưu: trả 1 × A = −100.000, phí sàn −10.000', () => {
+    const [partial] = partialReversalLinesOf(order, [r1], 300_000);
+    expect(partial).toMatchObject({ goodsAmount: -100_000, commissionAmount: -10_000, netAmount: -90_000 });
+  });
+
+  it('SALE đã lưu khác nền: phần dư làm tròn chia theo id dòng — thứ tự dòng DB trả về không đổi số', () => {
+    const two = { ...order, total: 130_000, items: [{ id: 'iB', total: 50_000, quantity: 1 }, { id: 'iA', total: 50_000, quantity: 1 }] };
+    const rA = { ...r1, items: [{ orderItemId: 'iA', quantity: 1 }] };
+    const goodsOf = (o: typeof two) => partialReversalLinesOf(o, [rA], 100_001)[0]!.goodsAmount;
+    expect(goodsOf(two)).toBe(-50_001);
+    expect(goodsOf({ ...two, items: [...two.items].reverse() })).toBe(-50_001);
+  });
+
+  it('SALE đã lưu theo nền mới → dòng đảo giống hệt khi tính cùng SALE', () => {
+    expect(partialReversalLinesOf(order, [r1], 250_000)).toEqual(partialReversalLinesOf(order, [r1]));
   });
 });
 
@@ -186,6 +257,14 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     deliveredAt: new Date(NOW.getTime() - 10 * 24 * H),
     items: [{ id: 'i9', total: 200_000, quantity: 1 }],
   };
+
+  it('sắp đủ hạn: bỏ đơn đã có SALE (mốc giao bị sửa lùi sau khi đã vào phiếu không làm đơn hiện lại)', async () => {
+    const { svc, prisma } = build();
+    await svc.statementFor('sf-a', NOW);
+    const upcomingWhere = prisma.order.findMany.mock.calls[1][0].where;
+    expect(upcomingWhere.deliveredAt).toHaveProperty('gt');
+    expect(upcomingWhere.merchantPayoutLines).toEqual({ none: { kind: 'SALE' } });
+  });
 
   it('bảng kê: đơn giao quá hạn giữ chưa đối soát (SALE) + đơn đã đối soát rồi bị trả (REVERSAL âm)', async () => {
     const { svc, prisma } = build();
@@ -337,7 +416,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
 
 describe('partialReversalLinesOf — trả nhiều lần cộng lại đúng bằng trả cả dòng', () => {
   it('ba lần trả 1/3 → tổng tiền hàng đảo = tổng dòng, phí sàn không lệch làm tròn', () => {
-    const order = { id: 'o', code: 'C', merchantCommissionPct: new Prisma.Decimal('0.15'), items: [{ id: 'i', total: 100_000, quantity: 3 }] };
+    const order = { id: 'o', code: 'C', total: 100_000, shippingFee: 0, merchantCommissionPct: new Prisma.Decimal('0.15'), items: [{ id: 'i', total: 100_000, quantity: 3 }] };
     const reqs = ['a', 'b', 'c'].map((id, n) => ({ id, reviewedAt: new Date(NOW.getTime() + n), shippingRefund: 0, items: [{ orderItemId: 'i', quantity: 1 }] }));
     const lines = partialReversalLinesOf(order, reqs);
     expect(lines.map((l) => l.refKey)).toEqual(['RETURN:a', 'RETURN:b', 'RETURN:c']);
@@ -428,7 +507,6 @@ describe('R2-MERCHANT-4: phiếu đối soát âm là đối tác nộp lại Tu
     (prisma as unknown as { merchantPayout: { findMany: jest.Mock } }).merchantPayout.findMany = jest
       .fn()
       .mockResolvedValue([{ id: 'cmpayout0001abcd1234', amount: -103_500, status: 'PENDING', createdAt: created, lines: [] }]);
-    (prisma as unknown as { merchantPancakeLink: unknown }).merchantPancakeLink = { findMany: jest.fn().mockResolvedValue([]) };
     (prisma.order.findMany as jest.Mock).mockResolvedValue([]);
     const config = {
       get: jest.fn(async (k: string, fb: unknown) =>
@@ -447,25 +525,284 @@ describe('R2-MERCHANT-4: phiếu đối soát âm là đối tác nộp lại Tu
   });
 });
 
-describe('R2-MERCHANT-2: hàng "Tubu giao hộ" đã bán hiện ở Đối soát (để đối chiếu, không vào phiếu)', () => {
-  it('chỉ dòng của biến thể đã liên kết, đơn tạo trong thời gian liên kết, đơn đã giao', async () => {
+describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', () => {
+  const CREATED = new Date('2026-09-20T00:00:00Z');
+  const items = (id: string) => [
+    { id: `${id}-a`, orderId: id, variationId: 'vA', productName: 'Mật ong', variationName: 'Hũ', quantity: 2, total: 120_000 },
+    { id: `${id}-b`, orderId: id, variationId: 'vB', productName: 'Xà bông', variationName: 'Bánh', quantity: 1, total: 50_000 },
+    { id: `${id}-c`, orderId: id, variationId: 'vC', productName: 'Hàng Tubu', variationName: 'Chai', quantity: 1, total: 30_000 },
+  ];
+  const pending = (orderItemId: string, orderId: string, deliveredAt: Date, createdAt = CREATED) => ({
+    orderItemId,
+    orderId,
+    code: orderId.toUpperCase(),
+    total: 195_000,
+    shippingFee: 25_000,
+    createdAt,
+    deliveredAt,
+  });
+  const queryOf = (call: unknown[]) => Prisma.sql(call[0] as readonly string[], ...(call.slice(1) as Prisma.Sql[]));
+  const sqlOf = (call: unknown[]) => queryOf(call).sql;
+
+  it('mốc bắt đầu đối soát giao hộ sai (2026-13-01): không lỗi 500, tạm không giới hạn, ghi cảnh báo một lần (Q8 review S6)', async () => {
+    const { svc, prisma } = withLinks();
+    const warn = jest.spyOn((svc as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-13-01' });
+    await expect(svc.statementFor('sf-a', NOW)).resolves.toMatchObject({ lines: [] });
+    await expect(svc.statementFor('sf-a', NOW)).resolves.toMatchObject({ lines: [] });
+    const pendingSql = prisma.$queryRaw.mock.calls.map((c: unknown[]) => sqlOf(c)).filter((q: string) => q.includes('merchant_pancake_links'));
+    expect(pendingSql.length).toBeGreaterThan(0);
+    for (const q of pendingSql) expect(q).not.toContain('system_configs');
+    expect(warn.mock.calls.filter(([m]) => String(m).includes('merchant.consignment_settle_from'))).toHaveLength(1);
+  });
+
+  function withLinks() {
+    const b = build();
+    b.prisma.merchantPancakeLink.findMany.mockResolvedValue([{ id: 'l1' }]);
+    b.prisma.storefront.findUnique.mockResolvedValue({ commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400 });
+    return b;
+  }
+
+  it('đủ 7 ngày → bảng kê (A 87.360, B 36.400); chưa đủ → sắp đủ hạn; chỉ dòng SQL trả về là của gian hàng', async () => {
+    const { svc, prisma } = withLinks();
+    const dueAt = new Date(NOW.getTime() - 10 * 24 * H);
+    const soonAt = new Date(NOW.getTime() - 2 * 24 * H);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([pending('o1-a', 'o1', dueAt), pending('o1-b', 'o1', dueAt), pending('o2-a', 'o2', soonAt)])
+      .mockResolvedValueOnce([]);
+    prisma.orderItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([...items('o1'), ...items('o2')]);
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.consignmentTerms).toEqual({ commissionPct: 0.1, feePct: 0.02, feeFixed: 3_400 });
+    expect(st.lines.map((l) => [l.refKey, l.orderItemId, l.goodsAmount, l.commissionAmount, l.opsFeeAmount, l.netAmount])).toEqual([
+      ['ITEM:o1-a', 'o1-a', 102_000, 10_200, 4_440, 87_360],
+      ['ITEM:o1-b', 'o1-b', 42_500, 4_250, 1_850, 36_400],
+    ]);
+    expect(st.total).toBe(123_760);
+    expect(st.upcoming.map((l) => [l.refKey, l.availableAt])).toEqual([['ITEM:o2-a', new Date(soonAt.getTime() + 7 * 24 * H)]]);
+    const sql = sqlOf(prisma.$queryRaw.mock.calls[1]);
+    expect(sql).toContain(`(o."paymentStatus" = 'PAID' OR o."paymentMethod" = 'COD')`);
+    expect(sql).toContain(`AND o."createdAt" >= ?\n`);
+    expect(queryOf(prisma.$queryRaw.mock.calls[1]).values).toContainEqual(new Date('2026-10-01T00:00:00Z'));
+    expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
+    expect(sql).toContain(`(l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")`);
+    expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED'`);
+    expect(prisma.orderItem.findMany.mock.calls[1][0].where).toEqual({ orderId: { in: ['o1', 'o2'] } });
+  });
+
+  it('hàng giao hộ chưa vào đối soát tự động (đặt trước mốc, liên kết takeover chưa xác nhận): danh sách chỉ đọc kèm lý do và tiền khách trả cho món (Q8 review S5)', async () => {
+    const { svc, prisma } = withLinks();
+    prisma.systemConfig.findUnique.mockResolvedValue({ value: '2026-10-01T00:00:00Z' });
+    prisma.$queryRaw.mockResolvedValueOnce([
+      { orderItemId: 'o1-b', orderId: 'o1', beforeSettleFrom: true, total: 3 },
+      { orderItemId: 'o2-a', orderId: 'o2', beforeSettleFrom: false, total: 3 },
+    ]);
+    prisma.order.findMany.mockResolvedValueOnce([
+      { id: 'o1', code: 'TUBU1', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-09-22T00:00:00Z'), items: items('o1') },
+      { id: 'o2', code: 'TUBU2', total: 195_000, shippingFee: 25_000, createdAt: new Date('2026-10-05T00:00:00Z'), deliveredAt: null, items: items('o2') },
+    ]);
+    const out = await svc.consignmentExcluded('sf-a');
+    expect(out.total).toBe(3);
+    expect(out.settleFrom).toEqual(new Date('2026-10-01T00:00:00Z'));
+    expect(out.lines.map((l) => [l.orderCode, l.orderItemId, l.reason, l.goodsAmount, l.quantity])).toEqual([
+      ['TUBU1', 'o1-b', 'BEFORE_SETTLE_FROM', 42_500, 1],
+      ['TUBU2', 'o2-a', 'TAKEOVER_UNCONFIRMED', 102_000, 2],
+    ]);
+    const sql = sqlOf(prisma.$queryRaw.mock.calls[0]);
+    expect(sql).toContain('NOT (');
+    expect(sql).toContain('LIMIT 200');
+    expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
+  });
+
+  it('phí đổi sau khi đặt: dòng tính theo mức hiệu lực lúc đặt đơn, không theo mức hiện tại', async () => {
+    const { svc, prisma } = withLinks();
+    prisma.storefront.findUnique.mockResolvedValue({ commissionPct: new Prisma.Decimal('0.3'), consignmentFeePct: new Prisma.Decimal('0.05'), consignmentFeeFixed: 9_000 });
+    prisma.storefrontTermsHistory.findMany.mockResolvedValue([
+      { commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400, effectiveFrom: new Date(0) },
+      { commissionPct: new Prisma.Decimal('0.3'), consignmentFeePct: new Prisma.Decimal('0.05'), consignmentFeeFixed: 9_000, effectiveFrom: new Date('2026-10-01T00:00:00Z') },
+    ]);
+    const dueAt = new Date(NOW.getTime() - 10 * 24 * H);
+    prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([pending('o1-a', 'o1', dueAt)]).mockResolvedValueOnce([]);
+    prisma.orderItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce(items('o1'));
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.consignmentTerms).toEqual({ commissionPct: 0.3, feePct: 0.05, feeFixed: 9_000 });
+    expect(st.lines.map((l) => [l.commissionAmount, l.opsFeeAmount, l.netAmount])).toEqual([[10_200, 2_040 + 3_400, 86_360]]);
+  });
+
+  it('gian hàng không đặt phí sàn riêng → merchant.commission_pct; mặc định không có phí giao hộ', async () => {
+    const { svc, prisma } = withLinks();
+    prisma.storefront.findUnique.mockResolvedValue({ commissionPct: null, consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 0 });
+    (svc as unknown as { config: unknown }).config = { get: jest.fn(async (k: string, fb: unknown) => (k === 'merchant.commission_pct' ? 0.12 : fb)) };
+    await expect(svc.consignmentTerms('sf-a')).resolves.toEqual({ commissionPct: 0.12, feePct: 0, feeFixed: 0 });
+  });
+
+  it('gian hàng chưa có liên kết nào → không có phần giao hộ, không chạy truy vấn giao hộ', async () => {
     const { svc, prisma } = build();
-    const linkedAt = new Date('2026-10-01T00:00:00Z');
-    (prisma as unknown as { merchantPancakeLink: unknown }).merchantPancakeLink = {
-      findMany: jest.fn().mockResolvedValue([{ variationId: 'v-pk', linkedAt, unlinkedAt: null }]),
-    };
-    const orderItem = {
-      findMany: jest.fn().mockResolvedValue([
-        { variationId: 'v-pk', productName: 'Tiêu', variationName: '200g', quantity: 2, total: 240_000, order: { code: 'A', createdAt: new Date('2026-10-05T00:00:00Z'), deliveredAt: new Date('2026-10-08T00:00:00Z') } },
-        { variationId: 'v-pk', productName: 'Tiêu', variationName: '200g', quantity: 1, total: 120_000, order: { code: 'OLD', createdAt: new Date('2026-09-20T00:00:00Z'), deliveredAt: new Date('2026-10-02T00:00:00Z') } },
-      ]),
-    };
-    (prisma as unknown as { orderItem: unknown }).orderItem = orderItem;
-    const res = await svc.tubuFulfilledSales('sf-a', NOW);
-    expect(res).toEqual({
-      lines: [{ orderCode: 'A', deliveredAt: new Date('2026-10-08T00:00:00Z'), productName: 'Tiêu', variationName: '200g', quantity: 2, total: 240_000 }],
-      goods: 240_000,
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.consignmentTerms).toBeNull();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('dòng đã vào phiếu: trả một phần mới duyệt → REVERSAL RETURN:<id>:ITEM:<dòng>; đơn RETURNED → đảo phần còn lại ITEM:<dòng>', async () => {
+    const { svc, prisma } = withLinks();
+    prisma.orderItem.findMany.mockResolvedValueOnce([{ id: 'o1-a' }]).mockResolvedValueOnce([
+      {
+        id: 'o1-a',
+        variationId: 'vA',
+        productName: 'Mật ong',
+        variationName: 'Hũ',
+        quantity: 2,
+        total: 120_000,
+        order: { id: 'o1', code: 'O1', status: 'RETURNED' },
+        merchantPayoutLines: [{ kind: 'SALE', refKey: 'ITEM:o1-a', goodsAmount: 102_000, commissionAmount: 10_200, opsFeeAmount: 4_440 }],
+      },
+    ]);
+    prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ orderItemId: 'o1-a' }]);
+    prisma.returnRequestItem.findMany.mockResolvedValue([{ orderItemId: 'o1-a', quantity: 1, returnRequest: { id: 'rr1', reviewedAt: NOW } }]);
+    const st = await svc.statementFor('sf-a', NOW);
+    expect(st.lines.map((l) => [l.kind, l.refKey, l.netAmount])).toEqual([
+      ['REVERSAL', 'RETURN:rr1:ITEM:o1-a', -43_680],
+      ['REVERSAL', 'ITEM:o1-a', -43_680],
+    ]);
+    expect(prisma.orderItem.findMany.mock.calls[0][0].where).toEqual({
+      order: { status: 'RETURNED' },
+      merchantPayoutLines: { some: { kind: 'SALE', payout: { storefrontId: 'sf-a' } }, none: { kind: 'REVERSAL', refKey: { startsWith: 'ITEM:' } } },
     });
-    expect(orderItem.findMany.mock.calls[0][0].where).toMatchObject({ variationId: { in: ['v-pk'] }, order: { status: 'DELIVERED' } });
+  });
+
+  function payoutReady() {
+    const b = withLinks();
+    const dueAt = new Date(NOW.getTime() - 10 * 24 * H);
+    b.prisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([pending('o1-a', 'o1', dueAt)]).mockResolvedValueOnce([]);
+    b.prisma.orderItem.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce(items('o1'));
+    b.prisma.storefront.findUnique
+      .mockResolvedValueOnce({ ...STORE, bankName: 'VCB', bankAccountNo: '1', bankAccountName: 'A' })
+      .mockResolvedValue({ commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400 });
+    b.prisma.merchantPayout.create.mockResolvedValue({ id: 'p1', amount: 86_360, lines: [{}] });
+    return b;
+  }
+
+  it('lập phiếu: khoá gian hàng trong transaction rồi mới tính bảng kê; lưu dòng hàng và phí giao hộ của từng dòng', async () => {
+    const { svc, prisma } = payoutReady();
+    await svc.createPayout('admin-1', 'sf-a', undefined, 86_360);
+    expect(sqlOf(prisma.$executeRaw.mock.calls[0])).toContain('pg_advisory_xact_lock(hashtext(');
+    expect(prisma.$executeRaw.mock.calls[0][1]).toBe('merchant-payout:sf-a');
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.$queryRaw.mock.invocationCallOrder[0]!);
+    const data = prisma.merchantPayout.create.mock.calls[0][0].data;
+    expect(data.amount).toBe(86_360);
+    expect(data.lines.create).toEqual([
+      expect.objectContaining({ orderId: 'o1', kind: 'SALE', refKey: 'ITEM:o1-a', orderItemId: 'o1-a', shippingFee: 0, codCollected: 0, opsFeeAmount: 5_440, netAmount: 86_360 }),
+    ]);
+  });
+
+  it('lập phiếu với tổng xem trước khác tổng hiện tại → 409, không tạo phiếu', async () => {
+    const { svc, prisma } = payoutReady();
+    await expect(svc.createPayout('admin-1', 'sf-a', undefined, 90_000)).rejects.toThrow(
+      'Số tiền chờ đối soát vừa thay đổi (90.000đ → 86.360đ). Tải lại bảng kê rồi lập phiếu.',
+    );
+    expect(prisma.merchantPayout.create).not.toHaveBeenCalled();
+  });
+
+  it('huỷ phiếu: khoá cùng gian hàng; dòng giao hộ chỉ bị chặn bởi dòng đảo của CHÍNH dòng hàng đó ở phiếu khác', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+    prisma.merchantPayout.findUniqueOrThrow.mockResolvedValue({ id: 'p1', status: 'CANCELLED' });
+    prisma.merchantPayoutLine.findMany.mockResolvedValue([
+      { orderId: 'o1', orderItemId: 'o1-a' },
+      { orderId: 'o9', orderItemId: null },
+    ]);
+    await svc.cancelPayout('admin-1', 'p1');
+    expect(prisma.$executeRaw.mock.calls[0][1]).toBe('merchant-payout:sf-a');
+    expect(prisma.merchantPayoutLine.findFirst.mock.calls[0][0].where).toEqual({
+      kind: 'REVERSAL',
+      payoutId: { not: 'p1' },
+      OR: [{ orderId: { in: ['o9'] }, orderItemId: null }, { orderItemId: { in: ['o1-a'] } }],
+    });
+    expect(prisma.merchantPayoutLine.deleteMany).toHaveBeenCalledWith({ where: { payoutId: 'p1' } });
+  });
+
+  it('huỷ phiếu không tồn tại → 409, không mở transaction', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPayout.findUnique.mockResolvedValue(null);
+    await expect(svc.cancelPayout('admin-1', 'p-x')).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('tổng quan admin: gồm gian hàng chỉ có hàng giao hộ; chỉ dựng bảng kê cho gian hàng có khoản chờ; đơn đang xử lý đếm gộp', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPancakeLink.findMany.mockImplementation(async (args: { distinct?: string[] }) =>
+      args.distinct ? [{ storefrontId: 'sf-c' }] : [],
+    );
+    prisma.$queryRaw.mockResolvedValueOnce([{ id: 'sf-d' }]);
+    prisma.order.groupBy.mockResolvedValue([{ fulfillerStorefrontId: 'sf-d', _count: { _all: 3 } }]);
+    prisma.storefront.findMany.mockResolvedValue([
+      { id: 'sf-c', title: 'Giao hộ', owner: null, commissionPct: null, consignmentFeePct: new Prisma.Decimal('0.02'), consignmentFeeFixed: 3_400 },
+      { id: 'sf-d', title: 'Tự giao', owner: null, commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 0 },
+    ]);
+    const spy = jest.spyOn(svc, 'statementFor').mockResolvedValue({ lines: [{ orderItemId: 'x', netAmount: 5 }], total: 5 } as never);
+    const res = await svc.adminOverview(NOW);
+    expect(prisma.storefront.findMany.mock.calls[0][0].where).toEqual({
+      type: 'MERCHANT',
+      OR: [{ fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }],
+    });
+    expect(spy.mock.calls.map((c) => c[0])).toEqual(['sf-d']);
+    expect(prisma.order.groupBy).toHaveBeenCalledTimes(1);
+    expect(res.defaultCommissionPct).toBe(0.15);
+    expect(res.stores).toEqual([
+      expect.objectContaining({ storefrontId: 'sf-c', activeOrders: 0, settleableLines: 0, settleableAmount: 0, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 }),
+      expect.objectContaining({ storefrontId: 'sf-d', activeOrders: 3, settleableLines: 1, settleableAmount: 5, consignmentLines: 1, commissionPct: 0.1 }),
+    ]);
+    const candidates = sqlOf(prisma.$queryRaw.mock.calls[0]);
+    expect(candidates).toContain('UNION');
+    expect(candidates).toContain('lk."storefrontId"');
+  });
+
+  it('admin sửa phí: chỉ gian hàng đối tác; ghi mốc gốc khi chưa có lịch sử rồi thêm dòng mới có người sửa; phí sàn theo mặc định lưu số đã quy ra (Q8 review S1)', async () => {
+    const { svc, prisma } = build();
+    prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'CTV' });
+    await expect(svc.updateStoreTerms('admin-1', 'sf-x', { consignmentFeePct: 0.01 })).rejects.toThrow(NotFoundException);
+    const old = { commissionPct: new Prisma.Decimal('0.1'), consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 0 };
+    prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'MERCHANT', ...old });
+    prisma.storefront.update.mockResolvedValue({ id: 'sf-a', commissionPct: null, consignmentFeePct: new Prisma.Decimal(0), consignmentFeeFixed: 2_000 });
+    await svc.updateStoreTerms('admin-1', 'sf-a', { commissionPct: null, consignmentFeeFixed: 2_000 });
+    expect(prisma.storefront.update.mock.calls[0][0].data).toEqual({ commissionPct: null, consignmentFeeFixed: 2_000 });
+    const rows = prisma.storefrontTermsHistory.create.mock.calls.map((c) => c[0].data);
+    expect(rows).toEqual([
+      { storefrontId: 'sf-a', ...old, effectiveFrom: new Date(0) },
+      expect.objectContaining({ storefrontId: 'sf-a', commissionPct: 0.15, consignmentFeeFixed: 2_000, changedById: 'admin-1' }),
+    ]);
+    expect(rows[1].effectiveFrom).toBeInstanceOf(Date);
+
+    // Mặc định đọc thẳng DB trong transaction (bộ nhớ đệm cấu hình có thể cũ), mốc gốc của gian hàng đang theo mặc định cũng
+    // lưu số.
+    prisma.storefrontTermsHistory.create.mockClear();
+    prisma.systemConfig.findUnique.mockResolvedValueOnce({ value: 0.2 });
+    prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'MERCHANT', ...old, commissionPct: null });
+    await svc.updateStoreTerms('admin-1', 'sf-a', { consignmentFeeFixed: 2_000 });
+    expect(prisma.systemConfig.findUnique).toHaveBeenLastCalledWith({ where: { key: 'merchant.commission_pct' }, select: { value: true } });
+    expect(prisma.storefrontTermsHistory.create.mock.calls.map((c) => c[0].data.commissionPct)).toEqual([0.2, 0.2]);
+
+    prisma.storefrontTermsHistory.create.mockClear();
+    prisma.storefrontTermsHistory.count.mockResolvedValue(2);
+    prisma.storefront.findUnique.mockResolvedValueOnce({ type: 'MERCHANT', ...old });
+    await svc.updateStoreTerms('admin-1', 'sf-a', { consignmentFeePct: 0.01 });
+    expect(prisma.storefrontTermsHistory.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('xác nhận hàng ký gửi: chỉ liên kết takeover còn hiệu lực; bấm lại không đổi mốc', async () => {
+    const { svc, prisma } = build();
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce(null);
+    await expect(svc.confirmConsignment('admin-1', 'l0')).rejects.toThrow(NotFoundException);
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: false, unlinkedAt: null });
+    await expect(svc.confirmConsignment('admin-1', 'l1')).rejects.toThrow(BadRequestException);
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: true, unlinkedAt: NOW });
+    await expect(svc.confirmConsignment('admin-1', 'l2')).rejects.toThrow('Liên kết đã gỡ.');
+    prisma.merchantPancakeLink.findUnique.mockResolvedValueOnce({ takeover: true, unlinkedAt: null });
+    await svc.confirmConsignment('admin-1', 'l3');
+    expect(prisma.merchantPancakeLink.updateMany).toHaveBeenCalledWith({
+      where: { id: 'l3', consignmentConfirmedAt: null },
+      data: { consignmentConfirmedAt: expect.any(Date), consignmentConfirmedBy: 'admin-1' },
+    });
   });
 });

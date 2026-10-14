@@ -14,7 +14,6 @@ import type { NotificationsService } from '../../src/modules/notifications/notif
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
 import {
-  barrierOnFirstCalls,
   createOrder,
   createUser,
   randCode,
@@ -168,11 +167,10 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     const expected = await service.statementFor(store.id);
     expect(expected.lines).toHaveLength(3);
 
-    const spy = barrierOnFirstCalls(service, 'statementFor', 4);
+    // Lập phiếu khoá theo gian hàng rồi mới tính bảng kê: các lần sau chờ khoá, tính lại thì không còn dòng nào.
     const results = await Promise.allSettled(
       Array.from({ length: 4 }, (_, i) => service.createPayout(`admin-${i}`, store.id)),
     );
-    spy.mockRestore();
     const s = summarize(results);
 
     const payouts = await prisma.merchantPayout.findMany({
@@ -192,7 +190,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     );
 
     expect(s.fulfilled).toHaveLength(1);
-    expect(s.rejected.every((r) => r.reason instanceof ConflictException)).toBe(true);
+    expect(s.rejected.every((r) => r.reason instanceof BadRequestException)).toBe(true);
     expect(payouts).toHaveLength(1);
     expect(lines).toHaveLength(3);
     expect(new Set(lines.map((l) => l.orderId)).size).toBe(3);

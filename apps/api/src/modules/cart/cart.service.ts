@@ -8,6 +8,7 @@ import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
+import { isPartnerOwnedVariation } from './partner-goods';
 import {
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
@@ -128,6 +129,8 @@ export class CartService {
         flashLimitNotice,
         // Nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giỏ chia nhóm theo đây, checkout tách đơn theo đây.
         fulfiller: fulfillerOf(it.variation),
+        // Hàng của gian hàng đối tác: checkout không cho trả bằng Điểm Xanh (partner-goods.ts).
+        partnerOwned: isPartnerOwnedVariation(it.variation),
       };
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);

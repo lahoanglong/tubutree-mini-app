@@ -2,82 +2,52 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getMerchantSettlement, type MerchantPayout, type MerchantSettlement, type SettlementLine, type TubuFulfilledSales } from '@/lib/merchant-client';
+import { getMerchantSettlement, type MerchantPayout, type MerchantSettlement } from '@/lib/merchant-client';
 import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { Notice, ScrollRegion, ToneBadge } from '@/components/admin/ui';
+import { Notice, ToneBadge } from '@/components/admin/ui';
+import { ConsignmentExcludedList, SettlementTable, consignmentFeesText, signedVnd } from '@/components/settlement-table';
 
-/** Số tiền có dấu: dương Tubu trả gian hàng, âm gian hàng nộp lại Tubu. */
-export function signedVnd(n: number): string {
-  return n < 0 ? `−${formatVnd(-n)}` : formatVnd(Math.abs(n));
-}
+export { isPartialReturnLine, signedVnd } from '@/components/settlement-table';
 
-/** Dòng đảo của một lần khách trả một phần đơn đã quyết toán (khác dòng đảo cả đơn). */
-export function isPartialReturnLine(l: Pick<SettlementLine, 'kind' | 'refKey'>): boolean {
-  return l.kind === 'REVERSAL' && !!l.refKey?.startsWith('RETURN:');
-}
-
-export function SettlementTable<L extends SettlementLine>({ lines, label, dateHeader, dateOf }: {
-  lines: L[];
-  label: string;
-  dateHeader: string;
-  dateOf: (l: L) => string | null;
-}) {
-  return (
-    <ScrollRegion label={label} className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
-      <table className="w-full text-left text-xs">
-        <thead className="bg-stone-50 text-stone-500">
-          <tr>
-            <th className="px-3 py-2 font-medium">Đơn</th>
-            <th className="px-3 py-2 font-medium">{dateHeader}</th>
-            <th className="px-3 py-2 text-right font-medium">Tiền hàng</th>
-            <th className="px-3 py-2 text-right font-medium">Phí giao</th>
-            <th className="px-3 py-2 text-right font-medium">Phí sàn</th>
-            <th className="px-3 py-2 text-right font-medium">COD bạn đã thu</th>
-            <th className="px-3 py-2 text-right font-medium">Thực nhận</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-stone-100">
-          {lines.map((l) => (
-            <tr key={`${l.orderId}-${l.kind}-${l.refKey ?? ''}`}>
-              <td className="px-3 py-2 font-medium text-stone-900">
-                {l.orderCode}
-                {l.kind === 'REVERSAL' && (
-                  <span className="ml-1 text-danger-fg">{isPartialReturnLine(l) ? '(trả một phần)' : '(trả hàng)'}</span>
-                )}
-              </td>
-              <td className="px-3 py-2 text-stone-600">{formatDate(dateOf(l))}</td>
-              <td className="px-3 py-2 text-right">{signedVnd(l.goodsAmount)}</td>
-              <td className="px-3 py-2 text-right">{signedVnd(l.shippingFee)}</td>
-              <td className="px-3 py-2 text-right">{signedVnd(-l.commissionAmount)}</td>
-              <td className="px-3 py-2 text-right">{signedVnd(-l.codCollected)}</td>
-              <td className={`px-3 py-2 text-right font-semibold ${l.netAmount < 0 ? 'text-danger-fg' : 'text-forest-700'}`}>{signedVnd(l.netAmount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ScrollRegion>
-  );
-}
-
-/** "Đối soát" của gian hàng tự giao: đơn đã đủ hạn chờ lập phiếu, đơn sắp đủ hạn và các phiếu Tubu đã lập. */
+/**
+ * "Đối soát" của gian hàng: khoản đã đủ hạn chờ lập phiếu, khoản sắp đủ hạn và các phiếu Tubu đã lập — gồm cả đơn gian hàng
+ * tự giao và hàng "Tubu giao hộ" (mỗi món một khoản).
+ */
 export function SettlementTab() {
   const q = useQuery({ queryKey: ['merchant-settlement'], queryFn: getMerchantSettlement });
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải bảng kê đối soát…</p>;
   if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được bảng kê đối soát.</p>;
   const s = q.data;
+  const terms = s.consignmentTerms ?? null;
 
   return (
     <div className="space-y-5">
       <Notice>
-        Mỗi đơn bạn tự giao: thực nhận = tiền hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của khách. Đơn được đưa vào
+        Mỗi đơn bạn tự giao: thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của
+        khách. Hàng của bạn bán theo giá lẻ niêm yết (hoặc giá giờ vàng khi Tubu Tree đưa món vào giờ vàng). Phần mã giảm giá
+        của khách và giảm giá hạng thành viên áp cho món của bạn được trừ vào số tiền của bạn (mã chỉ áp cho món khác không trừ
+        vào món của bạn). Khách không trả hàng của bạn bằng Điểm Xanh; hàng của bạn không bán giá đại lý, không đặt định kỳ,
+        không vào combo hay mua chung. Khách trả bằng Ví Tubu vẫn tính đủ giá trị món; phí sàn theo mức chốt lúc khách đặt
+        đơn. Đơn được đưa vào
         bảng kê sau {s.holdDays} ngày kể từ khi giao (hết hạn đổi/trả). Phiếu dương: Tubu Tree chuyển khoản vào tài khoản nhận
         đối soát của gian hàng. Phiếu âm (hay gặp với đơn COD vì bạn đã giữ tiền mặt của khách): bạn nộp phần phí sàn cho Tubu
         trong {s.negativeDueDays ?? 7} ngày kể từ khi lập phiếu. Đơn bị trả: Tubu Tree hoàn tiền cho khách, bạn nhận hàng về và nộp
         lại phần đã nhận cho đơn đó; đơn COD là đúng số tiền mặt bạn đã thu. Khách trả một phần đơn đã đối soát: kỳ sau có
         dòng &quot;trả một phần&quot; trừ lại đúng phần hàng trả.
       </Notice>
+      {terms && (
+        <Notice>
+          Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách, mỗi món là một khoản trên cùng phiếu đối soát. Thực nhận =
+          số tiền khách thực trả cho món (giá bán của món, kể cả giá giờ vàng, đã trừ phần mã giảm giá của khách và giảm giá
+          hạng thành viên áp cho chính món đó; mã chỉ áp cho món khác không trừ vào món của bạn; Điểm Xanh không dùng cho hàng
+          của bạn) − {consignmentFeesText(terms)} (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt). Khách trả bằng Ví
+          Tubu vẫn tính đủ giá trị món. Phí giao hàng do Tubu Tree thu và chịu, không tính
+          vào khoản của bạn. Món được đưa vào bảng kê sau {s.holdDays} ngày kể từ khi giao, chỉ đơn Tubu Tree đã thu được tiền (trả
+          trước đã thanh toán hoặc COD); khách trả món đã đối soát thì kỳ sau có khoản trừ lại, hàng trả về kho Tubu Tree.
+        </Notice>
+      )}
 
       <section className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -87,25 +57,25 @@ export function SettlementTab() {
           </p>
         </div>
         {s.lines.length === 0 ? (
-          <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-xs text-stone-500">Chưa có đơn nào đủ hạn đối soát.</p>
+          <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-xs text-stone-500">Chưa có khoản nào đủ hạn đối soát.</p>
         ) : (
-          <SettlementTable lines={s.lines} label="Đơn chờ lập phiếu đối soát" dateHeader="Ngày giao" dateOf={(l) => l.deliveredAt} />
+          <SettlementTable lines={s.lines} label="Khoản chờ lập phiếu đối soát" dateHeader="Ngày giao" dateOf={(l) => l.deliveredAt} />
         )}
       </section>
 
       {s.upcoming.length > 0 && (
         <section className="space-y-2">
-          <h2 className="font-display font-semibold text-stone-900">
-            Sắp đủ hạn ({new Set(s.upcoming.map((l) => l.orderId)).size} đơn)
-          </h2>
+          <h2 className="font-display font-semibold text-stone-900">Sắp đủ hạn ({s.upcoming.length} khoản)</h2>
           <SettlementTable
             lines={s.upcoming}
-            label="Đơn sắp đủ hạn đối soát"
+            label="Khoản sắp đủ hạn đối soát"
             dateHeader="Đối soát từ"
             dateOf={(l) => l.availableAt}
           />
         </section>
       )}
+
+      <ConsignmentExcludedList data={s.consignmentExcluded} />
 
       <section className="space-y-2">
         <h2 className="font-display font-semibold text-stone-900">Phiếu đối soát</h2>
@@ -119,8 +89,6 @@ export function SettlementTab() {
           </ul>
         )}
       </section>
-
-      {s.tubuFulfilled && s.tubuFulfilled.lines.length > 0 && <TubuFulfilledSection sales={s.tubuFulfilled} />}
     </div>
   );
 }
@@ -171,50 +139,5 @@ function PayoutItem({ payout: p, tubuAccount }: { payout: MerchantPayout; tubuAc
         </details>
       )}
     </li>
-  );
-}
-
-/** Hàng "Tubu giao hộ" (R2-MERCHANT-2): kho Tubu giao và thu tiền, đối chiếu theo thoả thuận ký gửi chứ không qua phiếu. */
-function TubuFulfilledSection({ sales }: { sales: TubuFulfilledSales }) {
-  return (
-    <section className="space-y-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display font-semibold text-stone-900">Hàng Tubu giao hộ đã bán (90 ngày)</h2>
-        <p className="text-sm text-stone-700">
-          Tiền hàng: <span className="font-semibold">{formatVnd(sales.goods)}</span>
-        </p>
-      </div>
-      <p className="text-xs text-stone-500">
-        Kho Tubu Tree giao và thu tiền nên các đơn này không vào phiếu đối soát. Tiền hàng được thanh toán theo thoả thuận ký gửi
-        với Tubu Tree; bảng này để bạn đối chiếu.
-      </p>
-      <ScrollRegion label="Hàng Tubu giao hộ đã bán" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
-        <table className="w-full min-w-[520px] text-left text-xs">
-          <thead className="bg-stone-50 text-stone-500">
-            <tr>
-              <th className="px-3 py-2 font-medium">Đơn</th>
-              <th className="px-3 py-2 font-medium">Ngày giao</th>
-              <th className="px-3 py-2 font-medium">Sản phẩm</th>
-              <th className="px-3 py-2 text-right font-medium">SL</th>
-              <th className="px-3 py-2 text-right font-medium">Tiền hàng</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {sales.lines.map((l, i) => (
-              <tr key={`${l.orderCode}-${i}`}>
-                <td className="px-3 py-2 font-medium text-stone-900">{l.orderCode}</td>
-                <td className="px-3 py-2 text-stone-600">{formatDate(l.deliveredAt)}</td>
-                <td className="px-3 py-2 text-stone-700">
-                  {l.productName}
-                  {l.variationName ? ` (${l.variationName})` : ''}
-                </td>
-                <td className="px-3 py-2 text-right">{l.quantity}</td>
-                <td className="px-3 py-2 text-right">{formatVnd(l.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollRegion>
-    </section>
   );
 }

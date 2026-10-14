@@ -336,14 +336,29 @@ export interface SettlementLine {
   orderId: string;
   orderCode: string;
   kind: 'SALE' | 'REVERSAL';
-  /** '' = cả đơn; 'RETURN:<id>' = dòng đảo của một lần khách trả một phần (mỗi đơn có thể có nhiều). */
+  /**
+   * '' = cả đơn; 'RETURN:<id>' = dòng đảo của một lần khách trả một phần (mỗi đơn có thể có nhiều). Hàng "Tubu giao hộ":
+   * 'ITEM:<dòng hàng>' và 'RETURN:<id>:ITEM:<dòng hàng>'.
+   */
   refKey?: string;
   goodsAmount: number;
   shippingFee: number;
   commissionAmount: number;
+  /** Phí Tubu giao hộ của dòng hàng giao hộ (0 với đơn tự giao). API cũ chưa trả. */
+  opsFeeAmount?: number;
   codCollected: number;
   netAmount: number;
   deliveredAt: string | null;
+  /** Dòng hàng "Tubu giao hộ"; null/thiếu = đơn gian hàng tự giao. */
+  orderItemId?: string | null;
+  item?: { productName: string; variationName: string | null; quantity: number } | null;
+}
+
+/** Mức phí áp cho hàng "Tubu giao hộ": phần trăm là phân số (0.1 = 10%), phí cố định tính mỗi đơn. */
+export interface ConsignmentTerms {
+  commissionPct: number;
+  feePct: number;
+  feeFixed: number;
 }
 
 export interface MerchantPayout {
@@ -366,17 +381,39 @@ export interface MerchantPayout {
   storefront?: { id: string; title: string };
 }
 
+/** Món "Tubu giao hộ" đã bán nhưng không tự vào bảng kê — chỉ để đối chiếu. */
+export interface ConsignmentExcludedLine {
+  orderId: string;
+  orderCode: string;
+  orderItemId: string;
+  productName: string;
+  variationName: string | null;
+  quantity: number;
+  /** Tiền khách thực trả cho món. */
+  goodsAmount: number;
+  createdAt: string;
+  deliveredAt: string | null;
+  /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
+  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+}
+
+export interface ConsignmentExcluded {
+  /** Mốc bắt đầu đối soát tự động; null = không giới hạn. */
+  settleFrom: string | null;
+  /** Tổng số món (danh sách chỉ trả tối đa 200 món mới nhất). */
+  total: number;
+  lines: ConsignmentExcludedLine[];
+}
+
 export interface MerchantStatement {
   holdDays: number;
   lines: SettlementLine[];
   total: number;
   upcoming: (SettlementLine & { availableAt: string | null })[];
-}
-
-/** Hàng "Tubu giao hộ" đã giao: kho Tubu thu tiền, không vào phiếu đối soát — để đối chiếu theo thoả thuận nhập hàng. */
-export interface TubuFulfilledSales {
-  lines: { orderCode: string; deliveredAt: string | null; productName: string; variationName: string | null; quantity: number; total: number }[];
-  goods: number;
+  /** null/thiếu = gian hàng chưa có hàng "Tubu giao hộ". */
+  consignmentTerms?: ConsignmentTerms | null;
+  /** Thiếu ở API cũ. */
+  consignmentExcluded?: ConsignmentExcluded | null;
 }
 
 export interface MerchantSettlement extends MerchantStatement {
@@ -384,7 +421,6 @@ export interface MerchantSettlement extends MerchantStatement {
   /** Tài khoản Tubu nhận tiền nộp lại của phiếu âm. */
   tubuAccount?: { bankName: string; accountNo: string; accountName: string } | null;
   negativeDueDays?: number;
-  tubuFulfilled?: TubuFulfilledSales;
 }
 
 // ── Hàng khách trả về gian hàng (đơn tự giao) ──
@@ -416,6 +452,8 @@ export const getMerchantSettlement = () => apiFetch<MerchantSettlement>('/mercha
 
 export interface MerchantFulfilmentOverview {
   slaConfig: SlaConfig;
+  /** merchant.commission_pct — phí sàn của gian hàng không đặt mức riêng. */
+  defaultCommissionPct?: number;
   stores: {
     storefrontId: string;
     title: string;
@@ -424,6 +462,12 @@ export interface MerchantFulfilmentOverview {
     overdueOrders: number;
     settleableLines: number;
     settleableAmount: number;
+    /** Trong số khoản chờ đối soát, số khoản là hàng "Tubu giao hộ". */
+    consignmentLines?: number;
+    /** Phí sàn riêng (phân số); null = mức mặc định. */
+    commissionPct?: number | null;
+    consignmentFeePct?: number;
+    consignmentFeeFixed?: number;
   }[];
   overdue: {
     id: string;
@@ -442,11 +486,19 @@ export const getMerchantFulfilmentOverview = () =>
 export const getAdminMerchantStatement = (storefrontId: string) =>
   apiFetch<MerchantStatement>(`/admin/merchant-fulfilment/statements/${encodeURIComponent(storefrontId)}`);
 
+/** Admin sửa phí sàn riêng (null = mặc định) và phí "Tubu giao hộ" của gian hàng; phần trăm gửi dạng phân số. */
+export const updateAdminMerchantStoreTerms = (
+  storefrontId: string,
+  body: { commissionPct?: number | null; consignmentFeePct?: number; consignmentFeeFixed?: number },
+) =>
+  apiFetch<unknown>(`/admin/merchant-fulfilment/stores/${encodeURIComponent(storefrontId)}/terms`, { method: 'PATCH', body });
+
 export const listAdminMerchantPayouts = (page = 1, limit = MERCHANT_PAGE_SIZE) =>
   apiFetch<Page<MerchantPayout>>(`/admin/merchant-fulfilment/payouts?page=${page}&limit=${limit}`);
 
-export const createAdminMerchantPayout = (storefrontId: string, note?: string) =>
-  apiFetch<MerchantPayout>('/admin/merchant-fulfilment/payouts', { method: 'POST', body: { storefrontId, note } });
+/** `expectedTotal`: tổng bảng kê admin đang xem — server tính lại khác số này thì từ chối (409) để admin xem lại. */
+export const createAdminMerchantPayout = (storefrontId: string, expectedTotal: number, note?: string) =>
+  apiFetch<MerchantPayout>('/admin/merchant-fulfilment/payouts', { method: 'POST', body: { storefrontId, note, expectedTotal } });
 
 export const markAdminMerchantPayoutPaid = (id: string, bankRef: string) =>
   apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/paid`, {

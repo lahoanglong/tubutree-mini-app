@@ -1389,6 +1389,8 @@ export class AdminService {
           id: true,
           linkedAt: true,
           takeover: true,
+          stockAtLink: true,
+          consignmentConfirmedAt: true,
           originProductId: true,
           product: {
             select: {

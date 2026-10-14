@@ -98,6 +98,20 @@ describe('GroupBuyService.create', () => {
     expect(prisma.groupBuy.create).not.toHaveBeenCalled();
   });
 
+  it('Q8 S2: hàng Tubu giao hộ của gian hàng đối tác → không mở được nhóm mua chung (mã nhóm là chương trình của Tubu)', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', name: 'Mật ong rừng', isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefrontId: 'sf-doi-tac', basePrice: 75000, salePrice: null,
+    });
+    await expect(new GroupBuyService(prisma, makeConfig()).create('u1', 'prod1')).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không mở mua chung được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect(prisma.groupBuy.create).not.toHaveBeenCalled();
+  });
+
   it('sản phẩm không tồn tại/ngừng bán → NotFound', async () => {
     const prisma = makePrisma();
     (prisma.product.findUnique as jest.Mock).mockResolvedValue(null);

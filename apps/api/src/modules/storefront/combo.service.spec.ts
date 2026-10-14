@@ -172,6 +172,53 @@ describe('ComboService.computeForStorefront', () => {
     expect(out.total).toBe(0);
   });
 
+  it('Q8 S2: hàng của gian hàng đối tác trong combo không được giảm và không tính vào điều kiện combo', async () => {
+    const prisma = makePrisma([
+      {
+        comboDiscountPct: 10,
+        items: [
+          { productId: 'p1', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p2', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p3', isHidden: false, product: { storefrontId: 'sf-doi-tac' } },
+        ],
+      },
+    ]);
+    const svc = new ComboService(prisma, config);
+    const out = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+      { variationId: 'v3', productId: 'p3', total: 100 },
+    ]);
+    expect(out).toEqual({ total: 20, perLine: { v1: 10, v2: 10 } });
+    const withoutPartner = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+    ]);
+    expect(withoutPartner.total).toBe(20);
+    expect((prisma.storefront.findFirst as jest.Mock).mock.calls[0][0].select.collections.select.items.select).toEqual({
+      productId: true,
+      isHidden: true,
+      product: { select: { storefrontId: true } },
+    });
+  });
+
+  it('Q8 S2: combo một sản phẩm Tubu + một hàng đối tác chỉ còn một sản phẩm → không còn là combo', async () => {
+    const prisma = makePrisma([
+      {
+        comboDiscountPct: 15,
+        items: [
+          { productId: 'p1', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p3', isHidden: false, product: { storefrontId: 'sf-doi-tac' } },
+        ],
+      },
+    ]);
+    const out = await new ComboService(prisma, config).computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v3', productId: 'p3', total: 100 },
+    ]);
+    expect(out).toEqual({ total: 0, perLine: {} });
+  });
+
   it('MONEY-5: chủ gian hàng tự mua qua gian hàng của mình → không có giảm combo', async () => {
     const prisma = {
       storefront: {

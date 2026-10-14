@@ -163,6 +163,7 @@ export async function linkTubuFulfilledVariation(
       originProductId: target.productId,
       originDeactivated: deactivate,
       takeover: target.requiresAdminConfirm,
+      stockAtLink: target.stock,
       linkedBy: opts.adminId,
     },
   });

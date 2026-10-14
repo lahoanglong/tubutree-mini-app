@@ -22,6 +22,7 @@ import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
   isInvoiceValid,
+  partnerPointsState,
   pointsEarnLabel,
   pointsUseLabel,
   shouldFallbackToCod,
@@ -142,6 +143,13 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
     enabled: !!addressId && authed && cartReady,
   });
+
+  // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
+  const partnerPoints = partnerPointsState(quote.data);
+  const pointsUsable = points.usable > 0 && !partnerPoints.disabled;
+  useEffect(() => {
+    if (partnerPoints.disabled && usePoints) setUsePoints(false);
+  }, [partnerPoints.disabled, usePoints]);
 
   const invoiceValid = isInvoiceValid(wantInvoice, invoice);
 
@@ -593,11 +601,11 @@ export default function CheckoutPage() {
           <Box
             role="checkbox"
             {...rowKeyboardProps()}
-            aria-checked={usePoints && points.usable > 0}
-            aria-disabled={points.usable <= 0}
-            className={points.usable > 0 ? 'tubu-press' : undefined}
+            aria-checked={usePoints && pointsUsable}
+            aria-disabled={!pointsUsable}
+            className={pointsUsable ? 'tubu-press' : undefined}
             onClick={() => {
-              if (points.usable <= 0) return;
+              if (!pointsUsable) return;
               haptic('light');
               setUsePoints((v) => !v);
             }}
@@ -615,6 +623,16 @@ export default function CheckoutPage() {
                   ? pointsUseLabel(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
+              {points.usable > 0 && partnerPoints.capNote && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  {partnerPoints.capNote}
+                </Text>
+              )}
+              {points.usable > 0 && partnerPoints.partnerNote && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  {partnerPoints.partnerNote}
+                </Text>
+              )}
               {points.convertedNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {points.convertedNote}
@@ -628,7 +646,7 @@ export default function CheckoutPage() {
             </Box>
             {/* Checkbox (Task 19) thị giác thuần tuý — cùng lý do như Radio ở trên: logic bật/tắt
                 dùng điểm vẫn nằm nguyên trong onClick của Box cha, onChange rỗng chỉ để thoả React. */}
-            <Checkbox checked={usePoints && points.usable > 0} disabled={points.usable <= 0} onChange={() => {}} />
+            <Checkbox checked={usePoints && pointsUsable} disabled={!pointsUsable} onChange={() => {}} />
           </Box>
         </Box>
       )}
