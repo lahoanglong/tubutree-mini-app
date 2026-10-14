@@ -1,10 +1,15 @@
-import { Controller, Post, Query } from '@nestjs/common';
+import { Controller, Param, Post, Query } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PancakeSyncService } from './pancake-sync.service';
+import { PancakeOrderService } from './pancake-order.service';
 
 @Controller('admin/pancake')
 export class PancakeController {
-  constructor(private readonly sync: PancakeSyncService) {}
+  constructor(
+    private readonly sync: PancakeSyncService,
+    private readonly orders: PancakeOrderService,
+  ) {}
 
   /**
    * Trigger đồng bộ catalog thủ công (admin).
@@ -20,5 +25,16 @@ export class PancakeController {
     const overwriteStock = withStock === '1' || withStock === 'true';
     const count = await this.sync.syncProducts(undefined, { forceStock: overwriteStock });
     return { synced: count, stockOverwritten: overwriteStock };
+  }
+
+  /**
+   * "Đẩy lại Pancake": xếp lại lệnh tạo đơn kho cho đơn chưa lên Pancake (lỗi, hết lượt, quá hạn tự đẩy). Luật an
+   * toàn (không đẩy đơn đã huỷ/đã rời kho/chưa thanh toán qua cổng) nằm ở PancakeOrderService.retryPushByAdmin;
+   * tạo trùng được chặn bằng tra cứu theo mã đơn trước khi tạo lại.
+   */
+  @Roles('ADMIN')
+  @Post('orders/:id/push')
+  retryPush(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.orders.retryPushByAdmin(adminId, id);
   }
 }

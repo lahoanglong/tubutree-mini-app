@@ -4,28 +4,52 @@ import type { PancakeClient } from './pancake.client';
 import type { PancakeOrderService } from './pancake-order.service';
 import type { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 
+type Where = { createdAt?: { gte?: Date; lt?: Date }; status?: unknown; pancakeCancelStatus?: unknown; paidAt?: unknown };
+
+/** findMany của test chỉ trả dữ liệu cho truy vấn đẩy đơn tồn (pushStale); các truy vấn theo dõi khác lấy từ `followUps`. */
 function mk(
-  prisma: Record<string, unknown>,
-  opts: { configured?: boolean; enqueuePush?: jest.Mock; alert?: jest.Mock } = {},
+  prisma: { order: Record<string, unknown> } & Record<string, unknown>,
+  opts: {
+    configured?: boolean;
+    enqueuePush?: jest.Mock;
+    alert?: jest.Mock;
+    followUps?: { overdue?: unknown[]; cancels?: unknown[]; payments?: unknown[] };
+  } = {},
 ) {
   const client = { isConfigured: jest.fn().mockReturnValue(opts.configured ?? true) } as unknown as PancakeClient;
   const enqueuePush = opts.enqueuePush ?? jest.fn().mockResolvedValue(undefined);
+  const enqueueCancel = jest.fn().mockResolvedValue(undefined);
+  const enqueuePayment = jest.fn().mockResolvedValue(undefined);
   const alert = opts.alert ?? jest.fn().mockResolvedValue(undefined);
+  const stale = prisma.order.findMany as jest.Mock | undefined;
+  const overdue = jest.fn().mockResolvedValue(opts.followUps?.overdue ?? []);
+  const cancels = jest.fn().mockResolvedValue(opts.followUps?.cancels ?? []);
+  const payments = jest.fn().mockResolvedValue(opts.followUps?.payments ?? []);
+  if (stale) {
+    prisma.order.findMany = jest.fn((args: { where: Where }) => {
+      const w = args.where;
+      if (w.pancakeCancelStatus) return cancels(args);
+      if (w.paidAt) return payments(args);
+      if (w.createdAt && !w.createdAt.gte) return overdue(args);
+      return stale(args);
+    });
+  }
   const svc = new PancakePushReconcileService(
     prisma as unknown as PrismaService,
     client,
-    { enqueuePush } as unknown as PancakeOrderService,
+    { enqueuePush, enqueueCancel, enqueuePayment } as unknown as PancakeOrderService,
     { alert } as unknown as GomdonAlertService,
   );
-  return { svc, enqueuePush, alert };
+  return { svc, enqueuePush, enqueueCancel, enqueuePayment, alert, overdue, cancels, payments };
 }
 
 describe('PancakePushReconcileService.reconcile', () => {
   it('Pancake chưa cấu hình → bỏ qua, không query DB', async () => {
     const findMany = jest.fn();
-    const { svc } = mk({ order: { findMany } }, { configured: false });
+    const prisma = { order: { findMany } };
+    const { svc } = mk(prisma, { configured: false });
     await svc.reconcile();
-    expect(findMany).not.toHaveBeenCalled();
+    expect(prisma.order.findMany).not.toHaveBeenCalled();
   });
 
   it('không có đơn tồn đọng → không gọi enqueuePush', async () => {
@@ -34,7 +58,7 @@ describe('PancakePushReconcileService.reconcile', () => {
     expect(enqueuePush).not.toHaveBeenCalled();
   });
 
-  it('tìm đơn pancakeOrderId=null, status khác CANCELLED, cũ hơn 15 phút → re-enqueue từng đơn', async () => {
+  it('tìm đơn pancakeOrderId=null còn trong kho, 15 phút < tuổi < 72 giờ → re-enqueue từng đơn (PLATFORM-8)', async () => {
     const findMany = jest.fn().mockResolvedValue([
       { id: 'o1', code: 'TUBU1', hasRecyclingPickup: false },
       { id: 'o2', code: 'TUBU2', hasRecyclingPickup: false },
@@ -43,7 +67,11 @@ describe('PancakePushReconcileService.reconcile', () => {
     await svc.reconcile();
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ pancakeOrderId: null, status: { notIn: ['CANCELLED'] } }),
+        where: expect.objectContaining({
+          pancakeOrderId: null,
+          status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] },
+          createdAt: { lt: expect.any(Date), gte: expect.any(Date) },
+        }),
         take: PancakePushReconcileService.BATCH_SIZE,
       }),
     );
@@ -204,12 +232,57 @@ describe('PancakePushReconcileService.reconcile — đơn đại lý còn backor
     const findMany = jest.fn().mockResolvedValue([]);
     const { svc } = mk({ order: { findMany } });
     await svc.reconcile();
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } },
-        }),
-      }),
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({
+      NOT: { type: 'DEALER', items: { some: { backorderedQty: { gt: 0 } } } },
+    });
+  });
+});
+
+describe('PancakePushReconcileService.reconcile — đơn cũ, huỷ, thanh toán (PLATFORM-1, PLATFORM-8, PANCAKE-2)', () => {
+  it('trả trước qua cổng chưa PAID không chiếm lô (chờ tiền); chuyển khoản chưa PAID vẫn được đẩy', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const { svc } = mk({ order: { findMany } });
+    await svc.reconcile();
+    const not = findMany.mock.calls[0][0].where.AND[1].NOT;
+    expect(not.paymentStatus).toEqual({ not: 'PAID' });
+    expect(not.paymentMethod.in).toEqual(expect.arrayContaining(['ZALOPAY', 'WALLET']));
+    expect(not.paymentMethod.in).not.toContain('BANK_TRANSFER');
+  });
+
+  it('đơn còn mở quá 72 giờ chưa lên Pancake → STALE + "Cần xử lý Pancake" (không tự đẩy đơn cũ)', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const { svc, enqueuePush, alert, overdue } = mk(
+      { order: { findMany: jest.fn().mockResolvedValue([]), updateMany } },
+      { followUps: { overdue: [{ id: 'o9', code: 'TUBU9', createdAt: new Date('2026-10-01') }] } },
     );
+    await svc.reconcile();
+    expect(overdue.mock.calls[0][0].where.createdAt.lt.getTime()).toBeLessThanOrEqual(Date.now() - 72 * 3_600_000);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o9', pancakeOrderId: null }, data: { pancakePushStatus: 'STALE' } });
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('KHÔNG tự đẩy nữa') }) }),
+    );
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('đơn huỷ chờ huỷ bên Pancake (PENDING/FAILED) → xếp lại job huỷ; cửa sổ tính theo ngày đặt', async () => {
+    const { svc, enqueueCancel, cancels } = mk(
+      { order: { findMany: jest.fn().mockResolvedValue([]) } },
+      { followUps: { cancels: [{ id: 'c1', code: 'TUBU7' }] } },
+    );
+    await svc.reconcile();
+    expect(cancels.mock.calls[0][0].where).toMatchObject({ status: 'CANCELLED', pancakeCancelStatus: { in: ['PENDING', 'FAILED'] } });
+    expect(cancels.mock.calls[0][0].where.createdAt.gte).toBeInstanceOf(Date);
+    expect(enqueueCancel).toHaveBeenCalledWith('c1');
+  });
+
+  it('đơn đã lên Pancake, nay PAID mà Pancake chưa biết → xếp job "đã thanh toán"', async () => {
+    const { svc, enqueuePayment, payments } = mk(
+      { order: { findMany: jest.fn().mockResolvedValue([]) } },
+      { followUps: { payments: [{ id: 'p1', code: 'TUBU8' }] } },
+    );
+    await svc.reconcile();
+    expect(payments.mock.calls[0][0].where).toMatchObject({ pancakeOrderId: { not: null }, pancakePaymentSynced: false, paymentStatus: 'PAID' });
+    expect(enqueuePayment).toHaveBeenCalledWith('p1');
   });
 });

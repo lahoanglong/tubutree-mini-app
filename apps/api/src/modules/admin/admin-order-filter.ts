@@ -60,8 +60,27 @@ export const ADMIN_ORDER_STATUSES = [
 ] as const;
 
 export type RecyclingFilter = 'attention' | 'all';
-/** attention = hàng đợi "Cần xử lý Pancake" (Order.pancakeAttention — xem PancakeProcessor.flagAttention). */
-export type PancakeFilter = 'attention';
+/**
+ * attention = hàng đợi "Cần xử lý Pancake" (Order.pancakeAttention — xem PancakeProcessor.flagAttention).
+ * unsynced = đơn còn trong kho mà chưa lên Pancake: đang lỗi / hết lượt / quá hạn tự đẩy / chưa cấu hình, hoặc đơn
+ * cũ chưa có trạng thái đồng bộ mà đã quá 15 phút.
+ */
+export type PancakeFilter = 'attention' | 'unsynced';
+export const PANCAKE_FILTERS: readonly PancakeFilter[] = ['attention', 'unsynced'];
+
+const PANCAKE_UNSYNCED_STATUSES = ['PENDING', 'PUSHING', 'FAILED', 'STALE', 'NOT_CONFIGURED'];
+const PANCAKE_UNSYNCED_GRACE_MS = 15 * 60_000;
+
+export function pancakeUnsyncedWhere(now: Date = new Date()): Prisma.OrderWhereInput {
+  return {
+    pancakeOrderId: null,
+    status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] },
+    OR: [
+      { pancakePushStatus: { in: PANCAKE_UNSYNCED_STATUSES } },
+      { pancakePushStatus: null, createdAt: { lt: new Date(now.getTime() - PANCAKE_UNSYNCED_GRACE_MS) } },
+    ],
+  };
+}
 
 /**
  * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED) mà đơn còn sống; issued = đã phát hành;
@@ -155,6 +174,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   else if (f.recycling === 'all') and.push({ hasRecyclingPickup: true });
   if (f.invoice) and.push(INVOICE_STATUS_WHERE[f.invoice]);
   if (f.pancake === 'attention') and.push({ pancakeAttentionAt: { not: null } });
+  else if (f.pancake === 'unsynced') and.push(pancakeUnsyncedWhere());
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
 }
