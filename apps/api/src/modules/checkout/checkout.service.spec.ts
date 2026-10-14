@@ -243,17 +243,16 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(10); // calcPointsEarned mock = 10
   });
 
-  it('COD vượt hạn mức 5tr → BadRequest', async () => {
-    const { svc } = build({ total: 6_000_000 });
-    // ép subtotal lớn để total vượt mức
-    (CART as { subtotal: number }).subtotal = 6_000_000;
-    (CART.items[0] as { total: number }).total = 6_000_000;
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('COD');
-    // khôi phục
-    (CART as { subtotal: number }).subtotal = 100;
-    (CART.items[0] as { total: number }).total = 100;
+  it('COD vượt hạn mức 5tr → BadRequest PAYMENT_METHOD_NOT_ALLOWED, báo giá khoá COD với cùng lý do', async () => {
+    const big = { ...CART, subtotal: 6_000_000, items: [{ ...CART.items[0]!, total: 6_000_000 }] };
+    const { svc, orderCreate } = build({ cartData: big });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.blockedPaymentMethods.COD).toMatch(/^Thanh toán khi nhận hàng \(COD\) chỉ nhận đơn tối đa 5\.000\.000đ/);
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: BadRequestException) => e);
+    expect((err as BadRequestException).getResponse()).toEqual(
+      expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 
   it('idempotency: key đã tồn tại, cùng user + cùng payload → trả đơn cũ, không tạo mới', async () => {
@@ -1602,6 +1601,58 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.shipments).toHaveLength(1);
     expect(q.blockedPaymentMethods).toEqual({});
+  });
+
+  describe('R4-CHECKOUT-2: hạn mức COD theo từng đơn sau khi tách; báo giá là nguồn duy nhất của lựa chọn bị khoá', () => {
+    const big = (item: Record<string, unknown>, unitPrice: number, quantity: number) => ({ ...item, unitPrice, quantity, total: unitPrice * quantity });
+    // 2.600.000đ hàng Tubu + 3.000.000đ hàng đối tác = 5.600.000đ; mỗi đơn đều dưới 5.000.000đ.
+    const MIXED_BIG = {
+      items: [big(TUBU_ITEM, 260_000, 10), big(SHOP_ITEM, 150_000, 20)],
+      subtotal: 5_600_000, discount: 0, freeship: false, couponCode: null,
+    };
+    // Phần đối tác 5.200.000đ: riêng đơn đó vượt mức.
+    const SHOP_OVER = {
+      items: [big(TUBU_ITEM, 100_000, 1), big(SHOP_ITEM, 260_000, 20)],
+      subtotal: 5_300_000, discount: 0, freeship: false, couponCode: null,
+    };
+
+    it('giỏ tổng 5.600.000đ, từng đơn dưới mức → báo giá không khoá COD, đặt COD tạo đủ hai đơn', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: MIXED_BIG, walletBalance: 0 });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.total).toBeGreaterThan(5_000_000);
+      expect(q.blockedPaymentMethods.COD).toBeUndefined();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(2);
+      expect(orderCreate.mock.calls.map((c) => c[0].data.paymentMethod)).toEqual(['COD', 'COD']);
+    });
+
+    it('một đơn con vượt mức → báo giá khoá COD kèm lý do; đặt COD bị từ chối đúng câu đó, mã PAYMENT_METHOD_NOT_ALLOWED', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: SHOP_OVER });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(Object.keys(q.blockedPaymentMethods).sort()).toEqual(['BANK_TRANSFER', 'COD', 'ZALOPAY']);
+      expect(q.blockedPaymentMethods.COD).toContain('đơn do Shop A giao là 5.230.000đ');
+      const err = await svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+      );
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('mọi phương thức khoá trong báo giá đều bị đặt hàng từ chối, phương thức không khoá thì đặt được', async () => {
+      for (const cartData of [MIXED_BIG, SHOP_OVER, ONLY_SHOP]) {
+        const { svc } = buildSplit({ cartData, walletBalance: 100_000_000 });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        for (const method of ['COD', 'BANK_TRANSFER', 'ZALOPAY', 'WALLET']) {
+          const res = await svc
+            .placeOrder('u1', { addressId: 'addr1', paymentMethod: method, expectedTotal: q.total } as never)
+            .then(() => null, (e: BadRequestException) => (e.getResponse() as { message: string }).message);
+          expect([method, res]).toEqual([method, q.blockedPaymentMethods[method] ?? null]);
+        }
+      }
+    });
   });
 
   it('phí giao theo cấu hình của shop; miễn phí khi đạt ngưỡng của shop; mã freeship Tubu không miễn phí giao của đối tác', async () => {

@@ -316,12 +316,41 @@ export function allocationError(amounts: GroupAmounts[]): string | null {
 export const PAYMENT_METHOD_NOT_ALLOWED = 'PAYMENT_METHOD_NOT_ALLOWED';
 export type CheckoutPaymentMethod = 'COD' | 'BANK_TRANSFER' | 'WALLET' | 'ZALOPAY' | 'VNPAY';
 const MERCHANT_METHODS: readonly CheckoutPaymentMethod[] = ['COD', 'WALLET'];
+/** Phương thức báo giá xét để khoá sẵn; Ví phụ thuộc số dư lúc bấm đặt nên FE tự so với số dư mới nhất. */
+export const QUOTED_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'ZALOPAY'] as const;
 
-export function paymentMethodBlockReason(
-  groups: { fulfiller: LineFulfiller }[],
-  method: string,
-): string | null {
-  if (MERCHANT_METHODS.includes(method as CheckoutPaymentMethod)) return null;
+/**
+ * Tiền thu hộ tối đa của MỘT đơn (một kiện): hãng giao thu hộ theo từng vận đơn, Gomdon nhận `collect_amount` 0..5.000.000
+ * (docs/integrations/gomdon.md). Lần đặt bị tách thì mỗi đơn con thu riêng nên xét từng đơn, không xét tổng lần đặt.
+ */
+export const COD_MAX_PER_ORDER = 5_000_000;
+
+interface PaymentGroup {
+  fulfiller: LineFulfiller;
+  /** Tiền khách trả cho đơn này (hàng sau giảm + phí giao). */
+  total: number;
+}
+
+const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+
+function codBlockReason(groups: PaymentGroup[]): string | null {
+  const over = groups.filter((g) => g.total > COD_MAX_PER_ORDER);
+  if (over.length === 0) return null;
+  const cap = vnd(COD_MAX_PER_ORDER);
+  const head =
+    groups.length > 1
+      ? `Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa ${cap}, mà ${over.map((g) => `đơn do ${g.fulfiller.name} giao là ${vnd(g.total)}`).join(', ')}.`
+      : `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${cap}, đơn này là ${vnd(over[0]!.total)}.`;
+  if (transferBlockReason(groups) === null) return `${head} Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.`;
+  const ways = ['trả bằng Ví Tubu nếu số dư đủ'];
+  if (over.some((g) => g.fulfiller.kind === 'TUBU')) ways.push(`đặt riêng phần hàng ${TUBU_FULFILLER_NAME} giao để chuyển khoản`);
+  for (const g of over) {
+    if (g.fulfiller.kind === 'MERCHANT') ways.push(`bớt số lượng hàng của ${g.fulfiller.name} để đơn không quá ${cap}`);
+  }
+  return `${head} Bạn có thể ${ways.join(', hoặc ')}.`;
+}
+
+function transferBlockReason(groups: PaymentGroup[]): string | null {
   if (groups.length > 1) {
     return 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu. Muốn chuyển khoản, hãy đặt riêng phần hàng Tubu Tree giao.';
   }
@@ -329,6 +358,16 @@ export function paymentMethodBlockReason(
     return 'Hàng do gian hàng đối tác tự giao chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
   }
   return null;
+}
+
+/**
+ * Lý do lần đặt (các đơn sau khi tách) không trả được bằng `method`, kèm cách xử lý; null = được. Báo giá trả đúng các câu này
+ * trong `blockedPaymentMethods` và đặt hàng từ chối bằng đúng câu đó, nên FE không bao giờ cho chọn một cách sẽ bị từ chối.
+ */
+export function paymentMethodBlockReason(groups: PaymentGroup[], method: string): string | null {
+  if (method === 'COD') return codBlockReason(groups);
+  if (MERCHANT_METHODS.includes(method as CheckoutPaymentMethod)) return null;
+  return transferBlockReason(groups);
 }
 
 export interface PublicLineFulfiller {

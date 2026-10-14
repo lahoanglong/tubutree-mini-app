@@ -4,6 +4,7 @@ import {
   allocateLineAmounts,
   allocateProRata,
   allocationError,
+  COD_MAX_PER_ORDER,
   pointsRedeemBase,
   fulfillerOf,
   groupByFulfiller,
@@ -562,15 +563,61 @@ describe('trần Điểm Xanh và phép chia từng dòng dùng chung một phé
 });
 
 describe('paymentMethodBlockReason', () => {
+  const g = (fulfiller: LineFulfiller, total = 100_000) => ({ fulfiller, total });
+
   it('chỉ hàng Tubu: mọi phương thức', () => {
-    expect(paymentMethodBlockReason([{ fulfiller: TUBU }], 'BANK_TRANSFER')).toBeNull();
+    expect(paymentMethodBlockReason([g(TUBU)], 'BANK_TRANSFER')).toBeNull();
+    expect(paymentMethodBlockReason([g(TUBU)], 'COD')).toBeNull();
   });
   it('hàng đối tác tự giao hoặc lần đặt bị tách: chỉ COD/Ví', () => {
-    expect(paymentMethodBlockReason([{ fulfiller: SHOP_A }], 'COD')).toBeNull();
-    expect(paymentMethodBlockReason([{ fulfiller: SHOP_A }], 'WALLET')).toBeNull();
-    expect(paymentMethodBlockReason([{ fulfiller: SHOP_A }], 'BANK_TRANSFER')).toContain('đối tác tự giao');
-    expect(paymentMethodBlockReason([{ fulfiller: TUBU }, { fulfiller: SHOP_A }], 'BANK_TRANSFER')).toContain('nhiều nơi giao');
-    expect(paymentMethodBlockReason([{ fulfiller: TUBU }, { fulfiller: SHOP_A }], 'ZALOPAY')).not.toBeNull();
+    expect(paymentMethodBlockReason([g(SHOP_A)], 'COD')).toBeNull();
+    expect(paymentMethodBlockReason([g(SHOP_A)], 'WALLET')).toBeNull();
+    expect(paymentMethodBlockReason([g(SHOP_A)], 'BANK_TRANSFER')).toContain('đối tác tự giao');
+    expect(paymentMethodBlockReason([g(TUBU), g(SHOP_A)], 'BANK_TRANSFER')).toContain('nhiều nơi giao');
+    expect(paymentMethodBlockReason([g(TUBU), g(SHOP_A)], 'ZALOPAY')).not.toBeNull();
+  });
+
+  describe('R4-CHECKOUT-2: hạn mức COD tính trên từng đơn sau khi tách, không trên tổng lần đặt', () => {
+    it('hai đơn đều dưới 5.000.000đ dù tổng 5.600.000đ → COD dùng được', () => {
+      expect(paymentMethodBlockReason([g(TUBU, 2_600_000), g(SHOP_A, 3_000_000)], 'COD')).toBeNull();
+    });
+
+    it('đúng 5.000.000đ mỗi đơn vẫn COD được; trên 5.000.000đ thì không', () => {
+      expect(paymentMethodBlockReason([g(TUBU, COD_MAX_PER_ORDER)], 'COD')).toBeNull();
+      expect(paymentMethodBlockReason([g(TUBU, COD_MAX_PER_ORDER + 1)], 'COD')).not.toBeNull();
+    });
+
+    it('một đơn Tubu trên 5.000.000đ: nêu số tiền và chỉ sang chuyển khoản hoặc Ví (cả hai còn dùng được)', () => {
+      expect(paymentMethodBlockReason([g(TUBU, 5_600_000)], 'COD')).toBe(
+        'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.',
+      );
+    });
+
+    it('lần đặt bị tách, đơn Tubu vượt mức: chỉ Ví hoặc đặt riêng phần Tubu để chuyển khoản', () => {
+      expect(paymentMethodBlockReason([g(TUBU, 5_200_000), g(SHOP_A, 300_000)], 'COD')).toBe(
+        'Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa 5.000.000đ, mà đơn do Tubu Tree giao là 5.200.000đ. ' +
+          'Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc đặt riêng phần hàng Tubu Tree giao để chuyển khoản.',
+      );
+    });
+
+    it('đơn của gian hàng tự giao vượt mức: chỉ Ví hoặc bớt số lượng (gian hàng không nhận chuyển khoản)', () => {
+      expect(paymentMethodBlockReason([g(SHOP_A, 5_100_000)], 'COD')).toBe(
+        'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.100.000đ. ' +
+          'Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc bớt số lượng hàng của Shop A để đơn không quá 5.000.000đ.',
+      );
+    });
+
+    it('nhiều đơn vượt mức: nêu từng đơn và gộp các hướng xử lý', () => {
+      expect(paymentMethodBlockReason([g(TUBU, 6_000_000), g(SHOP_A, 5_500_000), g(SHOP_B, 100_000)], 'COD')).toBe(
+        'Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa 5.000.000đ, mà đơn do Tubu Tree giao là 6.000.000đ, đơn do Shop A giao là 5.500.000đ. ' +
+          'Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc đặt riêng phần hàng Tubu Tree giao để chuyển khoản, hoặc bớt số lượng hàng của Shop A để đơn không quá 5.000.000đ.',
+      );
+    });
+
+    it('Ví và chuyển khoản không bị hạn mức COD chặn', () => {
+      expect(paymentMethodBlockReason([g(TUBU, 9_000_000)], 'WALLET')).toBeNull();
+      expect(paymentMethodBlockReason([g(TUBU, 9_000_000)], 'BANK_TRANSFER')).toBeNull();
+    });
   });
 });
 

@@ -39,6 +39,7 @@ import {
   pointsRedeemBase,
   paymentMethodBlockReason,
   publicFulfiller,
+  QUOTED_PAYMENT_METHODS,
   TUBU_FULFILLER_NAME,
   unavailableLineMessage,
   type GroupAmounts,
@@ -208,7 +209,7 @@ export class CheckoutService {
     const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     const blockedPaymentMethods: Record<string, string> = {};
-    for (const method of ['BANK_TRANSFER', 'ZALOPAY'] as const) {
+    for (const method of QUOTED_PAYMENT_METHODS) {
       const reason = paymentMethodBlockReason(computed.shipments, method);
       if (reason) blockedPaymentMethods[method] = reason;
     }
@@ -357,10 +358,6 @@ export class CheckoutService {
     }
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException('Số dư Ví Tubu không đủ.');
-    }
-    const codMax = 5_000_000;
-    if (paymentMethod === 'COD' && computed.total > codMax) {
-      throw new BadRequestException('Đơn vượt hạn mức COD, vui lòng chọn phương thức khác.');
     }
     // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU');
