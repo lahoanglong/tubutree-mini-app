@@ -1867,6 +1867,39 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     const kho = await openDetail(['KHO']);
     expect(kho.some((l) => l.includes('Đẩy lại Pancake'))).toBe(true);
   });
+
+  it('nhân viên mở đơn chuyển khoản chưa trả: không có nút "Đã nhận tiền" (API chỉ cho ADMIN); ADMIN thì có', async () => {
+    const unpaid = {
+      id: 'o10',
+      code: 'TB10',
+      status: 'PENDING_PAYMENT',
+      total: 250000,
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      fulfiller: 'TUBU',
+      createdAt: '2026-10-14T01:00:00.000Z',
+      items: [],
+      allowedTransitions: ['CANCELLED'],
+      canConfirmPayment: true,
+    };
+    const openDetail = async (role: 'STAFF' | 'ADMIN', perms: string[]) => {
+      mocks.auth = { user: { role }, status: 'authenticated', initialized: true };
+      mocks.access = { role, staffPermissions: perms };
+      mocks.orders = [unpaid];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+      await flush();
+      return container;
+    };
+    for (const perms of [['CSKH'], ['KHO'], ['CSKH', 'KHO']]) {
+      const c = await openDetail('STAFF', perms);
+      expect([...c.querySelectorAll('button')].some((b) => b.textContent === 'Đã nhận tiền')).toBe(false);
+      expect(c.querySelector('section[aria-label="Xác nhận đã nhận tiền"]')).toBeNull();
+    }
+    const admin = await openDetail('ADMIN', []);
+    expect([...admin.querySelectorAll('button')].some((b) => b.textContent === 'Đã nhận tiền')).toBe(true);
+  });
 });
 
 describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {

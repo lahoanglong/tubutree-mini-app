@@ -66,8 +66,11 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
   };
 }
 
-/** Khối "Chuyển trạng thái" + "Đã nhận tiền" trong chi tiết đơn admin. */
-export function OrderStatusActions({ order }: { order: AdminOrder }) {
+/**
+ * Khối "Chuyển trạng thái" + "Đã nhận tiền" trong chi tiết đơn admin. `canConfirmPayment=false` cho nhân viên:
+ * POST confirm-payment chỉ mở cho ADMIN, nút sẽ chỉ ra lỗi 403.
+ */
+export function OrderStatusActions({ order, canConfirmPayment = true }: { order: AdminOrder; canConfirmPayment?: boolean }) {
   const qc = useQueryClient();
   const [bankRef, setBankRef] = useState('');
   const [payMsg, setPayMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -125,7 +128,7 @@ export function OrderStatusActions({ order }: { order: AdminOrder }) {
 
   return (
     <div className="space-y-2 border-t border-stone-200 pt-2">
-      {order.canConfirmPayment && (
+      {canConfirmPayment && order.canConfirmPayment && (
         <section aria-label="Xác nhận đã nhận tiền" className="rounded-card border border-warning-fg bg-stone-0 p-2.5">
           <p className="text-xs text-warning-fg">
             Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm &quot;Đã nhận tiền&quot;.
