@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { formatVnDate } from '../../common/vn-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -93,6 +94,9 @@ const FULFIL_ORDER_SELECT = {
 } satisfies Prisma.OrderSelect;
 
 const REASON_REQUIRED = 'Cần nhập lý do để báo khách.';
+const PAYOUT_CANCEL_REASON_REQUIRED = 'Cần nhập lý do huỷ phiếu để báo gian hàng.';
+/** Số phiếu đã huỷ gần nhất hiện ở bảng đối soát của gian hàng. */
+const CANCELLED_PAYOUTS_SHOWN = 10;
 
 export const MERCHANT_FULFIL_STATUSES = ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] as const;
 
@@ -331,8 +335,37 @@ const PAYOUT_LINES_INCLUDE = {
   include: { orderItem: { select: { productName: true, variationName: true, quantity: true } } },
 } satisfies Prisma.MerchantPayout$linesArgs;
 
-function withLineItems<P extends { lines: (Record<string, unknown> & { orderItem: SettlementLine['item'] })[] }>(p: P) {
-  return { ...p, lines: p.lines.map(({ orderItem, ...l }) => ({ ...l, item: orderItem ?? null })) };
+/** Ảnh chụp các dòng của phiếu lúc huỷ (dòng thật đã xoá để đơn quay lại bảng kê). */
+interface PayoutCancelSnapshot {
+  lineCount: number;
+  orderCount: number;
+  lines: Record<string, unknown>[];
+}
+
+function readCancelSnapshot(raw: unknown): PayoutCancelSnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const snap = raw as Partial<PayoutCancelSnapshot>;
+  return Array.isArray(snap.lines) ? (snap as PayoutCancelSnapshot) : null;
+}
+
+function cancelSnapshotOf(
+  lines: ({ id: string; orderItem: SettlementLine['item'] } & Record<string, unknown> & { orderId: string })[],
+): Prisma.InputJsonValue {
+  return {
+    lineCount: lines.length,
+    orderCount: new Set(lines.map((l) => l.orderId)).size,
+    lines: lines.map(({ orderItem, payoutId: _payoutId, ...l }) => ({ ...l, item: orderItem ?? null })),
+  } as unknown as Prisma.InputJsonValue;
+}
+
+/** Phiếu kèm dòng ở dạng hiển thị; phiếu đã huỷ không còn dòng thật nên lấy từ ảnh chụp lúc huỷ. */
+export function withLineItems<
+  P extends { status?: string; cancelSnapshot?: Prisma.JsonValue | null; lines: (Record<string, unknown> & { orderItem: SettlementLine['item'] })[] },
+>(p: P) {
+  const { cancelSnapshot, ...rest } = p;
+  const snapshot = p.status === 'CANCELLED' ? readCancelSnapshot(cancelSnapshot) : null;
+  const lines = snapshot ? snapshot.lines : p.lines.map(({ orderItem, ...l }) => ({ ...l, item: orderItem ?? null }));
+  return { ...rest, lines, cancelledLineCount: snapshot?.lineCount ?? null, cancelledOrderCount: snapshot?.orderCount ?? null };
 }
 
 @Injectable()
@@ -885,7 +918,7 @@ export class MerchantFulfilmentService {
 
   async myStatement(userId: string) {
     const store = await this.merchantStore(userId);
-    const [statement, payouts, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
+    const [statement, live, cancelled, dueDays, tubuAccount, consignmentExcluded] = await Promise.all([
       this.statementFor(store.id),
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: { not: 'CANCELLED' } },
@@ -893,13 +926,22 @@ export class MerchantFulfilmentService {
         take: 50,
         include: { lines: PAYOUT_LINES_INCLUDE },
       }),
+      // Phiếu đã huỷ vẫn hiện (kèm lý do và các khoản lúc huỷ) để gian hàng đã được báo "đã lập phiếu" biết chuyện gì xảy ra.
+      this.prisma.merchantPayout.findMany({
+        where: { storefrontId: store.id, status: 'CANCELLED' },
+        orderBy: { cancelledAt: 'desc' },
+        take: CANCELLED_PAYOUTS_SHOWN,
+        include: { lines: PAYOUT_LINES_INCLUDE },
+      }),
       this.negativeDueDays(),
       this.tubuAccount(),
       this.consignmentExcluded(store.id),
     ]);
+    const payouts = [...live, ...cancelled].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return {
       ...statement,
-      payouts: payouts.map((p) => payoutView(withLineItems(p), dueDays)),
+      // Id admin lập/chuyển/huỷ phiếu là dữ liệu nội bộ, không trả cho gian hàng.
+      payouts: payouts.map(({ createdBy: _c, paidBy: _p, cancelledBy: _x, ...p }) => payoutView(withLineItems(p), dueDays)),
       negativeDueDays: dueDays,
       tubuAccount,
       consignmentExcluded,
@@ -984,10 +1026,22 @@ export class MerchantFulfilmentService {
       }
       throw err;
     }
-    await this.notifyOwner(store.ownerUserId, 'MERCHANT_PAYOUT_CREATED', {
-      amount: payout.amount.toLocaleString('vi-VN'),
-      count: String(payout.lines.length),
-    });
+    // Số đơn khác nhau (một đơn có thể có nhiều dòng: SALE, dòng đảo, từng món giao hộ).
+    const orderCount = String(new Set(payout.lines.map((l) => l.orderId)).size);
+    if (payout.amount < 0) {
+      const view = payoutView(payout, await this.negativeDueDays());
+      await this.notifyOwner(store.ownerUserId, 'MERCHANT_PAYOUT_CREATED_TO_TUBU', {
+        amount: (-payout.amount).toLocaleString('vi-VN'),
+        count: orderCount,
+        due_date: view.dueAt ? formatVnDate(view.dueAt) : '',
+        memo: view.transferMemo,
+      });
+    } else {
+      await this.notifyOwner(store.ownerUserId, 'MERCHANT_PAYOUT_CREATED', {
+        amount: payout.amount.toLocaleString('vi-VN'),
+        count: orderCount,
+      });
+    }
     return payout;
   }
 
@@ -1008,7 +1062,7 @@ export class MerchantFulfilmentService {
       throw new ConflictException('Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
     }
     await this.notifyOwner(payout.storefront.ownerUserId, 'MERCHANT_PAYOUT_PAID', {
-      amount: payout.amount.toLocaleString('vi-VN'),
+      amount: Math.abs(payout.amount).toLocaleString('vi-VN'),
       bank_ref: ref,
     });
     return payout;
@@ -1016,19 +1070,33 @@ export class MerchantFulfilmentService {
 
   /**
    * Huỷ phiếu chưa chuyển: các đơn trong phiếu quay lại bảng kê. Không huỷ được phiếu chứa dòng SALE của đơn đã có dòng đảo ở
-   * phiếu khác: huỷ thì đối tác bị trừ lại tiền của một đơn chưa từng được trả. Cùng khoá gian hàng với lập phiếu.
+   * phiếu khác: huỷ thì đối tác bị trừ lại tiền của một đơn chưa từng được trả. Cùng khoá gian hàng với lập phiếu. Lý do bắt
+   * buộc và gửi cho gian hàng; ghi chú lúc lập phiếu giữ nguyên. Dòng thật phải xoá (unique (orderId, kind, refKey) để đơn vào
+   * phiếu mới) nên phiếu giữ ảnh chụp các dòng lúc huỷ.
    */
-  async cancelPayout(adminId: string, payoutId: string) {
-    const target = await this.prisma.merchantPayout.findUnique({ where: { id: payoutId }, select: { storefrontId: true } });
+  async cancelPayout(adminId: string, payoutId: string, reason: string) {
+    const why = reason?.trim();
+    if (!why) throw new BadRequestException(PAYOUT_CANCEL_REASON_REQUIRED);
+    const target = await this.prisma.merchantPayout.findUnique({
+      where: { id: payoutId },
+      select: { storefrontId: true, amount: true, createdAt: true, storefront: { select: { ownerUserId: true } } },
+    });
     if (!target) throw new ConflictException('Chỉ huỷ được phiếu chưa chuyển tiền.');
     const done = await this.prisma.$transaction(async (tx) => {
       await this.lockStorePayouts(tx, target.storefrontId);
+      const lines = await tx.merchantPayoutLine.findMany({ where: { payoutId }, ...PAYOUT_LINES_INCLUDE });
       const flipped = await tx.merchantPayout.updateMany({
         where: { id: payoutId, status: 'PENDING' },
-        data: { status: 'CANCELLED', note: `Huỷ bởi ${adminId}` },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancelledBy: adminId,
+          cancelReason: why,
+          cancelSnapshot: cancelSnapshotOf(lines),
+        },
       });
       if (flipped.count === 0) return false;
-      const sales = await tx.merchantPayoutLine.findMany({ where: { payoutId, kind: 'SALE' }, select: { orderId: true, orderItemId: true } });
+      const sales = lines.filter((l) => l.kind === 'SALE');
       if (sales.length > 0) {
         // Đơn tự giao khoá theo đơn; hàng Tubu giao hộ theo dòng hàng (đơn kho Tubu có thể có hàng của nhiều gian hàng).
         const orderIds = sales.filter((l) => !l.orderItemId).map((l) => l.orderId);
@@ -1051,7 +1119,13 @@ export class MerchantFulfilmentService {
       return true;
     });
     if (!done) throw new ConflictException('Chỉ huỷ được phiếu chưa chuyển tiền.');
-    return this.prisma.merchantPayout.findUniqueOrThrow({ where: { id: payoutId } });
+    await this.notifyOwner(target.storefront.ownerUserId, target.amount < 0 ? 'MERCHANT_PAYOUT_CANCELLED_TO_TUBU' : 'MERCHANT_PAYOUT_CANCELLED', {
+      amount: Math.abs(target.amount).toLocaleString('vi-VN'),
+      created: formatVnDate(target.createdAt),
+      reason: why,
+    });
+    const view = await this.prisma.merchantPayout.findUniqueOrThrow({ where: { id: payoutId }, include: { lines: PAYOUT_LINES_INCLUDE } });
+    return payoutView(withLineItems(view), await this.negativeDueDays());
   }
 
   async listPayouts(storefrontId: string | undefined, page = 1, limit = 20) {

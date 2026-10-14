@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MerchantFulfilmentTab, pctInputToFraction, storeFeesText } from './merchant-fulfilment-tab';
 import { MerchantProductsTab } from './merchant-products-tab';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { scrollRegionProblems } from '@/test-utils/a11y';
 
 const inputByLabel = (root: ParentNode, label: string) => {
@@ -238,8 +238,56 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     const paid = api.calls.find((c) => c.url.includes('/payouts/mp1/paid'))!;
     expect(JSON.parse(String(paid.init!.body))).toEqual({ bankRef: 'FT555' });
     click(byText(root, 'button', 'Huỷ phiếu'));
+    await flush(1);
+    typeInto(confirmDialog()!.querySelector('textarea'), ' Sai tài khoản nhận ');
+    answerConfirm(true);
     await flush();
-    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/cancel'))).toBe(true);
+    const cancel = api.calls.find((c) => c.url.includes('/payouts/mp1/cancel'))!;
+    expect(JSON.parse(String(cancel.init!.body))).toEqual({ reason: 'Sai tài khoản nhận' });
+  });
+
+  it('R4-PARTNER-4: huỷ phiếu có hộp xác nhận bắt buộc nhập lý do; bấm Huỷ/Bỏ thì không gọi API', async () => {
+    const api = setup();
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    click(byText(root, 'button', 'Huỷ phiếu'));
+    await flush(1);
+    const dialog = confirmDialog()!;
+    expect(dialog.textContent).toContain('Huỷ phiếu đối soát?');
+    expect(dialog.textContent).toContain('Gian hàng đã được báo có phiếu sẽ nhận thông báo huỷ kèm lý do');
+    const accept = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Huỷ phiếu')!;
+    expect(accept.disabled).toBe(true);
+    typeInto(dialog.querySelector('textarea'), '   ');
+    expect(accept.disabled).toBe(true);
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/cancel'))).toBe(false);
+  });
+
+  it('R4-PARTNER-4: phiếu đã huỷ hiện lý do, ghi chú lúc lập, số khoản lúc huỷ và các khoản; không còn nút huỷ/đã chuyển', async () => {
+    const CANCELLED = {
+      ...PAYOUT,
+      status: 'CANCELLED',
+      note: 'Kỳ đầu tháng 10',
+      cancelledAt: '2026-10-13T03:00:00.000Z',
+      cancelledBy: 'adm1',
+      cancelReason: 'Sai tài khoản nhận',
+      cancelledLineCount: 2,
+    };
+    setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [CANCELLED], meta: { page: 1, limit: 20, total: 1 } } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('Đã huỷ');
+    expect(root.textContent).toContain('2 khoản lúc huỷ · lập 12/10/2026');
+    expect(root.textContent).toContain('Ghi chú lúc lập: Kỳ đầu tháng 10');
+    expect(root.textContent).toContain('Huỷ 13/10/2026 bởi adm1: Sai tài khoản nhận');
+    expect(byText(root, 'summary', 'Xem 2 khoản lúc huỷ')).not.toBeNull();
+    expect(byText(root, 'button', 'Huỷ phiếu')).toBeNull();
+    expect(byText(root, 'button', 'Đã chuyển')).toBeNull();
   });
 
   it('R2-MERCHANT-4: phiếu âm là tiền đối tác nộp — "Chờ thu", nội dung CK, hạn nộp; nút "Đã thu"', async () => {

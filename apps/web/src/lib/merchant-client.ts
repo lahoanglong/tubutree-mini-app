@@ -377,6 +377,13 @@ export interface MerchantPayout {
   paidAt?: string | null;
   bankRef?: string | null;
   note?: string | null;
+  /** Phiếu đã huỷ: lúc huỷ, lý do gửi cho gian hàng, số khoản và số đơn lúc huỷ (`lines` là ảnh chụp các khoản đó). */
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  cancelledLineCount?: number | null;
+  cancelledOrderCount?: number | null;
+  /** Chỉ admin thấy. */
+  cancelledBy?: string | null;
   lines: (SettlementLine & { id: string; createdAt?: string })[];
   storefront?: { id: string; title: string };
 }
@@ -506,5 +513,6 @@ export const markAdminMerchantPayoutPaid = (id: string, bankRef: string) =>
     body: { bankRef },
   });
 
-export const cancelAdminMerchantPayout = (id: string) =>
-  apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+/** `reason`: gửi nguyên văn cho gian hàng (bắt buộc); các khoản của phiếu quay lại bảng kê để lập phiếu mới. */
+export const cancelAdminMerchantPayout = (id: string, reason: string) =>
+  apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } });

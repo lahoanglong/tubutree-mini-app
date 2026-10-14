@@ -586,6 +586,36 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('trong 7 ngày');
   });
 
+  it('R4-PARTNER-4: phiếu đã huỷ hiện lý do, các khoản lúc huỷ và lời dặn; không lộ id nội bộ; phiếu âm đã huỷ nói chưa cần nộp', async () => {
+    const line = { id: 'l9', orderId: 'o9', orderCode: 'TF9', kind: 'SALE', goodsAmount: 210000, shippingFee: 0, commissionAmount: 31500, codCollected: 210000, netAmount: -31500, deliveredAt: null, createdAt: '2026-10-14T03:00:00.000Z' };
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      lines: [],
+      total: 0,
+      upcoming: [],
+      negativeDueDays: 7,
+      payouts: [
+        { id: 'pc2', storefrontId: 's1', amount: -31500, status: 'CANCELLED', direction: 'TO_TUBU', transferMemo: 'TUBU DS CCCC0002', dueAt: null, createdAt: '2026-10-14T03:00:00.000Z', cancelledAt: '2026-10-15T03:00:00.000Z', cancelReason: 'Lập nhầm kỳ', cancelledLineCount: 1, lines: [line] },
+        { id: 'pc1', storefrontId: 's1', amount: 87360, status: 'CANCELLED', direction: 'TO_MERCHANT', transferMemo: 'TUBU DS CCCC0001', dueAt: null, createdAt: '2026-10-12T03:00:00.000Z', cancelledAt: '2026-10-13T03:00:00.000Z', cancelReason: 'Sai tài khoản nhận', cancelledLineCount: 2, lines: [line, { ...line, id: 'l8', orderId: 'o8', orderCode: 'TF8' }] },
+      ],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const positive = root.querySelector('li[aria-label="Phiếu TUBU DS CCCC0001"]')!;
+    expect(positive.textContent).toContain('Đã huỷ');
+    expect(positive.textContent).toContain('Phiếu chuyển 87.360');
+    expect(positive.textContent).toContain('Tubu Tree đã huỷ phiếu này ngày 13/10/2026: Sai tài khoản nhận.');
+    expect(positive.textContent).toContain('Các khoản của phiếu đã quay lại bảng kê và sẽ vào phiếu mới.');
+    expect(positive.textContent).not.toContain('Bạn chưa cần nộp');
+    expect(positive.textContent).toContain('Xem 2 khoản lúc huỷ');
+    expect(positive.textContent).not.toContain('Tubu sẽ chuyển');
+    const negative = root.querySelector('li[aria-label="Phiếu TUBU DS CCCC0002"]')!;
+    expect(negative.textContent).toContain('Phiếu nộp 31.500');
+    expect(negative.textContent).toContain('Bạn chưa cần nộp khoản này; nếu đã chuyển khoản, liên hệ Tubu Tree để đối chiếu.');
+    expect(negative.textContent).not.toContain('Bạn cần nộp');
+    expect(negative.textContent).not.toContain('Chuyển vào tài khoản Tubu Tree');
+  });
+
   it('Q8: khoản hàng Tubu giao hộ nằm cùng bảng kê với đơn tự giao — nhãn, tên món, phí giao hộ; bỏ câu "thoả thuận ký gửi"', async () => {
     const item = { productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2 };
     const sale = {

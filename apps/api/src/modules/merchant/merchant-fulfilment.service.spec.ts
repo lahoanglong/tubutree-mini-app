@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { Prisma } from '@prisma/client';
 import { MerchantFulfilmentService, partialReversalLinesOf, reversalLineOf, saleLineOf, slaStateOf } from './merchant-fulfilment.service';
 import { MerchantSlaCron } from './merchant-sla.cron';
-import { payoutView } from './merchant-fulfilment.service';
+import { payoutView, withLineItems } from './merchant-fulfilment.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
 
@@ -10,6 +10,25 @@ const STORE = { id: 'sf-a', type: 'MERCHANT', title: 'Xanh Shop', ownerUserId: '
 const SLA = { confirmHours: 24, shipHours: 48, deliverDays: 7 };
 const NOW = new Date('2026-10-14T10:00:00Z');
 const H = 3_600_000;
+const CREATED = new Date('2026-10-10T03:00:00Z');
+
+const PAYOUT_LINE = {
+  id: 'l1',
+  payoutId: 'p1',
+  orderId: 'o1',
+  orderCode: 'TUBU1',
+  kind: 'SALE',
+  refKey: '',
+  orderItemId: null,
+  goodsAmount: 200_000,
+  shippingFee: 30_000,
+  commissionAmount: 20_000,
+  opsFeeAmount: 0,
+  codCollected: 0,
+  netAmount: 210_000,
+  createdAt: CREATED,
+  orderItem: null,
+};
 
 function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', merchantAcceptedAt: null }) {
   const setStatus = jest.fn().mockImplementation((_id: string, target: string) => Promise.resolve({ id: 'o1', status: target }));
@@ -26,8 +45,8 @@ function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1'
     merchantPayout: {
       create: jest.fn(),
       updateMany: jest.fn(),
-      findUnique: jest.fn().mockResolvedValue({ storefrontId: 'sf-a' }),
-      findUniqueOrThrow: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({ storefrontId: 'sf-a', amount: 200_000, createdAt: CREATED, storefront: { ownerUserId: 'u1' } }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'p1', status: 'CANCELLED', amount: 200_000, createdAt: CREATED, lines: [], cancelSnapshot: null }),
     },
     merchantPayoutLine: { deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
     merchantPancakeLink: {
@@ -325,6 +344,42 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     await expect(svc.createPayout('admin-1', 'sf-a')).rejects.toThrow(ConflictException);
   });
 
+  describe('thông báo lập phiếu (R4-PARTNER-5)', () => {
+    function created(amount: number, lines: { orderId: string }[]) {
+      const b = build();
+      b.prisma.storefront.findUnique.mockResolvedValue({ ...STORE, bankName: 'VCB', bankAccountNo: '1', bankAccountName: 'A' });
+      b.prisma.order.findMany.mockResolvedValueOnce([delivered]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      b.prisma.merchantPayout.create.mockResolvedValue({ id: 'cmpayout0001abcd1234', amount, status: 'PENDING', createdAt: CREATED, lines });
+      return b;
+    }
+
+    it('phiếu dương: đếm số đơn khác nhau, không đếm dòng (SALE, dòng đảo, từng món cùng đơn là một đơn)', async () => {
+      const { svc, notify } = created(300_000, [{ orderId: 'o1' }, { orderId: 'o1' }, { orderId: 'o2' }]);
+      await svc.createPayout('admin-1', 'sf-a');
+      expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_CREATED', { amount: '300.000', count: '2' });
+    });
+
+    it('phiếu âm: nói gian hàng phải chuyển cho Tubu bao nhiêu, hạn nào, nội dung gì — không in số âm', async () => {
+      const { svc, notify } = created(-80_236, [{ orderId: 'o1' }, { orderId: 'o1' }, { orderId: 'o2' }]);
+      await svc.createPayout('admin-1', 'sf-a');
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_CREATED_TO_TUBU', {
+        amount: '80.236',
+        count: '2',
+        due_date: '17/10/2026',
+        memo: 'TUBU DS ABCD1234',
+      });
+    });
+
+    it('đánh dấu đã thu phiếu âm: báo số tiền dương, không in dấu trừ', async () => {
+      const { svc, prisma, notify } = build();
+      prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+      prisma.merchantPayout.findUnique.mockResolvedValue({ id: 'p1', status: 'PAID', amount: -80_236, storefront: { ownerUserId: 'u1' } });
+      await svc.markPayoutPaid('admin-1', 'p1', 'FT9');
+      expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_PAID', { amount: '80.236', bank_ref: 'FT9' });
+    });
+  });
+
   it('không có dòng nào đủ điều kiện → 400', async () => {
     const { svc, prisma } = build();
     prisma.storefront.findUnique.mockResolvedValue(STORE);
@@ -342,21 +397,75 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_PAID', { amount: '200.000', bank_ref: 'FT123' });
   });
 
-  it('huỷ phiếu chưa chuyển: các đơn quay lại bảng kê (xoá dòng)', async () => {
+  it('huỷ phiếu chưa chuyển: các đơn quay lại bảng kê (xoá dòng), lưu lý do và ảnh chụp dòng, không đè ghi chú', async () => {
     const { svc, prisma } = build();
     prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
-    prisma.merchantPayout.findUniqueOrThrow.mockResolvedValue({ id: 'p1', status: 'CANCELLED' });
-    await svc.cancelPayout('admin-1', 'p1');
+    prisma.merchantPayoutLine.findMany.mockResolvedValue([PAYOUT_LINE, { ...PAYOUT_LINE, id: 'l2', kind: 'REVERSAL', refKey: 'RETURN:r1' }]);
+    await svc.cancelPayout('admin-1', 'p1', '  Sai số tài khoản nhận  ');
     expect(prisma.merchantPayoutLine.deleteMany).toHaveBeenCalledWith({ where: { payoutId: 'p1' } });
+    const data = prisma.merchantPayout.updateMany.mock.calls[0][0].data;
+    expect(data).toEqual({
+      status: 'CANCELLED',
+      cancelledAt: expect.any(Date),
+      cancelledBy: 'admin-1',
+      cancelReason: 'Sai số tài khoản nhận',
+      cancelSnapshot: expect.objectContaining({ lineCount: 2, orderCount: 1 }),
+    });
+    expect(data).not.toHaveProperty('note');
+    expect(JSON.stringify(data)).not.toContain('Huỷ bởi');
+    expect(data.cancelSnapshot.lines[0]).toEqual(expect.objectContaining({ id: 'l1', orderCode: 'TUBU1', kind: 'SALE', netAmount: 210_000, item: null }));
+    expect(data.cancelSnapshot.lines[0]).not.toHaveProperty('payoutId');
+  });
+
+  it('huỷ phiếu: báo gian hàng kèm lý do (phiếu dương) hoặc kèm dặn chưa cần nộp (phiếu âm)', async () => {
+    const a = build();
+    a.prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+    await a.svc.cancelPayout('admin-1', 'p1', 'Sai số tài khoản nhận');
+    expect(a.notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_CANCELLED', { amount: '200.000', created: '10/10/2026', reason: 'Sai số tài khoản nhận' });
+
+    const b = build();
+    b.prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
+    b.prisma.merchantPayout.findUnique.mockResolvedValue({ storefrontId: 'sf-a', amount: -80_236, createdAt: CREATED, storefront: { ownerUserId: 'u1' } });
+    await b.svc.cancelPayout('admin-1', 'p1', 'Lập nhầm kỳ');
+    expect(b.notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_CANCELLED_TO_TUBU', { amount: '80.236', created: '10/10/2026', reason: 'Lập nhầm kỳ' });
+  });
+
+  it('huỷ phiếu thiếu lý do (rỗng, toàn khoảng trắng) → 400, không mở transaction, không báo', async () => {
+    const { svc, prisma, notify } = build();
+    await expect(svc.cancelPayout('admin-1', 'p1', '   ')).rejects.toThrow('Cần nhập lý do huỷ phiếu để báo gian hàng.');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('phiếu vừa được đánh dấu đã chuyển (không còn PENDING) → 409, không xoá dòng, không báo huỷ', async () => {
+    const { svc, prisma, notify } = build();
+    prisma.merchantPayout.updateMany.mockResolvedValue({ count: 0 });
+    await expect(svc.cancelPayout('admin-1', 'p1', 'Lập nhầm')).rejects.toThrow(ConflictException);
+    expect(prisma.merchantPayoutLine.deleteMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('không huỷ được phiếu chứa SALE của đơn đã có dòng đảo ở phiếu khác (đối tác sẽ bị trừ tiền chưa từng nhận)', async () => {
-    const { svc, prisma } = build();
+    const { svc, prisma, notify } = build();
     prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
-    prisma.merchantPayoutLine.findMany.mockResolvedValue([{ orderId: 'o9' }]);
+    prisma.merchantPayoutLine.findMany.mockResolvedValue([{ ...PAYOUT_LINE, orderId: 'o9' }]);
     prisma.merchantPayoutLine.findFirst.mockResolvedValue({ orderCode: 'TUBU9' });
-    await expect(svc.cancelPayout('admin-1', 'p1')).rejects.toThrow(ConflictException);
+    await expect(svc.cancelPayout('admin-1', 'p1', 'Lập nhầm')).rejects.toThrow(ConflictException);
     expect(prisma.merchantPayoutLine.deleteMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('phiếu đã huỷ hiện lại các dòng từ ảnh chụp kèm lý do, không lộ ảnh chụp thô', () => {
+    const view = withLineItems({
+      status: 'CANCELLED',
+      lines: [],
+      cancelSnapshot: { lineCount: 2, orderCount: 1, lines: [{ id: 'l1', orderCode: 'TUBU1', netAmount: 210_000 }] },
+    });
+    expect(view.lines).toEqual([{ id: 'l1', orderCode: 'TUBU1', netAmount: 210_000 }]);
+    expect(view).toMatchObject({ cancelledLineCount: 2, cancelledOrderCount: 1 });
+    expect(view).not.toHaveProperty('cancelSnapshot');
+    const live = withLineItems({ status: 'PENDING', lines: [{ id: 'l1', orderItem: { productName: 'Trà', variationName: null, quantity: 2 } }] });
+    expect(live.lines).toEqual([{ id: 'l1', item: { productName: 'Trà', variationName: null, quantity: 2 } }]);
   });
 
   it('trả một phần (p5) đơn đã vào phiếu → thêm một dòng REVERSAL RETURN:<id> cho phần trả; SALE không lặp lại', async () => {
@@ -716,12 +825,11 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
   it('huỷ phiếu: khoá cùng gian hàng; dòng giao hộ chỉ bị chặn bởi dòng đảo của CHÍNH dòng hàng đó ở phiếu khác', async () => {
     const { svc, prisma } = build();
     prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });
-    prisma.merchantPayout.findUniqueOrThrow.mockResolvedValue({ id: 'p1', status: 'CANCELLED' });
     prisma.merchantPayoutLine.findMany.mockResolvedValue([
-      { orderId: 'o1', orderItemId: 'o1-a' },
-      { orderId: 'o9', orderItemId: null },
+      { ...PAYOUT_LINE, id: 'l1', orderId: 'o1', orderItemId: 'o1-a', orderItem: { productName: 'Trà', variationName: null, quantity: 1 } },
+      { ...PAYOUT_LINE, id: 'l2', orderId: 'o9', orderItemId: null },
     ]);
-    await svc.cancelPayout('admin-1', 'p1');
+    await svc.cancelPayout('admin-1', 'p1', 'Lập nhầm');
     expect(prisma.$executeRaw.mock.calls[0][1]).toBe('merchant-payout:sf-a');
     expect(prisma.merchantPayoutLine.findFirst.mock.calls[0][0].where).toEqual({
       kind: 'REVERSAL',
@@ -734,7 +842,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
   it('huỷ phiếu không tồn tại → 409, không mở transaction', async () => {
     const { svc, prisma } = build();
     prisma.merchantPayout.findUnique.mockResolvedValue(null);
-    await expect(svc.cancelPayout('admin-1', 'p-x')).rejects.toThrow(ConflictException);
+    await expect(svc.cancelPayout('admin-1', 'p-x', 'Lập nhầm')).rejects.toThrow(ConflictException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

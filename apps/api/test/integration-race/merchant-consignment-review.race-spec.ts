@@ -273,8 +273,8 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
       const raced = summarize(
         await Promise.allSettled(
           round % 2 === 0
-            ? [settlement.cancelPayout(admin.id, p1.id), settlement.createPayout(admin.id, s.store.id)]
-            : [settlement.createPayout(admin.id, s.store.id), settlement.cancelPayout(admin.id, p1.id)],
+            ? [settlement.cancelPayout(admin.id, p1.id, 'Huỷ để thử đua'), settlement.createPayout(admin.id, s.store.id)]
+            : [settlement.createPayout(admin.id, s.store.id), settlement.cancelPayout(admin.id, p1.id, 'Huỷ để thử đua')],
         ),
       );
       console.log('[cancel x create #%d] errors=%j', round, raced.errors);
@@ -310,6 +310,6 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
     expect(called.has(idle.store.id)).toBe(false);
     spy.mockRestore();
     await expect(settlement.createPayout('x', idle.store.id)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(settlement.cancelPayout('x', 'khong-co')).rejects.toBeInstanceOf(ConflictException);
+    await expect(settlement.cancelPayout('x', 'khong-co', 'Không có phiếu')).rejects.toBeInstanceOf(ConflictException);
   });
 });

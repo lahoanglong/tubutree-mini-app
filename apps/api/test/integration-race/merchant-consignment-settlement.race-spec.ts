@@ -328,6 +328,6 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
       [`ITEM:${itemOf(vA!.id).id}`, `ITEM:${itemOf(vB!.id).id}`].sort(),
     );
     expect(sum(all)).toBe(0);
-    await expect(settlement.cancelPayout('admin-x', salePayout.id)).rejects.toBeInstanceOf(ConflictException);
+    await expect(settlement.cancelPayout('admin-x', salePayout.id, 'Thử huỷ phiếu có SALE đã bị đảo')).rejects.toBeInstanceOf(ConflictException);
   });
 });

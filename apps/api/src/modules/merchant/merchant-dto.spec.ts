@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
 import { CreateMerchantProductDto, MerchantOrderReasonDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
-import { CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
+import { CancelMerchantPayoutDto, CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -111,5 +111,13 @@ describe('Lý do huỷ / giao không thành công (R4-PARTNER-1)', () => {
   it('lý do được cắt khoảng trắng hai đầu', async () => {
     const dto = await run(MerchantOrderReasonDto, { reason: '  Khách không nghe máy  ' });
     expect(dto.reason).toBe('Khách không nghe máy');
+  });
+});
+
+describe('Huỷ phiếu đối soát cần lý do (R4-PARTNER-4)', () => {
+  it('thiếu, rỗng hoặc chỉ khoảng trắng → 400 tiếng Việt; có lý do thì được cắt khoảng trắng', async () => {
+    expect(await message(CancelMerchantPayoutDto, {})).toContain('Cần nhập lý do huỷ phiếu để báo gian hàng.');
+    expect(await message(CancelMerchantPayoutDto, { reason: '   ' })).toContain('Cần nhập lý do huỷ phiếu để báo gian hàng.');
+    await expect(run(CancelMerchantPayoutDto, { reason: '  Lập nhầm kỳ  ' })).resolves.toMatchObject({ reason: 'Lập nhầm kỳ' });
   });
 });

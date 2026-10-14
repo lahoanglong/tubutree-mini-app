@@ -19,6 +19,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge } from './ui';
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
+import { useConfirm } from './confirm-dialog';
 
 const SLA_LABEL = { CONFIRM_OVERDUE: 'Quá hạn xác nhận', SHIP_OVERDUE: 'Quá hạn gửi hàng', DELIVER_OVERDUE: 'Quá hạn giao' } as const;
 const signed = (n: number) => (n < 0 ? `−${formatVnd(-n)}` : formatVnd(n));
@@ -353,25 +354,46 @@ function StoreTermsForm({
 function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onDone: () => void; onError: (e: unknown) => void }) {
   const [bankRef, setBankRef] = useState('');
   const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
-  const cancelMut = useMutation({ mutationFn: () => cancelAdminMerchantPayout(p.id), onSuccess: onDone, onError });
+  const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
+  const { ask, dialog } = useConfirm();
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
   const toTubu = payoutToTubu(p);
   const status = payoutStatus(p, 'admin');
+  const cancelled = p.status === 'CANCELLED';
+  const askCancel = async () => {
+    const reason = await ask({
+      title: 'Huỷ phiếu đối soát?',
+      message: `Phiếu ${signed(p.amount)} của ${p.storefront?.title ?? 'gian hàng'} (${p.lines.length} khoản) sẽ bị huỷ và các khoản quay lại bảng kê để lập phiếu mới. Gian hàng đã được báo có phiếu sẽ nhận thông báo huỷ kèm lý do bên dưới.`,
+      confirmLabel: 'Huỷ phiếu',
+      tone: 'danger',
+      input: { label: 'Lý do huỷ (gian hàng sẽ đọc được)', placeholder: 'Vd: sai tài khoản nhận, lập nhầm kỳ', maxLength: 300, required: true },
+    });
+    if (reason) cancelMut.mutate(reason);
+  };
   return (
     <li className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-stone-900">{p.storefront?.title ?? p.storefrontId}</span>
-        <span className="font-semibold">{signed(p.amount)}</span>
+        <span className={`font-semibold ${cancelled ? 'text-stone-500 line-through' : ''}`}>{signed(p.amount)}</span>
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         <span className="text-stone-500">
-          {p.lines.length} khoản · lập {formatDate(p.createdAt)}
+          {cancelled ? `${p.cancelledLineCount ?? p.lines.length} khoản lúc huỷ` : `${p.lines.length} khoản`} · lập {formatDate(p.createdAt)}
           {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}
         </span>
       </div>
+      {p.note && <p className="text-stone-600">Ghi chú lúc lập: {p.note}</p>}
+      {cancelled && (
+        <p className="rounded-control bg-stone-100 px-3 py-2 text-stone-700">
+          Huỷ {p.cancelledAt ? formatDate(p.cancelledAt) : ''}
+          {p.cancelledBy ? ` bởi ${p.cancelledBy}` : ''}: {p.cancelReason ?? 'không ghi lý do (phiếu huỷ trước khi có lý do)'}
+        </p>
+      )}
       {p.lines.length > 0 && (
         <details>
-          <summary className="flex min-h-[44px] cursor-pointer items-center font-medium text-forest-700 sm:min-h-6">Xem {p.lines.length} khoản</summary>
+          <summary className="flex min-h-[44px] cursor-pointer items-center font-medium text-forest-700 sm:min-h-6">
+            {cancelled ? `Xem ${p.lines.length} khoản lúc huỷ` : `Xem ${p.lines.length} khoản`}
+          </summary>
           <div className="mt-2">
             <SettlementTable
               lines={p.lines}
@@ -406,12 +428,13 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
             <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
               {toTubu ? 'Đã thu' : 'Đã chuyển'}
             </button>
-            <button type="button" disabled={busy} onClick={() => cancelMut.mutate()} className={BTN_XS_DANGER}>
+            <button type="button" disabled={busy} onClick={() => void askCancel()} className={BTN_XS_DANGER}>
               Huỷ phiếu
             </button>
           </form>
         </>
       )}
+      {dialog}
     </li>
   );
 }

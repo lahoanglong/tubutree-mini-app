@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,6 +17,15 @@ export class CreateMerchantPayoutDto {
 
 class MarkMerchantPayoutPaidDto {
   @IsString() @IsNotEmpty() @MaxLength(100) bankRef!: string;
+}
+
+/** Lý do huỷ phiếu gửi nguyên văn cho gian hàng. */
+export class CancelMerchantPayoutDto {
+  @Trim()
+  @IsString()
+  @IsNotEmpty({ message: 'Cần nhập lý do huỷ phiếu để báo gian hàng.' })
+  @MaxLength(300)
+  reason!: string;
 }
 
 /** Cùng trần với khoá merchant.commission_pct (system-config): phí theo % là phân số 0–0,5. */
@@ -72,7 +82,7 @@ export class MerchantAdminController {
   }
 
   @Post('payouts/:id/cancel')
-  cancelPayout(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
-    return this.fulfilment.cancelPayout(adminId, id);
+  cancelPayout(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: CancelMerchantPayoutDto) {
+    return this.fulfilment.cancelPayout(adminId, id, dto.reason);
   }
 }
