@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
-import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns, type OrderView } from '../services/shop-api';
+import { fetchOrder, fetchOrders, cancelOrder, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
-import { MultiImageUpload } from '../components/image-upload';
 import {
   formatVnd,
   formatPoints,
@@ -49,6 +48,21 @@ import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
+import { ReturnRequestSheet } from '../components/orders/return-request-sheet';
+import { RefundDestinationPicker } from '../components/orders/refund-destination-picker';
+import { OrderRefunds } from '../components/orders/order-refunds';
+import {
+  EMPTY_BANK,
+  bankDetailsError,
+  cancelRefundMode,
+  destinationBody,
+  remainingByLine,
+  returnLinesText,
+  returnStatusLabel,
+  showsPaymentDeadline,
+  type RefundBankInput,
+  type RefundMethodChoice,
+} from '../utils/refund-rules';
 
 /** Màu ô trạng thái thu gom — cùng bảng màu STATUS_COLOR của đơn (order-status.ts): 'progress'
  * dùng cùng cặp token với CONFIRMED/PACKED, 'success' với DELIVERED, 'warning' với PENDING_PAYMENT,
@@ -74,8 +88,11 @@ export default function OrderDetailPage() {
   const publicConfig = usePublicConfig();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
-  const [returnReason, setReturnReason] = useState('');
-  const [returnImages, setReturnImages] = useState<string[]>([]);
+  // Đổi key mỗi lần mở để form đổi/trả khởi tạo lại theo dữ liệu mới nhất (vẫn giữ animation đóng của sheet).
+  const [returnKey, setReturnKey] = useState(0);
+  const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
+  const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
+  const [cancelTouched, setCancelTouched] = useState(false);
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const authStatus = useAuthStore((s) => s.status);
@@ -91,8 +108,21 @@ export default function OrderDetailPage() {
   const myReturns = useQuery({
     queryKey: ['my-returns'],
     queryFn: fetchMyReturns,
-    enabled: !!order.data && order.data.status === 'DELIVERED',
+    enabled: !!order.data && (order.data.status === 'DELIVERED' || order.data.status === 'RETURNED'),
   });
+
+  useEffect(() => {
+    if (!confirmCancel || cancelMethod !== 'BANK' || cancelBank.accountNumber) return;
+    let alive = true;
+    void fetchRefundBank()
+      .then((b) => {
+        if (alive && b) setCancelBank(b);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [confirmCancel, cancelMethod, cancelBank.accountNumber]);
 
   // ── Mời theo dõi OA sau đơn đầu tiên (finding A3-01 nửa 2 — xem shouldShowFollowOaPrompt) ──
   // Mặc định seen=true để KHÔNG nháy hiện thẻ rồi ẩn ngay trong lúc chờ đọc cờ đã lưu trên máy.
@@ -149,7 +179,7 @@ export default function OrderDetailPage() {
   };
 
   const cancel = useMutation({
-    mutationFn: () => cancelOrder(code!),
+    mutationFn: (choose: boolean) => cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined),
     onSuccess: (cancelled) => {
       // Gộp phản hồi huỷ vào cache NGAY (trạng thái mới → ẩn "Hủy đơn"/"Thanh toán ngay" tức thì) nhưng GIỮ
       // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm ReorderSheet
@@ -157,6 +187,7 @@ export default function OrderDetailPage() {
       queryClient.setQueryData<OrderView>(['order', code], (old) => (old ? { ...old, ...cancelled, items: old.items } : old));
       void queryClient.invalidateQueries({ queryKey: ['order', code] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-refunds'] });
       setConfirmCancel(false);
       haptic('medium');
       openSnackbar({ text: vi.orders.cancelled, type: 'success' });
@@ -165,19 +196,6 @@ export default function OrderDetailPage() {
       setConfirmCancel(false);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
-  });
-
-  const returnReq = useMutation({
-    mutationFn: () => requestReturn(code!, returnReason.trim(), returnImages),
-    onSuccess: () => {
-      setReturnOpen(false);
-      setReturnReason('');
-      setReturnImages([]);
-      haptic('medium');
-      void queryClient.invalidateQueries({ queryKey: ['my-returns'] });
-      openSnackbar({ text: 'Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.', type: 'success' });
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   if (authStatus === 'loading' || order.isLoading) {
@@ -226,6 +244,12 @@ export default function OrderDetailPage() {
   const pointsNote = orderPointsNote(o.status, o.pointsEarned);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const returnWindow = returnWindowState(o, returnDays);
+  const refundMode = cancelRefundMode(o);
+  const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
+  const orderReturns = (myReturns.data ?? []).filter((r) => r.orderId === o.id);
+  const remaining = remainingByLine(o.items, orderReturns);
+  const canRequestMore =
+    o.status === 'DELIVERED' && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
@@ -241,6 +265,11 @@ export default function OrderDetailPage() {
         <Text.Title size="small" style={{ color: color.fg }}>
           {vi.orderStatus[o.status] ?? o.status}
         </Text.Title>
+        {showsPaymentDeadline(o) && (
+          <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
+            Thanh toán trước <b>{formatDateTime(o.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+          </Text>
+        )}
       </Box>
 
       {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
@@ -358,6 +387,8 @@ export default function OrderDetailPage() {
           </Text>
         )}
       </Box>
+
+      {(o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELIVERED') && <OrderRefunds orderId={o.id} />}
 
       {/* ── Vận chuyển (hãng VC + mã vận đơn + tra cứu + hành trình) §6.4 ── */}
       {(o.shippingCode || journey.length > 0) && (
@@ -578,60 +609,63 @@ export default function OrderDetailPage() {
         );
       })()}
 
-      {/* Đổi/trả — chỉ đơn đã giao, lỗi NSX (§6.4) */}
-      {o.status === 'DELIVERED' &&
-        (() => {
-          const ret = myReturns.data?.find((r) => r.orderId === o.id);
-          if (ret) {
-            const label =
-              ret.status === 'APPROVED'
-                ? 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu'
-                : ret.status === 'REJECTED'
-                  ? `Đổi/trả bị từ chối${ret.adminNote ? `: ${ret.adminNote}` : ''}`
-                  : 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
-            const retIcon: { icon: LucideIcon; tone: IconProps['tone'] } =
-              ret.status === 'APPROVED'
-                ? { icon: CheckCircle2, tone: 'brand' }
-                : ret.status === 'REJECTED'
-                  ? { icon: XCircle, tone: 'danger' }
-                  : { icon: Clock, tone: 'muted' };
-            const retColor =
-              ret.status === 'APPROVED'
-                ? 'var(--color-text-success)'
-                : ret.status === 'REJECTED'
-                  ? 'var(--color-text-danger)'
-                  : 'var(--color-text-secondary)';
-            return (
-              <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-                <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
-                  {label}
-                </Text>
-              </Box>
-            );
-          }
-          if (!returnWindow.open) {
-            return (
-              <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
-                </Text>
-              </Box>
-            );
-          }
+      {/* Đổi/trả theo dòng (D3) — mỗi yêu cầu một khung trạng thái */}
+      {(o.status === 'DELIVERED' || o.status === 'RETURNED') &&
+        orderReturns.map((ret, idx) => {
+          const retIcon: { icon: LucideIcon; tone: IconProps['tone'] } =
+            ret.status === 'APPROVED'
+              ? { icon: CheckCircle2, tone: 'brand' }
+              : ret.status === 'REJECTED'
+                ? { icon: XCircle, tone: 'danger' }
+                : { icon: Clock, tone: 'muted' };
+          const retColor =
+            ret.status === 'APPROVED'
+              ? 'var(--color-text-success)'
+              : ret.status === 'REJECTED'
+                ? 'var(--color-text-danger)'
+                : 'var(--color-text-secondary)';
+          const linesText = returnLinesText(ret, o.items);
           return (
-            <Box px={4} mt={2} style={{ textAlign: 'center' }}>
-              <Button
-                variant="ghost"
-                icon={RotateCcw}
-                onPress={() => setReturnOpen(true)}
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                Yêu cầu đổi/trả (lỗi nhà sản xuất)
-              </Button>
+            <Box key={ret.id ?? idx} mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
+              <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
+                {returnStatusLabel(ret)}
+              </Text>
+              {linesText && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                  Trả: {linesText}
+                </Text>
+              )}
+              {ret.status === 'APPROVED' && !!ret.items?.length && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                  {ret.receivedAt ? 'Tubu đã nhận lại hàng.' : 'Tubu sẽ liên hệ để nhận lại hàng.'}
+                </Text>
+              )}
             </Box>
           );
-        })()}
+        })}
+      {canRequestMore && !returnWindow.open && (
+        <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+            {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
+          </Text>
+        </Box>
+      )}
+      {canRequestMore && returnWindow.open && (
+        <Box px={4} mt={2} style={{ textAlign: 'center' }}>
+          <Button
+            variant="ghost"
+            icon={RotateCcw}
+            onPress={() => {
+              setReturnKey((k) => k + 1);
+              setReturnOpen(true);
+            }}
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
+          </Button>
+        </Box>
+      )}
 
       <Box p={4}>
         <SupportContact orderCode={o.code} />
@@ -689,13 +723,40 @@ export default function OrderDetailPage() {
         }
       />
 
-      {/* ── Confirm hủy (DI #10): giữ đơn là primary ── */}
+      {/* ── Confirm hủy (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
-        <Box p={5} style={{ textAlign: 'center' }}>
-          <Text.Title size="small">{vi.orders.cancelConfirmTitle}</Text.Title>
-          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
-            {vi.orders.cancelConfirmBody}
-          </Text>
+        <Box p={5}>
+          <Box style={{ textAlign: 'center' }}>
+            <Text.Title size="small">{vi.orders.cancelConfirmTitle}</Text.Title>
+            <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
+              {vi.orders.cancelConfirmBody}
+            </Text>
+          </Box>
+          {refundMode === 'choose' && (
+            <Box mt={4}>
+              <RefundDestinationPicker
+                method={cancelMethod}
+                onMethod={setCancelMethod}
+                bank={cancelBank}
+                onBank={setCancelBank}
+                bankError={cancelTouched ? cancelBankError : null}
+                amountLabel={formatVnd(o.total)}
+              />
+            </Box>
+          )}
+          {refundMode === 'wallet' && (
+            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 12, textAlign: 'center' }}>
+              {`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}
+            </Text>
+          )}
+          {refundMode === 'unpaidTransfer' && (
+            <Box mt={3} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
+              <Text size="xSmall" style={{ color: 'var(--color-status-warning-fg)' }}>
+                Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn
+                được hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
+              </Text>
+            </Box>
+          )}
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
             <Button fullWidth onPress={() => setConfirmCancel(false)}>
               {vi.orders.cancelKeep}
@@ -704,7 +765,11 @@ export default function OrderDetailPage() {
               fullWidth
               variant="ghost"
               loading={cancel.isPending}
-              onPress={() => cancel.mutate()}
+              onPress={() => {
+                setCancelTouched(true);
+                if (cancelBankError) return;
+                cancel.mutate(refundMode === 'choose');
+              }}
               style={{ color: 'var(--color-text-danger)' }}
             >
               {vi.orders.cancelYes}
@@ -713,45 +778,14 @@ export default function OrderDetailPage() {
         </Box>
       </Sheet>
 
-      <Sheet visible={returnOpen} onClose={() => setReturnOpen(false)} autoHeight>
-        <Box p={5}>
-          <Text.Title size="small">Yêu cầu đổi/trả</Text.Title>
-          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
-            Chỉ áp dụng khi lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả).
-            {`Trong ${returnDays} ngày từ khi nhận hàng. Tubu phản hồi trong 24h.`}
-          </Text>
-          <textarea
-            value={returnReason}
-            onChange={(e) => setReturnReason(e.target.value)}
-            placeholder="Mô tả lỗi sản phẩm (tối thiểu 5 ký tự)…"
-            rows={4}
-            style={{
-              width: '100%',
-              marginTop: 12,
-              padding: 10,
-              borderRadius: 'var(--radius-control)',
-              border: '1px solid var(--color-border-subtle)',
-              fontSize: 14,
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-          />
-          <Text size="xSmall" bold style={{ marginTop: 12, display: 'block', color: 'var(--color-text-secondary)' }}>
-            Ảnh minh chứng (khuyến khích, tối đa 3)
-          </Text>
-          <MultiImageUpload value={returnImages} onChange={setReturnImages} max={3} />
-          <Button
-            fullWidth
-            loading={returnReq.isPending}
-            disabled={returnReason.trim().length < 5}
-            onPress={() => returnReq.mutate()}
-            style={{ marginTop: 14 }}
-          >
-            Gửi yêu cầu
-          </Button>
-        </Box>
-      </Sheet>
+      <ReturnRequestSheet
+        key={returnKey}
+        open={returnOpen}
+        onClose={() => setReturnOpen(false)}
+        order={o}
+        returns={orderReturns}
+        returnDays={returnDays}
+      />
 
       {/* Mua lại cả đơn qua sheet dùng chung (spec §3.3) — chọn dòng, dòng hết hàng bị khoá. */}
       <ReorderSheet target={reorderTarget} source="order_detail" navigateToCart onClose={() => setReorderTarget(null)} />

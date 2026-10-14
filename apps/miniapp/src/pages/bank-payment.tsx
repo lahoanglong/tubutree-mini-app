@@ -5,6 +5,7 @@ import { Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
+import { formatDateTime } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
@@ -199,6 +200,15 @@ export default function BankPaymentPage() {
             Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
           </Text>
         </Box>
+
+        {data.paymentDeadline && (
+          <Box mt={2} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
+            <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+              Vui lòng chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b>. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó
+              Tubu sẽ hoàn lại cho bạn.
+            </Text>
+          </Box>
+        )}
 
         <Box flex alignItems="center" justifyContent="center" style={{ gap: 6, marginTop: 14, color: 'var(--color-text-tertiary)' }}>
           <Clock size={15} />
