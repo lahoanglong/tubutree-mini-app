@@ -1,4 +1,4 @@
-import type { ConsignmentTerms, SettlementLine } from '@/lib/merchant-client';
+import type { ConsignmentExcluded, ConsignmentExcludedLine, ConsignmentTerms, SettlementLine } from '@/lib/merchant-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { ScrollRegion, ToneBadge } from '@/components/admin/ui';
@@ -99,5 +99,75 @@ export function SettlementTable<L extends SettlementLine>({
         </tbody>
       </table>
     </ScrollRegion>
+  );
+}
+
+export const CONSIGNMENT_EXCLUDED_TITLE = 'Hàng Tubu giao hộ chưa vào đối soát tự động';
+
+function excludedReason(l: ConsignmentExcludedLine, settleFrom: string | null, viewer: 'merchant' | 'admin'): string {
+  if (l.reason === 'BEFORE_SETTLE_FROM') return `Đặt trước ${formatDate(settleFrom)} — trước khi đối soát tự động`;
+  return viewer === 'admin' ? 'Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt' : 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn';
+}
+
+/**
+ * Món "Tubu giao hộ" kho Tubu đã giao và thu tiền nhưng không tự vào bảng kê (đặt trước mốc đối soát tự động, biến thể nhận lại
+ * chưa xác nhận hàng ký gửi lúc đặt). Chỉ để đối chiếu: không cộng vào tổng chờ lập phiếu.
+ */
+export function ConsignmentExcludedList({
+  data,
+  viewer = 'merchant',
+  storeTitle,
+}: {
+  data: ConsignmentExcluded | null | undefined;
+  viewer?: 'merchant' | 'admin';
+  storeTitle?: string;
+}) {
+  if (!data || data.lines.length === 0) return null;
+  const title = `${CONSIGNMENT_EXCLUDED_TITLE} (${data.total} món)`;
+  const more = data.total - data.lines.length;
+  return (
+    <section className="space-y-2">
+      {viewer === 'admin' ? (
+        <p className="font-medium text-stone-900">{title}</p>
+      ) : (
+        <h2 className="font-display font-semibold text-stone-900">{title}</h2>
+      )}
+      <p className="text-xs text-stone-600">
+        {viewer === 'admin'
+          ? 'Kho Tubu Tree đã giao và thu tiền nhưng không tự vào bảng kê: đơn đặt trước mốc merchant.consignment_settle_from, hoặc biến thể nhận lại chưa được xác nhận hàng ký gửi lúc khách đặt. Chỉ để đối chiếu, không cộng vào phiếu.'
+          : 'Kho Tubu Tree đã giao và thu tiền các món này nhưng chúng không tự vào bảng kê: đơn đặt trước ngày bắt đầu đối soát tự động (thanh toán theo thoả thuận trước đó), hoặc biến thể nhận lại chưa được Tubu Tree xác nhận là hàng ký gửi của bạn lúc khách đặt. Danh sách chỉ để đối chiếu; cần xử lý thì liên hệ Tubu Tree.'}
+      </p>
+      <ScrollRegion
+        label={storeTitle ? `${CONSIGNMENT_EXCLUDED_TITLE} của ${storeTitle}` : CONSIGNMENT_EXCLUDED_TITLE}
+        className="rounded-card border border-stone-200 bg-stone-0 shadow-card"
+      >
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="bg-stone-50 text-stone-500">
+            <tr>
+              <th className="px-3 py-2 font-medium">Đơn</th>
+              <th className="px-3 py-2 font-medium">Ngày đặt</th>
+              <th className="px-3 py-2 font-medium">Món</th>
+              <th className="px-3 py-2 text-right font-medium">Tiền khách trả cho món</th>
+              <th className="px-3 py-2 font-medium">Lý do</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stone-100">
+            {data.lines.map((l) => (
+              <tr key={l.orderItemId}>
+                <td className="px-3 py-2 font-medium text-stone-900">{l.orderCode}</td>
+                <td className="px-3 py-2 text-stone-600">{formatDate(l.createdAt)}</td>
+                <td className="px-3 py-2 text-stone-700">
+                  {l.productName}
+                  {l.variationName ? ` (${l.variationName})` : ''} × {l.quantity}
+                </td>
+                <td className="px-3 py-2 text-right">{formatVnd(l.goodsAmount)}</td>
+                <td className="px-3 py-2 text-stone-600">{excludedReason(l, data.settleFrom, viewer)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollRegion>
+      {more > 0 && <p className="text-xs text-stone-500">Đang hiện {data.lines.length} món mới nhất, còn {more} món cũ hơn.</p>}
+    </section>
   );
 }

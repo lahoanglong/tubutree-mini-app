@@ -369,6 +369,30 @@ export interface MerchantPayout {
   storefront?: { id: string; title: string };
 }
 
+/** Món "Tubu giao hộ" đã bán nhưng không tự vào bảng kê — chỉ để đối chiếu. */
+export interface ConsignmentExcludedLine {
+  orderId: string;
+  orderCode: string;
+  orderItemId: string;
+  productName: string;
+  variationName: string | null;
+  quantity: number;
+  /** Tiền khách thực trả cho món. */
+  goodsAmount: number;
+  createdAt: string;
+  deliveredAt: string | null;
+  /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
+  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+}
+
+export interface ConsignmentExcluded {
+  /** Mốc bắt đầu đối soát tự động; null = không giới hạn. */
+  settleFrom: string | null;
+  /** Tổng số món (danh sách chỉ trả tối đa 200 món mới nhất). */
+  total: number;
+  lines: ConsignmentExcludedLine[];
+}
+
 export interface MerchantStatement {
   holdDays: number;
   lines: SettlementLine[];
@@ -376,6 +400,8 @@ export interface MerchantStatement {
   upcoming: (SettlementLine & { availableAt: string | null })[];
   /** null/thiếu = gian hàng chưa có hàng "Tubu giao hộ". */
   consignmentTerms?: ConsignmentTerms | null;
+  /** Thiếu ở API cũ. */
+  consignmentExcluded?: ConsignmentExcluded | null;
 }
 
 export interface MerchantSettlement extends MerchantStatement {

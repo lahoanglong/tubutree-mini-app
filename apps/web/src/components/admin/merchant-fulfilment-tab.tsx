@@ -18,7 +18,7 @@ import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge } from './ui';
-import { SettlementTable, formatPct } from '@/components/settlement-table';
+import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
 
 const SLA_LABEL = { CONFIRM_OVERDUE: 'Quá hạn xác nhận', SHIP_OVERDUE: 'Quá hạn gửi hàng', DELIVER_OVERDUE: 'Quá hạn giao' } as const;
 const signed = (n: number) => (n < 0 ? `−${formatVnd(-n)}` : formatVnd(n));
@@ -238,15 +238,21 @@ function StatementLines({ storefrontId, title }: { storefrontId: string; title: 
   const q = useQuery({ queryKey: ['admin-merchant-statement', storefrontId], queryFn: () => getAdminMerchantStatement(storefrontId) });
   if (q.isLoading) return <p className="text-stone-500">Đang tải bảng kê…</p>;
   if (q.isError || !q.data) return <p className="text-danger-fg">Không tải được bảng kê.</p>;
-  if (q.data.lines.length === 0) return <p className="text-stone-500">Không còn khoản nào chờ lập phiếu.</p>;
   return (
-    <SettlementTable
-      lines={q.data.lines}
-      label={`Khoản chờ lập phiếu của ${title}`}
-      dateHeader="Ngày giao"
-      dateOf={(l) => l.deliveredAt}
-      viewer="admin"
-    />
+    <div className="space-y-3">
+      {q.data.lines.length === 0 ? (
+        <p className="text-stone-500">Không còn khoản nào chờ lập phiếu.</p>
+      ) : (
+        <SettlementTable
+          lines={q.data.lines}
+          label={`Khoản chờ lập phiếu của ${title}`}
+          dateHeader="Ngày giao"
+          dateOf={(l) => l.deliveredAt}
+          viewer="admin"
+        />
+      )}
+      <ConsignmentExcludedList data={q.data.consignmentExcluded} viewer="admin" storeTitle={title} />
+    </div>
   );
 }
 

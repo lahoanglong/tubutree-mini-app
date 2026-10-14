@@ -7,7 +7,7 @@ import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { Notice, ToneBadge } from '@/components/admin/ui';
-import { SettlementTable, consignmentFeesText, signedVnd } from '@/components/settlement-table';
+import { ConsignmentExcludedList, SettlementTable, consignmentFeesText, signedVnd } from '@/components/settlement-table';
 
 export { isPartialReturnLine, signedVnd } from '@/components/settlement-table';
 
@@ -26,8 +26,9 @@ export function SettlementTab() {
     <div className="space-y-5">
       <Notice>
         Mỗi đơn bạn tự giao: thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của
-        khách. Mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền của bạn; khách trả bằng Ví Tubu vẫn tính đủ giá trị món;
-        phí sàn theo mức chốt lúc khách đặt đơn. Đơn được đưa vào
+        khách. Phần mã giảm giá, giảm giá hạng thành viên và Điểm Xanh áp cho món của bạn được trừ vào số tiền của bạn (mã chỉ
+        áp cho món khác không trừ vào món của bạn); khách trả bằng Ví Tubu vẫn tính đủ giá trị món; phí sàn theo mức chốt lúc
+        khách đặt đơn. Đơn được đưa vào
         bảng kê sau {s.holdDays} ngày kể từ khi giao (hết hạn đổi/trả). Phiếu dương: Tubu Tree chuyển khoản vào tài khoản nhận
         đối soát của gian hàng. Phiếu âm (hay gặp với đơn COD vì bạn đã giữ tiền mặt của khách): bạn nộp phần phí sàn cho Tubu
         trong {s.negativeDueDays ?? 7} ngày kể từ khi lập phiếu. Đơn bị trả: Tubu Tree hoàn tiền cho khách, bạn nhận hàng về và nộp
@@ -37,10 +38,10 @@ export function SettlementTab() {
       {terms && (
         <Notice>
           Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách, mỗi món là một khoản trên cùng phiếu đối soát. Thực nhận =
-          số tiền khách thực trả cho món (đã trừ phần mã giảm giá, Điểm Xanh chia theo giá trị món) − {consignmentFeesText(terms)}{' '}
-          (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt). Mã giảm giá và Điểm Xanh áp cho món được trừ vào số tiền
-          của bạn; khách trả bằng Ví Tubu vẫn tính đủ giá trị món. Phí giao hàng do Tubu Tree thu và chịu, không tính vào khoản
-          của bạn. Món được đưa vào bảng kê sau {s.holdDays} ngày kể từ khi giao, chỉ đơn Tubu Tree đã thu được tiền (trả
+          số tiền khách thực trả cho món (đã trừ phần mã giảm giá, giảm giá hạng thành viên và Điểm Xanh áp cho chính món đó; mã
+          chỉ áp cho món khác không trừ vào món của bạn) − {consignmentFeesText(terms)} (mức hiện tại; mỗi đơn tính theo mức áp
+          dụng lúc khách đặt). Khách trả bằng Ví Tubu vẫn tính đủ giá trị món. Phí giao hàng do Tubu Tree thu và chịu, không tính
+          vào khoản của bạn. Món được đưa vào bảng kê sau {s.holdDays} ngày kể từ khi giao, chỉ đơn Tubu Tree đã thu được tiền (trả
           trước đã thanh toán hoặc COD); khách trả món đã đối soát thì kỳ sau có khoản trừ lại, hàng trả về kho Tubu Tree.
         </Notice>
       )}
@@ -70,6 +71,8 @@ export function SettlementTab() {
           />
         </section>
       )}
+
+      <ConsignmentExcludedList data={s.consignmentExcluded} />
 
       <section className="space-y-2">
         <h2 className="font-display font-semibold text-stone-900">Phiếu đối soát</h2>
