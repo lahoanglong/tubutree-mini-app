@@ -5,6 +5,10 @@ import { Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { applyCoupon, formatVnd, getMyCoupons, removeCoupon } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
+import { couponExpiryLabel, couponValueLabel, isCouponEligible, sortCouponsForCart } from '@/lib/coupon-view';
+
+/** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
+const VISIBLE_COUPONS = 3;
 
 /** Khoá mutation dùng chung để trang chứa (thanh toán) biết mã đang được đổi qua `useIsMutating`. */
 export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
@@ -33,6 +37,7 @@ export function CouponBox({
   const qc = useQueryClient();
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
 
   const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>) => {
@@ -100,23 +105,51 @@ export function CouponBox({
             </button>
           </div>
           {(couponsQ.data?.length ?? 0) > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {couponsQ.data!.slice(0, 6).map((c) => {
-                const notEligible = c.minOrder != null && subtotal < c.minOrder;
-                return (
-                  <button
-                    key={c.code}
-                    type="button"
-                    disabled={notEligible || busy}
-                    onClick={() => apply.mutate(c.code)}
-                    title={notEligible ? `Cần đơn tối thiểu ${formatVnd(c.minOrder!)}` : undefined}
-                    className="min-h-11 rounded-control border border-dashed border-promo-solid px-3 text-xs font-semibold text-promo-fg disabled:opacity-50"
-                  >
-                    {c.code}
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              <ul aria-label="Mã giảm giá của bạn" className="mt-3 space-y-2">
+                {sortCouponsForCart(couponsQ.data!, subtotal)
+                  .slice(0, showAll ? undefined : VISIBLE_COUPONS)
+                  .map((c) => {
+                    const eligible = isCouponEligible(c, subtotal);
+                    return (
+                      <li
+                        key={c.code}
+                        className={`flex items-center gap-3 rounded-control border border-dashed border-promo-solid bg-promo-bg p-3 ${
+                          eligible ? '' : 'opacity-80'
+                        }`}
+                      >
+                        <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          <div className="break-all text-sm font-bold text-promo-fg">{c.code}</div>
+                          <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
+                          {c.minOrder != null && (
+                            <div className={`text-xs ${eligible ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
+                              {eligible
+                                ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
+                                : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
+                            </div>
+                          )}
+                          <div className="text-xs text-stone-700">{couponExpiryLabel(c.endAt)}</div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!eligible || busy}
+                          onClick={() => apply.mutate(c.code)}
+                          aria-label={`Dùng mã ${c.code}`}
+                          className={`${ui.btnPrimary} flex-none px-3`}
+                        >
+                          {eligible ? 'Dùng mã' : 'Chưa đủ'}
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+              {couponsQ.data!.length > VISIBLE_COUPONS && (
+                <button type="button" onClick={() => setShowAll((v) => !v)} className={`${ui.btnText} mt-1 text-forest-700`}>
+                  {showAll ? 'Thu gọn' : `Xem thêm ${couponsQ.data!.length - VISIBLE_COUPONS} mã`}
+                </button>
+              )}
+            </>
           )}
         </>
       )}
