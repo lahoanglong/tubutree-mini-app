@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { spinPrizeProblem } from './spin-prizes';
+import { bannedKeywordsProblem } from '../feed/content-filter';
 
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
@@ -188,6 +189,7 @@ export class SystemConfigService {
       }
       return null;
     },
+    'community.banned_keywords': bannedKeywordsProblem,
     'seasonpass.tiers': (value) => {
       if (!Array.isArray(value)) return 'phải là mảng bậc [{ xp, free, premium }]';
       const max = SystemConfigService.SEASONPASS_POINTS_MAX;

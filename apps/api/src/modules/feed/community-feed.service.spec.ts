@@ -1332,6 +1332,63 @@ describe('containsBannedContent (pure fn)', () => {
   });
 });
 
+// R2-ENGAGE-11 / ENGAGE-16: bỏ dấu làm "cả đó", "cả cuộc", "trúng thưởng" trùng từ cấm nên bài hợp lệ bị giữ chờ duyệt.
+describe('containsBannedContent — câu tiếng Việt thường gặp không bị bắt nhầm (R2-ENGAGE-11)', () => {
+  it.each([
+    'Cả đó đều thích sản phẩm này',
+    'Cả cuộc đời mình gắn bó với vườn rau',
+    'Chúc mừng bạn đã trúng thưởng trong sự kiện ảnh đẹp của Tubu',
+    'Mình vừa trúng thưởng vòng quay, cả nhà vui lắm',
+    'Cả đó giờ mình chỉ dùng nước rửa chén sinh học',
+  ])('bài hợp lệ: %s', (text) => {
+    expect(containsBannedContent(text)).toBe(false);
+  });
+
+  it.each([
+    'Hội nhóm cá độ bóng đá uy tín',
+    'Nhận cá cược online, rút tiền ngay',
+    'Nhận ca do bong da, tài xỉu',
+    'ca cuoc bong da luc nao cung co keo',
+    'Group CÁ ĐỘ đổi thưởng',
+  ])('cờ bạc rõ ràng vẫn bị bắt: %s', (text) => {
+    expect(containsBannedContent(text)).toBe(true);
+  });
+
+  it('danh sách do admin cấu hình thay được mặc định: bỏ từ, thêm từ, từ có dấu khớp đúng dấu, từ không dấu khớp cả hai', () => {
+    expect(containsBannedContent('Hội nhóm cờ bạc', ['casino'])).toBe(false);
+    expect(containsBannedContent('Mở casino online', ['casino'])).toBe(true);
+    expect(containsBannedContent('Bán thuốc lá lậu', ['thuốc lá lậu'])).toBe(true);
+    expect(containsBannedContent('Bán thuoc la lau', ['thuốc lá lậu'])).toBe(false);
+    expect(containsBannedContent('Bán thuốc lá lậu', ['thuoc la lau'])).toBe(true);
+  });
+
+  it('link ngoài vẫn bị hạ cờ kể cả khi danh sách từ rỗng', () => {
+    expect(containsBannedContent('xem http://spam.biz/x', [])).toBe(true);
+  });
+});
+
+describe('CommunityFeedService — danh sách từ cấm lấy từ SystemConfig (R2-ENGAGE-11)', () => {
+  it('createPost: bài "cả đó" của user tin cậy vẫn PUBLISHED', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createPost('u1', 'STAFF', { body: 'Cả đó đều thích sản phẩm này' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PUBLISHED');
+  });
+
+  it('createPost dùng community.banned_keywords do admin đặt (từ mới vào hàng chờ duyệt)', async () => {
+    const prisma = makePrisma();
+    const config = makeConfig({ 'community.banned_keywords': ['thuốc lá lậu'] });
+    await makeSvc(prisma, undefined, undefined, config).createPost('u1', 'STAFF', { body: 'Bán thuốc lá lậu giá rẻ' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
+  it('cấu hình sai kiểu (không phải mảng chuỗi) → dùng danh sách mặc định, không làm hỏng việc đăng bài', async () => {
+    const prisma = makePrisma();
+    const config = makeConfig({ 'community.banned_keywords': 'casino' });
+    await makeSvc(prisma, undefined, undefined, config).createPost('u1', 'STAFF', { body: 'Mở casino online' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+});
+
 describe('CommunityFeedService.bumpReputation', () => {
   it('ghi 1 dòng sổ cái ReputationEvent (khoá theo reason+refId) rồi mới cộng điểm', async () => {
     const prisma = makePrisma();

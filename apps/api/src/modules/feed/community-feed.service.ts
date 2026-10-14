@@ -7,6 +7,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { startOfVnDay } from '../../common/vn-time';
+import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
 const LEVEL_NAMES: Record<number, string> = {
@@ -47,84 +48,7 @@ export function slugifyTag(label: string): string {
     .replace(/-+/g, '-');
 }
 
-/** Domain được PHÉP chèn link ngoài trong bài/bình luận — khác domain này đều bị coi là link lạ. */
-const LINK_WHITELIST_DOMAINS = ['tubutree.com', 'zalo.me', 'zaloapp.com'];
-
-/**
- * Từ/cụm từ cấm cơ bản — spam/lừa đảo/cờ bạc/vay nóng phổ biến, đã chuẩn hoá bỏ dấu + thường
- * (so khớp qua stripDiacritics nên cả bản có dấu lẫn không dấu đều dính). Đây là rào chắn SƠ
- * BỘ, không thay thế kiểm duyệt người — mục đích chỉ để hạ auto-PUBLISHED xuống PENDING.
- * So khớp theo RANH GIỚI TỪ: "sex" không được dính "unisex".
- */
-const BANNED_KEYWORDS = [
-  'lua dao',
-  'lua tien',
-  'ca do',
-  'ca cuoc',
-  'casino',
-  'vay nong',
-  'vay lai',
-  'tin dung den',
-  'da cap',
-  'rua tien',
-  'hang nhai',
-  'khieu dam',
-  'sex',
-  'ma tuy',
-  'vu khi',
-  'lam bang gia',
-  'chiem doat tai san',
-  'trung thuong',
-];
-
-/**
- * Cụm chỉ bắt khi GÕ ĐÚNG DẤU: bỏ dấu thì trùng với từ đời thường của sàn cây cảnh/nhà cửa — "hàng giả" ~ "hàng gia
- * dụng/gia đình/gia vị", "cờ bạc" ~ "cỏ bạc hà". Đánh đổi: bản không dấu của hai cụm này không bị hạ cờ.
- */
-const BANNED_ACCENTED_KEYWORDS = ['hàng giả', 'cờ bạc'];
-
-const WORD_CHAR = '[\\p{L}\\p{N}]';
-function wholeWord(keyword: string): RegExp {
-  return new RegExp(`(?<!${WORD_CHAR})${keyword}(?!${WORD_CHAR})`, 'u');
-}
-const BANNED_FOLDED_PATTERNS = BANNED_KEYWORDS.map(wholeWord);
-const BANNED_ACCENTED_PATTERNS = BANNED_ACCENTED_KEYWORDS.map(wholeWord);
-
-/** Bỏ dấu tiếng Việt + hạ thường, dùng để so khớp BANNED_KEYWORDS không phân biệt dấu. */
-function stripDiacritics(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
-}
-
-/**
- * Lọc nội dung đơn giản (§6.14 moderation gap): kiểm tra text có chứa từ cấm cơ bản HOẶC link
- * ngoài domain không nằm trong whitelist hay không. KHÔNG chặn hẳn — chỉ dùng để hạ cờ, ép bài
- * viết/bình luận vào hàng chờ PENDING dù tác giả isTrusted, vì rào cản "đã mua 1 lần" quá thấp:
- * một tài khoản mua hàng 1 lần vẫn có thể chèn link ngoài/nội dung vi phạm và trước đây được
- * đăng PUBLISHED ngay lập tức, không qua bất kỳ bộ lọc nào.
- */
-export function containsBannedContent(text: string): boolean {
-  if (!text) return false;
-  const normalized = stripDiacritics(text);
-  if (BANNED_FOLDED_PATTERNS.some((re) => re.test(normalized))) return true;
-  const accented = text.normalize('NFC').toLowerCase();
-  if (BANNED_ACCENTED_PATTERNS.some((re) => re.test(accented))) return true;
-
-  const urlRegex = /https?:\/\/([^\s/"'<>]+)/gi;
-  let match: RegExpExecArray | null;
-  while ((match = urlRegex.exec(text)) !== null) {
-    const host = match[1]!.split(/[/:?#]/)[0]!.toLowerCase();
-    const whitelisted = LINK_WHITELIST_DOMAINS.some(
-      (domain) => host === domain || host.endsWith(`.${domain}`),
-    );
-    if (!whitelisted) return true;
-  }
-  return false;
-}
+export { containsBannedContent } from './content-filter';
 
 const DEFAULT_REJECT_REASON = 'nội dung chưa phù hợp với nội quy cộng đồng';
 const REJECT_TITLE_PREVIEW = 40;
@@ -202,6 +126,11 @@ export class CommunityFeedService {
     // Optional: thông báo trả lời/best-answer/duyệt bài — không chặn hành động chính nếu thiếu/lỗi.
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
+
+  /** Từ cấm do admin chỉnh ở SystemConfig `community.banned_keywords`; chưa đặt hoặc sai kiểu thì dùng danh sách mặc định. */
+  private async bannedKeywords(): Promise<readonly string[]> {
+    return parseBannedKeywords(await this.config.get<unknown>('community.banned_keywords', DEFAULT_BANNED_KEYWORDS));
+  }
 
   /**
    * Cộng điểm reputation (§6.14 Pha 4) + cập nhật hạng — NON-FATAL: tự try/catch,
@@ -525,7 +454,7 @@ export class CommunityFeedService {
     // lọc — rào cản "đã mua 1 lần" đủ thấp để một tài khoản mua hàng 1 lần chèn link ngoài/nội
     // dung vi phạm vào bài đăng công khai ngay lập tức. Match từ cấm/link lạ → ép PENDING (bỏ
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
-    const flagged = containsBannedContent(`${title ?? ''}\n${body}`);
+    const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
 
     const post = await this.prisma.feedPost.create({
@@ -899,7 +828,7 @@ export class CommunityFeedService {
     if (contentChanged && post.status === 'PUBLISHED') {
       const mergedTitle = data.title !== undefined ? (data.title as string | null) : post.title;
       const mergedBody = data.body !== undefined ? (data.body as string) : post.body;
-      const flagged = containsBannedContent(`${mergedTitle ?? ''}\n${mergedBody}`);
+      const flagged = containsBannedContent(`${mergedTitle ?? ''}\n${mergedBody}`, await this.bannedKeywords());
       const trusted = await this.isTrusted(userId, role);
       if (flagged || !trusted) {
         data.status = 'PENDING';

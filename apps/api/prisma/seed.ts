@@ -92,6 +92,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
   { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
   { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.banned_keywords', value: ['lua dao', 'lua tien', 'casino', 'vay nong', 'vay lai', 'tin dung den', 'da cap', 'rua tien', 'hang nhai', 'khieu dam', 'sex', 'ma tuy', 'vu khi', 'lam bang gia', 'chiem doat tai san', 'ca do bong da', 'ca cuoc bong da', 'cá độ', 'cá cược', 'hàng giả', 'cờ bạc'], category: 'community', description: 'Từ/cụm từ cấm trong bài cộng đồng (khớp → bài chờ duyệt). Cụm không dấu khớp cả có dấu; cụm có dấu chỉ khớp khi gõ đúng dấu', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
   { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },

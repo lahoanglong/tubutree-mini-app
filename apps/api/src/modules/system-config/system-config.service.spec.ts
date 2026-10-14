@@ -302,6 +302,11 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }],
       [[{ minActive: 1, pct: 1.5 }], [{ minActive: 0, pct: 0.1 }], [{ minActive: 1, pct: -0.1 }], { pct: 0.1 }],
     ],
+    [
+      'community.banned_keywords',
+      ['cá độ', 'vay nong'],
+      ['casino', [''], ['   '], [1], [{ w: 'x' }], ['x'.repeat(61)], Array.from({ length: 301 }, (_, i) => `t${i}`)],
+    ],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');
