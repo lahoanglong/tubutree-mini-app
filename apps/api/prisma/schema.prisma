@@ -911,6 +911,24 @@ model Order {
   pancakeAttention   String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
   pancakeAttentionAt DateTime?
+  /// Đẩy đơn sang Pancake (pancake-order.service.ts): WAITING_PAYMENT (trả trước qua cổng, chờ tiền) | PENDING
+  /// (đang thử lại) | PUSHING | SYNCED | FAILED (hết lượt thử, cron vẫn thử tiếp trong cửa sổ) | NOT_CONFIGURED |
+  /// SKIPPED (đơn đã huỷ/trả trước khi lên Pancake) | STALE (quá cửa sổ tự đẩy hoặc đã rời kho mà chưa lên Pancake —
+  /// kiểm tra tay). Null = đơn cũ trước cột này.
+  pancakePushStatus  String?
+  /// Lỗi gần nhất khi gọi Pancake cho đơn này (tạo / cập nhật thanh toán / huỷ) — hiện cho admin.
+  pancakeSyncError   String?
+  pancakePushAttempts Int             @default(0)
+  pancakeLastAttemptAt DateTime?
+  /// Mốc gửi lệnh tạo đơn mà CHƯA biết kết quả (timeout, mất response, chết giữa chừng). Còn giá trị khi chưa có
+  /// pancakeOrderId nghĩa là Pancake CÓ THỂ đã tạo đơn: phải tra theo mã đơn trước khi tạo lại.
+  pancakePushClaimedAt DateTime?
+  /// Đơn Pancake đã mang thông tin "không thu COD" (đã trả trước / công nợ đại lý). false + đơn đã PAID = còn phải
+  /// cập nhật sang Pancake.
+  pancakePaymentSynced Boolean        @default(false)
+  /// Huỷ đơn bên Pancake khi đơn huỷ ở Tubu: PENDING | CANCELLED | NOT_FOUND | TOO_LATE (Pancake đã gửi hàng) |
+  /// FAILED (hết lượt thử). Null = không cần (chưa từng lên Pancake, Pancake tự huỷ) hoặc đơn cũ.
+  pancakeCancelStatus String?
   items              OrderItem[]
   commissions        Commission[]
   paymentAttempts    PaymentAttempt[]
@@ -935,6 +953,9 @@ model Order {
   @@index([hasRecyclingPickup, gomdonStatus])
   // Hàng đợi "Cần xử lý Pancake" của admin: WHERE pancakeAttentionAt IS NOT NULL ORDER BY pancakeAttentionAt.
   @@index([pancakeAttentionAt])
+  // Bộ lọc admin "Chưa lên Pancake" và cron cứu hộ (đẩy lại / huỷ lại / cập nhật thanh toán).
+  @@index([pancakePushStatus])
+  @@index([pancakeCancelStatus])
   @@map("orders")
 }
 
