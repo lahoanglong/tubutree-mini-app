@@ -30,6 +30,15 @@ export interface MyRefundView {
   canChooseDestination: boolean;
 }
 
+/**
+ * Trạng thái khách thấy: khoản chờ đối soát (UNVERIFIED — Pancake báo khách trả dư, chưa ai đối chiếu sao kê) và khoản admin
+ * đã bỏ qua (DISMISSED) không phải tiền Tubu nợ khách.
+ */
+const CUSTOMER_VISIBLE: CustomerRefundStatus[] = ['PENDING', 'PROCESSING', 'COMPLETED'];
+
+/** Lý do tối thiểu khi admin bỏ qua một khoản chờ đối soát — khớp web admin. */
+const DISMISS_REASON_MIN = 5;
+
 const MINE_SELECT = {
   id: true,
   orderId: true,
@@ -68,7 +77,7 @@ export class CustomerRefundsService {
       // Hàng chờ: cũ nhất trước để khoản nợ khách lâu nhất không bị chìm.
       this.prisma.orderCustomerRefund.findMany({
         where,
-        orderBy: { createdAt: status === 'PENDING' ? 'asc' : 'desc' },
+        orderBy: { createdAt: status === 'PENDING' || status === 'UNVERIFIED' ? 'asc' : 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.orderCustomerRefund.count({ where }),
@@ -120,7 +129,7 @@ export class CustomerRefundsService {
     };
   }
 
-  private async recordTakeOver(tx: Prisma.TransactionClient, adminId: string, orderId: string, note: string): Promise<void> {
+  private async recordOrderNote(tx: Prisma.TransactionClient, adminId: string, orderId: string, note: string): Promise<void> {
     const order = await tx.order.findUnique({ where: { id: orderId }, select: { status: true } });
     if (!order) return;
     await tx.orderStatusHistory.create({
@@ -174,7 +183,7 @@ export class CustomerRefundsService {
         data: { status: 'PENDING', claimedBy: null, claimedAt: null },
       });
       if (res.count === 0) return false;
-      if (guard.takeOverNote) await this.recordTakeOver(tx, adminId, row.orderId, guard.takeOverNote);
+      if (guard.takeOverNote) await this.recordOrderNote(tx, adminId, row.orderId, guard.takeOverNote);
       return true;
     });
     if (!won) throw new BadRequestException(await this.notTransferableReason(id, adminId));
@@ -235,7 +244,7 @@ export class CustomerRefundsService {
         },
       });
       if (res.count === 0) return false;
-      if (guard.takeOverNote) await this.recordTakeOver(tx, adminId, row.orderId, `${guard.takeOverNote} · Mã GD ${bankRef}`);
+      if (guard.takeOverNote) await this.recordOrderNote(tx, adminId, row.orderId, `${guard.takeOverNote} · Mã GD ${bankRef}`);
       return true;
     });
     if (!won) throw new BadRequestException(await this.notTransferableReason(id, adminId));
@@ -263,6 +272,10 @@ export class CustomerRefundsService {
       return `Khách đã chọn nhận khoản này về Ví Tubu${at} và đã được cộng ${formatVnd(now.amount)} — KHÔNG chuyển khoản. Nếu đã lỡ chuyển, liên hệ khách để thu hồi.`;
     }
     if (now.status === 'COMPLETED') return `Khoản này đã được xác nhận chuyển khoản${now.bankRef ? ` (mã GD ${now.bankRef})` : ''}.`;
+    if (now.status === 'UNVERIFIED') {
+      return 'Khoản này chưa được xác nhận là tiền khách trả dư — đối chiếu sao kê rồi bấm "Xác nhận tiền dư" trước khi chuyển khoản.';
+    }
+    if (now.status === 'DISMISSED') return 'Khoản này đã được đánh dấu "Không phải tiền dư" — KHÔNG chuyển khoản.';
     if (now.status === 'PROCESSING' && now.claimedBy !== adminId) {
       const holder = now.claimedBy ? (await this.adminNames([now.claimedBy])).get(now.claimedBy) : undefined;
       return `Khoản này đang được ${holder ?? 'một quản trị viên khác'} chuyển khoản.`;
@@ -270,10 +283,98 @@ export class CustomerRefundsService {
     return 'Khoản hoàn vừa thay đổi — vui lòng tải lại.';
   }
 
+  /**
+   * Admin đã đối chiếu sao kê khoản dư Pancake báo (UNVERIFIED): khoản thành khoản chờ chuyển khoản thường (PENDING) — khách
+   * mới thấy và được báo để chọn Ví hay ngân hàng. `amount` = số dư thực nhận trên sao kê (mặc định số Pancake báo, không
+   * vượt số đó); phần còn lại ghi thành khoản đã bỏ qua để tổng các khoản dư vẫn bằng số Pancake đã báo (báo lại không đẻ
+   * khoản mới). Guard UNVERIFIED trong câu ghi: hai admin bấm cùng lúc (xác nhận / bỏ qua) chỉ một người thắng.
+   */
+  async verifyOverpayment(adminId: string, id: string, input: { amount?: number; note?: string }) {
+    const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    if (row.kind !== 'OVERPAYMENT' || row.status !== 'UNVERIFIED') {
+      throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
+    }
+    const amount = input.amount ?? row.amount;
+    if (!Number.isInteger(amount) || amount <= 0 || amount > row.amount) {
+      throw new BadRequestException(`Số tiền dư thực nhận phải từ 1đ đến ${formatVnd(row.amount)} (số Pancake báo dư).`);
+    }
+    const note = input.note?.trim() || null;
+    const won = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.orderCustomerRefund.updateMany({
+        where: { id, kind: 'OVERPAYMENT', status: 'UNVERIFIED' },
+        data: { status: 'PENDING', amount, adminNote: note },
+      });
+      if (res.count === 0) return false;
+      if (amount < row.amount) {
+        await tx.orderCustomerRefund.createMany({
+          data: [
+            {
+              orderId: row.orderId,
+              orderCode: row.orderCode,
+              kind: 'OVERPAYMENT',
+              refKey: `${row.refKey}:rest`,
+              userId: row.userId,
+              amount: row.amount - amount,
+              method: 'MANUAL_TRANSFER',
+              status: 'DISMISSED',
+              reason: row.reason,
+              completedBy: adminId,
+              completedAt: new Date(),
+              adminNote: `Phần Pancake báo dư nhưng sao kê không có (xác nhận ${formatVnd(amount)}/${formatVnd(row.amount)}).`,
+            },
+          ],
+          skipDuplicates: true,
+        });
+      }
+      const partial = amount < row.amount ? ` (Pancake báo ${formatVnd(row.amount)})` : '';
+      await this.recordOrderNote(
+        tx,
+        adminId,
+        row.orderId,
+        `Xác nhận tiền trả dư ${formatVnd(amount)}${partial} sau khi đối chiếu sao kê${note ? ` · ${note}` : ''}`,
+      );
+      return true;
+    });
+    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, vui lòng tải lại.');
+    this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
+    if (row.userId) {
+      await this.notifications
+        ?.notify(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) })
+        .catch(() => undefined);
+    }
+    return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
+  }
+
+  /** Không phải tiền khách trả dư (cùng một lần chuyển, nhân viên sửa đơn trên Pancake…): đóng khoản, không báo khách. */
+  async dismissOverpayment(adminId: string, id: string, input: { reason: string }) {
+    const reason = input.reason?.trim() ?? '';
+    const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    if (row.kind !== 'OVERPAYMENT' || row.status !== 'UNVERIFIED') {
+      throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
+    }
+    if (reason.length < DISMISS_REASON_MIN) {
+      throw new BadRequestException(`Ghi lý do (ít nhất ${DISMISS_REASON_MIN} ký tự) vì sao đây không phải tiền khách trả dư.`);
+    }
+    const won = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.orderCustomerRefund.updateMany({
+        where: { id, kind: 'OVERPAYMENT', status: 'UNVERIFIED' },
+        data: { status: 'DISMISSED', adminNote: reason, completedBy: adminId, completedAt: new Date() },
+      });
+      if (res.count === 0) return false;
+      await this.recordOrderNote(tx, adminId, row.orderId, `Không phải tiền trả dư ${formatVnd(row.amount)} (Pancake báo). Lý do: ${reason}`);
+      return true;
+    });
+    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, vui lòng tải lại.');
+    this.logger.log(`Admin ${adminId} bỏ qua khoản dư ${row.amount}đ đơn ${row.orderCode} (khoản ${id}): ${reason}`);
+    return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
+  }
+
   /** Các khoản hoàn của chính khách (mọi đơn hoặc một đơn) — hiện ở chi tiết đơn. */
   async listMine(userId: string, orderId?: string): Promise<MyRefundView[]> {
     const rows = await this.prisma.orderCustomerRefund.findMany({
-      where: { userId, ...(orderId ? { orderId } : {}) },
+      where: { userId, ...(orderId ? { orderId } : {}), status: { in: CUSTOMER_VISIBLE } },
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: MINE_SELECT,
@@ -333,7 +434,7 @@ export class CustomerRefundsService {
     input: { refundMethod: 'WALLET' | 'BANK'; bankName?: string; accountNumber?: string; accountName?: string },
   ): Promise<MyRefundView> {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
-    if (!row || row.userId !== userId) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
+    if (!row || row.userId !== userId || !CUSTOMER_VISIBLE.includes(row.status)) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     if (row.method === 'MANUAL_TRANSFER' && row.status === 'PROCESSING') {
       throw new BadRequestException(`Tubu đang chuyển khoản khoản này về ${maskedBank(row)} nên không đổi được nơi nhận nữa.`);
     }

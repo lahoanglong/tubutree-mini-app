@@ -489,17 +489,43 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(orderUpdateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { pancakePaidReported: 50000 } });
   });
 
-  it('R3-MONEY-1: đơn đã PAID mà Pancake báo cộng dồn gấp đôi (khách chuyển hai lần) → khoản hoàn OVERPAYMENT phần dư, báo khách và admin', async () => {
+  // Pancake là tín hiệu CHƯA xác thực (hợp đồng prepaid/bank_payment chưa đối chiếu với payload thật, nhân viên có thể
+  // sửa đơn trên Pancake): khoản dư chờ admin đối chiếu sao kê, khách không thấy và không rút được về Ví.
+  it('R3-MONEY-1: đơn đã PAID mà Pancake báo đã nhận gấp đôi → khoản OVERPAYMENT CHỜ ĐỐI SOÁT, KHÔNG báo khách, báo admin đối chiếu sao kê', async () => {
     const { proc, prisma, notifications } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114000,
     });
-    await proc.onPaymentReconcile({ id: 'p1', prepaid: 228000 });
+    await proc.onPaymentReconcile({ id: 'p1', bank_payment: 228000 });
     expect(lateRefunds(prisma)).toEqual([
-      expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114000, refKey: 'PANCAKE:paid:228000', method: 'MANUAL_TRANSFER', status: 'PENDING' }),
+      expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114000, refKey: 'PANCAKE:paid:228000', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }),
     ]);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TUBU1', amount: '114.000đ' });
-    expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', expect.anything(), expect.anything());
+    expect(notifications.notify).toHaveBeenCalledWith(
+      'admin1',
+      'OPS_REFUND_ALERT',
+      expect.objectContaining({ order_code: 'TUBU1', message: expect.stringContaining('Đối chiếu sao kê') }),
+    );
+  });
+
+  it('R3-MONEY-1: đơn đã PAID, Pancake báo prepaid = số Tubu đã ghi (transfer_money) cộng khoản nhân viên ghi bank_payment → KHÔNG có khoản dư nào', async () => {
+    const { proc, prisma, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114000, pancakePaymentSynced: true,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 114000, bank_payment: 114000 });
+    expect(lateRefunds(prisma)).toEqual([]);
+    expect(prisma.orderCustomerRefund.aggregate).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-1: đơn đã PAID, một ô Pancake vượt tổng đơn (prepaid 228.000) → vẫn ghi khoản chờ đối soát phần dư', async () => {
+    const { proc, prisma } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114000, pancakePaymentSynced: true,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 228000, bank_payment: 114000 });
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114000, status: 'UNVERIFIED' })]);
   });
 
   it('R3-MONEY-1: đơn đã hoàn (REFUNDED) vẫn nhận phần dư; báo lại cùng số → không tạo thêm (đã ghi đủ phần dư)', async () => {
@@ -522,13 +548,14 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(prisma.orderCustomerRefund.aggregate).not.toHaveBeenCalled();
   });
 
-  it('lần đầu Pancake báo đã nhận VƯỢT tổng đơn → lật PAID và ghi luôn khoản dư', async () => {
-    const { proc, prisma } = setup({
+  it('lần đầu Pancake báo đã nhận VƯỢT tổng đơn (trước khi Tubu ghi gì lên Pancake: cộng hai ô) → lật PAID và ghi khoản dư chờ đối soát', async () => {
+    const { proc, prisma, notifications } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 114000,
     });
-    await proc.onPaymentReconcile({ id: 'p1', bank_payment: 150000 });
-    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 36000 })]);
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 114000, bank_payment: 36000 });
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 36000, status: 'UNVERIFIED' })]);
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', expect.anything());
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {

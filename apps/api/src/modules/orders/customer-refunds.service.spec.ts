@@ -26,7 +26,7 @@ const pending = (over: Record<string, unknown> = {}) => ({
 
 function setup(row: Record<string, unknown> | null = pending()) {
   const tx = {
-    orderCustomerRefund: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    orderCustomerRefund: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     order: { findUnique: jest.fn().mockResolvedValue({ status: 'CANCELLED' }) },
     orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
   };
@@ -219,6 +219,134 @@ describe('CustomerRefundsService.chooseDestination (khách chọn nơi nhận kh
       data: { bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'TRAN THI B' },
     });
     expect(applyWalletDelta).not.toHaveBeenCalled();
+  });
+});
+
+const unverified = (over: Record<string, unknown> = {}) =>
+  pending({
+    kind: 'OVERPAYMENT',
+    refKey: 'PANCAKE:paid:228000',
+    status: 'UNVERIFIED',
+    reason: 'CONFIRMED',
+    bankName: null,
+    bankAccountNo: null,
+    bankAccountName: null,
+    ...over,
+  });
+
+describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối soát (UNVERIFIED)', () => {
+  beforeEach(() => (applyWalletDelta as jest.Mock).mockClear());
+
+  it('khách không thấy khoản chờ đối soát / đã bỏ qua ở chi tiết đơn', async () => {
+    const { service, prisma } = setup();
+    await service.listMine('u1', 'o1');
+    expect(prisma.orderCustomerRefund.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', orderId: 'o1', status: { in: ['PENDING', 'PROCESSING', 'COMPLETED'] } } }),
+    );
+  });
+
+  it.each(['UNVERIFIED', 'DISMISSED'])('khách KHÔNG chọn Ví được cho khoản %s (không cộng Ví, không ghi)', async (status) => {
+    const { service, prisma, tx } = setup(unverified({ status }));
+    await expect(service.chooseDestination('u1', 'r1', { refundMethod: 'WALLET' })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.chooseDestination('u1', 'r1', { refundMethod: 'BANK', bankName: 'ACB', accountNumber: '123456', accountName: 'A' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+  });
+
+  it('admin không "Bắt đầu chuyển khoản" được khoản chưa đối soát — nói rõ phải xác nhận trước', async () => {
+    const { service, prisma } = setup(unverified({ bankAccountNo: '190312345678' }));
+    prisma.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.claim('a1', 'r1')).rejects.toThrow('chưa được xác nhận là tiền khách trả dư');
+  });
+
+  it('xác nhận đã đối chiếu sao kê → PENDING (khách chọn nơi nhận), ghi lịch sử đơn, báo khách số tiền', async () => {
+    const { service, tx, notifications } = setup(unverified());
+    await service.verifyOverpayment('a1', 'r1', { note: 'Sao kê VCB 14/10 có 2 lần chuyển' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', kind: 'OVERPAYMENT', status: 'UNVERIFIED' },
+      data: { status: 'PENDING', amount: 114_000, adminNote: 'Sao kê VCB 14/10 có 2 lần chuyển' },
+    });
+    expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'o1',
+        actorType: 'ADMIN',
+        actorId: 'a1',
+        note: expect.stringContaining('Xác nhận tiền trả dư 114.000đ'),
+      }),
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '114.000đ' });
+  });
+
+  it('sao kê chỉ có một phần → khoản còn đúng số thực nhận, phần còn lại ghi "đã bỏ qua" (Pancake báo lại không đẻ thêm)', async () => {
+    const { service, tx, notifications } = setup(unverified());
+    await service.verifyOverpayment('a1', 'r1', { amount: 50_000 });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', kind: 'OVERPAYMENT', status: 'UNVERIFIED' },
+      data: expect.objectContaining({ status: 'PENDING', amount: 50_000 }),
+    });
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          orderId: 'o1',
+          kind: 'OVERPAYMENT',
+          refKey: 'PANCAKE:paid:228000:rest',
+          amount: 64_000,
+          status: 'DISMISSED',
+          completedBy: 'a1',
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '50.000đ' });
+  });
+
+  it.each([0, -1, 114_001, 1.5])('số tiền xác nhận %p ngoài 1đ..số Pancake báo dư → từ chối', async (amount) => {
+    const { service, tx } = setup(unverified());
+    await expect(service.verifyOverpayment('a1', 'r1', { amount })).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('khoản không còn chờ đối soát (admin khác vừa xử lý) → báo tải lại, không báo khách', async () => {
+    const { service, tx, notifications } = setup(unverified());
+    tx.orderCustomerRefund.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.verifyOverpayment('a1', 'r1', {})).rejects.toThrow('không còn chờ đối soát');
+    expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('khoản thường (đã PENDING) → không phải việc đối soát', async () => {
+    const { service, tx } = setup(pending({ kind: 'OVERPAYMENT' }));
+    await expect(service.verifyOverpayment('a1', 'r1', {})).rejects.toThrow('không còn chờ đối soát');
+    await expect(service.dismissOverpayment('a1', 'r1', { reason: 'Không có trên sao kê' })).rejects.toThrow('không còn chờ đối soát');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('"Không phải tiền dư" bắt buộc lý do ≥ 5 ký tự', async () => {
+    const { service, tx } = setup(unverified());
+    await expect(service.dismissOverpayment('a1', 'r1', { reason: ' ab ' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('"Không phải tiền dư" → DISMISSED, ghi ai/lý do vào khoản và lịch sử đơn, KHÔNG báo khách', async () => {
+    const { service, tx, notifications } = setup(unverified());
+    await service.dismissOverpayment('a1', 'r1', { reason: 'Nhân viên thêm phí ship trên Pancake, khách trả đúng' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', kind: 'OVERPAYMENT', status: 'UNVERIFIED' },
+      data: {
+        status: 'DISMISSED',
+        adminNote: 'Nhân viên thêm phí ship trên Pancake, khách trả đúng',
+        completedBy: 'a1',
+        completedAt: expect.any(Date),
+      },
+    });
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('Không phải tiền trả dư') }),
+    });
+    expect(notifications.notify).not.toHaveBeenCalled();
   });
 });
 

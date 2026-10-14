@@ -10,7 +10,7 @@ import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-ale
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import { ATTENTION_UNDERPAID, clearPancakeAttention } from './pancake-attention';
-import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
+import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
@@ -397,8 +397,8 @@ export class PancakeProcessor extends WorkerHost {
     if (!order) return null;
     if (order.paymentMethod !== 'BANK_TRANSFER') return null;
     if (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') {
-      // Đơn đã nhận đủ: Pancake báo cộng dồn vượt tổng đơn là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
-      await this.recordOverpayment(order, pancakePaidAmount(data));
+      // Đơn đã nhận đủ: Pancake báo vượt tổng đơn có thể là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
+      await this.recordOverpayment(order, pancakePaidAmountAfterPaid(data));
       return null;
     }
     if (order.paymentStatus !== 'UNPAID') return null;
@@ -418,7 +418,9 @@ export class PancakeProcessor extends WorkerHost {
       note: 'Pancake ghi nhận chuyển khoản',
       deferGomdonPush: opts.deferGomdonPush,
     });
-    if (outcome === 'PAID' || outcome === 'ALREADY_PAID') await this.recordOverpayment(current ?? order, pancakePaidAmount(data));
+    // Vừa lật PAID bằng chính webhook này thì Tubu chưa ghi gì lên Pancake: hai ô đều là tiền nhân viên ghi nhận.
+    if (outcome === 'PAID') await this.recordOverpayment(current ?? order, pancakePaidAmount(data));
+    if (outcome === 'ALREADY_PAID') await this.recordOverpayment(current ?? order, pancakePaidAmountAfterPaid(data));
     if (outcome === 'PAID') {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
       return current;

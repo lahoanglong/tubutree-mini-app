@@ -239,9 +239,10 @@ export function receivedRefundNote(amount: number): string {
 type OverOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'total'>;
 
 /**
- * Khách trả thêm cho đơn đã nhận đủ tiền (R3-MONEY-1): lệnh ZaloPay thứ hai cũng thành công (callback lần đầu thất lạc,
- * khách bấm thanh toán lại), hoặc khách chuyển khoản dư. Tiền đó không thuộc đơn nào: ghi một khoản hoàn OVERPAYMENT (khách
- * chọn Ví hay ngân hàng), báo khách và admin. Một khoản mỗi giao dịch (refKey = kênh + mã lệnh); trả true khi vừa tạo.
+ * Khách trả thêm cho đơn đã nhận đủ tiền qua ZaloPay (R3-MONEY-1): lệnh thứ hai cũng thành công (callback lần đầu thất lạc,
+ * khách bấm thanh toán lại). Cổng đã xác thực khoản này (MAC, đúng số tiền, lệnh khác lệnh đã lật PAID) nên ghi thẳng khoản
+ * hoàn OVERPAYMENT chờ khách chọn Ví hay ngân hàng, báo khách và admin. Một khoản mỗi lệnh (refKey = kênh + mã lệnh); trả
+ * true khi vừa tạo.
  */
 export async function recordOverpaymentRefund(
   ctx: LateCtx,
@@ -251,19 +252,23 @@ export async function recordOverpaymentRefund(
   if (!(input.amount > 0)) return false;
   const created = await ctx.prisma.$transaction((tx) =>
     tx.orderCustomerRefund.createMany({
-      data: [overRow(order, `${input.source}:${input.refKey}`, input.amount)],
+      data: [overRow(order, `${input.source}:${input.refKey}`, input.amount, 'PENDING')],
       skipDuplicates: true,
     }),
   );
   if (created.count === 0) return false;
-  await announceOverpayment(ctx, order, input.amount, input.source);
+  await announceOverpayment(ctx, order, input.amount);
   return true;
 }
 
 /**
- * Pancake báo số đã trả CỘNG DỒN vượt tổng đơn đã nhận đủ tiền: phần vượt là tiền khách chuyển dư. Như
- * `recordCumulativeLatePayment`, chỉ ghi phần tăng thêm so với các khoản dư Pancake đã ghi (khoá dòng đơn; số cộng dồn
- * nằm trong refKey nên webhook gửi lại là no-op). Trả số vừa ghi.
+ * Pancake báo số đã trả vượt tổng đơn đã nhận đủ tiền: CHƯA phải bằng chứng khách chuyển dư — hợp đồng field
+ * prepaid/bank_payment chưa đối chiếu được với payload thật, Tubu tự ghi transfer_money lên chính đơn đó, nhân viên có thể
+ * sửa đơn trên Pancake (thêm món, phụ phí) mà tổng đơn Tubu không đổi. Nên chỉ ghi khoản OVERPAYMENT ở trạng thái
+ * UNVERIFIED: khách không thấy, không chọn nơi nhận được, không được báo; admin đối chiếu sao kê rồi xác nhận
+ * (CustomerRefundsService.verifyOverpayment) hoặc bỏ qua. Như `recordCumulativeLatePayment`, chỉ ghi phần tăng thêm so với
+ * các khoản dư Pancake đã ghi (kể cả khoản đã bỏ qua — báo lại cùng số không đẻ việc mới); khoá dòng đơn, số cộng dồn nằm
+ * trong refKey nên webhook gửi lại là no-op. Trả số vừa ghi.
  */
 export async function recordCumulativeOverpayment(
   ctx: LateCtx,
@@ -282,16 +287,21 @@ export async function recordCumulativeOverpayment(
     const add = excess - (recorded._sum.amount ?? 0);
     if (add <= 0) return 0;
     const created = await tx.orderCustomerRefund.createMany({
-      data: [overRow(order, `${prefix}paid:${input.reportedTotal}`, add)],
+      data: [overRow(order, `${prefix}paid:${input.reportedTotal}`, add, 'UNVERIFIED')],
       skipDuplicates: true,
     });
     return created.count > 0 ? add : 0;
   });
-  if (amount > 0) await announceOverpayment(ctx, order, amount, input.source);
+  if (amount > 0) await announceUnverifiedOverpayment(ctx, order, amount, input.reportedTotal);
   return amount;
 }
 
-function overRow(order: OverOrder, refKey: string, amount: number): Prisma.OrderCustomerRefundCreateManyInput {
+function overRow(
+  order: OverOrder,
+  refKey: string,
+  amount: number,
+  status: 'PENDING' | 'UNVERIFIED',
+): Prisma.OrderCustomerRefundCreateManyInput {
   return {
     orderId: order.id,
     orderCode: order.code,
@@ -300,15 +310,14 @@ function overRow(order: OverOrder, refKey: string, amount: number): Prisma.Order
     userId: order.userId,
     amount,
     method: 'MANUAL_TRANSFER',
-    status: 'PENDING',
+    status,
     reason: order.status,
   };
 }
 
-async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number, source: 'ZALOPAY' | 'PANCAKE') {
+async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number) {
   const amount = formatVnd(rawAmount);
-  const channel = source === 'ZALOPAY' ? 'ZaloPay' : 'chuyển khoản';
-  ctx.logger.warn(`Khách trả thêm ${amount} qua ${channel} cho đơn ${order.code} đã nhận đủ tiền — đã tạo khoản hoàn tiền trả dư.`);
+  ctx.logger.warn(`Khách trả thêm ${amount} qua ZaloPay cho đơn ${order.code} đã nhận đủ tiền — đã tạo khoản hoàn tiền trả dư.`);
   await ctx.notifications
     ?.notify(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount })
     .catch(() => undefined);
@@ -319,7 +328,27 @@ async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: nu
       subject: `tiền trả dư đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message: `khách trả thêm ${amount} qua ${channel} cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", chờ khách chọn nơi nhận. Đối chiếu sao kê/ZaloPay trước khi chuyển khoản.`,
+        message: `ZaloPay xác nhận khách trả thêm ${amount} (một lệnh thanh toán khác) cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", chờ khách chọn nơi nhận.`,
+      }),
+    },
+  ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
+}
+
+async function announceUnverifiedOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number, reportedTotal: number) {
+  const amount = formatVnd(rawAmount);
+  ctx.logger.warn(`Pancake báo đơn ${order.code} đã nhận ${formatVnd(reportedTotal)} (tổng đơn ${formatVnd(order.total)}) — khoản dư ${amount} chờ admin đối soát.`);
+  await notifyAdmins(
+    { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
+    {
+      template: OPS_REFUND_TEMPLATE,
+      subject: `tiền trả dư chờ đối soát đơn ${order.code}`,
+      data: () => ({
+        order_code: order.code,
+        message:
+          `Pancake báo đã nhận ${formatVnd(reportedTotal)} cho đơn đã nhận đủ ${formatVnd(order.total)} — có thể khách chuyển dư ${amount}. ` +
+          'Khách CHƯA được báo. Đối chiếu sao kê: đúng là khách chuyển dư thì ở mục Hoàn tiền khách, bộ lọc "Chờ đối soát", bấm ' +
+          '"Xác nhận tiền dư" (khách được báo để chọn nhận về Ví hay ngân hàng); cùng một lần chuyển hoặc nhân viên sửa đơn trên ' +
+          'Pancake thì bấm "Không phải tiền dư".',
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));

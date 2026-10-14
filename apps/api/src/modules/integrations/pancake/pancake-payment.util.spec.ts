@@ -1,4 +1,4 @@
-import { isPancakeOrderPaid } from './pancake-payment.util';
+import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
 
 describe('isPancakeOrderPaid', () => {
   it('prepaid >= tổng đơn → đã trả', () => {
@@ -23,5 +23,24 @@ describe('isPancakeOrderPaid', () => {
 
   it('tổng đơn 0 (không hợp lệ) → false', () => {
     expect(isPancakeOrderPaid({ prepaid: 0 }, 0)).toBe(false);
+  });
+});
+
+describe('pancakePaidAmount / pancakePaidAmountAfterPaid', () => {
+  it('trước khi Tubu ghi số đã trả lên Pancake: cộng prepaid + bank_payment', () => {
+    expect(pancakePaidAmount({ prepaid: 114000, bank_payment: 36000 })).toBe(150000);
+  });
+
+  it('đơn đã nhận đủ: prepaid (Tubu tự ghi transfer_money) + bank_payment (nhân viên ghi) cùng một lần chuyển → không cộng đôi', () => {
+    expect(pancakePaidAmountAfterPaid({ prepaid: 114000, bank_payment: 114000 })).toBe(114000);
+  });
+
+  it('đơn đã nhận đủ: một ô vượt tổng đơn thì vẫn thấy', () => {
+    expect(pancakePaidAmountAfterPaid({ prepaid: 114000, bank_payment: 228000 })).toBe(228000);
+    expect(pancakePaidAmountAfterPaid({ prepaid: '228000' })).toBe(228000);
+  });
+
+  it('payload rác / âm → 0', () => {
+    expect(pancakePaidAmountAfterPaid({ prepaid: 'x', bank_payment: -5 })).toBe(0);
   });
 });

@@ -1426,10 +1426,15 @@ enum CustomerRefundMethod {
 
 /// PROCESSING: admin đã bấm "Đang chuyển khoản" — nơi nhận bị khoá (khách không đổi sang Ví được nữa) cho tới khi
 /// admin xác nhận đã chuyển (COMPLETED) hoặc trả lại hàng chờ (PENDING).
+/// UNVERIFIED: tín hiệu chưa xác thực (Pancake báo khách trả dư) — khách không thấy, không chọn nơi nhận được; admin đối
+/// chiếu sao kê rồi xác nhận (PENDING, báo khách) hoặc bỏ qua (DISMISSED: không nợ khách, giữ lại để Pancake báo lại cùng
+/// số không tạo khoản mới).
 enum CustomerRefundStatus {
   PENDING
   PROCESSING
   COMPLETED
+  UNVERIFIED
+  DISMISSED
 }
 
 /// Vì sao Tubu nợ khách khoản này (D2). END_CUSTOMER: đơn CTV lên hộ, hoàn cho khách cuối (C-001).
