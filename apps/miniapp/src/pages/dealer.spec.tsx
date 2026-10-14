@@ -198,6 +198,12 @@ describe('DealerPage — đúng một h1 ở mọi trạng thái (C-114)', () =>
     expect(h1Count()).toBe(1);
   });
 
+  it('hồ sơ bị từ chối: hiện lý do admin ghi để người đăng ký sửa đúng chỗ (SELLER-12)', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'REJECTED', rejectionReason: 'Ảnh CCCD mờ' });
+    renderPage();
+    expect(await screen.findByText('Lý do: Ảnh CCCD mờ')).toBeInTheDocument();
+  });
+
   it('hồ sơ đang chờ duyệt', async () => {
     mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'PENDING' });
     renderPage();

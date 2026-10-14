@@ -5,6 +5,7 @@ import { PancakeClient } from './pancake.client';
 import { PANCAKE_CANCEL, PANCAKE_PUSH, PANCAKE_PUSHABLE_STATUSES, PancakeOrderService } from './pancake-order.service';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
+import { TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
 import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
@@ -75,6 +76,8 @@ export class PancakePushReconcileService {
       const stale = await this.prisma.order.findMany({
         where: {
           pancakeOrderId: null,
+          // Đơn đối tác tự giao không đi Pancake (docs/2026-10-14-merchant-fulfilment-design.md mục 9).
+          ...TUBU_FULFILLED_ORDER_WHERE,
           // Chỉ đơn còn trong kho: đơn đã huỷ/trả không tồn tại để giao, đơn đã rời kho/đã giao mà đẩy thì giao 2 lần.
           status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
           createdAt: { lt: cutoff, gte: maxAge },
@@ -164,6 +167,7 @@ export class PancakePushReconcileService {
       const overdue = await this.prisma.order.findMany({
         where: {
           pancakeOrderId: null,
+          ...TUBU_FULFILLED_ORDER_WHERE,
           status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
           createdAt: { lt: maxAge },
           OR: [{ pancakePushStatus: null }, { pancakePushStatus: { notIn: [PANCAKE_PUSH.STALE] } }],
@@ -202,6 +206,7 @@ export class PancakePushReconcileService {
       const due = await this.prisma.order.findMany({
         where: {
           status: 'CANCELLED',
+          ...TUBU_FULFILLED_ORDER_WHERE,
           pancakeCancelStatus: { in: [PANCAKE_CANCEL.PENDING, PANCAKE_CANCEL.FAILED] },
           // updatedAt đổi theo mỗi lần thử (ghi lỗi) nên chỉ dùng để chừa job đang chạy; cửa sổ tính từ ngày đặt.
           updatedAt: { lt: new Date(now - PancakePushReconcileService.STALE_MINUTES * 60_000) },
@@ -227,6 +232,7 @@ export class PancakePushReconcileService {
       const due = await this.prisma.order.findMany({
         where: {
           pancakeOrderId: { not: null },
+          ...TUBU_FULFILLED_ORDER_WHERE,
           pancakePaymentSynced: false,
           paymentStatus: 'PAID',
           paymentMethod: { in: [...PREPAID_METHODS] },

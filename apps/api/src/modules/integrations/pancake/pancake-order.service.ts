@@ -14,8 +14,8 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { isPrepaidMethod } from '../../orders/order-transition';
 import { resolveDealerRecipient } from '../../dealer/dealer-recipient';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
+import { isMerchantFulfilledOrder, isPancakeFulfilledLine, TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
 import {
-  ALL_LINES,
   buildPancakeOrderBody,
   isPancakePrepaid,
   pancakePaymentState,
@@ -68,7 +68,8 @@ export const PANCAKE_CANCEL = {
 /** Trạng thái đơn Tubu còn được tự đẩy sang kho: chưa rời kho, chưa kết thúc. */
 export const PANCAKE_PUSHABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] as const;
 
-export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'WAIT_STOCK' | 'DEAD' | 'LEFT_WAREHOUSE';
+/** MERCHANT = đơn gian hàng đối tác tự giao (D4): không thuộc kho Tubu, không bao giờ lên Pancake. */
+export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'WAIT_STOCK' | 'DEAD' | 'LEFT_WAREHOUSE' | 'MERCHANT';
 
 /**
  * Đơn có được đẩy sang kho lúc này không. Trả trước qua cổng (ZaloPay/VNPay/Ví) chưa PAID thì chờ tiền — kho không
@@ -81,8 +82,10 @@ export function pancakePushGate(order: {
   paymentMethod: string;
   paymentStatus: string;
   type: string;
+  fulfiller?: string | null;
   items: { backorderedQty?: number | null }[];
 }): PancakePushGate {
+  if (isMerchantFulfilledOrder(order)) return 'MERCHANT';
   if (order.status === 'CANCELLED' || order.status === 'RETURNED') return 'DEAD';
   if (!(PANCAKE_PUSHABLE_STATUSES as readonly string[]).includes(order.status)) return 'LEFT_WAREHOUSE';
   if (isDealerAwaitingStock(order)) return 'WAIT_STOCK';
@@ -123,9 +126,6 @@ export class PancakeOrderService {
   /** Quá mốc này mà đơn vẫn PUSHING thì coi tiến trình đẩy trước đã chết. Dài hơn timeout gọi Pancake (15s). */
   static readonly PUSH_LEASE_MS = 60_000;
 
-  /** Vị từ dòng do Tubu giao qua Pancake (D4: dòng nhà bán tự giao bị lọc ra). Mặc định mọi dòng. */
-  protected isPancakeLine: PancakeLinePredicate = ALL_LINES;
-
   /** Xếp hàng đẩy đơn (retry + backoff — jobs/queue.module.ts). Gọi lặp an toàn, xem pancake-queue.ts. */
   enqueuePush(orderId: string): Promise<void> {
     return enqueuePancakePush(this.pushQueue, orderId);
@@ -144,6 +144,7 @@ export class PancakeOrderService {
     if (order.pancakeOrderId) return order.pancakeOrderId; // đã đẩy
 
     const gate = pancakePushGate(order);
+    if (gate === 'MERCHANT') return null; // D4: gian hàng đối tác tự giao, không ghi gì lên cột đồng bộ Pancake
     if (gate === 'DEAD') {
       await this.setPushStatus(order.id, PANCAKE_PUSH.SKIPPED);
       // Lần tạo trước có thể đã thành công rồi đơn mới bị huỷ: huỷ luôn bên Pancake (job tra theo mã đơn).
@@ -171,12 +172,20 @@ export class PancakeOrderService {
       return null;
     }
 
+    // D4: chỉ dòng isPancakeFulfilledLine tới kho; mã giả MCH_ / id nội bộ không bao giờ thay mã biến thể Pancake.
+    const variations = await this.variationsOf(order);
+    const isPancakeLine = this.pancakeLinesOf(variations);
+    const pancakeLineCount = order.items.filter(isPancakeLine).length;
+    const skipped = order.items.length - pancakeLineCount;
+    if (skipped > 0) await this.flagUnpushableLines(order.id, order.code, skipped, pancakeLineCount === 0);
+    if (pancakeLineCount === 0) return null;
+
     const { body, paymentSynced } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
-      variations: await this.variationsOf(order),
+      variations,
       onDealerCredit: await this.isOnDealerCredit(order),
       recyclingNote: await this.buildRecyclingNote(order),
-      isPancakeLine: this.isPancakeLine,
+      isPancakeLine,
     });
 
     // Giữ quyền đẩy (một tiến trình một lúc): job push, job thanh toán và cron có thể cùng chạm một đơn. Tiến trình
@@ -186,6 +195,7 @@ export class PancakeOrderService {
       where: {
         id: order.id,
         pancakeOrderId: null,
+        ...TUBU_FULFILLED_ORDER_WHERE,
         status: { in: [...PANCAKE_PUSHABLE_STATUSES] },
         NOT: DEALER_AWAITING_STOCK_WHERE,
         OR: [
@@ -274,6 +284,9 @@ export class PancakeOrderService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (order.pancakeOrderId) throw new BadRequestException(`Đơn ${order.code} đã có trên Pancake (#${order.pancakeOrderId}).`);
     const gate = pancakePushGate(order);
+    if (gate === 'MERCHANT') {
+      throw new BadRequestException(`Đơn ${order.code} do gian hàng đối tác tự giao — không đẩy sang kho Pancake.`);
+    }
     if (gate === 'DEAD') throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả, không đẩy sang kho.`);
     if (gate === 'LEFT_WAREHOUSE') {
       throw new BadRequestException(`Đơn ${order.code} đã ở trạng thái ${order.status} — không đẩy để tránh kho giao lần hai.`);
@@ -302,6 +315,7 @@ export class PancakeOrderService {
   async syncPayment(orderId: string, final = false): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
     if (order.pancakePaymentSynced || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
+    if (isMerchantFulfilledOrder(order)) return;
     if (!order.pancakeOrderId) {
       await this.pushOrder(order.id);
       return;
@@ -310,12 +324,13 @@ export class PancakeOrderService {
     const state = pancakePaymentState(order, onCredit);
     if (!isPancakePrepaid(state)) return;
     if (!this.client.isConfigured()) return;
+    const variations = await this.variationsOf(order);
     const { body, amountDue } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
-      variations: await this.variationsOf(order),
+      variations,
       onDealerCredit: onCredit,
       recyclingNote: await this.buildRecyclingNote(order),
-      isPancakeLine: this.isPancakeLine,
+      isPancakeLine: this.pancakeLinesOf(variations),
     });
     try {
       await this.client.updateOrder(order.pancakeOrderId, {
@@ -348,6 +363,7 @@ export class PancakeOrderService {
   async cancelOnPancake(orderId: string, final = false): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.status !== 'CANCELLED') return;
+    if (isMerchantFulfilledOrder(order)) return; // D4: chưa từng lên Pancake, không gọi Pancake
     const settled: string[] = [PANCAKE_CANCEL.CANCELLED, PANCAKE_CANCEL.NOT_FOUND, PANCAKE_CANCEL.TOO_LATE];
     if (order.pancakeCancelStatus && settled.includes(order.pancakeCancelStatus)) return;
     if (!mayExistOnPancake(order)) {
@@ -519,9 +535,31 @@ export class PancakeOrderService {
   private async variationsOf(order: OrderWithItems) {
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: order.items.map((i) => i.variationId) } },
-      select: { id: true, pancakeId: true, retailPrice: true },
+      select: { id: true, pancakeId: true, retailPrice: true, product: { select: { fulfilment: true } } },
     });
-    return new Map(variations.map((v) => [v.id, { pancakeId: v.pancakeId, retailPrice: v.retailPrice }]));
+    return new Map(
+      variations.map((v) => [v.id, { pancakeId: v.pancakeId, retailPrice: v.retailPrice, fulfilment: v.product?.fulfilment ?? null }]),
+    );
+  }
+
+  /** Dòng do kho Tubu giao (isPancakeFulfilledLine): có mã biến thể Pancake thật, sản phẩm không phải đối tác tự giao. */
+  private pancakeLinesOf(variations: Map<string, { pancakeId: string | null; fulfilment: string | null }>): PancakeLinePredicate {
+    return (line) => {
+      const v = variations.get(line.variationId);
+      return v != null && isPancakeFulfilledLine(v);
+    };
+  }
+
+  /** Dòng không có mã Pancake trên đơn kho Tubu (đơn cũ lẫn hàng đối tác, dữ liệu lỗi): admin xử lý tay qua hàng đợi Pancake. */
+  private async flagUnpushableLines(orderId: string, code: string, count: number, none: boolean): Promise<void> {
+    const reason = none
+      ? `Đơn không có dòng nào có mã Pancake hợp lệ (${count} dòng) — chưa gửi kho, cần xử lý tay.`
+      : `${count} dòng không có mã Pancake (hàng đối tác tự giao hoặc dữ liệu lỗi) — chỉ gửi kho phần còn lại, xử lý tay phần này.`;
+    this.logger.warn(`Đơn ${code}: ${reason}`);
+    await this.prisma.order.updateMany({
+      where: { id: orderId, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
+    });
   }
 
   /** Đơn đại lý ghi công nợ — cùng điều kiện DealerService.confirmDealerOrderPayment dùng để nhận diện. */

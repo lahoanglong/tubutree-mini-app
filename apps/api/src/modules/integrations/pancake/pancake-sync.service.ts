@@ -1,4 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
@@ -6,11 +7,10 @@ import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
-/** SP/biến thể merchant tự tạo — không có trên Pancake, quét toàn bộ không được đụng. */
-const MERCHANT_PANCAKE_PREFIX = 'MCH_';
 /**
  * Quét toàn bộ mà "biến mất" quá tỉ lệ này thì nhiều khả năng Pancake trả thiếu (lỗi phân trang, token
  * sai shop…) chứ không phải shop xoá hàng loạt — không tắt gì, chỉ log lỗi để người kiểm tra.
@@ -202,13 +202,18 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.error('Quét toàn bộ Pancake trả 0 sản phẩm — không tắt gì (nghi Pancake trả thiếu).');
       return;
     }
-    const notMerchant = { NOT: { pancakeId: { startsWith: MERCHANT_PANCAKE_PREFIX } } };
+    // Hàng không có mã Pancake (đối tác tự giao, sản phẩm đối tác "Tubu giao hộ" mà biến thể mới mang mã) không thuộc
+    // danh mục Pancake — quét toàn bộ không được đụng.
+    const onPancake = {
+      pancakeId: { not: null },
+      NOT: { pancakeId: { startsWith: LEGACY_FAKE_PANCAKE_PREFIX } },
+    } satisfies Prisma.VariationWhereInput & Prisma.ProductWhereInput;
     const [vars, prods] = await Promise.all([
-      this.prisma.variation.findMany({ where: { isActive: true, ...notMerchant }, select: { id: true, pancakeId: true } }),
-      this.prisma.product.findMany({ where: { isActive: true, ...notMerchant }, select: { id: true, pancakeId: true } }),
+      this.prisma.variation.findMany({ where: { isActive: true, ...onPancake }, select: { id: true, pancakeId: true } }),
+      this.prisma.product.findMany({ where: { isActive: true, ...onPancake }, select: { id: true, pancakeId: true } }),
     ]);
-    const goneVars = vars.filter((v) => !seen.variations.has(v.pancakeId));
-    const goneProds = prods.filter((p) => !seen.products.has(p.pancakeId));
+    const goneVars = vars.filter((v) => v.pancakeId !== null && !seen.variations.has(v.pancakeId));
+    const goneProds = prods.filter((p) => p.pancakeId !== null && !seen.products.has(p.pancakeId));
     if (goneVars.length === 0 && goneProds.length === 0) return;
     if (goneVars.length > vars.length * MAX_REMOVED_RATIO || goneProds.length > prods.length * MAX_REMOVED_RATIO) {
       this.logger.error(

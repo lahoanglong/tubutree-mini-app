@@ -71,6 +71,33 @@ export interface CartLine {
   soldPct?: number | null;
   /** Có khi số lượng vượt suất giờ vàng khách còn mua được: dòng đang tính giá thường, đây là lý do. */
   flashLimitNotice?: string | null;
+  /** Nơi giao dòng này (D4): kho Tubu, gian hàng đối tác tự giao, hoặc không giao được. API cũ chưa trả. */
+  fulfiller?: LineFulfiller;
+}
+
+export interface LineFulfiller {
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  storefrontId: string | null;
+  name: string;
+}
+/** Một kiện của lần đặt: mỗi nơi giao thành một đơn riêng với phí giao và tổng riêng. */
+export interface QuoteShipment {
+  key: string;
+  fulfiller: LineFulfiller;
+  itemIds: string[];
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  total: number;
+}
+/** Đơn cùng lần đặt bị tách theo nơi giao (kể cả chính đơn này). */
+export interface SplitOrderDTO {
+  id: string;
+  code: string;
+  total: number;
+  status: string;
+  fulfiller: 'TUBU' | 'MERCHANT';
+  fulfillerName: string;
 }
 
 /** Dòng giỏ có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
@@ -113,6 +140,9 @@ export interface CheckoutQuote {
   total: number;
   pointsEarned: number;
   pointsBalance: number;
+  shipments?: QuoteShipment[];
+  /** Phương thức không dùng được cho giỏ này → câu giải thích (ví dụ có hàng đối tác tự giao). */
+  blockedPaymentMethods?: Record<string, string>;
 }
 
 export interface AddressDTO {
@@ -142,6 +172,8 @@ export interface PublicConfig {
   affiliateWalletMultiplier: number;
   /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
   affiliateMinWithdrawBank: number;
+  /** Thuế TNCN khấu trừ khi rút hoa hồng: `pct` (phân số) áp cho lần rút từ `threshold`; thiếu khi API cũ. */
+  affiliatePitWithhold?: { pct: number; threshold: number };
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;
   /**
@@ -393,7 +425,7 @@ export const placeOrder = (
   idempotencyKey: string,
 ) =>
   api
-    .post<OrderDTO>('/checkout/place-order', body, {
+    .post<PlacedOrder>('/checkout/place-order', body, {
       headers: { 'Idempotency-Key': idempotencyKey },
     })
     .then((r) => r.data);
@@ -470,7 +502,15 @@ export interface OrderItemMedia {
   currentPrice?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
-export type OrderView = Omit<OrderDTO, 'items'> & { items: OrderItemView[] };
+export type OrderView = Omit<OrderDTO, 'items'> & {
+  items: OrderItemView[];
+  /** Ai giao đơn này (D4). API cũ chưa trả. */
+  fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
+  /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
+  siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
+};
+/** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
+export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };
 
 export type OrderStatusGroup = 'processing' | 'closed';
 export interface OrderListFilter {

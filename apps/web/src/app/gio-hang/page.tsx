@@ -8,6 +8,7 @@ import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-c
 import { CouponBox } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
+import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 
 export default function CartPage() {
   const phase = useAuthPhase();
@@ -46,9 +47,15 @@ export default function CartPage() {
   }
 
   const cart = cartQ.data;
-  const remainingFreeship = cart ? Math.max(0, cart.freeshipThreshold - cart.subtotal) : 0;
   // Checkout sẽ từ chối dòng hết hàng/vượt tồn: chặn từ giỏ để khách biết phải sửa gì thay vì gặp lỗi ở bước sau.
   const stockBlocked = !!cart?.items.some((it) => it.stock <= 0 || it.quantity > it.stock);
+  // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
+  const groups = groupByFulfiller(cart?.items ?? []);
+  const withHeaders = showFulfillerHeaders(groups);
+  const hasMerchant = groups.some((g) => g.fulfiller.kind === 'MERCHANT');
+  const freeshipBase = cart ? (hasMerchant ? tubuSubtotal(cart.items) : cart.subtotal) : 0;
+  const remainingFreeship =
+    cart && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
 
   return (
     <Shell>
@@ -108,85 +115,105 @@ export default function CartPage() {
                 <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
                 <span>
                   Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí vận chuyển
+                  {hasMerchant ? ' phần hàng Tubu Tree giao' : ''}
                 </span>
               </div>
             )}
-            <div className={`divide-y divide-stone-200 ${ui.card}`}>
-              {cart.items.map((it) => {
-                // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
-                const soldOut = it.stock <= 0;
-                const atMax = !soldOut && it.quantity >= it.stock;
-                const busy = busyItemId === it.id;
-                return (
-                  <div key={it.id} className="flex gap-3 p-3">
-                    <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
-                      {it.thumbnail ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
-                      ) : (
-                        <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words text-sm font-medium text-stone-900">{it.productName}</div>
-                      <div className="break-words text-xs text-stone-600">{it.variationName}</div>
-                      <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
-                      {soldOut && (
-                        <p className="mt-1 text-xs font-semibold text-danger-fg">Hết hàng — hãy xóa khỏi giỏ để tiếp tục thanh toán</p>
-                      )}
-                      {!soldOut && atMax && (
-                        <p className="mt-1 text-xs font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
-                      )}
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2">
-                        {!soldOut && (
-                          <div className="flex items-center rounded-control border border-stone-450 text-sm">
+            {withHeaders && (
+              <p className="mb-3 text-xs text-stone-600">
+                Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
+              </p>
+            )}
+            <div className="space-y-3">
+              {groups.map((g) => (
+                <section
+                  key={g.key}
+                  aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}
+                  className={`divide-y divide-stone-200 ${ui.card}`}
+                >
+                  {withHeaders && (
+                    <h2 className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-900">
+                      <Truck className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                      {fulfillerLabel(g.fulfiller)}
+                    </h2>
+                  )}
+                  {g.items.map((it) => {
+                    // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
+                    const soldOut = it.stock <= 0;
+                    const atMax = !soldOut && it.quantity >= it.stock;
+                    const busy = busyItemId === it.id;
+                    return (
+                      <div key={it.id} className="flex gap-3 p-3">
+                        <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
+                          {it.thumbnail ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.thumbnail} alt={it.productName} className="h-full w-full object-cover" />
+                          ) : (
+                            <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words text-sm font-medium text-stone-900">{it.productName}</div>
+                          <div className="break-words text-xs text-stone-600">{it.variationName}</div>
+                          <div className="mt-1 font-semibold text-stone-900">{formatVnd(it.unitPrice)}</div>
+                          {soldOut && (
+                            <p className="mt-1 text-xs font-semibold text-danger-fg">Hết hàng — hãy xóa khỏi giỏ để tiếp tục thanh toán</p>
+                          )}
+                          {!soldOut && atMax && (
+                            <p className="mt-1 text-xs font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
+                          )}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2">
+                            {!soldOut && (
+                              <div className="flex items-center rounded-control border border-stone-450 text-sm">
+                                <button
+                                  type="button"
+                                  onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                                  disabled={busy}
+                                  aria-label={`Giảm số lượng ${it.productName}`}
+                                  className="h-11 w-11 text-lg disabled:opacity-40"
+                                >
+                                  −
+                                </button>
+                                <span className="w-7 text-center text-stone-900" aria-live="polite">
+                                  {it.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
+                                  disabled={busy || atMax}
+                                  aria-label={`Tăng số lượng ${it.productName}`}
+                                  className="h-11 w-11 text-lg disabled:opacity-40"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
                             <button
                               type="button"
-                              onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                              onClick={() => remove.mutate(it.id)}
                               disabled={busy}
-                              aria-label={`Giảm số lượng ${it.productName}`}
-                              className="h-11 w-11 text-lg disabled:opacity-40"
+                              aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
+                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 ${
+                                soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
+                              }`}
                             >
-                              −
-                            </button>
-                            <span className="w-7 text-center text-stone-900" aria-live="polite">
-                              {it.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
-                              disabled={busy || atMax}
-                              aria-label={`Tăng số lượng ${it.productName}`}
-                              className="h-11 w-11 text-lg disabled:opacity-40"
-                            >
-                              +
+                              Xóa
                             </button>
                           </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => remove.mutate(it.id)}
-                          disabled={busy}
-                          aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
-                          className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 ${
-                            soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
-                          }`}
-                        >
-                          Xóa
-                        </button>
+                          {failedItemId === it.id && (
+                            <p role="alert" className="mt-1 text-xs text-danger-fg">
+                              {(update.error ?? remove.error) instanceof Error
+                                ? (update.error ?? remove.error)?.message
+                                : 'Cập nhật giỏ hàng thất bại.'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-none font-semibold text-stone-900">{formatVnd(it.total)}</div>
                       </div>
-                      {failedItemId === it.id && (
-                        <p role="alert" className="mt-1 text-xs text-danger-fg">
-                          {(update.error ?? remove.error) instanceof Error
-                            ? (update.error ?? remove.error)?.message
-                            : 'Cập nhật giỏ hàng thất bại.'}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex-none font-semibold text-stone-900">{formatVnd(it.total)}</div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </section>
+              ))}
             </div>
           </div>
 

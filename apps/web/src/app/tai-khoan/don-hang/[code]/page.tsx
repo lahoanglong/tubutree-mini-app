@@ -114,6 +114,35 @@ export default function OrderDetailPage() {
         </p>
       )}
 
+      {o.fulfilment?.kind === 'MERCHANT' && (
+        <p className="mt-2 text-sm text-stone-700">
+          Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
+          {o.fulfilment.phone && (
+            <>
+              {' '}· Liên hệ gian hàng: <span className="font-semibold text-stone-900">{o.fulfilment.phone}</span>
+            </>
+          )}
+        </p>
+      )}
+      {(o.siblings?.length ?? 0) > 0 && (
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm ${ui.card}`}>
+          <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
+          <ul className="mt-1 space-y-1">
+            {o.siblings!.map((sb) => (
+              <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+                    {sb.code}
+                  </Link>{' '}
+                  · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
+                </span>
+                <span className="font-semibold text-stone-900">{formatVnd(sb.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {(canPayAgain(o) || paidNotice) && (
         <div className="mt-2">
           {canPayAgain(o) && (

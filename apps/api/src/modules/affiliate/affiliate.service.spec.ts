@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { BadRequestException } from '@nestjs/common';
 import { AffiliateService } from './affiliate.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -207,7 +208,7 @@ describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho l
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: { updateMany },
+      commission: { updateMany, findMany: jest.fn().mockResolvedValue([{ affiliateUserId: 'ctv', amount: 12_000 }]) },
     } as unknown as PrismaService;
     return { prisma, updateMany };
   }
@@ -804,9 +805,10 @@ describe('AffiliateService.getMilestones holdDays hiển thị = số ngày gi�
 });
 
 describe('AffiliateService.requestPayout (money safety)', () => {
-  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number }) {
+  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number; taxId?: string | null }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
     const userUpdate = jest.fn().mockResolvedValue({});
+    const userFindUnique = jest.fn().mockResolvedValue({ personalTaxId: opts.taxId ?? null });
     const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
     const updateMany = jest.fn().mockResolvedValue({ count: opts.markCount ?? rows.length });
     const prisma = {
@@ -815,13 +817,13 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         findMany: jest.fn().mockResolvedValue(rows),
         updateMany,
       },
-      user: { update: userUpdate },
+      user: { update: userUpdate, findUnique: userFindUnique },
       payout: { create: payoutCreate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-    return { prisma, userUpdate, payoutCreate, updateMany };
+    return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany };
   }
 
   it('số dư khả dụng = 0 → BadRequest', async () => {
@@ -986,7 +988,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     );
   });
 
-  it('BANK hợp lệ → payout.amount = TỔNG THỰC + mark PAID + gán batch', async () => {
+  it('BANK hợp lệ → payout.amount = TỔNG THỰC + gán batch, hoa hồng vẫn APPROVED ("Đang rút") tới khi admin chuyển tiền (SELLER-10)', async () => {
     const { prisma, payoutCreate, updateMany } = makePrisma({
       available: 100_000,
       rows: [{ id: 'c1', amount: 100_000 }],
@@ -996,7 +998,65 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(r.status).toBe('REQUESTED');
     expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000);
     expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
-    expect(updateMany.mock.calls[0][0].data.status).toBe('PAID');
+    expect(updateMany.mock.calls[0][0].data.status).toBeUndefined();
+    expect(updateMany.mock.calls[0][0].data.paidAt).toBeUndefined();
+  });
+
+  // SELLER-11: trả hoa hồng cho cá nhân từ 2.000.000đ/lần thì tổ chức trả thu nhập khấu trừ 10% thuế TNCN (TT 111/2013).
+  it('SELLER-11: rút từ ngưỡng 2.000.000đ → lưu gross, thuế khấu trừ 10%, amount = thực nhận, MST đã khai', async () => {
+    const { prisma, payoutCreate } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }], taxId: '079201001234' });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 2_500_000, 'BANK', {
+      bankName: 'VCB',
+      accountNumber: '0123456789',
+      accountName: 'NGUYEN A',
+    });
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ grossAmount: 2_500_000, taxWithheld: 250_000, amount: 2_250_000, taxId: '079201001234' }),
+    );
+  });
+
+  it('SELLER-11: lần rút bị khấu trừ mà CTV chưa khai MST/CCCD → 400 PIT_TAX_ID_REQUIRED, không tạo lệnh, không khoá hoa hồng', async () => {
+    for (const method of ['BANK', 'WALLET_BALANCE']) {
+      const { prisma, payoutCreate, updateMany } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }] });
+      const err = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics)
+        .requestPayout('u1', 2_500_000, method, { bankName: 'VCB', accountNumber: '0123456789', accountName: 'NGUYEN A' })
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(expect.objectContaining({ code: 'PIT_TAX_ID_REQUIRED' }));
+      expect(payoutCreate).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it('SELLER-11: CTV khai MST/CCCD ngay trong lần rút → lưu vào hồ sơ và chụp vào lệnh rút', async () => {
+    const { prisma, payoutCreate, userUpdate } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }] });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout(
+      'u1',
+      2_500_000,
+      'WALLET_BALANCE',
+      undefined,
+      undefined,
+      ' 079201001234 ',
+    );
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { personalTaxId: '079201001234' } });
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 250_000, taxId: '079201001234' }));
+  });
+
+  it('SELLER-11: dưới ngưỡng không bắt khai MST', async () => {
+    const { prisma, payoutCreate } = makePrisma({ available: 500_000, rows: [{ id: 'c1', amount: 500_000 }] });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 500_000, 'WALLET_BALANCE');
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0 }));
+  });
+
+  it('SELLER-11: dưới ngưỡng → không khấu trừ; cấu hình 0% → tắt', async () => {
+    const small = makePrisma({ available: 1_999_000, rows: [{ id: 'c1', amount: 1_999_000 }] });
+    await new AffiliateService(small.prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 1_999_000, 'BANK', {});
+    expect(small.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 1_999_000 }));
+
+    const off = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.pit_withhold_pct' ? 0 : fb) as T } as unknown as SystemConfigService;
+    const big = makePrisma({ available: 5_000_000, rows: [{ id: 'c1', amount: 5_000_000 }] });
+    await new AffiliateService(big.prisma, off, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 5_000_000, 'BANK', {});
+    expect(big.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 5_000_000 }));
   });
 
   it('BANK: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG trả payout REQUESTED (Bug 4 fix)', async () => {
@@ -1407,7 +1467,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     );
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
     expect(commissionUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: 'PAID' },
+      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
       data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
     });
     expect(userUpdate).not.toHaveBeenCalled();
@@ -1505,5 +1565,82 @@ describe('AffiliateService.listLinks (giới hạn, C-100)', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 200, cursor: { id: 'l9' }, skip: 1 }),
     );
+  });
+});
+
+describe('AffiliateService — báo cáo khấu trừ thuế TNCN (SELLER-11)', () => {
+  const paid = (o: Record<string, unknown>) => ({
+    id: 'p',
+    userId: 'u1',
+    method: 'BANK',
+    grossAmount: 2_500_000,
+    taxWithheld: 250_000,
+    amount: 2_250_000,
+    taxId: '079201001234',
+    paidAt: new Date('2026-10-10T03:00:00Z'),
+    user: { fullName: 'Nguyễn An', phone: '0901234567', personalTaxId: '079201001234' },
+    ...o,
+  });
+
+  function svcWith(rows: unknown[], user: unknown = { fullName: 'Nguyễn An', personalTaxId: '079201001234' }) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma = {
+      payout: { findMany },
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+    } as unknown as PrismaService;
+    return { svc: new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics), findMany };
+  }
+
+  it('báo cáo tháng (giờ VN): chỉ lệnh rút hoa hồng đã chi trong tháng, gộp theo người nhận, MST theo số đã kê khai', async () => {
+    const { svc, findMany } = svcWith([
+      paid({ id: 'p1' }),
+      paid({ id: 'p2', method: 'WALLET_BALANCE', grossAmount: 3_000_000, taxWithheld: 300_000, amount: 2_700_000 }),
+      paid({
+        id: 'p3',
+        userId: 'u2',
+        grossAmount: 800_000,
+        taxWithheld: 0,
+        amount: 800_000,
+        taxId: null,
+        user: { fullName: 'Trần Bình', phone: null, personalTaxId: null },
+      }),
+    ]);
+    const r = await svc.pitReport('2026-10');
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      status: 'PAID',
+      grossAmount: { not: null },
+      paidAt: { gte: new Date('2026-09-30T17:00:00Z'), lt: new Date('2026-10-31T17:00:00Z') },
+    });
+    expect(r.month).toBe('2026-10');
+    expect(r.rows).toEqual([
+      expect.objectContaining({ userId: 'u1', fullName: 'Nguyễn An', taxId: '079201001234', payoutCount: 2, grossAmount: 5_500_000, taxWithheld: 550_000, netAmount: 4_950_000 }),
+      expect.objectContaining({ userId: 'u2', taxId: null, payoutCount: 1, grossAmount: 800_000, taxWithheld: 0, netAmount: 800_000 }),
+    ]);
+    expect(r.totals).toEqual({ recipients: 2, withheldRecipients: 1, grossAmount: 6_300_000, taxWithheld: 550_000, netAmount: 5_750_000 });
+  });
+
+  it('tháng sai định dạng → 400', async () => {
+    const { svc } = svcWith([]);
+    await expect(svc.pitReport('2026-13')).rejects.toThrow(BadRequestException);
+  });
+
+  it('bảng kê năm của CTV: từng lần chi có khấu trừ, tổng thu nhập/thuế/thực nhận, MST hiện tại', async () => {
+    const { svc, findMany } = svcWith([paid({ id: 'p1' }), paid({ id: 'p2', grossAmount: 900_000, taxWithheld: 0, amount: 900_000, taxId: null })]);
+    const r = await svc.taxStatement('u1', 2026);
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      userId: 'u1',
+      status: 'PAID',
+      grossAmount: { not: null },
+      paidAt: { gte: new Date('2025-12-31T17:00:00Z'), lt: new Date('2026-12-31T17:00:00Z') },
+    });
+    expect(r).toEqual(
+      expect.objectContaining({
+        year: 2026,
+        fullName: 'Nguyễn An',
+        taxId: '079201001234',
+        totals: { grossAmount: 3_400_000, taxWithheld: 250_000, netAmount: 3_150_000 },
+      }),
+    );
+    expect(r.items.map((i) => i.id)).toEqual(['p1', 'p2']);
   });
 });

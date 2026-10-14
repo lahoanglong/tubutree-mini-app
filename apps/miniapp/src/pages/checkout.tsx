@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
-import type { OrderDTO } from '@tubutree/shared-types';
-import { getAddresses, getCart, checkoutQuote, placeOrder } from '../services/shop-api';
+import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
+import { fulfillerLabel } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
@@ -70,7 +70,7 @@ export default function CheckoutPage() {
   // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
-  const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   const [totalChanged, setTotalChanged] = useState<string | null>(null);
   // Lỗi đặt đơn chỉ sửa được ở giỏ (hết tồn, vượt suất giờ vàng): giữ trên màn kèm đường về giỏ, không để toast trôi mất.
@@ -149,10 +149,11 @@ export default function CheckoutPage() {
   const zeroNote = quote.data ? zeroTotalNote(quote.data) : null;
   const paymentToSend = zeroNote ? 'COD' : payment;
 
-  // Đang chọn Ví mà tổng đơn vượt số dư → tự trả về COD, tránh đặt fail.
+  // Đang chọn Ví mà tổng đơn vượt số dư, hoặc phương thức bị máy chủ khoá cho giỏ này (có hàng gian hàng tự giao, D4)
+  // → tự trả về COD, tránh đặt fail.
   useEffect(() => {
     if (!quote.data) return;
-    if (shouldFallbackToCod(payment, walletBalanceLive, quote.data.total)) {
+    if (shouldFallbackToCod(payment, walletBalanceLive, quote.data.total) || quote.data.blockedPaymentMethods?.[payment]) {
       setPayment('COD');
     }
   }, [payment, quote.data, walletBalanceLive]);
@@ -325,9 +326,14 @@ export default function CheckoutPage() {
     { value: 'COD', label: vi.checkout.paymentCod, hint: null },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
-    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null },
+    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank, hint: null as string | null },
     { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)), hint: walletReason },
-  ].map((m) => ({ ...m, disabled: m.hint !== null }));
+  ]
+    .map((m) => ({ ...m, hint: quote.data?.blockedPaymentMethods?.[m.value] ?? m.hint }))
+    .map((m) => ({ ...m, disabled: m.hint !== null }));
+  // Mỗi nơi giao thành một đơn riêng (D4): chia danh sách món và phí giao theo kiện máy chủ báo.
+  const shipments = quote.data?.shipments ?? [];
+  const split = shipments.length > 1 || shipments.some((sh) => sh.fulfiller.kind === 'MERCHANT');
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -386,8 +392,27 @@ export default function CheckoutPage() {
           <Text bold size="small" style={{ marginBottom: 10 }}>
             Sản phẩm ({shownCount})
           </Text>
+          {split && (
+            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+              Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
+            </Text>
+          )}
+          {(split
+            ? shipments.map((sh) => ({ key: sh.key, shipment: sh, items: shownItems.filter((it) => sh.itemIds.includes(it.id)) }))
+            : [{ key: 'all', shipment: null, items: shownItems }]
+          ).map((grp) => (
+          <section
+            key={grp.key}
+            aria-label={grp.shipment ? fulfillerLabel(grp.shipment.fulfiller) : 'Sản phẩm trong đơn'}
+            style={{ marginBottom: grp.shipment ? 12 : 0 }}
+          >
+          {grp.shipment && (
+            <Text bold size="small" style={{ marginBottom: 8 }}>
+              {fulfillerLabel(grp.shipment.fulfiller)}
+            </Text>
+          )}
           <Box flex flexDirection="column" style={{ gap: 12 }}>
-            {shownItems.map((it) => (
+            {grp.items.map((it) => (
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
                 <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
@@ -407,6 +432,15 @@ export default function CheckoutPage() {
               </Box>
             ))}
           </Box>
+          {grp.shipment && (
+            <KeyValueRow
+              label="Phí giao"
+              value={grp.shipment.shippingFee === 0 ? vi.common.freeShip : formatVnd(grp.shipment.shippingFee)}
+              tone={grp.shipment.shippingFee === 0 ? 'success' : 'primary'}
+            />
+          )}
+          </section>
+          ))}
         </Box>
         ) : null;
       })()}

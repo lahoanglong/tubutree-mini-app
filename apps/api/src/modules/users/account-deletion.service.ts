@@ -229,6 +229,7 @@ export class AccountDeletionService {
         email: null,
         dob: null,
         avatarUrl: null,
+        personalTaxId: null,
         zaloId: null,
         zaloAccessToken: null,
         zaloRefreshToken: null,

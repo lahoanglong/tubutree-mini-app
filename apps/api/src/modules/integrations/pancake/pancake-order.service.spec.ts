@@ -185,6 +185,89 @@ describe('PancakeOrderService.pushOrder — người nhận, tag kênh (SELLER-2
   });
 });
 
+describe('PancakeOrderService — đơn/dòng gian hàng đối tác tự giao không bao giờ tới Pancake (D4 × P1)', () => {
+  const merchantVariations = {
+    variation: {
+      findMany: jest.fn().mockResolvedValue([{ id: 'vm', pancakeId: null, retailPrice: 100_000, product: { fulfilment: 'MERCHANT' } }]),
+    },
+  };
+  const merchantOrder = { fulfiller: 'MERCHANT', paymentMethod: 'WALLET', paymentStatus: 'PAID', items: [{ id: 'i1', variationId: 'vm', quantity: 1, unitPrice: 100_000 }] };
+
+  it('đơn MERCHANT → pushOrder không gọi Pancake, không ghi cột đồng bộ / cờ cần xử lý', async () => {
+    const t = setup(merchantOrder, { extra: merchantVariations });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(t.row()).toMatchObject({ pancakePushStatus: null, pancakeAttention: null, pancakePushClaimedAt: null });
+  });
+
+  it('đơn MERCHANT đã trả bằng Ví → job thanh toán (syncPayment) không đẩy, không PUT', async () => {
+    const t = setup(merchantOrder, { extra: merchantVariations });
+    await t.svc.syncPayment('o1', true);
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.client.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it('admin "Đẩy lại Pancake" trên đơn MERCHANT → 400, không xếp job', async () => {
+    const t = setup(merchantOrder, { extra: merchantVariations });
+    await expect(t.svc.retryPushByAdmin('admin1', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(t.queue.added).toEqual([]);
+  });
+
+  it('đơn MERCHANT đã huỷ → job huỷ không gọi Pancake, không ghi trạng thái huỷ Pancake', async () => {
+    const t = setup({ ...merchantOrder, status: 'CANCELLED' }, { extra: merchantVariations });
+    await t.svc.cancelOnPancake('o1', true);
+    expect(t.client.getOrder).not.toHaveBeenCalled();
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.client.updateOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakeCancelStatus).toBeNull();
+  });
+
+  it('mã giả MCH_ còn sót trên đơn kho Tubu → không tới Pancake, gắn cờ cần xử lý', async () => {
+    const t = setup({ items: [{ id: 'i1', variationId: 'vx', quantity: 1, unitPrice: 100_000 }] }, {
+      extra: { variation: { findMany: jest.fn().mockResolvedValue([{ id: 'vx', pancakeId: 'MCH_1791_abc_VAR', retailPrice: null, product: { fulfilment: 'TUBU' } }]) } },
+    });
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+    expect(t.row().pancakeAttention).toContain('chưa gửi kho');
+  });
+
+  it('đơn cũ lẫn hàng đối tác → chỉ gửi dòng Pancake (không id nội bộ, không MCH_), COD chia theo phần hàng Tubu', async () => {
+    const t = setup(
+      {
+        items: [
+          { id: 'i1', variationId: 'v1', quantity: 2, unitPrice: 50_000 },
+          { id: 'i2', variationId: 'vm', quantity: 1, unitPrice: 100_000 },
+          { id: 'i3', variationId: 'vgone', quantity: 1, unitPrice: 10_000 },
+        ],
+        subtotal: 210_000,
+        discount: 21_000,
+        shippingFee: 30_000,
+        total: 219_000,
+      },
+      {
+        extra: {
+          variation: {
+            findMany: jest.fn().mockResolvedValue([
+              { id: 'v1', pancakeId: 'pv1', retailPrice: 50_000, product: { fulfilment: 'TUBU' } },
+              { id: 'vm', pancakeId: null, retailPrice: 100_000, product: { fulfilment: 'MERCHANT' } },
+            ]),
+          },
+        },
+      },
+    );
+    expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+    const b = t.body();
+    expect(b.items.map((i) => i.variation_id)).toEqual(['pv1']);
+    expect(JSON.stringify(b)).not.toMatch(/"vm"|"vgone"|MCH_/);
+    // Phần hàng Tubu 100.000 / 210.000 → giảm 10.000; ship 30.000 → thu 120.000.
+    expect(b.cod).toBe(120_000);
+    expect(pancakeTotal(b)).toBe(120_000);
+    expect(t.row().pancakeAttention).toContain('2 dòng');
+  });
+});
+
 describe('PancakeOrderService.pushOrder — không đẩy đơn huỷ / đã rời kho (PANCAKE-3, PLATFORM-8)', () => {
   it('đơn đã CANCELLED (job retry chạy sau khi huỷ) → không tạo đơn, SKIPPED', async () => {
     const t = setup({ status: 'CANCELLED' });
@@ -536,7 +619,12 @@ describe('PancakeOrderService — xếp job (PLATFORM-1)', () => {
 
 describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdon)', () => {
   async function pushed(overrides: Record<string, unknown>, weights: { id: string; weight: number }[] = [], cfgValue?: unknown) {
-    const db = fakeOrderDb([baseOrder(overrides)], { variation: { findMany: jest.fn().mockResolvedValue(weights) } });
+    const order = baseOrder(overrides);
+    const rows = (order.items as { variationId: string }[]).map((it) => {
+      const w = weights.find((x) => x.id === it.variationId);
+      return { id: it.variationId, pancakeId: `p-${it.variationId}`, ...(w ? { weight: w.weight } : {}) };
+    });
+    const db = fakeOrderDb([order], { variation: { findMany: jest.fn().mockResolvedValue(rows) } });
     const client = fakeClient();
     const systemConfig = cfgValue === undefined ? undefined : ({ get: jest.fn().mockResolvedValue(cfgValue) } as never);
     await new PancakeOrderService(db.prisma as unknown as PrismaService, client as unknown as PancakeClient, fakeQueue() as never, systemConfig).pushOrder('o1');

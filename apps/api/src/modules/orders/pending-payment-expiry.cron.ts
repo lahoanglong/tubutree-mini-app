@@ -5,13 +5,16 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
-import { readPendingPaymentTtlHours } from './pending-payment-ttl';
+import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
 
 export {
+  DEALER_PENDING_PAYMENT_TTL_KEY,
+  DEFAULT_DEALER_PENDING_PAYMENT_TTL_HOURS,
   DEFAULT_PENDING_PAYMENT_TTL_HOURS,
   MAX_TTL_HOURS,
   MIN_TTL_HOURS,
   PENDING_PAYMENT_TTL_KEY,
+  readDealerPendingPaymentTtlHours,
   readPendingPaymentTtlHours,
 } from './pending-payment-ttl';
 
@@ -24,7 +27,8 @@ export type ExpireResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number
  * Tự huỷ đơn trả trước (khách lẻ + CTV lên đơn hộ) nằm ở PENDING_PAYMENT quá N giờ: không huỷ thì hàng
  * giữ kho, quota flash-sale và coupon dùng một lần bị khoá vĩnh viễn cho đơn không ai trả (C-024).
  *
- * Đơn đại lý (type DEALER) không quét: đơn "Ghi công nợ" trả qua sổ công nợ, UNPAID suốt đời là bình thường.
+ * Đơn đại lý "Ghi công nợ" không bao giờ bị quét: đơn đó CONFIRMED ngay và trả qua sổ công nợ. Đơn đại lý "Trả trước" nằm ở
+ * PENDING_PAYMENT như khách lẻ nên cũng tự huỷ, với hạn riêng `orders.dealer_pending_payment_ttl_hours` (SELLER-7).
  * Huỷ qua OrderStatusService.setStatus (đường huỷ chuẩn: hoàn kho/flash/coupon, đảo điểm, báo khách) với
  * guard onlyIfUnpaid — tiền về chen giữa lượt quét thì lần huỷ trượt, đơn giữ nguyên PAID.
  */
@@ -73,17 +77,23 @@ export class PendingPaymentExpiryCron {
   }
 
   private async cancelExpired(now: Date): Promise<{ scanned: number; cancelled: number; failed: number }> {
-    const ttlHours = await this.ttlHours();
+    const [ttlHours, dealerTtlHours] = await Promise.all([
+      this.ttlHours(),
+      this.dealerTtlHours(),
+    ]);
     const cutoff = new Date(now.getTime() - ttlHours * 3_600_000);
+    const dealerCutoff = new Date(now.getTime() - dealerTtlHours * 3_600_000);
     const stale = await this.prisma.order.findMany({
       where: {
-        type: 'RETAIL',
         status: 'PENDING_PAYMENT',
         paymentStatus: 'UNPAID',
         paymentMethod: { in: [...PREPAID_METHODS] },
-        createdAt: { lt: cutoff },
+        OR: [
+          { type: 'RETAIL', createdAt: { lt: cutoff } },
+          { type: 'DEALER', createdAt: { lt: dealerCutoff } },
+        ],
       },
-      select: { id: true, code: true, paymentMethod: true, _count: { select: { paymentAttempts: true } } },
+      select: { id: true, code: true, type: true, paymentMethod: true, _count: { select: { paymentAttempts: true } } },
       orderBy: { createdAt: 'asc' },
       take: BATCH_SIZE,
     });
@@ -96,7 +106,7 @@ export class PendingPaymentExpiryCron {
       try {
         const res = await this.orderStatus.setStatus(o.id, 'CANCELLED', {
           actorType: 'SYSTEM',
-          note: `Tự huỷ: quá ${ttlHours} giờ chưa thanh toán${
+          note: `Tự huỷ: quá ${o.type === 'DEALER' ? dealerTtlHours : ttlHours} giờ chưa thanh toán${
             gatewayAttempted ? ` — đã mở lệnh ${o.paymentMethod}: đối chiếu ${o.paymentMethod}, đã trừ tiền thì hoàn thủ công` : ''
           }`,
           onlyIfUnpaid: true,
@@ -124,5 +134,9 @@ export class PendingPaymentExpiryCron {
 
   private ttlHours(): Promise<number> {
     return readPendingPaymentTtlHours(this.systemConfig);
+  }
+
+  private dealerTtlHours(): Promise<number> {
+    return readDealerPendingPaymentTtlHours(this.systemConfig);
   }
 }

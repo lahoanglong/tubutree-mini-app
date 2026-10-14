@@ -15,8 +15,9 @@ import { OrderStatusService } from './order-status.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund } from './refund-queue';
 import { refundNote } from './order-returns.service';
-import { readPendingPaymentTtlHours } from './pending-payment-ttl';
+import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
 import { PREPAID_METHODS } from './order-transition';
+import { notifyMerchantOwner } from './merchant-order-notify';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
@@ -35,8 +36,25 @@ export interface OrderItemMedia {
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 export type OrderItemView = OrderWithItems['items'][number] & OrderItemMedia;
+/** Ai giao đơn (D4): kho Tubu hay gian hàng đối tác tự giao, kèm hotline gian hàng để khách liên hệ. */
+export interface OrderFulfilmentView {
+  kind: 'TUBU' | 'MERCHANT';
+  name: string;
+  phone: string | null;
+}
+
+export interface SiblingOrderView {
+  code: string;
+  status: string;
+  total: number;
+  fulfillerName: string;
+}
+
 export type OrderView = Omit<OrderWithItems, 'items'> & {
   items: OrderItemView[];
+  fulfilment?: OrderFulfilmentView;
+  /** Các đơn khác cùng lần đặt bị tách theo nơi giao. */
+  siblings?: SiblingOrderView[];
   /** Đơn trả trước chờ thanh toán: quá mốc này cron tự huỷ (BUYERMINI-8 — QR và chi tiết đơn ghi rõ hạn). */
   paymentDeadline?: string | null;
 };
@@ -118,16 +136,61 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) vẫn dùng detail() thô, không tốn thêm truy vấn. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [view] = await this.attachItemMedia([order]);
-    return { ...view!, paymentDeadline: await this.paymentDeadline(order) };
+    const [[view], fulfilment, paymentDeadline] = await Promise.all([
+      this.attachItemMedia([order]),
+      this.fulfilmentOf(order),
+      this.paymentDeadline(order),
+    ]);
+    return { ...view!, ...fulfilment, paymentDeadline };
   }
 
-  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL với cron tự huỷ. Null với đơn khác. */
+  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL với cron tự huỷ (đơn đại lý hạn riêng). Null với đơn khác. */
   async paymentDeadline(order: Pick<OrderWithItems, 'type' | 'status' | 'paymentStatus' | 'paymentMethod' | 'createdAt'>): Promise<string | null> {
-    if (order.type !== 'RETAIL' || order.status !== 'PENDING_PAYMENT' || order.paymentStatus !== 'UNPAID') return null;
+    if (order.status !== 'PENDING_PAYMENT' || order.paymentStatus !== 'UNPAID') return null;
+    if (order.type !== 'RETAIL' && order.type !== 'DEALER') return null;
     if (!(PREPAID_METHODS as readonly string[]).includes(order.paymentMethod)) return null;
-    const hours = await readPendingPaymentTtlHours(this.config);
+    const hours =
+      order.type === 'DEALER' ? await readDealerPendingPaymentTtlHours(this.config) : await readPendingPaymentTtlHours(this.config);
     return new Date(new Date(order.createdAt).getTime() + hours * 3_600_000).toISOString();
+  }
+
+  private async fulfilmentOf(order: {
+    userId: string;
+    code: string;
+    fulfiller?: string | null;
+    fulfillerStorefrontId?: string | null;
+    checkoutGroup?: string | null;
+  }): Promise<{ fulfilment: OrderFulfilmentView; siblings: SiblingOrderView[] }> {
+    const nameOf = async (fulfiller: string | null | undefined, storefrontId: string | null | undefined) => {
+      if (fulfiller !== 'MERCHANT' || !storefrontId) return { kind: 'TUBU' as const, name: 'Tubu Tree', phone: null };
+      const sf = await this.prisma.storefront.findUnique({
+        where: { id: storefrontId },
+        select: { title: true, warehousePhone: true },
+      });
+      return { kind: 'MERCHANT' as const, name: sf?.title ?? 'Gian hàng đối tác', phone: sf?.warehousePhone ?? null };
+    };
+    const fulfilment = await nameOf(order.fulfiller, order.fulfillerStorefrontId);
+    if (!order.checkoutGroup) return { fulfilment, siblings: [] };
+    const rows = await this.prisma.order.findMany({
+      where: { checkoutGroup: order.checkoutGroup, userId: order.userId, code: { not: order.code } },
+      select: {
+        code: true,
+        status: true,
+        total: true,
+        fulfiller: true,
+        fulfillerStorefront: { select: { title: true } },
+      },
+      orderBy: [{ fulfiller: 'asc' }, { code: 'asc' }],
+    });
+    return {
+      fulfilment,
+      siblings: rows.map((r) => ({
+        code: r.code,
+        status: r.status,
+        total: r.total,
+        fulfillerName: r.fulfiller === 'MERCHANT' ? (r.fulfillerStorefront?.title ?? 'Gian hàng đối tác') : 'Tubu Tree',
+      })),
+    };
   }
 
   /** Ảnh + tồn kho + còn bán được của từng dòng, join theo variationId (OrderItem không có FK/ảnh —
@@ -245,6 +308,10 @@ export class OrdersService {
     await this.notifications
       .notify(userId, 'ORDER_CANCELLED', { order_code: code, refund_note: refundNote(refund, bank) })
       .catch(() => undefined);
+    await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
+      order_code: code,
+      reason: 'Khách huỷ đơn',
+    });
     return this.detail(userId, code);
   }
 

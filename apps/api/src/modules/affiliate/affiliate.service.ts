@@ -29,6 +29,7 @@ import {
   type VnMonth,
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
+import { VN_OFFSET_MS } from '../../common/vn-time';
 import { paidLineTotals } from './commission-base';
 
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
@@ -42,6 +43,13 @@ const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
  * Commission: rate theo từng variation (variation.affiliateRate). Vòng đời:
  * PENDING (đặt) → LOCKED (DELIVERED) → APPROVED (sau hold_days) → PAID (payout).
  */
+export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
+export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 2_000_000;
+export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
+/** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
+export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
+export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
+
 @Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
@@ -92,6 +100,7 @@ export class AffiliateService {
       isAffiliate: user.role === 'AFFILIATE' || user.role === 'ADMIN',
       referralCode: user.referralCode,
       walletBalance: user.walletBalance,
+      personalTaxId: user.personalTaxId,
       monthRevenue,
       tier: this.monthlyTier(monthRevenue),
     };
@@ -192,7 +201,7 @@ export class AffiliateService {
     const startOfMonth = month.start;
     const startOfDay = vnDayStart(now);
 
-    const [today, monthCommission, pending, approved, links, monthRevenue] = await Promise.all([
+    const [today, monthCommission, pending, approved, links, monthRevenue, withdrawing] = await Promise.all([
       this.sumCommission(userId, startOfDay),
       this.sumCommission(userId, startOfMonth),
       this.prisma.commission.aggregate({
@@ -211,9 +220,14 @@ export class AffiliateService {
       // Trước đây: orderTotal mọi commission khác REJECTED tạo trong tháng → gồm cả đơn còn huỷ
       // được, hàng bị chặn affiliate và phí ship.
       this.confirmedRevenue(this.prisma, userId, month),
+      this.prisma.commission.aggregate({
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: { not: null } },
+        _sum: { amount: true },
+      }),
     ]);
 
     return {
+      withdrawingCommission: withdrawing._sum.amount ?? 0,
       todayCommission: today,
       monthCommission,
       pendingCommission: pending._sum.amount ?? 0,
@@ -265,12 +279,179 @@ export class AffiliateService {
     return { name: tier.name, emoji: tier.emoji };
   }
 
-  listCommissions(userId: string) {
-    return this.prisma.commission.findMany({
+  async listCommissions(userId: string) {
+    const rows = await this.prisma.commission.findMany({
       where: { affiliateUserId: userId },
       orderBy: { createdAt: 'desc' },
       take: 100,
+      include: { order: { select: { code: true, status: true } } },
     });
+    // SELLER-10: "Đang rút" = đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền (PAID chỉ khi admin xác nhận).
+    return rows.map(({ order, ...c }) => ({
+      ...c,
+      orderCode: order?.code ?? null,
+      orderStatus: order?.status ?? null,
+      withdrawing: c.status === 'APPROVED' && c.payoutBatchId !== null,
+    }));
+  }
+
+  /** Lịch sử lệnh rút của CTV: trạng thái, lý do từ chối, mã giao dịch, thuế TNCN đã khấu trừ (SELLER-10, SELLER-11). */
+  listMyPayouts(userId: string) {
+    return this.prisma.payout.findMany({
+      where: { userId },
+      orderBy: { requestedAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        amount: true,
+        grossAmount: true,
+        taxWithheld: true,
+        fee: true,
+        method: true,
+        status: true,
+        rejectionReason: true,
+        bankRef: true,
+        requestedAt: true,
+        reviewedAt: true,
+        paidAt: true,
+      },
+    });
+  }
+
+  /** Lệnh rút hoa hồng (có grossAmount, khác rút Ví) đã chi trong [start, end). */
+  private paidCommissionPayouts(where: Prisma.PayoutWhereInput, start: Date, end: Date) {
+    return this.prisma.payout.findMany({
+      where: { ...where, status: 'PAID', grossAmount: { not: null }, paidAt: { gte: start, lt: end } },
+      orderBy: { paidAt: 'asc' },
+      select: {
+        id: true,
+        userId: true,
+        method: true,
+        grossAmount: true,
+        taxWithheld: true,
+        amount: true,
+        taxId: true,
+        paidAt: true,
+        user: { select: { fullName: true, phone: true, personalTaxId: true } },
+      },
+    });
+  }
+
+  /**
+   * Báo cáo khấu trừ thuế TNCN theo tháng (giờ VN) cho kế toán kê khai: mọi lần chi hoa hồng cho cá nhân trong tháng, gộp theo
+   * người nhận. MST lấy theo số đã chụp vào lệnh rút (số đã kê khai), thiếu thì theo hồ sơ hiện tại.
+   */
+  async pitReport(month: string) {
+    const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+    if (!m) throw new BadRequestException('Tháng phải có dạng YYYY-MM.');
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const start = new Date(Date.UTC(y, mo, 1) - VN_OFFSET_MS);
+    const end = new Date(Date.UTC(y, mo + 1, 1) - VN_OFFSET_MS);
+    const payouts = await this.paidCommissionPayouts({}, start, end);
+    const byUser = new Map<
+      string,
+      { userId: string; fullName: string | null; phone: string | null; taxId: string | null; payoutCount: number; grossAmount: number; taxWithheld: number; netAmount: number }
+    >();
+    for (const p of payouts) {
+      const row = byUser.get(p.userId) ?? {
+        userId: p.userId,
+        fullName: p.user.fullName,
+        phone: p.user.phone,
+        taxId: null,
+        payoutCount: 0,
+        grossAmount: 0,
+        taxWithheld: 0,
+        netAmount: 0,
+      };
+      row.taxId = p.taxId ?? row.taxId ?? p.user.personalTaxId;
+      row.payoutCount += 1;
+      row.grossAmount += p.grossAmount ?? 0;
+      row.taxWithheld += p.taxWithheld;
+      row.netAmount += p.amount;
+      byUser.set(p.userId, row);
+    }
+    const rows = [...byUser.values()].sort((a, b) => b.taxWithheld - a.taxWithheld || b.grossAmount - a.grossAmount);
+    const sum = (k: 'grossAmount' | 'taxWithheld' | 'netAmount') => rows.reduce((s, r) => s + r[k], 0);
+    return {
+      month,
+      rows,
+      totals: {
+        recipients: rows.length,
+        withheldRecipients: rows.filter((r) => r.taxWithheld > 0).length,
+        grossAmount: sum('grossAmount'),
+        taxWithheld: sum('taxWithheld'),
+        netAmount: sum('netAmount'),
+      },
+    };
+  }
+
+  /** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (giờ VN) của một CTV, kèm MST đang khai. */
+  async taxStatement(userId: string, year: number) {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new BadRequestException('Năm không hợp lệ.');
+    const start = new Date(Date.UTC(year, 0, 1) - VN_OFFSET_MS);
+    const end = new Date(Date.UTC(year + 1, 0, 1) - VN_OFFSET_MS);
+    const [payouts, user] = await Promise.all([
+      this.paidCommissionPayouts({ userId }, start, end),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, personalTaxId: true } }),
+    ]);
+    const items = payouts.map((p) => ({
+      id: p.id,
+      paidAt: p.paidAt,
+      method: p.method,
+      grossAmount: p.grossAmount ?? 0,
+      taxWithheld: p.taxWithheld,
+      amount: p.amount,
+      taxId: p.taxId,
+    }));
+    const sum = (k: 'grossAmount' | 'taxWithheld' | 'amount') => items.reduce((s, i) => s + i[k], 0);
+    return {
+      year,
+      fullName: user?.fullName ?? null,
+      taxId: user?.personalTaxId ?? null,
+      items,
+      totals: { grossAmount: sum('grossAmount'), taxWithheld: sum('taxWithheld'), netAmount: sum('amount') },
+    };
+  }
+
+  /**
+   * MST/CCCD chụp vào lệnh rút. CTV khai trong lần rút thì lưu vào hồ sơ; lần rút bị khấu trừ thuế TNCN mà chưa có số nào thì
+   * từ chối: Tubu Tree phải kê khai khấu trừ theo MST người nhận và cấp chứng từ khấu trừ cho họ (SELLER-11).
+   */
+  private async taxIdForPayout(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    taxWithheld: number,
+    input?: string,
+  ): Promise<string | null> {
+    const given = input?.trim();
+    if (given) {
+      if (!PERSONAL_TAX_ID_PATTERN.test(given)) throw new BadRequestException(PERSONAL_TAX_ID_FORMAT_MESSAGE);
+      await tx.user.update({ where: { id: userId }, data: { personalTaxId: given } });
+      return given;
+    }
+    if (taxWithheld <= 0) return null;
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { personalTaxId: true } });
+    if (user?.personalTaxId) return user.personalTaxId;
+    throw new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      code: PIT_TAX_ID_REQUIRED,
+      message: `Lần rút này được khấu trừ thuế TNCN ${vnd(taxWithheld)}. Nhập mã số thuế cá nhân hoặc số CCCD để Tubu Tree kê khai và cấp chứng từ khấu trừ thuế cho bạn.`,
+    });
+  }
+
+  /**
+   * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động: lần trả từ ngưỡng trở lên thì giữ lại
+   * `affiliate.pit_withhold_pct` (mặc định 10% từ 2.000.000đ, theo Thông tư 111/2013/TT-BTC). 0% = tắt.
+   */
+  async personalIncomeTax(gross: number): Promise<number> {
+    const [pct, threshold] = await Promise.all([
+      this.config.get<number>('affiliate.pit_withhold_pct', DEFAULT_PIT_WITHHOLD_PCT),
+      this.config.get<number>('affiliate.pit_withhold_threshold', DEFAULT_PIT_WITHHOLD_THRESHOLD),
+    ]);
+    if (!(pct > 0) || gross < threshold) return 0;
+    return Math.round(gross * Math.min(pct, 1));
   }
 
   /**
@@ -354,7 +535,7 @@ export class AffiliateService {
     try {
       order = await this.prisma.$transaction(async (tx) => {
         // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
-        await assertVariationsSellable(tx, lines);
+        await assertVariationsSellable(tx, lines, { pancakeOnly: true });
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell; 0 dòng bị sửa → throw rollback.
         for (const line of lines) {
           const hit = await reserveVariationStock(tx, line.variationId, line.quantity);
@@ -557,10 +738,24 @@ export class AffiliateService {
     });
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
 
-    await this.prisma.commission.updateMany({
+    const reversible = await this.prisma.commission.findMany({
+      where: { orderId, status: { in: ['PENDING', 'LOCKED'] } },
+      select: { affiliateUserId: true, amount: true },
+    });
+    const res = await this.prisma.commission.updateMany({
       where: { orderId, status: { in: ['PENDING', 'LOCKED'] } },
       data: { status: 'REJECTED' },
     });
+    // SELLER-10: CTV thấy khoản dự kiến biến mất mà không ai báo. Báo theo từng CTV (đơn chỉ có một người giới thiệu).
+    if (res.count > 0 && this.notifications) {
+      const byUser = new Map<string, number>();
+      for (const c of reversible) byUser.set(c.affiliateUserId, (byUser.get(c.affiliateUserId) ?? 0) + c.amount);
+      for (const [uid, amount] of byUser) {
+        await this.notifications
+          .notify(uid, CTV_NOTIFICATION.REVERSED, { amount: vnd(amount) })
+          .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng đơn ${orderId} lỗi: ${(e as Error).message}`));
+      }
+    }
   }
 
   async requestPayout(
@@ -569,6 +764,7 @@ export class AffiliateService {
     method: string,
     bankInfo?: object,
     idempotencyKey?: string,
+    taxIdInput?: string,
   ) {
     const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
     // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
@@ -640,6 +836,9 @@ export class AffiliateService {
             select: { id: true, amount: true },
           });
           const total = rows.reduce((s, c) => s + c.amount, 0);
+          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
+          const taxWithheld = await this.personalIncomeTax(total);
+          const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
           const marked = await tx.commission.updateMany({
             where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
             data: { status: 'PAID', paidAt: new Date() },
@@ -653,10 +852,19 @@ export class AffiliateService {
           if (marked.count !== rows.length) {
             throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
           }
-          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm.
-          const credited = total;
+          const credited = total - taxWithheld;
           const payout = await tx.payout.create({
-            data: { userId, amount: credited, method, status: 'PAID', paidAt: new Date(), idempotencyKey: key },
+            data: {
+              userId,
+              amount: credited,
+              grossAmount: total,
+              taxWithheld,
+              taxId,
+              method,
+              status: 'PAID',
+              paidAt: new Date(),
+              idempotencyKey: key,
+            },
           });
           await applyWalletDelta(tx, {
             userId,
@@ -664,7 +872,9 @@ export class AffiliateService {
             type: 'COMMISSION_PAYOUT',
             refType: 'PAYOUT',
             refId: payout.id,
-            reason: `Rút ${rows.length} khoản hoa hồng về Ví`,
+            reason: taxWithheld
+              ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
+              : `Rút ${rows.length} khoản hoa hồng về Ví`,
           });
           return { credited };
         });
@@ -706,13 +916,26 @@ export class AffiliateService {
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
         if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+        const taxWithheld = await this.personalIncomeTax(total);
+        const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({
-          data: { userId, amount: total, method: 'BANK', bankInfo: bankInfo ?? {}, status: 'REQUESTED', idempotencyKey: key },
+          data: {
+            userId,
+            amount: total - taxWithheld,
+            grossAmount: total,
+            taxWithheld,
+            taxId,
+            method: 'BANK',
+            bankInfo: bankInfo ?? {},
+            status: 'REQUESTED',
+            idempotencyKey: key,
+          },
         });
-        // Gán batch + set PAID để loại khỏi "khả dụng" → chống rút trùng (gate theo count).
+        // Gán batch để loại khỏi "khả dụng" → chống rút trùng (gate theo count). Vẫn APPROVED ("Đang rút") cho tới khi admin
+        // xác nhận đã chuyển tiền (SELLER-10): trước đây set PAID ngay lúc CTV bấm rút.
         const marked = await tx.commission.updateMany({
           where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-          data: { payoutBatchId: p.id, status: 'PAID', paidAt: new Date() },
+          data: { payoutBatchId: p.id },
         });
         if (marked.count === 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
         // Xem giải thích ở nhánh WALLET_BALANCE phía trên — cùng 1 kiểu race hiếm cần chặn.
@@ -1112,7 +1335,11 @@ export class AffiliateService {
       );
     }
     this.logger.log(`Admin ${adminId} duyệt lệnh rút ${id}.`);
-    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    const payout = await this.prisma.payout.findUniqueOrThrow({ where: { id } });
+    await this.notifications
+      ?.notify(payout.userId, CTV_NOTIFICATION.PAYOUT_APPROVED, { amount: vnd(payout.amount) })
+      .catch((e: unknown) => this.logger.warn(`Báo duyệt lệnh rút ${id} lỗi: ${(e as Error).message}`));
+    return payout;
   }
 
   /**
@@ -1124,7 +1351,7 @@ export class AffiliateService {
     const why = reason?.trim();
     if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
 
-    return this.prisma.$transaction(async (tx) => {
+    const rejected = await this.prisma.$transaction(async (tx) => {
       const marked = await tx.payout.updateMany({
         where: { id, status: 'REQUESTED' },
         data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: why },
@@ -1137,14 +1364,14 @@ export class AffiliateService {
       const payout = await tx.payout.findUniqueOrThrow({ where: { id } });
 
       const linkedCommissions = await tx.commission.findMany({
-        where: { payoutBatchId: id, status: 'PAID' },
+        where: { payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
         select: { id: true },
       });
       if (linkedCommissions.length > 0) {
         // Nguồn 2 (requestPayout nhánh BANK): trả các commission liên quan về APPROVED, gỡ batch
         // → CTV rút lại được. KHÔNG đụng walletBalance (chưa từng cộng/trừ gì ở đó cho payout này).
         await tx.commission.updateMany({
-          where: { id: { in: linkedCommissions.map((c) => c.id) }, payoutBatchId: id, status: 'PAID' },
+          where: { id: { in: linkedCommissions.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
           data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
         });
       } else {
@@ -1162,19 +1389,31 @@ export class AffiliateService {
       this.logger.log(`Admin ${adminId} từ chối lệnh rút ${id}: ${why}`);
       return tx.payout.findUniqueOrThrow({ where: { id } });
     });
+    await this.notifications
+      ?.notify(rejected.userId, CTV_NOTIFICATION.PAYOUT_REJECTED, { amount: vnd(rejected.grossAmount ?? rejected.amount), reason: why })
+      .catch((e: unknown) => this.logger.warn(`Báo từ chối lệnh rút ${id} lỗi: ${(e as Error).message}`));
+    return rejected;
   }
 
   /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
   async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string } = {}) {
-    const res = await this.prisma.payout.updateMany({
-      where: { id, status: 'APPROVED' },
-      data: {
-        status: 'PAID',
-        paidBy: adminId,
-        paidAt: new Date(),
-        ...(opts.bankRef?.trim() ? { bankRef: opts.bankRef.trim() } : {}),
-        ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
-      },
+    const paidAt = new Date();
+    const res = await this.prisma.$transaction(async (tx) => {
+      const flipped = await tx.payout.updateMany({
+        where: { id, status: 'APPROVED' },
+        data: {
+          status: 'PAID',
+          paidBy: adminId,
+          paidAt,
+          ...(opts.bankRef?.trim() ? { bankRef: opts.bankRef.trim() } : {}),
+          ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
+        },
+      });
+      // Hoa hồng trong lệnh rút ngân hàng chỉ thành "Đã trả" khi tiền thật sự đã chuyển (SELLER-10).
+      if (flipped.count > 0) {
+        await tx.commission.updateMany({ where: { payoutBatchId: id, status: 'APPROVED' }, data: { status: 'PAID', paidAt } });
+      }
+      return flipped;
     });
     if (res.count === 0) {
       throw new BadRequestException(

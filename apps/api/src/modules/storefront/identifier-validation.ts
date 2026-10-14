@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from '../merchant/merchant-config';
 
 /**
  * `slug`, `subdomain`, `customDomain` trên Storefront mỗi cột `@unique` RIÊNG — nhưng mọi nơi
@@ -58,9 +59,10 @@ export function normalizeCustomDomain(raw: string): string {
  * chặn CHÍNH cho P0-1 (subdomain trùng slug người khác) và P0-2 (đơn hàng lộ qua slug trùng).
  */
 export async function assertIdentifierAvailable(
-  prisma: Pick<PrismaService, 'storefront'>,
+  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier'>>,
   value: string,
   excludeStorefrontId: string,
+  cooldownDays: number = DEFAULT_IDENTIFIER_COOLDOWN_DAYS,
 ): Promise<void> {
   const existing = await prisma.storefront.findFirst({
     where: {
@@ -70,5 +72,39 @@ export async function assertIdentifierAvailable(
   });
   if (existing) {
     throw new BadRequestException(`"${value}" đã được sử dụng bởi gian hàng khác, vui lòng chọn tên khác.`);
+  }
+  // SELLER-5: link cũ của gian hàng vừa đổi tên vẫn nằm trong tin nhắn, bài đăng của khách; gian hàng khác nhận ngay tên đó là
+  // nhận luôn khách (và ghi công đơn) của người trước. Chủ cũ lấy lại tên của chính mình thì được.
+  if (!prisma.releasedStorefrontIdentifier) return;
+  const released = await prisma.releasedStorefrontIdentifier.findUnique({ where: { value } });
+  if (
+    released &&
+    released.storefrontId !== excludeStorefrontId &&
+    released.releasedAt.getTime() > Date.now() - cooldownDays * 86_400_000
+  ) {
+    throw new BadRequestException(
+      `"${value}" vừa được một gian hàng khác ngừng dùng, tạm thời chưa thể đăng ký lại. Vui lòng chọn tên khác.`,
+    );
+  }
+}
+
+/**
+ * Ghi lại subdomain/tên miền gian hàng vừa nhả (đổi sang tên mới hoặc xoá) để `assertIdentifierAvailable` giữ cách ly.
+ */
+export async function recordReleasedIdentifiers(
+  prisma: Pick<PrismaService, 'releasedStorefrontIdentifier'>,
+  storefrontId: string,
+  previous: Array<string | null | undefined>,
+  next: Array<string | null | undefined>,
+): Promise<void> {
+  const keep = new Set(next.filter((v): v is string => !!v));
+  const releasedAt = new Date();
+  for (const value of previous) {
+    if (!value || keep.has(value)) continue;
+    await prisma.releasedStorefrontIdentifier.upsert({
+      where: { value },
+      create: { value, storefrontId, releasedAt },
+      update: { storefrontId, releasedAt },
+    });
   }
 }

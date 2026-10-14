@@ -32,6 +32,8 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { PriceTag } from '../components/ui/price-tag';
+import { Heading } from '../components/ui/text';
+import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 
 const UNDO_WINDOW_MS = 3500;
 const CART_KEY = ['cart'] as const;
@@ -161,6 +163,10 @@ export default function CartPage() {
     );
   }
   const empty = summary.items.length === 0;
+  // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
+  const groups = groupByFulfiller(summary.items);
+  const withHeaders = showFulfillerHeaders(groups);
+  const hasMerchant = groups.some((g) => g.fulfiller.kind === 'MERCHANT');
   // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
   const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
   const allSelected = selectedItems.length === summary.items.length;
@@ -207,19 +213,35 @@ export default function CartPage() {
           <Box px={3} pt={2}>
             <Checkbox checked={allSelected} onChange={toggleAll} label="Chọn tất cả" />
           </Box>
-          <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {summary.items.map((line) => (
-              <CartLineRow
-                key={line.id}
-                line={line}
-                selected={!deselected.has(line.id)}
-                onToggleSelect={() => toggleSelect(line.id)}
-                onQty={(qty) => update.mutate({ id: line.id, qty })}
-                onRemove={() => handleRemove(line)}
-                onOpen={() => navigate(`/product/${line.slug}`)}
-              />
-            ))}
-          </Box>
+          {withHeaders && (
+            <Box px={3} pt={2}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
+              </Text>
+            </Box>
+          )}
+          {groups.map((g) => (
+            <section key={g.key} aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}>
+              {withHeaders && (
+                <Heading variant="title-sm" as="h2" style={{ padding: '12px 12px 0' }}>
+                  {fulfillerLabel(g.fulfiller)}
+                </Heading>
+              )}
+              <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {g.items.map((line) => (
+                  <CartLineRow
+                    key={line.id}
+                    line={line}
+                    selected={!deselected.has(line.id)}
+                    onToggleSelect={() => toggleSelect(line.id)}
+                    onQty={(qty) => update.mutate({ id: line.id, qty })}
+                    onRemove={() => handleRemove(line)}
+                    onOpen={() => navigate(`/product/${line.slug}`)}
+                  />
+                ))}
+              </Box>
+            </section>
+          ))}
 
           <CouponBlock summary={summary} selectedSubtotal={selectedSubtotal} />
         </>
@@ -266,6 +288,8 @@ export default function CartPage() {
           selectedCount={selectedCount}
           allSelected={allSelected}
           overStock={overStockSelected}
+          tubuOnlyFreeship={hasMerchant}
+          tubuSelectedSubtotal={tubuSubtotal(selectedItems)}
           onCheckout={goCheckout}
         />
       )}
@@ -563,6 +587,8 @@ function StickySummary({
   selectedCount,
   allSelected,
   overStock,
+  tubuOnlyFreeship,
+  tubuSelectedSubtotal,
   onCheckout,
 }: {
   summary: CartSummary;
@@ -570,13 +596,19 @@ function StickySummary({
   selectedCount: number;
   allSelected: boolean;
   overStock: boolean;
+  /** Giỏ có hàng gian hàng tự giao: miễn phí vận chuyển chỉ áp cho phần Tubu Tree giao. */
+  tubuOnlyFreeship: boolean;
+  tubuSelectedSubtotal: number;
   onCheckout: () => void;
 }) {
   const threshold = summary.freeshipThreshold;
-  // Freeship progress theo tổng ĐANG CHỌN (không phải toàn giỏ) — khớp số tiền sẽ thanh toán.
-  const reached = (allSelected && summary.freeship) || selectedSubtotal >= threshold;
-  const progressPct = Math.min(100, Math.round((selectedSubtotal / threshold) * 100));
-  const remaining = Math.max(0, threshold - selectedSubtotal);
+  // Freeship progress theo tổng ĐANG CHỌN (không phải toàn giỏ) — khớp số tiền sẽ thanh toán. Có hàng gian hàng tự giao
+  // thì chỉ tính phần Tubu Tree giao (checkout tính phí kho Tubu trên tiền hàng của kiện Tubu).
+  const base = tubuOnlyFreeship ? tubuSelectedSubtotal : selectedSubtotal;
+  const showFreeship = !tubuOnlyFreeship || base > 0;
+  const reached = (!tubuOnlyFreeship && allSelected && summary.freeship) || base >= threshold;
+  const progressPct = Math.min(100, Math.round((base / threshold) * 100));
+  const remaining = Math.max(0, threshold - base);
   // Coupon giảm chỉ hiển thị khi chọn TOÀN giỏ (subset re-tính ở checkout — tránh số sai).
   const discount = allSelected ? summary.discount : 0;
 
@@ -584,33 +616,39 @@ function StickySummary({
     <StickyActionBar
       summary={
         <>
-          <Box style={{ marginBottom: 2 }}>
-            <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
-              {reached ? vi.cart.freeshipReached : vi.cart.freeshipProgress(formatVnd(remaining))}
-            </Text>
-            <Box
-              aria-hidden
-              style={{
-                height: 5,
-                background: 'var(--stone-200)',
-                borderRadius: 'var(--radius-pill)',
-                marginTop: 5,
-                overflow: 'hidden',
-              }}
-            >
+          {showFreeship && (
+            <Box style={{ marginBottom: 2 }}>
+              <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
+                {reached
+                  ? tubuOnlyFreeship
+                    ? 'Phần hàng Tubu Tree giao được miễn phí ship'
+                    : vi.cart.freeshipReached
+                  : vi.cart.freeshipProgress(formatVnd(remaining)) + (tubuOnlyFreeship ? ' cho phần hàng Tubu Tree giao' : '')}
+              </Text>
               <Box
+                aria-hidden
                 style={{
-                  width: `${progressPct}%`,
-                  height: '100%',
-                  background: reached
-                    ? 'var(--forest-400)'
-                    : 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                  height: 5,
+                  background: 'var(--stone-200)',
                   borderRadius: 'var(--radius-pill)',
-                  transition: 'width var(--dur-slow) var(--ease-out)',
+                  marginTop: 5,
+                  overflow: 'hidden',
                 }}
-              />
+              >
+                <Box
+                  style={{
+                    width: `${progressPct}%`,
+                    height: '100%',
+                    background: reached
+                      ? 'var(--forest-400)'
+                      : 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                    borderRadius: 'var(--radius-pill)',
+                    transition: 'width var(--dur-slow) var(--ease-out)',
+                  }}
+                />
+              </Box>
             </Box>
-          </Box>
+          )}
 
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />

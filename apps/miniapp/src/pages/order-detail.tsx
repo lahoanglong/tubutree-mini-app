@@ -42,6 +42,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { Badge } from '../components/ui/badge';
 import { Icon, type IconProps } from '../components/ui/icon';
 import { KeyValueRow } from '../components/ui/key-value-row';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
@@ -391,6 +392,58 @@ export default function OrderDetailPage() {
           </Text>
         )}
       </Box>
+
+      {/* Đơn do gian hàng đối tác tự giao (D4): khách cần biết ai giao và liên hệ ai; đơn tách cùng lần đặt dẫn qua lại. */}
+      {(o.fulfilment?.kind === 'MERCHANT' || (o.siblings?.length ?? 0) > 0) && (
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          {o.fulfilment && (
+            <>
+              <Text bold size="small">
+                Giao bởi {o.fulfilment.name}
+              </Text>
+              {o.fulfilment.kind === 'MERCHANT' && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                  Gian hàng tự đóng gói và giao đơn này.
+                  {o.fulfilment.phone ? ` Liên hệ gian hàng: ${o.fulfilment.phone}` : ''}
+                </Text>
+              )}
+            </>
+          )}
+          {o.siblings && o.siblings.length > 0 && (
+            <section aria-label="Đơn cùng lần đặt" style={{ marginTop: o.fulfilment ? 12 : 0 }}>
+              <Text bold size="small" style={{ marginBottom: 6 }}>
+                Đơn cùng lần đặt
+              </Text>
+              {o.siblings.map((sb) => (
+                <Box
+                  key={sb.code}
+                  role="link"
+                  {...rowKeyboardProps()}
+                  aria-label={`Xem đơn ${sb.code}, ${sb.fulfillerName} giao`}
+                  className="tubu-press"
+                  onClick={() => navigate(`/order/${sb.code}`)}
+                  flex
+                  alignItems="center"
+                  justifyContent="space-between"
+                  style={{ gap: 8, minHeight: 44, cursor: 'pointer', borderTop: '1px solid var(--color-border-subtle)' }}
+                >
+                  <Box style={{ minWidth: 0 }}>
+                    <Text size="small" bold>
+                      {sb.code}
+                    </Text>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                      {sb.fulfillerName} giao · {vi.orderStatus[sb.status] ?? sb.status}
+                    </Text>
+                  </Box>
+                  <Text size="small" style={{ whiteSpace: 'nowrap' }}>
+                    {formatVnd(sb.total)}
+                  </Text>
+                </Box>
+              ))}
+            </section>
+          )}
+        </Box>
+      )}
 
       {(o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELIVERED') && <OrderRefunds orderId={o.id} />}
 

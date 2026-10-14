@@ -130,3 +130,29 @@ describe('PancakeSyncHooks.afterPaid', () => {
     await expect(t.hooks.afterPaid('o1')).resolves.toBeUndefined();
   });
 });
+
+describe('PancakeSyncHooks — đơn gian hàng đối tác tự giao (D4) không chạm Pancake', () => {
+  it('precheckCancel đơn MERCHANT → NONE, không hỏi Pancake kể cả khi cột Pancake có dấu vết lạ', async () => {
+    const t = setup({ fulfiller: 'MERCHANT' });
+    expect(await t.hooks.precheckCancel(subject({ fulfiller: 'MERCHANT', pancakePushClaimedAt: new Date() }))).toEqual({ kind: 'NONE' });
+    expect(t.client.searchOrders).not.toHaveBeenCalled();
+    expect(t.client.getOrder).not.toHaveBeenCalled();
+  });
+
+  it('afterLocalCancel đơn MERCHANT → không xếp job huỷ, không ghi pancakeCancelStatus', async () => {
+    const t = setup({ fulfiller: 'MERCHANT', status: 'CANCELLED', pancakePushClaimedAt: new Date() });
+    await t.hooks.afterLocalCancel('o1', { kind: 'NONE' });
+    await t.hooks.afterLocalCancel('o1');
+    expect(t.queue.added).toEqual([]);
+    expect(t.row().pancakeCancelStatus).toBeNull();
+  });
+
+  it('afterPaid đơn MERCHANT → không xếp job thanh toán Pancake; đơn TUBU thì có', async () => {
+    const m = setup({ fulfiller: 'MERCHANT' });
+    await m.hooks.afterPaid('o1');
+    expect(m.queue.added).toEqual([]);
+    const t = setup();
+    await t.hooks.afterPaid('o1');
+    expect(t.queue.added.map((j) => j.name)).toEqual(['payment']);
+  });
+});

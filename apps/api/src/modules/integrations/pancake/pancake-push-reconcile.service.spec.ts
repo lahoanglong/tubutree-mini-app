@@ -285,4 +285,13 @@ describe('PancakePushReconcileService.reconcile — đơn cũ, huỷ, thanh toá
     expect(payments.mock.calls[0][0].where).toMatchObject({ pancakeOrderId: { not: null }, pancakePaymentSynced: false, paymentStatus: 'PAID' });
     expect(enqueuePayment).toHaveBeenCalledWith('p1');
   });
+
+  it('không quét đơn đối tác tự giao (D4): đơn đó không bao giờ có pancakeOrderId', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const { svc } = mk({ order: { findMany } });
+    await svc.reconcile();
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ fulfiller: 'TUBU' }) }),
+    );
+  });
 });

@@ -4,6 +4,8 @@ export interface AffiliateMe {
   isAffiliate: boolean;
   referralCode: string;
   walletBalance: number;
+  /** MST cá nhân/CCCD đã khai để kê khai khấu trừ thuế TNCN (null: chưa khai). */
+  personalTaxId?: string | null;
   monthRevenue?: number;
   tier?: AffiliateTier;
 }
@@ -24,6 +26,8 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
+  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
+  withdrawingCommission?: number;
   totalClicks: number;
   totalConversions: number;
   monthRevenue: number;
@@ -83,6 +87,27 @@ export interface Commission {
   amount: number;
   status: CommissionStatus;
   createdAt: string;
+  orderCode?: string | null;
+  orderStatus?: string | null;
+  /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng chưa chuyển tiền. */
+  withdrawing?: boolean;
+}
+
+export type PayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+export interface AffiliatePayout {
+  id: string;
+  /** Số thực nhận (sau thuế TNCN và phí). */
+  amount: number;
+  grossAmount: number | null;
+  taxWithheld: number;
+  fee: number;
+  method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY';
+  status: PayoutStatus;
+  rejectionReason: string | null;
+  bankRef: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+  paidAt: string | null;
 }
 
 export const getAffiliateMe = () => api.get<AffiliateMe>('/affiliate/me').then((r) => r.data);
@@ -115,11 +140,36 @@ export interface PayoutResult {
   payoutId?: string;
   status?: string;
 }
+export const getMyPayouts = () => api.get<AffiliatePayout[]>('/affiliate/payouts').then((r) => r.data);
+/**
+ * Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. `taxId`: MST/CCCD khai lần đầu khi
+ * lần rút bị khấu trừ thuế TNCN.
+ */
 export const requestPayout = (
   amount: number,
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
-  bankInfo?: { bankName: string; accountNumber: string; accountName: string },
-) => api.post<PayoutResult>('/affiliate/payouts', { amount, method, bankInfo }).then((r) => r.data);
+  bankInfo: { bankName: string; accountNumber: string; accountName: string } | undefined,
+  idempotencyKey: string,
+  taxId?: string,
+) =>
+  api
+    .post<PayoutResult>(
+      '/affiliate/payouts',
+      { amount, method, bankInfo, ...(taxId ? { taxId } : {}) },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    .then((r) => r.data);
+
+export interface TaxStatement {
+  year: number;
+  fullName: string | null;
+  taxId: string | null;
+  items: { id: string; paidAt: string; method: string; grossAmount: number; taxWithheld: number; amount: number; taxId: string | null }[];
+  totals: { grossAmount: number; taxWithheld: number; netAmount: number };
+}
+/** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (mặc định năm nay). */
+export const getTaxStatement = (year?: number) =>
+  api.get<TaxStatement>('/affiliate/tax-statement', { params: year ? { year } : {} }).then((r) => r.data);
 
 export interface StorefrontStat {
   slug: string;

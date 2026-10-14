@@ -74,7 +74,12 @@ export function fakeOrderDb(initial: Row[], extra: Record<string, unknown> = {})
   };
   const prisma = {
     order,
-    variation: { findMany: jest.fn().mockResolvedValue([]) },
+    // Mặc định mỗi biến thể là hàng kho Tubu có mã Pancake thật (`p-<id>`) — spec D4 ghi đè để thử hàng đối tác tự giao.
+    variation: {
+      findMany: jest.fn(async ({ where }: { where?: { id?: { in?: string[] } } } = {}) =>
+        (where?.id?.in ?? []).map((id) => ({ id, pancakeId: `p-${id}`, retailPrice: null, weight: 0, product: { fulfilment: 'TUBU' } })),
+      ),
+    },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
     address: { findFirst: jest.fn().mockResolvedValue(null) },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -102,6 +107,7 @@ export function baseOrder(overrides: Row = {}): Row {
     code: 'TUBU1',
     userId: 'u1',
     type: 'RETAIL',
+    fulfiller: 'TUBU',
     platform: 'miniapp',
     status: 'CONFIRMED',
     paymentMethod: 'COD',

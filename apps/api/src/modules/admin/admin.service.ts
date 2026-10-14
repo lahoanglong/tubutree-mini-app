@@ -27,6 +27,7 @@ import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './c
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
 import { normalizeCouponCode } from '../coupons/coupons.service';
+import { linkTubuFulfilledVariation } from '../merchant/merchant-pancake-link';
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -150,6 +151,16 @@ export class AdminService {
       });
       if (flipped.count === 0) throw new BadRequestException('Đơn đã được xử lý.');
     }
+    // SELLER-12: người đăng ký nhận kết quả (kèm lý do khi từ chối) thay vì phải tự mở lại trang để đoán.
+    const tierName = approve && tierId
+      ? (await this.prisma.dealerTier.findUnique({ where: { id: tierId }, select: { name: true } }))?.name ?? ''
+      : '';
+    await this.notifications
+      .notify(app.userId, approve ? 'DEALER_APPLICATION_APPROVED' : 'DEALER_APPLICATION_REJECTED', {
+        tier: tierName,
+        reason: reason?.trim() || 'Hồ sơ chưa đủ điều kiện',
+      })
+      .catch((e: unknown) => this.logger.warn(`Báo kết quả hồ sơ đại lý ${id} lỗi: ${(e as Error).message}`));
     return this.prisma.dealerApplication.findUnique({ where: { id } });
   }
 
@@ -1017,27 +1028,42 @@ export class AdminService {
   }
 
   async reviewMerchantProduct(adminId: string, productId: string, approve: boolean, rejectReason?: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { storefront: { select: { ownerUserId: true } } },
+    });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    const reason = approve ? null : (rejectReason?.trim() || 'Không đạt tiêu chuẩn xanh của Tubu Tree');
 
     // CAS theo trạng thái đã đọc: hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn B bấm
     // Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người
     // thứ hai nhận lỗi rõ ràng thay vì lặng lẽ lật ngược quyết định.
-    const moved = await this.prisma.product.updateMany({
-      where: { id: productId, approvalStatus: product.approvalStatus },
-      data: {
-        approvalStatus: approve ? 'APPROVED' : 'REJECTED',
-        rejectReason: approve ? null : (rejectReason ?? 'Không đạt tiêu chuẩn xanh của Tubu Tree'),
-      },
+    // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm trong CÙNG transaction — mã vừa bị sản phẩm khác lấy thì
+    // rollback cả lần duyệt.
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.product.updateMany({
+        where: { id: productId, approvalStatus: product.approvalStatus },
+        data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
+      });
+      if (moved.count === 0) {
+        throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
+      }
+      if (approve) await linkTubuFulfilledVariation(tx, product);
     });
-    if (moved.count === 0) {
-      throw new BadRequestException('Sản phẩm vừa được người khác xử lý — tải lại danh sách để xem trạng thái mới.');
-    }
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
 
     this.logger.warn(
       `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} sản phẩm đối tác ${productId} (${product.name})`,
     );
+    const ownerId = product.storefront?.ownerUserId;
+    if (ownerId) {
+      await this.notifications
+        .notify(ownerId, approve ? 'MERCHANT_PRODUCT_APPROVED' : 'MERCHANT_PRODUCT_REJECTED', {
+          product_name: product.name,
+          reason: reason ?? '',
+        })
+        .catch((e: unknown) => this.logger.warn(`Báo đối tác kết quả duyệt ${productId} lỗi: ${(e as Error).message}`));
+    }
 
     return updated;
   }

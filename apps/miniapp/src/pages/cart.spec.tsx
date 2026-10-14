@@ -179,3 +179,38 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(screen.getByTestId('flash-limit-notice')).toBeInTheDocument();
   });
 });
+
+describe('CartPage — chia theo nơi giao (D4)', () => {
+  const TUBU = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' };
+  const SHOP = { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' };
+  const HONEY = { ...OK_LINE, id: 'ci-m', productName: 'Mật ong rừng', total: 150_000, unitPrice: 150_000, fulfiller: SHOP };
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('giỏ toàn hàng Tubu: không có tiêu đề nơi giao, ngưỡng miễn phí ship như cũ', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, fulfiller: TUBU }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByRole('heading', { level: 2, name: 'Tubu Tree giao' })).toBeNull();
+    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí ship')).toBeInTheDocument();
+  });
+
+  it('có hàng gian hàng tự giao: mỗi nơi giao một nhóm (Tubu trước), báo tách đơn; ngưỡng miễn phí ship chỉ tính phần Tubu', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [HONEY, { ...OK_LINE, fulfiller: TUBU }], subtotal: 200_000, freeship: true }));
+    renderPage();
+    await screen.findByText('Mật ong rừng');
+    const sections = screen.getAllByRole('region');
+    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['Tubu Tree giao', 'Mật ong Linh giao']);
+    expect(screen.getByRole('heading', { level: 2, name: 'Mật ong Linh giao' })).toBeInTheDocument();
+    expect(screen.getByText(/mỗi nơi giao thành một đơn riêng/)).toBeInTheDocument();
+    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí ship cho phần hàng Tubu Tree giao')).toBeInTheDocument();
+  });
+
+  it('chỉ có hàng gian hàng tự giao: không mời mua thêm để được miễn phí ship', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [HONEY], subtotal: 150_000 }));
+    renderPage();
+    await screen.findByText('Mật ong rừng');
+    expect(screen.queryByText(/miễn phí ship/)).toBeNull();
+  });
+});

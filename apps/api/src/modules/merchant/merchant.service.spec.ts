@@ -189,7 +189,7 @@ describe('MerchantService', () => {
 
   describe('createProduct (Merchant tự đăng)', () => {
     it('tạo sản phẩm với trạng thái PENDING_REVIEW chờ admin duyệt', async () => {
-      const store = { id: 's1', ownerUserId: 'u1', title: 'Xanh Shop', collections: [{ id: 'col1' }] };
+      const store = { id: 's1', type: 'MERCHANT', ownerUserId: 'u1', title: 'Xanh Shop', collections: [{ id: 'col1' }] };
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },

@@ -1,6 +1,7 @@
 import { isNewGeoCode } from './geo-code';
 import { isPrepaidMethod } from '../../orders/order-transition';
 import type { PancakeCreateOrderBody, PancakeCreateOrderItem } from './pancake.types';
+import { isRealPancakeId } from './pancake-fulfilment';
 
 /** Tag máy đọc được trên đơn Pancake — kho/automation lọc đơn thu gom, không phải đọc note tự do. */
 export const PANCAKE_TAG_RECYCLING = 'RECYCLING';
@@ -146,7 +147,9 @@ export function pancakeOrderNote(code: string, recyclingNote: string | null | un
  */
 export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyContext): PancakeBodyResult {
   const isLine = ctx.isPancakeLine ?? ALL_LINES;
-  const lines = order.items.filter(isLine);
+  // Dòng không có mã biến thể Pancake thật (hàng đối tác tự giao, mã giả MCH_) không bao giờ tới kho — kể cả khi người gọi
+  // quên lọc: gửi id nội bộ thay mã Pancake là kho nhận một dòng hàng không tồn tại.
+  const lines = order.items.filter((l) => isLine(l) && isRealPancakeId(ctx.variations.get(l.variationId)?.pancakeId));
   const value = (l: PancakePushLine) => l.unitPrice * l.quantity;
   const goodsAll = order.items.reduce((s, l) => s + value(l), 0);
   const goods = lines.reduce((s, l) => s + value(l), 0);
@@ -159,7 +162,7 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
     const v = ctx.variations.get(l.variationId);
     const retail = Math.max(v?.retailPrice ?? l.unitPrice, l.unitPrice);
     return {
-      variation_id: v?.pancakeId ?? l.variationId,
+      variation_id: v!.pancakeId!,
       quantity: l.quantity,
       discount_each_product: retail - l.unitPrice,
       variation_info: { retail_price: retail },

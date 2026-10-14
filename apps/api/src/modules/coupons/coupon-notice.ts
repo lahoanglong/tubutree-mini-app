@@ -1,6 +1,10 @@
 /** Lý do khi mã vẫn hợp lệ nhưng phần hàng được tính giảm ra 0đ (vd giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu). */
 export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong đơn được giảm theo mã này.';
 
+/** Mã miễn phí vận chuyển chỉ miễn phí giao hàng do Tubu Tree giao; đơn chỉ có hàng gian hàng tự giao, hoặc đã miễn phí giao. */
+export const COUPON_FREESHIP_NOTHING_REASON =
+  'Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.';
+
 /**
  * Câu giải thích cho khách khi giỏ vẫn giữ mã nhưng mã chưa được áp cho đơn này (giảm 0đ, không tiêu
  * lượt). `reason` là thông điệp tiếng Việt của CouponsService (vd "Đơn tối thiểu 150.000đ để dùng mã này.").

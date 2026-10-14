@@ -12,12 +12,12 @@ import { recordReferralTouch } from '@/lib/shop-client';
  * có nó thì đơn đặt từ link gian hàng CTV về `storefrontSlug = null`: CTV không được ghi nhận
  * đơn, và combo giảm giá của gian hàng cũng không được áp (khách trả cao hơn giá quảng cáo).
  */
-export function StorefrontTracker({ slug, type }: { slug: string; type?: string }) {
+export function StorefrontTracker({ slug, type, referralCode }: { slug: string; type?: string; referralCode?: string | null }) {
   const { status } = useAuth();
 
   useEffect(() => {
-    rememberStorefront(slug, type);
-  }, [slug, type]);
+    rememberStorefront(slug, type, referralCode);
+  }, [slug, type, referralCode]);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -29,7 +29,7 @@ export function StorefrontTracker({ slug, type }: { slug: string; type?: string 
       storefrontSlug: slug,
       kind: type === 'CTV' ? 'ctv' : 'brand',
     }).catch(() => undefined);
-  }, [slug, type, status]);
+  }, [slug, type, referralCode, status]);
 
   return null;
 }

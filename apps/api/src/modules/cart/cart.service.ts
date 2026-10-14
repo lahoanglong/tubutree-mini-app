@@ -7,6 +7,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
 import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
+import { fulfillerOf } from '../checkout/checkout-split';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
@@ -45,7 +46,15 @@ export class CartService {
     const cartId = await this.ensureCart(userId);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
-      include: { items: { include: { variation: { include: { product: true } } } } },
+      include: {
+        items: {
+          include: {
+            variation: {
+              include: { product: { include: { storefront: { select: { title: true, ownerUserId: true, type: true } } } } },
+            },
+          },
+        },
+      },
     });
 
     // Q-14: dòng SP đã ngừng bán/chưa duyệt vẫn giữ trong DB (SP mở bán lại thì tự hiện lại) nhưng
@@ -95,6 +104,8 @@ export class CartService {
         flashEndAt: flash?.endAt ?? null,
         soldPct: flash ? (flash.quota > 0 ? Math.round((flash.soldCount / flash.quota) * 100) : 0) : null,
         flashLimitNotice,
+        // Nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3): giỏ chia nhóm theo đây, checkout tách đơn theo đây.
+        fulfiller: fulfillerOf(it.variation),
       };
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);

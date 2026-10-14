@@ -305,12 +305,13 @@ describe('PANCAKE-11: hàng bị xoá khỏi Pancake thì ngừng bán trên Tub
     });
   const catalog = () => [[product('a', [variation('v-a')]), product('b', [variation('v-b')])]];
 
-  it('quét toàn bộ: biến thể/SP không còn trên Pancake → isActive=false, pancakeHold=REMOVED; bỏ qua hàng merchant (MCH_)', async () => {
+  it('quét toàn bộ: biến thể/SP không còn trên Pancake → isActive=false, pancakeHold=REMOVED; bỏ qua hàng không có mã Pancake (đối tác tự giao, MCH_ cũ)', async () => {
     const prisma = sweepPrisma();
     await new PancakeSyncService(prisma, makeClient(catalog()), lifecycle).syncProducts();
     const m = mk(prisma);
-    expect(m.variation.findMany.mock.calls[0][0].where).toEqual({ isActive: true, NOT: { pancakeId: { startsWith: 'MCH_' } } });
-    expect(m.product.findMany.mock.calls[0][0].where).toEqual({ isActive: true, NOT: { pancakeId: { startsWith: 'MCH_' } } });
+    const onPancake = { isActive: true, pancakeId: { not: null }, NOT: { pancakeId: { startsWith: 'MCH_' } } };
+    expect(m.variation.findMany.mock.calls[0][0].where).toEqual(onPancake);
+    expect(m.product.findMany.mock.calls[0][0].where).toEqual(onPancake);
     expect(m.variation.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['db-gone'] }, isActive: true },
       data: { isActive: false, pancakeHold: 'REMOVED' },

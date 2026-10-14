@@ -29,6 +29,19 @@ describe('SystemConfigController.publicConfig', () => {
     expect(out.affiliateMinWithdrawBank).toBe(80000);
   });
 
+  // SELLER-11: CTV cần thấy số thực nhận sau thuế TNCN trước khi bấm rút; số phải là số service dùng để khấu trừ.
+  it('trả mức khấu trừ thuế TNCN khi rút hoa hồng (cùng khoá và mặc định với affiliate.service)', async () => {
+    expect((await new SystemConfigController(makeConfig()).publicConfig()).affiliatePitWithhold).toEqual({
+      pct: 0.1,
+      threshold: 2_000_000,
+    });
+    const config = makeConfig({ 'affiliate.pit_withhold_pct': 0, 'affiliate.pit_withhold_threshold': 5_000_000 });
+    expect((await new SystemConfigController(config).publicConfig()).affiliatePitWithhold).toEqual({
+      pct: 0,
+      threshold: 5_000_000,
+    });
+  });
+
   it('chưa cấu hình → trả đúng mặc định hiện hành (12%, 50k)', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.12);

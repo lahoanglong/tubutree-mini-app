@@ -10,6 +10,7 @@ import { cancelPancakeOrder, mayExistOnPancake, PANCAKE_CANCEL } from './pancake
 import { PancakeApiError, pancakeErrorText, pancakeOrderHasCode, isPancakeCancelled } from './pancake-outbound';
 import { enqueuePancakeCancel, enqueuePancakePayment } from './pancake-queue';
 import { ATTENTION_CANCEL_PENDING, flagPancakeAttention } from './pancake-attention';
+import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
 /** Lời báo khách/admin khi Pancake đã bàn giao đơn cho đơn vị vận chuyển (D1). */
 export const PANCAKE_HANDED_OVER_MESSAGE = 'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH';
@@ -30,7 +31,7 @@ export type PancakeCancelDecision =
   /** Không hỏi được Pancake (mất kết nối, chưa cấu hình, Pancake từ chối lệnh): huỷ ở Tubu, job thử lại. */
   | { kind: 'DEFERRED'; reason: string };
 
-type CancelSubject = Pick<Order, 'id' | 'code' | 'pancakeOrderId' | 'pancakePushClaimedAt'>;
+type CancelSubject = Pick<Order, 'id' | 'code' | 'pancakeOrderId' | 'pancakePushClaimedAt'> & Partial<Pick<Order, 'fulfiller'>>;
 
 /**
  * Móc nối chiều Tubu → Pancake cho các đường đổi trạng thái đơn ở OrdersModule (huỷ, nhận tiền) — tách khỏi
@@ -58,7 +59,8 @@ export class PancakeSyncHooks {
   ) {}
 
   async precheckCancel(order: CancelSubject): Promise<PancakeCancelDecision> {
-    if (!mayExistOnPancake(order)) return { kind: 'NONE' };
+    // D4: đơn gian hàng đối tác tự giao không có trên Pancake — mốc huỷ là lúc đối tác báo đã gửi hàng (MerchantFulfilment).
+    if (isMerchantFulfilledOrder(order) || !mayExistOnPancake(order)) return { kind: 'NONE' };
     if (!this.client.isConfigured()) return { kind: 'DEFERRED', reason: 'Pancake chưa được cấu hình' };
     if (Date.now() < this.unreachableUntil) return { kind: 'DEFERRED', reason: 'Pancake vừa không phản hồi' };
     const opts = { timeoutMs: PancakeSyncHooks.CANCEL_TIMEOUT_MS };
@@ -114,9 +116,9 @@ export class PancakeSyncHooks {
       }
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
-        select: { id: true, code: true, pancakeOrderId: true, pancakePushClaimedAt: true, pancakeCancelStatus: true },
+        select: { id: true, code: true, fulfiller: true, pancakeOrderId: true, pancakePushClaimedAt: true, pancakeCancelStatus: true },
       });
-      if (!order || !mayExistOnPancake(order)) return;
+      if (!order || isMerchantFulfilledOrder(order) || !mayExistOnPancake(order)) return;
       await this.prisma.order.update({ where: { id: orderId }, data: { pancakeCancelStatus: PANCAKE_CANCEL.PENDING } });
       if (decision?.kind === 'DEFERRED') {
         await flagPancakeAttention(
@@ -135,6 +137,8 @@ export class PancakeSyncHooks {
 
   /** Đơn vừa PAID: đã lên Pancake thì báo "đã thanh toán, không thu COD"; chưa lên (chờ tiền) thì đẩy. */
   async afterPaid(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { fulfiller: true } }).catch(() => null);
+    if (order && isMerchantFulfilledOrder(order)) return; // D4: gian hàng tự giao, kho Tubu không có đơn này
     await enqueuePancakePayment(this.queue, orderId).catch((err) =>
       this.logger.error(`Xếp lệnh cập nhật thanh toán Pancake lỗi cho đơn ${orderId}: ${pancakeErrorText(err)} — cron cứu hộ thử lại.`),
     );
