@@ -15,7 +15,7 @@ const DELIVERED = new Date('2026-10-03T03:00:00Z');
 /**
  * Ví dụ tính tay dùng chung với race spec: gian hàng phí sàn 10%, phí Tubu giao hộ 2% + 3.400đ/đơn.
  * Đơn kho Tubu: A (giao hộ) 2 × 60.000 = 120.000, B (giao hộ) 1 × 50.000, C (hàng Tubu) 1 × 30.000 → tiền hàng 200.000;
- * mã giảm 20.000 + Điểm Xanh 10.000; phí giao 25.000 (Tubu giữ) → khách trả 195.000, tiền hàng thực trả 170.000 (85%).
+ * mã giảm 30.000; phí giao 25.000 (Tubu giữ) → khách trả 195.000, tiền hàng thực trả 170.000 (85%).
  *   A: 120.000 × 85% = 102.000; phí sàn 10.200; phí giao hộ 2.040 + 3.400 × 102.000/144.500 (= 2.400) = 4.440 → 87.360
  *   B:  50.000 × 85% =  42.500; phí sàn  4.250; phí giao hộ   850 + 3.400 ×  42.500/144.500 (= 1.000) = 1.850 → 36.400
  */

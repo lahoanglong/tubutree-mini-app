@@ -18,11 +18,11 @@ const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
 
 /**
- * Đơn gian hàng tự giao đối soát trên tiền khách THỰC TRẢ cho hàng (sau mã giảm giá Tubu, Điểm Xanh), như hàng Tubu giao hộ:
+ * Đơn gian hàng tự giao đối soát trên tiền khách THỰC TRẢ cho hàng (sau mã giảm giá của khách), như hàng Tubu giao hộ:
  * gian hàng chịu phần giảm, phí giao giữ nguyên. Ví dụ tính tay (phí sàn chốt trên đơn 10%):
  *
  *   A 2 × 100.000 = 200.000, B 1 × 100.000 = 100.000 → tiền hàng 300.000
- *   mã giảm giá Tubu 30.000 + Điểm Xanh 20.000 → giảm 50.000; phí giao 30.000 → khách trả 280.000
+ *   mã giảm giá 50.000 (Điểm Xanh không dùng cho hàng đối tác); phí giao 30.000 → khách trả 280.000
  *   tiền hàng thực trả 250.000, chia theo giá trị dòng: A 166.667, B 83.333
  *
  *   SALE        hàng 250.000, phí giao 30.000, phí sàn 25.000
@@ -112,8 +112,8 @@ describe('Đối soát đơn tự giao theo tiền khách thực trả (real Pos
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAID',
       subtotal: 300_000,
       discount: 50_000,
-      couponDiscount: 30_000,
-      pointsDiscount: 20_000,
+      couponDiscount: 50_000,
+      pointsDiscount: 0,
       shippingFee: 30_000,
       total: 280_000,
       items: {

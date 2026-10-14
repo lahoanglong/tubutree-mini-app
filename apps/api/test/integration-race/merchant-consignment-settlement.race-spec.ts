@@ -20,7 +20,7 @@ const ago = (days: number) => new Date(Date.now() - days * DAY);
 /**
  * Q8 trên Postgres THẬT: hàng "Tubu giao hộ" (biến thể Pancake liên kết với gian hàng) đối soát qua CÙNG phiếu với hàng tự
  * giao, mỗi dòng hàng một dòng phiếu (refKey ITEM:<dòng>). Ví dụ tính tay (khớp merchant-consignment.spec.ts): phí sàn 10%,
- * phí giao hộ 2% + 3.400đ/đơn; đơn A 2×60.000 + B 50.000 (giao hộ) + C 30.000 (hàng Tubu), mã giảm 20.000, Điểm Xanh 10.000,
+ * phí giao hộ 2% + 3.400đ/đơn; đơn A 2×60.000 + B 50.000 (giao hộ) + C 30.000 (hàng Tubu), mã giảm 30.000,
  * phí giao 25.000 → khách trả 195.000, tiền hàng thực trả 170.000.
  *   SALE A = 102.000 − 10.200 − 4.440 = 87.360; SALE B = 42.500 − 4.250 − 1.850 = 36.400; phiếu 123.760.
  *   Trả 1 hũ A: REVERSAL −51.000 + 5.100 + 2.220 = −43.680 (khách được hoàn 51.000).
@@ -150,7 +150,7 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
   const stockOf = async (id: string) => (await prisma.variation.findUniqueOrThrow({ where: { id } })).stock;
   const sum = (ls: { netAmount: number }[]) => ls.reduce((s, l) => s + l.netAmount, 0);
 
-  it('ví dụ tính tay: 2 dòng giao hộ + 1 dòng Tubu + mã giảm + Điểm Xanh → đúng 2 dòng SALE 87.360/36.400 dù lập phiếu chồng; trả 1 hũ A chồng lập phiếu → đúng 1 REVERSAL −43.680; trả nốt → đơn RETURNED, tổng các dòng = 0', async () => {
+  it('ví dụ tính tay: 2 dòng giao hộ + 1 dòng Tubu + mã giảm → đúng 2 dòng SALE 87.360/36.400 dù lập phiếu chồng; trả 1 hũ A chồng lập phiếu → đúng 1 REVERSAL −43.680; trả nốt → đơn RETURNED, tổng các dòng = 0', async () => {
     const admin = await createUser(prisma, { role: 'ADMIN' });
     const { owner, store, tag } = await shop({ commissionPct: 0.1, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 });
     const { product, variations: [vA, vB] } = await variations(store.id, tag, [60_000, 50_000]);
@@ -165,7 +165,7 @@ describe('Đối soát hàng Tubu giao hộ qua phiếu đối soát (real Postg
         { variationId: vB!.id, name: 'Xà bông', unitPrice: 50_000, quantity: 1 },
         { variationId: vC!.id, name: 'Nước rửa chén', unitPrice: 30_000, quantity: 1 },
       ],
-      { createdAt: ago(3), deliveredAt: ago(2), discount: 30_000, couponDiscount: 20_000, pointsDiscount: 10_000, shippingFee: 25_000 },
+      { createdAt: ago(3), deliveredAt: ago(2), discount: 30_000, couponDiscount: 30_000, pointsDiscount: 0, shippingFee: 25_000 },
     );
     expect(order.total).toBe(195_000);
     const iA = itemOf(vA!.id);

@@ -92,7 +92,7 @@ describe('saleLineOf — công thức đối soát (thiết kế mục 7)', () =
 });
 
 describe('Đơn tự giao — ví dụ tính tay (giống race spec merchant-selfship-paid-base)', () => {
-  // A 2 × 100k, B 1 × 100k; mã giảm 30k + Điểm Xanh 20k; phí giao 30k → khách trả 280k; phí sàn 10%.
+  // A 2 × 100k, B 1 × 100k; mã giảm 50k; phí giao 30k → khách trả 280k; phí sàn 10%.
   const order = {
     id: 'o',
     code: 'C',

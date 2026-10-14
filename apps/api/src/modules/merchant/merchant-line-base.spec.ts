@@ -10,7 +10,7 @@ describe('merchantLineBase — nền tiền hàng từng dòng của đơn đố
     ],
   };
 
-  it('tiền hàng khách thực trả (sau mã giảm giá, Điểm Xanh) chia theo giá trị dòng, cộng lại đúng bằng số khách trả cho hàng', () => {
+  it('tiền hàng khách thực trả (sau mã giảm giá) chia theo giá trị dòng, cộng lại đúng bằng số khách trả cho hàng', () => {
     expect(merchantLineBase(order)).toEqual([83_333, 166_667]);
     expect(merchantLineBase(order).reduce((s, v) => s + v, 0)).toBe(250_000);
   });
