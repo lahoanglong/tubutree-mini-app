@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -239,11 +240,27 @@ export class CartService {
   }
 
   /** Xoá nhiều dòng (dùng sau khi đặt đơn checkout TẬP CON — chỉ dọn món đã mua, giữ phần còn lại). */
-  async removeItems(userId: string, itemIds: string[]): Promise<void> {
+  async removeItems(userId: string, itemIds: string[], db: Prisma.TransactionClient = this.prisma): Promise<void> {
     if (itemIds.length === 0) return;
-    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+    const cart = await db.cart.findUnique({ where: { userId } });
     if (!cart) return;
-    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
+    await db.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
+  }
+
+  /**
+   * Khoá giỏ của user tới hết transaction đặt đơn rồi đọc lại các dòng: mọi lần đặt của cùng một giỏ xếp hàng sau nhau, và
+   * lần đến sau thấy giỏ đã được lần trước dọn (đặt đơn dọn giỏ ngay trong transaction đó), không đặt lại từ bản giỏ đã đọc.
+   * NO KEY UPDATE: không chặn thêm dòng giỏ (khoá KEY SHARE của khoá ngoại cart_items → carts).
+   */
+  async lockForCheckout(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<{ id: string; variationId: string; quantity: number }[]> {
+    await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "userId" = ${userId} FOR NO KEY UPDATE`;
+    return tx.cartItem.findMany({
+      where: { cart: { userId } },
+      select: { id: true, variationId: true, quantity: true },
+    });
   }
 
   async applyCoupon(userId: string, code: string) {
@@ -264,10 +281,10 @@ export class CartService {
     return this.getCart(userId);
   }
 
-  async clear(userId: string): Promise<void> {
-    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+  async clear(userId: string, db: Prisma.TransactionClient = this.prisma): Promise<void> {
+    const cart = await db.cart.findUnique({ where: { userId } });
     if (!cart) return;
-    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await this.prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
+    await db.cartItem.deleteMany({ where: { cartId: cart.id } });
+    await db.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
   }
 }

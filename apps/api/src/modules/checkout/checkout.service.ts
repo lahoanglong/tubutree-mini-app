@@ -47,6 +47,38 @@ const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_k
 export const TOTAL_CHANGED = 'TOTAL_CHANGED';
 export const TOTAL_CHANGED_MESSAGE_PREFIX = 'Tổng tiền đơn vừa thay đổi';
 
+/** Mã lỗi ổn định: giỏ đổi giữa lúc tính tiền và lúc ghi đơn (tab khác sửa giỏ, hoặc lần bấm trước vừa đặt xong). */
+export const CART_CHANGED = 'CART_CHANGED';
+const CART_CHANGED_MESSAGE =
+  'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+
+/**
+ * Lần bấm "Đặt hàng" đến sau khi giỏ đã thành đơn (app báo lỗi mạng/quá thời gian rồi khách bấm lại, có khi với key mới) nhận
+ * lại đơn đó nếu đơn mới tạo trong khoảng này và cùng địa chỉ, cách trả tiền, thu gom.
+ */
+const RECENT_ORDER_REPLAY_MS = 2 * 60_000;
+
+/** Giỏ đã bị đổi khi lần đặt này giành được khoá giỏ; `consumed` = dòng định mua đã biến mất (thường do lần đặt trước). */
+class CartChangedError extends Error {
+  constructor(readonly consumed: boolean) {
+    super(CART_CHANGED);
+  }
+}
+
+function cartChangeSince(
+  read: { id: string; variationId: string; quantity: number }[],
+  fresh: { id: string; variationId: string; quantity: number }[],
+): 'consumed' | 'changed' | null {
+  const byId = new Map(fresh.map((l) => [l.id, l]));
+  let changed = false;
+  for (const l of read) {
+    const now = byId.get(l.id);
+    if (!now) return 'consumed';
+    if (now.variationId !== l.variationId || now.quantity !== l.quantity) changed = true;
+  }
+  return changed ? 'changed' : null;
+}
+
 /** Một kiện của lần đặt (một nơi giao) — thành một đơn khi đặt. */
 export interface CheckoutShipment extends GroupAmounts {
   key: string;
@@ -276,7 +308,11 @@ export class CheckoutService {
       storefrontSlug ?? undefined,
       dto.itemIds,
     );
-    if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
+    if (cart.items.length === 0) {
+      const recent = await this.recentlyPlacedOrder(userId, dto);
+      if (recent) return recent;
+      throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
+    }
 
     // PD-3 (spec 2.3): đơn 0đ (Điểm Xanh/mã giảm giá phủ hết hàng, freeship) không có gì để thu.
     // BANK_TRANSFER/ZALOPAY sẽ treo PENDING_PAYMENT rồi bị cron huỷ; WALLET sẽ thành PAID không trừ gì.
@@ -339,6 +375,11 @@ export class CheckoutService {
     let orders: Awaited<ReturnType<typeof this.prisma.order.create>>[];
     try {
       orders = await this.prisma.$transaction(async (tx) => {
+        // Mọi lần đặt của cùng giỏ chạy nối tiếp từ đây, và giỏ được dọn trong chính tx này: lần bấm lại (key khác) đang chờ
+        // khoá sẽ thấy dòng đã mua biến mất thay vì đặt thêm một đơn từ bản giỏ đã đọc trước đó (R2-MONEY-2).
+        const change = cartChangeSince(cart.items, await this.cart.lockForCheckout(tx, userId));
+        if (change) throw new CartChangedError(change === 'consumed');
+
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
         // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
@@ -558,31 +599,32 @@ export class CheckoutService {
           }
           if (referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
         }
+        // Dọn giỏ cùng tx với đơn (vẫn dưới khoá giỏ). Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại và mã giảm giá.
+        if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
+          await this.cart.removeItems(userId, cart.items.map((l) => l.id), tx);
+        } else {
+          await this.cart.clear(userId, tx);
+        }
         return created;
       });
     } catch (err) {
-      // Race idempotency: 2 request cùng Idempotency-Key chạy đồng thời — request thua
-      // cuộc ăn unique-violation (P2002). Trả lại đơn mà request thắng đã tạo.
-      if (idempotencyKey && this.isUniqueViolation(err)) {
+      // Cùng Idempotency-Key gửi chồng: lần đến sau hoặc ăn unique-violation (P2002), hoặc chờ khoá giỏ rồi thấy giỏ đã
+      // thành đơn. Trả lại đơn mà lần thắng đã tạo.
+      if (idempotencyKey && (this.isUniqueViolation(err) || err instanceof CartChangedError)) {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
         if (existing) return this.replayIdempotentOrder(existing, userId, dto);
+      }
+      if (err instanceof CartChangedError) {
+        if (err.consumed) {
+          const recent = await this.recentlyPlacedOrder(userId, dto);
+          if (recent) return recent;
+        }
+        throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: CART_CHANGED, message: CART_CHANGED_MESSAGE });
       }
       throw err;
     }
 
-    // Dọn giỏ + đẩy Pancake (ngoài transaction chính). Coupon redeem đã chạy trong tx ở trên.
-    // Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại (không clear coupon toàn giỏ).
-    // Đơn + thanh toán đã commit ở tx trên — lỗi dọn giỏ (DB blip) không được làm hỏng response
-    // (nhất quán với Pancake/notification bên dưới).
-    try {
-      if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
-        await this.cart.removeItems(userId, cart.items.map((l) => l.id));
-      } else {
-        await this.cart.clear(userId);
-      }
-    } catch (err) {
-      this.logger.error(`Dọn giỏ lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
-    }
+    // Đẩy Pancake + thông báo (ngoài transaction chính). Coupon redeem và dọn giỏ đã chạy trong tx ở trên.
     for (const [i, order] of orders.entries()) {
       const shipment = computed.shipments[i]!;
       if (shipment.fulfiller.kind === 'MERCHANT') {
@@ -700,19 +742,60 @@ export class CheckoutService {
     if (existing.userId !== userId) {
       throw new BadRequestException('Idempotency-Key không hợp lệ.');
     }
-    // Đơn 0đ đã bị ép COD (placeOrderInner): khách gửi lại đúng phương thức đã chọn lúc đầu vẫn là
-    // cùng một yêu cầu.
-    const forcedCod = existing.paymentMethod === 'COD' && existing.total === 0;
-    const paymentChanged = existing.paymentMethod !== dto.paymentMethod && !forcedCod;
-    // Bật/tắt thu gom tái chế giữa 2 lần gửi cùng key cũng là "yêu cầu khác" — không trả đơn cũ.
-    const recyclingChanged = Boolean(existing.hasRecyclingPickup) !== (dto.hasRecyclingPickup === true);
-    const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
-    const addressChanged =
-      !address || stableStringify(this.addressSnapshot(address)) !== stableStringify(existing.shippingAddress);
-    if (paymentChanged || addressChanged || recyclingChanged) {
+    if (!(await this.isSameRequest(existing, dto))) {
       throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, vui lòng tải lại trang.');
     }
     return this.findOrderResponse(existing.id);
+  }
+
+  /** Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu gom (so snapshot địa chỉ bằng stableStringify, xem trên). */
+  private async isSameRequest(
+    existing: { paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; hasRecyclingPickup?: boolean },
+    dto: PlaceOrderDto,
+  ): Promise<boolean> {
+    // Đơn 0đ đã bị ép COD (placeOrderInner): khách gửi lại đúng phương thức đã chọn lúc đầu vẫn là
+    // cùng một yêu cầu.
+    const forcedCod = existing.paymentMethod === 'COD' && existing.total === 0;
+    if (existing.paymentMethod !== dto.paymentMethod && !forcedCod) return false;
+    // Bật/tắt thu gom tái chế giữa 2 lần gửi cũng là "yêu cầu khác" — không trả đơn cũ.
+    if (Boolean(existing.hasRecyclingPickup) !== (dto.hasRecyclingPickup === true)) return false;
+    const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
+    return !!address && stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress);
+  }
+
+  /**
+   * Đơn khách vừa tự đặt (lần đặt gần nhất trong RECENT_ORDER_REPLAY_MS, chưa huỷ) mà lần gửi này trùng thông tin — dùng khi
+   * giỏ đã thành đơn trước khi lần gửi này kịp đặt. Lần đặt bị tách thì trả đơn đầu nhóm như lần đặt gốc.
+   */
+  private async recentlyPlacedOrder(userId: string, dto: PlaceOrderDto) {
+    const select = {
+      id: true,
+      code: true,
+      checkoutGroup: true,
+      paymentMethod: true,
+      total: true,
+      shippingAddress: true,
+      hasRecyclingPickup: true,
+    } as const;
+    const latest = await this.prisma.order.findFirst({
+      where: {
+        userId,
+        type: 'RETAIL',
+        subscriptionId: null,
+        placedForCustomer: false,
+        status: { not: 'CANCELLED' },
+        createdAt: { gte: new Date(Date.now() - RECENT_ORDER_REPLAY_MS) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select,
+    });
+    if (!latest) return null;
+    const primary =
+      latest.checkoutGroup && latest.checkoutGroup !== latest.code
+        ? await this.prisma.order.findFirst({ where: { userId, code: latest.checkoutGroup }, select })
+        : latest;
+    if (!primary || !(await this.isSameRequest(primary, dto))) return null;
+    return this.findOrderResponse(primary.id);
   }
 
   /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
