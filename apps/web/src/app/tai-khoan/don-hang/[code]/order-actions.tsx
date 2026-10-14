@@ -8,17 +8,27 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelOrder,
   fetchMyReturns,
+  formatVnd,
   repurchaseOrder,
-  requestReturn,
   type OrderDetailDTO,
   type RepurchaseResult,
   type ReturnRequestDTO,
 } from '@/lib/shop-client';
 import { canCancelOrder, isReorderable } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
-
-const RETURN_REASON_MIN = 5;
-const RETURN_REASON_MAX = 500;
+import {
+  EMPTY_BANK,
+  bankDetailsError,
+  cancelRefundMode,
+  destinationBody,
+  remainingByLine,
+  returnLinesText,
+  returnStatusLabel,
+  type RefundBankInput,
+  type RefundMethodChoice,
+} from '@/lib/refund-rules';
+import { RefundDestinationPicker } from './refund-destination-picker';
+import { ReturnRequestForm } from './return-request-form';
 
 /** Số dòng của lượt mua lại không thêm được (hết hàng/ngừng bán) hoặc chỉ thêm được một phần. */
 function repurchaseSummary(r: RepurchaseResult): { added: number; short: number } {
@@ -27,7 +37,8 @@ function repurchaseSummary(r: RepurchaseResult): { added: number; short: number 
 }
 
 /**
- * Việc khách tự làm được trên đơn: hủy (khi còn kịp), mua lại (đơn đã kết thúc), yêu cầu đổi/trả (đơn đã giao).
+ * Việc khách tự làm được trên đơn: hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại (đơn đã kết thúc),
+ * yêu cầu đổi/trả theo dòng và số lượng (đơn đã giao).
  * Quy tắc chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
  */
 export function OrderActions({
@@ -43,22 +54,36 @@ export function OrderActions({
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
-  const [reason, setReason] = useState('');
+  const [returnKey, setReturnKey] = useState(0);
+  const [returnSent, setReturnSent] = useState(false);
   const [partial, setPartial] = useState<{ added: number; short: number } | null>(null);
+  const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
+  const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
+  const [cancelTouched, setCancelTouched] = useState(false);
 
   const canCancel = canCancelOrder(o, userId);
   const canReorder = isReorderable(o.status);
   const delivered = o.status === 'DELIVERED';
+  const showsReturns = delivered || o.status === 'RETURNED';
+  const refundMode = cancelRefundMode({ paymentMethod: o.paymentMethod, paymentStatus: o.paymentStatus ?? 'UNPAID' });
+  const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
 
-  const returnsQ = useQuery({ queryKey: ['my-returns'], queryFn: fetchMyReturns, enabled: delivered, retry: 0 });
-  const existingReturn: ReturnRequestDTO | undefined = o.id ? returnsQ.data?.find((r) => r.orderId === o.id) : undefined;
+  const returnsQ = useQuery({ queryKey: ['my-returns'], queryFn: fetchMyReturns, enabled: showsReturns, retry: 0 });
+  const orderReturns: ReturnRequestDTO[] = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
+  const remaining = remainingByLine(
+    o.items.filter((it): it is typeof it & { id: string } => !!it.id),
+    orderReturns,
+  );
+  const canRequestMore =
+    delivered && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
   const cancel = useMutation({
-    mutationFn: () => cancelOrder(o.code),
+    mutationFn: (choose: boolean) => cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined),
     onSuccess: () => {
       setConfirmCancel(false);
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
+      void qc.invalidateQueries({ queryKey: ['my-refunds'] });
     },
     onError: () => setConfirmCancel(false),
   });
@@ -73,17 +98,7 @@ export function OrderActions({
     },
   });
 
-  const returnReq = useMutation({
-    mutationFn: () => requestReturn(o.code, reason.trim()),
-    onSuccess: () => {
-      setReturnOpen(false);
-      setReason('');
-      void qc.invalidateQueries({ queryKey: ['my-returns'] });
-    },
-  });
-  const reasonOk = reason.trim().length >= RETURN_REASON_MIN;
-
-  const nothingToDo = !canCancel && !canReorder && !delivered;
+  const nothingToDo = !canCancel && !canReorder && !showsReturns;
   if (nothingToDo) return null;
 
   return (
@@ -105,13 +120,37 @@ export function OrderActions({
             Bạn muốn hủy đơn này?
           </p>
           <p className="mt-1 text-sm text-stone-700">Đơn đã hủy không thể khôi phục lại.</p>
+          {refundMode === 'choose' && (
+            <div className="mt-3 rounded-control bg-stone-0 p-3">
+              <RefundDestinationPicker
+                method={cancelMethod}
+                onMethod={setCancelMethod}
+                bank={cancelBank}
+                onBank={setCancelBank}
+                bankError={cancelTouched ? cancelBankError : null}
+                amountLabel={formatVnd(o.total)}
+              />
+            </div>
+          )}
+          {refundMode === 'wallet' && (
+            <p className="mt-2 text-sm text-stone-700">{`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}</p>
+          )}
+          {refundMode === 'unpaidTransfer' && (
+            <p role="note" className="mt-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
+              Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn được
+              hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => setConfirmCancel(false)} disabled={cancel.isPending} className={ui.btnPrimary}>
               Giữ đơn
             </button>
             <button
               type="button"
-              onClick={() => cancel.mutate()}
+              onClick={() => {
+                setCancelTouched(true);
+                if (!cancelBankError) cancel.mutate(refundMode === 'choose');
+              }}
               disabled={cancel.isPending}
               className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
             >
@@ -138,10 +177,17 @@ export function OrderActions({
               {repurchase.isPending ? 'Đang thêm vào giỏ…' : 'Mua lại đơn này'}
             </button>
           )}
-          {delivered && !existingReturn && !returnOpen && !returnReq.isSuccess && (
-            <button type="button" onClick={() => setReturnOpen(true)} className={`${ui.btnSecondary} gap-2`}>
+          {canRequestMore && !returnOpen && !returnSent && (
+            <button
+              type="button"
+              onClick={() => {
+                setReturnKey((k) => k + 1);
+                setReturnOpen(true);
+              }}
+              className={`${ui.btnSecondary} gap-2`}
+            >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              Yêu cầu đổi/trả
+              {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
             </button>
           )}
         </div>
@@ -169,81 +215,51 @@ export function OrderActions({
         </div>
       )}
 
-      {delivered && existingReturn && <ReturnStatus request={existingReturn} />}
-      {delivered && returnReq.isSuccess && !existingReturn && (
+      {showsReturns && orderReturns.map((r) => <ReturnStatus key={r.id} request={r} items={o.items} />)}
+      {returnSent && (
         <p role="status" className="mt-3 text-sm font-medium text-success-fg">
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
         </p>
       )}
 
       {delivered && returnOpen && (
-        <form
-          className="mt-3 space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (reasonOk) returnReq.mutate();
+        <ReturnRequestForm
+          key={returnKey}
+          order={o}
+          returns={orderReturns}
+          supportEmail={supportEmail}
+          onClose={() => setReturnOpen(false)}
+          onDone={() => {
+            setReturnOpen(false);
+            setReturnSent(true);
           }}
-        >
-          <h3 className="font-semibold text-stone-900">Yêu cầu đổi/trả</h3>
-          <p className="text-xs text-stone-600">
-            Chỉ áp dụng khi lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả) và trong thời hạn đổi/trả kể
-            từ khi nhận hàng. Cần gửi ảnh minh chứng? Gửi kèm mã đơn {o.code} qua email {supportEmail}.
-          </p>
-          <label className="block">
-            <span className="text-xs font-medium text-stone-700">Lý do đổi/trả</span>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              maxLength={RETURN_REASON_MAX}
-              rows={4}
-              aria-invalid={reason.length > 0 && !reasonOk ? true : undefined}
-              aria-describedby="return-reason-hint"
-              className={`${reason.length > 0 && !reasonOk ? ui.fieldError : ui.field} mt-1 py-2`}
-            />
-          </label>
-          <p id="return-reason-hint" className={`text-xs ${reason.length > 0 && !reasonOk ? 'text-danger-fg' : 'text-stone-600'}`}>
-            {reason.length > 0 && !reasonOk
-              ? `Hãy mô tả ít nhất ${RETURN_REASON_MIN} ký tự.`
-              : `${reason.length}/${RETURN_REASON_MAX} ký tự`}
-          </p>
-          {returnReq.isError && (
-            <p role="alert" className={ui.error}>
-              {returnReq.error instanceof Error ? returnReq.error.message : 'Không gửi được yêu cầu.'}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setReturnOpen(false);
-                returnReq.reset();
-              }}
-              disabled={returnReq.isPending}
-              className={ui.btnSecondary}
-            >
-              Đóng
-            </button>
-            <button type="submit" disabled={!reasonOk || returnReq.isPending} className={ui.btnPrimary}>
-              {returnReq.isPending ? 'Đang gửi…' : 'Gửi yêu cầu'}
-            </button>
-          </div>
-        </form>
+        />
       )}
     </section>
   );
 }
 
-function ReturnStatus({ request: r }: { request: ReturnRequestDTO }) {
+function ReturnStatus({ request: r, items }: { request: ReturnRequestDTO; items: OrderDetailDTO['items'] }) {
   const view =
     r.status === 'APPROVED'
-      ? { Icon: CheckCircle2, tone: 'text-success-fg', text: 'Đổi/trả đã được duyệt — tiền hoàn vào Ví Tubu.' }
+      ? { Icon: CheckCircle2, tone: 'text-success-fg' }
       : r.status === 'REJECTED'
-        ? { Icon: XCircle, tone: 'text-danger-fg', text: `Yêu cầu đổi/trả bị từ chối${r.adminNote ? `: ${r.adminNote}` : '.'}` }
-        : { Icon: Clock, tone: 'text-stone-700', text: 'Yêu cầu đổi/trả đang được xử lý (phản hồi trong 24 giờ).' };
+        ? { Icon: XCircle, tone: 'text-danger-fg' }
+        : { Icon: Clock, tone: 'text-stone-700' };
+  const lines = returnLinesText(
+    r,
+    items.filter((it): it is typeof it & { id: string } => !!it.id),
+  );
   return (
-    <p role="status" className={`mt-3 flex items-start gap-2 text-sm ${view.tone}`}>
-      <view.Icon className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-      <span className="min-w-0 break-words">{view.text}</span>
-    </p>
+    <div role="status" className="mt-3 text-sm">
+      <p className={`flex items-start gap-2 ${view.tone}`}>
+        <view.Icon className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+        <span className="min-w-0 break-words">{returnStatusLabel(r)}</span>
+      </p>
+      {lines && <p className="ml-6 text-xs text-stone-600">Trả: {lines}</p>}
+      {r.status === 'APPROVED' && !!r.items?.length && (
+        <p className="ml-6 text-xs text-stone-600">{r.receivedAt ? 'Tubu đã nhận lại hàng.' : 'Tubu sẽ liên hệ để nhận lại hàng.'}</p>
+      )}
+    </div>
   );
 }

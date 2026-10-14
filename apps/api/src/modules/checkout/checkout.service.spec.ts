@@ -63,6 +63,7 @@ function build(
     /** P0 A3-05: dùng PricingService THẬT thay vì mock cứng — cho test end-to-end freeship/giảm % hạng. */
     pricing?: PricingService;
     geo?: { checkWard: jest.Mock };
+    systemConfig?: { get: jest.Mock };
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -156,7 +157,7 @@ function build(
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics, opts.geo as never);
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics, opts.geo as never, opts.systemConfig as never);
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
 }
 
@@ -1378,5 +1379,29 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.couponApplied).toBe(true);
     expect(q.couponNotice).toBeNull();
+  });
+});
+
+describe('CheckoutService — thông báo khi đặt đơn (BUYERMINI-8)', () => {
+  beforeAll(() => jest.useFakeTimers({ now: new Date('2026-10-13T03:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] }));
+  afterAll(() => jest.useRealTimers());
+
+  it.each(['BANK_TRANSFER', 'ZALOPAY'])('đơn %s chưa trả → "chờ thanh toán" kèm số tiền và hạn (TTL từ SystemConfig), KHÔNG "đã xác nhận"', async (paymentMethod) => {
+    const systemConfig = { get: jest.fn().mockResolvedValue(24) };
+    const { svc, notifications } = build({ total: 114_000, systemConfig });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    expect(systemConfig.get).toHaveBeenCalledWith('orders.pending_payment_ttl_hours', 24);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_AWAITING_PAYMENT', {
+      order_code: expect.any(String),
+      amount: expect.stringMatching(/đ$/),
+      deadline: '10:00 14/10/2026',
+    });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+  });
+
+  it.each(['COD', 'WALLET'])('đơn %s → "đã xác nhận" như cũ', async (paymentMethod) => {
+    const { svc, notifications } = build({ walletBalance: 1_000_000 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: expect.any(String) });
   });
 });

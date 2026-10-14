@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
@@ -525,8 +526,13 @@ export interface PurchasedItemsPage {
 export const fetchPurchasedItems = async (params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
   (await takePurchasedItems(params)) ?? api.get<PurchasedItemsPage>('/me/purchased-items', { params }).then((r) => r.data);
 
-export const cancelOrder = (code: string) =>
-  api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
+/** Nơi nhận tiền hoàn (D2). Không gửi = Ví Tubu (như bản cũ). */
+export type RefundDestinationBody =
+  | { refundMethod: 'WALLET' }
+  | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
+
+export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
+  api.post<OrderDTO>(`/orders/${code}/cancel`, destination ?? {}).then((r) => r.data);
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {
@@ -559,15 +565,41 @@ export const repurchaseOrder = (
   api
     .post<CartSummary & { cart?: CartSummary; results?: RepurchaseLineResult[] }>(`/orders/${code}/repurchase`, body)
     .then((r) => normalizeRepurchaseResponse(r.data));
-export const requestReturn = (code: string, reason: string, images?: string[]) =>
-  api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);
+export interface ReturnRequestBody {
+  reasonCode: ReturnReasonCode;
+  reason?: string;
+  images?: string[];
+  items: { orderItemId: string; quantity: number }[];
+}
+export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
+  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body).then((r) => r.data);
 export interface ReturnRequestDTO {
   id: string;
   orderId: string;
   reason: string;
+  reasonCode?: string | null;
   status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
   adminNote: string | null;
+  refundMethod?: 'WALLET' | 'BANK';
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  /** Tiền hàng + phí ship hoàn khi duyệt (null khi chưa duyệt). */
+  refundAmount?: number | null;
+  shippingRefund?: number;
+  pointsRefunded?: number;
+  fullReturn?: boolean;
+  receivedAt?: string | null;
+  items?: { orderItemId: string; quantity: number; refundAmount: number }[];
   createdAt: string;
 }
 export const fetchMyReturns = () =>
   api.get<ReturnRequestDTO[]>('/orders/me/returns').then((r) => r.data);
+
+/** Các khoản hoàn tiền của khách (chuyển khoản chờ xử lý, tiền về muộn) cho một đơn. */
+export const fetchMyRefunds = (orderId: string) =>
+  api.get<MyRefund[]>('/orders/me/refunds', { params: { orderId } }).then((r) => r.data);
+/** Tài khoản ngân hàng khách dùng gần nhất — điền sẵn khi chọn hoàn về ngân hàng. */
+export const fetchRefundBank = () =>
+  api.get<{ bank: RefundBankInput | null }>('/orders/me/refund-bank').then((r) => r.data.bank);
+export const chooseRefundDestination = (refundId: string, body: RefundDestinationBody) =>
+  api.post<MyRefund>(`/orders/me/refunds/${refundId}/destination`, body).then((r) => r.data);

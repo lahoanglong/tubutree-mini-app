@@ -41,6 +41,7 @@ function setup(
       orderStatusHistory: { create: historyCreate },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       $executeRaw: txExecuteRaw,
     }),
   );
@@ -58,6 +59,8 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
   } as unknown as PrismaService;
@@ -294,6 +297,9 @@ describe('PancakeProcessor.onCancelled', () => {
   });
 });
 
+const lateRefunds = (prisma: PrismaService) =>
+  (prisma.orderCustomerRefund.createMany as jest.Mock).mock.calls.flatMap(([a]) => (a as { data: unknown[] }).data);
+
 describe('PancakeProcessor.onPaymentReconcile', () => {
   const paidPayload = { id: 'p1', is_paid: true };
 
@@ -346,13 +352,13 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     };
-    const { proc, orderUpdateMany, orderFindFirst, notifications, analytics } = setup(order);
+    const { proc, prisma, orderUpdateMany, orderFindFirst, notifications, analytics } = setup(order);
     orderFindFirst.mockResolvedValueOnce(order).mockResolvedValueOnce(order).mockResolvedValue({ ...order, status: 'CANCELLED' });
-    orderUpdateMany.mockImplementation(async (a: UpdateManyArgs) => ({ count: 'pancakeAttention' in a.data ? 1 : 0 }));
+    orderUpdateMany.mockResolvedValue({ count: 0 });
     await proc.onPaymentReconcile(paidPayload);
-    expect(notifications.notify).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
     expect(analytics.record).not.toHaveBeenCalled();
-    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('HOÀN TIỀN THỦ CÔNG')]);
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 100000, userId: 'u1' })]);
   });
 
   it('đơn đã CONFIRMED (xác nhận trước khi tiền về) → chỉ lật PAID, KHÔNG đụng status, ghi order_paid ĐÚNG 1 LẦN', async () => {
@@ -371,16 +377,35 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
   // P1-3 (docs/2026-09-08-review-progress.md): tiền chuyển khoản tới SAU khi đơn đã hủy/trả
   // trước đây vẫn bị lật PAID êm — đơn đứng CANCELLED/RETURNED + PAID, không ai tự hoàn tiền
   // thật cho khách.
-  it.each(['CANCELLED', 'RETURNED'])('đơn %s nhận xác nhận thanh toán trễ → KHÔNG lật PAID, không notify; vào hàng đợi hoàn tiền tay', async (status) => {
-    const { proc, orderUpdateMany, notifications, analytics } = setup({
+  // BUYERMINI-7/MONEY-6 (D2): tiền về muộn tự tạo yêu cầu hoàn trong hàng đợi hoàn tiền, báo khách + admin.
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s nhận xác nhận thanh toán trễ → KHÔNG lật PAID; tạo yêu cầu hoàn tiền, báo khách và admin', async (status) => {
+    const { proc, prisma, orderUpdateMany, notifications, analytics } = setup({
       id: 'o1', code: 'TUBU1', userId: 'u1', status,
       paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
     });
-    await proc.onPaymentReconcile(paidPayload);
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 0, bank_payment: 100000 });
     expect(statusFlips(orderUpdateMany)).toHaveLength(0);
-    expect(notifications.notify).not.toHaveBeenCalled();
     expect(analytics.record).not.toHaveBeenCalled();
-    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('HOÀN TIỀN THỦ CÔNG')]);
+    expect(lateRefunds(prisma)).toEqual([
+      expect.objectContaining({
+        orderId: 'o1', kind: 'LATE_PAYMENT', refKey: 'PANCAKE:p1:100000', amount: 100000,
+        method: 'MANUAL_TRANSFER', status: 'PENDING', userId: 'u1',
+      }),
+    ]);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '100.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(attentionFlags(orderUpdateMany)).toEqual([]);
+  });
+
+  it('Pancake gửi lại cùng webhook tiền về muộn → không tạo khoản thứ hai, không báo lại', async () => {
+    const { proc, prisma, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000,
+    });
+    (prisma.orderCustomerRefund.createMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await proc.onPaymentReconcile(paidPayload);
+    expect(notifications.notify).not.toHaveBeenCalled();
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {

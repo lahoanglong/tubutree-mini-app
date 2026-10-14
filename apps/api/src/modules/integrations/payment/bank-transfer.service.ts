@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from './vietqr';
+import { readPendingPaymentTtlHours } from '../../orders/pending-payment-ttl';
 
 /**
  * Thanh toán chuyển khoản qua VietQR (Napas 247). Sinh QR phía server cho đơn BANK_TRANSFER:
@@ -63,10 +64,17 @@ export class BankTransferService {
       `https://img.vietqr.io/image/${bin}-${accountNo}-compact2.png` +
       `?amount=${order.total}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
 
+    // Hạn trùng với cron tự huỷ: trang QR nói rõ "chuyển trước HH:mm" để khách không chuyển sau khi đơn đã huỷ.
+    const paymentDeadline =
+      order.status === 'PENDING_PAYMENT' && order.paymentStatus === 'UNPAID'
+        ? new Date(new Date(order.createdAt).getTime() + (await readPendingPaymentTtlHours(this.config)) * 3_600_000).toISOString()
+        : null;
+
     return {
       orderCode: order.code,
       amount: order.total,
       paymentStatus: order.paymentStatus,
+      paymentDeadline,
       bank: { bin, name: bankName, accountNo, accountName },
       memo,
       qrString,

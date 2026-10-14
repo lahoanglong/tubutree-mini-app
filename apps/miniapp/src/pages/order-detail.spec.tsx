@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   fetchOrder: vi.fn(),
   fetchMyReturns: vi.fn(),
   getPublicConfig: vi.fn(),
+  cancelOrder: vi.fn(),
+  fetchMyRefunds: vi.fn(),
+  fetchRefundBank: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -25,7 +28,10 @@ vi.mock('../services/shop-api', () => ({
   fetchOrders: vi.fn(),
   getPublicConfig: mocks.getPublicConfig,
   fetchMyReturns: mocks.fetchMyReturns,
-  cancelOrder: vi.fn(),
+  cancelOrder: mocks.cancelOrder,
+  fetchMyRefunds: mocks.fetchMyRefunds,
+  fetchRefundBank: mocks.fetchRefundBank,
+  chooseRefundDestination: vi.fn(),
   requestReturn: vi.fn(),
   addToCart: vi.fn(),
   repurchaseOrder: vi.fn(),
@@ -326,3 +332,82 @@ describe('OrderDetailPage — tương phản chữ ngày giờ ở khung trạng
     expect(contrast(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn thanh toán (D2, BUYERMINI-8/9, MONEY-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.fetchMyRefunds.mockResolvedValue([]);
+    mocks.fetchRefundBank.mockResolvedValue({ bankName: 'VCB', accountNumber: '0071000123456', accountName: 'TRAN THI B' });
+    mocks.cancelOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+  });
+
+  const paidTransfer = { ...ORDER, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114_000 };
+
+  it('đơn chuyển khoản đã trả: chọn tài khoản ngân hàng → gửi nơi nhận kèm tài khoản điền sẵn', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
+    expect(screen.getByText('Nhận lại 114.000đ về')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+    await waitFor(() => expect(screen.getByLabelText('Số tài khoản')).toHaveValue('0071000123456'));
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() =>
+      expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', {
+        refundMethod: 'BANK',
+        bankName: 'VCB',
+        accountNumber: '0071000123456',
+        accountName: 'TRAN THI B',
+      }),
+    );
+  });
+
+  it('đơn chuyển khoản đã trả: giữ mặc định Ví Tubu → gửi refundMethod WALLET', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }));
+  });
+
+  it('đơn chuyển khoản chưa ghi nhận tiền: hiện hạn thanh toán và cảnh báo trước khi huỷ', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: '2026-10-02T03:00:00.000Z',
+    });
+    renderPage();
+    expect(await screen.findByText(/quá hạn đơn sẽ tự huỷ/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy đơn' }));
+    expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản');
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
+  });
+
+  it('đã duyệt trả một phần: hiện số tiền, dòng trả, trạng thái nhận hàng và cho trả thêm', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, deliveredAt: new Date().toISOString() });
+    mocks.fetchMyReturns.mockResolvedValue([
+      {
+        id: 'r1',
+        orderId: 'o1',
+        status: 'APPROVED',
+        refundMethod: 'WALLET',
+        refundAmount: 50_000,
+        shippingRefund: 0,
+        receivedAt: null,
+        items: [{ orderItemId: 'oi1', quantity: 1, refundAmount: 50_000 }],
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Đổi/trả đã duyệt — đã hoàn 50.000đ vào Ví Tubu')).toBeInTheDocument();
+    expect(screen.getByText('Trả: Xà bông thảo mộc ×1')).toBeInTheDocument();
+    expect(screen.getByText('Tubu sẽ liên hệ để nhận lại hàng.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trả thêm sản phẩm' })).toBeInTheDocument();
+  });
+});
+

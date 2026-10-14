@@ -167,3 +167,22 @@ describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 
     expect(onlyH1().textContent).toBe('Thanh toán chuyển khoản');
   });
 });
+
+describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('có hạn → nói rõ chuyển trước giờ nào và quá hạn đơn tự huỷ', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-14T03:00:00.000Z' });
+    renderPage();
+    const note = await screen.findByRole('note');
+    expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
+  });
+
+  it('API bản cũ không trả hạn → không hiện khung hạn', async () => {
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByText(/Giữ nguyên nội dung/);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+});
+

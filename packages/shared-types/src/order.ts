@@ -88,6 +88,8 @@ export interface OrderDTO {
   gomdonCancelStatus?: string | null;
   /** Thời điểm đơn chuyển DELIVERED — mốc tính hạn đổi/trả (ISO). */
   deliveredAt?: string | null;
+  /** Hạn thanh toán của đơn trả trước đang chờ tiền (ISO) — quá hạn đơn tự huỷ. Null với đơn khác. */
+  paymentDeadline?: string | null;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;

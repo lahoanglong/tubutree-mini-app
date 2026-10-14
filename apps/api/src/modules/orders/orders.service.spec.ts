@@ -1,5 +1,4 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -483,37 +482,6 @@ describe('OrdersService.cancel — flash sale quota restore', () => {
   });
 });
 
-describe('OrdersService.requestReturn', () => {
-  const deliveredOrder = { ...baseOrder, status: 'DELIVERED', updatedAt: new Date(), createdAt: new Date() };
-
-  function makeReturnService(over: { create?: jest.Mock; findFirst?: jest.Mock } = {}) {
-    const create = over.create ?? jest.fn().mockResolvedValue({ id: 'r1' });
-    const prisma = {
-      order: { findUnique: jest.fn().mockResolvedValue(deliveredOrder) },
-      returnRequest: { findFirst: over.findFirst ?? jest.fn().mockResolvedValue(null), create },
-    } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), create };
-  }
-
-  it('race: 2 request đổi/trả song song — pre-check đọc "chưa có" nhưng create() đụng unique index partial (orderId, status=REQUESTED) → BadRequest, KHÔNG tạo 2 dòng', async () => {
-    const create = jest
-      .fn()
-      .mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }));
-    const { svc } = makeReturnService({ create });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow(
-      'Đơn đang có yêu cầu đổi/trả chờ xử lý.',
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('gửi hợp lệ (chưa có yêu cầu chờ xử lý) → tạo return request', async () => {
-    const { svc, create } = makeReturnService();
-    const r = await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi sản phẩm' });
-    expect(r).toEqual({ id: 'r1' });
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
   beforeEach(() => jest.clearAllMocks());
   const queue = () => ({ getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) });
@@ -545,40 +513,6 @@ describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
     );
     await b.svc.cancel('u1', 'TUBU1').catch(() => undefined);
     expect(q2.add).not.toHaveBeenCalled();
-  });
-});
-
-describe('OrdersService.requestReturn — hạn đổi/trả tính từ mốc giao THẬT (deliveredAt), không phải updatedAt', () => {
-  const DAY = 864e5;
-  function svcFor(order: Record<string, unknown>, history: { createdAt: Date } | null = null, windowDays = 7) {
-    const create = jest.fn().mockResolvedValue({ id: 'r1' });
-    const prisma = {
-      order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', createdAt: new Date(Date.now() - 30 * DAY), ...order }) },
-      orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(history) },
-      returnRequest: { findFirst: jest.fn().mockResolvedValue(null), create },
-    } as unknown as PrismaService;
-    const cfg = {
-      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'returns.window_days' ? (windowDays as T) : (fb as T)),
-    } as unknown as SystemConfigService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, cfg, affiliate, reversal), create };
-  }
-
-  it('giao 10 ngày trước, webhook vận chuyển vừa ghi đơn (updatedAt = hôm nay) → QUÁ HẠN 7 ngày', async () => {
-    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 10 * DAY), updatedAt: new Date() });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('giao 2 ngày trước → còn hạn, tạo yêu cầu', async () => {
-    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 2 * DAY), updatedAt: new Date() });
-    await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' });
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('đơn cũ chưa có deliveredAt → lấy lần lật DELIVERED trong order_status_history', async () => {
-    const { svc, create } = svcFor({ deliveredAt: null, updatedAt: new Date() }, { createdAt: new Date(Date.now() - 9 * DAY) });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
-    expect(create).not.toHaveBeenCalled();
   });
 });
 

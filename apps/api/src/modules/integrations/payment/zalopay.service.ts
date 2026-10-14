@@ -20,6 +20,7 @@ import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
 import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
+import { recordLatePaymentRefund } from '../../orders/refund-queue';
 
 interface ZalopayCreateResponse {
   return_code?: number;
@@ -169,10 +170,9 @@ export class ZalopayService {
       // CANCELLED/RETURNED + PAID mà không cơ chế nào tự phát hiện cần hoàn tiền thật cho
       // khách. Vẫn trả return_code=1 (ZaloPay coi là đã nhận, không cần retry) — chỉ không
       // ghi nhận PAID vào đơn đã chết.
+      const paidAmount = data.amount ?? attempt?.amount ?? order.total;
       if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-        this.logger.warn(
-          `Nhận callback thanh toán ZaloPay cho đơn ${order.code} đã ${order.status} — CẦN HOÀN TIỀN THỦ CÔNG cho khách, không tự lật PAID.`,
-        );
+        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
         return { return_code: 1, return_message: 'success' };
       }
       // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
@@ -220,9 +220,33 @@ export class ZalopayService {
         }
         await this.pancakeHooks?.afterPaid(order.id);
         await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+      } else {
+        // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
+        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
       }
     }
     return { return_code: 1, return_message: 'success' };
+  }
+
+  /**
+   * Tiền về khi đơn đã huỷ/trả: không lật PAID, tạo yêu cầu hoàn tiền (khách chọn Ví hay ngân hàng). Chỉ khi đơn CHƯA
+   * từng nhận khoản này (UNPAID): đơn PAID/REFUNDED nghĩa là callback này là bản ZaloPay gửi lại của lần đã lật PAID
+   * (tiền đó đã nằm trong đơn và đã/sẽ được hoàn theo luồng huỷ/trả) — tạo thêm khoản là hoàn hai lần.
+   */
+  private async recordLatePayment(orderId: string, amount: number, appTransId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || (order.status !== 'CANCELLED' && order.status !== 'RETURNED')) return;
+    if (order.paymentStatus !== 'UNPAID') {
+      this.logger.warn(
+        `Callback ZaloPay ${appTransId} cho đơn ${order.code} (${order.status}, ${order.paymentStatus}) — đã ghi nhận tiền trước đó, bỏ qua.`,
+      );
+      return;
+    }
+    await recordLatePaymentRefund({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order, {
+      amount,
+      source: 'ZALOPAY',
+      refKey: appTransId,
+    });
   }
 
   /** So sánh MAC chống timing-attack (độ dài khác → false ngay, không ném). */

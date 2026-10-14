@@ -47,6 +47,14 @@ const QR_BODY = {
 };
 
 describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơn (A2-02=A6-01)', () => {
+  it('BUYERMINI-8 (web): hiện hạn chuyển khoản giờ VN để khách biết đơn tự huỷ khi nào', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, paymentDeadline: '2026-10-14T03:00:00.000Z' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    expect(container.querySelector('[role="note"]')?.textContent).toBe('Chuyển khoản trước 10:00 14/10/2026 — quá hạn đơn sẽ tự huỷ.');
+  });
+
   it('đơn BANK_TRANSFER → gọi GET /payments/bank-qr/:code và hiện QR, ngân hàng, STK, chủ TK, số tiền, nội dung CK', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));

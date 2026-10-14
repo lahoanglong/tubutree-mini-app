@@ -9,10 +9,11 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
-import { isPancakeOrderPaid } from './pancake-payment.util';
+import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { UnpaidPrepaidTransitionError } from '../../orders/order-transition';
+import { recordLatePaymentRefund } from '../../orders/refund-queue';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 
 interface EventData {
@@ -336,17 +337,19 @@ export class PancakeProcessor extends WorkerHost {
     if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
     if (!isPancakeOrderPaid(data, order.total)) return;
 
-    const { outcome } = await this.orderStatus.markPaid(order.id, {
+    const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'PANCAKE',
       note: 'Pancake ghi nhận chuyển khoản',
     });
     if (outcome === 'PAID') {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
     } else if (outcome === 'CLOSED') {
-      // Tiền về sau khi đơn đã huỷ/trả: không "hồi sinh" đơn — vận hành hoàn tiền tay cho khách.
-      await this.flagAttention(
-        order,
-        'Pancake ghi nhận đã nhận tiền chuyển khoản nhưng đơn đã huỷ/trả — CẦN HOÀN TIỀN THỦ CÔNG cho khách.',
+      // Tiền về sau khi đơn đã huỷ/trả: không "hồi sinh" đơn — tạo yêu cầu hoàn tiền, khách chọn Ví hay ngân hàng.
+      const amount = pancakePaidAmount(data) || order.total;
+      await recordLatePaymentRefund(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        current ?? order,
+        { amount, source: 'PANCAKE', refKey: `${String(data['id'] ?? 'order')}:${amount}` },
       );
     }
   }

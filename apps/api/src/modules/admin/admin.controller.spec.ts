@@ -13,9 +13,9 @@ import {
   GomdonRetryDto,
   ListOrdersQuery,
   ResolvePancakeAttentionDto,
-  ReturnRequestsQuery,
   SetUserRoleDto,
 } from './admin.controller';
+import { ReturnRequestsQuery, ReturnsAdminController } from '../orders/returns-admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
 const asBodyDto = (metatype: new () => object, value: Record<string, unknown>) =>
@@ -273,13 +273,13 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
   it('controller chuyển order xuống AdminService (thiếu → undefined, service mặc định desc)', async () => {
     const admin = {
       listDealerApplications: jest.fn().mockResolvedValue({ data: [], meta: {} }),
-      listReturnRequests: jest.fn().mockResolvedValue({ data: [], meta: {} }),
     };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.dealerApps(Object.assign(new DealerAppsQuery(), { page: 1, limit: 20, status: 'PENDING' as const, order: 'asc' as const }));
     expect(admin.listDealerApplications).toHaveBeenCalledWith('PENDING', 1, 20, 'asc');
-    await ctrl.returns(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
-    expect(admin.listReturnRequests).toHaveBeenCalledWith(undefined, 2, 10, undefined);
+    const returns = { listForAdmin: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+    await new ReturnsAdminController(returns as never).list(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
+    expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
   });
 
   it('DealerPriceHistoryQuery nhận variationId', async () => {

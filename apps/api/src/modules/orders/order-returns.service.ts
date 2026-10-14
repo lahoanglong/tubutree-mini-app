@@ -1,0 +1,503 @@
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequestItem } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { paginated, skipTake } from '../../common/pagination';
+import { notifyAdmins } from '../../common/notify-admins';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { isMoneyBackable, OrderReversalService, type RefundOutcome } from './order-reversal.service';
+import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
+import {
+  canRefundToBank,
+  formatVnd,
+  maskedBank,
+  normalizeBankDetails,
+  WALLET_DESTINATION,
+  type RefundDestination,
+} from './refund-destination';
+import { announceBankRefund } from './refund-queue';
+import { partialReturnTotals } from './return-ledger';
+import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
+import type { ReturnRequestDto } from './dto/return-request.dto';
+
+type OrderWithItems = Order & { items: OrderItem[] };
+type RequestWithItems = ReturnRequest & { items: ReturnRequestItem[] };
+
+const PANCAKE_ALERT_TEMPLATE = 'OPS_PANCAKE_ALERT';
+
+export interface ReturnPreview {
+  requestId: string;
+  shopFault: boolean;
+  defaultShopFault: boolean;
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  /** Tiền sẽ hoàn (0 khi đơn không có khoản đã thu). */
+  refund: number;
+  moneyRefundable: boolean;
+  destination: { method: 'WALLET' | 'BANK' | 'END_CUSTOMER'; bankName?: string | null; accountNumber?: string | null; accountName?: string | null };
+  pointsUsedBack: number;
+  pointsEarnedBack: number;
+  lines: { orderItemId: string; productName: string; variationName: string; quantity: number; orderedQuantity: number; refundAmount: number }[];
+  /** Đơn do Tubu giao qua Pancake: duyệt xong cần xử lý phiếu trả trên Pancake. */
+  pancakeTask: boolean;
+}
+
+function allocOrder(order: OrderWithItems): AllocOrder {
+  return {
+    total: order.total,
+    shippingFee: order.shippingFee,
+    pointsUsed: order.pointsUsed,
+    pointsUsedConverted: order.pointsUsedConverted,
+    pointsEarned: order.pointsEarned,
+    items: order.items.map((i) => ({ id: i.id, total: i.total, quantity: i.quantity })),
+  };
+}
+
+/** Câu "đã hoàn bao nhiêu, về đâu" cho thông báo khách (D2: khách được báo ở mỗi bước). */
+export function refundNote(refund: RefundOutcome | null, bank: { bankName?: string | null; bankAccountNo?: string | null } | null, pointsBack = 0): string {
+  const parts: string[] = [];
+  if (refund && refund.amount > 0) {
+    if (refund.to === 'WALLET') parts.push(`Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.`);
+    else if (refund.to === 'BANK') {
+      parts.push(`Tubu sẽ chuyển khoản ${formatVnd(refund.amount)} về ${bank ? maskedBank(bank) : 'tài khoản của bạn'} trong 1-3 ngày làm việc, miễn phí.`);
+    } else parts.push(`Khoản hoàn ${formatVnd(refund.amount)} được trả cho người nhận hàng.`);
+  }
+  if (pointsBack > 0) parts.push(`Đã hoàn ${pointsBack} Điểm Xanh.`);
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
+ * Trả hàng theo dòng và số lượng (D3, BUYERMINI-11/MONEY-7/ADMINOPS-6). Khách chọn dòng + số lượng + lý do + nơi nhận
+ * tiền; admin xem số tiền tính sẵn rồi xác nhận; tiền/điểm/hoa hồng đảo theo phần; kho chỉ cộng khi admin bấm
+ * "Đã nhận hàng về". Lần trả nốt mọi dòng còn lại chuyển đơn sang RETURNED và đi đường đảo cả đơn (trừ phần đã hoàn).
+ */
+@Injectable()
+export class OrderReturnsService {
+  private readonly logger = new Logger(OrderReturnsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: SystemConfigService,
+    private readonly reversal: OrderReversalService,
+    private readonly loyalty: LoyaltyService,
+    private readonly affiliate: AffiliateService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  // ── Khách ──
+
+  async request(userId: string, code: string, dto: ReturnRequestDto) {
+    const order = await this.prisma.order.findUnique({ where: { code }, include: { items: true } });
+    if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'DELIVERED') throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
+    const windowDays = await this.config.get<number>('returns.window_days', 7);
+    // Mốc giao THẬT (OrderStatusService ghi deliveredAt; đơn cũ lấy lần lật DELIVERED trong sổ). updatedAt trôi theo mọi
+    // lần ghi sau khi giao (webhook vận chuyển, hoá đơn) nên không dùng được.
+    const deliveredAt = order.deliveredAt ?? (await this.lastDeliveredAt(order.id)) ?? order.updatedAt ?? order.createdAt;
+    if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
+      throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
+    }
+    const existing = await this.prisma.returnRequest.findFirst({ where: { orderId: order.id, status: 'REQUESTED' } });
+    if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
+
+    const reasonCode = dto.reasonCode ?? null;
+    const text = dto.reason?.trim() ?? '';
+    if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
+      throw new BadRequestException('Vui lòng mô tả lý do đổi/trả (ít nhất 5 ký tự).');
+    }
+    const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
+
+    const prior = await partialReturnTotals(this.prisma, order.id);
+    const lines = this.requestedLines(order, prior.approvedQty, dto.items);
+    const remainingAll = order.items.every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
+    // Đơn đại lý có công nợ/đặt trước/thưởng doanh số theo cả đơn — chưa đảo theo phần được, chỉ nhận trả cả đơn.
+    if (order.type === 'DEALER' && !remainingAll) {
+      throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Vui lòng chọn tất cả sản phẩm hoặc liên hệ Tubu.');
+    }
+    const destination = this.destinationFor(order, dto);
+
+    let req: RequestWithItems;
+    try {
+      req = await this.prisma.returnRequest.create({
+        data: {
+          orderId: order.id,
+          userId,
+          reason,
+          reasonCode,
+          images: dto.images ?? [],
+          refundMethod: destination.method,
+          ...(destination.method === 'BANK'
+            ? {
+                bankName: destination.bank.bankName,
+                bankAccountNo: destination.bank.accountNumber,
+                bankAccountName: destination.bank.accountName,
+              }
+            : {}),
+          items: { create: [...lines].map(([orderItemId, quantity]) => ({ orderItemId, quantity })) },
+        },
+        include: { items: true },
+      });
+    } catch (err) {
+      // Guard thật là unique index partial (orderId WHERE status='REQUESTED'): hai lần gửi song song chỉ một lần tạo.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
+      }
+      throw err;
+    }
+    await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
+    return req;
+  }
+
+  listMine(userId: string) {
+    return this.prisma.returnRequest.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: { items: true },
+    });
+  }
+
+  // ── Admin ──
+
+  async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
+    const where = status ? { status: status as never } : {};
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.returnRequest.findMany({
+        where,
+        // Hàng chờ duyệt (REQUESTED) web gửi order=asc — yêu cầu cũ nhất lên đầu, không bị chìm.
+        orderBy: { createdAt: order ?? 'desc' },
+        ...skipTake(page, limit),
+        include: { items: true },
+      }),
+      this.prisma.returnRequest.count({ where }),
+    ]);
+    return paginated(await this.withContext(rows), page, limit, total);
+  }
+
+  /** Số tiền/điểm sẽ hoàn nếu duyệt ngay bây giờ — bước xác nhận của admin (không ghi gì). */
+  async preview(id: string, shopFaultInput?: boolean): Promise<ReturnPreview> {
+    const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
+    if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
+    const prior = await partialReturnTotals(this.prisma, order.id, id);
+    const lines = this.linesOf(req, order, prior.approvedQty);
+    const shopFault = shopFaultInput ?? req.shopFault ?? defaultShopFault(req.reasonCode);
+    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+    return this.previewOf(req, order, shares, shopFault);
+  }
+
+  async review(
+    adminId: string,
+    id: string,
+    input: { approve: boolean; note?: string; shopFault?: boolean; expectedRefund?: number },
+  ) {
+    const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
+    if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
+    const note = input.note?.trim() || undefined;
+
+    if (!input.approve) {
+      if (!note || note.length < 3) throw new BadRequestException('Vui lòng ghi lý do từ chối để báo cho khách.');
+      const rejected = await this.prisma.returnRequest.updateMany({
+        where: { id, status: 'REQUESTED' },
+        data: { status: 'REJECTED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
+      });
+      if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
+      const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
+      await this.notifications
+        .notify(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note })
+        .catch(() => undefined);
+      return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
+    }
+
+    const standardPointsExpiresAt = await this.loyalty.pointsExpiresAt(new Date());
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const approved = await tx.returnRequest.updateMany({
+        where: { id, status: 'REQUESTED' },
+        data: { status: 'APPROVED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
+      });
+      if (approved.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
+      // Khoá đơn: hai yêu cầu của cùng đơn (lần trước vừa duyệt) hay webhook huỷ/trả xếp hàng sau lần duyệt này.
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${req.orderId} FOR UPDATE`;
+      const order = await tx.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
+      if (order.status !== 'DELIVERED') {
+        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+      }
+      const prior = await partialReturnTotals(tx, order.id, id);
+      const lines = this.linesOf(req, order, prior.approvedQty);
+      const shopFault = input.shopFault ?? req.shopFault ?? defaultShopFault(req.reasonCode);
+      const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+      const moneyRefundable = isMoneyBackable(order);
+      const refund = moneyRefundable ? shares.goods + shares.shipping : 0;
+      if (input.expectedRefund !== undefined && input.expectedRefund !== refund) {
+        throw new ConflictException(
+          `Số tiền hoàn đã đổi thành ${formatVnd(refund)} (đơn vừa có thay đổi). Vui lòng xem lại trước khi duyệt.`,
+        );
+      }
+      const destination = this.storedDestination(req, order);
+
+      let money: RefundOutcome | null;
+      let pointsBack = shares.pointsUsedBack;
+      let commissionCut = 0;
+      if (shares.isFull) {
+        const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
+        if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+        await tx.orderStatusHistory.create({
+          data: { orderId: order.id, fromStatus: 'DELIVERED', toStatus: 'RETURNED', actorType: 'ADMIN', actorId: adminId, note: note ?? null },
+        });
+        const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id });
+        money = reversed.refund;
+      } else {
+        const partial = await this.reversal.reversePartialReturn(tx, order, {
+          requestId: id,
+          shares,
+          destination,
+          prior,
+          standardPointsExpiresAt,
+        });
+        money = partial.refund;
+        pointsBack = partial.pointsBack;
+        commissionCut = partial.commissionCut;
+      }
+
+      await tx.returnRequestItem.deleteMany({ where: { returnRequestId: id } });
+      await tx.returnRequestItem.createMany({
+        data: shares.lines.map((l) => ({ returnRequestId: id, orderItemId: l.orderItemId, quantity: l.quantity, refundAmount: moneyRefundable ? l.refundAmount : 0 })),
+      });
+      await tx.returnRequest.update({
+        where: { id },
+        data: {
+          shopFault,
+          fullReturn: shares.isFull,
+          refundAmount: moneyRefundable ? shares.goods : 0,
+          shippingRefund: moneyRefundable ? shares.shipping : 0,
+          pointsRefunded: shares.pointsUsedBack,
+          convertedPointsRefunded: shares.convertedBack,
+          pointsReversed: shares.pointsEarnedBack,
+          commissionReversed: commissionCut,
+          ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
+        },
+      });
+      return { order, shares, money, pointsBack };
+    });
+
+    const { order, shares, money } = outcome;
+    if (shares.isFull) {
+      // Điểm thường/điểm tích và hoa hồng của phần còn lại — idempotent, chạy sau commit như mọi lần đảo cả đơn.
+      await this.loyalty.reverseOrderPoints(order.id);
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+    }
+    if (money?.to === 'BANK') {
+      await announceBankRefund(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        { orderCode: order.code, amount: money.amount, userId: order.userId, bankName: req.bankName, bankAccountNo: req.bankAccountNo },
+      );
+    }
+    await this.flagPancakeReturn(order, shares);
+    await this.notifications
+      .notify(order.userId, 'RETURN_APPROVED_DETAIL', {
+        order_code: order.code,
+        refund_note: refundNote(money, req, outcome.pointsBack),
+      })
+      .catch(() => undefined);
+    return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
+  }
+
+  /** Admin xác nhận đã nhận hàng trả về kho: lúc này mới cộng lại tồn kho các dòng trả (D3). Một lần mỗi yêu cầu. */
+  async markReceived(adminId: string, id: string) {
+    const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
+    if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
+    const restocked = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.returnRequest.updateMany({
+        where: { id, status: 'APPROVED', receivedAt: null },
+        data: { receivedAt: new Date(), receivedBy: adminId },
+      });
+      if (flip.count === 0) throw new BadRequestException('Yêu cầu chưa được duyệt hoặc đã ghi nhận nhận hàng trước đó.');
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${req.orderId} FOR UPDATE`;
+      const order = await tx.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
+      const prior = await partialReturnTotals(tx, order.id, id);
+      return this.reversal.restockReturnedItems(tx, order, req.items, prior.restockedQty);
+    });
+    const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
+    this.logger.log(`Admin ${adminId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`);
+    await this.notifications.notify(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }).catch(() => undefined);
+    return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
+  }
+
+  // ── Nội bộ ──
+
+  /** Dòng + số lượng khách xin trả, kiểm không vượt phần chưa trả. Không gửi = mọi phần còn lại. */
+  private requestedLines(
+    order: OrderWithItems,
+    approvedQty: ReadonlyMap<string, number>,
+    items: { orderItemId: string; quantity: number }[] | undefined,
+  ): Map<string, number> {
+    const remaining = new Map(order.items.map((i) => [i.id, i.quantity - (approvedQty.get(i.id) ?? 0)]));
+    const out = new Map<string, number>();
+    if (!items) {
+      for (const [id, q] of remaining) if (q > 0) out.set(id, q);
+    } else {
+      for (const it of items) {
+        if (!remaining.has(it.orderItemId)) throw new BadRequestException('Có dòng hàng không thuộc đơn này.');
+        out.set(it.orderItemId, (out.get(it.orderItemId) ?? 0) + it.quantity);
+      }
+      for (const [id, q] of out) {
+        if (q > (remaining.get(id) ?? 0)) {
+          const name = order.items.find((i) => i.id === id)?.productName ?? 'sản phẩm';
+          throw new BadRequestException(`Số lượng trả của "${name}" vượt số còn lại có thể trả (${Math.max(0, remaining.get(id) ?? 0)}).`);
+        }
+      }
+    }
+    // Đơn không có dòng hàng (dữ liệu cũ) chỉ trả được nguyên đơn — computeReturnShares coi là trả cả đơn.
+    if (out.size === 0 && order.items.length > 0) throw new BadRequestException('Đơn không còn sản phẩm nào có thể trả.');
+    return out;
+  }
+
+  /** Dòng của yêu cầu lúc duyệt. Yêu cầu tạo trước khi có dòng = trả mọi phần còn lại; kiểm lại phần còn lại. */
+  private linesOf(req: RequestWithItems, order: OrderWithItems, approvedQty: ReadonlyMap<string, number>): Map<string, number> {
+    const items = req.items.length ? req.items.map((i) => ({ orderItemId: i.orderItemId, quantity: i.quantity })) : undefined;
+    return this.requestedLines(order, approvedQty, items);
+  }
+
+  private destinationFor(order: Pick<Order, 'paymentMethod' | 'placedForCustomer'>, dto: ReturnRequestDto): RefundDestination {
+    if (dto.refundMethod !== 'BANK' || order.placedForCustomer) return WALLET_DESTINATION;
+    if (!canRefundToBank(order.paymentMethod)) {
+      throw new BadRequestException('Đơn thanh toán bằng Ví Tubu được hoàn về Ví Tubu.');
+    }
+    return { method: 'BANK', bank: normalizeBankDetails(dto) };
+  }
+
+  private storedDestination(req: ReturnRequest, order: Pick<Order, 'paymentMethod'>): RefundDestination {
+    if (req.refundMethod === 'BANK' && req.bankAccountNo && canRefundToBank(order.paymentMethod)) {
+      return {
+        method: 'BANK',
+        bank: { bankName: req.bankName ?? '', accountNumber: req.bankAccountNo, accountName: req.bankAccountName ?? '' },
+      };
+    }
+    return WALLET_DESTINATION;
+  }
+
+  private previewOf(req: RequestWithItems, order: OrderWithItems, shares: ReturnShares, shopFault: boolean): ReturnPreview {
+    const moneyRefundable = isMoneyBackable(order);
+    const dest = this.storedDestination(req, order);
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    return {
+      requestId: req.id,
+      shopFault,
+      defaultShopFault: defaultShopFault(req.reasonCode),
+      isFull: shares.isFull,
+      goods: shares.goods,
+      shipping: shares.shipping,
+      refund: moneyRefundable ? shares.goods + shares.shipping : 0,
+      moneyRefundable,
+      destination: order.placedForCustomer
+        ? { method: 'END_CUSTOMER' }
+        : dest.method === 'BANK'
+          ? { method: 'BANK', bankName: dest.bank.bankName, accountNumber: dest.bank.accountNumber, accountName: dest.bank.accountName }
+          : { method: 'WALLET' },
+      pointsUsedBack: shares.pointsUsedBack,
+      pointsEarnedBack: shares.pointsEarnedBack,
+      lines: shares.lines.map((l) => ({
+        ...l,
+        productName: byId.get(l.orderItemId)?.productName ?? '',
+        variationName: byId.get(l.orderItemId)?.variationName ?? '',
+        orderedQuantity: byId.get(l.orderItemId)?.quantity ?? 0,
+        refundAmount: moneyRefundable ? l.refundAmount : 0,
+      })),
+      pancakeTask: !!order.pancakeOrderId,
+    };
+  }
+
+  /**
+   * Đơn Tubu giao qua Pancake: Pancake là nguồn sự thật của đơn/kho nên lần trả này phải được xử lý tay trên Pancake
+   * (phiếu trả/nhận hàng về). Đưa vào hàng "Cần xử lý Pancake" và báo admin — không tự gọi Pancake.
+   */
+  private async flagPancakeReturn(order: Pick<Order, 'id' | 'code' | 'pancakeOrderId'> & { items: OrderItem[] }, shares: ReturnShares) {
+    if (!order.pancakeOrderId) return;
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    const what = shares.lines
+      .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
+      .join(', ');
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. Tạo phiếu trả hàng trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
+    try {
+      await this.prisma.order.updateMany({
+        where: { id: order.id },
+        data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
+      });
+      await notifyAdmins(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        { template: PANCAKE_ALERT_TEMPLATE, subject: `trả hàng đơn ${order.code} trên Pancake`, data: () => ({ order_code: order.code, message: reason }) },
+      );
+    } catch (err) {
+      this.logger.error(`Không ghi được việc cần xử lý Pancake cho lần trả đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Kèm đơn (cả dòng hàng), khách và tên sản phẩm từng dòng trả: admin cần thấy trả món nào, bao nhiêu trước khi duyệt.
+   * ReturnRequest không khai quan hệ tới Order/User nên nạp theo lô rồi ghép (hai truy vấn cho cả trang).
+   */
+  private async withContext<T extends RequestWithItems>(input: T): Promise<unknown>;
+  private async withContext<T extends RequestWithItems>(input: T[]): Promise<unknown[]>;
+  private async withContext<T extends RequestWithItems>(input: T | T[]): Promise<unknown> {
+    const rows = Array.isArray(input) ? input : [input];
+    if (rows.length === 0) return [];
+    const [orders, users] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
+        select: {
+          id: true,
+          code: true,
+          total: true,
+          subtotal: true,
+          discount: true,
+          shippingFee: true,
+          pointsUsed: true,
+          status: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          pancakeOrderId: true,
+          placedForCustomer: true,
+          items: { select: { id: true, productName: true, variationName: true, quantity: true, unitPrice: true, total: true } },
+        },
+      }),
+      this.prisma.user.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.userId))] } },
+        select: { id: true, fullName: true, phone: true },
+      }),
+    ]);
+    const orderMap = new Map(orders.map((o) => [o.id, o]));
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const decorated = rows.map((r) => {
+      const order = orderMap.get(r.orderId) ?? null;
+      const itemById = new Map((order?.items ?? []).map((i) => [i.id, i]));
+      return {
+        ...r,
+        reasonLabel: r.reasonCode ? (RETURN_REASONS[r.reasonCode as ReturnReasonCode]?.label ?? r.reasonCode) : null,
+        items: r.items.map((it) => ({
+          ...it,
+          productName: itemById.get(it.orderItemId)?.productName ?? null,
+          variationName: itemById.get(it.orderItemId)?.variationName ?? null,
+          orderedQuantity: itemById.get(it.orderItemId)?.quantity ?? null,
+        })),
+        order,
+        user: userMap.get(r.userId) ?? null,
+      };
+    });
+    return Array.isArray(input) ? decorated : decorated[0];
+  }
+
+  /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */
+  private async lastDeliveredAt(orderId: string): Promise<Date | null> {
+    const h = await this.prisma.orderStatusHistory
+      ?.findFirst({
+        where: { orderId, toStatus: 'DELIVERED' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      })
+      .catch(() => null);
+    return h?.createdAt ?? null;
+  }
+}

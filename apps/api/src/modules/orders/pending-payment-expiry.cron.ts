@@ -5,12 +5,16 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
+import { readPendingPaymentTtlHours } from './pending-payment-ttl';
 
-export const PENDING_PAYMENT_TTL_KEY = 'orders.pending_payment_ttl_hours';
-export const DEFAULT_PENDING_PAYMENT_TTL_HOURS = 24;
-// Sàn 1 giờ: lỡ tay đặt 0 thì đơn khách vừa đặt (đang mở app ngân hàng chuyển khoản) bị huỷ ngay lượt sau.
-export const MIN_TTL_HOURS = 1;
-export const MAX_TTL_HOURS = 24 * 30;
+export {
+  DEFAULT_PENDING_PAYMENT_TTL_HOURS,
+  MAX_TTL_HOURS,
+  MIN_TTL_HOURS,
+  PENDING_PAYMENT_TTL_KEY,
+  readPendingPaymentTtlHours,
+} from './pending-payment-ttl';
+
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 
@@ -99,6 +103,8 @@ export class PendingPaymentExpiryCron {
           expectedStatus: 'PENDING_PAYMENT',
           // D1: đơn chuyển khoản chờ tiền đã lên Pancake (kèm "CHỜ CHUYỂN KHOẢN") — huỷ cả bên Pancake.
           pancakeGate: true,
+          // Khách cần biết VÌ SAO đơn huỷ và nếu lỡ chuyển khoản muộn thì tiền đi đâu (BUYERMINI-8).
+          notifyEvent: 'ORDER_PAYMENT_EXPIRED',
         });
         if (res.status === 'CANCELLED') {
           cancelled += 1;
@@ -116,10 +122,7 @@ export class PendingPaymentExpiryCron {
     return { scanned: stale.length, cancelled, failed };
   }
 
-  private async ttlHours(): Promise<number> {
-    const raw = await this.systemConfig.get<unknown>(PENDING_PAYMENT_TTL_KEY, DEFAULT_PENDING_PAYMENT_TTL_HOURS);
-    const n = typeof raw === 'number' ? raw : Number.NaN;
-    if (!Number.isFinite(n)) return DEFAULT_PENDING_PAYMENT_TTL_HOURS;
-    return Math.min(MAX_TTL_HOURS, Math.max(MIN_TTL_HOURS, n));
+  private ttlHours(): Promise<number> {
+    return readPendingPaymentTtlHours(this.systemConfig);
   }
 }

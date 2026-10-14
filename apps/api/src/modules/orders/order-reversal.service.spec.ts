@@ -30,6 +30,7 @@ type MockTx = {
   coinTransaction: { create: jest.Mock; findMany: jest.Mock };
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
   orderCustomerRefund: { create: jest.Mock };
+  returnRequest: { findMany: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
@@ -65,7 +66,9 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
       // PD-3: hoàn đơn XU cũ ghi lô CONVERTED bằng INSERT ... ON CONFLICT DO NOTHING (points-ledger.ts).
       createManyAndReturn: jest.fn().mockResolvedValue([{ id: 'ptx' }]),
     },
-    orderCustomerRefund: { create: jest.fn().mockResolvedValue({}) },
+    orderCustomerRefund: { create: jest.fn().mockResolvedValue({ id: 'cr1' }) },
+    // D3: đơn đã giao chưa có lần trả một phần nào.
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     orderItem: { update: jest.fn().mockResolvedValue({}) },
@@ -169,7 +172,7 @@ describe('OrderReversalService', () => {
     expect(tx.coinTransaction.create).not.toHaveBeenCalled();
     expect(applyWalletDelta).not.toHaveBeenCalled();
     // Xu cũ không ra tiền: không phải "đã hoàn vào Ví", mà là N Điểm Xanh để caller báo đúng câu.
-    expect(result).toEqual({ moneyRefunded: false, pointsRefunded: points });
+    expect(result).toMatchObject({ moneyRefunded: false, pointsRefunded: points });
   });
 
   // Review B1: phần điểm lô CONVERTED (tiền trả trước) hoàn TRONG tx huỷ, cùng commit với việc lật trạng thái đơn.
@@ -244,7 +247,7 @@ describe('OrderReversalService', () => {
     it('đơn WALLET 150.000đ đã tiêu 120 điểm quy đổi → { moneyRefunded: true, pointsRefunded: 120 }', async () => {
       const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 150, pointsUsedConverted: 120 });
       const result = await service.reverseFinancials(makeTx(order) as never, order);
-      expect(result).toEqual({ moneyRefunded: true, pointsRefunded: 120 });
+      expect(result).toMatchObject({ moneyRefunded: true, pointsRefunded: 120 });
     });
 
     it('đơn COD tổng 0đ đã giao rồi trả: guard UNPAID→REFUNDED thắng nhưng không có đồng nào vào Ví → moneyRefunded false', async () => {
@@ -254,7 +257,7 @@ describe('OrderReversalService', () => {
       const result = await service.reverseFinancials(tx as never, order);
       expect(tx.order.updateMany).toHaveBeenCalled();
       expect(applyWalletDelta).not.toHaveBeenCalled();
-      expect(result).toEqual({ moneyRefunded: false, pointsRefunded: 0 });
+      expect(result).toMatchObject({ moneyRefunded: false, pointsRefunded: 0 });
     });
 
     it('đơn 0đ trả bằng điểm quy đổi (COD ép 0đ) đã giao rồi trả → chỉ báo điểm, không báo tiền', async () => {
@@ -262,7 +265,7 @@ describe('OrderReversalService', () => {
         paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED', total: 0, pointsUsed: 80, pointsUsedConverted: 80,
       });
       const result = await service.reverseFinancials(makeTx(order) as never, order);
-      expect(result).toEqual({ moneyRefunded: false, pointsRefunded: 80 });
+      expect(result).toMatchObject({ moneyRefunded: false, pointsRefunded: 80 });
     });
 
     it('đơn WALLET 0đ → moneyRefunded false (không có gì để hoàn)', async () => {
@@ -282,7 +285,7 @@ describe('OrderReversalService', () => {
       const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID' });
       const tx = makeTx(order);
       tx.order.updateMany.mockResolvedValue({ count: 0 });
-      expect(await service.reverseFinancials(tx as never, order)).toEqual({ moneyRefunded: false, pointsRefunded: 0 });
+      expect(await service.reverseFinancials(tx as never, order)).toMatchObject({ moneyRefunded: false, pointsRefunded: 0 });
     });
 
     it('dòng ORDER_REFUND_CONVERTED / ORDER_REFUND_XU đã có → pointsRefunded 0 (không báo hoàn điểm đã hoàn từ trước)', async () => {
@@ -352,7 +355,7 @@ describe('OrderReversalService', () => {
     });
     expect(tx.coinTransaction.create).not.toHaveBeenCalled();
     expect(tx.row.paymentStatus).toBe('REFUNDED');
-    expect(result).toEqual({ moneyRefunded: true, pointsRefunded: 0 });
+    expect(result).toMatchObject({ moneyRefunded: true, pointsRefunded: 0 });
   });
 
   it('COD trả hàng: gọi reverseFinancials 2 lần cho CÙNG đơn (double-processing) → KHÔNG hoàn ví lần 2', async () => {
@@ -682,7 +685,7 @@ describe('OrderReversalService — thu hồi thưởng quý đại lý', () => {
     const tx = makeTx(order);
     // Đơn DEALER mặc định paymentMethod='WALLET' (fixture) + paymentStatus UNPAID → guard PAID
     // thua (count=0) → không có gì được hoàn.
-    await expect(service.reverseFinancials(tx as never, order)).resolves.toEqual({ moneyRefunded: false, pointsRefunded: 0 });
+    await expect(service.reverseFinancials(tx as never, order)).resolves.toMatchObject({ moneyRefunded: false, pointsRefunded: 0 });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('thưởng quý'));
     error.mockRestore();
   });
@@ -709,5 +712,104 @@ describe('OrderReversalService — resolve DealerService xuyên module (đúng w
     const tx = makeTx(order);
     await service.reverseFinancials(tx as never, order);
     expect(dealer.clawbackQuarterBonusForOrder).toHaveBeenCalledWith(tx, order, { paidBeforeReversal: false });
+  });
+});
+
+describe('OrderReversalService — nơi nhận tiền hoàn và phần đã trả trước (D2/D3)', () => {
+  let service: OrderReversalService;
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+    (applyWalletDelta as jest.Mock).mockClear();
+  });
+
+  it('BUYERMINI-9: huỷ đơn chuyển khoản đã trả, khách chọn ngân hàng → ghi khoản chờ chuyển khoản, KHÔNG cộng Ví', async () => {
+    const order = makeOrder({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'CONFIRMED', total: 114_000 });
+    const tx = makeTx(order);
+    const res = await service.reverseFinancials(tx as never, order, {
+      destination: { method: 'BANK', bank: { bankName: 'Techcombank', accountNumber: '190312345678', accountName: 'NGUYEN VAN A' } },
+    });
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: 'CANCEL',
+        amount: 114_000,
+        method: 'MANUAL_TRANSFER',
+        status: 'PENDING',
+        userId: 'u1',
+        bankAccountNo: '190312345678',
+      }),
+    });
+    expect(res).toMatchObject({ refund: { amount: 114_000, to: 'BANK' } });
+    expect(tx.row.paymentStatus).toBe('REFUNDED');
+  });
+
+  it('đơn trả bằng Ví luôn hoàn về Ví dù có nơi nhận ngân hàng', async () => {
+    const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', status: 'CONFIRMED' });
+    const tx = makeTx(order);
+    const res = await service.reverseFinancials(tx as never, order, {
+      destination: { method: 'BANK', bank: { bankName: 'VCB', accountNumber: '123456789', accountName: 'A' } },
+    });
+    expect(tx.orderCustomerRefund.create).not.toHaveBeenCalled();
+    expect(res.refund).toEqual({ amount: 150000, to: 'WALLET' });
+  });
+
+  it('đơn đã trả một phần trước đó → lần đảo cả đơn chỉ hoàn phần còn lại, không cộng kho dòng đã nhận về', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order);
+    tx.returnRequest.findMany.mockResolvedValue([
+      {
+        refundAmount: 40_000,
+        shippingRefund: 10_000,
+        pointsRefunded: 0,
+        convertedPointsRefunded: 0,
+        pointsReversed: 0,
+        commissionReversed: 0,
+        receivedAt: new Date(),
+        items: [{ orderItemId: 'i2', quantity: 1 }],
+      },
+    ]);
+    const res = await service.reverseFinancials(tx as never, order);
+    expect(res.refund).toEqual({ amount: 100_000, to: 'WALLET' });
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('trả một phần đã duyệt nhưng CHƯA nhận hàng về → lần đảo cả đơn không cộng kho phần đó (nhận về sẽ cộng)', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order);
+    tx.returnRequest.findMany.mockResolvedValue([
+      {
+        refundAmount: 40_000,
+        shippingRefund: 0,
+        pointsRefunded: 0,
+        convertedPointsRefunded: 0,
+        pointsReversed: 0,
+        commissionReversed: 0,
+        receivedAt: null,
+        items: [
+          { orderItemId: 'i1', quantity: 1 },
+          { orderItemId: 'i2', quantity: 1 },
+        ],
+      },
+    ]);
+    await service.reverseFinancials(tx as never, order);
+    // i1: 2 - 1 đã duyệt = 1 đơn vị; i2: 1 - 1 = 0 → chỉ một lần cộng kho.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const sqlValues = (tx.$executeRaw.mock.calls[0] as unknown[]).slice(1);
+    expect(sqlValues).toContain(1);
+    expect(sqlValues).toContain('v1');
+  });
+
+  it('trả hàng chờ nhận về: restock=false → không cộng kho lúc duyệt', async () => {
+    const order = makeOrder({ paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order, { restock: false });
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
   });
 });

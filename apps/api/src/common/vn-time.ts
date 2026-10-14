@@ -37,3 +37,10 @@ export function vnMonthKey(d: Date = new Date()): string {
 export function formatVnDate(d: Date): string {
   return d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
 }
+
+/** Mốc giờ hiển thị cho khách ('00:05 14/10/2026') theo giờ VN — dùng cho hạn thanh toán. */
+export function formatVnDateTime(d: Date): string {
+  const vn = new Date(d.getTime() + VN_OFFSET_MS);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${p2(vn.getUTCHours())}:${p2(vn.getUTCMinutes())} ${p2(vn.getUTCDate())}/${p2(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`;
+}

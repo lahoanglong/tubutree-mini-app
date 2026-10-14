@@ -97,10 +97,6 @@ class ReviewDto {
   @IsOptional() @IsString() tierId?: string;
   @IsOptional() @IsString() reason?: string;
 }
-class ReviewReturnDto {
-  @IsBoolean() approve!: boolean;
-  @IsOptional() @IsString() note?: string;
-}
 export class ReviewMerchantProductDto {
   @IsBoolean() approve!: boolean;
   @IsOptional() @IsString() rejectReason?: string;
@@ -220,11 +216,6 @@ export class DealerAppsQuery extends PaginationQuery {
   @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
 }
 
-export class ReturnRequestsQuery extends PaginationQuery {
-  @IsOptional() @IsIn(['REQUESTED', 'APPROVED', 'REJECTED']) status?: 'REQUESTED' | 'APPROVED' | 'REJECTED';
-  @IsOptional() @IsIn([...SORT_ORDERS]) order?: SortOrder;
-}
-
 export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
   @IsOptional() @IsString() @MaxLength(100) search?: string;
@@ -328,16 +319,6 @@ export class AdminController {
   @Post('dealer-applications/:id/review')
   review(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewDto) {
     return this.admin.reviewDealerApplication(adminId, id, dto.approve, dto.tierId, dto.reason);
-  }
-
-  @Get('return-requests')
-  returns(@Query() q: ReturnRequestsQuery) {
-    return this.admin.listReturnRequests(q.status, q.page, q.limit, q.order);
-  }
-
-  @Post('return-requests/:id/review')
-  reviewReturn(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewReturnDto) {
-    return this.admin.reviewReturn(adminId, id, dto.approve, dto.note);
   }
 
   @Get('users')
