@@ -31,7 +31,7 @@ describe('Gomdon race (real Postgres)', () => {
   const pushQueue = mockQueue();
   const eventsQueue = mockQueue();
   const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) };
-  const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+  const alerts = { alert: jest.fn().mockResolvedValue(undefined), resolveKinds: jest.fn().mockResolvedValue(0) };
   const client = {
     isConfigured: jest.fn().mockResolvedValue(true),
     isRecyclingEnabled: jest.fn().mockResolvedValue(true),

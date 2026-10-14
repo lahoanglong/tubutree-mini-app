@@ -259,7 +259,7 @@ describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2,
     const orderStatus = gate();
     const { svc, $transaction, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
     await svc.cancel('u1', 'TUBU1');
-    expect(orderStatus.precheckPancakeCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1', pancakeOrderId: 'pk-1' }), true);
+    expect(orderStatus.precheckPancakeCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1', pancakeOrderId: 'pk-1' }), 'CUSTOMER');
     expect(orderStatus.precheckPancakeCancel.mock.invocationCallOrder[0]).toBeLessThan($transaction.mock.invocationCallOrder[0]!);
     expect(row.status).toBe('CANCELLED');
     expect(orderStatus.afterPancakeCancel).toHaveBeenCalledWith('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });

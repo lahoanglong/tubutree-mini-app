@@ -23,6 +23,9 @@ import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './retur
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
 
+/** Bộ lọc admin "Chờ nhận hàng về": đã duyệt, chưa bấm "Đã nhận hàng về". */
+export const RETURNS_TO_RECEIVE = 'TO_RECEIVE';
+
 type OrderWithItems = Order & { items: OrderItem[] };
 type RequestWithItems = ReturnRequest & { items: ReturnRequestItem[] };
 
@@ -216,18 +219,29 @@ export class OrderReturnsService {
   // ── Admin ──
 
   async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
-    const where = status ? { status: status as never } : {};
+    const where = status === RETURNS_TO_RECEIVE ? await this.toReceiveWhere() : status ? { status: status as never } : {};
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.returnRequest.findMany({
         where,
         // Hàng chờ duyệt (REQUESTED) web gửi order=asc — yêu cầu cũ nhất lên đầu, không bị chìm.
-        orderBy: { createdAt: order ?? 'desc' },
+        orderBy: { createdAt: order ?? (status === RETURNS_TO_RECEIVE ? 'asc' : 'desc') },
         ...skipTake(page, limit),
         include: { items: true },
       }),
       this.prisma.returnRequest.count({ where }),
     ]);
     return paginated(await this.withContext(rows), page, limit, total);
+  }
+
+  /** Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. */
+  private async toReceiveWhere(): Promise<Prisma.ReturnRequestWhereInput> {
+    const base = { status: 'APPROVED' as const, receivedAt: null };
+    const pending = await this.prisma.returnRequest.findMany({ where: base, select: { orderId: true } });
+    const merchant = await this.prisma.order.findMany({
+      where: { id: { in: [...new Set(pending.map((r) => r.orderId))] }, fulfiller: 'MERCHANT' },
+      select: { id: true },
+    });
+    return { ...base, orderId: { notIn: merchant.map((o) => o.id) } };
   }
 
   /** Số tiền/điểm sẽ hoàn nếu duyệt ngay bây giờ — bước xác nhận của admin (không ghi gì). */

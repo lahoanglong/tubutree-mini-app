@@ -4,10 +4,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
-import { OrderReturnsService } from './order-returns.service';
+import { OrderReturnsService, RETURNS_TO_RECEIVE } from './order-returns.service';
 import { ReturnPreviewQuery, ReviewReturnDto } from './dto/return-request.dto';
 
-const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED'] as const;
+const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', RETURNS_TO_RECEIVE] as const;
 const SORT_ORDERS = ['asc', 'desc'] as const;
 
 export class ReturnRequestsQuery extends PaginationQuery {

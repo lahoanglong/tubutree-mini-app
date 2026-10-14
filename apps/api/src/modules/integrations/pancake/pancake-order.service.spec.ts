@@ -22,7 +22,7 @@ function setup(order: Record<string, unknown> = {}, opts: { client?: Record<stri
   const db = fakeOrderDb([baseOrder(order)], opts.extra);
   const client = fakeClient(opts.client);
   const queue = fakeQueue();
-  const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+  const alerts = { alert: jest.fn().mockResolvedValue(undefined), resolveKinds: jest.fn().mockResolvedValue(0) };
   const svc = new PancakeOrderService(
     db.prisma as unknown as PrismaService,
     client as unknown as PancakeClient,
@@ -492,6 +492,16 @@ describe('PancakeOrderService.syncPayment', () => {
     expect(t.row().pancakePaymentSynced).toBe(false);
   });
 
+  it('ghi chú giao hàng của khách có trong body tạo đơn và vẫn giữ khi PUT lại note lúc đã thanh toán (R2-PANCAKE-2)', async () => {
+    const created = setup({ paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', note: 'Để ở bảo vệ' });
+    await created.svc.syncPayment('o1');
+    expect(created.body().note).toContain('Khách dặn: Để ở bảo vệ');
+
+    const updated = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', note: 'Để ở bảo vệ' });
+    await updated.svc.syncPayment('o1');
+    expect(updated.client.updateOrder).toHaveBeenCalledWith('pk-1', expect.objectContaining({ note: expect.stringContaining('Khách dặn: Để ở bảo vệ') }));
+  });
+
   it('đã đồng bộ / đơn COD chưa trả → không gọi Pancake', async () => {
     const a = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID', pancakePaymentSynced: true });
     await a.svc.syncPayment('o1');
@@ -705,7 +715,7 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
   it('NEEDS_MANUAL_CHECK → "KIỂM TRA GOMDON"; AWAITING_PAYMENT → "CHỜ THANH TOÁN"', async () => {
     const a = await pushed({ hasRecyclingPickup: true, gomdonStatus: 'NEEDS_MANUAL_CHECK' });
     expect(a.note).toContain('[KIỂM TRA GOMDON (mã đơn TUBU1) TRƯỚC KHI TẠO VẬN ĐƠN TAY]');
-    const b = await pushed({ hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT' });
+    const b = await pushed({ hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT', paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT' });
     expect(b.note).toContain('[CHỜ THANH TOÁN - VẬN ĐƠN GOMDON TỰ TẠO SAU KHI KHÁCH THANH TOÁN, KHÔNG TẠO VẬN ĐƠN KHÁC]');
   });
 
@@ -714,5 +724,102 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     expect(a.note).toContain('TỐI ĐA 1.0kg');
     const b = await pushed({ hasRecyclingPickup: true, gomdonPartnerCode: 'BE-7' }, [{ id: 'v1', weight: 0 }], { defaultWeightFallback: 800 });
     expect(b.note).toContain('TỐI ĐA 1.6kg');
+  });
+});
+
+describe('PancakeOrderService — đơn thu gom: Pancake chờ vận đơn Gomdon, ghi chú luôn mang mã vận đơn (R2-GOMDON-1)', () => {
+  const recycling = { hasRecyclingPickup: true, recyclingNote: 'Pin cũ' };
+
+  it.each([
+    ['ZaloPay vừa trả, Gomdon còn AWAITING_PAYMENT', { paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', gomdonStatus: 'AWAITING_PAYMENT' }],
+    ['Ví đã trả, Gomdon đang CREATING', { paymentMethod: 'WALLET', paymentStatus: 'PAID', gomdonStatus: 'CREATING' }],
+    ['COD, Gomdon chưa chạy (null)', { gomdonStatus: null }],
+  ])('%s → job thanh toán/đẩy KHÔNG tạo đơn Pancake (Gomdon tự đẩy sau khi có mã)', async (_label, over) => {
+    const t = setup({ ...recycling, ...over });
+    await t.svc.syncPayment('o1');
+    expect(await t.svc.pushOrder('o1')).toBeNull();
+    expect(t.client.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('chuyển khoản CHƯA trả, Gomdon AWAITING_PAYMENT → vẫn đẩy ngay (Pancake đối soát CK) với ghi chú chờ thanh toán', async () => {
+    const t = setup({ ...recycling, paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT', gomdonStatus: 'AWAITING_PAYMENT' });
+    await t.svc.pushOrder('o1');
+    expect(t.body().note).toContain('CHỜ THANH TOÁN - VẬN ĐƠN GOMDON TỰ TẠO');
+  });
+
+  it('admin "Đẩy lại Pancake" khi đơn thu gom đang chờ vận đơn → từ chối, nói rõ hệ thống tự đẩy', async () => {
+    const t = setup({ ...recycling, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', gomdonStatus: 'CREATING' });
+    await expect(t.svc.retryPushByAdmin('admin1', 'o1')).rejects.toThrow(/đang chờ tạo vận đơn Gomdon/);
+  });
+
+  it('syncWaybillNote: đơn đã lên Pancake, vừa có vận đơn → PUT note có mã + tag GOMDON, giữ lời dặn khách; đã trả thì kèm cod 0', async () => {
+    const t = setup({
+      ...recycling,
+      note: 'Gọi trước',
+      pancakeOrderId: 'pk-1',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      gomdonPartnerCode: 'BE-9105',
+      gomdonOrderId: '9105',
+      gomdonStatus: '1',
+    });
+    await t.svc.syncWaybillNote('o1');
+    const [id, payload] = t.client.updateOrder.mock.calls[0]!;
+    expect(id).toBe('pk-1');
+    expect(payload.note).toContain('Mã VĐ Gomdon: BE-9105 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC]');
+    expect(payload.note).toContain('[ĐÃ THANH TOÁN CHUYỂN KHOẢN');
+    expect(payload.note).toContain('Khách dặn: Gọi trước');
+    expect(payload.tags).toContain('GOMDON');
+    expect(payload).toMatchObject({ cod: 0, transfer_money: 230_000 });
+    expect(t.row().pancakePaymentSynced).toBe(true);
+    expect(t.alerts.resolveKinds).toHaveBeenCalledWith('o1', ['WAYBILL_NOTE']);
+  });
+
+  it('syncWaybillNote: đơn COD → chỉ PUT note/tag, không đụng tiền', async () => {
+    const t = setup({ ...recycling, pancakeOrderId: 'pk-1', gomdonPartnerCode: 'BE-1', gomdonOrderId: '1', gomdonStatus: '1' });
+    await t.svc.syncWaybillNote('o1');
+    const payload = t.client.updateOrder.mock.calls[0]![1];
+    expect(Object.keys(payload).sort()).toEqual(['note', 'tags']);
+    expect(payload.note).toContain('[THU COD 230.000đ]');
+  });
+
+  it('job thanh toán PUT ghi chú cũ trong lúc Gomdon vừa gắn vận đơn → PUT lại ghi chú mới (không để note "CHỜ THANH TOÁN")', async () => {
+    const t = setup({ ...recycling, pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', gomdonStatus: 'CREATING' });
+    t.client.updateOrder.mockImplementationOnce(async () => {
+      Object.assign(t.rows[0]!, { gomdonPartnerCode: 'BE-2', gomdonOrderId: '2', gomdonStatus: '1' });
+      return { id: 'pk-1' };
+    });
+    await t.svc.syncPayment('o1');
+    expect(t.client.updateOrder).toHaveBeenCalledTimes(2);
+    expect(t.client.updateOrder.mock.calls[1]![1].note).toContain('Mã VĐ Gomdon: BE-2');
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('PUT lại ghi chú lỗi → báo "ghi mã vào Pancake" (nhóm WAYBILL_NOTE), không nhắc "sau khi khách thanh toán"', async () => {
+    const t = setup({ ...recycling, gomdonStatus: 'NEEDS_MANUAL_CHECK' });
+    t.client.createOrder.mockImplementationOnce(async () => {
+      Object.assign(t.rows[0]!, { gomdonPartnerCode: 'BE-4', gomdonOrderId: '4', gomdonStatus: '1' });
+      return { id: 'pk-new' };
+    });
+    t.client.updateOrder.mockRejectedValueOnce(new PancakeApiError('Pancake 503', true));
+    await t.svc.pushOrder('o1');
+    expect(t.alerts.alert).toHaveBeenCalledWith(
+      'TUBU1',
+      expect.stringMatching(/vận đơn Gomdon BE-4 nhưng chưa ghi được mã vào đơn Pancake #pk-new .*KHÔNG tạo vận đơn khác/),
+      undefined,
+      'WAYBILL_NOTE',
+    );
+    expect(t.alerts.alert.mock.calls[0]![1]).not.toContain('khách thanh toán');
+  });
+
+  it('đơn lên Pancake với ghi chú chưa có mã, vận đơn tới trong lúc tạo → PUT lại ghi chú ngay sau khi lưu mã Pancake', async () => {
+    const t = setup({ ...recycling, gomdonStatus: 'NEEDS_MANUAL_CHECK' });
+    t.client.createOrder.mockImplementationOnce(async () => {
+      Object.assign(t.rows[0]!, { gomdonPartnerCode: 'BE-3', gomdonOrderId: '3', gomdonStatus: '1' });
+      return { id: 'pk-new' };
+    });
+    await t.svc.pushOrder('o1');
+    expect(t.body().note).toContain('KIỂM TRA GOMDON');
+    expect(t.client.updateOrder).toHaveBeenCalledWith('pk-new', expect.objectContaining({ note: expect.stringContaining('Mã VĐ Gomdon: BE-3') }));
   });
 });

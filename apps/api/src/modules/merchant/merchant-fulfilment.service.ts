@@ -366,7 +366,8 @@ export class MerchantFulfilmentService {
   async fail(userId: string, orderId: string, reason: string) {
     const { store, order } = await this.ownOrder(userId, orderId);
     if (order.status !== 'SHIPPING') throw new BadRequestException('Chỉ đơn đang giao mới báo giao thất bại được.');
-    return this.cancelBySeller(userId, store.title, order, `Giao không thành công: ${reason.trim()}`);
+    // Giao không thành = hàng quay về gian hàng: đây là luồng hoàn của D1 nên huỷ được dù đã gửi hàng.
+    return this.cancelBySeller(userId, store.title, order, `Giao không thành công: ${reason.trim()}`, true);
   }
 
   /** Đối tác huỷ trước khi giao cho đơn vị vận chuyển (cùng mốc D1: chưa SHIPPING). */
@@ -378,10 +379,17 @@ export class MerchantFulfilmentService {
     return this.cancelBySeller(userId, store.title, order, reason.trim());
   }
 
-  private async cancelBySeller(userId: string, storeTitle: string, order: { id: string; status: string }, reason: string) {
+  private async cancelBySeller(
+    userId: string,
+    storeTitle: string,
+    order: { id: string; status: string },
+    reason: string,
+    returnedToSender = false,
+  ) {
     if (!reason) throw new BadRequestException('Cần nhập lý do để báo khách.');
     await this.transition(userId, order, 'CANCELLED', {
       note: reason,
+      returnedToSender,
       notifyEvent: 'MERCHANT_ORDER_CANCELLED_BY_SELLER',
       notifyData: { reason, store: storeTitle },
     });

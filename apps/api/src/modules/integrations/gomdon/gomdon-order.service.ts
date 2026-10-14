@@ -12,9 +12,9 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { GomdonClient } from './gomdon.client';
 import type { GomdonCreateOrderBody, GomdonCreateOrderResponse } from './gomdon.types';
-import { PancakeOrderService } from '../pancake/pancake-order.service';
+import { PancakeOrderService, waybillNoteAlert } from '../pancake/pancake-order.service';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
-import { GomdonAlertService } from './gomdon-alert.service';
+import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
 import { GomdonDuplicateOrderError, GomdonRejectedError, isTransientGomdonRejection } from './gomdon.errors';
 import { enqueueGomdonCancel, enqueueGomdonPush } from './gomdon-queue';
 import { recyclingWeight } from './gomdon-weight';
@@ -205,7 +205,12 @@ export class GomdonOrderService {
       if (!order.pancakeOrderId) {
         await this.pancakeOrder.enqueuePush(order.id);
       } else {
-        await this.alerts.alert(order.code, 'Gomdon chưa cấu hình — đơn thu gom đã thanh toán cần TẠO VẬN ĐƠN TAY (Pancake đã có đơn).');
+        await this.alerts.alert(
+          order.code,
+          'Gomdon chưa cấu hình — đơn thu gom đã thanh toán cần TẠO VẬN ĐƠN TAY (Pancake đã có đơn).',
+          GOMDON_ALERT_TEMPLATE,
+          GOMDON_ALERT_KIND.WAYBILL_NEEDED,
+        );
       }
       return null;
     }
@@ -287,16 +292,24 @@ export class GomdonOrderService {
       await this.enqueueCancel(order.id);
       return partnerCode;
     }
+    // Hệ thống đã tự gắn được vận đơn: các việc "tạo/kiểm tra vận đơn tay" cũ hết hiệu lực.
+    await this.alerts.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NEEDED]);
     if (!fresh.pancakeOrderId) {
       // Thành công → đẩy tiếp sang Pancake với mã Gomdon trong note.
       await this.pancakeOrder.enqueuePush(order.id);
     } else {
-      // Đơn trả trước: Pancake đã nhận đơn lúc chờ thanh toán (note "chờ thanh toán") — không có API sửa
-      // note Pancake, báo CSKH/kho ghi mã vào Pancake để không ai tạo thêm vận đơn khác.
-      await this.alerts.alert(
-        order.code,
-        `Đã tạo vận đơn Gomdon ${partnerCode} sau khi khách thanh toán. Đơn Pancake tạo trước đó chưa có mã này — ghi mã vào Pancake, KHÔNG tạo vận đơn khác.`,
-      );
+      // Pancake đã có đơn từ trước (chuyển khoản đẩy lúc chờ tiền, COD đẩy kèm cảnh báo tạo tay sau lần tạo lỗi):
+      // ghi mã vận đơn + tag GOMDON vào đơn Pancake. Chỉ báo người làm tay khi Pancake từ chối.
+      try {
+        await this.pancakeOrder.syncWaybillNote(order.id);
+      } catch (err) {
+        await this.alerts.alert(
+          order.code,
+          waybillNoteAlert(partnerCode, fresh.pancakeOrderId, err),
+          GOMDON_ALERT_TEMPLATE,
+          GOMDON_ALERT_KIND.WAYBILL_NOTE,
+        );
+      }
     }
     return partnerCode;
   }
@@ -344,7 +357,12 @@ export class GomdonOrderService {
 
     if (isDead(order.status)) {
       if (unclear.count > 0) {
-        await this.alerts.alert(order.code, 'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.');
+        await this.alerts.alert(
+          order.code,
+          'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.',
+          GOMDON_ALERT_TEMPLATE,
+          GOMDON_ALERT_KIND.CANCEL_NEEDED,
+        );
       }
       return;
     }
@@ -354,6 +372,8 @@ export class GomdonOrderService {
       unclear.count > 0
         ? `Không rõ Gomdon đã tạo vận đơn chưa (${reason}). KIỂM TRA GOMDON trước khi tạo vận đơn tay.`
         : `Tạo vận đơn Gomdon thất bại sau nhiều lần thử (${reason}). Cần TẠO VẬN ĐƠN TAY và hẹn thu gom với khách.`,
+      GOMDON_ALERT_TEMPLATE,
+      GOMDON_ALERT_KIND.WAYBILL_NEEDED,
     );
   }
 
@@ -416,7 +436,12 @@ export class GomdonOrderService {
         if (order.gomdonStatus === GOMDON_STATE.NEEDS_MANUAL_CHECK) {
           await this.setCancelStatus(order.id, GOMDON_CANCEL.FAILED);
           if (!alreadyFailed) {
-            await this.alerts.alert(order.code, 'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.');
+            await this.alerts.alert(
+              order.code,
+              'Đơn đã huỷ nhưng không rõ Gomdon đã tạo vận đơn chưa — kiểm tra và huỷ tay trên Gomdon.',
+              GOMDON_ALERT_TEMPLATE,
+              GOMDON_ALERT_KIND.CANCEL_NEEDED,
+            );
           }
           return;
         }
@@ -425,6 +450,7 @@ export class GomdonOrderService {
       }
       if (order.gomdonStatus === '2') {
         await this.setCancelStatus(order.id, GOMDON_CANCEL.CANCELLED);
+        await this.resolveAfterCancel(order.id);
         return;
       }
       if (isGomdonPickedUp(order.gomdonStatus)) {
@@ -443,6 +469,8 @@ export class GomdonOrderService {
           await this.alerts.alert(
             order.code,
             `Đơn đã huỷ nhưng vận đơn Gomdon ${order.gomdonPartnerCode} chưa có mã số Gomdon để huỷ qua API — HUỶ TAY trên Gomdon theo mã vận đơn ${order.gomdonPartnerCode} để bưu tá không tới giao hàng/thu COD.`,
+            GOMDON_ALERT_TEMPLATE,
+            GOMDON_ALERT_KIND.CANCEL_NEEDED,
           );
         }
         return;
@@ -457,12 +485,15 @@ export class GomdonOrderService {
             order.code,
             `Gomdon báo "${res.message}" khi huỷ vận đơn ${order.gomdonPartnerCode ?? order.gomdonOrderId} của đơn đã huỷ — tra trên cổng Gomdon: ` +
               'vận đơn đã huỷ thì bấm "Đã xử lý tay"; còn chạy thì huỷ tay để bưu tá không tới lấy hàng.',
+            GOMDON_ALERT_TEMPLATE,
+            GOMDON_ALERT_KIND.CANCEL_NEEDED,
           );
         }
         return;
       }
       if (!res.ok) throw new Error(`Gomdon không huỷ được vận đơn: ${res.message ?? 'không rõ lý do'}`);
       await this.setCancelStatus(order.id, GOMDON_CANCEL.CANCELLED);
+      await this.resolveAfterCancel(order.id);
       this.logger.log(`Đã huỷ vận đơn Gomdon ${order.gomdonPartnerCode ?? order.gomdonOrderId} cho đơn ${order.code}.`);
     } catch (err) {
       if (!isLastAttempt) throw err; // BullMQ retry
@@ -475,6 +506,8 @@ export class GomdonOrderService {
           `Không huỷ được vận đơn Gomdon ${order.gomdonPartnerCode ?? order.gomdonOrderId ?? ''} cho đơn đã huỷ (${
             err instanceof Error ? err.message : err
           }) — hệ thống còn tự thử lại; huỷ tay trên Gomdon để bưu tá không tới lấy hàng rồi bấm "Đã xử lý tay".`,
+          GOMDON_ALERT_TEMPLATE,
+          GOMDON_ALERT_KIND.CANCEL_NEEDED,
         );
       }
     }
@@ -571,7 +604,7 @@ export class GomdonOrderService {
     return {
       queued: true,
       message: order.pancakeOrderId
-        ? `${follow} Đơn Pancake đã có từ trước — khi có mã vận đơn, ghi mã vào Pancake và KHÔNG tạo vận đơn khác.`
+        ? `${follow} Đơn Pancake đã có từ trước — hệ thống tự ghi mã vận đơn vào ghi chú Pancake (lỗi thì có báo động).`
         : follow,
     };
   }
@@ -773,7 +806,18 @@ export class GomdonOrderService {
     await this.alerts.alert(
       order.code,
       `Lần tạo vận đơn trước bị gián đoạn: đơn đã ${order.status === 'RETURNED' ? 'trả' : 'huỷ'} nhưng có thể đã tạo vận đơn Gomdon — kiểm tra & huỷ tay trên Gomdon (tra theo mã đơn ${order.code}).`,
+      GOMDON_ALERT_TEMPLATE,
+      GOMDON_ALERT_KIND.CANCEL_NEEDED,
     );
+  }
+
+  /** Vận đơn của đơn đã huỷ đã huỷ xong: mọi việc tạo/kiểm tra/huỷ tay/ghi mã còn mở của đơn hết hiệu lực. */
+  private async resolveAfterCancel(orderId: string): Promise<void> {
+    await this.alerts.resolveKinds(orderId, [
+      GOMDON_ALERT_KIND.CANCEL_NEEDED,
+      GOMDON_ALERT_KIND.WAYBILL_NEEDED,
+      GOMDON_ALERT_KIND.WAYBILL_NOTE,
+    ]);
   }
 
   private async setCancelStatus(
@@ -808,11 +852,21 @@ export class GomdonOrderService {
       );
     }
     if (isDead(order.status)) {
-      await this.alerts.alert(order.code, `${reason}. Đơn đã huỷ — kiểm tra và huỷ tay vận đơn trên Gomdon nếu có.`);
+      await this.alerts.alert(
+        order.code,
+        `${reason}. Đơn đã huỷ — kiểm tra và huỷ tay vận đơn trên Gomdon nếu có.`,
+        GOMDON_ALERT_TEMPLATE,
+        GOMDON_ALERT_KIND.CANCEL_NEEDED,
+      );
       return;
     }
     if (!order.pancakeOrderId) await this.pancakeOrder.enqueuePush(order.id);
-    await this.alerts.alert(order.code, `${reason}. ${advice ?? `KIỂM TRA GOMDON (mã đơn ${order.code}) trước khi tạo vận đơn tay.`}`);
+    await this.alerts.alert(
+      order.code,
+      `${reason}. ${advice ?? `KIỂM TRA GOMDON (mã đơn ${order.code}) trước khi tạo vận đơn tay.`}`,
+      GOMDON_ALERT_TEMPLATE,
+      GOMDON_ALERT_KIND.WAYBILL_NEEDED,
+    );
   }
 
   /**

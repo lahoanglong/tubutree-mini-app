@@ -13,9 +13,11 @@ export type PancakeStatusAction =
 
 const to = (status: OrderStatus): PancakeStatusAction => ({ kind: 'status', status });
 const RETURNED: PancakeStatusAction = { kind: 'returned' };
+/** Mở đầu lý do "ĐANG HOÀN" — gỡ khỏi hàng đợi khi Pancake báo "Đã hoàn" và đơn đã tự huỷ/trả. */
+export const PANCAKE_RETURNING_PREFIX = 'Pancake báo ĐANG HOÀN';
 const RETURNING: PancakeStatusAction = {
   kind: 'attention',
-  reason: 'Pancake báo ĐANG HOÀN (giao không thành, hàng đang quay về kho). Liên hệ khách; khi kho nhận lại hàng, Pancake báo "Đã hoàn" thì đơn tự huỷ và hoàn tiền.',
+  reason: `${PANCAKE_RETURNING_PREFIX} (giao không thành, hàng đang quay về kho). Liên hệ khách; khi kho nhận lại hàng, Pancake báo "Đã hoàn" thì đơn tự huỷ và hoàn tiền.`,
 };
 
 /**

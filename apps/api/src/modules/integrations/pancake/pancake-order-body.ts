@@ -75,6 +75,8 @@ export interface PancakePushOrder {
   invoiceRequest?: unknown;
   hasRecyclingPickup?: boolean | null;
   gomdonPartnerCode?: string | null;
+  /** Ghi chú giao hàng khách nhập lúc đặt (Order.note) — kho và shipper đọc trên Pancake. */
+  note?: string | null;
   items: PancakePushLine[];
 }
 
@@ -134,9 +136,35 @@ export function pancakeTags(
   return tags;
 }
 
+export const CUSTOMER_NOTE_MAX = 200;
+
+/**
+ * Lời dặn của khách cho kho/shipper, đã làm sạch: một dòng, không có dấu tách " | " hay ngoặc vuông của các dấu hệ
+ * thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), cắt CUSTOMER_NOTE_MAX ký tự. Rỗng → null.
+ */
+export function customerDeliveryNote(note: string | null | undefined): string | null {
+  const clean = (note ?? '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\|/g, '/')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')')
+    .replace(/order\s*code\s*:/gi, 'Mã đơn:')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return null;
+  const capped = clean.length > CUSTOMER_NOTE_MAX ? `${clean.slice(0, CUSTOMER_NOTE_MAX - 1).trimEnd()}…` : clean;
+  return `Khách dặn: ${capped}`;
+}
+
 /** "Order code: <mã>" luôn đứng đầu — webhook Pancake và tra cứu đơn đọc mã từ đây. */
-export function pancakeOrderNote(code: string, recyclingNote: string | null | undefined, paymentNote: string): string {
-  return [`Order code: ${code}`, recyclingNote, paymentNote].filter(Boolean).join(' | ');
+export function pancakeOrderNote(
+  code: string,
+  recyclingNote: string | null | undefined,
+  paymentNote: string,
+  customerNote?: string | null,
+): string {
+  return [`Order code: ${code}`, recyclingNote, paymentNote, customerDeliveryNote(customerNote)].filter(Boolean).join(' | ');
 }
 
 /**
@@ -212,7 +240,7 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
     cod,
     custom_id: order.code,
     tags: pancakeTags(order, state),
-    note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod)),
+    note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod), order.note),
     extension: {
       external_order_id: order.code,
       invoice_request: inv

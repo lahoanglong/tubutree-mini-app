@@ -37,12 +37,25 @@ const ACTIONS: readonly OrderStatusAction[] = [
 
 /**
  * Nút chuyển trạng thái = đúng `allowedTransitions` API trả (AdminService.listOrders — cùng luật
- * OrderStatusService.setStatus, gồm khoá giao đơn trả trước chưa PAID). API cũ không trả trường này thì không
+ * OrderStatusService.setStatus, gồm khoá giao đơn trả trước chưa PAID, và theo nhóm việc của người xem). API cũ không trả trường này thì không
  * hiện nút nào thay vì tự đoán (C-024).
  */
 export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>): OrderStatusAction[] {
   const allowed = new Set(order.allowedTransitions ?? []);
   return ACTIONS.filter((a) => allowed.has(a.status));
+}
+
+const PREPAID_METHODS = new Set(['WALLET', 'ZALOPAY', 'BANK_TRANSFER', 'VNPAY', 'XU']);
+
+/** Hệ quả tiền/điểm của lần huỷ do admin bấm — admin/hệ thống huỷ luôn hoàn vào Ví Tubu (D2). */
+function cancelConsequences(order: AdminOrder): string[] {
+  const lines =
+    order.paymentStatus === 'PAID' && PREPAID_METHODS.has(order.paymentMethod)
+      ? [`Hoàn ${formatVnd(order.total)} vào Ví Tubu của khách ngay khi huỷ.`]
+      : ['Khách chưa trả tiền — không có khoản hoàn tiền.'];
+  if ((order.pointsUsed ?? 0) > 0) lines.push(`Trả lại ${order.pointsUsed} Điểm Xanh khách đã dùng.`);
+  if (order.pancakeOrderId) lines.push('Hệ thống sẽ huỷ cả đơn trên kho Pancake.');
+  return lines;
 }
 
 function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
@@ -59,7 +72,7 @@ function confirmQuestion(order: AdminOrder, status: string): ConfirmOptions {
       : '';
   return {
     title: 'Huỷ đơn hàng',
-    message: `Xác nhận huỷ đơn ${order.code}?${gomdonNote}`,
+    message: [`Xác nhận huỷ đơn ${order.code}?`, ...cancelConsequences(order)].join('\n') + gomdonNote,
     confirmLabel: 'Huỷ đơn',
     cancelLabel: 'Giữ đơn',
     tone: 'danger',
@@ -102,16 +115,31 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
     },
   });
 
+  // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
+  const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
+
   const onConfirmPayment = async () => {
     if (payInFlight.current || payMut.isPending) return;
-    const ok = await confirm({
-      title: 'Xác nhận đã nhận tiền',
-      message:
-        `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
-        `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}. ` +
-        'Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
-      confirmLabel: 'Đã nhận tiền',
-    });
+    const ok = await confirm(
+      latePayment
+        ? {
+            title: 'Ghi nhận tiền về muộn',
+            message:
+              `Ghi nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code} sau khi đơn đã huỷ?\n\n` +
+              `Đơn giữ nguyên trạng thái huỷ. Hệ thống ghi khoản hoàn ${formatVnd(order.total)} vào hàng đợi Hoàn tiền khách; ` +
+              'khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. Chỉ bấm khi đã thấy tiền về tài khoản.',
+            confirmLabel: 'Ghi nhận',
+            cancelLabel: 'Đóng',
+          }
+        : {
+            title: 'Xác nhận đã nhận tiền',
+            message:
+              `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
+              `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}. ` +
+              'Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
+            confirmLabel: 'Đã nhận tiền',
+          },
+    );
     if (!ok || payInFlight.current || payMut.isPending) return;
     payInFlight.current = true;
     setPayMsg(null);
@@ -128,10 +156,15 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
 
   return (
     <div className="space-y-2 border-t border-stone-200 pt-2">
-      {canConfirmPayment && order.canConfirmPayment && (
-        <section aria-label="Xác nhận đã nhận tiền" className="rounded-card border border-warning-fg bg-stone-0 p-2.5">
+      {canConfirmPayment && (order.canConfirmPayment || latePayment) && (
+        <section
+          aria-label={latePayment ? 'Ghi nhận tiền về muộn' : 'Xác nhận đã nhận tiền'}
+          className="rounded-card border border-warning-fg bg-stone-0 p-2.5"
+        >
           <p className="text-xs text-warning-fg">
-            Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm &quot;Đã nhận tiền&quot;.
+            {latePayment
+              ? 'Đơn đã huỷ khi chưa nhận tiền. Nếu sao kê có khoản chuyển của đơn này, bấm "Ghi nhận tiền về muộn" để đưa vào hàng đợi Hoàn tiền khách.'
+              : 'Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm "Đã nhận tiền".'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
@@ -150,7 +183,7 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
               disabled={busy}
               className={BTN_WARNING}
             >
-              Đã nhận tiền
+              {latePayment ? 'Ghi nhận tiền về muộn' : 'Đã nhận tiền'}
             </button>
           </div>
         </section>

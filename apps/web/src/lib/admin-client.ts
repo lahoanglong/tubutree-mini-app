@@ -77,6 +77,8 @@ export interface AdminOrder {
   paymentStatus?: string;
   shippingFee?: number;
   discountTotal?: number;
+  /** Điểm Xanh khách đã dùng cho đơn — trả lại khi huỷ. */
+  pointsUsed?: number;
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -124,6 +126,8 @@ export interface AdminOrder {
   allowedTransitions?: string[];
   /** true = đơn lẻ chuyển khoản còn UNPAID, chưa huỷ/trả → nút "Đã nhận tiền". */
   canConfirmPayment?: boolean;
+  /** true = đơn lẻ chuyển khoản đã huỷ/trả, chưa ghi nhận tiền → nút "Ghi nhận tiền về muộn" (khoản hoàn vào hàng đợi, D2). */
+  canRecordLatePayment?: boolean;
   /** TUBU = kho Tubu (qua Pancake); MERCHANT = gian hàng đối tác tự giao, không bao giờ lên Pancake. */
   fulfiller?: 'TUBU' | 'MERCHANT' | string;
   fulfillerStorefront?: { title: string } | null;
@@ -501,6 +505,8 @@ export interface ConfirmDealerPaymentResult {
   ok: boolean;
   /** true = đơn đã PAID từ trước (webhook/admin khác) — không ghi gì thêm. */
   alreadyPaid: boolean;
+  /** true = đơn lẻ đã huỷ/trả: tiền về muộn đã được ghi thành khoản hoàn trong hàng đợi Hoàn tiền khách. */
+  latePayment?: boolean;
   message: string;
   order: { id: string; code: string; status: string; paymentStatus: string };
 }

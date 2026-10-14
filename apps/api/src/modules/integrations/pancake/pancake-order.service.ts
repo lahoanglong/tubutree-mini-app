@@ -9,8 +9,8 @@ import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
 import { recyclingWeight } from '../gomdon/gomdon-weight';
-import { GOMDON_STATE } from '../gomdon/gomdon-status';
-import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
+import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
+import { GOMDON_ALERT_KIND, GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { isPrepaidMethod } from '../../orders/order-transition';
 import { resolveDealerRecipient } from '../../dealer/dealer-recipient';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
@@ -69,8 +69,31 @@ export const PANCAKE_CANCEL = {
 /** Trạng thái đơn Tubu còn được tự đẩy sang kho: chưa rời kho, chưa kết thúc. */
 export const PANCAKE_PUSHABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] as const;
 
-/** MERCHANT = đơn gian hàng đối tác tự giao (D4): không thuộc kho Tubu, không bao giờ lên Pancake. */
-export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'WAIT_STOCK' | 'DEAD' | 'LEFT_WAREHOUSE' | 'MERCHANT';
+/**
+ * MERCHANT = đơn gian hàng đối tác tự giao (D4): không thuộc kho Tubu, không bao giờ lên Pancake. WAIT_GOMDON = đơn
+ * thu gom đang chờ vận đơn Gomdon (GomdonOrderService đẩy Pancake ngay khi có mã / chốt tạo tay).
+ */
+export type PancakePushGate = 'PUSH' | 'WAIT_PAYMENT' | 'WAIT_STOCK' | 'WAIT_GOMDON' | 'DEAD' | 'LEFT_WAREHOUSE' | 'MERCHANT';
+
+/**
+ * Đơn thu gom mà Gomdon sắp tạo vận đơn: chưa chạy (null), đang gọi Gomdon (CREATING), hay vừa thanh toán xong còn
+ * AWAITING_PAYMENT (job tạo vận đơn đã xếp). Đẩy Pancake lúc này là ghi chú "kiểm tra Gomdon / chờ thanh toán"
+ * không mã vận đơn, không tag GOMDON — kho dễ đặt vận đơn thứ hai. Chuyển khoản chưa trả thì không chờ: Pancake cần
+ * đơn để đối soát, vận đơn chỉ tạo sau khi nhận tiền.
+ */
+export function awaitsGomdonWaybill(order: {
+  hasRecyclingPickup?: boolean | null;
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+  gomdonStatus?: string | null;
+  paymentMethod: string;
+  paymentStatus: string;
+}): boolean {
+  if (!order.hasRecyclingPickup || order.gomdonOrderId || order.gomdonPartnerCode) return false;
+  const status = order.gomdonStatus ?? null;
+  if (status === null || status === GOMDON_STATE.CREATING) return true;
+  return status === GOMDON_STATE.AWAITING_PAYMENT && isGomdonPayable(order);
+}
 
 /**
  * Đơn có được đẩy sang kho lúc này không. Trả trước qua cổng (ZaloPay/VNPay/Ví) chưa PAID thì chờ tiền — kho không
@@ -84,6 +107,10 @@ export function pancakePushGate(order: {
   paymentStatus: string;
   type: string;
   fulfiller?: string | null;
+  hasRecyclingPickup?: boolean | null;
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+  gomdonStatus?: string | null;
   items: { backorderedQty?: number | null }[];
 }): PancakePushGate {
   if (isMerchantFulfilledOrder(order)) return 'MERCHANT';
@@ -93,6 +120,7 @@ export function pancakePushGate(order: {
   if (order.paymentStatus !== 'PAID' && isPrepaidMethod(order.paymentMethod) && order.paymentMethod !== 'BANK_TRANSFER') {
     return 'WAIT_PAYMENT';
   }
+  if (awaitsGomdonWaybill(order)) return 'WAIT_GOMDON';
   return 'PUSH';
 }
 
@@ -164,6 +192,10 @@ export class PancakeOrderService {
       await this.setPushStatus(order.id, PANCAKE_PUSH.WAITING_STOCK);
       return null;
     }
+    if (gate === 'WAIT_GOMDON') {
+      this.logger.log(`Đơn thu gom ${order.code} chờ vận đơn Gomdon — Gomdon đẩy sang Pancake khi có mã.`);
+      return null;
+    }
     if (!this.client.isConfigured()) {
       this.logger.warn(`Pancake chưa cấu hình — đơn ${order.code} giữ trạng thái chờ đồng bộ.`);
       await this.prisma.order.updateMany({
@@ -224,7 +256,11 @@ export class PancakeOrderService {
       // Lần trước đã gửi lệnh tạo mà không rõ kết quả → tra theo mã đơn, có thì nhận đơn đó thay vì tạo thêm.
       if (order.pancakePushClaimedAt) {
         const found = await this.findOnPancake(order);
-        if (found) return await this.adopt(order, found);
+        if (found) {
+          const adopted = await this.adopt(order, found);
+          await this.refreshNoteIfWaybillChanged(order);
+          return adopted;
+        }
       }
       pancakeOrderId = extractPancakeOrderId(await this.client.createOrder(body));
     } catch (err) {
@@ -250,6 +286,7 @@ export class PancakeOrderService {
       throw err;
     }
     await this.saveCreated(order, pancakeOrderId, paymentSynced);
+    await this.refreshNoteIfWaybillChanged(order);
     return pancakeOrderId;
   }
 
@@ -314,6 +351,11 @@ export class PancakeOrderService {
     if (gate === 'WAIT_STOCK') {
       throw new BadRequestException(`Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`);
     }
+    if (gate === 'WAIT_GOMDON') {
+      throw new BadRequestException(
+        `Đơn thu gom ${order.code} đang chờ tạo vận đơn Gomdon — hệ thống tự đẩy sang kho kèm mã vận đơn (quá 60 phút thì đẩy kèm cảnh báo tạo tay).`,
+      );
+    }
     if (!this.client.isConfigured()) throw new BadRequestException('Pancake chưa được cấu hình (PANCAKE_API_KEY/SHOP_ID).');
     if (this.pushInFlight(order)) throw new BadRequestException(`Đơn ${order.code} đang được đẩy sang Pancake — chờ ít phút rồi tải lại.`);
     await this.prisma.order.update({
@@ -341,21 +383,9 @@ export class PancakeOrderService {
     const state = pancakePaymentState(order, onCredit);
     if (!isPancakePrepaid(state)) return;
     if (!this.client.isConfigured()) return;
-    const variations = await this.variationsOf(order);
-    const { body, amountDue } = buildPancakeOrderBody(order, {
-      recipient: await this.recipientOf(order),
-      variations,
-      onDealerCredit: onCredit,
-      recyclingNote: await this.buildRecyclingNote(order),
-      isPancakeLine: this.pancakeLinesOf(variations),
-    });
+    const { payload, amountDue } = await this.orderUpdate(order, onCredit);
     try {
-      await this.client.updateOrder(order.pancakeOrderId, {
-        transfer_money: body.transfer_money,
-        cod: body.cod,
-        tags: body.tags,
-        note: body.note,
-      });
+      await this.client.updateOrder(order.pancakeOrderId, payload);
     } catch (err) {
       await this.setPushError(order.id, err);
       if (final) {
@@ -371,6 +401,67 @@ export class PancakeOrderService {
     }
     await this.prisma.order.update({ where: { id: order.id }, data: { pancakePaymentSynced: true, pancakeSyncError: null } });
     await clearPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_PENDING);
+    await this.refreshNoteIfWaybillChanged(order);
+  }
+
+  /**
+   * Vận đơn Gomdon vừa gắn cho đơn đã có trên Pancake: PUT lại ghi chú + tag (mã vận đơn, "KHÔNG TẠO VẬN ĐƠN KHÁC",
+   * tag GOMDON, lời dặn khách, dấu thanh toán) — cùng đường với job thanh toán. Đơn đã trả trước thì kèm luôn số đã
+   * trả (cod 0). Ném lỗi khi Pancake từ chối để người gọi báo "ghi mã vào Pancake".
+   */
+  async syncWaybillNote(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    if (!order.pancakeOrderId || isMerchantFulfilledOrder(order) || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
+    if (!this.client.isConfigured()) throw new PancakeApiError('Pancake chưa cấu hình (PANCAKE_API_KEY/SHOP_ID).', false);
+    const onCredit = await this.isOnDealerCredit(order);
+    await this.client.updateOrder(order.pancakeOrderId, (await this.orderUpdate(order, onCredit)).payload);
+    if (isPancakePrepaid(pancakePaymentState(order, onCredit)) && !order.pancakePaymentSynced) {
+      await this.prisma.order.update({ where: { id: order.id }, data: { pancakePaymentSynced: true, pancakeSyncError: null } });
+      await clearPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_PENDING);
+    }
+    await this.alerts?.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NOTE]);
+    this.logger.log(`Đã ghi mã vận đơn Gomdon ${order.gomdonPartnerCode ?? '(chưa có)'} vào đơn Pancake #${order.pancakeOrderId} (${order.code}).`);
+  }
+
+  /** Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. */
+  private async orderUpdate(order: OrderWithItems, onCredit: boolean) {
+    const variations = await this.variationsOf(order);
+    const { body, amountDue, paymentState } = buildPancakeOrderBody(order, {
+      recipient: await this.recipientOf(order),
+      variations,
+      onDealerCredit: onCredit,
+      recyclingNote: await this.buildRecyclingNote(order),
+      isPancakeLine: this.pancakeLinesOf(variations),
+    });
+    const payload = {
+      ...(isPancakePrepaid(paymentState) ? { transfer_money: body.transfer_money, cod: body.cod } : {}),
+      tags: body.tags,
+      note: body.note,
+    };
+    return { payload, amountDue };
+  }
+
+  /**
+   * Ghi chú vừa gửi Pancake dựng từ ảnh chụp `sent`; Gomdon gắn vận đơn chen giữa (job thanh toán và job vận đơn chạy
+   * song song) thì Pancake đang giữ ghi chú cũ — PUT lại theo đơn mới nhất. Lỗi → báo "ghi mã vào Pancake".
+   */
+  private async refreshNoteIfWaybillChanged(sent: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup' | 'gomdonPartnerCode'>): Promise<void> {
+    if (!sent.hasRecyclingPickup) return;
+    const now = await this.prisma.order.findUnique({
+      where: { id: sent.id },
+      select: { gomdonPartnerCode: true, pancakeOrderId: true },
+    });
+    if (!now?.pancakeOrderId || !now.gomdonPartnerCode || now.gomdonPartnerCode === sent.gomdonPartnerCode) return;
+    try {
+      await this.syncWaybillNote(sent.id);
+    } catch (err) {
+      await this.alerts?.alert(
+        sent.code,
+        waybillNoteAlert(now.gomdonPartnerCode, now.pancakeOrderId, err),
+        undefined,
+        GOMDON_ALERT_KIND.WAYBILL_NOTE,
+      );
+    }
   }
 
   /**
@@ -627,6 +718,14 @@ export class PancakeOrderService {
       return DEFAULT_GOMDON_WEIGHT_FALLBACK;
     }
   }
+}
+
+/** Báo động khi chưa ghi được mã vận đơn Gomdon vào đơn Pancake (cả đơn COD lẫn trả trước). */
+export function waybillNoteAlert(partnerCode: string, pancakeOrderId: string, err: unknown): string {
+  return (
+    `Đã có vận đơn Gomdon ${partnerCode} nhưng chưa ghi được mã vào đơn Pancake #${pancakeOrderId} (${pancakeErrorText(err)}) — ` +
+    'ghi mã vào ghi chú Pancake, KHÔNG tạo vận đơn khác.'
+  );
 }
 
 export type PancakeCancelOutcome =

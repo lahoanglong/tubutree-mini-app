@@ -9,6 +9,20 @@ export const PANCAKE_ALERT_TEMPLATE = 'OPS_PANCAKE_ALERT';
 const MAX_RECIPIENTS = 20;
 
 /**
+ * Nhóm việc của báo động mà hệ thống tự đóng được khi chính nó xử lý xong — để hàng đợi "Cần xử lý thu gom" không
+ * giữ những ô đỏ đã hết hiệu lực (R2-GOMDON-3). Báo động không có nhóm chỉ người đóng.
+ */
+export const GOMDON_ALERT_KIND = {
+  /** Chưa có vận đơn sống: cần tạo tay / kiểm tra Gomdon. Đóng khi hệ thống gắn được vận đơn. */
+  WAYBILL_NEEDED: 'WAYBILL_NEEDED',
+  /** Đơn Pancake chưa mang mã vận đơn Gomdon: cần ghi tay. Đóng khi hệ thống ghi được mã vào Pancake. */
+  WAYBILL_NOTE: 'WAYBILL_NOTE',
+  /** Đơn đã huỷ còn vận đơn có thể sống: cần huỷ tay. Đóng khi hệ thống huỷ được vận đơn. */
+  CANCEL_NEEDED: 'CANCEL_NEEDED',
+} as const;
+export type GomdonAlertKind = (typeof GOMDON_ALERT_KIND)[keyof typeof GOMDON_ALERT_KIND];
+
+/**
  * Báo vận hành/CSKH khi vận đơn thu gom cần người xử lý (tạo lỗi, không rõ đã tạo chưa, Gomdon huỷ/
  * hoàn/giao thất bại, huỷ vận đơn không được, giao trùng vận đơn...). Kênh:
  *  - log error (luôn có);
@@ -31,7 +45,7 @@ export class GomdonAlertService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async alert(orderCode: string, message: string, template: string = GOMDON_ALERT_TEMPLATE): Promise<void> {
+  async alert(orderCode: string, message: string, template: string = GOMDON_ALERT_TEMPLATE, kind?: GomdonAlertKind): Promise<void> {
     const source = template === PANCAKE_ALERT_TEMPLATE ? 'PANCAKE' : 'GOMDON';
     this.logger.error(`[${source} CẦN XỬ LÝ] Đơn ${orderCode}: ${message}`);
     try {
@@ -46,7 +60,7 @@ export class GomdonAlertService {
             select: { id: true },
           });
           if (open) return false;
-          await tx.gomdonAlert.create({ data: { orderId: order.id, message } });
+          await tx.gomdonAlert.create({ data: { orderId: order.id, message, ...(kind ? { kind } : {}) } });
           return true;
         });
         if (!created) return;
@@ -87,6 +101,15 @@ export class GomdonAlertService {
     const r = await this.prisma.gomdonAlert.updateMany({
       where: { orderId, resolvedAt: null },
       data: { resolvedAt: new Date(), resolvedById: actorId ?? null },
+    });
+    return r.count;
+  }
+
+  /** Hệ thống tự xử lý xong một nhóm việc → đóng báo động đang mở thuộc nhóm đó (người đóng = hệ thống). */
+  async resolveKinds(orderId: string, kinds: readonly GomdonAlertKind[]): Promise<number> {
+    const r = await this.prisma.gomdonAlert.updateMany({
+      where: { orderId, resolvedAt: null, kind: { in: [...kinds] } },
+      data: { resolvedAt: new Date(), resolvedById: null },
     });
     return r.count;
   }

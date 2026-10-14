@@ -264,7 +264,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     expect(st.stock).toBe(START_STOCK);
   });
 
-  it('(h) webhook vận chuyển báo DELIVERED cho đơn chưa trả (2 lần song song + 1 lần lặp) → bị chặn, ghi chú đơn có đúng 1 dấu', async () => {
+  it('(h) webhook vận chuyển báo DELIVERED cho đơn chưa trả (2 lần song song + 1 lần lặp) → bị chặn, mục cần xử lý có đúng 1 dấu, ghi chú của khách giữ nguyên', async () => {
     const { order } = await staleOrder({ createdAt: new Date(), status: 'PACKED', note: 'Giao giờ hành chính' });
     const calls = [
       orderStatus.setStatus(order.id, 'DELIVERED', { actorType: 'PANCAKE' }),
@@ -278,8 +278,9 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
     }
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after.status).toBe('PACKED');
-    expect(after.note?.startsWith('Giao giờ hành chính | ')).toBe(true);
-    expect(after.note?.split('vận chuyển đã báo DELIVERED')).toHaveLength(2);
+    expect(after.note).toBe('Giao giờ hành chính');
+    expect(after.pancakeAttention?.split('vận chuyển đã báo DELIVERED')).toHaveLength(2);
+    expect(after.pancakeAttentionAt).not.toBeNull();
   });
 
   it('(e) phạm vi: đơn mới đặt, đơn đại lý còn trong hạn riêng, đơn COD, đơn đã PAID → không bị đụng tới', async () => {

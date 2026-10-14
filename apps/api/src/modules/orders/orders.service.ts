@@ -16,11 +16,10 @@ import { parseRefundDestination, type RefundDestinationInput } from './refund-de
 import { announceBankRefund } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
-import { PREPAID_METHODS } from './order-transition';
+import { cancelHandover, PREPAID_METHODS } from './order-transition';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
-import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
 import { foldVietnamese } from '../catalog/search-text';
 
@@ -269,7 +268,7 @@ export class OrdersService {
     let reversed: ReversalResult | null = null;
     // D1: đơn đã lên Pancake → huỷ bên Pancake TRƯỚC; Pancake đã gửi hàng thì dừng ở đây (đồng bộ trạng thái, báo
     // khách liên hệ CSKH), không hỏi được Pancake thì vẫn huỷ và để job huỷ thử lại.
-    const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, true);
+    const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, 'CUSTOMER');
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -358,6 +357,11 @@ export class OrdersService {
       referrerUserId?: string | null;
       hasRecyclingPickup?: boolean | null;
       gomdonStatus?: string | null;
+      gomdonOrderId?: string | null;
+      gomdonPartnerCode?: string | null;
+      shippingCode?: string | null;
+      shippingPartner?: string | null;
+      shippedAt?: Date | null;
     },
     actorId: string,
   ) {
@@ -376,11 +380,14 @@ export class OrdersService {
         'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Vui lòng liên hệ Tubu để admin huỷ và hoàn tiền cho khách.',
       );
     }
-    // Đơn thu gom tái chế: bưu tá Gomdon đã lấy hàng (webhook chuyển SHIPPING có thể tới trễ) → không
-    // cho khách tự huỷ nữa (huỷ vận đơn bằng API không còn được, hàng đã rời kho).
-    if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
+    // D1 cùng một luật với admin/nhà bán (cancelHandover): đã có mã vận đơn hãng, bưu tá Gomdon đã lấy hàng (webhook
+    // chuyển SHIPPING có thể tới trễ)... thì khách không tự huỷ được nữa.
+    const handover = cancelHandover(order);
+    if (handover) {
       throw new BadRequestException(
-        'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.',
+        handover.kind === 'GOMDON_PICKED_UP'
+          ? 'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.'
+          : 'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.',
       );
     }
   }

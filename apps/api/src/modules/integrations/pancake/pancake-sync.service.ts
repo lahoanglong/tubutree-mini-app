@@ -311,7 +311,14 @@ export class PancakeSyncService implements OnModuleInit {
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
       basePrice: p.variations?.find((v) => !v.is_removed && positiveInt(v.retail_price))?.retail_price ?? existing?.basePrice ?? 0,
     };
-    const productHold = this.holdPatch(existing, p.is_removed ? PANCAKE_HOLD.REMOVED : null);
+    // Chưa biến thể nào có giá (và sản phẩm chưa từng bán có giá) → chưa mở bán, kẻo hiện "0đ" ngoài danh mục.
+    // Sản phẩm đang bán mà Pancake tạm trả thiếu giá thì giữ bán theo giá cũ như biến thể (variationPrices).
+    const priced = (p.variations ?? []).some((v) => !v.is_removed && positiveInt(v.retail_price));
+    const soldBefore = !!existing && existing.basePrice > 0 && existing.pancakeHold !== PANCAKE_HOLD.NO_PRICE;
+    const productHold = this.holdPatch(
+      existing,
+      p.is_removed ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
+    );
 
     // forSegment: suy từ tên để segment pills (Cho mẹ&bé / Nhà bếp xanh / Chăm sóc cá nhân / Sống xanh)
     // có hàng. Chỉ set khi tạo mới hoặc khi product cũ CHƯA có segment (không đè tag thủ công).

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,6 +11,8 @@ import { foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
+import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
+import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
@@ -50,6 +52,19 @@ function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; 
     o.paymentStatus === 'UNPAID' &&
     o.status !== 'CANCELLED' &&
     o.status !== 'RETURNED'
+  );
+}
+
+/**
+ * Nút "Ghi nhận tiền về muộn": đơn lẻ chuyển khoản đã huỷ/trả mà chưa từng ghi nhận tiền — admin đối soát sao kê thấy
+ * khách chuyển sau khi huỷ thì ghi một khoản hoàn vào hàng đợi Hoàn tiền khách (D2).
+ */
+function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+  return (
+    o.type !== 'DEALER' &&
+    o.paymentMethod === 'BANK_TRANSFER' &&
+    o.paymentStatus === 'UNPAID' &&
+    (o.status === 'CANCELLED' || o.status === 'RETURNED')
   );
 }
 
@@ -697,6 +712,7 @@ export class AdminService {
     pancake?: PancakeFilter,
     from?: string,
     to?: string,
+    viewer: OrderActor = { role: 'ADMIN' },
   ) {
     const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to });
     const [items, total] = await this.prisma.$transaction([
@@ -730,6 +746,17 @@ export class AdminService {
         })
       : [];
     const onCredit = new Set(debits.map((d) => d.refId));
+    const lateCandidates = items.filter((o) => canAdminRecordLatePayment(o)).map((o) => o.id);
+    const lateRecorded = new Set(
+      lateCandidates.length
+        ? (
+            await this.prisma.orderCustomerRefund.findMany({
+              where: { orderId: { in: lateCandidates }, kind: 'LATE_PAYMENT' },
+              select: { orderId: true },
+            })
+          ).map((r) => r.orderId)
+        : [],
+    );
     // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
     // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
     const data = items.map((o) => {
@@ -737,8 +764,9 @@ export class AdminService {
       return {
         ...o,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
-        allowedTransitions: allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true }),
+        allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
         canConfirmPayment: canAdminConfirmRetailPayment(o),
+        canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
       };
     });
     return paginated(data, page, limit, total);
@@ -753,9 +781,13 @@ export class AdminService {
    * OrderReversalService chỉ đổi paymentStatus qua guard PAID→REFUNDED, không bao giờ ghi đè
    * REFUNDED trở lại PAID.
    */
-  async updateOrderStatus(adminId: string, id: string, status: OrderStatus, note?: string) {
+  async updateOrderStatus(actor: OrderActor & { id: string }, id: string, status: OrderStatus, note?: string) {
+    const adminId = actor.id;
     const before = await this.prisma.order.findFirst({ where: { OR: [{ id }, { code: id }] } });
     if (!before) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    const block = actorTransitionBlock(actor, before, status);
+    if (block?.kind === 'FORBIDDEN') throw new ForbiddenException(block.message);
+    if (block) throw new BadRequestException(block.message);
 
     let updated;
     try {
@@ -798,15 +830,38 @@ export class AdminService {
 
     const bankRef = dto.bankRef?.trim();
     const adminNote = dto.note?.trim();
-    const { outcome } = await this.orderStatus.markPaid(order.id, {
+    const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'ADMIN',
       actorId: adminId,
       note: ['Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
     });
     if (outcome === 'CLOSED') {
-      throw new BadRequestException(
-        `Đơn ${order.code} đã huỷ/trả — nếu đã nhận tiền, cần hoàn tiền thủ công cho khách, không xác nhận thanh toán.`,
+      // D2: tiền về sau khi đơn đã huỷ/trả → không "hồi sinh" đơn, ghi khoản hoàn vào hàng đợi Hoàn tiền khách (cùng
+      // đường webhook Pancake/ZaloPay); khách chọn Ví hay ngân hàng. Đơn đã có khoản tiền về muộn (webhook hay admin
+      // khác ghi, mã GD gõ khác) thì không tạo khoản thứ hai.
+      const created = await recordLatePaymentRefund(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        current,
+        {
+          amount: order.total,
+          source: 'ADMIN',
+          refKey: ADMIN_LATE_PAYMENT_REF,
+          note: ['Admin ghi nhận tiền về muộn', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+        },
       );
+      this.logger.warn(`Admin ${adminId} ghi nhận tiền về muộn ${order.total}đ cho đơn đã đóng ${order.code}` + (bankRef ? ` (mã GD ${bankRef})` : ''));
+      return {
+        ok: true,
+        alreadyPaid: false,
+        latePayment: true,
+        message: created
+          ? `Đơn ${order.code} đã huỷ/trả — đã ghi khoản hoàn ${order.total.toLocaleString('vi-VN')}đ tiền về muộn, xem mục Hoàn tiền khách (khách chọn nhận về Ví hay tài khoản ngân hàng).`
+          : `Khoản tiền về muộn của đơn ${order.code} đã được ghi trước đó (tự động từ Pancake hoặc admin khác) — không tạo thêm khoản hoàn, xem mục Hoàn tiền khách.`,
+        order: await this.prisma.order.findUniqueOrThrow({
+          where: { id: order.id },
+          include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
+        }),
+      };
     }
     if (outcome === 'NOT_PAYABLE') {
       throw new BadRequestException(`Đơn ${order.code} đã hoàn tiền hoặc thanh toán lỗi — không thể xác nhận.`);
@@ -820,6 +875,7 @@ export class AdminService {
     return {
       ok: true,
       alreadyPaid,
+      latePayment: false,
       message: alreadyPaid
         ? `Đơn ${order.code} đã được ghi nhận thanh toán trước đó.`
         : `Đã xác nhận nhận tiền đơn ${order.code}.`,

@@ -14,6 +14,8 @@ import { refundNote } from './order-returns.service';
 import {
   assertPaidBeforeFulfilment,
   assertTransition,
+  CancelAfterHandoverError,
+  cancelHandover,
   canTransition,
   InvalidOrderTransitionError,
   isPrepaidMethod,
@@ -23,7 +25,6 @@ import {
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import {
   PancakeHandedOverError,
-  PANCAKE_HANDED_OVER_STAFF_MESSAGE,
   PancakeSyncHooks,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
@@ -120,6 +121,11 @@ export class OrderStatusService {
       patch?: OrderStatusPatch;
       /** Biến thêm cho mẫu tin `notifyEvent` (ví dụ lý do đối tác huỷ). */
       notifyData?: Record<string, string>;
+      /**
+       * Huỷ vì hàng đã HOÀN VỀ người gửi (Pancake "Đã hoàn", gian hàng báo giao không thành công): đây là luồng hoàn
+       * của D1 nên được huỷ dù đơn đã bàn giao vận chuyển. Mọi đường huỷ khác bị chặn sau mốc bàn giao.
+       */
+      returnedToSender?: boolean;
     } = {},
   ) {
     const order = await this.prisma.order.findFirst({
@@ -146,10 +152,37 @@ export class OrderStatusService {
       }
     }
 
+    const handoverOpts = { pancakeReportedCancel: opts.actorType === 'PANCAKE' };
+    if (targetStatus === 'CANCELLED' && !opts.returnedToSender) {
+      const handover = cancelHandover(order, handoverOpts);
+      if (handover) {
+        const err = new CancelAfterHandoverError(order.code, from, handover);
+        // Webhook Pancake tự đưa vào "Cần xử lý" (có báo động); cron/hệ thống không có ai đọc lỗi nên ghi dấu ở đây.
+        if (opts.actorType === 'SYSTEM' || opts.actorType === undefined) {
+          await flagPancakeAttention(this.prisma, undefined, order, `Hệ thống: ${err.message}`, this.logger);
+        }
+        throw err;
+      }
+    }
+
     const pancakeDecision =
       targetStatus === 'CANCELLED' && opts.actorType !== 'PANCAKE' && (opts.pancakeGate ?? isHumanActor(opts.actorType))
-        ? await this.precheckPancakeCancel(order, isHumanActor(opts.actorType), opts.actorType)
+        ? await this.precheckPancakeCancel(order, opts.actorType === 'CUSTOMER' ? 'CUSTOMER' : isHumanActor(opts.actorType) ? 'STAFF' : 'SYSTEM')
         : undefined;
+
+    // D1 trong cùng câu lật: webhook gán mã vận đơn / Gomdon báo đã lấy hàng / nhà bán báo đã gửi chen giữa lúc đọc
+    // và lúc lật thì lần huỷ này trượt (rồi báo lỗi bàn giao ở dưới), không hoàn tiền cho hàng đang nằm ở hãng. Pancake tự
+    // báo huỷ thì mã vận đơn không phải mốc bàn giao (xem cancelHandover) nên không ràng cột đó.
+    const handoverGuard =
+      targetStatus === 'CANCELLED' && !opts.returnedToSender
+        ? Object.fromEntries(
+            Object.entries({
+              shippedAt: order.shippedAt,
+              ...(handoverOpts.pancakeReportedCancel ? {} : { shippingCode: order.shippingCode }),
+              gomdonStatus: order.gomdonStatus,
+            }).filter(([, v]) => v !== undefined),
+          )
+        : {};
 
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
@@ -160,6 +193,7 @@ export class OrderStatusService {
         where: {
           id: order.id,
           status: order.status,
+          ...handoverGuard,
           ...(requiresPaymentBefore(from, targetStatus) && order.paymentStatus === 'PAID' ? { paymentStatus: 'PAID' as const } : {}),
           ...(opts.onlyIfUnpaid ? { paymentStatus: 'UNPAID' as const } : {}),
         },
@@ -218,7 +252,10 @@ export class OrderStatusService {
     });
     if (!won) {
       this.logger.warn(`setStatus thua race: đơn ${order.code} đã đổi trạng thái bởi request khác.`);
-      return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+      const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+      const handover = targetStatus === 'CANCELLED' && !opts.returnedToSender && current.status !== 'CANCELLED' ? cancelHandover(current, handoverOpts) : null;
+      if (handover) throw new CancelAfterHandoverError(order.code, current.status as OrderStatus, handover);
+      return current;
     }
 
     // Side-effect điểm/hoa hồng — idempotent qua unique index riêng, an toàn để NGOÀI tx
@@ -282,7 +319,17 @@ export class OrderStatusService {
    */
   async markPaid(
     orderIdOrCode: string,
-    opts: { actorType: StatusActor; actorId?: string; note?: string },
+    opts: {
+      actorType: StatusActor;
+      actorId?: string;
+      note?: string;
+      /**
+       * Người gọi tự xếp tạo vận đơn Gomdon sau (enqueueGomdonAfterPaid): webhook Pancake mang cả tiền lẫn "đã gửi
+       * hàng" + vận đơn hãng khác phải ghi xong vận chuyển trước, kẻo job Gomdon thấy đơn còn trong kho và đặt bưu
+       * tá thứ hai (GOMDON-3).
+       */
+      deferGomdonPush?: boolean;
+    },
   ): Promise<{ outcome: MarkPaidOutcome; order: Order }> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const order = await this.prisma.order.findFirst({ where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] } });
@@ -323,15 +370,7 @@ export class OrderStatusService {
       });
       if (!won) continue;
 
-      if (order.hasRecyclingPickup && this.gomdonQueue) {
-        // Lỗi enqueue không được làm hỏng việc đã lật PAID — GomdonReconcileService quét
-        // AWAITING_PAYMENT + PAID và enqueue lại.
-        await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
-          this.logger.error(
-            `Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`,
-          ),
-        );
-      }
+      if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications
         .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
@@ -344,20 +383,33 @@ export class OrderStatusService {
     throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — vui lòng tải lại rồi thử lại.');
   }
 
+  /** Đơn thu gom vừa trả tiền: lúc này mới đặt bưu tá Gomdon. */
+  async enqueueGomdonAfterPaid(order: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup'>): Promise<void> {
+    if (!order.hasRecyclingPickup || !this.gomdonQueue) return;
+    // Lỗi enqueue không được làm hỏng việc đã lật PAID — GomdonReconcileService quét AWAITING_PAYMENT + PAID và
+    // enqueue lại.
+    await enqueueGomdonPush(this.gomdonQueue, order.id).catch((err) =>
+      this.logger.error(`Enqueue vận đơn Gomdon sau thanh toán lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`),
+    );
+  }
+
   /**
    * Webhook (Pancake/Gomdon) báo trạng thái vận đơn cho đơn trả trước chưa PAID bị chặn và nuốt êm, không phát lại
-   * sau khi tiền về — đơn sẽ đứng yên ở trạng thái cũ. Để lại dấu trên ghi chú đơn (mỗi trạng thái một lần, webhook
-   * retry không nhân bản) để sau khi xác nhận "Đã nhận tiền" admin biết cần đẩy tiếp tay. Best-effort: lỗi ghi dấu
-   * không được thay lỗi chuyển trạng thái gốc (webhook dựa vào loại lỗi đó để bỏ qua êm).
+   * sau khi tiền về — đơn sẽ đứng yên ở trạng thái cũ. Để lại dấu trong hàng đợi "Cần xử lý Pancake" (mỗi trạng thái
+   * một lần, webhook retry không nhân bản; giữ lý do đang chờ khác) để sau khi xác nhận "Đã nhận tiền" admin biết cần
+   * đẩy tiếp tay. Không ghi vào Order.note: đó là lời dặn của khách, khách đọc lại và kho nhận qua Pancake.
+   * Best-effort: lỗi ghi dấu không được thay lỗi chuyển trạng thái gốc (webhook dựa vào loại lỗi đó để bỏ qua êm).
    */
   private async flagDroppedStatus(orderId: string, code: string, target: OrderStatus): Promise<void> {
     const marker = `[Chờ thanh toán: vận chuyển đã báo ${target} — đẩy tay sau khi nhận tiền]`;
     try {
       await this.prisma.$executeRaw`
         UPDATE "orders"
-        SET "note" = CASE WHEN "note" IS NULL OR "note" = '' THEN ${marker} ELSE "note" || ' | ' || ${marker} END
-        WHERE "id" = ${orderId} AND ("note" IS NULL OR position(${marker} in "note") = 0)`;
-      this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã ghi chú để admin đẩy tay sau khi nhận tiền.`);
+        SET "pancakeAttention" = CASE WHEN "pancakeAttention" IS NULL OR "pancakeAttention" = '' THEN ${marker}
+                                      ELSE "pancakeAttention" || ' | ' || ${marker} END,
+            "pancakeAttentionAt" = COALESCE("pancakeAttentionAt", NOW())
+        WHERE "id" = ${orderId} AND ("pancakeAttention" IS NULL OR position(${marker} in "pancakeAttention") = 0)`;
+      this.logger.warn(`Đơn ${code} chưa thanh toán nhưng vận chuyển báo ${target} — đã đưa vào hàng đợi để admin đẩy tay sau khi nhận tiền.`);
     } catch (err) {
       this.logger.error(`Không ghi được dấu trạng thái bị chặn cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
@@ -365,16 +417,23 @@ export class OrderStatusService {
 
   /**
    * Hỏi Pancake trước khi huỷ (D1). Pancake đã gửi hàng → đồng bộ lại trạng thái theo Pancake rồi từ chối huỷ; cron
-   * (không có người đọc lỗi) thì đưa đơn vào "Cần xử lý Pancake".
+   * (không có người đọc lỗi) thì đưa đơn vào "Cần xử lý Pancake". Khách và người vận hành nhận lời báo khác nhau: khách
+   * được bảo liên hệ CSKH, còn CSKH/kho cần biết phải làm gì với hãng vận chuyển.
    */
-  async precheckPancakeCancel(order: Order, human: boolean, actor?: StatusActor): Promise<PancakeCancelDecision | undefined> {
+  async precheckPancakeCancel(order: Order, asker: 'CUSTOMER' | 'STAFF' | 'SYSTEM'): Promise<PancakeCancelDecision | undefined> {
     if (!this.pancakeHooks) return undefined;
     try {
       return await this.pancakeHooks.precheckCancel(order);
     } catch (err) {
       if (!(err instanceof PancakeHandedOverError)) throw err;
       await this.resyncFromPancake(order, err.pancakeStatus);
-      if (!human) {
+      if (asker === 'STAFF') {
+        throw new BadRequestException(
+          `Pancake báo đã gửi hàng (mã ${err.pancakeStatus}) — đơn ${order.code} không huỷ được nữa, đã đồng bộ về trạng thái theo Pancake. ` +
+            'Liên hệ đơn vị vận chuyển để chặn giao/hoàn hàng; hàng hoàn về kho thì đơn tự huỷ và hoàn tiền, khách đã nhận thì xử lý bằng trả hàng/hoàn tiền.',
+        );
+      }
+      if (asker === 'SYSTEM') {
         await flagPancakeAttention(
           this.prisma,
           undefined,
@@ -383,7 +442,7 @@ export class OrderStatusService {
           this.logger,
         );
       }
-      throw new BadRequestException(actor === 'ADMIN' ? PANCAKE_HANDED_OVER_STAFF_MESSAGE : err.message);
+      throw new BadRequestException(err.message);
     }
   }
 

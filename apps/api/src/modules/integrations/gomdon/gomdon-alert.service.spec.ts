@@ -1,4 +1,4 @@
-import { GomdonAlertService, GOMDON_ALERT_TEMPLATE, PANCAKE_ALERT_TEMPLATE } from './gomdon-alert.service';
+import { GomdonAlertService, GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, PANCAKE_ALERT_TEMPLATE } from './gomdon-alert.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 
@@ -69,6 +69,22 @@ describe('GomdonAlertService (UAT GOMDON-2: báo động phải xem lại đư�
     prisma.gomdonAlert.create.mockRejectedValueOnce(new Error('db down'));
     await expect(svc.alert('TUBU1', 'x')).resolves.toBeUndefined();
     expect(notifications.notify).toHaveBeenCalled();
+  });
+
+  it('báo động có nhóm việc (kind) → lưu kind để hệ thống tự đóng khi tự xử lý xong (R2-GOMDON-3)', async () => {
+    const { svc, prisma } = build();
+    await svc.alert('TUBU1', 'Cần TẠO VẬN ĐƠN TAY', GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.WAYBILL_NEEDED);
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledWith({ data: { orderId: 'o1', message: 'Cần TẠO VẬN ĐƠN TAY', kind: 'WAYBILL_NEEDED' } });
+  });
+
+  it('resolveKinds: hệ thống đóng báo động đang mở theo nhóm việc (không ghi người xử lý), không đụng nhóm khác', async () => {
+    const { svc, prisma } = build();
+    prisma.gomdonAlert.updateMany.mockResolvedValueOnce({ count: 2 });
+    expect(await svc.resolveKinds('o1', [GOMDON_ALERT_KIND.WAYBILL_NEEDED, GOMDON_ALERT_KIND.WAYBILL_NOTE])).toBe(2);
+    expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'o1', resolvedAt: null, kind: { in: ['WAYBILL_NEEDED', 'WAYBILL_NOTE'] } },
+      data: { resolvedAt: expect.any(Date), resolvedById: null },
+    });
   });
 
   it('resolve: chỉ đóng báo động đang mở, ghi người xử lý', async () => {

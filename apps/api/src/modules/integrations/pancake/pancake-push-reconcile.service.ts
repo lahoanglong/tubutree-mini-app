@@ -2,13 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
-import { PANCAKE_CANCEL, PANCAKE_PUSH, PANCAKE_PUSHABLE_STATUSES, PancakeOrderService } from './pancake-order.service';
+import { awaitsGomdonWaybill, PANCAKE_CANCEL, PANCAKE_PUSH, PANCAKE_PUSHABLE_STATUSES, PancakeOrderService } from './pancake-order.service';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
 import { TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
 import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
-import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
+import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { CRON_TZ } from '../../../common/cron-tz';
 
 /**
@@ -111,11 +111,8 @@ export class PancakePushReconcileService {
       for (const order of stale) {
         try {
           if (isDealerAwaitingStock(order)) continue;
-          const waitingGomdon =
-            order.hasRecyclingPickup &&
-            !order.gomdonOrderId &&
-            !order.gomdonPartnerCode &&
-            (order.gomdonStatus == null || order.gomdonStatus === GOMDON_STATE.CREATING);
+          // Cùng điều kiện với cổng đẩy (pancakePushGate WAIT_GOMDON): gồm cả đơn vừa trả tiền còn AWAITING_PAYMENT.
+          const waitingGomdon = awaitsGomdonWaybill(order);
           let giveUpAlert: string | null = null;
           if (waitingGomdon) {
             if (order.createdAt >= giveUpCutoff) continue; // GomdonReconcileService đang lo
@@ -137,7 +134,7 @@ export class PancakePushReconcileService {
               });
             } else {
               const r = await this.prisma.order.updateMany({
-                where: { ...noWaybill, gomdonStatus: null },
+                where: { ...noWaybill, OR: [{ gomdonStatus: null }, { gomdonStatus: GOMDON_STATE.AWAITING_PAYMENT }] },
                 data: { gomdonStatus: GOMDON_STATE.FAILED },
               });
               if (r.count > 0) {
@@ -150,7 +147,7 @@ export class PancakePushReconcileService {
           }
           await this.pancakeOrder.enqueuePush(order.id);
           // Báo SAU khi đã đẩy Pancake (kho có đơn để tạo tay); lỗi gửi báo động tự nuốt trong alert().
-          if (giveUpAlert) await this.alerts.alert(order.code, giveUpAlert);
+          if (giveUpAlert) await this.alerts.alert(order.code, giveUpAlert, GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.WAYBILL_NEEDED);
         } catch (err) {
           this.logger.error(`Re-enqueue lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
         }

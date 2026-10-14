@@ -8,11 +8,12 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
-import { resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { clearPancakeAttention } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
-import { UnpaidPrepaidTransitionError } from '../../orders/order-transition';
+import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment } from '../../orders/refund-queue';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
@@ -79,6 +80,25 @@ function blockedNeedsAttention(err: InvalidOrderTransitionError): boolean {
  * Khớp đơn theo pancakeOrderId; mã đơn (external_order_id / "Order code: …" trong note) chỉ dùng khi đơn Tubu
  * chưa gắn đơn Pancake nào hoặc gắn đúng đơn này — xem resolveOrder.
  */
+/** Mã Pancake POS "Đã gửi hàng". */
+const PANCAKE_STATUS_SHIPPED = 2;
+
+function pancakeTime(v: unknown): Date | null {
+  if (typeof v !== 'string' && typeof v !== 'number') return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Mốc updated_at Pancake mới nhất đã ghi vào hành trình vận chuyển (null nếu chưa mốc nào có). */
+function latestPancakeAt(history: unknown[]): Date | null {
+  let latest: Date | null = null;
+  for (const h of history) {
+    const at = pancakeTime((h as { pancakeAt?: unknown } | null)?.pancakeAt);
+    if (at && (!latest || at > latest)) latest = at;
+  }
+  return latest;
+}
+
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
   private readonly logger = new Logger(PancakeProcessor.name);
@@ -163,22 +183,7 @@ export class PancakeProcessor extends WorkerHost {
       case 'order':
       case 'order.status_updated':
       case 'order.updated':
-        // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
-        // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
-        // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
-        // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/hoàn: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
-        // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
-        if (isTerminalPancakeStatus(data)) {
-          await this.onStatusUpdated(data);
-          await this.onPaymentReconcile(data);
-        } else {
-          await this.onPaymentReconcile(data);
-          await this.onStatusUpdated(data);
-        }
-        // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
-        if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
-          await this.onShippingUpdated(data);
-        }
+        await this.onOrderEvent(data);
         break;
       case 'order.shipping_updated':
         await this.onShippingUpdated(data);
@@ -196,6 +201,33 @@ export class PancakeProcessor extends WorkerHost {
         this.logger.debug(`Bỏ qua event chưa xử lý: ${eventType}`);
     }
     return 'PROCESSED';
+  }
+
+  private async onOrderEvent(data: Record<string, unknown>): Promise<void> {
+    // Đối soát thanh toán (Pancake ghi nhận chuyển khoản → lật UNPAID→PAID) chạy TRƯỚC trạng thái: nhân viên
+    // Pancake hay ghi nhận tiền và đổi trạng thái trong cùng một lần lưu, mà OrderStatusService chặn đơn trả
+    // trước chưa PAID rời PENDING_PAYMENT/đi giao — chạy trạng thái trước thì đơn đã trả bị kẹt ở CONFIRMED
+    // kèm dấu "đẩy tay" sai. Ngoại lệ huỷ/hoàn: giữ trạng thái trước để tiền về đơn đã huỷ vẫn đi đường cảnh
+    // báo hoàn tiền thủ công, không bị lật PAID+CONFIRMED (kèm báo "đã xác nhận") rồi huỷ ngay sau đó.
+    let paidNow: Order | null = null;
+    try {
+      if (isTerminalPancakeStatus(data)) {
+        await this.onStatusUpdated(data);
+        await this.onPaymentReconcile(data);
+      } else {
+        paidNow = await this.onPaymentReconcile(data, { deferGomdonPush: true });
+        await this.onStatusUpdated(data);
+      }
+      // Đơn Pancake kèm thông tin vận chuyển → cập nhật luôn nếu có (field thật ở `partner`).
+      if (data['partner'] || data['tracking_link'] || data['shipping_status'] || data['tracking_number']) {
+        await this.onShippingUpdated(data);
+      }
+    } finally {
+      // Đặt bưu tá thu gom SAU khi đã ghi trạng thái + vận đơn của cùng sự kiện: kho đã giao bằng hãng khác thì
+      // job Gomdon thấy ngay và không tạo vận đơn thứ hai (GOMDON-3). Lần chạy lại sau lỗi không lật PAID nữa
+      // nên vẫn phải xếp ở đây.
+      if (paidNow) await this.orderStatus.enqueueGomdonAfterPaid(paidNow);
+    }
   }
 
   /**
@@ -266,6 +298,7 @@ export class PancakeProcessor extends WorkerHost {
     const target = this.targetStatus(order, action);
     if (!target) return;
     if (action.kind === 'returned' && target.status === 'RETURNED' && (await this.blockedByPartialReturn(order))) return;
+    const returned = action.kind === 'returned';
 
     // Hai nguồn trạng thái giao hàng không được cãi nhau: đơn có vận đơn Gomdon sống thì mốc đang giao/đã giao
     // chỉ theo Gomdon (DELIVERED cộng điểm, khoá hoa hồng — kho bấm "hoàn thành" hàng loạt trên Pancake không
@@ -287,7 +320,7 @@ export class PancakeProcessor extends WorkerHost {
     // OrderStatusService tự chặn DELIVERED sau khi đã ở CANCELLED/RETURNED (trạng thái cuối).
     // CHỈ nuốt lỗi transition không hợp lệ; lỗi khác (DB down, loyalty/affiliate throw thật) phải NÉM TIẾP
     // để process() đánh dấu FAILED + BullMQ retry — nuốt hết ở đây sẽ mất event vĩnh viễn.
-    await this.setStatusFromPancake(order, target.status, target.note);
+    await this.setStatusFromPancake(order, target.status, target.note, returned);
   }
 
   /** "Đã hoàn" (hàng về kho): đơn chưa giao → huỷ (hoàn tiền, hoàn kho, đảo điểm); đã giao → trả hàng. */
@@ -319,11 +352,25 @@ export class PancakeProcessor extends WorkerHost {
     return true;
   }
 
-  private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string): Promise<void> {
+  /** `returnedToSender`: Pancake "Đã hoàn" — hàng đã về kho, được huỷ/hoàn tiền dù đơn đã bàn giao vận chuyển (D1). */
+  private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string, returnedToSender = false): Promise<void> {
     try {
-      await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note });
+      const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender });
+      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
+      if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
+        await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
+      }
     } catch (err) {
       if (!(err instanceof InvalidOrderTransitionError)) throw err;
+      if (err instanceof CancelAfterHandoverError) {
+        // D1: sau bàn giao chỉ còn luồng hoàn/trả — lệnh huỷ từ Pancake là việc cho người, không phải lệnh hoàn tiền.
+        await this.flagAttention(
+          order,
+          `Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (${err.handover.detail}) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng ` +
+            'vận chuyển: chặn giao và chờ Pancake báo "Đã hoàn" (đơn tự huỷ, hoàn tiền), hoặc khách đã nhận thì xử lý ở Đổi/Trả.',
+        );
+        return;
+      }
       if (blockedNeedsAttention(err)) {
         await this.flagAttention(
           order,
@@ -344,31 +391,35 @@ export class PancakeProcessor extends WorkerHost {
    * Đơn đã huỷ/trả: mọi khoản Pancake báo đã nhận (kể cả chuyển thiếu) thành yêu cầu hoàn, tính theo phần tăng thêm.
    * Đơn còn sống mà chuyển thiếu: vào hàng cần xử lý và báo khách số còn thiếu.
    */
-  private async onPaymentReconcile(data: Record<string, unknown>): Promise<void> {
+  /** Trả đơn vừa lật PAID (null nếu không lật) — để người gọi đặt bưu tá thu gom khi đã `deferGomdonPush`. */
+  private async onPaymentReconcile(data: Record<string, unknown>, opts: { deferGomdonPush?: boolean } = {}): Promise<Order | null> {
     const order = await this.findOrder(data);
-    if (!order) return;
-    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return;
+    if (!order) return null;
+    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return null;
     const flaggedPaid = isPancakeOrderPaid(data, order.total);
     const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
       await this.recordLatePancakePayment(order, reported);
-      return;
+      return null;
     }
     if (!flaggedPaid) {
       if (reported > 0) await this.flagUnderpaid(order, reported);
-      return;
+      return null;
     }
 
     const { outcome, order: current } = await this.orderStatus.markPaid(order.id, {
       actorType: 'PANCAKE',
       note: 'Pancake ghi nhận chuyển khoản',
+      deferGomdonPush: opts.deferGomdonPush,
     });
     if (outcome === 'PAID') {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
+      return current;
     } else if (outcome === 'CLOSED') {
       // Tiền về sau khi đơn đã huỷ/trả: không "hồi sinh" đơn — tạo yêu cầu hoàn tiền, khách chọn Ví hay ngân hàng.
       await this.recordLatePancakePayment(current ?? order, reported);
     }
+    return null;
   }
 
   private async recordLatePancakePayment(order: Order, reported: number): Promise<void> {
@@ -430,13 +481,34 @@ export class PancakeProcessor extends WorkerHost {
     }
 
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
+    // Webhook tới trễ / sai thứ tự (Pancake gửi lại, cron chạy lại UNMATCHED): không lùi dòng vận chuyển. So theo
+    // updated_at của Pancake với mốc mới nhất đã ghi; không có mốc giờ thì ít nhất không đưa đơn đã giao về "đang giao".
+    const eventAt = pancakeTime(data['updated_at']);
+    const lastAt = latestPancakeAt(history);
+    if (eventAt && lastAt && eventAt.getTime() < lastAt.getTime()) {
+      this.logger.warn(`Bỏ qua cập nhật vận chuyển cũ (${data['updated_at']}) cho đơn ${order.code}.`);
+      return;
+    }
+    if (order.status === 'DELIVERED' && Number(data['status']) === PANCAKE_STATUS_SHIPPED) {
+      this.logger.warn(`Bỏ qua "Đã gửi hàng" tới sau khi đơn ${order.code} đã giao.`);
+      return;
+    }
     // Ghi mốc khi TRẠNG THÁI hoặc MÃ VẬN ĐƠN đổi (gán waybill cũng là 1 mốc) — tránh ghi trùng.
     const last = history[history.length - 1] as { status?: string | null; code?: string | null } | undefined;
     const changed =
       (!!shipStatusS && shipStatusS !== (last?.status ?? null)) ||
       (!!waybillS && waybillS !== (last?.code ?? null));
     const nextHistory = changed
-      ? [...history, { at: new Date().toISOString(), status: shipStatusS, carrier: carrierS, code: waybillS }]
+      ? [
+          ...history,
+          {
+            at: new Date().toISOString(),
+            status: shipStatusS,
+            carrier: carrierS,
+            code: waybillS,
+            ...(eventAt ? { pancakeAt: eventAt.toISOString() } : {}),
+          },
+        ]
       : history;
 
     await this.prisma.order.update({

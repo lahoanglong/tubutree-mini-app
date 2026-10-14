@@ -3,6 +3,7 @@ import type { Queue } from 'bullmq';
 import { GomdonWebhookService, gomdonDedupeKey, parseGomdonPayload } from './gomdon-webhook.service';
 import { InvalidOrderTransitionError, type OrderStatusService } from '../../orders/order-status.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
+import type { PancakeOrderService } from '../pancake/pancake-order.service';
 import type { GomdonAlertService } from './gomdon-alert.service';
 import type { GomdonWebhookPayload } from './gomdon.types';
 
@@ -41,17 +42,19 @@ function build(opts: { orders?: (Record<string, unknown> | null)[] } = {}) {
     },
   };
   const orderStatus = { setStatus: jest.fn().mockResolvedValue({}) };
-  const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+  const alerts = { alert: jest.fn().mockResolvedValue(undefined), resolveKinds: jest.fn().mockResolvedValue(0) };
   const eventsQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
   const pushQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
+  const pancakeOrder = { syncWaybillNote: jest.fn().mockResolvedValue(undefined) };
   const svc = new GomdonWebhookService(
     prisma as unknown as PrismaService,
     orderStatus as unknown as OrderStatusService,
     alerts as unknown as GomdonAlertService,
     eventsQueue as unknown as Queue,
     pushQueue as unknown as Queue,
+    pancakeOrder as unknown as PancakeOrderService,
   );
-  return { svc, prisma, orderStatus, alerts, eventsQueue, pushQueue };
+  return { svc, prisma, orderStatus, alerts, eventsQueue, pushQueue, pancakeOrder };
 }
 
 /**
@@ -270,7 +273,28 @@ describe('GomdonWebhookService.processEvent — áp dụng trạng thái', () =>
     expect(second).toEqual({ code: 'TUBU1001', gomdonAttempt: 0, hasRecyclingPickup: true, gomdonOrderId: null, gomdonPartnerCode: null });
     const upd = ctx.prisma.order.updateMany.mock.calls[0][0].data;
     expect(upd).toMatchObject({ gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1', shippingCode: 'BE77' });
-    expect(ctx.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KHÔNG tạo vận đơn tay'));
+    // Tự khớp xong: đóng việc "kiểm tra/tạo vận đơn tay" cũ thay vì thêm một báo động nữa (R2-GOMDON-3).
+    expect(ctx.alerts.resolveKinds).toHaveBeenCalledWith('o1', ['WAYBILL_NEEDED']);
+    expect(ctx.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('tự lành cho đơn đã lên Pancake → ghi mã vận đơn vào ghi chú Pancake; Pancake lỗi thì báo ghi tay (R2-GOMDON-1)', async () => {
+    const order = { status: 'CONFIRMED', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: 'NEEDS_MANUAL_CHECK', shippingCode: null, pancakeOrderId: 'pk9' };
+    const ok = build({ orders: [null, order] });
+    await process(ok, { order_id: 77, order_code: 'BE77', order_customer_id: 'TUBU1001', status: 1 });
+    expect(ok.pancakeOrder.syncWaybillNote).toHaveBeenCalled();
+    expect(ok.alerts.alert).not.toHaveBeenCalled();
+
+    const failing = build({ orders: [null, order] });
+    failing.pancakeOrder.syncWaybillNote.mockRejectedValueOnce(new Error('Pancake 503'));
+    await process(failing, { order_id: 77, order_code: 'BE77', order_customer_id: 'TUBU1001', status: 1 });
+    expect(failing.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('ghi mã vào ghi chú Pancake'), 'OPS_GOMDON_ALERT', 'WAYBILL_NOTE');
+  });
+
+  it('Gomdon xác nhận huỷ (2) cho đơn đã huỷ → đóng các việc huỷ tay/tạo tay còn mở (R2-GOMDON-3)', async () => {
+    const ctx = build({ orders: [{ status: 'CANCELLED', gomdonStatus: '1' }] });
+    await process(ctx, { order_id: 55, status: 2 });
+    expect(ctx.alerts.resolveKinds).toHaveBeenCalledWith('o1', ['CANCEL_NEEDED', 'WAYBILL_NEEDED', 'WAYBILL_NOTE']);
   });
 
   it('tự lành cho đơn đã CANCELLED → enqueue huỷ vận đơn vừa phát hiện', async () => {

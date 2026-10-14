@@ -69,11 +69,12 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
   });
 
-  it('Pancake đã gửi hàng → admin được báo dùng luồng trả hàng/hoàn (không bảo "liên hệ CSKH"), không lật CANCELLED, đồng bộ lại SHIPPING', async () => {
+  it('Pancake đã gửi hàng → admin được hướng dẫn chặn giao với hãng / trả hàng (không bảo "liên hệ CSKH"), không lật CANCELLED, đồng bộ lại SHIPPING', async () => {
     const { svc, tx, pancakeHooks } = make(makeOrder({ status: 'PACKED' }), {
       precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)),
     });
     const err = await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' }).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/Pancake báo đã gửi hàng \(mã 2\).*chặn giao\/hoàn hàng/);
     expect((err as Error).message).toContain('trả hàng');
     expect((err as Error).message).not.toContain('liên hệ CSKH');
     expect(tx.order.updateMany.mock.calls.map((c) => c[0].data.status)).toEqual(['SHIPPING']);
@@ -82,7 +83,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
 
   it('khách tự huỷ đơn đã bàn giao → vẫn câu "liên hệ CSKH"', async () => {
     const { svc } = make(makeOrder({ status: 'PACKED' }), { precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)) });
-    await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, true)).rejects.toThrow('vui lòng liên hệ CSKH');
+    await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
   });
 
   it('cron hết hạn thanh toán (SYSTEM + pancakeGate) gặp đơn đã bàn giao → không huỷ, đưa vào "Cần xử lý Pancake"', async () => {

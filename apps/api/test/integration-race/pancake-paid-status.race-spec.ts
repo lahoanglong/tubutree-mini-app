@@ -22,6 +22,7 @@ const order6 = () => Math.random().toString(36).slice(2, 8);
 describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (real Postgres)', () => {
   let prisma: PrismaService;
   let processor: PancakeProcessor;
+  let orderStatus: OrderStatusService;
   const notify = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
@@ -43,7 +44,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
     );
     const analytics = new AnalyticsEventsService(prisma);
-    const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
+    orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
     processor = new PancakeProcessor(prisma, notifications, orderStatus);
   });
 
@@ -121,8 +122,20 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect(ev.status).toBe('PROCESSED');
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
-    expect(after.note).toContain(`vận chuyển đã báo SHIPPING — ${MARKER}`);
+    expect(after.note ?? '').not.toContain(MARKER);
     expect(after.pancakeAttention).toContain('chưa ghi nhận thanh toán');
+    expect(after.pancakeAttentionAt).not.toBeNull();
+  });
+
+  it('webhook vận chuyển (Gomdon/hệ thống) bị chặn vì chưa trả tiền → dấu "đẩy tay" vào hàng đợi admin, KHÔNG vào ghi chú khách (R2-PANCAKE-5)', async () => {
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { note: 'Gọi trước khi giao' } });
+    for (let i = 0; i < 2; i++) {
+      await expect(orderStatus.setStatus(order.id, 'SHIPPING', { actorType: 'SYSTEM' })).rejects.toThrow();
+    }
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.note).toBe('Gọi trước khi giao');
+    expect(after.pancakeAttention).toBe(`[Chờ thanh toán: vận chuyển đã báo SHIPPING — ${MARKER}]`);
     expect(after.pancakeAttentionAt).not.toBeNull();
   });
 
@@ -169,5 +182,52 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     await processor.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
     expect((await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe('PROCESSED');
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).shippingCode).toBe('GHN123');
+  });
+
+  it('GOMDON-3: đơn thu gom, Pancake ghi nhận tiền + "Đã gửi hàng" kèm vận đơn GHN cùng lúc → job Gomdon chỉ xếp SAU khi đơn đã SHIPPING + có mã GHN (không đặt bưu tá thứ hai)', async () => {
+    const seenAtEnqueue: { status: string; shippingCode: string | null }[] = [];
+    const gomdonQueue = {
+      getJob: jest.fn().mockResolvedValue(undefined),
+      add: jest.fn(async (_name: string, data: { orderId: string }) => {
+        const o = await prisma.order.findUniqueOrThrow({ where: { id: data.orderId }, select: { status: true, shippingCode: true } });
+        seenAtEnqueue.push(o);
+        return {};
+      }),
+    };
+    const loyalty = { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn() } as unknown as LoyaltyService;
+    const affiliate = { lockCommissionsForOrder: jest.fn(), grantReferralReward: jest.fn(), reverseCommissionsForOrder: jest.fn() } as unknown as AffiliateService;
+    const reversal = new OrderReversalService(
+      { restore: jest.fn() } as unknown as FlashSaleService,
+      { release: jest.fn() } as unknown as CouponsService,
+    );
+    const statusWithGomdon = new OrderStatusService(
+      prisma,
+      loyalty,
+      affiliate,
+      { notify } as unknown as NotificationsService,
+      reversal,
+      gomdonQueue as never,
+    );
+    const proc = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, statusWithGomdon);
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT' } });
+    const ev = await prisma.pancakeWebhookEvent.create({
+      data: {
+        eventType: 'orders',
+        rawPayload: {
+          id: `pc-${order.code}`,
+          extension: { external_order_id: order.code },
+          status: 2,
+          bank_payment: order.total,
+          partner: { partner_name: 'GHN', extend_code: 'GHN777888' },
+        } as object,
+        status: 'PENDING',
+      },
+    });
+    await proc.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after).toMatchObject({ status: 'SHIPPING', paymentStatus: 'PAID', shippingCode: 'GHN777888' });
+    expect(seenAtEnqueue).toEqual([{ status: 'SHIPPING', shippingCode: 'GHN777888' }]);
   });
 });

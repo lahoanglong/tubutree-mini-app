@@ -39,6 +39,8 @@ function setup(
   /** Tổng LATE_PAYMENT Pancake đã ghi của đơn (khoản hoàn tiền về muộn tính theo phần tăng thêm). */
   const refundAggregate = jest.fn().mockResolvedValue({ _sum: { amount: null } });
   const txQueryRaw = jest.fn().mockResolvedValue([]);
+  /** findFirst: khoản tiền về muộn admin đã ghi tay của đơn (null = chưa có). */
+  const orderCustomerRefund = { createMany: refundCreateMany, aggregate: refundAggregate, findFirst: jest.fn().mockResolvedValue(null) };
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       order: { updateMany: txUpdateMany },
@@ -46,7 +48,7 @@ function setup(
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
-      orderCustomerRefund: { createMany: refundCreateMany, aggregate: refundAggregate },
+      orderCustomerRefund,
       $executeRaw: txExecuteRaw,
       $queryRaw: txQueryRaw,
     }),
@@ -65,7 +67,7 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
-    orderCustomerRefund: { createMany: refundCreateMany, aggregate: refundAggregate },
+    orderCustomerRefund,
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -91,7 +93,7 @@ function setup(
   const proc = new PancakeProcessor(prisma, notifications, orderStatus, alerts as never) as unknown as {
     onStatusUpdated(d: Record<string, unknown>): Promise<void>;
     onCancelled(d: Record<string, unknown>): Promise<void>;
-    onPaymentReconcile(d: Record<string, unknown>): Promise<void>;
+    onPaymentReconcile(d: Record<string, unknown>): Promise<unknown>;
     onShippingUpdated(d: Record<string, unknown>): Promise<void>;
     extractOrderCode(d: Record<string, unknown>): string | null;
     process(job: { data: { eventId: string } }): Promise<void>;
@@ -649,6 +651,33 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     });
   });
 
+  it('webhook vận chuyển tới trễ (updated_at cũ hơn mốc đã ghi) → không lùi trạng thái vận chuyển (R2-PANCAKE-3)', async () => {
+    const history = [{ at: '2026-10-14T05:00:00.000Z', status: 'delivered', carrier: 'GHN', code: 'GHN1', pancakeAt: '2026-10-14T04:59:00.000Z' }];
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'delivered', shippingHistory: history,
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, updated_at: '2026-10-14T03:00:00', partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('đơn đã giao mà Pancake gửi lại "Đã gửi hàng" (2) không kèm mốc giờ → không đổi dòng vận chuyển về "đang giao"', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'delivered', shippingHistory: [],
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('cập nhật mới hơn → ghi mốc kèm giờ Pancake để so lần sau', async () => {
+    const { proc, orderUpdate } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN1', shippingStatus: 'picked', shippingHistory: [],
+    });
+    await proc.onShippingUpdated({ id: 'p1', status: 2, updated_at: '2026-10-14T06:00:00', partner: { partner_name: 'GHN', extend_code: 'GHN1', partner_status: 'on_the_way' } });
+    const data = orderUpdate.mock.calls[0][0].data;
+    expect(data.shippingStatus).toBe('on_the_way');
+    expect(data.shippingHistory.at(-1).pancakeAt).toBe(new Date('2026-10-14T06:00:00').toISOString());
+  });
+
   it('đơn hàng không tồn tại → bỏ qua không ném lỗi', async () => {
     const { proc, orderUpdate } = setup(null);
     await proc.onShippingUpdated({ id: 'nonexistent-p1', partner: { partner_name: 'GHN' } });
@@ -770,7 +799,7 @@ describe('PancakeProcessor — đơn thu gom tái chế (Gomdon)', () => {
       { id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, hasRecyclingPickup: true },
       q2,
     );
-    await expect(b.proc.onPaymentReconcile({ id: 'p1', is_paid: true })).resolves.toBeUndefined();
+    await expect(b.proc.onPaymentReconcile({ id: 'p1', is_paid: true })).resolves.toMatchObject({ id: 'o1' });
     expect(b.notifications.notify).toHaveBeenCalled();
   });
 
@@ -867,6 +896,37 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     expect(txExecuteRaw).toHaveBeenCalled();
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+  });
+
+  it('"Đã huỷ" (6) / order.cancelled khi đơn ĐANG GIAO → không huỷ/hoàn tiền: vào "Cần xử lý Pancake" (D1)', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const order = { ...base, paymentMethod: 'WALLET', paymentStatus: 'PAID', status: 'SHIPPING', shippingCode: 'BEX1', shippingPartner: 'BEX' };
+    const { proc, txUpdateMany, loyalty } = setup(order, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    await proc.onCancelled({ id: 'p1' });
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(attentionFlags(txUpdateMany)[0]).toContain('Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao)');
+  });
+
+  it('"Đã huỷ" (6) khi đơn PACKED mới đặt hãng (có mã vận đơn, chưa giao) → huỷ, hoàn kho, đảo điểm như thường, không vào hàng đợi', async () => {
+    const order = { ...base, status: 'PACKED', shippingCode: 'GHN1', shippingPartner: 'GHN' };
+    const { proc, txUpdateMany, loyalty } = setup(order);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'CANCELLED' });
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+    expect(attentionFlags(txUpdateMany)).toHaveLength(0);
+  });
+
+  it('"Đã hoàn" (5) sau "Đang hoàn" (4) → huỷ xong thì tự gỡ việc "ĐANG HOÀN" khỏi hàng đợi (R2-PANCAKE-4)', async () => {
+    const order = { ...base, status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN (giao không thành…' };
+    const { proc, prisma, orderUpdateMany } = setup(order);
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...order, status: 'CANCELLED' });
+    await proc.onStatusUpdated({ id: 'p1', status: 5 });
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
   });
 
   it('"Đã hoàn" (5) khi đơn ĐÃ GIAO → RETURNED', async () => {
@@ -1029,10 +1089,20 @@ describe('PancakeProcessor — đơn có vận đơn Gomdon sống: Gomdon là n
     expect(txUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('huỷ từ Pancake vẫn nhận', async () => {
-    const { proc, txUpdateMany } = setup({ ...liveGomdon, status: 'CONFIRMED' });
+  it('huỷ từ Pancake vẫn nhận khi bưu tá Gomdon chưa lấy hàng', async () => {
+    const { proc, txUpdateMany } = setup({ ...liveGomdon, status: 'CONFIRMED', gomdonStatus: '1' });
     await proc.onStatusUpdated({ id: 'p1', status: 6 });
     expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'CANCELLED' });
+  });
+
+  it('Pancake huỷ đơn mà bưu tá Gomdon đã lấy hàng → KHÔNG huỷ, không hoàn tiền; vào hàng đợi + báo admin (R2-GOMDON-2)', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, txUpdateMany, loyalty } = setup({ ...liveGomdon, status: 'SHIPPING', gomdonStatus: '4' }, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(attentionFlags(txUpdateMany)).toEqual([expect.stringContaining('Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển')]);
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('KHÔNG tự huỷ/hoàn tiền'), 'OPS_PANCAKE_ALERT');
   });
 
   it('vận đơn Gomdon đã huỷ → Pancake lại được chốt đã giao', async () => {
