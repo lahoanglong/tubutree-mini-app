@@ -1700,3 +1700,58 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     expect(ledger.mock.calls.map((c) => -(c[1] as { delta: number }).delta)).toEqual(totals);
   });
 });
+
+// R3-MERCHANT-1: phản hồi đặt hàng và báo giá cho khách không kèm phí sàn đối tác, khoá nội bộ hay ID chủ gian hàng.
+describe('CheckoutService — không lộ trường nội bộ cho khách (R3-MERCHANT-1)', () => {
+  const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+  const SHOP_ITEM = { id: 'i2', variationId: 'vm', productId: 'pm', productName: 'Xà phòng', variationName: '100g', unitPrice: 50_000, quantity: 1, total: 50_000, fulfiller: SHOP_A };
+  const ONLY_SHOP = { items: [SHOP_ITEM], subtotal: 50_000, discount: 0, freeship: false, couponCode: null };
+  const RAW_ORDER = {
+    id: 'o1',
+    code: 'TT1',
+    total: 80_000,
+    status: 'PENDING_PAYMENT',
+    checkoutGroup: null,
+    userId: 'u1',
+    items: [{ id: 'oi1', variationId: 'vm' }],
+    merchantCommissionPct: 0.15,
+    commission: 0,
+    endCustomerKey: '0912345678',
+    idempotencyKey: 'idem-1',
+    pancakeOrderId: 'pk-1',
+    pancakePushStatus: 'SYNCED',
+    pancakeSyncError: 'lỗi',
+    pancakePushAttempts: 2,
+    gomdonAttempt: 1,
+    reviewInvitedAt: null,
+    gomdonStatusAt: null,
+  };
+  const HIDDEN = [
+    'merchantCommissionPct', 'commission', 'endCustomerKey', 'idempotencyKey', 'pancakeOrderId', 'pancakePushStatus',
+    'pancakeSyncError', 'pancakePushAttempts', 'gomdonAttempt', 'reviewInvitedAt', 'gomdonStatusAt',
+  ];
+
+  it('placeOrder trả đơn đã lọc cột nội bộ, vẫn giữ mã đơn và tổng tiền', async () => {
+    const { svc, prisma } = build({ cartData: ONLY_SHOP });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...RAW_ORDER });
+    const res = (await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)) as unknown as Record<string, unknown>;
+    expect(res).toMatchObject({ code: 'TT1', total: 80_000 });
+    for (const key of HIDDEN) expect(res).not.toHaveProperty(key);
+  });
+
+  it('lần đặt bị tách theo nơi giao: đơn trả về cũng đã lọc, kèm splitOrders', async () => {
+    const { svc, prisma } = build({ cartData: ONLY_SHOP });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...RAW_ORDER, checkoutGroup: 'TT1' });
+    (prisma.order as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([]);
+    const res = (await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)) as unknown as Record<string, unknown>;
+    expect(res).toHaveProperty('splitOrders');
+    for (const key of HIDDEN) expect(res).not.toHaveProperty(key);
+  });
+
+  it('báo giá: items[].fulfiller không kèm ownerUserId của chủ gian hàng', async () => {
+    const { svc } = build({ cartData: ONLY_SHOP });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.items[0]!.fulfiller).toEqual({ kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A' });
+    expect(JSON.stringify(q)).not.toContain('u-a');
+  });
+});
