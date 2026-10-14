@@ -78,7 +78,9 @@ function makePrisma(over: Record<string, unknown> = {}) {
     user: { findUnique: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-    $transaction: jest.fn().mockResolvedValue([]),
+    userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+    // Mảng thao tác (ghi kèm sổ user_admin_events) chạy thật; callback giữ hành vi cũ.
+    $transaction: jest.fn((arg: unknown) => (Array.isArray(arg) ? Promise.all(arg) : Promise.resolve([]))),
   };
   return { ...base, ...over } as unknown as PrismaService;
 }

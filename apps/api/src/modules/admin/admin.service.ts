@@ -31,6 +31,8 @@ import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './c
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
 import { normalizeCouponCode } from '../coupons/coupons.service';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
+import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
 import { linkTubuFulfilledVariation } from '../merchant/merchant-pancake-link';
 
 /**
@@ -366,7 +368,9 @@ export class AdminService {
     }
     // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
     // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
-    let data: Prisma.UserUpdateInput = { role };
+    // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, lên lại STAFF phải gán lại có chủ đích.
+    const droppedPerms = role !== 'STAFF' ? (user.staffPermissions ?? []) : [];
+    let data: Prisma.UserUpdateInput = { role, ...(droppedPerms.length ? { staffPermissions: [] } : {}) };
     let dealerTierId: string | undefined;
     if (role === 'DEALER') {
       dealerTierId = tierId?.trim();
@@ -374,18 +378,34 @@ export class AdminService {
       const tier = await this.prisma.dealerTier.findUnique({ where: { id: dealerTierId } });
       if (!tier) throw new BadRequestException('Bậc đại lý không tồn tại.');
       data = {
-        role,
+        ...data,
         metadata: {
           ...((user.metadata as Record<string, unknown> | null) ?? {}),
           dealerTierId,
         } as Prisma.InputJsonObject,
       };
     }
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data,
-      select: { id: true, phone: true, fullName: true, role: true },
-    });
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data,
+        select: { id: true, phone: true, fullName: true, role: true },
+      }),
+      ...(previousRole !== role
+        ? [recordUserAdminEvent(this.prisma, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId })]
+        : []),
+      ...(droppedPerms.length
+        ? [
+            recordUserAdminEvent(this.prisma, {
+              userId: user.id,
+              kind: 'STAFF_PERMISSIONS',
+              from: droppedPerms.join(','),
+              to: '',
+              actorId: adminId,
+            }),
+          ]
+        : []),
+    ]);
     // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
     // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
     // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
@@ -412,6 +432,105 @@ export class AdminService {
    * đơn COD chưa giao (có thể bị huỷ/boom) và đơn chưa lên kho cũng thành doanh thu. Giá trị đơn đặt (GMV) và COD chưa
    * thu tách ô riêng; đơn trả hàng có ô riêng.
    */
+  /**
+   * Gán nhóm việc cho nhân viên (ADMINOPS-10). Chỉ cho tài khoản STAFF: ADMIN đã có mọi quyền, khách thì phải cấp vai
+   * trò nhân viên trước. Có hiệu lực ở request kế tiếp (JwtStrategy đọc DB, cache vài giây).
+   */
+  async setStaffPermissions(adminId: string, userId: string, raw: string[]) {
+    const unknown = raw.filter((p) => !isStaffPermission(p));
+    if (unknown.length) throw new BadRequestException(`Nhóm việc không hợp lệ: ${unknown.join(', ')}.`);
+    const perms = STAFF_PERMISSIONS.filter((p) => raw.includes(p));
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, staffPermissions: true } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+    if (user.role !== 'STAFF') {
+      throw new BadRequestException('Chỉ gán nhóm việc cho tài khoản Nhân viên (STAFF) — cấp vai trò nhân viên trước.');
+    }
+    const before = [...user.staffPermissions].sort().join(',');
+    const after = perms.join(',');
+    if (before === after) return { id: userId, staffPermissions: perms, changed: false };
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { staffPermissions: perms } }),
+      recordUserAdminEvent(this.prisma, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, actorId: adminId }),
+    ]);
+    this.logger.warn(`Admin ${adminId} đổi nhóm việc nhân viên ${userId}: [${before}] → [${after}]`);
+    return { id: userId, staffPermissions: perms, changed: true };
+  }
+
+  /**
+   * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
+   * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
+   */
+  async getUserDetail(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        role: true,
+        staffPermissions: true,
+        referralCode: true,
+        pointsBalance: true,
+        pointsConvertedBalance: true,
+        walletBalance: true,
+        isBlocked: true,
+        blockedAt: true,
+        blockedReason: true,
+        createdAt: true,
+        tier: { select: { name: true } },
+      },
+    });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+    const take = AdminService.DETAIL_TAKE;
+    const [orders, orderTotal, wallet, points, events, grants] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: { id: true, code: true, status: true, paymentMethod: true, paymentStatus: true, total: true, createdAt: true, fulfiller: true },
+      }),
+      this.prisma.order.count({ where: { userId } }),
+      this.prisma.walletTransaction.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: { id: true, delta: true, balanceAfter: true, type: true, refType: true, refId: true, reason: true, createdAt: true },
+      }),
+      this.prisma.pointsTransaction.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
+      }),
+      this.prisma.userAdminEvent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      user.phone
+        ? this.prisma.roleGrant.findMany({
+            where: { phone: user.phone },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, role: true, grantedBy: true, note: true, revokedAt: true, createdAt: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const actorIds = [...new Set([...events.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
+      : [];
+    const actorName = new Map(actors.map((a) => [a.id, a.fullName ?? a.phone ?? a.id]));
+    const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
+    return {
+      user,
+      orders: { items: orders, total: orderTotal },
+      wallet,
+      points,
+      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
+      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
+    };
+  }
+
+  static readonly DETAIL_TAKE = 30;
+
   async getDashboardStats() {
     const open: Prisma.OrderWhereInput = { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } };
     const collected: Prisma.OrderWhereInput = {

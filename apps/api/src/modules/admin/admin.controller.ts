@@ -22,6 +22,7 @@ import {
 } from 'class-validator';
 import type { ValidationArguments, ValidationOptions } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService } from './admin.service';
@@ -343,6 +344,7 @@ export class AdminController {
     return this.admin.reviewDealerApplication(adminId, id, dto.approve, dto.tierId, dto.reason);
   }
 
+  @AllowStaff('CSKH')
   @Get('users')
   users(@Query() q: ListUsersQuery) {
     return this.admin.listUsers(q.page, q.limit, q.search);
@@ -383,6 +385,7 @@ export class AdminController {
     return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
   }
 
+  @AllowStaff('CSKH', 'KHO')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery) {
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to);
@@ -403,6 +406,7 @@ export class AdminController {
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */
+  @AllowStaff('KHO')
   @Post('orders/:id/pancake-attention/resolve')
   resolvePancakeAttention(
     @CurrentUser('sub') adminId: string,
@@ -422,12 +426,14 @@ export class AdminController {
    * Tạo lại vận đơn thu gom Gomdon (FAILED / NOT_CONFIGURED / NEEDS_MANUAL_CHECK + xác nhận / Gomdon đã
    * huỷ vận đơn cũ). Luật an toàn nằm ở GomdonOrderService.retryPush — lỗi của nó trả nguyên văn.
    */
+  @AllowStaff('KHO')
   @Post('orders/:id/gomdon/retry')
   retryGomdon(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: GomdonRetryDto) {
     return this.admin.retryGomdonPush(adminId, id, dto.confirmedNoWaybill);
   }
 
   /** Huỷ vận đơn Gomdon (đơn đã huỷ → xếp job huỷ; đơn còn hiệu lực → huỷ ngay). */
+  @AllowStaff('KHO')
   @Post('orders/:id/gomdon/cancel-waybill')
   cancelGomdonWaybill(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
     return this.admin.cancelGomdonWaybill(adminId, id);
@@ -438,6 +444,7 @@ export class AdminController {
    * "Cần xử lý thu gom", hệ thống không tự tạo vận đơn nữa. Chỉ từ trạng thái cần xử lý (luật ở
    * GomdonOrderService.markHandled — lỗi trả nguyên văn).
    */
+  @AllowStaff('KHO')
   @Post('orders/:id/gomdon/mark-handled')
   markGomdonHandled(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: GomdonMarkHandledDto) {
     return this.admin.markGomdonHandled(adminId, id, dto.note);
@@ -456,12 +463,14 @@ export class AdminController {
   }
 
   /** Đánh dấu báo động Gomdon (giao trùng vận đơn, huỷ không được…) đã xử lý. */
+  @AllowStaff('KHO')
   @Post('gomdon/alerts/:alertId/resolve')
   resolveGomdonAlert(@CurrentUser('sub') adminId: string, @Param('alertId') alertId: string) {
     return this.admin.resolveGomdonAlert(adminId, alertId);
   }
 
   /** Sổ ghi vết: ai đổi trạng thái đơn này, từ đâu sang đâu, lúc nào. */
+  @AllowStaff('CSKH', 'KHO')
   @Get('orders/:id/status-history')
   orderStatusHistory(@Param('id') id: string) {
     return this.admin.orderStatusHistory(id);
@@ -477,6 +486,7 @@ export class AdminController {
     return this.admin.confirmOrderPayment(adminId, id, dto);
   }
 
+  @AllowStaff('CSKH', 'KHO')
   @Put('orders/:id/status')
   updateOrderStatus(
     @CurrentUser('sub') adminId: string,

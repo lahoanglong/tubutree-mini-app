@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { recordUserAdminEvent } from '../../../common/user-admin-events';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -24,7 +25,7 @@ export class RbacService {
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
    */
-  async applyGrants(user: User, db: Db = this.prisma): Promise<User> {
+  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
     if (!user.phone) return user;
     const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
@@ -38,7 +39,16 @@ export class RbacService {
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${user.phone}) ${user.role} → ${best}`);
-    return db.user.update({ where: { id: user.id }, data: { role: best } });
+    const updated = await db.user.update({ where: { id: user.id }, data: { role: best } });
+    await recordUserAdminEvent(db, {
+      userId: user.id,
+      kind: 'ROLE',
+      from: user.role,
+      to: best,
+      reason: 'Áp quyền cấp theo SĐT',
+      actorId,
+    });
+    return updated;
   }
 
   /**
@@ -75,7 +85,7 @@ export class RbacService {
       // Áp ngay nếu user đã tồn tại
       let applied = false;
       if (user) {
-        const updated = await this.applyGrants(user, tx);
+        const updated = await this.applyGrants(user, tx, adminId);
         applied = updated.role !== user.role;
       }
       return { granted: role, applied };
@@ -111,7 +121,20 @@ export class RbacService {
       let downgraded = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
-        await tx.user.update({ where: { id: user.id }, data: { role: base } });
+        await tx.user.update({
+          where: { id: user.id },
+          data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
+        });
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: 'Thu hồi quyền nhân viên', actorId: adminId });
+        if (user.staffPermissions?.length) {
+          await recordUserAdminEvent(tx, {
+            userId: user.id,
+            kind: 'STAFF_PERMISSIONS',
+            from: user.staffPermissions.join(','),
+            to: '',
+            actorId: adminId,
+          });
+        }
         downgraded = true;
         this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
       }

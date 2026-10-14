@@ -231,6 +231,8 @@ model User {
   dob                    DateTime?
   avatarUrl              String?
   role                   UserRole        @default(CUSTOMER)
+  /// Nhóm việc của STAFF ngoài quầy/chấm công (common/staff-permissions.ts): CSKH, KHO. Chỉ có tác dụng khi role = STAFF.
+  staffPermissions       String[]        @default([])
   tierId                 String?
   tier                   MembershipTier? @relation(fields: [tierId], references: [id])
   tierGraceUntil         DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
@@ -312,6 +314,23 @@ model User {
   @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullName_trgm_idx")
   @@index([fullNameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_fullNameSearch_trgm_idx")
   @@map("users")
+}
+
+/// Sổ việc admin làm trên một tài khoản (đổi vai trò, nhóm việc nhân viên, khoá/mở khoá) — màn chi tiết người dùng đọc lại.
+model UserAdminEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK
+  kind      String
+  fromValue String?
+  toValue   String?
+  reason    String?
+  /// adminId, hoặc null khi hệ thống tự làm (áp quyền cấp sẵn theo SĐT lúc đăng nhập).
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("user_admin_events")
 }
 
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.

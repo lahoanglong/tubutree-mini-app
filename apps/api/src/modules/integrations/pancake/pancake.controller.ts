@@ -1,5 +1,6 @@
 import { Controller, Param, Post, Query } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../../common/staff-permissions';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PancakeSyncService } from './pancake-sync.service';
 import { PancakeOrderService } from './pancake-order.service';
@@ -33,6 +34,7 @@ export class PancakeController {
    * tạo trùng được chặn bằng tra cứu theo mã đơn trước khi tạo lại.
    */
   @Roles('ADMIN')
+  @AllowStaff('KHO')
   @Post('orders/:id/push')
   retryPush(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
     return this.orders.retryPushByAdmin(adminId, id);

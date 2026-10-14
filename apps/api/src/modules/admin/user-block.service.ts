@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 
 /**
  * Admin khoá / mở khoá tài khoản (farm voucher, lừa COD, spam cộng đồng). Khoá có hiệu lực ngay: thu hồi
@@ -31,6 +32,7 @@ export class UserBlockService {
         data: { isBlocked: true, blockedAt: now, blockedReason: reason, blockedById: adminId, sessionsRevokedAt: now },
         select: { id: true, isBlocked: true, blockedAt: true, blockedReason: true },
       });
+      await recordUserAdminEvent(tx, { userId, kind: 'BLOCK', reason, actorId: adminId });
       const { count } = await tx.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
@@ -49,11 +51,14 @@ export class UserBlockService {
     if (meta && typeof meta === 'object' && meta.anonymizedAt) {
       throw new BadRequestException('Tài khoản đã được xoá theo yêu cầu của chủ tài khoản, không mở khoá được.');
     }
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: { isBlocked: false, blockedAt: null, blockedReason: null, blockedById: null },
-      select: { id: true, isBlocked: true, blockedAt: true, blockedReason: true },
-    });
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { isBlocked: false, blockedAt: null, blockedReason: null, blockedById: null },
+        select: { id: true, isBlocked: true, blockedAt: true, blockedReason: true },
+      }),
+      recordUserAdminEvent(this.prisma, { userId, kind: 'UNBLOCK', actorId: adminId }),
+    ]);
     this.sessions.invalidate(userId);
     this.logger.warn(`Admin ${adminId} mở khoá user ${userId}.`);
     return updated;

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsOptional } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { OrderReturnsService } from './order-returns.service';
@@ -21,21 +22,25 @@ export class ReturnRequestsQuery extends PaginationQuery {
 export class ReturnsAdminController {
   constructor(private readonly returns: OrderReturnsService) {}
 
+  @AllowStaff('CSKH', 'KHO')
   @Get()
   list(@Query() q: ReturnRequestsQuery) {
     return this.returns.listForAdmin(q.status, q.page, q.limit, q.order);
   }
 
+  @AllowStaff('CSKH')
   @Get(':id/preview')
   preview(@Param('id') id: string, @Query() q: ReturnPreviewQuery) {
     return this.returns.preview(id, q.shopFault === undefined ? undefined : q.shopFault === 'true');
   }
 
+  @AllowStaff('CSKH')
   @Post(':id/review')
   review(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewReturnDto) {
     return this.returns.review(adminId, id, dto);
   }
 
+  @AllowStaff('KHO')
   @Post(':id/received')
   received(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
     return this.returns.markReceived(adminId, id);

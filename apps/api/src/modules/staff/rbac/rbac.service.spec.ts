@@ -16,6 +16,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+    userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
   };
   const merged = { ...base, ...over };
   // addGrant/revokeGrant chạy trong $transaction(tx => ...) — mock tx = chính client này để
@@ -266,6 +267,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
         count: jest.fn().mockResolvedValue(adminCount),
       },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+      userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
       $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),

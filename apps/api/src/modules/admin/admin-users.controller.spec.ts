@@ -12,7 +12,7 @@ describe('AdminUsersController — khoá/mở khoá người dùng', () => {
 
   it('chuyển đúng admin đang thao tác, id và lý do sang service', async () => {
     const blocks = { block: jest.fn().mockResolvedValue({ id: 'u9' }), unblock: jest.fn().mockResolvedValue({ id: 'u9' }) };
-    const ctrl = new AdminUsersController(blocks as unknown as UserBlockService);
+    const ctrl = new AdminUsersController(blocks as unknown as UserBlockService, {} as never);
     await ctrl.block('admin1', 'u9', { reason: 'Lừa đảo COD' });
     await ctrl.unblock('admin1', 'u9');
     expect(blocks.block).toHaveBeenCalledWith('admin1', 'u9', 'Lừa đảo COD');
