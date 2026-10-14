@@ -14,7 +14,7 @@ import {
   couponNotAppliedNotice,
   couponRejectedWithFlash,
 } from '../coupons/coupon-notice';
-import { fulfillerOf } from '../checkout/checkout-split';
+import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
@@ -193,7 +193,19 @@ export class CartService {
     const cartId = await this.ensureCart(userId);
     const variation = await this.prisma.variation.findUnique({
       where: { id: dto.variationId },
-      include: { product: { select: { isActive: true, approvalStatus: true } } },
+      include: {
+        product: {
+          select: {
+            isActive: true,
+            approvalStatus: true,
+            name: true,
+            fulfilment: true,
+            storefront: {
+              select: { title: true, type: true, ordersPausedAt: true, owner: { select: { role: true, isBlocked: true } } },
+            },
+          },
+        },
+      },
     });
     // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog, xem CatalogService): SP đối tác chưa
     // duyệt/bị từ chối không còn tìm thấy qua catalog/search/related/for-you, nhưng ai đã có sẵn
@@ -201,6 +213,12 @@ export class CartService {
     // nếu chỉ kiểm isActive — phải kiểm cả approvalStatus của Product cha.
     if (!variation || !isSellableVariation(variation)) {
       throw new NotFoundException('Sản phẩm không khả dụng.');
+    }
+    // Gian hàng tạm nghỉ/ngừng bán: báo ngay thay vì để khách bỏ hàng vào giỏ rồi mới bị chặn lúc đặt (R3-MERCHANT-3).
+    const store = variation.product.fulfilment === 'MERCHANT' ? variation.product.storefront : null;
+    const storeReason = store?.type === 'MERCHANT' ? merchantStoreUnavailableReason(store) : null;
+    if (store && storeReason) {
+      throw new BadRequestException(storeUnavailableOnAddMessage(variation.product.name, store.title, storeReason));
     }
 
     const existing = await this.prisma.cartItem.findUnique({

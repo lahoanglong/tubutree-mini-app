@@ -106,14 +106,14 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
       )}
       {o && link.state === 'AVAILABLE' && (
         <p>
-          Đang thuộc sản phẩm Tubu không bán: <strong>{o.name}</strong> ({brand}). Duyệt thì biến thể chuyển sang gian hàng {storeTitle}.
+          Đang thuộc sản phẩm Tubu không bán: <strong>{o.name}</strong> ({brand}). Duyệt thì biến thể chuyển sang gian hàng “{storeTitle}”.
         </p>
       )}
       {o && link.state === 'TAKEOVER' && (
         <Notice tone="warning" role="alert">
           <p>
             Duyệt sẽ chuyển biến thể đang bán của <strong>{o.name}</strong> (thương hiệu {brand}) sang gian hàng{' '}
-            <strong>{storeTitle}</strong>: tồn kho {v?.stock ?? 0} sp, đã bán {o.sold}, {o.reviewCount} đánh giá.{' '}
+            <strong>“{storeTitle}”</strong>: tồn kho {v?.stock ?? 0} sp, đã bán {o.sold}, {o.reviewCount} đánh giá.{' '}
             {o.otherVariations === 0
               ? 'Sản phẩm gốc không còn biến thể nào nên sẽ bị tắt bán (trang sản phẩm, đánh giá, yêu thích không còn hiện).'
               : `Sản phẩm gốc vẫn bán ${o.otherVariations} biến thể còn lại.`}
@@ -121,7 +121,7 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
           <p className="mt-1 font-semibold">
             {link.brandMatchesStore
               ? `Gian hàng là chủ thương hiệu ${brand}.`
-              : `Gian hàng ${storeTitle} không phải chủ thương hiệu ${brand}: chỉ duyệt khi đã có thoả thuận giao hàng này cho gian hàng.`}
+              : `Gian hàng “${storeTitle}” không phải chủ thương hiệu ${brand}: chỉ duyệt khi đã có thoả thuận giao hàng này cho gian hàng.`}
           </p>
           <p className="mt-1">Gỡ liên kết sau này (hoặc từ chối khi đối tác sửa nội dung) trả biến thể về sản phẩm gốc.</p>
         </Notice>
@@ -214,6 +214,36 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
   );
 }
 
+/** Bản sửa của sản phẩm ĐANG BÁN: khách vẫn thấy cột "Đang bán" cho tới khi admin duyệt cột "Bản sửa" (R3-MERCHANT-4). */
+function EditComparison({ live, next }: { live: NonNullable<AdminPendingProduct['live']>; next: AdminPendingProduct }) {
+  const rows: { label: string; before: string | null; after: string | null }[] = [
+    { label: 'Tên', before: live.name, after: next.name },
+    { label: 'Mô tả ngắn', before: live.shortDesc, after: next.shortDesc ?? null },
+    { label: 'Mô tả', before: live.description, after: next.description },
+    { label: 'Ảnh', before: live.thumbnail, after: next.thumbnail },
+  ];
+  return (
+    <div className="mt-3 border-t border-stone-200 pt-3 text-xs text-stone-700">
+      <p className="mb-2 text-stone-500">Khách vẫn thấy nội dung &quot;Đang bán&quot; cho tới khi bạn duyệt bản sửa.</p>
+      <div className="space-y-2">
+        {rows
+          .filter((r) => (r.before ?? '') !== (r.after ?? ''))
+          .map((r) => (
+            <div key={r.label} className="grid gap-1 sm:grid-cols-2 sm:gap-3">
+              <p className="min-w-0 break-words">
+                <strong className="text-stone-900">{r.label} · Đang bán:</strong>{' '}
+                <span className="line-clamp-3 text-stone-600">{r.before || '—'}</span>
+              </p>
+              <p className="min-w-0 break-words rounded-control bg-warning-bg px-2 py-1 text-warning-fg">
+                <strong>{r.label} · Bản sửa:</strong> <span className="line-clamp-3">{r.after || '—'}</span>
+              </p>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
   const qc = useQueryClient();
   const [rejectReason, setRejectReason] = useState('');
@@ -225,7 +255,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
 
   const reviewMut = useMutation({
     mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
-      reviewMerchantProduct(p.id, approve, reason, approve && takeover ? confirmTakeover : undefined),
+      reviewMerchantProduct(p.id, approve, reason, approve && takeover ? confirmTakeover : undefined, p.isEdit ? p.editVersion : undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
@@ -235,26 +265,26 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex gap-3">
+        <div className="flex min-w-0 gap-3">
           {p.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnail} alt={p.name} className="h-20 w-20 rounded-control border border-stone-200 object-cover" />
+            <img src={p.thumbnail} alt={p.name} className="h-20 w-20 shrink-0 rounded-control border border-stone-200 object-cover" />
           ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-control bg-forest-50 text-forest-600">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-600">
               <Leaf className="h-8 w-8" aria-hidden />
             </div>
           )}
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-stone-900">{p.name}</h3>
-              <ToneBadge tone="warning">Chờ duyệt</ToneBadge>
-              <ToneBadge tone={p.pancakeLinkCode ? 'info' : 'neutral'}>
+              <h3 className="break-words font-semibold text-stone-900">{p.name}</h3>
+              <ToneBadge tone="warning">{p.isEdit ? 'Bản sửa chờ duyệt' : 'Chờ duyệt'}</ToneBadge>
+              <ToneBadge tone={p.pancakeLinkCode ? 'info' : 'neutral'} wrap>
                 {p.pancakeLinkCode ? `Tubu giao hộ · mã Pancake ${p.pancakeLinkCode}` : 'Gian hàng tự giao'}
               </ToneBadge>
             </div>
-            <p className="text-xs text-stone-500">Slug: /{p.slug} · Thương hiệu: {p.brand || 'Riêng'} · Danh mục: {p.category}</p>
+            <p className="break-words text-xs text-stone-500">Slug: /{p.slug} · Thương hiệu: {p.brand || 'Riêng'} · Danh mục: {p.category}</p>
             {p.storefront && (
-              <p className="mt-1 text-xs font-medium text-forest-700">
+              <p className="mt-1 break-words text-xs font-medium text-forest-700">
                 Gian hàng: {p.storefront.title} {p.storefront.subdomain ? `(${p.storefront.subdomain}.tubutree.com)` : ''}
               </p>
             )}
@@ -290,7 +320,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
               'Đang xử lý...'
             ) : (
               <>
-                <Check className="h-3.5 w-3.5" aria-hidden /> Duyệt xuất bản
+                <Check className="h-3.5 w-3.5" aria-hidden /> {p.isEdit ? 'Duyệt bản sửa' : 'Duyệt xuất bản'}
               </>
             )}
           </button>
@@ -326,6 +356,8 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
           )}
         </div>
       </div>
+
+      {p.isEdit && p.live && <EditComparison live={p.live} next={p} />}
 
       {link && <PancakeLinkPanel link={link} storeTitle={p.storefront?.title ?? 'đối tác'} />}
 

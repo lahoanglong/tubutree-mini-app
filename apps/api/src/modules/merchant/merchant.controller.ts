@@ -47,7 +47,7 @@ export const withHttps = ({ value }: { value: unknown }) => {
 };
 
 export class UpdateMerchantStoreDto {
-  @IsOptional() @IsString() @MaxLength(120) title?: string;
+  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' }) @MaxLength(120) title?: string;
   @IsOptional() @IsString() @MaxLength(200) headerNote?: string;
   @IsOptional() @IsString() @MaxLength(63) subdomain?: string;
   @IsOptional() @IsString() @MaxLength(253) customDomain?: string;

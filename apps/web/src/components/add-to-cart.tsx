@@ -19,7 +19,16 @@ interface Variation {
 /** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
 const LOW_STOCK_NOTICE = 5;
 
-export default function AddToCart({ slug, variations: isrVariations }: { slug: string; variations: Variation[] }) {
+export default function AddToCart({
+  slug,
+  variations: isrVariations,
+  blockedReason = null,
+}: {
+  slug: string;
+  variations: Variation[];
+  /** Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): khách xem được trang nhưng chưa mua được. */
+  blockedReason?: string | null;
+}) {
   const router = useRouter();
   const qc = useQueryClient();
   const phase = useAuthPhase();
@@ -95,7 +104,7 @@ export default function AddToCart({ slug, variations: isrVariations }: { slug: s
   // Khách bấm "Thêm vào giỏ" khi chưa đăng nhập rồi đăng nhập xong thì quay lại đây: thêm nốt món đó.
   const resumed = useRef(false);
   useEffect(() => {
-    if (phase !== 'authenticated' || resumed.current) return;
+    if (phase !== 'authenticated' || resumed.current || blockedReason) return;
     resumed.current = true;
     const pending = takePendingAdd(isrVariations.map((v) => v.id));
     if (!pending) return;
@@ -106,7 +115,7 @@ export default function AddToCart({ slug, variations: isrVariations }: { slug: s
   }, [phase]);
 
   const onAdd = async () => {
-    if (phase === 'loading') return;
+    if (phase === 'loading' || blockedReason) return;
     if (phase === 'unavailable') {
       setSuccess(false);
       setMsg('Chưa kết nối được tới Tubu Tree nên chưa thêm được vào giỏ. Bạn kiểm tra mạng rồi bấm lại nhé.');
@@ -120,6 +129,16 @@ export default function AddToCart({ slug, variations: isrVariations }: { slug: s
     if (!selected || !available) return;
     await add(selected.id, Math.min(qty, maxQty));
   };
+
+  if (blockedReason) {
+    return (
+      <div className="mt-4">
+        <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
+          Tạm thời chưa mua được
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4">

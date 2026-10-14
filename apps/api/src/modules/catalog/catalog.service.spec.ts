@@ -808,6 +808,14 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
 describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
   const base = { id: 'p1', slug: 'xa-phong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, variations: [], reviews: [] };
   const config = { get: jest.fn(async <T>(k: string, fb?: T) => (k === 'merchant.default_shipping_fee' ? (27_000 as T) : (fb as T))) };
+  const OPEN_STORE = {
+    title: 'Shop',
+    type: 'MERCHANT',
+    shippingFee: null as number | null,
+    freeShipFrom: null as number | null,
+    ordersPausedAt: null as Date | null,
+    owner: { role: 'DEALER', isBlocked: false } as { role: string; isBlocked: boolean } | null,
+  };
 
   it('hàng Tubu giao → fulfiller TUBU, không lộ đối tượng storefront', async () => {
     const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null }) } } as unknown as PrismaService;
@@ -817,16 +825,53 @@ describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () =
   });
 
   it('hàng gian hàng tự giao → tên gian hàng, phí giao và ngưỡng miễn phí của gian hàng', async () => {
-    const storefront = { title: 'Xà phòng Cô Lan', type: 'MERCHANT', shippingFee: 22_000, freeShipFrom: 300_000 };
+    const storefront = { ...OPEN_STORE, title: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 };
     const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
     const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
     expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 });
   });
 
   it('gian hàng chưa đặt phí giao → phí mặc định merchant.default_shipping_fee', async () => {
-    const storefront = { title: 'Shop A', type: 'MERCHANT', shippingFee: null, freeShipFrom: null };
+    const storefront = { ...OPEN_STORE, title: 'Shop A', shippingFee: null, freeShipFrom: null };
     const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
     const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
     expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Shop A', shippingFee: 27_000, freeShipFrom: null });
+  });
+
+  // R3-MERCHANT-3: trang sản phẩm nói thẳng khi gian hàng không nhận đơn, thay vì để khách thêm vào giỏ rồi mới bị chặn.
+  it('R3-MERCHANT-3: gian hàng tạm nghỉ → fulfiller UNAVAILABLE lý do STORE_PAUSED, kèm tên gian hàng', async () => {
+    const storefront = { ...OPEN_STORE, title: 'Shop A', ordersPausedAt: new Date() };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Shop A', shippingFee: null, freeShipFrom: null });
+    expect(JSON.stringify(r)).not.toContain('isBlocked');
+  });
+
+  it.each([
+    ['chủ gian hàng bị khoá', { role: 'DEALER', isBlocked: true }],
+    ['chủ gian hàng bị hạ quyền', { role: 'CUSTOMER', isBlocked: false }],
+    ['gian hàng mất chủ', null],
+  ])('R3-MERCHANT-3: %s → UNAVAILABLE lý do STORE_CLOSED', async (_label, owner) => {
+    const storefront = { ...OPEN_STORE, title: 'Shop B', owner };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'UNAVAILABLE', reason: 'STORE_CLOSED', name: 'Shop B', shippingFee: null, freeShipFrom: null });
+  });
+
+  it('R3-MERCHANT-4: lý do từ chối bản sửa là lời nhắn riêng cho đối tác, không lộ ra PDP công khai', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null, rejectReason: 'Ảnh vi phạm' }) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r).not.toHaveProperty('rejectReason');
+  });
+
+  it('R3-MERCHANT-3: PDP lấy thêm trạng thái tạm nghỉ và chủ gian hàng từ DB', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
+    await new CatalogService({ product: { findUnique } } as unknown as PrismaService, config as never).getBySlug('xa-phong');
+    expect(findUnique.mock.calls[0][0].include.storefront.select).toMatchObject({
+      ordersPausedAt: true,
+      owner: { select: { role: true, isBlocked: true } },
+    });
   });
 });

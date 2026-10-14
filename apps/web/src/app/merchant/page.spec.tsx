@@ -791,7 +791,8 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     await openTab('Sản phẩm');
     click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
     const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
-    expect(overlay.textContent).toContain('chờ Tubu Tree duyệt lại');
+    expect(overlay.textContent).toContain('vẫn bán với nội dung cũ');
+    expect(overlay.textContent).not.toContain('chờ Tubu Tree duyệt lại');
     expect(byText(overlay, 'label', 'Số còn bán được')!.textContent).toContain('đã trừ 3 sp khách đặt chưa gửi');
     typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
     click(byText(overlay, 'button', 'Lưu thay đổi'));
@@ -807,6 +808,42 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     click(byText(root, 'button', 'Mở bán lại'));
     await flush();
     expect(mocks.updateProduct).toHaveBeenLastCalledWith('z', { isActive: true });
+  });
+
+  it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {
+    const pendingEdit = { name: 'SP a (tên mới)', description: 'Mô tả mới', shortDesc: 'Ngắn mới', images: [], thumbnail: null, submittedAt: '2026-10-14T03:00:00.000Z' };
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('a', 'APPROVED', { isActive: true, pendingEdit })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 1, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const row = root.querySelector('tbody')!;
+    expect(row.textContent).toContain('SP a');
+    expect(row.textContent).toContain('Đã duyệt (Đang hiển thị)');
+    expect(byText(row, 'span', 'Bản sửa chờ duyệt')!.className).toContain('bg-warning-bg');
+    click(byText(row, 'button', 'Sửa'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    expect(overlay.textContent).toContain('Bản sửa đang chờ Tubu Tree duyệt');
+    expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('SP a (tên mới)');
+    typeInto(inputByLabel(overlay, 'Mô tả ngắn'), 'Ngắn mới hơn');
+    click(byText(overlay, 'button', 'Lưu thay đổi'));
+    await flush();
+    expect(mocks.updateProduct).toHaveBeenCalledWith('a', { shortDesc: 'Ngắn mới hơn' });
+  });
+
+  it('R3-MERCHANT-4: bản sửa bị từ chối báo rõ lý do và nói sản phẩm vẫn bán nội dung cũ', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('a', 'APPROVED', { isActive: true, rejectReason: 'Ảnh vi phạm bản quyền', pendingEdit: null })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 1, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const row = root.querySelector('tbody')!;
+    expect(row.textContent).toContain('Bản sửa bị từ chối: Ảnh vi phạm bản quyền');
+    expect(row.textContent).toContain('vẫn bán nội dung cũ');
   });
 
   it('Đăng sản phẩm mới: lỗi từ API hiện thông báo danger và hộp thoại vẫn mở; Hủy đóng hộp thoại', async () => {

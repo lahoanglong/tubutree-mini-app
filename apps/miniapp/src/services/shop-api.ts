@@ -55,10 +55,12 @@ export interface ProductDetail {
 }
 
 export interface ProductFulfiller {
-  kind: 'TUBU' | 'MERCHANT';
+  /** UNAVAILABLE: gian hàng tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (xem `reason`). */
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
   name: string;
   shippingFee: number | null;
   freeShipFrom: number | null;
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
 }
 
 export interface CartLine {

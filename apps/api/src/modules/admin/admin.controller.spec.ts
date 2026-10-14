@@ -13,7 +13,9 @@ import {
   GomdonRetryDto,
   ListOrdersQuery,
   ResolvePancakeAttentionDto,
+  ReviewMerchantProductDto,
   SetUserRoleDto,
+  UnlinkMerchantProductDto,
 } from './admin.controller';
 import { ReturnRequestsQuery, ReturnsAdminController } from '../orders/returns-admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
@@ -399,5 +401,33 @@ describe('POST /admin/users/role — tierId cho DEALER (C-008)', () => {
   it('tierId sai kiểu / quá dài → 400', async () => {
     await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 5 })).rejects.toThrow();
     await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'x'.repeat(101) })).rejects.toThrow();
+  });
+});
+
+describe('UnlinkMerchantProductDto (R3-MERCHANT-6)', () => {
+  it('lý do chỉ có khoảng trắng bị chặn như để trống: đối tác phải nhận được lý do thật', async () => {
+    await expect(asBodyDto(UnlinkMerchantProductDto, { reason: '   ' })).rejects.toMatchObject({
+      response: { message: expect.arrayContaining(['Nhập lý do gỡ liên kết để báo đối tác.']) },
+    });
+    await expect(asBodyDto(UnlinkMerchantProductDto, {})).rejects.toBeDefined();
+  });
+
+  it('lý do hợp lệ được cắt khoảng trắng hai đầu', async () => {
+    await expect(asBodyDto(UnlinkMerchantProductDto, { reason: '  Sai thương hiệu  ' })).resolves.toMatchObject({
+      reason: 'Sai thương hiệu',
+    });
+  });
+});
+
+describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
+  it('dòng "Bản sửa chờ duyệt" gửi editVersion dạng ISO, dòng thường không gửi', async () => {
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: false, rejectReason: 'x', editVersion: '2026-10-14T03:00:00.000Z' }),
+    ).resolves.toMatchObject({ editVersion: '2026-10-14T03:00:00.000Z' });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true })).resolves.toMatchObject({ approve: true });
+  });
+
+  it('editVersion không phải thời điểm hợp lệ bị chặn', async () => {
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, editVersion: 'hôm qua' })).rejects.toBeDefined();
   });
 });

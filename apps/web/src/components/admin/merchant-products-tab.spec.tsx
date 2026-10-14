@@ -271,3 +271,118 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     expect(call?.init?.body).toBe(JSON.stringify({ reason: 'Sai thương hiệu' }));
   });
 });
+
+describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-MERCHANT-4)', () => {
+  const edit = product({
+    name: 'Nến thơm sả (tên mới)',
+    description: 'Mô tả mới của đối tác',
+    thumbnail: 'https://cdn.example/new.jpg',
+    isEdit: true,
+    editVersion: '2026-10-14T03:00:00.000Z',
+    live: { name: 'Nến thơm sả', description: 'Mô tả đang bán', shortDesc: null, thumbnail: 'https://cdn.example/old.jpg' },
+    approvalStatus: 'APPROVED',
+  });
+
+  it('dòng bản sửa ghi rõ "Bản sửa chờ duyệt", đặt nội dung đang bán cạnh nội dung mới, nút duyệt gọi đúng là "Duyệt bản sửa"', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [edit], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Bản sửa chờ duyệt');
+    expect(text).toContain('Đang bán');
+    expect(text).toContain('Nến thơm sả');
+    expect(text).toContain('Mô tả đang bán');
+    expect(text).toContain('Nến thơm sả (tên mới)');
+    expect(text).toContain('Mô tả mới của đối tác');
+    expect(byText(container, 'button', 'Duyệt xuất bản')).toBeNull();
+    click(byText(container, 'button', 'Duyệt bản sửa'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, editVersion: '2026-10-14T03:00:00.000Z' }));
+  });
+
+  it('từ chối bản sửa cũng gửi đúng phiên bản bản sửa admin đang xem, để bấm trên dòng cũ không từ chối nhầm cả sản phẩm đang bán', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [edit], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Từ chối'));
+    typeInto(container.querySelector('input[placeholder="Lý do từ chối..."]') as HTMLInputElement, 'Ảnh mờ');
+    click(byText(container, 'button', 'Xác nhận từ chối'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/review'));
+    expect(call?.init?.body).toBe(
+      JSON.stringify({ approve: false, rejectReason: 'Ảnh mờ', editVersion: '2026-10-14T03:00:00.000Z' }),
+    );
+  });
+
+  it('sản phẩm mới đăng không có khối so sánh "Đang bán"', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [product()], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).not.toContain('Đang bán');
+    expect(container.textContent).not.toContain('Bản sửa chờ duyệt');
+  });
+});
+
+describe('MerchantProductsTab — 390px (R3-MERCHANT-7)', () => {
+  it('huy hiệu mã Pancake dài được xuống dòng và cột thông tin co được, không đẩy trang tràn ngang', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: { data: [product({ pancakeLinkCode: 'seed-BHN-PP-200-RẤT-DÀI-KHÔNG-CÓ-KHOẢNG-TRẮNG' })], meta: { page: 1, limit: 100, total: 1 } },
+      },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const badge = byText(container, 'span', 'Tubu giao hộ · mã Pancake')!;
+    expect(badge.className).toContain('whitespace-normal');
+    expect(badge.className).toContain('break-all');
+    expect(badge.className).not.toContain('whitespace-nowrap');
+    expect(badge.parentElement?.parentElement?.className).toContain('min-w-0');
+  });
+
+  it('tên gian hàng mặc định đã có chữ "Gian hàng": không ghép thêm chữ "Gian hàng" cố định trong lời cảnh báo', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: {
+          data: [
+            product({
+              pancakeLinkCode: 'X',
+              storefront: { id: 's', title: 'Gian hàng của Nguyễn Văn Shop A', subdomain: null, ownerUserId: 'u' },
+              pancakeLink: {
+                code: 'X',
+                state: 'TAKEOVER',
+                reason: null,
+                variation: { name: '200g', stock: 1, retailPrice: 1000, salePrice: null },
+                origin: { id: 'o', name: 'Tiêu đen', slug: 't', brand: 'BH', brandName: 'BH', isActive: true, onSale: true, sold: 1, reviewCount: 0, otherVariations: 0, storefrontTitle: null },
+                brandMatchesStore: false,
+              },
+            }),
+          ],
+          meta: { page: 1, limit: 100, total: 1 },
+        },
+      },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).not.toContain('Gian hàng Gian hàng');
+    expect(container.textContent).not.toContain('gian hàng Gian hàng');
+  });
+});

@@ -732,7 +732,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
   });
 
-  it('R2-MERCHANT-14: đơn trả cho khách không kèm phí sàn đối tác, hoa hồng CTV hay cột vận hành Pancake/Gomdon nội bộ', async () => {
+  it('R2-MERCHANT-14, R3-MERCHANT-1: đơn trả cho khách không kèm phí sàn đối tác, hoa hồng CTV, mã đơn Pancake, khoá chống đặt trùng hay cột vận hành nội bộ', async () => {
     const internal = {
       merchantCommissionPct: '0.1500',
       commission: 12_000,
@@ -743,6 +743,9 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       pancakeAttention: 'X',
       merchantSlaNotifiedAt: new Date(),
       gomdonAttempt: 1,
+      pancakeOrderId: 'pk-1',
+      idempotencyKey: 'idem-1',
+      reviewInvitedAt: new Date(),
     };
     const { svc } = makeMediaService([{ ...baseOrder, ...internal, items: [] }], []);
     const view = (await svc.detailView('u1', 'TUBU1')) as unknown as Record<string, unknown>;

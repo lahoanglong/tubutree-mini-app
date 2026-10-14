@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
@@ -104,7 +104,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(await prisma.merchantPancakeLink.count({ where: { productId: p.id } })).toBe(0);
   });
 
-  it('(b) duyệt có xác nhận → chuyển; sửa nội dung rồi bị từ chối → biến thể về sản phẩm gốc, gốc bán lại, gian hàng khác xin được mã', async () => {
+  it('(b) duyệt có xác nhận → chuyển; sửa nội dung không làm mất liên kết, từ chối bản sửa giữ nội dung đang bán; admin gỡ liên kết → biến thể về sản phẩm gốc, gốc bán lại, gian hàng khác xin được mã', async () => {
     const tubu = await tubuProduct();
     const a = await merchantStore();
     const p = await requestLink(a.owner, tubu.code);
@@ -119,10 +119,29 @@ describe('Merchant Pancake link (real Postgres)', () => {
       originDeactivated: true,
       linkedBy: 'admin-it',
     });
+    const liveName = (await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).name;
 
     await merchant.updateProduct(a.owner.id, p.id, { name: 'Tiêu đen Shop A' });
-    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm');
+    const editing = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
+    expect(editing).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, fulfilment: 'TUBU' });
+    expect(editing.editDraft?.name).toBe('Tiêu đen Shop A');
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } })).productId).toBe(p.id);
+    expect(await prisma.merchantPancakeLink.count({ where: { productId: p.id, unlinkedAt: null } })).toBe(1);
 
+    const editRow = (await admin.listPendingMerchantProducts(1, 100)).data.find((r) => r.id === p.id)!;
+    expect(editRow).toMatchObject({ isEdit: true, pancakeLinkCode: tubu.code });
+    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm', false, editRow.editVersion!);
+    for (const approve of [false, true]) {
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(BadRequestException);
+    }
+    const rejectedEdit = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
+    expect(rejectedEdit).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, rejectReason: 'Nhầm' });
+    expect(rejectedEdit.editDraft).toBeNull();
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } })).productId).toBe(p.id);
+    expect(await prisma.merchantPancakeLink.count({ where: { productId: p.id, unlinkedAt: null } })).toBe(1);
+
+    await admin.unlinkMerchantProduct('admin-it', p.id, 'Hết hợp tác');
     const [v, origin, mine] = await Promise.all([
       prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } }),
       prisma.product.findUniqueOrThrow({ where: { id: tubu.product.id }, include: { variations: true } }),
@@ -131,7 +150,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(v.productId).toBe(tubu.product.id);
     expect(origin.isActive).toBe(true);
     expect(origin.variations.map((x) => x.id)).toEqual([tubu.variation.id]);
-    expect(mine.approvalStatus).toBe('REJECTED');
+    expect(mine.isActive).toBe(false);
     expect(mine.fulfilment).toBe('MERCHANT');
     expect(mine.variations.every((x) => x.pancakeId === null)).toBe(true);
 

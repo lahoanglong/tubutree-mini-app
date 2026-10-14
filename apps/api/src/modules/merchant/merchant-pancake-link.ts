@@ -119,7 +119,7 @@ export async function linkTubuFulfilledVariation(
 ): Promise<void> {
   if (!product.pancakeLinkCode || !product.storefrontId) return;
   const target = await findLinkablePancakeVariation(tx, product.pancakeLinkCode, product.id);
-  // Sửa nội dung đưa sản phẩm đã liên kết về chờ duyệt; lần duyệt lại không có gì để chuyển.
+  // Biến thể đã thuộc chính sản phẩm này (duyệt lặp): không có gì để chuyển.
   if (target?.productId === product.id) return;
   if (!target) {
     const owned = await tx.variation.findFirst({

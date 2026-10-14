@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto } from './merchant.controller';
+import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -57,5 +57,21 @@ describe('Link tra cứu vận đơn (R2-MERCHANT-12)', () => {
 
   it('chuỗi không phải link → 400 tiếng Việt kèm ví dụ', async () => {
     expect(await message(ShipMerchantOrderDto, { ...BASE, trackingUrl: 'GHN ABC' })).toContain('Link tra cứu vận đơn không hợp lệ');
+  });
+});
+
+describe('DTO gian hàng đối tác (R3-MERCHANT-5)', () => {
+  it('tên gian hàng rỗng hoặc chỉ khoảng trắng → 400 tiếng Việt, không để lọt xuống DB', async () => {
+    expect(await message(UpdateMerchantStoreDto, { title: '' })).toContain('Tên gian hàng không được để trống');
+    expect(await message(UpdateMerchantStoreDto, { title: '   ' })).toContain('Tên gian hàng không được để trống');
+  });
+
+  it('tên gian hàng được cắt khoảng trắng hai đầu', async () => {
+    const dto = await run(UpdateMerchantStoreDto, { title: '  Shop Lan  ' });
+    expect(dto.title).toBe('Shop Lan');
+  });
+
+  it('không gửi tên (chỉ đổi trường khác) vẫn hợp lệ', async () => {
+    await expect(run(UpdateMerchantStoreDto, { headerNote: 'Xin chào' })).resolves.toMatchObject({ headerNote: 'Xin chào' });
   });
 });

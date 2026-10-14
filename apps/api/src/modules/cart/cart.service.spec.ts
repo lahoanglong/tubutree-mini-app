@@ -59,6 +59,54 @@ describe('CartService guard tồn kho', () => {
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
   });
 
+  describe('addItem: hàng của gian hàng chưa nhận đơn bị chặn ngay lúc thêm vào giỏ (R3-MERCHANT-3)', () => {
+    const merchantVariation = (store: Record<string, unknown>) => ({
+      id: 'v1',
+      isActive: true,
+      stock: 3,
+      product: {
+        isActive: true,
+        approvalStatus: 'APPROVED',
+        name: 'Xà phòng thủ công',
+        fulfilment: 'MERCHANT',
+        storefrontId: 'sf-a',
+        storefront: { title: 'Shop A', type: 'MERCHANT', ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false }, ...store },
+      },
+    });
+    const build = (variation: unknown) => {
+      const upsert = jest.fn();
+      const prisma = {
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
+        variation: { findUnique: jest.fn().mockResolvedValue(variation) },
+        cartItem: { findUnique: jest.fn().mockResolvedValue(null), upsert },
+        $transaction: jest.fn(),
+      } as unknown as PrismaService;
+      return { svc: new CartService(prisma, coupons, config, flash, analytics), upsert, prisma };
+    };
+
+    it('gian hàng tạm nghỉ → 400 nói tạm nghỉ, giỏ không thêm gì', async () => {
+      const { svc, prisma } = build(merchantVariation({ ordersPausedAt: new Date() }));
+      const err = await svc.addItem('u1', { variationId: 'v1', quantity: 1 }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toContain('Shop A đang tạm nghỉ');
+      expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['chủ gian hàng bị khoá', { owner: { role: 'DEALER', isBlocked: true } }],
+      ['chủ gian hàng không còn quyền đối tác', { owner: { role: 'CUSTOMER', isBlocked: false } }],
+    ])('%s → 400 nói đã ngừng bán', async (_label, store) => {
+      const { svc } = build(merchantVariation(store));
+      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('Shop A đã ngừng bán');
+    });
+
+    it('hàng Tubu giao không bị ảnh hưởng bởi trạng thái gian hàng', async () => {
+      const tubu = { id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'APPROVED', name: 'X', fulfilment: 'TUBU', storefrontId: null, storefront: null } };
+      const { svc } = build(tubu);
+      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 5 })).rejects.toThrow('Chỉ còn 3 sản phẩm');
+    });
+  });
+
   it('getCart: dòng SP ngừng bán/chưa duyệt bị tách ra unavailableItems, không tính vào items/subtotal (C-007)', async () => {
     const line = (id: string, product: { isActive: boolean; approvalStatus: string }, isActive = true) => ({
       id: `ci-${id}`,

@@ -36,12 +36,14 @@ import {
   groupByFulfiller,
   PAYMENT_METHOD_NOT_ALLOWED,
   paymentMethodBlockReason,
+  publicFulfiller,
   TUBU_FULFILLER_NAME,
   unavailableLineMessage,
   type GroupAmounts,
   type LineFulfiller,
 } from './checkout-split';
 import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+import { forBuyer } from '../orders/buyer-order-fields';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
@@ -232,7 +234,7 @@ export class CheckoutService {
       // Lô quy đổi không bị khoá (không có điểm đơn nào trong lô) và không bị trần 20%.
       redeemableConvertedPoints: user.pointsConvertedBalance,
       lockedPoints: computed.lockedPoints,
-      items: cart.items,
+      items: cart.items.map((it) => ({ ...it, fulfiller: publicFulfiller(it.fulfiller) })),
     };
   }
 
@@ -1061,7 +1063,7 @@ export class CheckoutService {
       where: { id: orderId },
       include: { items: true },
     });
-    if (!order.checkoutGroup) return order;
+    if (!order.checkoutGroup) return forBuyer(order);
     const group = await this.prisma.order.findMany({
       where: { checkoutGroup: order.checkoutGroup, userId: order.userId },
       orderBy: [{ fulfiller: 'asc' }, { code: 'asc' }],
@@ -1076,7 +1078,7 @@ export class CheckoutService {
       },
     });
     return {
-      ...order,
+      ...forBuyer(order),
       splitOrders: group.map((o) => ({
         id: o.id,
         code: o.code,

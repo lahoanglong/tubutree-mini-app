@@ -109,15 +109,26 @@ export interface ProductDetail {
 }
 
 export interface ProductFulfiller {
-  kind: 'TUBU' | 'MERCHANT';
+  /** UNAVAILABLE: gian hàng tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (xem `reason`). */
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
   name: string;
   shippingFee: number | null;
   freeShipFrom: number | null;
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
 }
 
-/** Dòng "ai giao" trên trang sản phẩm; null khi API không nói (sản phẩm cũ). */
+/** Gian hàng chưa nhận đơn: câu báo cho khách và tắt nút mua; null khi mua được. */
+export function pdpUnavailableText(p: Pick<ProductDetail, 'fulfiller'>): string | null {
+  const f = p.fulfiller;
+  if (f?.kind !== 'UNAVAILABLE') return null;
+  const who = f.name || 'Gian hàng';
+  return f.reason === 'STORE_PAUSED' ? `${who} đang tạm nghỉ, chưa nhận đơn.` : `${who} đã ngừng bán trên Tubu Tree.`;
+}
+
+/** Dòng "ai giao" trên trang sản phẩm; null khi API không nói (sản phẩm cũ) hoặc gian hàng chưa nhận đơn. */
 export function pdpFulfillerText(p: Pick<ProductDetail, 'fulfilment' | 'fulfiller'>): string | null {
   const f = p.fulfiller;
+  if (f?.kind === 'UNAVAILABLE') return null;
   if (f?.kind === 'TUBU' || (!f && p.fulfilment === 'TUBU')) return 'Tubu Tree giao hàng';
   if (!f && p.fulfilment !== 'MERCHANT') return null;
   const who = f ? `Do ${f.name} giao` : 'Gian hàng đối tác tự giao';
