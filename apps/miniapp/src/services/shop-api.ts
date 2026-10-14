@@ -624,6 +624,18 @@ export interface ReturnRequestBody {
 }
 export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
   api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body).then((r) => r.data);
+/** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt). */
+export interface ReturnEstimateDTO {
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  pointsUsedBack: number;
+  lines: { orderItemId: string; quantity: number; refundAmount: number }[];
+}
+export const estimateReturn = (code: string, body: { reasonCode?: ReturnReasonCode; items: { orderItemId: string; quantity: number }[] }) =>
+  api.post<ReturnEstimateDTO>(`/orders/${code}/return-estimate`, body).then((r) => r.data);
 export interface ReturnRequestDTO {
   id: string;
   orderId: string;

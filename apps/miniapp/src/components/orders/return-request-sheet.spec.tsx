@@ -2,12 +2,16 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), requestReturn: vi.fn(), fetchRefundBank: vi.fn() }));
+const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), requestReturn: vi.fn(), fetchRefundBank: vi.fn(), estimateReturn: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../../services/shop-api', () => ({ requestReturn: mocks.requestReturn, fetchRefundBank: mocks.fetchRefundBank }));
+vi.mock('../../services/shop-api', () => ({
+  requestReturn: mocks.requestReturn,
+  fetchRefundBank: mocks.fetchRefundBank,
+  estimateReturn: mocks.estimateReturn,
+}));
 vi.mock('../image-upload', () => ({ MultiImageUpload: () => null }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -41,6 +45,7 @@ describe('ReturnRequestSheet (D3: trả theo dòng và số lượng)', () => {
     vi.clearAllMocks();
     mocks.requestReturn.mockResolvedValue({ id: 'r1' });
     mocks.fetchRefundBank.mockResolvedValue({ bankName: 'Techcombank', accountNumber: '190312345678', accountName: 'NGUYEN VAN A' });
+    mocks.estimateReturn.mockResolvedValue({ refund: 0, goods: 0, shipping: 0, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
   });
 
   it('BUYERMINI-11: chọn 1/3 chai + lý do chọn sẵn → gửi đúng dòng, số lượng, mã lý do, nhận về Ví', async () => {
@@ -99,5 +104,33 @@ describe('ReturnRequestSheet (D3: trả theo dòng và số lượng)', () => {
       accountNumber: '190312345678',
       accountName: 'NGUYEN VAN A',
     });
+  });
+
+  it('R2-LIFECYCLE-7: chạm vào tên sản phẩm cũng chọn/bỏ chọn dòng đó', () => {
+    renderSheet();
+    const box = screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' });
+    expect(box).not.toBeChecked();
+    fireEvent.click(screen.getByText('Nước giặt'));
+    expect(box).toBeChecked();
+    fireEvent.click(screen.getByText('Nước giặt'));
+    expect(box).not.toBeChecked();
+  });
+
+  it('R2-BUYERMINI-7: hiện số tiền dự kiến hoàn cho dòng/số lượng/lý do đang chọn, cập nhật khi đổi số lượng', async () => {
+    mocks.estimateReturn.mockImplementation(async (_code: string, body: { items: { quantity: number }[]; reasonCode?: string }) => {
+      const q = body.items[0]!.quantity;
+      const ship = body.reasonCode === 'DEFECTIVE' ? 15_000 : 0;
+      return { refund: 89_000 * q + ship, goods: 89_000 * q, shipping: ship, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] };
+    });
+    renderSheet();
+    expect(screen.queryByText(/Dự kiến hoàn/)).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    expect(await screen.findByText('Dự kiến hoàn 89.000đ')).toBeInTheDocument();
+    expect(mocks.estimateReturn).toHaveBeenLastCalledWith('TB1', { items: [{ orderItemId: 'i1', quantity: 1 }], reasonCode: undefined });
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    expect(await screen.findByText('Dự kiến hoàn 178.000đ')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
+    expect(await screen.findByText('Dự kiến hoàn 193.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/gồm 15.000đ phí vận chuyển/)).toBeInTheDocument();
   });
 });
