@@ -52,10 +52,12 @@ export function legacyXuToPoints(xu: number): number {
 /**
  * Khoá dòng users của người được mời. Cả lúc cấp thưởng lẫn lúc thu hồi (trong tx trả hàng) đều
  * lấy khoá này trước khi đọc, nên lần cấp không thể đọc "2 đơn đã giao" rồi ghi thưởng sau khi lần
- * trả đơn kia đã kiểm "chưa có thưởng" và commit.
+ * trả đơn kia đã kiểm "chưa có thưởng" và commit. NO KEY UPDATE (như sổ Ví): tx trả hàng đã chèn
+ * dòng có khoá ngoại tới user này (lịch sử trạng thái, sự kiện), giữ KEY SHARE; FOR UPDATE đụng khoá
+ * đó của lần trả hàng song song khác của cùng khách và deadlock.
  */
 export async function lockReferee(tx: Db, refereeId: string): Promise<void> {
-  await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR NO KEY UPDATE`;
 }
 
 /**

@@ -138,7 +138,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
       fulfillerStorefrontId: storefrontId,
       merchantCommissionPct: 0.15,
       paymentMethod: 'COD',
-      paymentStatus: 'PAID',
+      paymentStatus: 'UNPAID',
       subtotal: total - 30_000,
       shippingFee: 30_000,
       total,
@@ -351,5 +351,39 @@ describe('Merchant fulfilment races (real Postgres)', () => {
         expect(results[0]!.status).toBe('fulfilled');
       }
     }
+  });
+
+  it('(d) đơn COD đối tác bị trả (trước và sau đối soát) → khách được hoàn vào Ví, đối tác nộp lại đúng số tiền mặt đã thu', async () => {
+    const { store } = await merchantStore();
+    const buyer = await createUser(prisma);
+    const product = await productWithVariation({ storefrontId: store.id, fulfilment: 'MERCHANT' });
+    const variationId = product.variations[0]!.id;
+    const settled = await deliveredMerchantOrder(store.id, buyer.id, variationId, 130_000);
+    await service.createPayout('admin-it', store.id);
+    const unsettled = await deliveredMerchantOrder(store.id, buyer.id, variationId, 230_000);
+    // Chưa qua hạn giữ: không lên bảng kê SALE.
+    await prisma.order.update({ where: { id: unsettled.id }, data: { deliveredAt: new Date() } });
+
+    const ret = (id: string) =>
+      orderStatus.setStatus(id, 'RETURNED', { actorType: 'ADMIN', actorId: 'admin-it', note: 'Khách trả hàng', expectedStatus: 'DELIVERED' });
+    // Hai lần trả của cùng một khách chạy song song: khoá dòng user ở bước hoàn Ví và bước thu hồi thưởng giới thiệu không
+    // được chéo nhau với khoá KEY SHARE do các INSERT có khoá ngoại tới users giữ (từng deadlock 40P01).
+    const returned = summarize(await Promise.allSettled([ret(settled.id), ret(unsettled.id)]));
+    expect(returned.errors).toEqual([]);
+
+    const st = await service.statementFor(store.id);
+    const wallet = await prisma.user.findUniqueOrThrow({ where: { id: buyer.id }, select: { walletBalance: true } });
+    const saleLine = await prisma.merchantPayoutLine.findFirstOrThrow({ where: { orderId: settled.id, kind: 'SALE' } });
+    console.log('[d] lines=%j wallet=%d', st.lines.map((l) => [l.orderCode, l.kind, l.netAmount]), wallet.walletBalance);
+
+    expect(wallet.walletBalance).toBe(130_000 + 230_000);
+    const byOrder = new Map(st.lines.map((l) => [l.orderId, l]));
+    expect(st.lines).toHaveLength(2);
+    expect(saleLine.netAmount + byOrder.get(settled.id)!.netAmount).toBe(-130_000);
+    expect(byOrder.get(unsettled.id)!.netAmount).toBe(-230_000);
+    expect(st.total).toBe(-(130_000 - Math.round(100_000 * 0.15)) - 230_000);
+
+    await service.createPayout('admin-it', store.id);
+    expect((await service.statementFor(store.id)).lines).toHaveLength(0);
   });
 });
