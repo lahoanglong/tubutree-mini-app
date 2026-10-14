@@ -201,17 +201,119 @@ describe('R5 tiền: trả hai lần, khoá người chuyển khoản, chuyển 
     return { user, order, deliver };
   }
 
-  describe('R3-MONEY-1 — chuyển khoản dư (Pancake báo cộng dồn vượt tổng đơn)', () => {
-    it('đơn đã PAID, 2 webhook "đã nhận 2T" cùng lúc rồi "3T" → hai khoản OVERPAYMENT, mỗi khoản T', async () => {
-      const { order, deliver } = await pancakeBankOrder(114_000, { status: 'CONFIRMED', paymentStatus: 'PAID', paidAt: new Date() });
+  describe('R3-MONEY-1 — chuyển khoản dư (Pancake báo vượt tổng đơn): chờ admin đối soát, khách không rút được', () => {
+    const paidBank = (total: number) =>
+      pancakeBankOrder(total, { status: 'CONFIRMED', paymentStatus: 'PAID', paidAt: new Date(), pancakePaymentSynced: true });
+
+    it('đơn đã PAID, 2 webhook "đã nhận 2T" cùng lúc rồi "3T" → hai khoản OVERPAYMENT chờ đối soát, khách không thấy, không chọn Ví được, không được báo', async () => {
+      const { user, order, deliver } = await paidBank(114_000);
+      await createUser(prisma, { role: 'ADMIN' });
       const s = summarize(await Promise.allSettled([deliver({ bank_payment: 228_000 }), deliver({ bank_payment: 228_000 })]));
       expect(s.errors).toEqual([]);
       let rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'asc' } });
-      expect(rows).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114_000, refKey: 'PANCAKE:paid:228000' })]);
+      expect(rows).toEqual([
+        expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114_000, refKey: 'PANCAKE:paid:228000', status: 'UNVERIFIED' }),
+      ]);
       await deliver({ bank_payment: 342_000 });
       rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'asc' } });
-      expect(rows.map((r) => r.amount)).toEqual([114_000, 114_000]);
-      expect(sent('REFUND_OVERPAYMENT')).toHaveLength(2);
+      expect(rows.map((r) => [r.amount, r.status])).toEqual([
+        [114_000, 'UNVERIFIED'],
+        [114_000, 'UNVERIFIED'],
+      ]);
+
+      expect(await refunds.listMine(user.id, order.id)).toEqual([]);
+      for (const r of rows) {
+        await expect(refunds.chooseDestination(user.id, r.id, { refundMethod: 'WALLET' })).rejects.toThrow('Không tìm thấy khoản hoàn tiền');
+      }
+      expect(await walletOf(user.id)).toBe(0);
+      expect(await prisma.walletTransaction.count({ where: { userId: user.id } })).toBe(0);
+      expect(sent('REFUND_OVERPAYMENT')).toHaveLength(0);
+      expect(notify.mock.calls.filter(([uid]) => uid === user.id)).toEqual([]);
+      const alerts = sent('OPS_REFUND_ALERT').map(([, , d]) => d as Record<string, string>);
+      expect(alerts.length).toBeGreaterThan(0);
+      for (const d of alerts) expect(d).toMatchObject({ order_code: order.code, message: expect.stringContaining('Khách CHƯA được báo') });
+    });
+
+    it('Pancake báo prepaid = số Tubu tự ghi (transfer_money) cùng bank_payment nhân viên ghi → KHÔNG tạo gì (kể cả khoản chờ đối soát)', async () => {
+      const { user, order, deliver } = await paidBank(114_000);
+      await deliver({ prepaid: 114_000, bank_payment: 114_000 });
+      await deliver({ prepaid: 114_000, bank_payment: 114_000, is_paid: true });
+      expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(0);
+      expect(await refunds.listMine(user.id, order.id)).toEqual([]);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('admin xác nhận (đối chiếu sao kê) → khách mới thấy khoản, được báo, chọn Ví được đúng một lần', async () => {
+      const { user, order, deliver } = await paidBank(90_000);
+      const admin = await createUser(prisma, { role: 'ADMIN', fullName: 'Admin Đối Soát' });
+      await deliver({ bank_payment: 180_000 });
+      const [row] = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+      notify.mockClear();
+
+      await refunds.verifyOverpayment(admin.id, row!.id, { note: 'Sao kê có 2 lần chuyển 90.000đ' });
+      expect(sent('REFUND_OVERPAYMENT')).toEqual([[user.id, 'REFUND_OVERPAYMENT', { order_code: order.code, amount: '90.000đ' }]]);
+      expect(await refunds.listMine(user.id, order.id)).toEqual([
+        expect.objectContaining({ kind: 'OVERPAYMENT', amount: 90_000, status: 'PENDING', canChooseDestination: true }),
+      ]);
+      expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorId: admin.id, note: { contains: 'Xác nhận tiền trả dư' } } })).toBe(1);
+
+      const picks = await Promise.allSettled([
+        refunds.chooseDestination(user.id, row!.id, { refundMethod: 'WALLET' }),
+        refunds.chooseDestination(user.id, row!.id, { refundMethod: 'WALLET' }),
+      ]);
+      expect(picks.filter((p) => p.status === 'fulfilled')).toHaveLength(1);
+      expect(await walletOf(user.id)).toBe(90_000);
+    });
+
+    it('RACE (8 vòng): hai admin cùng lúc — một "Xác nhận tiền dư", một "Không phải tiền dư" → đúng một bên thắng; bỏ qua thì khách không bao giờ nhận được', async () => {
+      const outcomes: string[] = [];
+      for (let round = 0; round < 8; round++) {
+        notify.mockClear();
+        const { user, order, deliver } = await paidBank(50_000);
+        const [a, b] = [await createUser(prisma, { role: 'ADMIN' }), await createUser(prisma, { role: 'ADMIN' })];
+        await deliver({ bank_payment: 100_000 });
+        const [row] = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+        const verify = () => refunds.verifyOverpayment(a.id, row!.id, {});
+        const dismiss = () => refunds.dismissOverpayment(b.id, row!.id, { reason: 'Không thấy trên sao kê' });
+        const [verified, dismissed] =
+          round % 2 ? await Promise.allSettled([verify(), dismiss()]) : (await Promise.allSettled([dismiss(), verify()])).reverse();
+        expect([verified!.status, dismissed!.status].sort()).toEqual(['fulfilled', 'rejected']);
+        const final = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row!.id } });
+        if (verified!.status === 'fulfilled') {
+          outcomes.push('verified');
+          expect(final.status).toBe('PENDING');
+          expect(sent('REFUND_OVERPAYMENT')).toHaveLength(1);
+          await refunds.chooseDestination(user.id, row!.id, { refundMethod: 'WALLET' });
+          expect(await walletOf(user.id)).toBe(50_000);
+        } else {
+          outcomes.push('dismissed');
+          expect(final).toMatchObject({ status: 'DISMISSED', completedBy: b.id });
+          expect(sent('REFUND_OVERPAYMENT')).toHaveLength(0);
+          await expect(refunds.chooseDestination(user.id, row!.id, { refundMethod: 'WALLET' })).rejects.toThrow();
+          await expect(refunds.claim(a.id, row!.id, { bankName: 'ACB', accountNumber: '123456789', accountName: 'A' })).rejects.toThrow();
+          expect(await walletOf(user.id)).toBe(0);
+        }
+        expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorType: 'ADMIN' } })).toBe(1);
+      }
+      console.log('[verify x dismiss] %j', outcomes);
+    });
+
+    it('sao kê chỉ có một phần → khoản đúng số thực nhận; Pancake báo lại cùng số không đẻ khoản mới, báo thêm chỉ phần tăng', async () => {
+      const { user, order, deliver } = await paidBank(100_000);
+      const admin = await createUser(prisma, { role: 'ADMIN' });
+      await deliver({ bank_payment: 200_000 });
+      const [row] = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+      await refunds.verifyOverpayment(admin.id, row!.id, { amount: 30_000 });
+      await deliver({ bank_payment: 200_000 });
+      let rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id }, orderBy: { amount: 'asc' } });
+      expect(rows.map((r) => [r.amount, r.status])).toEqual([
+        [30_000, 'PENDING'],
+        [70_000, 'DISMISSED'],
+      ]);
+      await deliver({ bank_payment: 250_000 });
+      rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id, status: 'UNVERIFIED' } });
+      expect(rows.map((r) => r.amount)).toEqual([50_000]);
+      expect((await refunds.listMine(user.id, order.id)).map((r) => r.amount)).toEqual([30_000]);
     });
   });
 
