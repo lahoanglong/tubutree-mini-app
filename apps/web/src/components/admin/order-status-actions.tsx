@@ -129,6 +129,7 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
               `Đơn giữ nguyên trạng thái huỷ. Hệ thống ghi khoản hoàn ${formatVnd(order.total)} vào hàng đợi Hoàn tiền khách; ` +
               'khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. Chỉ bấm khi đã thấy tiền về tài khoản.',
             confirmLabel: 'Ghi nhận',
+            cancelLabel: 'Đóng',
           }
         : {
             title: 'Xác nhận đã nhận tiền',
