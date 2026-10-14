@@ -511,8 +511,15 @@ export class LoyaltyService {
     const tierPoints = await this.tierPoints(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
+    const [vndPerPoint, vndPerPointRedeem, maxRedeemPct] = await Promise.all([
+      this.positiveConfig('loyalty.vnd_per_point', 10000),
+      this.positiveConfig('loyalty.vnd_per_point_redeem', 1000),
+      this.fractionConfig('loyalty.max_redeem_pct', 0.2),
+    ]);
 
     return {
+      /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
+      rates: { vndPerPoint, vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
       /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
@@ -541,6 +548,7 @@ export class LoyaltyService {
             id: next.id,
             name: next.name,
             minPoints: next.minPoints,
+            minSpending: next.minSpending ?? null,
             pointsToGo: Math.max(0, next.minPoints - tierPoints),
           }
         : null,
@@ -548,6 +556,7 @@ export class LoyaltyService {
         id: t.id,
         name: t.name,
         minPoints: t.minPoints,
+        minSpending: t.minSpending ?? null,
         multiplier: Number(t.pointMultiplier),
       })),
     };
@@ -752,6 +761,16 @@ export class LoyaltyService {
   private async positiveConfig(key: string, fallback: number): Promise<number> {
     const v = await this.config.get<number>(key, fallback);
     if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      this.logger.warn(`SystemConfig ${key}=${JSON.stringify(v)} không hợp lệ → dùng mặc định ${fallback}`);
+      return fallback;
+    }
+    return v;
+  }
+
+  /** Phân số 0..1 từ SystemConfig (0 hợp lệ = tắt); sai kiểu/ngoài khoảng → mặc định + cảnh báo. */
+  private async fractionConfig(key: string, fallback: number): Promise<number> {
+    const v = await this.config.get<number>(key, fallback);
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1) {
       this.logger.warn(`SystemConfig ${key}=${JSON.stringify(v)} không hợp lệ → dùng mặc định ${fallback}`);
       return fallback;
     }

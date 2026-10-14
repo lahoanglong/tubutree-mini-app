@@ -2,6 +2,7 @@ import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
 import { formatNumber } from '../utils/format';
+import type { LoyaltyRates } from '../utils/loyalty-copy';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
@@ -34,8 +35,10 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
-  nextTier: { id: string; name: string; minPoints: number; pointsToGo: number } | null;
-  tiers: { id: string; name: string; minPoints: number; multiplier: number }[];
+  nextTier: { id: string; name: string; minPoints: number; minSpending?: number | null; pointsToGo: number } | null;
+  tiers: { id: string; name: string; minPoints: number; minSpending?: number | null; multiplier: number }[];
+  /** Quy tắc tích/đổi điểm từ cấu hình để giải thích trên màn Điểm Xanh. Optional: API cũ chưa trả. */
+  rates?: LoyaltyRates;
 }
 
 export interface PointsTxn {

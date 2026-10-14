@@ -140,6 +140,15 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(body.referralCode).toBe('AB12CD34');
   });
 
+  it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {
+    const { container } = renderPage();
+    const name = await screen.findByText('Xà bông thảo mộc');
+    const row = name.closest('div')!.parentElement as HTMLElement;
+    expect(row.querySelector('img')).toBeNull();
+    expect(row.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('img[alt="Xà bông thảo mộc"]')).toBeNull();
+  });
+
   it('không nhập gì và không có link giới thiệu → KHÔNG gửi referralCode (hành vi cũ giữ nguyên)', async () => {
     renderPage();
     const body = await placeOrderClick();

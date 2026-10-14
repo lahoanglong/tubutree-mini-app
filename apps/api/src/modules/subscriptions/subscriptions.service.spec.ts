@@ -7,7 +7,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { WalletLedgerService } from '../wallet/wallet-ledger.service';
-import { formatVnDate } from '../../common/vn-time';
+import { formatVnDate, vnDateKey } from '../../common/vn-time';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -165,17 +165,29 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       lockedStatus?: string;
       applyDelta?: jest.Mock;
       quantity?: number;
+      retryCount?: number;
+      orderCreateError?: Error;
+      existingOrder?: unknown;
+      retryDays?: number;
+      dueRows?: unknown[];
     } = {},
   ) {
-    const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, nextRunAt: new Date(Date.now() - 60_000) }];
+    const due = opts.dueRows ?? [
+      { id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, retryCount: opts.retryCount ?? 0, nextRunAt: new Date(Date.now() - 60_000) },
+    ];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
-    const orderCreate = jest.fn().mockImplementation((args) => Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }));
+    const orderCreate = jest.fn().mockImplementation((args) =>
+      opts.orderCreateError
+        ? Promise.reject(opts.orderCreateError)
+        : Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }),
+    );
     const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: 4 });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
+    const findMany = jest.fn().mockResolvedValue(due);
     const prisma = {
       subscription: {
-        findMany: jest.fn().mockResolvedValue(due),
+        findMany,
         updateMany,
         update: subUpdate,
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
@@ -212,14 +224,18 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         ),
       },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
-      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(null) },
+      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(opts.existingOrder ?? null) },
       // Tạo đơn định kỳ giờ chạy trong $transaction (trừ stock atomic + order.create) — mock
       // chạy callback với chính prisma mock (đủ variation.updateMany + order.create cho test).
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
-        k === 'subscribe.discount_tiers' && opts.tiers ? (opts.tiers as unknown as T) : (fb as T),
+        k === 'subscribe.discount_tiers' && opts.tiers
+          ? (opts.tiers as unknown as T)
+          : k === 'subscribe.stock_retry_days' && opts.retryDays !== undefined
+            ? (opts.retryDays as unknown as T)
+            : (fb as T),
     } as unknown as SystemConfigService;
     const pr = {
       calcShippingFee: jest.fn().mockResolvedValue(0),
@@ -242,6 +258,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       enqueuePush,
       analytics,
       subUpdate,
+      findMany,
     };
   }
 
@@ -323,6 +340,97 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'out_of_stock' }),
       }),
     );
+  });
+
+  // ENGAGE-14: hết hàng đúng đêm cron làm gói 4-10 tuần mất cả kỳ, lỗi tạm thời thì khách không được báo.
+  describe('thử lại kỳ khi hết hàng/lỗi tạm thời (ENGAGE-14)', () => {
+    const tomorrowVn = () => new Date(`${vnDateKey(new Date(Date.now() + 864e5))}T00:00:00+07:00`);
+    const retryWrite = (updateMany: jest.Mock) =>
+      updateMany.mock.calls.find(([a]) => a.data && 'retryCount' in a.data && a.data.nextRunAt)?.[0];
+
+    it('hết hàng lần đầu → hẹn thử lại 0h ngày mai (giờ VN) thay vì bỏ cả chu kỳ, retryCount +1', async () => {
+      const { svc, updateMany } = makeProcess(1, { stockCount: 0 });
+      await svc.processDue();
+      const write = retryWrite(updateMany);
+      expect(write.where).toMatchObject({ id: 's1', status: 'ACTIVE' });
+      expect(write.data.nextRunAt).toEqual(tomorrowVn());
+      expect(write.data.retryCount).toEqual({ increment: 1 });
+    });
+
+    it('lần đầu báo khách "sẽ thử lại ngày mai", không nói "kỳ sau"', async () => {
+      const { svc, notify } = makeProcess(1, { stockCount: 0 });
+      await svc.processDue();
+      const [, code, data] = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_ORDER_FAILED')!;
+      expect(code).toBe('SUBSCRIPTION_ORDER_FAILED');
+      expect(data.reason).toMatch(/Hết hàng tạm thời/);
+      expect(data.retry).toMatch(/thử lại vào ngày mai/);
+    });
+
+    it('lần thử lại sau (retryCount>0) hết hàng tiếp nhưng còn lượt → tiếp tục hẹn ngày mai, không báo thêm', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryCount: 1 });
+      await svc.processDue();
+      expect(retryWrite(updateMany).data.retryCount).toEqual({ increment: 1 });
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('hết lượt thử lại (retryCount = trần) → bỏ kỳ: giữ nextRunAt của claim, reset retryCount, báo ngày kỳ kế tiếp', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryCount: 3 });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { retryCount: 0 } });
+      const [, , data] = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_ORDER_FAILED')!;
+      expect(data.retry).toMatch(/kỳ kế tiếp ngày \d{2}\/\d{2}\/\d{4}/);
+    });
+
+    it('subscribe.stock_retry_days = 0 → tắt thử lại, bỏ kỳ ngay như cũ nhưng vẫn báo', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryDays: 0 });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('lỗi tạm thời khác (vd P2034) → trước đây chỉ log: giờ cũng hẹn thử lại ngày mai và báo khách', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('P2034 write conflict') });
+      await svc.processDue();
+      expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }));
+    });
+
+    it('lỗi sau khi đơn kỳ ĐÃ ghi (idempotencyKey có đơn) → không thử lại, không báo hỏng', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('boom'), existingOrder: { id: 'o-existing' } });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('ra đơn thành công → reset retryCount về 0 trong cùng tx', async () => {
+      const { svc, subUpdate } = makeProcess(1, { retryCount: 2 });
+      await svc.processDue();
+      expect(subUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ lastOrderId: 'o1', retryCount: 0 }) }),
+      );
+    });
+  });
+
+  describe('quét gói đến hạn theo trang (ENGAGE-14)', () => {
+    it('lấy theo thứ tự nextRunAt cũ nhất trước, trang 200', async () => {
+      const { svc, findMany } = makeProcess(0);
+      await svc.processDue();
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: [{ nextRunAt: 'asc' }, { id: 'asc' }], take: 200 }),
+      );
+    });
+
+    it('trang đầy 200 → quét tiếp trang sau đến khi hết (không dồn phần dư sang đêm sau)', async () => {
+      const full = Array.from({ length: 200 }, (_, i) => ({
+        id: `s${i}`, userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, retryCount: 0,
+        nextRunAt: new Date(Date.now() - 60_000),
+      }));
+      const { svc, findMany } = makeProcess(0);
+      findMany.mockResolvedValueOnce(full).mockResolvedValueOnce(full.slice(0, 5)).mockResolvedValue([]);
+      await svc.processDue();
+      expect(findMany).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('SP ngừng bán → tạm dừng lịch + phát subscription_changed action=order_failed reason=inactive_product', async () => {
@@ -595,6 +703,12 @@ describe('SubscriptionsService.skipCycle', () => {
     const data = update.mock.calls[0][0].data;
     expect((data.nextRunAt as Date).getTime()).toBe(nextRunAt.getTime() + 4 * 7 * 864e5);
     expect(data.status).toBeUndefined();
+  });
+
+  it('bỏ kỳ giữa lúc đang thử lại vì hết hàng → xoá bộ đếm thử lại để kỳ sau đủ lượt (ENGAGE-14)', async () => {
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: new Date('2026-07-10T00:00:00.000Z') });
+    await svc.skipCycle('u1', 's1');
+    expect(update.mock.calls[0][0].data.retryCount).toBe(0);
   });
 
   it('không tìm thấy lịch → NotFound', async () => {

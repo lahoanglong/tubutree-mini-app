@@ -27,7 +27,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({}),
     },
     variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
-    order: { findFirst: jest.fn().mockResolvedValue({ id: 'o1' }) }, // có đơn DELIVERED
+    order: { findFirst: jest.fn().mockResolvedValue({ id: 'o1' }), count: jest.fn().mockResolvedValue(1) }, // có đơn DELIVERED
     review: {
       findFirst: jest.fn().mockResolvedValue(null), // chưa review
       create: jest.fn().mockResolvedValue({ id: 'r1' }),
@@ -219,11 +219,21 @@ describe('ReviewsService.create', () => {
     expect(ptx.mock.calls[0][0].data.delta).toBe(10);
   });
 
+  it('ảnh raster base64 nén (miniapp chưa có Cloudinary, ENGAGE-6) → +10 điểm như ảnh Cloudinary', async () => {
+    const prisma = makePrisma();
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
+      ...dto,
+      images: [`data:image/jpeg;base64,${'A'.repeat(1000)}`],
+    } as never);
+    const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
+    expect(ptx.mock.calls[0][0].data.delta).toBe(10);
+  });
+
   it('MONEY-10: ảnh/video không phải media đã tải lên (lọt qua DTO) → chỉ thưởng như đánh giá chữ (+5)', async () => {
     const prisma = makePrisma();
     await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {
       ...dto,
-      images: ['x'],
+      images: ['x', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
       videoUrl: 'https://example.com/not-a-video',
     } as never);
     const ptx = (prisma as unknown as { pointsTransaction: { create: jest.Mock } }).pointsTransaction.create;
@@ -729,7 +739,16 @@ describe('ReviewsService.canReview', () => {
   it('đã có đơn DELIVERED chứa sản phẩm, chưa đánh giá → được đánh giá', async () => {
     const prisma = makePrisma();
     const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
-    expect(r).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
+    expect(r).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true, purchaseCount: 1 });
+  });
+
+  it('mua lại nhiều lần (ENGAGE-23): trả số đơn đã nhận có sản phẩm để FE nói "đã mua N lần", đếm đúng khách và đúng biến thể', async () => {
+    const prisma = makePrisma({ order: { findFirst: jest.fn().mockResolvedValue({ id: 'o3' }), count: jest.fn().mockResolvedValue(3) } });
+    const r = await new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'tinh-dau');
+    expect(r.purchaseCount).toBe(3);
+    expect(prisma.order.count).toHaveBeenCalledWith({
+      where: { userId: 'u1', status: 'DELIVERED', items: { some: { variationId: { in: ['v1'] } } } },
+    });
   });
 
   it('chưa từng mua → không được, kèm lý do để FE hiện đúng thông điệp', async () => {
@@ -761,6 +780,7 @@ describe('ReviewsService.canReview', () => {
       reason: null,
       myReview: { id: 'r0', rating: 4, comment: 'ổn', images: ['a.jpg'], videoUrl: null },
       rewardAvailable: false,
+      purchaseCount: 1,
     });
   });
 

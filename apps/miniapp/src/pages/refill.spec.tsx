@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   getRefillSummary: vi.fn(),
   returnBottles: vi.fn(),
+  callPhone: vi.fn(),
   haptic: vi.fn(),
   keySeq: 0,
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
@@ -26,6 +27,8 @@ vi.mock('../services/refill-api', () => ({
   returnBottles: mocks.returnBottles,
 }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/zmp-bridge', () => ({ callPhone: mocks.callPhone }));
+vi.mock('../components/support-contact', () => ({ SupportContact: () => <div data-testid="support-contact" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks.keySeq}` }));
 vi.mock('../store/auth', () => ({
@@ -135,7 +138,7 @@ describe('RefillPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.returnBottles).toHaveBeenCalledWith(2, expect.stringMatching(/^key-\d+$/));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Đã gửi yêu cầu đổi vỏ chai! Vui lòng chờ quản lý duyệt.',
+        text: 'Đã gửi yêu cầu! Mang vỏ chai đến điểm nhận để nhân viên đối chiếu và duyệt.',
         type: 'success',
       }),
     );
@@ -269,5 +272,83 @@ describe('RefillPage — tiêu đề, vùng chạm, bàn phím (C-076, C-114)', 
     expect(link!.tabIndex).toBe(0);
     fireEvent.keyDown(link!, { key: 'Enter' });
     expect(mocks.navigate).toHaveBeenCalledWith('/game');
+  });
+});
+
+// ENGAGE-13: trang chỉ nói "mang vỏ đến cửa hàng" không có địa chỉ/giờ, và yêu cầu "Chờ duyệt" không có bước tiếp theo.
+describe('RefillPage — điểm nhận vỏ và bước tiếp theo (ENGAGE-13)', () => {
+  const PICKUP = { address: '12 Nguyễn Huệ, Q.1, TP.HCM', hours: '8h–20h hằng ngày', phone: '0899 149 229' };
+
+  it('hiện địa chỉ, giờ mở cửa và nút gọi SĐT điểm nhận khi admin đã cấu hình', async () => {
+    mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickup: PICKUP }));
+    renderPage();
+    expect(await screen.findByText('Điểm nhận vỏ')).toBeInTheDocument();
+    expect(screen.getByText('12 Nguyễn Huệ, Q.1, TP.HCM')).toBeInTheDocument();
+    expect(screen.getByText('8h–20h hằng ngày')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Gọi 0899 149 229/ }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0899 149 229');
+    expect(screen.queryByTestId('support-contact')).toBeNull();
+  });
+
+  it('chỉ có một phần thông tin → chỉ hiện phần đó', async () => {
+    mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickup: { address: null, hours: '8h–20h', phone: null } }));
+    renderPage();
+    expect(await screen.findByText('8h–20h')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Gọi/ })).toBeNull();
+  });
+
+  it('chưa cấu hình điểm nhận → nói thật là app chưa có địa chỉ và đưa kênh liên hệ để hỏi', async () => {
+    mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickup: { address: null, hours: null, phone: null } }));
+    renderPage();
+    expect(await screen.findByText(/Chưa có địa chỉ điểm nhận trên app/)).toBeInTheDocument();
+    expect(screen.getByTestId('support-contact')).toBeInTheDocument();
+  });
+
+  it('API cũ không trả pickup → cũng rơi về hướng dẫn liên hệ', async () => {
+    renderPage();
+    expect(await screen.findByText(/Chưa có địa chỉ điểm nhận trên app/)).toBeInTheDocument();
+  });
+
+  it('có yêu cầu Chờ duyệt → nói rõ bước tiếp theo: mang đúng số vỏ đến điểm nhận để nhân viên đối chiếu', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        history: [
+          { id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT },
+          { id: 'h2', quantity: 1, seedsAwarded: 10, status: 'PENDING', createdAt: CREATED_AT },
+        ],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText(/Bạn có 3 vỏ chai đang chờ duyệt/)).toBeInTheDocument();
+    expect(screen.getByText(/nhân viên đối chiếu số vỏ rồi duyệt/)).toBeInTheDocument();
+  });
+
+  it('không có yêu cầu nào chờ duyệt → không hiện hộp bước tiếp theo', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({ history: [{ id: 'h2', quantity: 3, seedsAwarded: 30, status: 'APPROVED', createdAt: CREATED_AT }] }),
+    );
+    renderPage();
+    await screen.findByText('Lịch sử đổi vỏ');
+    expect(screen.queryByText(/đang chờ duyệt/)).toBeNull();
+  });
+
+  it('nhân viên ghi nhận ít vỏ hơn khai → lịch sử nói "nhận 2/3 vỏ"', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        history: [{ id: 'h1', quantity: 2, seedsAwarded: 20, status: 'APPROVED', createdAt: CREATED_AT, declaredQuantity: 3 }],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText('Nhận 2/3 vỏ')).toBeInTheDocument();
+  });
+
+  it('bị từ chối có lý do → hiện lý do dưới dòng lịch sử', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        history: [{ id: 'h1', quantity: 1, seedsAwarded: 0, status: 'REJECTED', createdAt: CREATED_AT, rejectionReason: 'Vỏ chưa rửa sạch' }],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText('Lý do: Vỏ chưa rửa sạch')).toBeInTheDocument();
   });
 });

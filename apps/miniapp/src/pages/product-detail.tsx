@@ -16,6 +16,7 @@ import {
 import { getErrorMessage } from '../services/api';
 import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
+import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
 import { ReviewsSection, Stars } from '../components/reviews-section';
@@ -229,9 +230,9 @@ export default function ProductDetailPage() {
 
   const groupBuyMutation = useMutation({
     mutationFn: (productId: string) => createGroupBuy(productId),
-    onSuccess: () => {
+    onSuccess: (group) => {
       openSnackbar({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
-      navigate('/group-buy');
+      navigate(`/group-buy/${group.id}`);
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -569,10 +570,10 @@ export default function ProductDetailPage() {
         </Box>
         <Box style={{ flex: 1 }}>
           <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-            {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — giá tốt hơn'}
+            {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
           </Text>
           <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-            Rủ bạn bè cho đủ nhóm, cả nhóm cùng được giảm giá
+            {groupBuyPitch(config.groupBuy)}
           </Text>
         </Box>
         <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />

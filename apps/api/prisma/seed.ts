@@ -98,6 +98,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
+  { key: 'wishlist.price_drop_min_pct', value: 0.05, category: 'wishlist', description: 'Giảm dưới mức này (phân số, 0.05 = 5%) thì không báo user đã yêu thích sản phẩm' },
+  { key: 'wishlist.price_drop_cooldown_days', value: 7, category: 'wishlist', description: 'Số ngày tối thiểu giữa hai thông báo giảm giá cùng sản phẩm cho một user (0 = tắt)' },
+  { key: 'subscribe.stock_retry_days', value: 3, category: 'subscribe', description: 'Số đêm cron thử lại kỳ định kỳ khi hết hàng/lỗi tạm thời trước khi bỏ kỳ (0 = không thử lại)' },
   {
     key: 'subscribe.discount_tiers',
     value: [
@@ -159,6 +162,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.max_open_per_user', value: 3, category: 'groupbuy', description: 'Trần số nhóm mua chung OPEN cùng lúc/user — chống spam mở nhóm (P0-2)' },
   { key: 'refill.seeds_per_bottle', value: 50, category: 'refill', description: '💧 thưởng cho mỗi vỏ chai đổi' },
   { key: 'refill.monthly_cap_bottles', value: 20, category: 'refill', description: 'Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)' },
+  { key: 'refill.pickup_address', value: '', category: 'refill', description: 'Địa chỉ điểm nhận vỏ chai hiện cho khách ở trang Đổi vỏ chai (để trống = ẩn)' },
+  { key: 'refill.pickup_hours', value: '', category: 'refill', description: 'Giờ mở cửa điểm nhận vỏ chai, vd "8h–20h hằng ngày" (để trống = ẩn)' },
+  { key: 'refill.pickup_phone', value: '', category: 'refill', description: 'SĐT điểm nhận vỏ chai (để trống = ẩn)' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
@@ -689,7 +695,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
-  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
+  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },
   { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
   // Mọi nhánh tạm dừng (SP ngừng bán, địa chỉ hỏng, Ví Tubu không đủ — C-015) đều truyền {{reason}}. Prod nhận lời này
   // và mẫu chuyển khoản dưới qua migration 20261010191000_subscription_second_order_templates_fix.
@@ -698,7 +704,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-sub-order-awaiting-payment', code: 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo, vui lòng chuyển khoản {{amount}}đ trong {{hours}} giờ để Tubu giao hàng. Quá hạn đơn kỳ này sẽ tự huỷ, lịch vẫn giữ cho kỳ sau 🌿' },
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
-  { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿' },
+  { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. {{retry}} 🌿' },
   { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
@@ -731,6 +737,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-xu-converted', code: 'XU_CONVERTED', channel: 'INAPP', bodyTemplate: '{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.', createOnly: true },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm Điểm Xanh thưởng.' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
+  { id: 'nt-refill-approved', code: 'REFILL_APPROVED', channel: 'INAPP', bodyTemplate: '🌿 Đổi vỏ chai thành công: ghi nhận {{quantity}} vỏ{{note}}, +{{seeds}} 💧 tưới cây.' },
+  { id: 'nt-refill-rejected', code: 'REFILL_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi {{quantity}} vỏ chai chưa được duyệt{{reason}}. Bạn có thể gửi lại yêu cầu mới sau khi mang vỏ đến điểm nhận.' },
+  { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },

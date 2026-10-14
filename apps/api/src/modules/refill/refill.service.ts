@@ -9,6 +9,8 @@ import { startOfVnMonth } from '../../common/vn-time';
  * Refill / đổi vỏ chai (§6.14.6). Khách mang vỏ chai rỗng đến đổi → gửi yêu cầu (PENDING).
  * Quản lý (Admin/Staff) xem & duyệt đơn trên trang Quản trị → tự động thưởng 💧 vào Vườn Xanh.
  */
+const LIST_PENDING_TAKE = 100;
+
 @Injectable()
 export class RefillService {
   constructor(
@@ -65,14 +67,16 @@ export class RefillService {
   }
 
   async getSummary(userId: string) {
-    const [perBottle, monthlyCap, monthlyUsed, totalRecycled, recent] = await Promise.all([
+    const [perBottle, monthlyCap, monthlyUsed, totalRecycled, recent, pickup] = await Promise.all([
       this.config.get<number>('refill.seeds_per_bottle', 50),
       this.config.get<number>('refill.monthly_cap_bottles', 20),
       this.usedThisMonth(userId),
       this.totalRecycled(userId),
       this.prisma.bottleReturn.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 10 }),
+      this.pickupPoint(),
     ]);
     return {
+      pickup,
       perBottle,
       monthlyCap,
       monthlyUsed,
@@ -84,11 +88,15 @@ export class RefillService {
         seedsAwarded: r.seedsAwarded,
         status: r.status,
         createdAt: r.createdAt,
+        declaredQuantity: r.declaredQuantity,
+        rejectionReason: r.rejectionReason,
       })),
     };
   }
 
-  async listPending() {
+  /** Cũ nhất trước để yêu cầu chờ lâu không bị đẩy khỏi hàng khi > 100; `cursor` = id dòng cuối trang trước. */
+  async listPending(opts: { cursor?: string; take?: number } = {}) {
+    const take = Math.max(1, Math.min(Math.trunc(opts.take ?? LIST_PENDING_TAKE) || LIST_PENDING_TAKE, LIST_PENDING_TAKE));
     return this.prisma.bottleReturn.findMany({
       where: { status: 'PENDING' },
       include: {
@@ -101,74 +109,93 @@ export class RefillService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
   }
 
-  async approveReturn(id: string) {
+  /**
+   * Nhân viên đối chiếu vỏ tại điểm nhận rồi duyệt. `receivedQuantity` bỏ trống = nhận đủ số khách khai; nhập nhiều hơn
+   * thì kẹp về số khai (không thưởng quá số khách xin). Nhận ít hơn: `quantity` thành số thực nhận (đếm trần tháng và
+   * tổng đã tái chế theo vỏ thật), số khai ban đầu giữ ở `declaredQuantity`, 💧 theo số thực nhận.
+   */
+  async approveReturn(id: string, reviewerId: string, receivedQuantity?: number) {
     const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
+    if (receivedQuantity !== undefined && (!Number.isInteger(receivedQuantity) || receivedQuantity < 1)) {
+      throw new BadRequestException('Số vỏ thực nhận phải là số nguyên từ 1. Không nhận được vỏ nào thì hãy từ chối yêu cầu.');
+    }
+    const received = Math.min(receivedQuantity ?? item.quantity, item.quantity);
+    const adjusted = received < item.quantity;
+    const perBottle = item.quantity > 0 ? item.seedsAwarded / item.quantity : 0;
+    const seeds = adjusted ? Math.round(received * perBottle) : item.seedsAwarded;
 
     await this.prisma.$transaction(async (tx) => {
       const updated = await tx.bottleReturn.updateMany({
         where: { id, status: 'PENDING' },
-        data: { status: 'APPROVED' },
+        data: {
+          status: 'APPROVED',
+          reviewedBy: reviewerId,
+          reviewedAt: new Date(),
+          ...(adjusted ? { quantity: received, declaredQuantity: item.quantity, seedsAwarded: seeds } : {}),
+        },
       });
       if (updated.count === 0) {
         throw new BadRequestException('Yêu cầu này đã được xử lý hoặc không hợp lệ.');
       }
       await tx.gameProfile.upsert({
         where: { userId: item.userId },
-        create: { userId: item.userId, totalSeeds: item.seedsAwarded },
-        update: { totalSeeds: { increment: item.seedsAwarded } },
-      });
-      await tx.notificationLog.create({
-        data: {
-          userId: item.userId,
-          templateCode: 'REFILL_APPROVED',
-          channel: 'INAPP',
-          payload: {
-            title: 'Đổi vỏ chai thành công!',
-            body: `Yêu cầu đổi ${item.quantity} vỏ chai của bạn đã được duyệt (+${item.seedsAwarded} 💧 tưới cây).`,
-          },
-          status: 'SENT',
-        },
+        create: { userId: item.userId, totalSeeds: seeds },
+        update: { totalSeeds: { increment: seeds } },
       });
     });
+
+    await this.notifications
+      .notify(item.userId, 'REFILL_APPROVED', {
+        quantity: String(received),
+        seeds: String(seeds),
+        note: adjusted ? ` (bạn khai ${item.quantity} vỏ)` : '',
+      })
+      .catch(() => undefined);
 
     return { ok: true, status: 'APPROVED' };
   }
 
-  async rejectReturn(id: string) {
+  async rejectReturn(id: string, reviewerId: string, reason?: string) {
     const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
+    const why = reason?.trim() || null;
 
-    await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.bottleReturn.updateMany({
-        where: { id, status: 'PENDING' },
-        data: { status: 'REJECTED' },
-      });
-      if (updated.count === 0) {
-        throw new BadRequestException('Yêu cầu này đã được xử lý hoặc không hợp lệ.');
-      }
-      await tx.notificationLog.create({
-        data: {
-          userId: item.userId,
-          templateCode: 'REFILL_REJECTED',
-          channel: 'INAPP',
-          payload: {
-            title: 'Yêu cầu đổi vỏ chai từ chối',
-            body: `Yêu cầu đổi ${item.quantity} vỏ chai của bạn chưa hợp lệ hoặc bị từ chối.`,
-          },
-          status: 'SENT',
-        },
-      });
+    const updated = await this.prisma.bottleReturn.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', reviewedBy: reviewerId, reviewedAt: new Date(), rejectionReason: why },
     });
+    if (updated.count === 0) {
+      throw new BadRequestException('Yêu cầu này đã được xử lý hoặc không hợp lệ.');
+    }
+
+    await this.notifications
+      .notify(item.userId, 'REFILL_REJECTED', { quantity: String(item.quantity), reason: why ? `: ${why}` : '' })
+      .catch(() => undefined);
 
     return { ok: true, status: 'REJECTED' };
+  }
+
+  /** Điểm nhận vỏ: admin điền ở SystemConfig refill.pickup_*; trống/sai kiểu → null để app ẩn dòng đó. */
+  private async pickupPoint(): Promise<{ address: string | null; hours: string | null; phone: string | null }> {
+    const text = async (key: string): Promise<string | null> => {
+      const v = await this.config.get<unknown>(key, '');
+      return typeof v === 'string' && v.trim() ? v.trim() : null;
+    };
+    const [address, hours, phone] = await Promise.all([
+      text('refill.pickup_address'),
+      text('refill.pickup_hours'),
+      text('refill.pickup_phone'),
+    ]);
+    return { address, hours, phone };
   }
 
   private async usedThisMonth(userId: string): Promise<number> {

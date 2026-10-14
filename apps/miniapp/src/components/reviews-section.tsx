@@ -257,6 +257,7 @@ export function ReviewsSection({ slug }: { slug: string }) {
           slug={slug}
           draft={draft}
           isEdit={!!myReview}
+          purchaseCount={eligQ.data?.purchaseCount ?? 0}
           showReward={eligQ.data?.rewardAvailable !== false}
           onDraftChange={(patch) => setEdited((d) => ({ ...(d ?? base), ...patch }))}
           onDone={() => {
@@ -279,6 +280,7 @@ function WriteReview({
   slug,
   draft,
   isEdit,
+  purchaseCount,
   showReward,
   onDraftChange,
   onDone,
@@ -286,6 +288,8 @@ function WriteReview({
   slug: string;
   draft: ReviewDraft;
   isEdit: boolean;
+  /** Số đơn đã nhận có sản phẩm này; API cũ chưa trả thì là 0 (không hiện câu nào). */
+  purchaseCount: number;
   /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
   showReward: boolean;
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
@@ -377,6 +381,13 @@ function WriteReview({
               : images.length > 0
                 ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
                 : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
+        </Text>
+      )}
+      {purchaseCount > 1 && (
+        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
+          {`Bạn đã mua sản phẩm này ${purchaseCount} lần. Mỗi sản phẩm chỉ có một đánh giá, nên ${
+            isEdit ? 'lưu lại sẽ cập nhật đánh giá cũ của bạn.' : 'đánh giá này tính cho mọi lần mua.'
+          }`}
         </Text>
       )}
       {!isEdit && !showReward && (

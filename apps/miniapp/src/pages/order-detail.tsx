@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, MessageSquare, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
+import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, requestReturn, fetchMyReturns, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -18,9 +18,16 @@ import {
   type RecyclingTone,
 } from '../utils/format';
 import { shippingEventLabel } from '../utils/format-shipping';
-import { STATUS_COLOR, TIMELINE_STEPS, timelineIndex, isReorderable } from '../utils/order-status';
 import {
-  openOAChat,
+  STATUS_COLOR,
+  isReorderable,
+  orderPointsNote,
+  orderStamp,
+  returnWindowState,
+  timelineIndex,
+  timelineStepsFor,
+} from '../utils/order-status';
+import {
   openExternal,
   hasOA,
   followOA,
@@ -39,6 +46,8 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { SupportContact } from '../components/support-contact';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 
 /** Màu ô trạng thái thu gom — cùng bảng màu STATUS_COLOR của đơn (order-status.ts): 'progress'
@@ -62,6 +71,7 @@ export default function OrderDetailPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const publicConfig = usePublicConfig();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
@@ -211,6 +221,11 @@ export default function OrderDetailPage() {
   // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
   const canPayNow = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
+  const stamp = orderStamp(o);
+  const timelineSteps = timelineStepsFor(o.paymentMethod);
+  const pointsNote = orderPointsNote(o.status, o.pointsEarned);
+  const returnDays = publicConfig.returnWindowDays ?? 7;
+  const returnWindow = returnWindowState(o, returnDays);
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
@@ -221,7 +236,7 @@ export default function OrderDetailPage() {
         {/* Không dùng opacity để làm dòng phụ: nó kéo cặp màu trạng thái xuống dưới 4,5:1 (chờ thanh toán 3,84).
             Thứ bậc đã có từ cỡ xSmall dưới tiêu đề đậm. */}
         <Text size="xSmall" style={{ color: color.fg }}>
-          {formatDateTime(o.createdAt)}
+          {stamp.label} <span>{formatDateTime(stamp.at)}</span>
         </Text>
         <Text.Title size="small" style={{ color: color.fg }}>
           {vi.orderStatus[o.status] ?? o.status}
@@ -255,12 +270,12 @@ export default function OrderDetailPage() {
       )}
 
       {/* ── Timeline (DI #9) ── */}
-      {timelineIndex(o.status) >= 0 && (
+      {timelineIndex(o.status, timelineSteps) >= 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
           </Text>
-          <Timeline current={timelineIndex(o.status)} />
+          <Timeline steps={timelineSteps} current={timelineIndex(o.status, timelineSteps)} />
         </Box>
       )}
 
@@ -327,10 +342,19 @@ export default function OrderDetailPage() {
         />
         <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
         <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
-        {o.pointsEarned > 0 && o.status !== 'CANCELLED' && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-success)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Icon icon={Leaf} size="sm" tone="brand" />
-            {vi.checkout.pointsEarn(o.pointsEarned)}
+        {pointsNote && (
+          <Text
+            size="xSmall"
+            style={{
+              color: pointsNote.tone === 'success' ? 'var(--color-text-success)' : 'var(--color-text-secondary)',
+              marginTop: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <Icon icon={Leaf} size="sm" tone={pointsNote.tone === 'success' ? 'brand' : 'muted'} />
+            {pointsNote.text}
           </Text>
         )}
       </Box>
@@ -586,35 +610,31 @@ export default function OrderDetailPage() {
               </Box>
             );
           }
+          if (!returnWindow.open) {
+            return (
+              <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
+                </Text>
+              </Box>
+            );
+          }
           return (
             <Box px={4} mt={2} style={{ textAlign: 'center' }}>
               <Button
                 variant="ghost"
+                icon={RotateCcw}
                 onPress={() => setReturnOpen(true)}
-                style={{ color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                style={{ color: 'var(--color-text-secondary)' }}
               >
-                <RotateCcw size={15} strokeWidth={2} aria-hidden />
                 Yêu cầu đổi/trả (lỗi nhà sản xuất)
               </Button>
             </Box>
           );
         })()}
 
-      <Box p={4} style={{ textAlign: 'center' }}>
-        {hasOA ? (
-          <Button
-            variant="ghost"
-            onPress={() => void openOAChat(`Hỗ trợ đơn ${o.code}`)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <MessageSquare size={16} strokeWidth={2} aria-hidden />
-            Yêu cầu hỗ trợ qua Zalo OA
-          </Button>
-        ) : (
-          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-            {vi.orders.support}
-          </Text>
-        )}
+      <Box p={4}>
+        <SupportContact orderCode={o.code} />
       </Box>
 
       {/* ── Action bar — 4 tổ hợp gốc: (huỷ+thanh toán ngay) / (chỉ huỷ) / (chỉ mua lại) /
@@ -698,7 +718,7 @@ export default function OrderDetailPage() {
           <Text.Title size="small">Yêu cầu đổi/trả</Text.Title>
           <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
             Chỉ áp dụng khi lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả).
-            Trong 7 ngày từ khi nhận hàng. Tubu phản hồi trong 24h.
+            {`Trong ${returnDays} ngày từ khi nhận hàng. Tubu phản hồi trong 24h.`}
           </Text>
           <textarea
             value={returnReason}
@@ -749,14 +769,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
-function Timeline({ current }: { current: number }) {
+function Timeline({ steps, current }: { steps: readonly string[]; current: number }) {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column' }}>
-      {TIMELINE_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < current;
         const active = i === current;
         return (
-          <Box key={step} flex style={{ gap: 12, minHeight: i === TIMELINE_STEPS.length - 1 ? 24 : 44 }}>
+          <Box key={step} flex style={{ gap: 12, minHeight: i === steps.length - 1 ? 24 : 44 }}>
             <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span
                 className={active ? 'tubu-pulse' : undefined}
@@ -779,7 +799,7 @@ function Timeline({ current }: { current: number }) {
                   </svg>
                 )}
               </span>
-              {i < TIMELINE_STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <span
                   style={{
                     width: 2,

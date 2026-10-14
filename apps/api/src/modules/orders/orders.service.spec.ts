@@ -151,6 +151,18 @@ describe('OrdersService.cancel', () => {
     expect((coupons.release as jest.Mock)).toHaveBeenCalledWith('BDAY50K', 'o1', expect.anything());
   });
 
+  // MONEY-15: bấm huỷ lần hai (double-tap/mạng chậm) vào đơn vừa huỷ bị báo "Đơn đã vào quy trình giao" như thể đang giao.
+  it('đơn đã CANCELLED (bấm huỷ lần hai) → trả đơn hiện tại, không ném lỗi, không hoàn tiền/thông báo lần nữa', async () => {
+    const { svc, updateMany, $transaction } = makeService({ ...baseOrder, status: 'CANCELLED' });
+    jest.clearAllMocks();
+    await expect(svc.cancel('u1', 'TUBU1')).resolves.toMatchObject({ code: 'TUBU1', status: 'CANCELLED' });
+    expect($transaction).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(loyalty.reverseOrderPoints as jest.Mock).not.toHaveBeenCalled();
+    expect(affiliate.reverseCommissionsForOrder as jest.Mock).not.toHaveBeenCalled();
+    expect(notifications.notify as jest.Mock).not.toHaveBeenCalled();
+  });
+
   it('KHÔNG hủy được đơn SHIPPING (đã vào giao)', async () => {
     const { svc, updateMany } = makeService({ ...baseOrder, status: 'SHIPPING' });
     await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow();

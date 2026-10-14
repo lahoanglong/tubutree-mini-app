@@ -219,14 +219,14 @@ function SubscriptionCard({
             : vi.subscriptions.scheduling
           : vi.subscriptions.pausedLine}
       </Text>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {vi.subscriptions.edit}
         </Button>
-        <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: 1, minWidth: 0 }}>
+        <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {s.status === 'ACTIVE' ? vi.subscriptions.pause : vi.subscriptions.resume}
         </Button>
-        <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: 1, minWidth: 0, color: 'var(--color-text-danger)' }}>
+        <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: '1 1 auto', minWidth: 'max-content', color: 'var(--color-text-danger)' }}>
           {vi.subscriptions.cancel}
         </Button>
       </div>

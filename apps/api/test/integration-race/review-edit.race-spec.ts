@@ -210,16 +210,46 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   it('can-review: có đánh giá rồi vẫn được, trả đánh giá hiện có; chưa mua thì NOT_PURCHASED', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
-    expect(await reviews.canReview(u.id, p.slug)).toEqual({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
+    expect(await reviews.canReview(u.id, p.slug)).toEqual({
+      canReview: true,
+      reason: null,
+      myReview: null,
+      rewardAvailable: true,
+      purchaseCount: 1,
+    });
     const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });
     expect(await reviews.canReview(u.id, p.slug)).toEqual({
       canReview: true,
       reason: null,
       myReview: { id: first.id, rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'], videoUrl: null },
       rewardAvailable: false,
+      purchaseCount: 1,
     });
     const stranger = await createUser(prisma);
     expect(await reviews.canReview(stranger.id, p.slug)).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
+  });
+
+  it('purchaseCount (ENGAGE-23): chỉ đếm đơn DELIVERED của đúng khách và đúng sản phẩm; mua lại vẫn một đánh giá, thưởng một lần', async () => {
+    const a = await product();
+    const b = await product();
+    const { u } = await buyer(a.v.id);
+    const item = (variationId: string) => ({
+      create: [{ variationId, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }],
+    });
+    await createOrder(prisma, { userId: u.id, status: 'DELIVERED', items: item(a.v.id) });
+    await createOrder(prisma, { userId: u.id, status: 'DELIVERED', items: item(b.v.id) });
+    await createOrder(prisma, { userId: u.id, status: 'CONFIRMED', items: item(a.v.id) });
+    await createOrder(prisma, { userId: u.id, status: 'RETURNED', items: item(a.v.id) });
+    await buyer(a.v.id);
+
+    expect((await reviews.canReview(u.id, a.p.slug)).purchaseCount).toBe(2);
+    expect((await reviews.canReview(u.id, b.p.slug)).purchaseCount).toBe(1);
+
+    const first = await reviews.create(u.id, a.p.slug, { rating: 5, comment: 'Lần 1' });
+    const again = await reviews.create(u.id, a.p.slug, { rating: 3, comment: 'Mua lần 2' });
+    expect(again).toMatchObject({ id: first.id, updated: true });
+    expect((await ledger(u.id)).balance).toBe(5);
+    expect((await reviews.canReview(u.id, a.p.slug)).purchaseCount).toBe(2);
   });
 
   // PG-4: cờ rewardAvailable phải khớp với điều createFirst làm thật trên sổ điểm.

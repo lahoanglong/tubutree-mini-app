@@ -1752,10 +1752,15 @@ model BottleReturn {
   id           String       @id @default(cuid())
   userId       String
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quantity     Int // số vỏ chai đổi lần này
+  quantity     Int // số vỏ chai đổi lần này; khi duyệt = số vỏ nhân viên THỰC NHẬN (≤ số khách khai)
   seedsAwarded Int // 💧 đã thưởng (khi APPROVED)
   status       RefillStatus @default(PENDING)
   createdAt    DateTime     @default(now())
+  // Chỉ có khi nhân viên duyệt số vỏ ít hơn khách khai: số khách khai ban đầu, để đối soát.
+  declaredQuantity Int?
+  reviewedBy       String? // userId nhân viên/admin duyệt hoặc từ chối
+  reviewedAt       DateTime?
+  rejectionReason  String?
 
   @@index([userId, createdAt])
   @@index([status])
@@ -2384,6 +2389,8 @@ model Subscription {
   // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
   paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
+  // Số lần cron đã thử lại kỳ hiện tại vì hết hàng/lỗi tạm thời (reset về 0 khi ra đơn hoặc khi bỏ kỳ).
+  retryCount    Int       @default(0)
   lastOrderId   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

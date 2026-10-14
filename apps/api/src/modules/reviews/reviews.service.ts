@@ -5,7 +5,7 @@ import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
-import { isUploadedReviewMedia } from './review-media';
+import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -37,6 +37,7 @@ export class ReviewsService {
     reason: 'NOT_PURCHASED' | null;
     myReview?: { id: string; rating: number; comment: string | null; images: string[]; videoUrl: string | null } | null;
     rewardAvailable?: boolean;
+    purchaseCount?: number;
   }> {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
@@ -45,15 +46,15 @@ export class ReviewsService {
       where: { productId: product.id },
       select: { id: true },
     });
-    const delivered = await this.prisma.order.findFirst({
-      where: {
-        userId,
-        status: 'DELIVERED',
-        items: { some: { variationId: { in: variations.map((v) => v.id) } } },
-      },
-      select: { id: true },
-    });
+    const deliveredWhere = {
+      userId,
+      status: 'DELIVERED' as const,
+      items: { some: { variationId: { in: variations.map((v) => v.id) } } },
+    };
+    const delivered = await this.prisma.order.findFirst({ where: deliveredWhere, select: { id: true } });
     if (!delivered) return { canReview: false, reason: 'NOT_PURCHASED' };
+    // Mua lại chỉ sửa đánh giá cũ (Q-30 giữ 1 đánh giá/sản phẩm): FE cần số lần mua để giải thích vì sao.
+    const purchaseCount = await this.prisma.order.count({ where: deliveredWhere });
 
     // Q-30: đã có đánh giá thì vẫn được (mua lại → sửa đánh giá cũ); trả đánh giá hiện có để FE điền sẵn form.
     const existing = await this.prisma.review.findFirst({ where: { userId, productId: product.id } });
@@ -64,6 +65,7 @@ export class ReviewsService {
       canReview: true,
       reason: null,
       rewardAvailable,
+      purchaseCount,
       myReview: existing
         ? {
             id: existing.id,
@@ -123,8 +125,9 @@ export class ReviewsService {
     dto: CreateReviewDto,
   ) {
     // Thưởng điểm theo độ phong phú UGC: video (§6.14.9) > ảnh > chỉ chữ.
-    const hasVideo = isUploadedReviewMedia(dto.videoUrl);
-    const hasImages = (dto.images ?? []).some(isUploadedReviewMedia);
+    // Cùng luật với CreateReviewDto (MONEY-10): media lọt qua DTO bằng đường khác vẫn không được thưởng thêm.
+    const hasVideo = isUploadedMediaUrl(dto.videoUrl);
+    const hasImages = (dto.images ?? []).some((img) => isUploadedImage(img, PUBLIC_CONTENT_IMAGE));
     const rewardPoints = hasVideo ? 15 : hasImages ? 10 : 5;
     // Điểm đánh giá là Điểm Xanh thường nên có hạn như mọi điểm thưởng khác. Đọc cấu hình NGOÀI tx để không giữ
     // kết nối tx; lượt thua race P2002 ở bước tạo chỉ tốn một lần đọc cấu hình.

@@ -203,6 +203,7 @@ export default function MyApp() {
                     <Route path="/feed/:id" element={<PostDetailPage />} />
                     <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                     <Route path="/group-buy" element={<GroupBuyPage />} />
+                    <Route path="/group-buy/:id" element={<GroupBuyPage />} />
                     <Route path="/refill" element={<RefillPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/loyalty" element={<LoyaltyPage />} />

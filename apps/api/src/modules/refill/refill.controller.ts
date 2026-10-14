@@ -1,11 +1,21 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { IsInt, Max, Min } from 'class-validator';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RefillService } from './refill.service';
 
 class ReturnBottlesDto {
   @IsInt() @Min(1) @Max(100) quantity!: number;
+}
+
+class ApproveReturnDto {
+  /** Số vỏ nhân viên đếm được tại điểm nhận; bỏ trống = đủ số khách khai. */
+  @IsOptional() @IsInt() @Min(1) @Max(100) receivedQuantity?: number;
+}
+
+class RejectReturnDto {
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
 }
 
 @Controller('refill')
@@ -27,21 +37,21 @@ export class RefillController {
   // Admin/Staff: Lấy danh sách đổi vỏ chờ duyệt
   @Roles('STAFF', 'ADMIN')
   @Get('admin/pending')
-  listPending() {
-    return this.refill.listPending();
+  listPending(@Query() query: CursorPageQuery) {
+    return this.refill.listPending({ cursor: query.cursor, take: query.take ? Number(query.take) : undefined });
   }
 
   // Admin/Staff: Duyệt đơn đổi vỏ chai
   @Roles('STAFF', 'ADMIN')
   @Post('admin/:id/approve')
-  approve(@Param('id') id: string) {
-    return this.refill.approveReturn(id);
+  approve(@CurrentUser('sub') reviewerId: string, @Param('id') id: string, @Body() dto: ApproveReturnDto) {
+    return this.refill.approveReturn(id, reviewerId, dto?.receivedQuantity);
   }
 
   // Admin/Staff: Từ chối đơn đổi vỏ chai
   @Roles('STAFF', 'ADMIN')
   @Post('admin/:id/reject')
-  reject(@Param('id') id: string) {
-    return this.refill.rejectReturn(id);
+  reject(@CurrentUser('sub') reviewerId: string, @Param('id') id: string, @Body() dto: RejectReturnDto) {
+    return this.refill.rejectReturn(id, reviewerId, dto?.reason);
   }
 }

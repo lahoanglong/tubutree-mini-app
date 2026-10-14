@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
@@ -47,6 +48,7 @@ export class FlashSaleService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
+    private readonly lifecycle: LifecycleService,
   ) {}
 
   /**
@@ -390,6 +392,53 @@ export class FlashSaleService {
         data: { notifiedAt: now },
       });
       if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);
+    } catch (err) {
+      this.logger.error(err);
+    }
+  }
+
+  /**
+   * Cron :10 mỗi giờ: sale vừa bắt đầu (trong 2 giờ qua, còn chạy) → báo user đã ❤️ wishlist sản phẩm, như khi giá
+   * Pancake giảm. Mỗi sản phẩm một lần, theo biến thể giảm sâu nhất. Cửa sổ 2 giờ để một lượt cron lỡ không làm mất báo;
+   * lượt thứ hai trong cửa sổ không gửi lại vì notifyWishlistPriceDrop có cooldown theo user × sản phẩm.
+   */
+  @Cron('10 * * * *', { timeZone: CRON_TZ })
+  async notifyWishlistOfStartedSales(now: Date = new Date()): Promise<void> {
+    try {
+      const sales = await this.prisma.flashSale.findMany({
+        where: { isActive: true, startAt: { gt: new Date(now.getTime() - 2 * 3600e3), lte: now }, endAt: { gt: now } },
+        include: {
+          items: {
+            select: {
+              id: true,
+              flashPrice: true,
+              quota: true,
+              soldCount: true,
+              variation: { select: { retailPrice: true, salePrice: true, product: { select: { id: true, name: true } } } },
+            },
+          },
+        },
+        orderBy: { startAt: 'asc' },
+        take: 20,
+      });
+      for (const sale of sales) {
+        const best = new Map<string, { name: string; oldPrice: number; newPrice: number }>();
+        for (const it of sale.items) {
+          const base = it.variation.salePrice ?? it.variation.retailPrice;
+          if (it.soldCount >= it.quota || !(it.flashPrice < base)) continue;
+          const cur = best.get(it.variation.product.id);
+          if (!cur || (base - it.flashPrice) / base > (cur.oldPrice - cur.newPrice) / cur.oldPrice) {
+            best.set(it.variation.product.id, { name: it.variation.product.name, oldPrice: base, newPrice: it.flashPrice });
+          }
+        }
+        for (const [productId, b] of best) {
+          await this.lifecycle
+            .notifyWishlistPriceDrop(productId, b.name, { oldPrice: b.oldPrice, newPrice: b.newPrice })
+            .catch((err) =>
+              this.logger.error(`Báo wishlist flash sale lỗi (product=${productId}): ${err instanceof Error ? err.message : err}`),
+            );
+        }
+      }
     } catch (err) {
       this.logger.error(err);
     }

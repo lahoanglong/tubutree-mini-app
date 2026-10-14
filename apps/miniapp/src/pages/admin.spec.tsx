@@ -718,11 +718,29 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     it('Duyệt gọi API đúng yêu cầu, báo thành công; Từ chối báo kiểu info', async () => {
       await openRefill();
       fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
-      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1'));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 3));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' }));
       fireEvent.click(screen.getByRole('button', { name: 'Từ chối · =Độc' }));
       await waitFor(() => expect(mocks.rejectRefillReturn).toHaveBeenCalledWith('r2'));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã từ chối yêu cầu.', type: 'info' }));
+    });
+
+    it('nhân viên đếm thiếu vỏ: giảm "Vỏ thực nhận" rồi Duyệt gửi đúng số đếm, giọt nước xem trước theo số đó', async () => {
+      await openRefill();
+      expect(screen.getByText('Đếm tại điểm nhận · +30 giọt nước')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
+      expect(screen.getByText('Đếm tại điểm nhận · +20 giọt nước')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 2));
+    });
+
+    it('không cho nhập quá số khách khai; yêu cầu chỉ 1 vỏ thì không có bộ chọn và duyệt đúng 1', async () => {
+      await openRefill();
+      const plus = screen.getByRole('button', { name: 'Tăng số lượng' });
+      expect(plus).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getAllByRole('button', { name: 'Giảm số lượng' })).toHaveLength(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · =Độc' }));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r2', 1));
     });
 
     it('đang duyệt một yêu cầu thì nút Từ chối của yêu cầu khác bị khoá', async () => {

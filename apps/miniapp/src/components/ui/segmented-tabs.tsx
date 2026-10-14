@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useScrollHints } from './use-scroll-hints';
 
 export interface SegmentedTabItem {
@@ -17,6 +18,11 @@ export interface SegmentedTabsProps {
  * — audit A4-19). role="tablist"/"tab" cho a11y (0 chỗ dùng hiện tại). */
 export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsProps) {
   const hints = useScrollHints<HTMLDivElement>();
+  useEffect(() => {
+    if (!scroll) return;
+    const active = hints.ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [scroll, value, hints.ref]);
   return (
     <div
       {...(scroll ? hints : {})}
@@ -40,7 +46,7 @@ export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsP
             aria-selected={active}
             onClick={() => onChange(it.key)}
             style={{
-              flex: scroll ? undefined : 1,
+              flex: scroll ? '0 0 auto' : 1,
               minHeight: 44,
               minWidth: 44,
               border: 'none',

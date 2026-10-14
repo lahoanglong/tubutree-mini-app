@@ -42,6 +42,15 @@ export const MAX_SUBSCRIPTION_QUANTITY = 999;
  */
 export const SUBSCRIPTION_COD_MAX = 5_000_000;
 
+/** Cron mỗi đêm quét tối đa PAGE gói/trang, tối đa MAX_PAGES trang (chặn vòng lặp vô hạn nếu dữ liệu bất thường). */
+const DUE_PAGE_SIZE = 200;
+const DUE_MAX_PAGES = 50;
+
+/** Số đêm thử lại một kỳ vì hết hàng/lỗi tạm thời trước khi bỏ kỳ (subscribe.stock_retry_days; 0 = không thử lại). */
+export const STOCK_RETRY_DAYS_KEY = 'subscribe.stock_retry_days';
+export const DEFAULT_STOCK_RETRY_DAYS = 3;
+const MAX_STOCK_RETRY_DAYS = 7;
+
 interface CreateSubInput {
   variationId: string;
   quantity: number;
@@ -422,7 +431,7 @@ export class SubscriptionsService {
         : sub.nextRunAt;
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt } });
+        const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt, retryCount: 0 } });
         await this.analytics.record(tx, {
           eventName: 'subscription_changed',
           userId,
@@ -464,7 +473,7 @@ export class SubscriptionsService {
     if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
     if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
     const nextRunAt = this.addWeeks(sub.nextRunAt, sub.intervalWeeks);
-    return this.prisma.subscription.update({ where: { id }, data: { nextRunAt } });
+    return this.prisma.subscription.update({ where: { id }, data: { nextRunAt, retryCount: 0 } });
   }
 
   /**
@@ -478,26 +487,31 @@ export class SubscriptionsService {
   async processDue(): Promise<void> {
     try {
       const now = new Date();
-      const due = await this.prisma.subscription.findMany({
-        where: { status: 'ACTIVE', nextRunAt: { lte: now } },
-        take: 200,
-      });
       let created = 0;
-      for (const sub of due) {
-        // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
-        // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
-        const nextRunAt = this.addWeeks(now, sub.intervalWeeks);
-        const claimed = await this.prisma.subscription.updateMany({
-          where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
-          data: { nextRunAt },
+      // Cũ nhất trước và quét hết các trang: trước đây take 200 không orderBy nên phần dư dồn sang đêm sau, mà gói đã
+      // claim thì rời tập "đến hạn" nên trang kế luôn là các gói chưa xử lý.
+      for (let page = 0; page < DUE_MAX_PAGES; page++) {
+        const due = await this.prisma.subscription.findMany({
+          where: { status: 'ACTIVE', nextRunAt: { lte: now } },
+          orderBy: [{ nextRunAt: 'asc' }, { id: 'asc' }],
+          take: DUE_PAGE_SIZE,
         });
-        if (claimed.count === 0) continue; // instance khác đã claim
-        try {
-          if (await this.runCycle(sub, sub.nextRunAt, nextRunAt)) created++;
-        } catch (err) {
-          // nextRunAt đã advance → bỏ qua chu kỳ này (không double-charge), chờ chu kỳ kế.
-          this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
+        for (const sub of due) {
+          // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
+          // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
+          const nextRunAt = this.addWeeks(now, sub.intervalWeeks);
+          const claimed = await this.prisma.subscription.updateMany({
+            where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
+            data: { nextRunAt },
+          });
+          if (claimed.count === 0) continue; // instance khác đã claim
+          try {
+            if (await this.runCycle(sub, sub.nextRunAt, nextRunAt)) created++;
+          } catch (err) {
+            this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
+          }
         }
+        if (due.length < DUE_PAGE_SIZE) break;
       }
       if (created) this.logger.log(`Subscription orders created: ${created}`);
     } catch (err) {
@@ -509,7 +523,11 @@ export class SubscriptionsService {
    * Một kỳ đã claim: ghi đơn rồi xử lý hậu quả từng loại lỗi. Trả true nếu có đơn mới. `nextRunAt` = kỳ kế mà bước
    * claim đã ghi; bật lại lịch giữ nguyên ngày đó nên tin tạm dừng nói rõ kỳ này không giao và ngày kỳ kế tiếp.
    */
-  private async runCycle(sub: { id: string; userId: string }, cycleAt: Date, nextRunAt: Date): Promise<boolean> {
+  private async runCycle(
+    sub: { id: string; userId: string; retryCount?: number },
+    cycleAt: Date,
+    nextRunAt: Date,
+  ): Promise<boolean> {
     const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
@@ -537,23 +555,66 @@ export class SubscriptionsService {
         return false;
       }
       if (err instanceof SubscriptionOutOfStockError) {
-        // Khác nhánh isActive/địa chỉ ở trên (pause hẳn): hết hàng báo cho khách biết kỳ này
-        // không có đơn, KHÔNG pause lịch — cron sẽ tự thử lại ở chu kỳ kế (nextRunAt đã advance).
-        await this.notifications
-          .notify(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason: 'Hết hàng tạm thời' })
-          .catch(() => undefined);
-        await this.analytics.recordBestEffort({
-          eventName: 'subscription_changed',
-          userId: sub.userId,
-          platform: 'system',
-          props: { subscriptionId: sub.id, action: 'order_failed', reason: 'out_of_stock' },
-        });
+        // Hết hàng thường chỉ tạm thời: không pause lịch, cũng không bỏ cả chu kỳ 4-10 tuần — thử lại từng đêm.
+        await this.retryOrSkipCycle(sub, nextRunAt, 'Hết hàng tạm thời', 'out_of_stock');
+        return false;
       }
-      throw err; // giữ nguyên hành vi cũ: processDue() log lỗi + đếm là chu kỳ bị bỏ qua.
+      // Lỗi còn lại (P2034, DB chập chờn...): tx đã rollback nên không có đơn dở — trừ khi đơn kỳ này đã ghi xong và lỗi
+      // đến sau đó, khi đó không thử lại kẻo đẻ đơn thứ hai.
+      this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
+      const written = await this.prisma.order.findUnique({
+        where: { idempotencyKey: `subscription:${sub.id}:${cycleAt.toISOString()}` },
+        select: { id: true },
+      });
+      if (!written) await this.retryOrSkipCycle(sub, nextRunAt, 'Hệ thống đang bận', 'transient_error');
+      return false;
     }
     if (!placed) return false;
     await this.afterOrderPlaced(placed);
     return true;
+  }
+
+  /**
+   * Kỳ không ra đơn vì lý do có thể tự hết: hẹn lại 0h ngày mai (giờ VN, trước cron 3h) tối đa
+   * `subscribe.stock_retry_days` đêm, báo khách một lần ở lần đầu. Hết lượt thì bỏ kỳ — nextRunAt đã ở kỳ kế do bước
+   * claim — và báo ngày kỳ kế tiếp.
+   */
+  private async retryOrSkipCycle(
+    sub: { id: string; userId: string; retryCount?: number },
+    nextCycleAt: Date,
+    reason: string,
+    reasonCode: string,
+  ): Promise<void> {
+    const attempt = sub.retryCount ?? 0;
+    const maxRetries = await this.stockRetryDays();
+    let retry: string | null;
+    if (attempt < maxRetries) {
+      const retryAt = new Date(`${vnDateKey(new Date(Date.now() + 864e5))}T00:00:00+07:00`);
+      await this.prisma.subscription.updateMany({
+        where: { id: sub.id, status: 'ACTIVE' },
+        data: { nextRunAt: retryAt, retryCount: { increment: 1 } },
+      });
+      retry = attempt === 0 ? 'Lịch vẫn giữ, Tubu sẽ tự thử lại vào ngày mai.' : null;
+    } else {
+      if (attempt > 0) {
+        await this.prisma.subscription.updateMany({ where: { id: sub.id, status: 'ACTIVE' }, data: { retryCount: 0 } });
+      }
+      retry = `Lịch vẫn giữ nhưng kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextCycleAt)}.`;
+    }
+    if (retry) await this.notifications.notify(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason, retry }).catch(() => undefined);
+    await this.analytics.recordBestEffort({
+      eventName: 'subscription_changed',
+      userId: sub.userId,
+      platform: 'system',
+      props: { subscriptionId: sub.id, action: 'order_failed', reason: reasonCode },
+    });
+  }
+
+  private async stockRetryDays(): Promise<number> {
+    const raw = await this.config.get<unknown>(STOCK_RETRY_DAYS_KEY, DEFAULT_STOCK_RETRY_DAYS);
+    return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= MAX_STOCK_RETRY_DAYS
+      ? raw
+      : DEFAULT_STOCK_RETRY_DAYS;
   }
 
   /**
@@ -686,7 +747,7 @@ export class SubscriptionsService {
     });
     const after = await tx.subscription.update({
       where: { id: sub.id },
-      data: { lastOrderId: order.id },
+      data: { lastOrderId: order.id, retryCount: 0 },
       select: { nextRunAt: true, intervalWeeks: true },
     });
     // Đơn đầu giao ngay ghi trong tx tạo gói: kỳ kế tính từ hôm nay (cron thì đã dời ở bước claim).

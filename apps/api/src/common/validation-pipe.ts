@@ -1,67 +1,114 @@
-import { BadRequestException, ValidationPipe, type ValidationError } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import type { ValidationError } from '@nestjs/common';
 
-type Translate = (field: string, englishMessage: string) => string;
-
-const lastNumber = (msg: string) => msg.match(/-?\d+(?:\.\d+)?(?!.*\d)/)?.[0] ?? '';
-const afterValues = (msg: string) => msg.split('following values:')[1]?.trim() ?? '';
-
-/** Câu tiếng Việt cho các luật class-validator mặc định; `field` đã gồm "Mỗi phần tử của" khi luật áp từng phần tử. */
-const VI: Record<string, Translate> = {
-  isNotEmpty: (f) => `${f} không được để trống.`,
-  arrayNotEmpty: (f) => `${f} không được để trống.`,
-  isDefined: (f) => `${f} là bắt buộc.`,
-  isString: (f) => `${f} phải là chuỗi ký tự.`,
-  isInt: (f) => `${f} phải là số nguyên.`,
-  isNumber: (f) => `${f} phải là số.`,
-  isPositive: (f) => `${f} phải là số dương.`,
-  isBoolean: (f) => `${f} phải là true/false.`,
-  isArray: (f) => `${f} phải là danh sách.`,
-  isObject: (f) => `${f} phải là object.`,
-  nestedValidation: (f) => `${f} phải là object.`,
-  isDateString: (f) => `${f} phải là ngày giờ hợp lệ (ISO 8601).`,
-  isIso8601: (f) => `${f} phải là ngày giờ hợp lệ (ISO 8601).`,
-  isUrl: (f) => `${f} phải là đường dẫn URL hợp lệ.`,
-  isEmail: (f) => `${f} phải là email hợp lệ.`,
-  isUuid: (f) => `${f} phải là mã UUID hợp lệ.`,
-  matches: (f) => `${f} không đúng định dạng.`,
-  min: (f, m) => `${f} không được nhỏ hơn ${lastNumber(m)}.`,
-  max: (f, m) => `${f} không được lớn hơn ${lastNumber(m)}.`,
-  minLength: (f, m) => `${f} phải có ít nhất ${lastNumber(m)} ký tự.`,
-  maxLength: (f, m) => `${f} tối đa ${lastNumber(m)} ký tự.`,
-  arrayMinSize: (f, m) => `${f} cần ít nhất ${lastNumber(m)} phần tử.`,
-  arrayMaxSize: (f, m) => `${f} tối đa ${lastNumber(m)} phần tử.`,
-  isIn: (f, m) => `${f} phải là một trong: ${afterValues(m)}.`,
-  isEnum: (f, m) => `${f} phải là một trong: ${afterValues(m)}.`,
-  whitelistValidation: (f) => `Trường ${f} không được gửi lên.`,
+/**
+ * Nhãn tiếng Việt cho các trường khách/admin hay nhập; trường khác rơi về «tên-trường». Miniapp và web hiện nguyên văn
+ * message[0] của lỗi 400 nên không để câu tiếng Anh của class-validator lọt ra.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  rating: 'Số sao',
+  comment: 'Nội dung đánh giá',
+  images: 'Ảnh',
+  videoUrl: 'Video',
+  reason: 'Lý do',
+  body: 'Nội dung',
+  title: 'Tiêu đề',
+  question: 'Câu hỏi',
+  answer: 'Câu trả lời',
+  note: 'Ghi chú',
+  fullName: 'Họ tên',
+  recipient: 'Người nhận',
+  phone: 'Số điện thoại',
+  email: 'Email',
+  street: 'Địa chỉ',
+  ward: 'Phường/xã',
+  district: 'Quận/huyện',
+  province: 'Tỉnh/thành',
+  quantity: 'Số lượng',
+  amount: 'Số tiền',
+  code: 'Mã',
+  startAt: 'Thời gian bắt đầu',
+  endAt: 'Thời gian kết thúc',
+  q: 'Từ khoá',
+  page: 'Trang',
+  limit: 'Số dòng mỗi trang',
 };
 
-/** Thông báo mặc định của class-validator là tiếng Anh ("must", "should"); thông báo tự viết trong DTO giữ nguyên. */
-const isEnglishDefault = (msg: string) => /\b(must|should)\b/.test(msg);
+const trailingNumber = (original: string): string => original.match(/(-?\d+(?:\.\d+)?)(?: characters| elements)?$/)?.[1] ?? '';
+const allowedValues = (original: string): string => {
+  const list = original.split(':').slice(1).join(':').trim();
+  return list && list.length <= 120 ? list : '';
+};
 
-function translate(constraint: string, message: string, path: string): string {
-  const rule = VI[constraint];
-  if (!rule || !isEnglishDefault(message)) return message;
-  const field = message.startsWith('each value in ') ? `Mỗi phần tử của ${path}` : path;
-  return rule(field, message);
+/** Câu tiếng Việt cho các luật class-validator mặc định (khoá = tên constraint của class-validator). */
+const TEMPLATES: Record<string, (subject: string, original: string) => string> = {
+  isString: (s) => `${s} phải là chuỗi ký tự.`,
+  isNotEmpty: (s) => `${s} không được để trống.`,
+  isNotEmptyObject: (s) => `${s} không được để trống.`,
+  arrayNotEmpty: (s) => `${s} không được để trống.`,
+  isDefined: (s) => `${s} là bắt buộc.`,
+  isInt: (s) => `${s} phải là số nguyên.`,
+  isNumber: (s) => `${s} phải là số.`,
+  isPositive: (s) => `${s} phải lớn hơn 0.`,
+  isBoolean: (s) => `${s} chỉ nhận đúng hoặc sai.`,
+  isArray: (s) => `${s} phải là một danh sách.`,
+  isObject: (s) => `${s} phải là một đối tượng.`,
+  nestedValidation: (s) => `${s} phải là một đối tượng.`,
+  isEmail: (s) => `${s} không hợp lệ.`,
+  isUrl: (s) => `${s} phải là đường dẫn (URL) hợp lệ.`,
+  isDateString: (s) => `${s} phải là ngày giờ hợp lệ (ISO 8601).`,
+  isIso8601: (s) => `${s} phải là ngày giờ hợp lệ (ISO 8601).`,
+  isUuid: (s) => `${s} không đúng định dạng.`,
+  matches: (s) => `${s} không đúng định dạng.`,
+  isIn: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
+  isEnum: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
+  minLength: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} ký tự.`,
+  maxLength: (s, o) => `${s} không được dài quá ${trailingNumber(o)} ký tự.`,
+  min: (s, o) => `${s} không được nhỏ hơn ${trailingNumber(o)}.`,
+  max: (s, o) => `${s} không được lớn hơn ${trailingNumber(o)}.`,
+  arrayMinSize: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} mục.`,
+  arrayMaxSize: (s, o) => `${s} chỉ được có tối đa ${trailingNumber(o)} mục.`,
+};
+
+/** Có chữ có dấu tiếng Việt → thông điệp do dev tự viết trong DTO, giữ nguyên văn (cụ thể hơn câu chung). */
+const HAS_VIETNAMESE = /[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]/i;
+
+function translate(constraint: string, original: string, path: string[]): string {
+  const property = path[path.length - 1]!;
+  if (constraint === 'whitelistValidation') return `Không nhận trường «${property}».`;
+  if (HAS_VIETNAMESE.test(original)) return original;
+
+  const named = [...path].reverse().find((seg) => !/^\d+$/.test(seg)) ?? property;
+  const index = path.find((seg) => /^\d+$/.test(seg));
+  const label = FIELD_LABELS[named] ?? `Trường «${named}»`;
+  const base = /^each value in /.test(original) ? `Mỗi mục của ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label;
+  const subject = index === undefined ? base : `${base} (mục ${Number(index) + 1})`;
+
+  const template = TEMPLATES[constraint];
+  return template ? template(subject, original) : `${subject} không hợp lệ.`;
 }
 
-function flatten(errors: ValidationError[], parent?: string): string[] {
-  return errors.flatMap((e) => {
-    const path = parent ? `${parent}.${e.property}` : e.property;
-    const own = Object.entries(e.constraints ?? {}).map(([name, msg]) => translate(name, msg, path));
-    return [...own, ...flatten(e.children ?? [], path)];
-  });
+export function translateValidationErrors(errors: ValidationError[], parent: string[] = []): string[] {
+  const out: string[] = [];
+  for (const e of errors) {
+    const path = [...parent, e.property];
+    for (const [constraint, original] of Object.entries(e.constraints ?? {})) {
+      out.push(translate(constraint, original, path));
+    }
+    if (e.children?.length) out.push(...translateValidationErrors(e.children, path));
+  }
+  return out;
 }
 
 /**
- * ValidationPipe dùng chung của API (cấu hình như trước: whitelist, chặn trường lạ, transform) với thông báo lỗi tiếng
- * Việt. Giữ dạng phản hồi mặc định của Nest ({ statusCode: 400, message: string[], error }) vì client đọc message[0].
+ * ValidationPipe toàn cục của API (whitelist, chặn trường lạ, transform) với lỗi 400 bằng tiếng Việt. Giữ dạng phản hồi
+ * mặc định của Nest ({ statusCode: 400, message: string[], error }) vì client đọc message[0].
  */
 export function createValidationPipe(): ValidationPipe {
   return new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
-    exceptionFactory: (errors) => new BadRequestException(flatten(errors)),
+    exceptionFactory: (errors) => new BadRequestException(translateValidationErrors(errors)),
   });
 }
