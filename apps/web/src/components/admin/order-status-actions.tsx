@@ -115,16 +115,30 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
     },
   });
 
+  // Đơn đã huỷ/trả mà tiền chuyển khoản về sau: cùng API, nhưng ghi khoản hoàn vào hàng đợi thay vì lật "đã thanh toán".
+  const latePayment = !order.canConfirmPayment && order.canRecordLatePayment === true;
+
   const onConfirmPayment = async () => {
     if (payInFlight.current || payMut.isPending) return;
-    const ok = await confirm({
-      title: 'Xác nhận đã nhận tiền',
-      message:
-        `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
-        `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}. ` +
-        'Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
-      confirmLabel: 'Đã nhận tiền',
-    });
+    const ok = await confirm(
+      latePayment
+        ? {
+            title: 'Ghi nhận tiền về muộn',
+            message:
+              `Ghi nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code} sau khi đơn đã huỷ?\n\n` +
+              `Đơn giữ nguyên trạng thái huỷ. Hệ thống ghi khoản hoàn ${formatVnd(order.total)} vào hàng đợi Hoàn tiền khách; ` +
+              'khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. Chỉ bấm khi đã thấy tiền về tài khoản.',
+            confirmLabel: 'Ghi nhận',
+          }
+        : {
+            title: 'Xác nhận đã nhận tiền',
+            message:
+              `Xác nhận đã nhận ${formatVnd(order.total)} chuyển khoản cho đơn ${order.code}?\n\n` +
+              `Đơn sẽ được ghi nhận "Đã thanh toán"${order.status === 'PENDING_PAYMENT' ? ' và chuyển sang "Đã xác nhận"' : ''}. ` +
+              'Không có thao tác huỷ xác nhận — chỉ bấm khi đã thấy tiền về tài khoản.',
+            confirmLabel: 'Đã nhận tiền',
+          },
+    );
     if (!ok || payInFlight.current || payMut.isPending) return;
     payInFlight.current = true;
     setPayMsg(null);
@@ -141,10 +155,15 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
 
   return (
     <div className="space-y-2 border-t border-stone-200 pt-2">
-      {canConfirmPayment && order.canConfirmPayment && (
-        <section aria-label="Xác nhận đã nhận tiền" className="rounded-card border border-warning-fg bg-stone-0 p-2.5">
+      {canConfirmPayment && (order.canConfirmPayment || latePayment) && (
+        <section
+          aria-label={latePayment ? 'Ghi nhận tiền về muộn' : 'Xác nhận đã nhận tiền'}
+          className="rounded-card border border-warning-fg bg-stone-0 p-2.5"
+        >
           <p className="text-xs text-warning-fg">
-            Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm &quot;Đã nhận tiền&quot;.
+            {latePayment
+              ? 'Đơn đã huỷ khi chưa nhận tiền. Nếu sao kê có khoản chuyển của đơn này, bấm "Ghi nhận tiền về muộn" để đưa vào hàng đợi Hoàn tiền khách.'
+              : 'Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm "Đã nhận tiền".'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
@@ -163,7 +182,7 @@ export function OrderStatusActions({ order, canConfirmPayment = true }: { order:
               disabled={busy}
               className={BTN_WARNING}
             >
-              Đã nhận tiền
+              {latePayment ? 'Ghi nhận tiền về muộn' : 'Đã nhận tiền'}
             </button>
           </div>
         </section>

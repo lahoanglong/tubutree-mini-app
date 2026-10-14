@@ -162,6 +162,33 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(native).not.toHaveBeenCalled();
   });
 
+  it('đơn chuyển khoản đã huỷ mà tiền về muộn: nút "Ghi nhận tiền về muộn" → hỏi xác nhận rồi POST confirm-payment, hiện câu của API (R2-ADMINOPS-3)', async () => {
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, latePayment: true, message: 'Đã ghi khoản hoàn 450.000đ tiền về muộn, xem mục Hoàn tiền khách.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    expect(buttonLabels(container)).not.toContain('Đã nhận tiền');
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    expect(confirmDialog()?.textContent).toMatch(/hàng đợi Hoàn tiền khách/);
+    answerConfirm(true);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/orders/o1/confirm-payment');
+    expect(container.textContent).toContain('xem mục Hoàn tiền khách');
+  });
+
+  it('nhân viên (canConfirmPayment=false ở cấp trang) không thấy nút ghi nhận tiền về muộn', () => {
+    const { container } = mount(
+      <OrderStatusActions order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })} canConfirmPayment={false} />,
+    );
+    expect(buttonLabels(container)).not.toContain('Ghi nhận tiền về muộn');
+  });
+
   it('"Hủy đơn" đơn đã trả trước: hộp thoại nêu số tiền hoàn và nơi nhận (Ví Tubu của khách), điểm đã dùng được trả lại', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
     const { container } = mount(

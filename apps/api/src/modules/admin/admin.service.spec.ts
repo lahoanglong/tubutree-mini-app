@@ -998,9 +998,10 @@ describe('AdminService.confirmOrderPayment', () => {
         findFirst: jest.fn().mockResolvedValue(order),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
       },
+      orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     });
     const orderStatus = {
-      markPaid: jest.fn().mockResolvedValue({ outcome, order: { ...order, paymentStatus: 'PAID' } }),
+      markPaid: jest.fn().mockResolvedValue({ outcome, order: outcome === 'CLOSED' ? order : { ...order, paymentStatus: 'PAID' } }),
     } as unknown as OrderStatusService;
     const svc = new AdminService(
       prisma,
@@ -1014,7 +1015,7 @@ describe('AdminService.confirmOrderPayment', () => {
       defaultGomdonOrder,
       defaultGomdonClient,
     );
-    return { svc, orderStatus: orderStatus as unknown as { markPaid: jest.Mock } };
+    return { svc, prisma, orderStatus: orderStatus as unknown as { markPaid: jest.Mock } };
   }
   const bankOrder = (over: Record<string, unknown> = {}) => ({
     id: 'o1',
@@ -1044,11 +1045,28 @@ describe('AdminService.confirmOrderPayment', () => {
     await expect(svc.confirmOrderPayment('admin-2', 'o1')).resolves.toMatchObject({ ok: true, alreadyPaid: true });
   });
 
-  it('đơn đã huỷ/trả → 400 nhắc hoàn tiền thủ công', async () => {
-    const { svc } = make(bankOrder({ status: 'CANCELLED' }), 'CLOSED');
-    const err = await svc.confirmOrderPayment('admin-1', 'o1').catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(BadRequestException);
-    expect((err as Error).message).toContain('hoàn tiền thủ công');
+  it('tiền chuyển khoản về muộn cho đơn đã huỷ → ghi khoản hoàn LATE_PAYMENT vào hàng đợi Hoàn tiền khách (D2, R2-ADMINOPS-3)', async () => {
+    const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: ' FT2627001 ' });
+    expect(res).toMatchObject({ ok: true, latePayment: true });
+    expect(res.message).toContain('Hoàn tiền khách');
+    const createMany = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock } }).orderCustomerRefund.createMany;
+    expect(createMany.mock.calls[0][0].data[0]).toMatchObject({
+      orderId: 'o1',
+      kind: 'LATE_PAYMENT',
+      refKey: 'ADMIN:FT2627001',
+      amount: 350000,
+      method: 'MANUAL_TRANSFER',
+      status: 'PENDING',
+    });
+  });
+
+  it('bấm lại cùng mã GD (khoản hoàn đã ghi) → báo đã ghi trước đó, không tạo khoản thứ hai', async () => {
+    const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock } }).orderCustomerRefund.createMany.mockResolvedValue({ count: 0 });
+    const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
+    expect(res).toMatchObject({ ok: true, latePayment: true });
+    expect(res.message).toContain('đã được ghi trước đó');
   });
 
   it('đơn đã hoàn tiền (REFUNDED) → 400', async () => {

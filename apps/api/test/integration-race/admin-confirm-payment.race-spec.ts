@@ -180,4 +180,19 @@ describe('Admin confirm-payment race (real Postgres)', () => {
     const delivered = await admin.updateOrderStatus(a.id, order.id, 'DELIVERED');
     expect(delivered.status).toBe('DELIVERED');
   });
+
+  it('tiền về muộn cho đơn đã huỷ: 2 admin cùng bấm "Đã nhận tiền" với cùng mã GD → đúng 1 khoản hoàn LATE_PAYMENT, đơn vẫn CANCELLED/UNPAID (D2, R2-ADMINOPS-3)', async () => {
+    const { order } = await bankTransferOrder(300_000);
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    const results = await Promise.allSettled([
+      admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT2627001' }),
+      admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'FT2627001' }),
+    ]);
+    expect(summarize(results).rejected).toHaveLength(0);
+    const refunds = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]).toMatchObject({ kind: 'LATE_PAYMENT', amount: 300_000, status: 'PENDING', method: 'MANUAL_TRANSFER' });
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
+  });
 });
