@@ -26,7 +26,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
+import { GroupBuyService, groupBuyCouponCode } from '../../src/modules/groupbuy/groupbuy.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { TOTAL_CHANGED } from '../../src/modules/checkout/checkout.service';
@@ -209,6 +209,32 @@ describe('Hàng của gian hàng đối tác không hưởng chương trình kh�
     const c = await variation(90_000, { consignment: store.id });
     const u = await buyer();
     await expect(groupBuy.create(u.userId, c.productId)).rejects.toMatchObject(NOT_ELIGIBLE);
+  });
+
+  it('mua chung: nhóm đã mở từ trước trên hàng giao hộ của gian hàng → không tham gia được, nhóm đóng và thành viên được báo; nhóm đủ người chưa phát mã thì không phát (review vòng 3 S2)', async () => {
+    const notify = moduleRef.get(NotificationsService).notify as jest.Mock;
+    const store = await shop();
+    const c = await variation(80_000, { consignment: store.id });
+    const [opener, member, joiner] = [await buyer(), await buyer(), await buyer()];
+    const open = await prisma.groupBuy.create({
+      data: { productId: c.productId, initiatorId: opener.userId, targetSize: 3, currentSize: 2, unitPrice: 68_000, basePrice: 80_000, expiresAt: ago(-1) },
+    });
+    await prisma.groupBuyMember.createMany({ data: [opener, member].map((u) => ({ groupBuyId: open.id, userId: u.userId })) });
+    notify.mockClear();
+    await expect(groupBuy.join(joiner.userId, open.id)).rejects.toMatchObject(NOT_ELIGIBLE);
+    expect((await prisma.groupBuy.findUniqueOrThrow({ where: { id: open.id } })).status).toBe('FAILED');
+    expect(await prisma.groupBuyMember.count({ where: { groupBuyId: open.id } })).toBe(2);
+    expect(notify.mock.calls.filter((call) => call[1] === 'GROUP_BUY_FAILED').map((call) => call[0]).sort()).toEqual([opener.userId, member.userId].sort());
+    expect((await groupBuy.listOpen(joiner.userId)).some((g) => g.id === open.id)).toBe(false);
+
+    const done = await prisma.groupBuy.create({
+      data: { productId: c.productId, initiatorId: opener.userId, targetSize: 2, currentSize: 2, unitPrice: 68_000, basePrice: 80_000, status: 'SUCCESS', expiresAt: ago(-1) },
+    });
+    await prisma.groupBuyMember.createMany({ data: [opener, member].map((u) => ({ groupBuyId: done.id, userId: u.userId })) });
+    await groupBuy.reconcileSuccessfulGroups();
+    expect((await prisma.groupBuy.findUniqueOrThrow({ where: { id: done.id } })).status).toBe('FAILED');
+    const codes = [opener, member].map((u) => groupBuyCouponCode(done.id, u.userId));
+    expect(await prisma.coupon.count({ where: { code: { in: codes } } })).toBe(0);
   });
 
   it('combo CTV: không thêm hàng đối tác vào combo; hàng đối tác đã nằm trong combo thì không được giảm, hàng Tubu vẫn được', async () => {
