@@ -355,6 +355,28 @@ describe('AdminService.setUserRole', () => {
     expect((prisma as unknown as { user: { update: jest.Mock } }).user.update).not.toHaveBeenCalled();
   });
 
+  // R4-ADMIN-10: admin dán SĐT từ Zalo (+84…/84…, có khoảng trắng) — User.phone lưu 0xxxxxxxxx nên tra đúng chuỗi gõ
+  // vào báo nhầm "chưa mở Mini App".
+  it.each(['+84899625240', '84899625240', '0899 625 240', ' +84 899.625.240 '])(
+    'SĐT dạng %p → tra theo dạng lưu 0899625240 và thu hồi grant theo đúng SĐT đó',
+    async (typed) => {
+      const findUnique = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' });
+      const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'STAFF', fullName: 'X' });
+      const prisma = makePrisma({ user: { findUnique, update, count: jest.fn().mockResolvedValue(1) } });
+      (rbac.revokeGrantsAbove as jest.Mock).mockClear();
+      await mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF');
+      expect(findUnique).toHaveBeenCalledWith({ where: { phone: '0899625240' } });
+      expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'STAFF');
+    },
+  );
+
+  it('không thấy user → thông báo kèm SĐT đã chuẩn hoá để admin đối chiếu', async () => {
+    const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '+84944555666', 'STAFF')).rejects.toThrow(
+      'Không tìm thấy người dùng có SĐT 0944555666',
+    );
+  });
+
   it('cấp role: update đúng user + trả previousRole (audit ai đổi)', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN', fullName: 'X' });
     const prisma = makePrisma({
