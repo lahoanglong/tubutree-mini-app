@@ -35,6 +35,8 @@ export function showFulfillerHeaders(groups: FulfillerGroup<unknown>[]): boolean
 export function fulfillerLabel(f: LineFulfiller): string {
   if (f.kind === 'TUBU') return 'Tubu Tree giao';
   if (f.kind === 'MERCHANT') return `${f.name} giao`;
+  if (f.reason === 'STORE_PAUSED' && f.name) return `${f.name} đang tạm nghỉ, chưa nhận đơn`;
+  if (f.reason === 'STORE_CLOSED' && f.name) return `${f.name} đã ngừng bán`;
   return 'Không giao được';
 }
 
