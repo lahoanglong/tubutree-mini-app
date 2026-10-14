@@ -4,6 +4,8 @@ export interface AffiliateMe {
   isAffiliate: boolean;
   referralCode: string;
   walletBalance: number;
+  /** MST cá nhân/CCCD đã khai để kê khai khấu trừ thuế TNCN (null: chưa khai). */
+  personalTaxId?: string | null;
   monthRevenue?: number;
   tier?: AffiliateTier;
 }
@@ -139,16 +141,35 @@ export interface PayoutResult {
   status?: string;
 }
 export const getMyPayouts = () => api.get<AffiliatePayout[]>('/affiliate/payouts').then((r) => r.data);
-/** Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. */
+/**
+ * Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. `taxId`: MST/CCCD khai lần đầu khi
+ * lần rút bị khấu trừ thuế TNCN.
+ */
 export const requestPayout = (
   amount: number,
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
   bankInfo: { bankName: string; accountNumber: string; accountName: string } | undefined,
   idempotencyKey: string,
+  taxId?: string,
 ) =>
   api
-    .post<PayoutResult>('/affiliate/payouts', { amount, method, bankInfo }, { headers: { 'Idempotency-Key': idempotencyKey } })
+    .post<PayoutResult>(
+      '/affiliate/payouts',
+      { amount, method, bankInfo, ...(taxId ? { taxId } : {}) },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
     .then((r) => r.data);
+
+export interface TaxStatement {
+  year: number;
+  fullName: string | null;
+  taxId: string | null;
+  items: { id: string; paidAt: string; method: string; grossAmount: number; taxWithheld: number; amount: number; taxId: string | null }[];
+  totals: { grossAmount: number; taxWithheld: number; netAmount: number };
+}
+/** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (mặc định năm nay). */
+export const getTaxStatement = (year?: number) =>
+  api.get<TaxStatement>('/affiliate/tax-statement', { params: year ? { year } : {} }).then((r) => r.data);
 
 export interface StorefrontStat {
   slug: string;

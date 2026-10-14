@@ -43,6 +43,9 @@ vi.mock('../services/affiliate-api', () => ({
   getCommissions: vi.fn().mockResolvedValue([]),
   getMyPayouts: vi.fn().mockResolvedValue([]),
   requestPayout: vi.fn(),
+  getTaxStatement: vi.fn().mockResolvedValue({
+    year: 2026, fullName: null, taxId: null, items: [], totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 },
+  }),
   getStorefrontAnalytics: vi.fn().mockResolvedValue({ storefronts: [] }),
   getProductBreakdown: vi.fn().mockResolvedValue([]),
   getCtvTiers: vi.fn().mockResolvedValue({ allTiers: [] }),
@@ -65,6 +68,7 @@ import {
   getCtvMilestones,
   getMyPayouts,
   getCtvTiers,
+  getTaxStatement,
   requestPayout,
 } from '../services/affiliate-api';
 
@@ -292,6 +296,16 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getByText(/Lý do: Thiếu số tài khoản/)).toBeInTheDocument();
   });
 
+  it('SELLER-11: có khấu trừ trong năm → tổng thu nhập và thuế đã khấu trừ năm nay, cách nhận chứng từ khấu trừ', async () => {
+    vi.mocked(getTaxStatement).mockResolvedValue({
+      year: 2026, fullName: 'Nguyễn An', taxId: '079201001234', items: [],
+      totals: { grossAmount: 3_000_000, taxWithheld: 300_000, netAmount: 2_700_000 },
+    });
+    renderPage();
+    expect(await screen.findByText('Năm 2026: thu nhập hoa hồng 3.000.000đ · đã khấu trừ thuế TNCN 300.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/chứng từ khấu trừ thuế TNCN/)).toBeInTheDocument();
+  });
+
   it('có hoa hồng đang rút: báo số đang chờ Tubu Tree chuyển khoản', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, withdrawingCommission: 80_000,
@@ -369,6 +383,44 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     await openWithdraw();
     expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 2.700.000đ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận 2.700.000đ vào Ví' })).toBeInTheDocument();
+  });
+
+  it('SELLER-11: lần rút bị khấu trừ mà chưa khai MST/CCCD → bắt nhập (10 hoặc 12 số) rồi gửi kèm', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    const submit = await screen.findByRole('button', { name: 'Nhận 2.700.000đ vào Ví' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(inputNear('Mã số thuế cá nhân hoặc số CCCD'), { target: { value: '07920100' } });
+    expect(submit).toBeDisabled();
+    expect(screen.getByText('Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.')).toBeInTheDocument();
+    fireEvent.change(inputNear('Mã số thuế cá nhân hoặc số CCCD'), { target: { value: '079201001234' } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+    expect(requestPayout).toHaveBeenCalledWith(3_000_000, 'WALLET_BALANCE', undefined, expect.any(String), '079201001234');
+  });
+
+  it('SELLER-11: đã khai MST/CCCD → không hỏi lại, ghi rõ số dùng để kê khai', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0, personalTaxId: '079201001234' });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    const submit = await screen.findByRole('button', { name: 'Nhận 2.700.000đ vào Ví' });
+    expect(screen.queryByText('Mã số thuế cá nhân hoặc số CCCD')).toBeNull();
+    expect(screen.getByText('Kê khai khấu trừ theo MST/CCCD 079201001234')).toBeInTheDocument();
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+    expect(requestPayout).toHaveBeenCalledWith(3_000_000, 'WALLET_BALANCE', undefined, expect.any(String));
   });
 
   it('chọn Ngân hàng: khoá nút tới khi nhập đủ thông tin tài khoản, rồi gửi kèm thông tin ngân hàng', async () => {

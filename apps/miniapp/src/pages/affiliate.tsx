@@ -10,6 +10,7 @@ import {
   createAffiliateLink,
   getCommissions,
   getMyPayouts,
+  getTaxStatement,
   requestPayout,
   getStorefrontAnalytics,
   getProductBreakdown,
@@ -28,6 +29,7 @@ import { useAuthStore } from '../store/auth';
 import { formatDate, formatPoints, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
+import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
 import { vi as copy } from '../i18n/vi';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -254,6 +256,7 @@ function Dashboard() {
   const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks });
   const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions });
   const payoutsQ = useQuery({ queryKey: ['affiliate-payouts'], queryFn: getMyPayouts });
+  const taxQ = useQuery({ queryKey: ['affiliate-tax-statement'], queryFn: () => getTaxStatement() });
   const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
   const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
@@ -800,6 +803,17 @@ function Dashboard() {
       </Section>
 
       <Section title="Lệnh rút">
+        {taxQ.data && taxQ.data.totals.taxWithheld > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <Text variant="body-sm" as="div">
+              Năm {taxQ.data.year}: thu nhập hoa hồng {formatVnd(taxQ.data.totals.grossAmount)} · đã khấu trừ thuế TNCN{' '}
+              {formatVnd(taxQ.data.totals.taxWithheld)}
+            </Text>
+            <Text variant="caption" tone="tertiary" as="div">
+              Cần chứng từ khấu trừ thuế TNCN để quyết toán thuế? Liên hệ CSKH Tubu Tree, kế toán cấp theo bảng kê năm này.
+            </Text>
+          </div>
+        )}
         {payoutsQ.isError ? (
           <ErrorState variant="inline" message={getErrorMessage(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
         ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
@@ -912,6 +926,7 @@ function Dashboard() {
         {withdrawing && (
           <WithdrawForm
             max={d?.withdrawableCommission ?? 0}
+            taxIdOnFile={meQ.data?.personalTaxId ?? null}
             // dashQ lỗi → max tạm =0 (không phải số dư thật) — đừng chặn theo max chưa xác thực,
             // để BE tự validate số dư (đồng bộ với nút "Rút hoa hồng" phía trên vẫn cho mở sheet).
             knownMax={!dashQ.isError}
@@ -920,6 +935,8 @@ function Dashboard() {
               void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-payouts'] });
+              void qc.invalidateQueries({ queryKey: ['affiliate-tax-statement'] });
+              void qc.invalidateQueries({ queryKey: ['affiliate-me'] });
               // Rút về WALLET_BALANCE cộng thẳng vào Ví Tubu — invalidate để trang Ví không
               // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi rút.
               void qc.invalidateQueries({ queryKey: ['wallet'] });
@@ -939,10 +956,12 @@ function Dashboard() {
 function WithdrawForm({
   max,
   knownMax,
+  taxIdOnFile,
   onDone,
 }: {
   max: number;
   knownMax: boolean;
+  taxIdOnFile: string | null;
   onDone: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
@@ -950,11 +969,15 @@ function WithdrawForm({
   const { affiliateMinWithdrawBank: minBank, affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
   const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
   const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
+  const [taxId, setTaxId] = useState('');
   // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh rút thứ hai.
   const payKey = useRef(newIdempotencyKey());
 
   const mut = useMutation({
-    mutationFn: () => requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current),
+    mutationFn: () =>
+      askTaxId
+        ? requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current, taxId.trim())
+        : requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current),
     onSuccess: (r) => {
       haptic('medium');
       openSnackbar({
@@ -969,6 +992,9 @@ function WithdrawForm({
   // BE chỉ nhận rút toàn bộ hoa hồng có thể rút (affiliate.service.requestPayout), nên số tiền không cho sửa.
   const amountNum = max;
   const tax = payoutTax(amountNum, pit);
+  // Lần rút bị khấu trừ thuế TNCN cần MST/CCCD để Tubu Tree kê khai và cấp chứng từ (BE trả PIT_TAX_ID_REQUIRED nếu thiếu).
+  const askTaxId = tax > 0 && !taxIdOnFile;
+  const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(taxId.trim());
   const bankValid =
     method !== 'BANK' ||
     (bank.bankName.trim() && bank.accountNumber.trim().length >= 6 && bank.accountName.trim());
@@ -983,6 +1009,7 @@ function WithdrawForm({
     // và nhãn "Tối thiểu 50k" cũng hiện sai trong khoảng đó.
     (method !== 'BANK' || (cfgLoaded && amountNum >= minBank)) &&
     bankValid &&
+    taxIdValid &&
     !mut.isPending;
 
   return (
@@ -1018,11 +1045,37 @@ function WithdrawForm({
               Khấu trừ thuế TNCN {formatVnd(tax)} · thực nhận {formatVnd(amountNum - tax)}
             </Text>
           )}
+          {tax > 0 && taxIdOnFile && (
+            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+              Kê khai khấu trừ theo MST/CCCD {taxIdOnFile}
+            </Text>
+          )}
         </div>
       ) : (
         <div role="alert">
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0 }}>
             Chưa tải được số hoa hồng có thể rút. Đóng lại rồi thử lại sau ít phút.
+          </Text>
+        </div>
+      )}
+
+      {askTaxId && (
+        <div style={{ marginTop: 12 }}>
+          <Input
+            label="Mã số thuế cá nhân hoặc số CCCD"
+            inputMode="numeric"
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+          />
+          <Text
+            variant="caption"
+            tone={taxId.trim() && !taxIdValid ? 'danger' : 'tertiary'}
+            as="div"
+            style={{ marginTop: 4 }}
+          >
+            {taxId.trim() && !taxIdValid
+              ? 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.'
+              : 'Tubu Tree dùng số này để kê khai thuế đã khấu trừ và cấp chứng từ khấu trừ cho bạn. Chỉ cần nhập một lần.'}
           </Text>
         </div>
       )}
