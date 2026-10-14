@@ -297,6 +297,8 @@ describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', 
       paymentAttempt: {
         findUnique: jest.fn().mockResolvedValue(attempt),
         create: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
@@ -462,7 +464,7 @@ describe('ZalopayService.createPayment — chỉ đơn ZaloPay đang chờ thanh
   function setup(orderRow: Record<string, unknown>) {
     const prisma = withTx({
       order: { findUnique: jest.fn().mockResolvedValue(orderRow), update: jest.fn().mockResolvedValue({}) },
-      paymentAttempt: { create: jest.fn().mockResolvedValue({}) },
+      paymentAttempt: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     }) as unknown as PrismaService;
     const svc = new ZalopayService(prisma, { notify: jest.fn() } as unknown as NotificationsService, makeConfig(true) as never);
     return { svc, prisma };
@@ -497,6 +499,35 @@ describe('ZalopayService.createPayment — chỉ đơn ZaloPay đang chờ thanh
     }
   });
 
+  it('R3-MONEY-1: lệnh cũ chưa có kết quả mà ZaloPay báo đã trả → ghi nhận lệnh cũ, KHÔNG mở lệnh mới (khách khỏi trả hai lần)', async () => {
+    const { svc, prisma } = setup(base);
+    const apply = jest.spyOn(svc, 'applyGatewayPayment').mockResolvedValue(undefined);
+    (prisma.paymentAttempt.findMany as jest.Mock).mockResolvedValue([{ id: 'a0', appTransId: '261014_TUBU1_old' }]);
+    (prisma.order.findUnique as jest.Mock).mockResolvedValueOnce(base).mockResolvedValue({ ...base, paymentStatus: 'PAID', status: 'CONFIRMED' });
+    axiosPost.mockResolvedValueOnce({ data: { return_code: 1, amount: 250000 } });
+    await expect(svc.createPayment('u1', 'TUBU1')).rejects.toThrow('Đơn đã thanh toán');
+    expect(apply).toHaveBeenCalledWith('261014_TUBU1_old', 250000, 'query');
+    expect(axiosPost).toHaveBeenCalledTimes(1);
+    expect(axiosPost.mock.calls[0][0]).toMatch(/\/query$/);
+    expect(prisma.paymentAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('R3-MONEY-1: lệnh cũ còn đang xử lý → bảo khách chờ, không mở lệnh mới', async () => {
+    const { svc, prisma } = setup(base);
+    (prisma.paymentAttempt.findMany as jest.Mock).mockResolvedValue([{ id: 'a0', appTransId: '261014_TUBU1_old' }]);
+    axiosPost.mockResolvedValueOnce({ data: { return_code: 3, is_processing: true } });
+    await expect(svc.createPayment('u1', 'TUBU1')).rejects.toThrow('đang được xử lý');
+    expect(prisma.paymentAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('không hỏi được ZaloPay về lệnh cũ → vẫn cho mở lệnh mới (tiền trả trùng sau đó thành khoản hoàn)', async () => {
+    const { svc, prisma } = setup(base);
+    (prisma.paymentAttempt.findMany as jest.Mock).mockResolvedValue([{ id: 'a0', appTransId: '261014_TUBU1_old' }]);
+    axiosPost.mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce({ data: { return_code: 1, order_url: 'x' } });
+    await svc.createPayment('u1', 'TUBU1');
+    expect(prisma.paymentAttempt.create).toHaveBeenCalled();
+  });
+
   it('ZaloPay trả return_code ≠ 1 → báo lỗi, không ghi PaymentAttempt, không đổi paymentTxnId', async () => {
     const { svc, prisma } = setup(base);
     axiosPost.mockResolvedValue({ data: { return_code: 2, return_message: 'Giao dịch thất bại', sub_return_code: -68 } });
@@ -517,7 +548,11 @@ describe('ZalopayService — callback thiếu/sai kiểu số tiền', () => {
     const attemptUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = withTx({
       order: { findFirst: jest.fn(), findUnique: jest.fn().mockResolvedValue(orderRow), update: jest.fn(), updateMany },
-      paymentAttempt: { findUnique: jest.fn().mockResolvedValue({ ...attempt, order: orderRow }), updateMany: attemptUpdateMany },
+      paymentAttempt: {
+        findUnique: jest.fn().mockResolvedValue({ ...attempt, order: orderRow }),
+        updateMany: attemptUpdateMany,
+        update: jest.fn().mockResolvedValue({}),
+      },
       orderCustomerRefund: { createMany },
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     }) as unknown as PrismaService;

@@ -983,6 +983,8 @@ model Order {
   pancakeAttention       String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
   pancakeAttentionAt     DateTime?
+  /// Số tiền chuyển khoản (cộng dồn) Pancake báo đã nhận khi đơn còn chưa đủ tiền — đơn bị huỷ thì hoàn đúng số này.
+  pancakePaidReported    Int?
   /// Đẩy đơn sang Pancake (pancake-order.service.ts): WAITING_PAYMENT (trả trước qua cổng, chờ tiền) | PENDING
   /// (đang thử lại) | PUSHING | SYNCED | FAILED (hết lượt thử, cron vẫn thử tiếp trong cửa sổ) | NOT_CONFIGURED |
   /// SKIPPED (đơn đã huỷ/trả trước khi lên Pancake) | STALE (quá cửa sổ tự đẩy hoặc đã rời kho mà chưa lên Pancake —
@@ -1182,6 +1184,8 @@ model PaymentAttempt {
   /// Cổng đã cho kết quả cuối (callback hoặc tra trạng thái: đã trả / thất bại / hết hạn) — cron đối soát thôi hỏi.
   resolvedAt    DateTime?
   lastQueriedAt DateTime?
+  /// Lần thử này là khoản đã lật đơn sang PAID — callback/tra cứu sau của chính nó là gửi lại, của lần thử khác là tiền trả thêm.
+  succeededAt   DateTime?
 
   @@index([orderId])
   @@index([provider, resolvedAt, createdAt])
@@ -1436,6 +1440,7 @@ enum CustomerRefundKind {
   CANCEL
   RETURN
   LATE_PAYMENT
+  OVERPAYMENT
 }
 
 /// Hàng đợi hoàn tiền thủ công của admin. Dòng MANUAL_TRANSFER PENDING là tiền Tubu đang nợ khách; WALLET là
@@ -1447,7 +1452,7 @@ model OrderCustomerRefund {
   orderCode       String
   kind            CustomerRefundKind   @default(END_CUSTOMER)
   /// Khoá chống tạo trùng trong cùng (đơn, loại): id yêu cầu trả hàng (RETURN), kênh + mã giao dịch
-  /// (LATE_PAYMENT), rỗng cho loại chỉ có một lần mỗi đơn (END_CUSTOMER, CANCEL).
+  /// (LATE_PAYMENT, OVERPAYMENT), rỗng cho loại chỉ có một lần mỗi đơn (END_CUSTOMER, CANCEL).
   refKey          String               @default("")
   /// Chủ đơn — khách thấy khoản này ở chi tiết đơn và tự chọn nơi nhận. Null với END_CUSTOMER (khách cuối có
   /// thể không có tài khoản).

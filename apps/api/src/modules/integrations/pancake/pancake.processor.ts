@@ -9,12 +9,12 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
-import { clearPancakeAttention } from './pancake-attention';
+import { ATTENTION_UNDERPAID, clearPancakeAttention } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
-import { recordCumulativeLatePayment } from '../../orders/refund-queue';
+import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 
@@ -395,7 +395,13 @@ export class PancakeProcessor extends WorkerHost {
   private async onPaymentReconcile(data: Record<string, unknown>, opts: { deferGomdonPush?: boolean } = {}): Promise<Order | null> {
     const order = await this.findOrder(data);
     if (!order) return null;
-    if (order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return null;
+    if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    if (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') {
+      // Đơn đã nhận đủ: Pancake báo cộng dồn vượt tổng đơn là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
+      await this.recordOverpayment(order, pancakePaidAmount(data));
+      return null;
+    }
+    if (order.paymentStatus !== 'UNPAID') return null;
     const flaggedPaid = isPancakeOrderPaid(data, order.total);
     const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
@@ -412,6 +418,7 @@ export class PancakeProcessor extends WorkerHost {
       note: 'Pancake ghi nhận chuyển khoản',
       deferGomdonPush: opts.deferGomdonPush,
     });
+    if (outcome === 'PAID' || outcome === 'ALREADY_PAID') await this.recordOverpayment(current ?? order, pancakePaidAmount(data));
     if (outcome === 'PAID') {
       this.logger.log(`Pancake xác nhận thanh toán đơn ${order.code} → PAID`);
       return current;
@@ -430,11 +437,22 @@ export class PancakeProcessor extends WorkerHost {
     );
   }
 
+  private async recordOverpayment(order: Order, reported: number): Promise<void> {
+    if (!(reported > order.total)) return;
+    await recordCumulativeOverpayment(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      order,
+      { reportedTotal: reported, source: 'PANCAKE' },
+    );
+  }
+
   private async flagUnderpaid(order: Order, paid: number): Promise<void> {
+    // Đơn bị huỷ sau đó thì hoàn đúng số này ngay lúc huỷ (refundReportedUnderpayment).
+    await this.prisma.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID' }, data: { pancakePaidReported: paid } });
     const missing = order.total - paid;
     const flagged = await this.flagAttention(
       order,
-      `Khách chuyển thiếu: Pancake ghi nhận ${formatVnd(paid)}/${formatVnd(order.total)}, còn thiếu ${formatVnd(missing)} — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận.`,
+      `${ATTENTION_UNDERPAID}: Pancake ghi nhận ${formatVnd(paid)}/${formatVnd(order.total)}, còn thiếu ${formatVnd(missing)} — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận.`,
     );
     if (!flagged) return;
     await this.notifications

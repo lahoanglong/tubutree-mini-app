@@ -6,6 +6,8 @@ import { PANCAKE_ALERT_TEMPLATE, type GomdonAlertService } from '../gomdon/gomdo
 export const ATTENTION_PUSH_FAILED = 'Chưa đẩy được đơn sang Pancake';
 export const ATTENTION_CANCEL_PENDING = 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake';
 export const ATTENTION_PAYMENT_PENDING = 'Chưa báo được "đã thanh toán, không thu COD" sang Pancake';
+/** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
+export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
 
 /**
  * Hàng đợi "Cần xử lý Pancake": ghi lý do lên đơn + báo ADMIN in-app (cùng cơ chế PancakeProcessor.flagAttention).

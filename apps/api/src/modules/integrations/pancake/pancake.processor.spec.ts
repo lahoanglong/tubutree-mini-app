@@ -122,7 +122,10 @@ type UpdateManyArgs = { where: Record<string, unknown>; data: Record<string, unk
 const statusFlips = (m: jest.Mock) =>
   m.mock.calls.map(([a]) => a as UpdateManyArgs).filter((a) => a?.data && ('status' in a.data || 'paymentStatus' in a.data));
 const attentionFlags = (m: jest.Mock) =>
-  m.mock.calls.map(([a]) => a as UpdateManyArgs).filter((a) => a?.data && 'pancakeAttention' in a.data).map((a) => a.data.pancakeAttention as string);
+  m.mock.calls
+    .map(([a]) => a as UpdateManyArgs)
+    .filter((a) => a?.data && 'pancakeAttention' in a.data && a.data.pancakeAttention !== null)
+    .map((a) => a.data.pancakeAttention as string);
 
 describe('PancakeProcessor.extractOrderCode', () => {
   const { proc } = setup(null);
@@ -475,6 +478,57 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     orderUpdateMany.mockResolvedValue({ count: 0 });
     await proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_UNDERPAID', expect.anything());
+  });
+
+  it('R3-MONEY-5: chuyển thiếu → lưu số Pancake báo đã nhận lên đơn (huỷ sau đó thì hoàn đúng số này)', async () => {
+    const { proc, orderUpdateMany } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 98000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
+    expect(orderUpdateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { pancakePaidReported: 50000 } });
+  });
+
+  it('R3-MONEY-1: đơn đã PAID mà Pancake báo cộng dồn gấp đôi (khách chuyển hai lần) → khoản hoàn OVERPAYMENT phần dư, báo khách và admin', async () => {
+    const { proc, prisma, notifications } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 228000 });
+    expect(lateRefunds(prisma)).toEqual([
+      expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114000, refKey: 'PANCAKE:paid:228000', method: 'MANUAL_TRANSFER', status: 'PENDING' }),
+    ]);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TUBU1', amount: '114.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('R3-MONEY-1: đơn đã hoàn (REFUNDED) vẫn nhận phần dư; báo lại cùng số → không tạo thêm (đã ghi đủ phần dư)', async () => {
+    const { proc, prisma } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED', total: 114000,
+    });
+    (prisma.orderCustomerRefund.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 114000 } });
+    await proc.onPaymentReconcile({ id: 'p1', status: 6, prepaid: 228000 });
+    expect(lateRefunds(prisma)).toEqual([]);
+  });
+
+  it('đơn đã PAID, Pancake báo đúng tổng đơn → không có khoản dư nào', async () => {
+    const { proc, prisma } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 114000, is_paid: true });
+    expect(lateRefunds(prisma)).toEqual([]);
+    expect(prisma.orderCustomerRefund.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('lần đầu Pancake báo đã nhận VƯỢT tổng đơn → lật PAID và ghi luôn khoản dư', async () => {
+    const { proc, prisma } = setup({
+      id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 114000,
+    });
+    await proc.onPaymentReconcile({ id: 'p1', bank_payment: 150000 });
+    expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 36000 })]);
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {
