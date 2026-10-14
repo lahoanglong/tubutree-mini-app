@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -81,6 +81,8 @@ export default function CheckoutPage() {
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
   const cartReady = selection == null || cartLoaded;
   const checkoutItems = itemIds ? (cartQ.data?.items ?? []).filter((it) => itemIds.includes(it.id)) : (cartQ.data?.items ?? []);
+  // Giỏ đã tải và không còn món nào (đặt xong rồi Back, mở lại tab cũ): không dựng form 0đ, không gọi báo giá (BE trả 400).
+  const cartEmpty = cartLoaded && checkoutItems.length === 0;
 
   useEffect(() => {
     setInvoice(loadSavedInvoice());
@@ -125,7 +127,7 @@ export default function CheckoutPage() {
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
-    enabled: !!addressId && phase === 'authenticated' && cartReady,
+    enabled: !!addressId && phase === 'authenticated' && cartReady && !cartEmpty,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -279,6 +281,28 @@ export default function CheckoutPage() {
             nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
           <BankTransferPanel order={placed} />
+        </div>
+      </Shell>
+    );
+  }
+
+  if (cartEmpty) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
+            <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
+          </div>
+          <h2 className="mt-4 font-display text-lg font-semibold text-stone-900">Giỏ hàng đang trống</h2>
+          <p className="mt-1 text-sm text-stone-600">Chưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <Link href="/" className={ui.btnPrimary}>
+              Khám phá sản phẩm
+            </Link>
+            <Link href="/tai-khoan" className={ui.btnSecondary}>
+              Đơn của tôi
+            </Link>
+          </div>
         </div>
       </Shell>
     );
