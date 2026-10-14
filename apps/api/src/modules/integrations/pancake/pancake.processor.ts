@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, Optional } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import type { Order } from '@prisma/client';
+import { Prisma, type Order } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -43,6 +43,9 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
 };
 
 type HandleOutcome = 'PROCESSED' | 'UNMATCHED';
+
+const CLOSED_ORDER_STATUSES = ['CANCELLED', 'RETURNED'] as const;
+const isClosedOrder = (status: string): boolean => (CLOSED_ORDER_STATUSES as readonly string[]).includes(status);
 
 function isTerminalPancakeStatus(data: Record<string, unknown>): boolean {
   const action = resolvePancakeStatus(data['status'] ?? data['status_name']);
@@ -527,6 +530,14 @@ export class PancakeProcessor extends WorkerHost {
       return;
     }
 
+    // Đơn đã huỷ/trả (đã hoàn tiền) mà Pancake gắn vận đơn MỚI: hàng có thể đang đi tới khách — việc cho người, không ghi
+    // mã vận đơn lên đơn đã đóng (khách thấy vận đơn trên đơn đã huỷ). Cùng mã đã có (vd "Đã hoàn" kèm hãng) thì vẫn ghi.
+    const newWaybill = Boolean(waybillS) && waybillS !== order.shippingCode;
+    if (newWaybill && isClosedOrder(order.status)) {
+      await this.flagWaybillOnClosedOrder(order, carrierS, waybillS!);
+      return;
+    }
+
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
     // Webhook tới trễ / sai thứ tự (Pancake gửi lại, cron chạy lại UNMATCHED): không lùi dòng vận chuyển. So theo
     // updated_at của Pancake với mốc mới nhất đã ghi; không có mốc giờ thì ít nhất không đưa đơn đã giao về "đang giao".
@@ -558,16 +569,31 @@ export class PancakeProcessor extends WorkerHost {
         ]
       : history;
 
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        shippingPartner: carrierS ?? order.shippingPartner,
-        shippingCode: waybillS ?? order.shippingCode,
-        shippingStatus: shipStatusS ?? order.shippingStatus,
-        trackingLink: linkS ?? order.trackingLink,
-        shippingHistory: nextHistory as object,
-      },
-    });
+    try {
+      await this.prisma.order.update({
+        // Vận đơn mới chỉ ghi khi đơn chưa bị huỷ/trả chen giữa lúc đọc và lúc ghi.
+        where: newWaybill ? { id: order.id, status: { notIn: [...CLOSED_ORDER_STATUSES] } } : { id: order.id },
+        data: {
+          shippingPartner: carrierS ?? order.shippingPartner,
+          shippingCode: waybillS ?? order.shippingCode,
+          shippingStatus: shipStatusS ?? order.shippingStatus,
+          trackingLink: linkS ?? order.trackingLink,
+          shippingHistory: nextHistory as object,
+        },
+      });
+    } catch (err) {
+      if (!(newWaybill && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025')) throw err;
+      const now = await this.prisma.order.findUnique({ where: { id: order.id } });
+      if (now && isClosedOrder(now.status)) await this.flagWaybillOnClosedOrder(now, carrierS, waybillS!);
+    }
+  }
+
+  private async flagWaybillOnClosedOrder(order: Pick<Order, 'id' | 'code' | 'status'>, carrier: string | null, waybill: string): Promise<void> {
+    await this.flagAttention(
+      order,
+      `Pancake báo vận đơn ${carrier ?? 'hãng vận chuyển'} ${waybill} cho đơn đã "${STATUS_LABEL[order.status as OrderStatus] ?? order.status}" ` +
+        '(đã hoàn tiền) — KHÔNG ghi lên đơn. Kiểm tra với kho/hãng: chặn giao và hoàn hàng về kho; khách đã nhận hàng thì xử lý thu hồi tiền/hàng.',
+    );
   }
 
   /** Báo ADMIN (OPS_GOMDON_ALERT) khi Pancake gắn vận đơn khác cho đơn còn vận đơn Gomdon sống. */

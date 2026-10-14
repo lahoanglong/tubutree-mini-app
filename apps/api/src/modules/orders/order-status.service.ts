@@ -260,6 +260,12 @@ export class OrderStatusService {
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
       const handover = targetStatus === 'CANCELLED' && !opts.returnedToSender && current.status !== 'CANCELLED' ? cancelHandover(current, handoverOpts) : null;
       if (handover) throw new CancelAfterHandoverError(order.code, current.status as OrderStatus, handover);
+      // Đơn vừa bị huỷ/trả chen giữa mà nguồn khác báo đang giao/đã giao: đúng lỗi như lúc đọc tuần tự, để webhook đưa
+      // vào "Cần xử lý" (hàng có thể đang đi tới khách trong khi tiền đã hoàn) thay vì coi là xong.
+      const closed = current.status === 'CANCELLED' || current.status === 'RETURNED';
+      if (closed && (targetStatus === 'SHIPPING' || targetStatus === 'DELIVERED')) {
+        throw new InvalidOrderTransitionError(current.status as OrderStatus, targetStatus);
+      }
       return current;
     }
 

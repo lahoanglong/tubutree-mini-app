@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
@@ -489,6 +490,51 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
 });
 
 describe('PancakeProcessor.onShippingUpdated', () => {
+  describe('đơn đã huỷ/trả (R3-CANCEL-5)', () => {
+    const cancelled = {
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'u1',
+      status: 'CANCELLED',
+      paymentStatus: 'REFUNDED',
+      shippingPartner: null,
+      shippingCode: null,
+      shippingStatus: null,
+      trackingLink: null,
+      shippingHistory: [],
+    };
+    const shipped = { id: 'p1', status: 2, partner: { partner_name: 'GHN', extend_code: 'GHNRCn', partner_status: 'picked' } };
+
+    it('Pancake báo vận đơn MỚI cho đơn đã huỷ → không ghi mã vận đơn lên đơn, đưa vào "Cần xử lý" kèm mã', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, orderUpdate, orderUpdateMany } = setup(cancelled, undefined, alerts);
+      await proc.onShippingUpdated(shipped);
+      expect(orderUpdate).not.toHaveBeenCalled();
+      expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringMatching(/GHN GHNRCn.*đơn đã "Đã huỷ"/)]);
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+    });
+
+    it('cùng mã vận đơn đã có (Pancake "Đã hoàn" kèm thông tin hãng) → vẫn cập nhật dòng vận chuyển như trước, không báo động', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, orderUpdate, orderUpdateMany } = setup({ ...cancelled, shippingPartner: 'GHN', shippingCode: 'GHNRCn' }, undefined, alerts);
+      await proc.onShippingUpdated({ id: 'p1', status: 5, partner: { partner_name: 'GHN', extend_code: 'GHNRCn', partner_status: 'returned' } });
+      expect(orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ shippingStatus: 'returned' }) }));
+      expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('đơn bị huỷ chen giữa lúc đọc và lúc ghi vận đơn mới → câu ghi trượt (lọc trạng thái), đưa vào "Cần xử lý"', async () => {
+      const open = { ...cancelled, status: 'PACKED', paymentStatus: 'PAID' };
+      const { proc, prisma, orderUpdate, orderUpdateMany } = setup(open);
+      orderUpdate.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('not found', { code: 'P2025', clientVersion: 'test' }));
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue(cancelled);
+      await proc.onShippingUpdated(shipped);
+      expect(orderUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } } }),
+      );
+      expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('GHNRCn')]);
+    });
+  });
+
   it('nhận payload Pancake POS chuẩn (partner object): cập nhật hãng VC, mã vận đơn, trạng thái và link tracking', async () => {
     const { proc, orderUpdate } = setup({
       id: 'o1',
@@ -515,7 +561,8 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     await proc.onShippingUpdated(payload);
 
     expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: 'o1' },
+      // Vận đơn mới: chỉ ghi khi đơn chưa huỷ/trả (R3-CANCEL-5).
+      where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } },
       data: expect.objectContaining({
         shippingPartner: 'Giao Hàng Nhanh',
         shippingCode: 'GHN123456789',
@@ -556,7 +603,8 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     await proc.onShippingUpdated(payload);
 
     expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: 'o1' },
+      // Vận đơn mới: chỉ ghi khi đơn chưa huỷ/trả (R3-CANCEL-5).
+      where: { id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } },
       data: expect.objectContaining({
         shippingPartner: 'Viettel Post',
         shippingCode: 'VT987654321',
