@@ -27,10 +27,14 @@ export async function flagPancakeAttention(
   if (alerts) await alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
 }
 
+/** Đơn đã huỷ xong trên Pancake (hoặc chưa từng lên): việc đẩy/huỷ/báo thanh toán còn treo không còn ý nghĩa. */
+export const ATTENTION_SETTLED_BY_CANCEL = [ATTENTION_PUSH_FAILED, ATTENTION_CANCEL_PENDING, ATTENTION_PAYMENT_PENDING];
+
 /** Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin). */
-export async function clearPancakeAttention(prisma: PrismaService, orderId: string, prefix: string): Promise<void> {
+export async function clearPancakeAttention(prisma: PrismaService, orderId: string, prefix: string | string[]): Promise<void> {
+  const prefixes = Array.isArray(prefix) ? prefix : [prefix];
   await prisma.order.updateMany({
-    where: { id: orderId, pancakeAttention: { startsWith: prefix } },
+    where: { id: orderId, OR: prefixes.map((p) => ({ pancakeAttention: { startsWith: p } })) },
     data: { pancakeAttention: null, pancakeAttentionAt: null },
   });
 }

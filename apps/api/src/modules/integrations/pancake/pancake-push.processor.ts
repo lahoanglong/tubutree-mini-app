@@ -9,8 +9,9 @@ import { PancakeOrderDataError, pancakeErrorText } from './pancake-outbound';
 /**
  * Worker queue pancake-push (outbound). Retry+backoff (5 lần, exponential 2s) do BullMQ tự quản qua
  * defaultJobOptions (jobs/queue.module.ts). Ném lỗi tiếp để BullMQ đếm attempt.
- *  - push: tạo đơn. Mỗi lần lỗi ghi lý do lên đơn (admin thấy); lần cuối chốt FAILED + "Cần xử lý Pancake". Thiếu
- *    dữ liệu người nhận thì dừng ngay (thử lại không giúp gì).
+ *  - push: tạo đơn. Mỗi lần lỗi ghi lý do lên đơn (admin thấy); lần cuối chốt FAILED + "Cần xử lý Pancake" (lỗi tạm
+ *    của đơn mới thì chưa — xem PancakeOrderService.PUSH_ATTENTION_GRACE_MINUTES). Thiếu dữ liệu người nhận thì dừng
+ *    ngay (thử lại không giúp gì).
  *  - payment / cancel: cập nhật "đã thanh toán" / huỷ đơn Pancake; lần cuối báo admin xử lý tay.
  */
 @Processor(QUEUE_PANCAKE_PUSH)

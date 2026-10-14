@@ -403,6 +403,37 @@ describe('PancakeOrderService.markPushFailure', () => {
     expect(t.alerts.alert).toHaveBeenCalledTimes(1);
   });
 
+  it('Pancake chập tạm (lỗi mạng/5xx) với đơn mới đặt → FAILED nhưng KHÔNG báo admin, để cron 15 phút tự đẩy lại (R2-PLATFORM-9)', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, createdAt: new Date(Date.now() - 5 * 60_000), paidAt: null });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Không kết nối được Pancake khi tạo đơn: ECONNREFUSED', true), true);
+    expect(t.row().pancakePushStatus).toBe(PANCAKE_PUSH.FAILED);
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('lỗi tạm kéo dài quá thời gian ân hạn kể từ lúc đặt/trả tiền → mới vào "Cần xử lý Pancake"', async () => {
+    const t = setup({
+      pancakePushStatus: PANCAKE_PUSH.PENDING,
+      createdAt: new Date(Date.now() - 3 * 3_600_000),
+      paidAt: new Date(Date.now() - (PancakeOrderService.PUSH_ATTENTION_GRACE_MINUTES + 1) * 60_000),
+    });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 503 khi tạo đơn: busy', true), true);
+    expect(t.row().pancakeAttention).toContain('Chưa đẩy được đơn sang Pancake');
+    expect(t.alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('trả tiền mới đây (đơn đặt lâu rồi) → vẫn trong ân hạn, chưa báo', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, createdAt: new Date(Date.now() - 3 * 3_600_000), paidAt: new Date(Date.now() - 2 * 60_000) });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 502 khi tạo đơn', true), true);
+    expect(t.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('Pancake từ chối dứt khoát (4xx) → báo ngay dù đơn mới đặt', async () => {
+    const t = setup({ pancakePushStatus: PANCAKE_PUSH.PENDING, createdAt: new Date(), paidAt: null });
+    await t.svc.markPushFailure('o1', new PancakeApiError('Pancake trả 422 khi tạo đơn: thiếu kho', false), true);
+    expect(t.alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
   it('đơn đang PUSHING bởi tiến trình khác → không ghi đè trạng thái (giữ khoá)', async () => {
     const t = setup({ pancakePushStatus: PANCAKE_PUSH.PUSHING, pancakeLastAttemptAt: new Date() });
     await t.svc.markPushFailure('o1', new Error('đang đẩy'), true);
@@ -539,6 +570,27 @@ describe('PancakeOrderService.cancelOnPancake (PANCAKE-2, D1)', () => {
     const t = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date() });
     await t.svc.cancelOnPancake('o1');
     expect(t.row()).toMatchObject({ pancakeCancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakePushClaimedAt: null });
+  });
+
+  it('huỷ xong (đơn không có trên Pancake) → tự gỡ lý do "Cần xử lý Pancake" của chiều đẩy/huỷ/thanh toán (R2-ADMINOPS-5)', async () => {
+    for (const reason of [
+      'Chưa đẩy được đơn sang Pancake (kho chưa thấy đơn): 500',
+      'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake (đơn Pancake #chưa rõ): timeout',
+    ]) {
+      const never = setup({ status: 'CANCELLED', pancakeAttention: reason, pancakeAttentionAt: new Date() });
+      await never.svc.cancelOnPancake('o1');
+      expect(never.row()).toMatchObject({ pancakeCancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakeAttention: null, pancakeAttentionAt: null });
+
+      const searched = setup({ status: 'CANCELLED', pancakePushClaimedAt: new Date(), pancakeAttention: reason, pancakeAttentionAt: new Date() });
+      await searched.svc.cancelOnPancake('o1');
+      expect(searched.row()).toMatchObject({ pancakeCancelStatus: PANCAKE_CANCEL.NOT_FOUND, pancakeAttention: null });
+    }
+  });
+
+  it('huỷ xong không gỡ lý do do người/webhook ghi (vd. đơn trùng trên Pancake)', async () => {
+    const t = setup({ status: 'CANCELLED', pancakeAttention: 'Pancake có 2 đơn mang mã TUBU1', pancakeAttentionAt: new Date() });
+    await t.svc.cancelOnPancake('o1');
+    expect(t.row().pancakeAttention).toBe('Pancake có 2 đơn mang mã TUBU1');
   });
 
   it('chưa từng lên Pancake → NOT_FOUND, không gọi Pancake', async () => {
