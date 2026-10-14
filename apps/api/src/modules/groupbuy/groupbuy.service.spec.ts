@@ -86,6 +86,17 @@ describe('GroupBuyService — chống tự làm đủ nhóm bằng tài khoản 
 });
 
 describe('GroupBuyService.create', () => {
+  it('hàng gian hàng đối tác tự giao (D4) → không mở được nhóm mua chung', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', isActive: true, approvalStatus: 'APPROVED', fulfilment: 'MERCHANT', basePrice: 75000, salePrice: null,
+    });
+    await expect(new GroupBuyService(prisma, makeConfig()).create('u1', 'prod1')).rejects.toThrow(
+      'Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ mua chung.',
+    );
+    expect(prisma.groupBuy.create).not.toHaveBeenCalled();
+  });
+
   it('sản phẩm không tồn tại/ngừng bán → NotFound', async () => {
     const prisma = makePrisma();
     (prisma.product.findUnique as jest.Mock).mockResolvedValue(null);

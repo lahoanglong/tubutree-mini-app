@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,6 +6,20 @@ import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { TUBU_FULFILLER_NAME } from '../checkout/checkout-split';
+import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+
+/**
+ * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
+ * hàng (giống lúc checkout), không theo luật freeship của Tubu, và không đặt định kỳ/mua chung được.
+ */
+export interface ProductFulfiller {
+  kind: 'TUBU' | 'MERCHANT';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+}
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
@@ -91,7 +105,10 @@ export class CatalogService {
     createdAt: true,
   } satisfies Prisma.ReviewSelect;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: SystemConfigService,
+  ) {}
 
   async list(query: ProductQuery) {
     const { page, limit, sort } = query;
@@ -205,6 +222,7 @@ export class CatalogService {
           take: 20,
           select: this.publicReviewSelect,
         },
+        storefront: { select: { title: true, type: true, shippingFee: true, freeShipFrom: true } },
       },
     });
     // P0 A2-03=A5-06=A6-04: SP chưa duyệt (PENDING_REVIEW) hoặc bị từ chối (REJECTED, kể cả từng
@@ -215,8 +233,28 @@ export class CatalogService {
     // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
     // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
     // (variations đã loại qua publicVariationSelect).
-    const { pancakeId: _pancakeId, ...publicProduct } = product;
-    return { ...publicProduct, sold: product.soldExternal + product.soldApp };
+    const { pancakeId: _pancakeId, storefront, ...publicProduct } = product;
+    return {
+      ...publicProduct,
+      sold: product.soldExternal + product.soldApp,
+      fulfiller: await this.fulfillerOf(product.fulfilment, storefront),
+    };
+  }
+
+  private async fulfillerOf(
+    fulfilment: string,
+    store: { title: string; type: string; shippingFee: number | null; freeShipFrom: number | null } | null,
+  ): Promise<ProductFulfiller> {
+    if (fulfilment !== 'MERCHANT') return { kind: 'TUBU', name: TUBU_FULFILLER_NAME, shippingFee: null, freeShipFrom: null };
+    const defaultFee =
+      (await this.config?.get<number>('merchant.default_shipping_fee', DEFAULT_MERCHANT_SHIPPING_FEE)) ??
+      DEFAULT_MERCHANT_SHIPPING_FEE;
+    return {
+      kind: 'MERCHANT',
+      name: store?.type === 'MERCHANT' ? store.title : 'Gian hàng đối tác',
+      shippingFee: store?.shippingFee ?? defaultFee,
+      freeShipFrom: store?.freeShipFrom ?? null,
+    };
   }
 
   async related(slug: string) {

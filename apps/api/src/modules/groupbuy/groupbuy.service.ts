@@ -45,6 +45,10 @@ export class GroupBuyService {
     if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
       throw new NotFoundException('Sản phẩm không khả dụng.');
     }
+    // Mã giảm của nhóm là Tubu tài trợ trên hàng Tubu giao; hàng gian hàng tự giao chưa có chính sách ai chịu phần giảm (D4).
+    if (product.fulfilment === 'MERCHANT') {
+      throw new BadRequestException('Sản phẩm do gian hàng đối tác tự giao, chưa hỗ trợ mua chung.');
+    }
     await this.assertRealUser(userId);
 
     // Chống spam mở nhóm hàng loạt: rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ
