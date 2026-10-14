@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({
   refunds: [] as unknown[],
   refundBank: null as Record<string, string> | null,
   chooseDestination: vi.fn(),
+  invalidateBalances: vi.fn(),
 }));
+vi.mock('@/lib/balances', () => ({ invalidateBalances: mocks.invalidateBalances }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: mocks.user, status: 'authenticated', initialized: true }),
 }));
@@ -88,6 +90,7 @@ beforeEach(() => {
   mocks.refunds = [];
   mocks.refundBank = null;
   mocks.chooseDestination.mockReset();
+  mocks.invalidateBalances.mockReset();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -148,6 +151,14 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     await flush(8);
     expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined);
     expect(container.textContent).toContain('Đã hủy đơn hàng');
+  });
+
+  it('hủy xong làm mới số dư Điểm Xanh/Ví (tiền và điểm hoàn về) — R2-BUYERWEB-3', async () => {
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(8);
+    expect(mocks.invalidateBalances).toHaveBeenCalled();
   });
 
   it('D2: đơn chuyển khoản đã trả → mặc định hoàn về Ví Tubu', async () => {
@@ -413,6 +424,7 @@ describe('chi tiết đơn — hoàn tiền và hạn thanh toán (D2, BUYERMINI
     click(btn(container, 'Xác nhận')!);
     await flush(8);
     expect(mocks.chooseDestination).toHaveBeenCalledWith('rf1', { refundMethod: 'WALLET' });
+    expect(mocks.invalidateBalances).toHaveBeenCalled();
     expect(container.textContent).toContain('Đã hoàn 197.000đ vào Ví Tubu.');
   });
 

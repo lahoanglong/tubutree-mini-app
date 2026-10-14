@@ -37,6 +37,7 @@ import {
 import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
 import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
@@ -191,7 +192,7 @@ export default function CheckoutPage() {
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
-      for (const key of ['me', 'wallet', 'wallet-txn', 'points-txn']) void qc.invalidateQueries({ queryKey: [key] });
+      invalidateBalances(qc);
     },
     onError: (e) => {
       if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {

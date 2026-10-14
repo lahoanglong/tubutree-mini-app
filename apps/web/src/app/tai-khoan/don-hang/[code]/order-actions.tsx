@@ -16,6 +16,7 @@ import {
 } from '@/lib/shop-client';
 import { canCancelOrder, isReorderable } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { invalidateBalances } from '@/lib/balances';
 import {
   EMPTY_BANK,
   bankDetailsError,
@@ -84,6 +85,7 @@ export function OrderActions({
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
+      invalidateBalances(qc);
     },
     onError: () => setConfirmCancel(false),
   });

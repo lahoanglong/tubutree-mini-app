@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chooseRefundDestination, fetchMyRefunds, formatVnd } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
+import { invalidateBalances } from '@/lib/balances';
 import {
   EMPTY_BANK,
   bankDetailsError,
@@ -116,6 +117,7 @@ function ChooseDestination({
     mutationFn: () => chooseRefundDestination(refund.id, destinationBody(method, bank)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] });
+      invalidateBalances(qc);
       onSaved(
         method === 'WALLET'
           ? `Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.`
