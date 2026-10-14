@@ -257,3 +257,21 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     expect(pick(container, 'Dầu gội').checked).toBe(false);
   });
 });
+
+describe('/gio-hang — dòng giá Giờ vàng (R4-BUYER-4)', () => {
+  it('dòng đang tính giá Giờ vàng được ghi nhãn "Giá Giờ vàng" cạnh giá, dòng thường thì không', async () => {
+    state.cart = cartOf([line({ unitPrice: 79000, isFlash: true }), line({ id: 'i2', variationId: 'v2', productName: 'Xà bông' })]);
+    const { container } = await mount();
+    const badges = container.querySelectorAll('[data-testid="cart-flash-badge"]');
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.textContent).toContain('Giá Giờ vàng');
+    expect(badges[0]!.closest('div')!.textContent).toContain('79.000đ');
+  });
+
+  it('vượt giới hạn mua Giờ vàng: hiện câu giải thích của server, dòng tính giá thường không có nhãn', async () => {
+    state.cart = cartOf([line({ flashLimitNotice: 'Vượt giới hạn mua giá Giờ vàng, các sản phẩm tính giá thường.' })]);
+    const { container } = await mount();
+    expect(container.textContent).toContain('Vượt giới hạn mua giá Giờ vàng');
+    expect(container.querySelector('[data-testid="cart-flash-badge"]')).toBeNull();
+  });
+});

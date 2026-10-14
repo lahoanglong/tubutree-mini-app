@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Check, Truck } from 'lucide-react';
-import { getProduct, formatVnd, pdpFulfillerText, pdpUnavailableText } from '@/lib/api';
+import { getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
+import { PdpPrice } from '@/components/flash-price';
 import ProductGallery from '@/components/product-gallery';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
@@ -38,13 +39,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = await getProduct(slug);
   if (!product) notFound();
 
-  const price = product.salePrice ?? product.basePrice;
   const images = galleryImages(product);
   const description = plainText(product.description);
   const shortDesc = plainText(product.shortDesc);
   const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
   const fulfillerText = pdpFulfillerText(product);
   const unavailableText = pdpUnavailableText(product);
+  const partnerNote = unavailableText ? null : pdpPartnerNote(product);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -65,7 +66,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <div className="text-sm font-semibold text-forest-700">{product.brand}</div>
           )}
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
-          <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
+          <PdpPrice product={product} />
           {unavailableText ? (
             <p
               data-testid="pdp-unavailable"
@@ -82,6 +83,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <span>{fulfillerText}</span>
               </p>
             )
+          )}
+          {partnerNote && (
+            <p data-testid="pdp-partner-note" className="mt-1 text-xs text-stone-600">
+              {partnerNote}
+            </p>
           )}
           {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 

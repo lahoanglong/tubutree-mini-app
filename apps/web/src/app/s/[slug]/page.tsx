@@ -12,8 +12,9 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { getStorefront, formatVnd, formatSold } from '@/lib/api';
+import { getStorefront, formatSold } from '@/lib/api';
 import { StorefrontTracker } from '@/components/storefront-tracker';
+import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
 export const revalidate = 300;
 
@@ -237,12 +238,6 @@ export default async function StorefrontPage({
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
             {c.items.map((it) => {
-              const price = it.product.salePrice ?? it.product.basePrice;
-              const hasSale = it.product.salePrice != null && it.product.salePrice < it.product.basePrice;
-              const discountPct = hasSale
-                ? Math.round(((it.product.basePrice - price) / it.product.basePrice) * 100)
-                : 0;
-
               return (
                 <Link
                   key={it.id}
@@ -267,11 +262,10 @@ export default async function StorefrontPage({
                       </div>
                     )}
 
-                    {hasSale && discountPct > 0 && (
-                      <div className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card">
-                        -{discountPct}%
-                      </div>
-                    )}
+                    <CardSaleBadge
+                      product={it.product}
+                      className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+                    />
                   </div>
 
                   <div className="flex flex-1 flex-col p-3.5">
@@ -280,14 +274,12 @@ export default async function StorefrontPage({
                       {it.product.name}
                     </h3>
 
-                    <div className="mt-2 flex items-baseline gap-1.5">
-                      <p className="text-sm font-bold text-stone-900 sm:text-base">{formatVnd(price)}</p>
-                      {hasSale && (
-                        <p className="text-xs text-stone-500 line-through">
-                          {formatVnd(it.product.basePrice)}
-                        </p>
-                      )}
-                    </div>
+                    <ProductPriceRow
+                      product={it.product}
+                      className="mt-2 flex items-baseline gap-1.5"
+                      priceClassName="text-sm font-bold text-stone-900 sm:text-base"
+                      originalClassName="text-xs text-stone-500 line-through"
+                    />
 
                     {formatSold(it.product.sold) && (
                       <p className="mt-1 text-xs text-stone-600">{formatSold(it.product.sold)}</p>

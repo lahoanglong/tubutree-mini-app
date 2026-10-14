@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
-import { getBrand, formatVnd, formatSold } from '@/lib/api';
+import { getBrand, formatSold } from '@/lib/api';
+import { ProductPriceRow } from '@/components/flash-price';
 
 export const revalidate = 300;
 
@@ -124,9 +125,12 @@ export default async function BrandPage({
                 )}
                 <div className="p-2">
                   <p className="line-clamp-2 text-sm text-stone-900">{p.name}</p>
-                  <p className="mt-1 font-bold text-stone-900">
-                    {formatVnd(p.salePrice ?? p.basePrice)}
-                  </p>
+                  <ProductPriceRow
+                    product={p}
+                    className="mt-1 flex items-baseline gap-1.5"
+                    priceClassName="font-bold text-stone-900"
+                    originalClassName="text-xs text-stone-500 line-through"
+                  />
                   {formatSold(p.sold) && <p className="mt-0.5 text-xs text-stone-500">{formatSold(p.sold)}</p>}
                 </div>
               </Link>

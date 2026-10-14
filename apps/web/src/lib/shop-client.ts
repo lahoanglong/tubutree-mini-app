@@ -2,6 +2,7 @@
 
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
+import type { FlashItem } from './flash-price';
 
 export interface CartLine {
   id: string;
@@ -16,6 +17,10 @@ export interface CartLine {
   total: number;
   /** Nơi giao dòng này (D4): kho Tubu, gian hàng đối tác tự giao, hoặc không giao được. API cũ chưa trả. */
   fulfiller?: LineFulfiller;
+  /** Dòng đang tính giá Giờ vàng (`unitPrice` đã là giá Giờ vàng). API cũ chưa trả. */
+  isFlash?: boolean;
+  /** Số lượng vượt giới hạn mua Giờ vàng nên dòng tính giá thường: câu giải thích từ server. */
+  flashLimitNotice?: string | null;
 }
 export interface LineFulfiller {
   kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
@@ -148,6 +153,14 @@ export async function getProductStock(slug: string): Promise<Record<string, numb
     { auth: false, cache: 'no-store' },
   );
   return Object.fromEntries((p.variations ?? []).map((v) => [v.id, v.stock]));
+}
+
+/**
+ * Đợt Giờ vàng đang chạy (công khai, không cache): trang chủ/chi tiết là bản ISR 5 phút nên giá Giờ vàng không thể nằm trong
+ * HTML; trình duyệt hỏi lại cái này để giá hiển thị khớp giá giỏ và đơn.
+ */
+export async function getActiveFlashSales(): Promise<FlashItem[]> {
+  return apiFetch<FlashItem[]>('/flash-sales/active', { auth: false, cache: 'no-store' });
 }
 
 // Cart

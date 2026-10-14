@@ -106,6 +106,8 @@ export interface ProductDetail {
   fulfilment?: 'TUBU' | 'MERCHANT';
   /** Ai giao (D4): tên gian hàng lấy theo gian hàng hiện tại, phí giao riêng của gian hàng. API cũ chưa trả. */
   fulfiller?: ProductFulfiller;
+  /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không dùng Điểm Xanh. API cũ chưa trả → hàng Tubu. */
+  partnerOwned?: boolean;
 }
 
 export interface ProductFulfiller {
@@ -137,6 +139,11 @@ export function pdpFulfillerText(p: Pick<ProductDetail, 'fulfilment' | 'fulfille
       ? `phí giao ${formatVnd(f.shippingFee)}${f.freeShipFrom != null ? ` (miễn phí từ ${formatVnd(f.freeShipFrom)})` : ''}`
       : 'phí giao riêng';
   return `${who}, đi kiện riêng · ${fee} · thanh toán COD hoặc Ví Tubu, không nhận chuyển khoản`;
+}
+/** Khách phải biết từ trang sản phẩm: hàng của gian hàng đối tác chỉ bán giá lẻ và không dùng Điểm Xanh (D4). null = hàng Tubu. */
+export function pdpPartnerNote(p: Pick<ProductDetail, 'partnerOwned' | 'fulfilment' | 'fulfiller'>): string | null {
+  const partner = p.partnerOwned === true || p.fulfiller?.kind === 'MERCHANT' || (!p.fulfiller && p.fulfilment === 'MERCHANT');
+  return partner ? 'Hàng của gian hàng đối tác: chỉ bán theo giá lẻ, không dùng Điểm Xanh.' : null;
 }
 interface Page<T> {
   data: T[];
