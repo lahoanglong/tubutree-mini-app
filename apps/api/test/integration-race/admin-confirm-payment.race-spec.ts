@@ -172,12 +172,13 @@ describe('Admin confirm-payment race (real Postgres)', () => {
 
   it('(d) đơn chuyển khoản chưa trả → admin chuyển DELIVERED bị chặn; sau "Đã nhận tiền" thì giao được', async () => {
     const { order } = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeOrderId: `pk-${order.code}` } });
     const a = await createUser(prisma, { role: 'ADMIN' });
-    await expect(admin.updateOrderStatus(a.id, order.id, 'DELIVERED')).rejects.toThrow('Đã nhận tiền');
+    await expect(admin.updateOrderStatus({ id: a.id, role: 'ADMIN' }, order.id, 'DELIVERED')).rejects.toThrow('Đã nhận tiền');
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('PENDING_PAYMENT');
 
     await admin.confirmOrderPayment(a.id, order.id);
-    const delivered = await admin.updateOrderStatus(a.id, order.id, 'DELIVERED');
+    const delivered = await admin.updateOrderStatus({ id: a.id, role: 'ADMIN' }, order.id, 'DELIVERED');
     expect(delivered.status).toBe('DELIVERED');
   });
 

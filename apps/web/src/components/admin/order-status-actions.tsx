@@ -37,7 +37,7 @@ const ACTIONS: readonly OrderStatusAction[] = [
 
 /**
  * Nút chuyển trạng thái = đúng `allowedTransitions` API trả (AdminService.listOrders — cùng luật
- * OrderStatusService.setStatus, gồm khoá giao đơn trả trước chưa PAID). API cũ không trả trường này thì không
+ * OrderStatusService.setStatus, gồm khoá giao đơn trả trước chưa PAID, và theo nhóm việc của người xem). API cũ không trả trường này thì không
  * hiện nút nào thay vì tự đoán (C-024).
  */
 export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>): OrderStatusAction[] {

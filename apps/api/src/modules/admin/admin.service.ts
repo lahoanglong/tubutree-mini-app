@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,6 +11,7 @@ import { foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
+import { actorAllowedTransitions, actorTransitionBlock, type OrderActor } from './order-actor-transitions';
 import { recordLatePaymentRefund } from '../orders/refund-queue';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -706,6 +707,7 @@ export class AdminService {
     pancake?: PancakeFilter,
     from?: string,
     to?: string,
+    viewer: OrderActor = { role: 'ADMIN' },
   ) {
     const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to });
     const [items, total] = await this.prisma.$transaction([
@@ -746,7 +748,7 @@ export class AdminService {
       return {
         ...o,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
-        allowedTransitions: allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true }),
+        allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
         canConfirmPayment: canAdminConfirmRetailPayment(o),
         canRecordLatePayment: canAdminRecordLatePayment(o),
       };
@@ -763,9 +765,13 @@ export class AdminService {
    * OrderReversalService chỉ đổi paymentStatus qua guard PAID→REFUNDED, không bao giờ ghi đè
    * REFUNDED trở lại PAID.
    */
-  async updateOrderStatus(adminId: string, id: string, status: OrderStatus, note?: string) {
+  async updateOrderStatus(actor: OrderActor & { id: string }, id: string, status: OrderStatus, note?: string) {
+    const adminId = actor.id;
     const before = await this.prisma.order.findFirst({ where: { OR: [{ id }, { code: id }] } });
     if (!before) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    const block = actorTransitionBlock(actor, before, status);
+    if (block?.kind === 'FORBIDDEN') throw new ForbiddenException(block.message);
+    if (block) throw new BadRequestException(block.message);
 
     let updated;
     try {

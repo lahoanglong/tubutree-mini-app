@@ -8,6 +8,8 @@ import { AdminController, IssueInvoiceDto, ListOrdersQuery } from './admin.contr
 import { buildAdminOrderWhere } from './admin-order-filter';
 import type { PrismaService } from '../../prisma/prisma.service';
 
+const VIEWER = { sub: 'admin-1', role: 'ADMIN' as const };
+
 /**
  * C-094 (A1-039): đơn yêu cầu hoá đơn VAT được ghi nhận lúc thanh toán (invoiceStatus REQUESTED) nhưng không
  * màn nào xử lý nốt; việc "đã xuất" chỉ đến từ webhook Pancake. Admin cần danh sách đơn VAT + nút xuất.
@@ -183,8 +185,8 @@ describe('Controller + DTO — issue-invoice / lọc invoice', () => {
   it('GET /admin/orders nhận ?invoice=pending|issued|all và chuyển xuống listOrders', async () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [] }) };
     const ctl = new AdminController(admin as never, {} as never);
-    await ctl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, invoice: 'pending' }));
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined, 'pending', undefined, undefined, undefined);
+    await ctl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, invoice: 'pending' }), VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined, 'pending', undefined, undefined, undefined, VIEWER);
     expect(await validate(plainToInstance(ListOrdersQuery, { invoice: 'all' }))).toHaveLength(0);
     expect((await validate(plainToInstance(ListOrdersQuery, { invoice: 'hack' }))).some((e) => e.property === 'invoice')).toBe(true);
   });

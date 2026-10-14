@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
+import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
 import {
   Allow,
@@ -388,8 +389,8 @@ export class AdminController {
 
   @AllowStaff('CSKH', 'KHO')
   @Get('orders')
-  orders(@Query() q: ListOrdersQuery) {
-    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to);
+  orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
+    return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer);
   }
 
   /**
@@ -490,11 +491,11 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO')
   @Put('orders/:id/status')
   updateOrderStatus(
-    @CurrentUser('sub') adminId: string,
+    @CurrentUser() actor: JwtPayload,
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.admin.updateOrderStatus(adminId, id, dto.status, dto.note);
+    return this.admin.updateOrderStatus({ ...actor, id: actor.sub }, id, dto.status, dto.note);
   }
 
   @Get('config')

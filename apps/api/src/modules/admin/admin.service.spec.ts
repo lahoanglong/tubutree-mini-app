@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService } from '../orders/order-status.service';
@@ -613,6 +613,8 @@ function makeStatusPrisma(order: Record<string, unknown>, finalOrder: Record<str
   return { prisma, txUpdateMany };
 }
 
+const ADMIN_ACTOR = { id: 'admin-1', role: 'ADMIN' };
+
 describe('AdminService.updateOrderStatus', () => {
   // C-024: admin từng đẩy được đơn chuyển khoản chưa ai trả lên DELIVERED → cộng điểm + chốt hoa hồng.
   it.each(['SHIPPING', 'DELIVERED'] as const)(
@@ -620,12 +622,12 @@ describe('AdminService.updateOrderStatus', () => {
     async (to) => {
       const order = {
         id: 'o9', code: 'TB-109', userId: 'u9', status: 'CONFIRMED', total: 250000, note: null, items: [],
-        paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID',
+        paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', fulfiller: 'TUBU', pancakeOrderId: 'pk9',
       };
       const { prisma, txUpdateMany } = makeStatusPrisma(order, order);
       (prisma as unknown as { dealerCreditLedger: unknown }).dealerCreditLedger = { findFirst: jest.fn().mockResolvedValue(null) };
 
-      const err = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o9', to).catch((e: unknown) => e);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o9', to).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as Error).message).toContain('Đã nhận tiền');
       expect(txUpdateMany).not.toHaveBeenCalled();
@@ -635,10 +637,10 @@ describe('AdminService.updateOrderStatus', () => {
   );
 
   it('chuyển DELIVERED → credit điểm và lock hoa hồng', async () => {
-    const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000, note: null, items: [] };
+    const order = { id: 'o1', code: 'TB-100', userId: 'u1', status: 'SHIPPING', total: 200000, note: null, items: [], fulfiller: 'TUBU', pancakeOrderId: 'pk1' };
     const { prisma } = makeStatusPrisma(order, { ...order, status: 'DELIVERED' });
 
-    const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o1', 'DELIVERED', 'Giao thành công');
+    const res = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o1', 'DELIVERED', 'Giao thành công');
     expect(res.status).toBe('DELIVERED');
     expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
@@ -648,7 +650,7 @@ describe('AdminService.updateOrderStatus', () => {
     const order = { id: 'o2', code: 'TB-101', userId: 'u2', status: 'CONFIRMED', total: 300000, note: null, items: [], paymentMethod: 'COD', paymentStatus: 'UNPAID' };
     const { prisma } = makeStatusPrisma(order, { ...order, status: 'CANCELLED' });
 
-    const res = await mkAdmin(prisma).updateOrderStatus('admin-1', 'o2', 'CANCELLED', 'Khách đổi ý');
+    const res = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o2', 'CANCELLED', 'Khách đổi ý');
     expect(res.status).toBe('CANCELLED');
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o2');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o2');
@@ -658,18 +660,60 @@ describe('AdminService.updateOrderStatus', () => {
     const order = { id: 'o3', code: 'TB-102', userId: 'u3', status: 'DELIVERED', total: 100000, note: null, items: [] };
     const { prisma } = makeStatusPrisma(order, order);
 
-    await expect(mkAdmin(prisma).updateOrderStatus('admin-1', 'o3', 'CONFIRMED')).rejects.toBeInstanceOf(
+    await expect(mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o3', 'CONFIRMED')).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(loyalty.reverseOrderPoints).not.toHaveBeenCalledWith('o3');
     expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith('o3');
   });
 
+  describe('theo nhóm việc và Pancake (R2-ADMINOPS-2)', () => {
+    const cod = {
+      id: 'o7', code: 'TB-107', userId: 'u7', status: 'CONFIRMED', total: 200000, note: null, items: [],
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', fulfiller: 'TUBU', pancakeOrderId: 'pk7',
+    };
+    it.each([
+      [['CSKH'], 'DELIVERED'],
+      [['CSKH'], 'PACKED'],
+      [['KHO'], 'CANCELLED'],
+      [['KHO'], 'DELIVERED'],
+      [['CSKH', 'KHO'], 'SHIPPING'],
+    ] as const)('STAFF %j → %s bị 403, không lật trạng thái', async (perms, to) => {
+      const { prisma, txUpdateMany } = makeStatusPrisma(cod, cod);
+      const err = await mkAdmin(prisma)
+        .updateOrderStatus({ id: 'staff-1', role: 'STAFF', staffPermissions: [...perms] }, 'o7', to)
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(txUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('CSKH huỷ được, KHO đóng gói được', async () => {
+      const { prisma } = makeStatusPrisma(cod, { ...cod, status: 'CANCELLED' });
+      await expect(
+        mkAdmin(prisma).updateOrderStatus({ id: 's1', role: 'STAFF', staffPermissions: ['CSKH'] }, 'o7', 'CANCELLED'),
+      ).resolves.toMatchObject({ status: 'CANCELLED' });
+      const k = makeStatusPrisma(cod, { ...cod, status: 'PACKED' });
+      await expect(
+        mkAdmin(k.prisma).updateOrderStatus({ id: 's2', role: 'STAFF', staffPermissions: ['KHO'] }, 'o7', 'PACKED'),
+      ).resolves.toMatchObject({ status: 'PACKED' });
+    });
+
+    it('ADMIN đánh dấu Đã giao tay cho đơn Tubu chưa lên Pancake → 400, không cộng điểm/hoa hồng', async () => {
+      const order = { ...cod, id: 'o8', pancakeOrderId: null };
+      const { prisma, txUpdateMany } = makeStatusPrisma(order, order);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o8', 'DELIVERED').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toContain('chưa lên Pancake');
+      expect(txUpdateMany).not.toHaveBeenCalled();
+      expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith('o8');
+    });
+  });
+
   it('đơn không tồn tại → throw NotFoundException', async () => {
     const prisma = makePrisma({
       order: { findFirst: jest.fn().mockResolvedValue(null) },
     });
-    await expect(mkAdmin(prisma).updateOrderStatus('admin-1', 'non-existent', 'CANCELLED')).rejects.toThrow(
+    await expect(mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'non-existent', 'CANCELLED')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -796,19 +840,27 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
   const row = (o: Record<string, unknown>) => ({
     id: String(o.code),
     type: 'RETAIL',
+    fulfiller: 'TUBU',
+    pancakeOrderId: `pk-${String(o.code)}`,
     paymentMethod: 'BANK_TRANSFER',
     paymentStatus: 'UNPAID',
     items: [],
     user: null,
     ...o,
   });
-  const list = async (items: Record<string, unknown>[], debits: { refId: string }[] = []) => {
+  const list = async (
+    items: Record<string, unknown>[],
+    debits: { refId: string }[] = [],
+    viewer?: { role: string; staffPermissions?: string[] },
+  ) => {
     const prisma = makePrisma({
       order: { findMany: jest.fn().mockResolvedValue(items.map(row)), count: jest.fn().mockResolvedValue(items.length) },
       dealerCreditLedger: { findMany: jest.fn().mockResolvedValue(debits) },
       $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
     });
-    const res = (await mkAdmin(prisma).listOrders(1, 20)) as unknown as {
+    const res = (await mkAdmin(prisma).listOrders(
+      1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, viewer,
+    )) as unknown as {
       data: { code: string; allowedTransitions: string[]; canConfirmPayment: boolean }[];
     };
     return Object.fromEntries(res.data.map((o) => [o.code, o])) as Record<
@@ -816,6 +868,20 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
       { allowedTransitions: string[]; canConfirmPayment: boolean }
     >;
   };
+
+  it('nút theo người xem: CSKH chỉ Huỷ, KHO chỉ Đóng gói; đơn Tubu chưa lên Pancake không có Giao vận/Đã giao (R2-ADMINOPS-2)', async () => {
+    const orders = [
+      { code: 'C', status: 'CONFIRMED', paymentMethod: 'COD' },
+      { code: 'N', status: 'CONFIRMED', paymentMethod: 'COD', pancakeOrderId: null },
+    ];
+    const cskh = await list(orders, [], { role: 'STAFF', staffPermissions: ['CSKH'] });
+    expect(cskh.C!.allowedTransitions).toEqual(['CANCELLED']);
+    const kho = await list(orders, [], { role: 'STAFF', staffPermissions: ['KHO'] });
+    expect(kho.C!.allowedTransitions).toEqual(['PACKED']);
+    const admin = await list(orders, [], { role: 'ADMIN' });
+    expect(admin.C!.allowedTransitions).toEqual(['PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED']);
+    expect(admin.N!.allowedTransitions).toEqual(['PACKED', 'CANCELLED']);
+  });
 
   it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {
     const by = await list([{ code: 'A', status: 'PENDING_PAYMENT' }, { code: 'B', status: 'PACKED' }]);
