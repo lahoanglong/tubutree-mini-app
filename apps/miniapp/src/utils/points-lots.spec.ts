@@ -26,14 +26,14 @@ describe('expiringPointsNote / pointExpiryPolicyNote (R2-ENGAGE-8)', () => {
 
   it('nói rõ số điểm và ngày hết hạn gần nhất; xa hơn 30 ngày thì không báo gấp', () => {
     expect(expiringPointsNote({ amount: 1_250, expiresAt: '2027-02-01T03:00:00.000Z' }, NOW)).toEqual({
-      text: '1.250 điểm Xanh sẽ hết hạn ngày 01/02/2027',
+      text: '1.250 Điểm Xanh sẽ hết hạn ngày 01/02/2027',
       urgent: false,
     });
   });
 
   it('trong 30 ngày tới: báo gấp kèm số ngày còn lại', () => {
     expect(expiringPointsNote({ amount: 70, expiresAt: '2026-10-20T03:00:00.000Z' }, NOW)).toEqual({
-      text: '70 điểm Xanh sẽ hết hạn ngày 20/10/2026 (còn 6 ngày)',
+      text: '70 Điểm Xanh sẽ hết hạn ngày 20/10/2026 (còn 6 ngày)',
       urgent: true,
     });
   });

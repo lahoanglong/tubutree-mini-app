@@ -1,4 +1,4 @@
-import { formatDate, formatPoints } from './format';
+import { formatDate, formatNumber, formatPoints } from './format';
 
 /**
  * Điểm Xanh khách thấy: MỘT con số = lô thường + lô quy đổi. Hai lô chỉ tách ra khi cần nói rõ phần nào
@@ -26,7 +26,7 @@ const DAY_MS = 864e5;
 const URGENT_WITHIN_DAYS = 30;
 
 /**
- * "70 điểm Xanh sẽ hết hạn ngày 20/10/2026": lô điểm thường hết hạn gần nhất để khách dùng trước. Trong 30 ngày
+ * "70 Điểm Xanh sẽ hết hạn ngày 20/10/2026": lô điểm thường hết hạn gần nhất để khách dùng trước. Trong 30 ngày
  * tới thêm "(còn N ngày)" và `urgent` để trang tô màu cảnh báo. Thiếu dữ liệu/ngày hỏng/0 điểm → null.
  */
 export function expiringPointsNote(
@@ -38,7 +38,7 @@ export function expiringPointsNote(
   if (Number.isNaN(at.getTime())) return null;
   const daysLeft = Math.max(0, Math.ceil((at.getTime() - now.getTime()) / DAY_MS));
   const urgent = daysLeft <= URGENT_WITHIN_DAYS;
-  const base = `${formatPoints(expiring.amount)} Xanh sẽ hết hạn ngày ${formatDate(at)}`;
+  const base = `${formatNumber(expiring.amount)} Điểm Xanh sẽ hết hạn ngày ${formatDate(at)}`;
   return { text: urgent ? `${base} (còn ${daysLeft} ngày)` : base, urgent };
 }
 

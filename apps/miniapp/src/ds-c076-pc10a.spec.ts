@@ -67,9 +67,9 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/season-leaderboard.tsx': ['🥇', '🥈', '🥉'],
   'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
-  // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 trong hộp chúc mừng là nội dung trình bày; kết quả thật do backend trả về.
+  // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 (trúng giải) / 🍀 (không trúng) trong hộp kết quả là nội dung trình bày; kết quả thật do backend trả về.
   'src/components/wheel.tsx': ['🌿', '🎁', '💧', '⭐', '🪴', '🏷', '💚', '🍀'],
-  'src/components/game/wheel-prize-sheet.tsx': ['🎉'],
+  'src/components/game/wheel-prize-sheet.tsx': ['🎉', '🍀'],
   // Badge hạng cộng đồng: emoji theo hạng 1..4 là nội dung của hạng.
   'src/components/community/rank-badge.tsx': ['🌱', '🌿', '🌳', '🏆'],
 };
