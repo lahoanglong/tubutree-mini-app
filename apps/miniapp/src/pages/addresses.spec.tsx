@@ -42,12 +42,13 @@ describe('Sổ địa chỉ: nút hành động (C-078)', () => {
     mocks.updateAddress.mockResolvedValue({});
   });
 
-  it('Đặt mặc định / Sửa / Xóa là nút thật, cao 44px', async () => {
+  it('Đặt mặc định / Sửa / Xóa là nút thật, vùng chạm tối thiểu 44x44 (R2-BUYERMINI-12)', async () => {
     renderPage();
     for (const name of ['Đặt mặc định', 'Sửa', 'Xóa']) {
       const btn = await screen.findByRole('button', { name });
       expect(btn.tagName).toBe('BUTTON');
       expect(btn.style.minHeight).toBe('44px');
+      expect(btn.style.minWidth).toBe('44px');
     }
   });
 

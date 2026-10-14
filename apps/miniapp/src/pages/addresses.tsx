@@ -193,6 +193,7 @@ function ActionLink({
       className="tubu-press"
       style={{
         minHeight: 44,
+        minWidth: 44,
         padding: '0 8px',
         background: 'none',
         border: 'none',
