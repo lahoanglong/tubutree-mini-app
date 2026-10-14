@@ -41,7 +41,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
-import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
+import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
  * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
@@ -181,6 +181,8 @@ export default function LoyaltyPage() {
   // Con số khách thấy là tổng hai lô; đổi mã giảm giá chỉ dùng được lô thường (pointsBalance).
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
+  const expiringNote = expiringPointsNote(data?.expiringPoints);
+  const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
   const rewardCatalog = rewardsQ.data;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
@@ -243,6 +245,21 @@ export default function LoyaltyPage() {
               {convertedNote && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                   {convertedNote}
+                </Text>
+              )}
+              {expiringNote && (
+                <Text
+                  variant="caption"
+                  tone={expiringNote.urgent ? 'warning' : 'secondary'}
+                  as="div"
+                  style={{ marginTop: 6, fontWeight: expiringNote.urgent ? 600 : undefined }}
+                >
+                  {expiringNote.text}
+                </Text>
+              )}
+              {expiryPolicy && (
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                  {expiryPolicy}
                 </Text>
               )}
 

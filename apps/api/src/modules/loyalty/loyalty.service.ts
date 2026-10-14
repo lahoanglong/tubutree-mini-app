@@ -17,10 +17,10 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { isRealUser } from '../../common/real-user';
 import { decideTier } from './tier-policy';
-import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from './points-expiry-date';
+import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from './loyalty-expiry.service';
+import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -516,17 +516,24 @@ export class LoyaltyService {
     const tierPoints = await this.tierPoints(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
-    const [vndPerPoint, vndPerPointRedeem, maxRedeemPct] = await Promise.all([
+    const [vndPerPoint, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
       this.positiveConfig('loyalty.vnd_per_point', 10000),
       this.positiveConfig('loyalty.vnd_per_point_redeem', 1000),
       this.fractionConfig('loyalty.max_redeem_pct', 0.2),
+      this.pointExpireMonths(),
+      loadPointExpiryTxns(this.prisma, userId),
     ]);
+    const expiring = user.pointsBalance > 0 ? nextPointExpiry(expiryTxns, new Date()) : null;
 
     return {
       /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
       rates: { vndPerPoint, vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
+      /** Điểm thường sắp hết hạn gần nhất (cộng các lô cùng ngày hết hạn) để khách dùng trước; null nếu không có. */
+      expiringPoints: expiring ? { amount: Math.min(expiring.amount, user.pointsBalance), expiresAt: expiring.expiresAt.toISOString() } : null,
+      /** Số tháng điểm thường hết hạn kể từ ngày tích (SystemConfig loyalty.point_expire_months). Điểm quy đổi không hết hạn. */
+      pointExpireMonths,
       /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
       pointsConvertedBalance: user.pointsConvertedBalance,
       /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
@@ -760,6 +767,10 @@ export class LoyaltyService {
    */
   async pointsExpiresAt(from: Date): Promise<Date> {
     return pointsExpiryFrom(from, await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS));
+  }
+
+  private async pointExpireMonths(): Promise<number> {
+    return normalizePointExpireMonths(await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS));
   }
 
   /** Số dương từ SystemConfig; sai kiểu/≤0 (admin gõ nhầm) → mặc định an toàn + cảnh báo. */

@@ -345,6 +345,35 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
   });
 });
 
+describe('LoyaltyPage — hạn dùng Điểm Xanh (R2-ENGAGE-8)', () => {
+  it('hiện điểm sắp hết hạn gần nhất kèm ngày và chính sách 12 tháng', async () => {
+    const soon = new Date(Date.now() + 10 * 864e5);
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, expiringPoints: { amount: 70, expiresAt: soon.toISOString() }, pointExpireMonths: 12 });
+    renderPage();
+    expect(await screen.findByText(/^70 điểm Xanh sẽ hết hạn ngày \d{2}\/\d{2}\/\d{4} \(còn 10 ngày\)$/)).toBeInTheDocument();
+    expect(screen.getByText('Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
+  });
+
+  it('điểm quy đổi vẫn ghi rõ không hết hạn bên cạnh dòng điểm sắp hết hạn', async () => {
+    mocks.getLoyalty.mockResolvedValue({
+      ...LOYALTY,
+      pointsConvertedBalance: 30,
+      expiringPoints: { amount: 500, expiresAt: '2099-01-01T03:00:00.000Z' },
+      pointExpireMonths: 12,
+    });
+    renderPage();
+    expect(await screen.findByText('trong đó 30 điểm không hết hạn')).toBeInTheDocument();
+    expect(screen.getByText(/^500 điểm Xanh sẽ hết hạn ngày 01\/01\/2099$/)).toBeInTheDocument();
+  });
+
+  it('không có điểm sắp hết hạn: chỉ còn dòng chính sách, không có dòng "sẽ hết hạn"', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, expiringPoints: null, pointExpireMonths: 12 });
+    renderPage();
+    expect(await screen.findByText(/có hạn 12 tháng/)).toBeInTheDocument();
+    expect(screen.queryByText(/sẽ hết hạn ngày/)).toBeNull();
+  });
+});
+
 describe('LoyaltyPage — thẻ thành viên số', () => {
   const openCard = async () => {
     renderPage();
