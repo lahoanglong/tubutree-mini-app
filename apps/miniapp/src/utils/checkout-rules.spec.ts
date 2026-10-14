@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   checkoutPoints,
   isInvoiceValid,
-  partnerPointsState,
+  pointsCapState,
   walletUnavailableReason,
   pointsEarnLabel,
   pointsUseLabel,
@@ -218,14 +218,15 @@ describe('pointsUseLabel / pointsEarnLabel (C-080)', () => {
 
 const PARTNER_NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
 
-describe('partnerPointsState (Q8 S7)', () => {
-  it('giỏ không có hàng đối tác (hoặc API cũ): không đổi gì', () => {
-    expect(partnerPointsState(undefined)).toEqual({ disabled: false, capNote: null, partnerNote: null });
-    expect(partnerPointsState({ pointsMax: 20, pointsPartnerNote: null })).toEqual({ disabled: false, capNote: null, partnerNote: null });
+describe('pointsCapState (Q8 S7, R4-BUYER-2)', () => {
+  it('báo giá chưa có trần (đang tải, API cũ): không đổi gì', () => {
+    expect(pointsCapState(undefined)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+    expect(pointsCapState({}, 8000)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+    expect(pointsCapState({ pointsPartnerNote: null }, 8000)).toEqual({ disabled: false, capNote: null, partnerNote: null });
   });
 
   it('giỏ có hàng đối tác: nêu trần điểm của đơn và câu giải thích', () => {
-    expect(partnerPointsState({ pointsMax: 1250, pointsPartnerNote: PARTNER_NOTE })).toEqual({
+    expect(pointsCapState({ pointsMax: 1250, pointsPartnerNote: PARTNER_NOTE }, 8000)).toEqual({
       disabled: false,
       capNote: 'Đơn này dùng tối đa 1.250 Điểm Xanh',
       partnerNote: PARTNER_NOTE,
@@ -233,6 +234,28 @@ describe('partnerPointsState (Q8 S7)', () => {
   });
 
   it('giỏ chỉ hàng đối tác: tắt ô Điểm Xanh, giữ câu giải thích', () => {
-    expect(partnerPointsState({ pointsMax: 0, pointsPartnerNote: PARTNER_NOTE })).toEqual({ disabled: true, capNote: null, partnerNote: PARTNER_NOTE });
+    expect(pointsCapState({ pointsMax: 0, pointsPartnerNote: PARTNER_NOTE }, 8000)).toEqual({ disabled: true, capNote: null, partnerNote: PARTNER_NOTE });
+  });
+
+  it('giỏ chỉ hàng Tubu, trần của đơn thấp hơn số điểm dùng được: nêu trần trước khi tick (khách 8.013 điểm, trần 42)', () => {
+    expect(pointsCapState({ pointsMax: 42, pointsPartnerNote: null }, 7972)).toEqual({
+      disabled: false,
+      capNote: 'Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn',
+      partnerNote: null,
+    });
+  });
+
+  it('giỏ chỉ hàng Tubu, trần không thấp hơn số điểm dùng được: nhãn đã đúng, không thêm dòng', () => {
+    expect(pointsCapState({ pointsMax: 300, pointsPartnerNote: null }, 300)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+    expect(pointsCapState({ pointsMax: 20, pointsPartnerNote: null })).toEqual({ disabled: false, capNote: null, partnerNote: null });
+  });
+
+  it('giỏ chỉ hàng Tubu, trần 0 mà khách có điểm: tắt ô kèm lời giải thích; không có điểm thì để nguyên', () => {
+    expect(pointsCapState({ pointsMax: 0, pointsPartnerNote: null }, 500)).toEqual({
+      disabled: true,
+      capNote: 'Đơn này chưa dùng được Điểm Xanh',
+      partnerNote: null,
+    });
+    expect(pointsCapState({ pointsMax: 0, pointsPartnerNote: null }, 0)).toEqual({ disabled: false, capNote: null, partnerNote: null });
   });
 });

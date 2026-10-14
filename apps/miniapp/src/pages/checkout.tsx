@@ -22,7 +22,7 @@ import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
   isInvoiceValid,
-  partnerPointsState,
+  pointsCapState,
   pointsEarnLabel,
   pointsUseLabel,
   shouldFallbackToCod,
@@ -145,7 +145,7 @@ export default function CheckoutPage() {
   });
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
-  const partnerPoints = partnerPointsState(quote.data);
+  const partnerPoints = pointsCapState(quote.data, points.usable);
   const pointsUsable = points.usable > 0 && !partnerPoints.disabled;
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);

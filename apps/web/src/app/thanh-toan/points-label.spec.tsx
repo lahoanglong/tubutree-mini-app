@@ -64,6 +64,24 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     expect(label()).not.toContain('500');
   });
 
+  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư → nêu trần ngay khi chưa tick', async () => {
+    calls.extra = { pointsMax: 20, pointsPartnerNote: null };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).toContain('Đơn này dùng tối đa 20 Điểm Xanh, tính theo giá trị hàng của đơn');
+  });
+
+  it('R4-BUYER-2: trần của đơn không thấp hơn số dư dùng được → không thêm dòng trần', async () => {
+    calls.extra = { pointsMax: 500, pointsPartnerNote: null };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).not.toContain('Đơn này dùng tối đa');
+  });
+
   it('Q8 S7: giỏ có hàng của gian hàng đối tác → ô Điểm Xanh nêu trần của đơn và câu giải thích', async () => {
     calls.extra = { pointsMax: 12, pointsPartnerNote: NOTE };
     calls.used = 12;

@@ -809,6 +809,32 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
     await waitFor(() => expect(mocks.checkoutQuote.mock.calls.some((c) => c[1] === 300)).toBe(true));
   });
 
+  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư: nêu trần ngay khi chưa tick, tick xong ra đúng số thật', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 8013, redeemablePoints: 7972 });
+    mocks.checkoutQuote.mockImplementation(async (_addr: string, pointsToUse: number) => ({
+      ...QUOTE,
+      pointsBalance: 8013,
+      redeemablePoints: 7972,
+      pointsMax: 42,
+      pointsPartnerNote: null,
+      pointsUsed: pointsToUse > 0 ? 42 : 0,
+      pointsDiscount: pointsToUse > 0 ? 42_000 : 0,
+    }));
+    renderPage();
+    expect(await screen.findByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
+    expect(screen.getByText(/Dùng được 7\.972\/8\.013 điểm/)).toBeInTheDocument();
+    fireEvent.click(await pointsRow());
+    expect(await screen.findByText('Dùng 42 điểm — giảm 42.000đ')).toBeInTheDocument();
+  });
+
+  it('R4-BUYER-2: trần của đơn không thấp hơn số điểm dùng được thì không thêm dòng trần', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 300, pointsPartnerNote: null });
+    renderPage();
+    expect(await screen.findByText('Bạn đang có 300 điểm')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
+    expect(screen.queryByText(/Đơn này dùng tối đa/)).toBeNull();
+  });
+
   it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
     renderPage();
