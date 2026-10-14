@@ -1777,7 +1777,7 @@ describe('admin/page — KPI doanh thu (ADMINOPS-14)', () => {
     const { container } = await mount();
     const text = container.textContent ?? '';
     expect(text).toContain('Doanh thu đã thu');
-    expect(text).toContain('Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả, tiền hoàn và đơn ghi công nợ');
+    expect(text).toContain('Đã thanh toán hoặc COD Tubu đã thu; trừ đơn huỷ/trả, tiền hoàn, đơn ghi công nợ và COD gian hàng tự giao');
     const dl = container.querySelector('[data-kpi-revenue-breakdown]')!;
     expect(dl.textContent).toContain('Giá trị đơn còn hiệu lực1.500.000');
     expect(dl.textContent).toContain('COD chưa thu400.000');

@@ -533,10 +533,11 @@ export class AdminService {
 
   async getDashboardStats() {
     const open: Prisma.OrderWhereInput = { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } };
+    // COD của đơn gian hàng tự giao do đối tác thu, không phải Tubu (đối soát trừ phí sàn từ phía đối tác).
     const collected: Prisma.OrderWhereInput = {
       status: { notIn: ['CANCELLED', 'RETURNED'] },
       paymentStatus: { not: 'REFUNDED' },
-      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED', paymentMethod: 'COD' }],
+      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED', paymentMethod: 'COD', fulfiller: { not: 'MERCHANT' } }],
     };
     const [
       totalOrders,
@@ -576,7 +577,7 @@ export class AdminService {
           SUM(r."refundAmount") FILTER (
             WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
               AND o."paymentStatus" <> 'REFUNDED'
-              AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD'))
+              AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD' AND o.fulfiller <> 'MERCHANT'))
           ) AS on_collected
         FROM return_requests r
         JOIN orders o ON o.id = r."orderId"

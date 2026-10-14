@@ -683,7 +683,7 @@ function DashboardTab({
         <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu đã thu</div>
           <div className="mt-2 text-2xl font-bold text-forest-700">{formatVnd(stats.totalRevenue)}</div>
-          <div className="mt-1 text-xs text-stone-500">Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả, tiền hoàn và đơn ghi công nợ</div>
+          <div className="mt-1 text-xs text-stone-500">Đã thanh toán hoặc COD Tubu đã thu; trừ đơn huỷ/trả, tiền hoàn, đơn ghi công nợ và COD gian hàng tự giao</div>
           {stats.gmv !== undefined && (
             <dl className="mt-2 space-y-0.5 text-xs text-stone-600" data-kpi-revenue-breakdown>
               <div className="flex justify-between gap-2">
