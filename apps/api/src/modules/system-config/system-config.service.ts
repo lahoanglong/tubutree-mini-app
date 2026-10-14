@@ -6,6 +6,15 @@ import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
 
+const DISPLAY_NAME_MAX = 100;
+
+/** Chuỗi hiển thị bắt buộc (tên ngân hàng, tên chủ tài khoản): có chữ, không quá DISPLAY_NAME_MAX ký tự. */
+function displayNameProblem(value: unknown, what: string): string | null {
+  if (typeof value !== 'string' || !value.trim()) return `không được để trống — nhập ${what}`;
+  if (value.length > DISPLAY_NAME_MAX) return `tối đa ${DISPLAY_NAME_MAX} ký tự`;
+  return null;
+}
+
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
  * QUY TẮC: mọi rate/ngưỡng/hold-time PHẢI lấy qua service này, KHÔNG hard-code.
@@ -209,6 +218,9 @@ export class SystemConfigService {
         : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
     'payment.bank_bin': (value) =>
       typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
+    // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.
+    'payment.bank_name': (value) => displayNameProblem(value, 'tên ngân hàng, vd "Techcombank"'),
+    'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
     'shipping.tier_freeship_overrides': (value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
       for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {
