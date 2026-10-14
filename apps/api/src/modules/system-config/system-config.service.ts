@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
+import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
 
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
@@ -294,6 +295,10 @@ export class SystemConfigService {
         update: { value: stored, updatedBy: changedBy },
         create: { key, value: stored, category, updatedBy: changedBy },
       });
+      // Hàng "Tubu giao hộ" chốt phí sàn theo lúc đặt: gian hàng đang theo mặc định cần dòng lịch sử cho mức mới.
+      if (key === MERCHANT_COMMISSION_KEY && typeof value === 'number') {
+        await freezeDefaultCommissionChange(tx, commissionPctOf(existing?.value), value, new Date(), changedBy);
+      }
     });
     this.cache.delete(key);
   }

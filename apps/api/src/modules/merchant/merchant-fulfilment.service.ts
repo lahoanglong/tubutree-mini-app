@@ -36,6 +36,7 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
+import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 
 type Db = Prisma.TransactionClient;
@@ -1086,6 +1087,8 @@ export class MerchantFulfilmentService {
    * Admin sửa phí sàn riêng của gian hàng (null = theo merchant.commission_pct) và phí "Tubu giao hộ" (% và cố định mỗi đơn).
    * Mỗi lần sửa ghi một dòng lịch sử có hiệu lực từ bây giờ: hàng giao hộ tính theo mức hiệu lực lúc đặt đơn, nên mức mới chỉ
    * áp cho đơn đặt từ giờ (đơn tự giao vốn đã chốt phí sàn trên đơn). Gian hàng chưa có lịch sử thì ghi mức cũ làm mốc gốc.
+   * Phí sàn theo mặc định lưu vào lịch sử bằng số mặc định lúc đó; đổi mặc định sau này ghi dòng mới
+   * (freezeDefaultCommissionChange), nên đơn đã đặt không bị tính lại theo mặc định mới.
    */
   async updateStoreTerms(
     adminId: string,
@@ -1093,17 +1096,18 @@ export class MerchantFulfilmentService {
     dto: { commissionPct?: number | null; consignmentFeePct?: number; consignmentFeeFixed?: number },
   ) {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`merchant-terms:${storefrontId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${termsLockKey(storefrontId)}))`;
       const before = await tx.storefront.findUnique({
         where: { id: storefrontId },
         select: { type: true, commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
       });
       if (!before || before.type !== 'MERCHANT') throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+      const defaultPct = await defaultCommissionPctIn(tx);
       if ((await tx.storefrontTermsHistory.count({ where: { storefrontId } })) === 0) {
         await tx.storefrontTermsHistory.create({
           data: {
             storefrontId,
-            commissionPct: before.commissionPct,
+            commissionPct: before.commissionPct ?? defaultPct,
             consignmentFeePct: before.consignmentFeePct,
             consignmentFeeFixed: before.consignmentFeeFixed,
             effectiveFrom: new Date(0),
@@ -1122,7 +1126,7 @@ export class MerchantFulfilmentService {
       await tx.storefrontTermsHistory.create({
         data: {
           storefrontId,
-          commissionPct: updated.commissionPct,
+          commissionPct: updated.commissionPct ?? defaultPct,
           consignmentFeePct: updated.consignmentFeePct,
           consignmentFeeFixed: updated.consignmentFeeFixed,
           effectiveFrom: new Date(),

@@ -1634,7 +1634,8 @@ model StorefrontTermsHistory {
   id                  String     @id @default(cuid())
   storefrontId        String
   storefront          Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  /// NULL = theo merchant.commission_pct.
+  /// Phí sàn đã quy ra số (gian hàng theo merchant.commission_pct thì lưu mặc định lúc ghi; đổi mặc định ghi thêm dòng).
+  /// NULL chỉ còn ở dòng cũ chưa quy ra — nơi đọc coi là mặc định hiện tại.
   commissionPct       Decimal?   @db.Decimal(5, 4)
   consignmentFeePct   Decimal    @db.Decimal(5, 4)
   consignmentFeeFixed Int
