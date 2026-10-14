@@ -76,6 +76,12 @@ import {
   type RecyclingFilter,
   type PancakeFilter,
   type InvoiceFilter,
+  downloadOrdersCsv,
+  downloadUsersCsv,
+  getOpsAccess,
+  type InboxKey,
+  type StaffPermission,
+  type AdminOrder,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import {
@@ -125,16 +131,22 @@ import {
   ToneBadge,
 } from '@/components/admin/ui';
 import { AnalyticsTab } from './analytics-tab';
-import {
-  exportOrdersToCsv,
-  exportUsersToCsv,
-  ORDER_STATUS_LABELS,
-  PAYMENT_METHOD_LABELS,
-} from '@/lib/export-csv';
+import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
+import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
+import { OpsHealthTab } from '@/components/admin/ops-health-tab';
+import { RefillTab } from '@/components/admin/refill-tab';
+import { AttendanceTab } from '@/components/admin/attendance-tab';
+import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
+import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
+import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { orderPaymentStatusShort } from '@/lib/order-view';
 
 type Tab =
+  | 'inbox'
+  | 'opsHealth'
+  | 'refill'
+  | 'attendance'
   | 'dashboard'
   | 'dealers'
   | 'dealerClaims'
@@ -159,34 +171,100 @@ type Tab =
   | 'reviews'
   | 'subscriptions'
   | 'analytics';
-const TABS: { k: Tab; label: string }[] = [
-  { k: 'dashboard', label: 'Tổng quan KPI' },
-  { k: 'dealers', label: 'Đại lý' },
-  { k: 'dealerClaims', label: 'Thưởng đại lý' },
-  { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
-  { k: 'customerRefunds', label: 'Hoàn tiền khách' },
-  { k: 'orders', label: 'Đơn hàng' },
-  { k: 'returns', label: 'Đổi / Trả' },
-  { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
-  { k: 'posCredits', label: 'Tích điểm tại quầy' },
-  { k: 'users', label: 'Người dùng' },
-  { k: 'reviews', label: 'Đánh giá' },
-  { k: 'subscriptions', label: 'Gói định kỳ' },
-  { k: 'config', label: 'Cấu hình' },
-  { k: 'coupons', label: 'Voucher' },
-  { k: 'brands', label: 'Nhãn hàng' },
-  { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
-  { k: 'merchantFulfilment', label: 'Đơn đối tác tự giao' },
-  { k: 'flashSales', label: 'Flash Sale' },
-  { k: 'faqs', label: 'Câu hỏi thường gặp' },
-  { k: 'contentKit', label: 'Content Kit CTV' },
-  { k: 'academy', label: 'Academy' },
-  { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
-  { k: 'notificationTemplates', label: 'Mẫu thông báo' },
-  { k: 'analytics', label: 'Retention & North-star' },
+/**
+ * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
+ * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.
+ */
+const NAV_GROUPS: NavGroup<Tab>[] = [
+  {
+    label: 'Tổng quan',
+    items: [
+      { k: 'inbox', label: 'Việc cần xử lý' },
+      { k: 'dashboard', label: 'Tổng quan KPI' },
+      { k: 'analytics', label: 'Retention & North-star' },
+    ],
+  },
+  {
+    label: 'Đơn hàng & giao vận',
+    items: [
+      { k: 'orders', label: 'Đơn hàng' },
+      { k: 'merchantFulfilment', label: 'Đơn đối tác tự giao' },
+    ],
+  },
+  {
+    label: 'Hoàn tiền & đổi trả',
+    items: [
+      { k: 'returns', label: 'Đổi / Trả' },
+      { k: 'customerRefunds', label: 'Hoàn tiền khách' },
+      { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
+    ],
+  },
+  {
+    label: 'Người bán',
+    items: [
+      { k: 'dealers', label: 'Đại lý' },
+      { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
+      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'brands', label: 'Nhãn hàng' },
+    ],
+  },
+  {
+    label: 'Khách hàng',
+    items: [
+      { k: 'users', label: 'Người dùng' },
+      { k: 'reviews', label: 'Đánh giá' },
+      { k: 'subscriptions', label: 'Gói định kỳ' },
+      { k: 'posCredits', label: 'Tích điểm tại quầy' },
+      { k: 'refill', label: 'Đổi vỏ chai' },
+    ],
+  },
+  {
+    label: 'Khuyến mãi',
+    items: [
+      { k: 'coupons', label: 'Voucher' },
+      { k: 'flashSales', label: 'Flash Sale' },
+    ],
+  },
+  {
+    label: 'Nội dung',
+    items: [
+      { k: 'faqs', label: 'Câu hỏi thường gặp' },
+      { k: 'contentKit', label: 'Content Kit CTV' },
+      { k: 'academy', label: 'Academy' },
+      { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
+      { k: 'notificationTemplates', label: 'Mẫu thông báo' },
+    ],
+  },
+  { label: 'Nhân sự', items: [{ k: 'attendance', label: 'Chấm công' }] },
+  {
+    label: 'Cấu hình & tích hợp',
+    items: [
+      { k: 'config', label: 'Cấu hình' },
+      { k: 'opsHealth', label: 'Sức khoẻ hệ thống' },
+    ],
+  },
 ];
+const TABS = NAV_GROUPS.flatMap((g) => g.items);
+const DEFAULT_TAB: Tab = 'inbox';
 
-const TAB_KEYS = new Set<string>(TABS.map((t) => t.k));
+/**
+ * Mục nhân viên (STAFF) mở được theo nhóm việc — khớp các route @AllowStaff ở API (staff-permissions.matrix.spec.ts);
+ * mọi nhân viên đều duyệt được đổi vỏ chai (route /refill/admin vốn mở cho STAFF).
+ */
+const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
+  BASE: ['refill'],
+  CSKH: ['inbox', 'orders', 'returns', 'users', 'quickReplies'],
+  KHO: ['inbox', 'orders', 'returns'],
+};
+function staffTabs(perms: readonly string[]): Set<Tab> {
+  const out = new Set<Tab>(STAFF_TABS.BASE);
+  for (const p of perms) for (const t of STAFF_TABS[p as StaffPermission] ?? []) out.add(t);
+  return out;
+}
+
+const TAB_KEYS = new Set<Tab>(TABS.map((t) => t.k));
+const ALL_TABS: ReadonlySet<Tab> = TAB_KEYS;
 
 /**
  * Tab + bộ lọc đơn nằm trên URL (`/admin?tab=orders&recycling=attention`) để gửi link cho đồng nghiệp,
@@ -200,7 +278,7 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
   const r = sp.get('recycling');
   const p = sp.get('pancake');
   return {
-    tab: t && TAB_KEYS.has(t) ? (t as Tab) : null,
+    tab: t && TAB_KEYS.has(t as Tab) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
     pancake: p === 'attention' || p === 'unsynced' ? p : '',
   };
@@ -209,7 +287,7 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
 function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: PancakeFilter | '' = '') {
   if (typeof window === 'undefined') return;
   const sp = new URLSearchParams();
-  if (tab !== 'dashboard') sp.set('tab', tab);
+  if (tab !== DEFAULT_TAB) sp.set('tab', tab);
   if (tab === 'orders' && recycling) sp.set('recycling', recycling);
   if (tab === 'orders' && pancake) sp.set('pancake', pancake);
   const qs = sp.toString();
@@ -218,9 +296,17 @@ function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: Panca
 
 export default function AdminPage() {
   const { user, status, initialized } = useAuth();
-  const [tab, setTabState] = useState<Tab>('dashboard');
+  const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number } | null>(null);
+  const role = user?.role;
+  // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
+  const accessQ = useQuery({
+    queryKey: ['admin-ops-access'],
+    queryFn: getOpsAccess,
+    enabled: status === 'authenticated' && role === 'STAFF',
+  });
 
   useEffect(() => {
     const u = readUrlState();
@@ -245,6 +331,36 @@ export default function AdminPage() {
     setTabState('orders');
     writeUrlState('orders', '', 'attention');
   };
+  const openUnsyncedQueue = () => {
+    setOrdersRecycling('');
+    setOrdersPancake('unsynced');
+    setTabState('orders');
+    writeUrlState('orders', '', 'unsynced');
+  };
+  const openOrderByCode = (code: string) => {
+    setOrdersRecycling('');
+    setOrdersPancake('');
+    setOrderSeed({ search: code, n: Date.now() });
+    setTabState('orders');
+    writeUrlState('orders', '');
+  };
+  const openInbox = (k: InboxKey) => {
+    if (k === 'pancakeAttention') return openPancakeQueue();
+    if (k === 'pancakeUnsynced') return openUnsyncedQueue();
+    if (k === 'gomdonAttention') return openRecyclingQueue();
+    const target: Record<Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention'>, Tab> = {
+      customerRefunds: 'customerRefunds',
+      returnsPending: 'returns',
+      returnsToReceive: 'returns',
+      merchantOverdue: 'merchantFulfilment',
+      merchantProducts: 'merchantProducts',
+      dealerApplications: 'dealers',
+      dealerClaims: 'dealerClaims',
+      payouts: 'payouts',
+      refillPending: 'refill',
+    };
+    setTab(target[k]);
+  };
   const onRecyclingFilterChange = (r: RecyclingFilter | '') => {
     setOrdersRecycling(r);
     writeUrlState('orders', r, ordersPancake);
@@ -264,62 +380,71 @@ export default function AdminPage() {
         <Link href="/dang-nhap" className="inline-flex min-h-[44px] items-center font-semibold text-forest-700 underline">Đăng nhập</Link>
       </Center>
     );
-  if (user?.role !== 'ADMIN')
-    return <Center>Bạn không có quyền truy cập trang quản trị.</Center>;
+  if (role !== 'ADMIN' && role !== 'STAFF') return <Center>Bạn không có quyền truy cập trang quản trị.</Center>;
+  if (role === 'STAFF' && accessQ.isLoading) return <Center>Đang tải…</Center>;
+  if (role === 'STAFF' && !accessQ.data) return <Center>Không tải được quyền của bạn. Tải lại trang để thử lại.</Center>;
+
+  const isAdmin = role === 'ADMIN';
+  const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
+  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.k)) })).filter((g) => g.items.length > 0);
+  const active: Tab = allowed.has(tab) ? tab : (groups[0]?.items[0]?.k ?? DEFAULT_TAB);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className="mx-auto max-w-7xl px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-xl font-semibold text-stone-900">Quản trị Tubu Tree</h1>
         <Link href="/admin/pos" className="inline-flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
           Màn thu ngân (tích điểm tại quầy)
         </Link>
       </div>
-      <div className="relative mt-4 flex gap-2 overflow-x-auto border-b border-stone-200">
-        {TABS.map((t) => (
-          <button
-            key={t.k}
-            onClick={() => setTab(t.k)}
-            className={`min-h-[44px] whitespace-nowrap px-3 py-2 text-sm font-medium sm:min-h-0 ${
-              tab === t.k ? 'border-b-2 border-forest-600 text-forest-700' : 'text-stone-500 hover:text-stone-700'
-            }`}
-          >
-            {t.label}
-            {t.k === 'customerRefunds' && <CustomerRefundsPendingBadge />}
-          </button>
-        ))}
-      </div>
-      <div className="mt-4">
-        {tab === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
-        {tab === 'dealers' && <DealersTab />}
-        {tab === 'dealerClaims' && <DealerClaimsTab />}
-        {tab === 'payouts' && <PayoutAdminTab />}
-        {tab === 'customerRefunds' && <CustomerRefundsTab />}
-        {tab === 'orders' && <OrdersTab
-            recycling={ordersRecycling}
-            onRecyclingChange={onRecyclingFilterChange}
-            pancake={ordersPancake}
-            onPancakeChange={onPancakeFilterChange}
-          />}
-        {tab === 'returns' && <ReturnsTab />}
-        {tab === 'cashback' && <CashbackTab />}
-        {tab === 'posCredits' && <PosCreditsTab />}
-        {tab === 'users' && <UsersTab />}
-        {tab === 'users' && <AccountDeletionPanel />}
-        {tab === 'reviews' && <ReviewsTab />}
-        {tab === 'subscriptions' && <SubscriptionsTab />}
-        {tab === 'config' && <ConfigTab />}
-        {tab === 'coupons' && <CouponsTab />}
-        {tab === 'brands' && <BrandsTab />}
-        {tab === 'merchantProducts' && <MerchantProductsTab />}
-        {tab === 'merchantFulfilment' && <MerchantFulfilmentTab />}
-        {tab === 'flashSales' && <FlashSalesTab />}
-        {tab === 'faqs' && <FaqTab />}
-        {tab === 'contentKit' && <ContentKitTab />}
-        {tab === 'academy' && <AcademyTab />}
-        {tab === 'quickReplies' && <QuickReplyTab />}
-        {tab === 'notificationTemplates' && <NotificationTemplatesTab />}
-        {tab === 'analytics' && <AnalyticsTab />}
+      <div className="mt-4 lg:flex lg:items-start lg:gap-6">
+        <AdminNav
+          groups={groups}
+          active={active}
+          onSelect={setTab}
+          badge={(k) => (isAdmin && k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
+        />
+        <div className="mt-4 min-w-0 flex-1 lg:mt-0">
+          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
+          {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
+          {active === 'dealers' && <DealersTab />}
+          {active === 'dealerClaims' && <DealerClaimsTab />}
+          {active === 'payouts' && <PayoutAdminTab />}
+          {active === 'customerRefunds' && <CustomerRefundsTab />}
+          {active === 'orders' && (
+            <OrdersTab
+              key={orderSeed?.n ?? 0}
+              initialSearch={orderSeed?.search}
+              isAdmin={isAdmin}
+              recycling={ordersRecycling}
+              onRecyclingChange={onRecyclingFilterChange}
+              pancake={ordersPancake}
+              onPancakeChange={onPancakeFilterChange}
+            />
+          )}
+          {active === 'returns' && <ReturnsTab />}
+          {active === 'cashback' && <CashbackTab />}
+          {active === 'posCredits' && <PosCreditsTab />}
+          {active === 'users' && <UsersTab isAdmin={isAdmin} />}
+          {active === 'users' && isAdmin && <AccountDeletionPanel />}
+          {active === 'reviews' && <ReviewsTab />}
+          {active === 'subscriptions' && <SubscriptionsTab />}
+          {active === 'refill' && <RefillTab />}
+          {active === 'config' && <ConfigTab />}
+          {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} />}
+          {active === 'attendance' && <AttendanceTab />}
+          {active === 'coupons' && <CouponsTab />}
+          {active === 'brands' && <BrandsTab />}
+          {active === 'merchantProducts' && <MerchantProductsTab />}
+          {active === 'merchantFulfilment' && <MerchantFulfilmentTab />}
+          {active === 'flashSales' && <FlashSalesTab />}
+          {active === 'faqs' && <FaqTab />}
+          {active === 'contentKit' && <ContentKitTab />}
+          {active === 'academy' && <AcademyTab />}
+          {active === 'quickReplies' && <QuickReplyTab />}
+          {active === 'notificationTemplates' && <NotificationTemplatesTab />}
+          {active === 'analytics' && <AnalyticsTab />}
+        </div>
       </div>
     </main>
   );
@@ -542,9 +667,21 @@ function DashboardTab({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Doanh thu */}
         <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu bán hàng</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Doanh thu đã thu</div>
           <div className="mt-2 text-2xl font-bold text-forest-700">{formatVnd(stats.totalRevenue)}</div>
-          <div className="mt-1 text-xs text-stone-500">Đơn đã xác nhận & hoàn tất</div>
+          <div className="mt-1 text-xs text-stone-500">Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả và tiền hoàn</div>
+          {stats.gmv !== undefined && (
+            <dl className="mt-2 space-y-0.5 text-xs text-stone-600" data-kpi-revenue-breakdown>
+              <div className="flex justify-between gap-2">
+                <dt>Giá trị đơn còn hiệu lực</dt>
+                <dd className="font-medium text-stone-900">{formatVnd(stats.gmv)}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt>COD chưa thu</dt>
+                <dd className="font-medium text-warning-fg">{formatVnd(stats.codPendingValue ?? 0)}</dd>
+              </div>
+            </dl>
+          )}
         </div>
 
         {/* Đơn hàng */}
@@ -558,7 +695,20 @@ function DashboardTab({
             {stats.cancelledOrders > 0 && (
               <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã hủy</span>
             )}
+            {(stats.returnedOrders ?? 0) > 0 && (
+              <span className="rounded bg-promo-bg px-1.5 py-0.5 font-medium text-promo-fg">{stats.returnedOrders} đã trả hàng</span>
+            )}
           </div>
+          {stats.returnRefundTotal !== undefined && (
+            <button
+              type="button"
+              onClick={() => onSelectTab('returns')}
+              className="mt-2 min-h-[44px] text-left text-xs text-stone-600 underline-offset-2 hover:underline sm:min-h-0"
+            >
+              Đã hoàn khi trả hàng: <b className="text-stone-900">{formatVnd(stats.returnRefundTotal)}</b>
+              {(stats.pendingReturns ?? 0) > 0 && <> · <b className="text-warning-fg">{stats.pendingReturns}</b> yêu cầu chờ duyệt</>}
+            </button>
+          )}
         </div>
 
         {/* Khách hàng & Đối tác */}
@@ -653,21 +803,32 @@ function OrdersTab({
   onRecyclingChange,
   pancake,
   onPancakeChange,
+  isAdmin = true,
+  initialSearch,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
   pancake: PancakeFilter | '';
   onPancakeChange: (p: PancakeFilter | '') => void;
+  isAdmin?: boolean;
+  initialSearch?: string;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch ?? '');
+  const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
+  const narrow = useNarrowScreen();
+  const badRange = !!from && !!to && from > to;
 
   const q = useQuery({
-    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake],
+    queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to],
     queryFn: () =>
       listOrders(
         page,
@@ -677,8 +838,32 @@ function OrdersTab({
         20,
         invoice || undefined,
         pancake || undefined,
+        from || undefined,
+        to || undefined,
       ),
+    enabled: !badRange,
   });
+  const exportAll = async () => {
+    setExportMsg(null);
+    setExporting(true);
+    try {
+      const r = await downloadOrdersCsv({
+        status: status || undefined,
+        search: search || undefined,
+        recycling: recycling || undefined,
+        invoice: invoice || undefined,
+        pancake: pancake || undefined,
+        from: from || undefined,
+        to: to || undefined,
+      });
+      setExportMsg({ ok: true, text: `Đã tải ${r.filename} — mọi đơn khớp bộ lọc, không chỉ trang đang xem.` });
+    } catch (e) {
+      setExportMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+    } finally {
+      setExporting(false);
+    }
+  };
+  const expandedOrder = q.data?.data.find((o) => (o.id || o.code) === expandedId) ?? null;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
   const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });
   const pancakeCount = pancakeQ.data ?? 0;
@@ -746,17 +931,66 @@ function OrdersTab({
             <option value="RETURNED">Đã trả hàng</option>
           </select>
 
-          <button
-            type="button"
-            onClick={() => exportOrdersToCsv(q.data?.data ?? [])}
-            disabled={!q.data || q.data.data.length === 0}
-            className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
-            title="Xuất file CSV cho Excel / kế toán"
-          >
-            <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
-            Xuất CSV (Excel)
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => void exportAll()}
+              disabled={exporting || badRange || !q.data || q.data.meta.total === 0}
+              className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
+              title="Xuất mọi đơn khớp bộ lọc ra file CSV cho Excel / kế toán"
+            >
+              <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+              {exporting ? 'Đang xuất…' : 'Xuất CSV (Excel)'}
+            </button>
+          )}
         </div>
+        <div className="flex w-full flex-wrap items-center gap-2 text-xs text-stone-600">
+          <label className="flex items-center gap-1.5">
+            Từ ngày
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(1);
+              }}
+              className={`${FIELD_CLASS} ${TOUCH_H}`}
+            />
+          </label>
+          <label className="flex items-center gap-1.5">
+            đến
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(1);
+              }}
+              className={`${FIELD_CLASS} ${TOUCH_H}`}
+            />
+          </label>
+          {(from || to) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFrom('');
+                setTo('');
+                setPage(1);
+              }}
+              className={BTN_SMALL}
+            >
+              Bỏ lọc ngày
+            </button>
+          )}
+          {badRange && <span className="text-danger-fg">Ngày bắt đầu phải trước ngày kết thúc.</span>}
+        </div>
+        {exportMsg && (
+          <p role="status" className={`w-full text-xs ${exportMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+            {exportMsg.text}
+          </p>
+        )}
       </div>
 
       {/* Bộ lọc thu gom tái chế (Gomdon) */}
@@ -871,10 +1105,10 @@ function OrdersTab({
               <tr>
                 <th className="px-3 py-2.5 font-medium">Mã đơn</th>
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
-                <th className="px-3 py-2.5 font-medium">Thanh toán</th>
+                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Thanh toán</th>
                 <th className="px-3 py-2.5 font-medium">Tổng tiền</th>
                 <th className="px-3 py-2.5 font-medium">Trạng thái</th>
-                <th className="px-3 py-2.5 font-medium">Ngày đặt</th>
+                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Ngày đặt</th>
                 <th className="px-3 py-2.5 font-medium text-right">Chi tiết / Cập nhật</th>
               </tr>
             </thead>
@@ -890,20 +1124,31 @@ function OrdersTab({
                   const isExpanded = expandedId === (o.id || o.code);
                   return (
                     <React.Fragment key={o.id || o.code}>
-                      <tr className="border-t border-stone-100 hover:bg-stone-50">
+                      <tr
+                        className={`border-t border-stone-100 hover:bg-stone-50 ${narrow ? 'cursor-pointer' : ''}`}
+                        onClick={narrow ? () => setExpandedId(o.id || o.code) : undefined}
+                      >
                         <td className="px-3 py-3">
                           <div className="font-semibold text-stone-800">{o.code}</div>
                           <div className="mt-0.5 flex flex-wrap gap-1">
+                            {o.fulfiller === 'MERCHANT' && (
+                              <ToneBadge tone="info" title={o.fulfillerStorefront?.title ?? undefined}>
+                                Gian hàng tự giao
+                              </ToneBadge>
+                            )}
                             <RecyclingBadge order={o} />
                             <PancakeAttentionBadge order={o} />
                             <PancakeSyncBadge order={o} />
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-stone-500 md:hidden">
+                            {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
                         </td>
                         <td className="px-3 py-3">
                           <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
                           {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="hidden px-3 py-3 md:table-cell">
                           <div className="text-xs font-medium text-stone-700">
                             {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
@@ -922,87 +1167,29 @@ function OrdersTab({
                         <td className="px-3 py-3">
                           <OrderStatusBadge status={o.status} />
                         </td>
-                        <td className="px-3 py-3 text-xs text-stone-500">
+                        <td className="hidden px-3 py-3 text-xs text-stone-500 md:table-cell">
                           {formatDate(o.createdAt)}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <button
                             type="button"
-                            onClick={() => setExpandedId(isExpanded ? null : (o.id || o.code))}
+                            aria-haspopup={narrow ? 'dialog' : undefined}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedId(isExpanded ? null : (o.id || o.code));
+                            }}
                             className={`${BTN_SMALL} inline-flex items-center gap-1`}
                           >
-                            {isExpanded ? 'Đóng' : 'Xem & Sửa'}
-                            {isExpanded ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
+                            {isExpanded && !narrow ? 'Đóng' : 'Xem & Sửa'}
+                            {isExpanded && !narrow ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
                           </button>
                         </td>
                       </tr>
 
-                      {/* Expandable row for details & status update */}
-                      {isExpanded && (
+                      {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <div className="space-y-3">
-                              <PancakeAttentionPanel order={o} />
-                              <PancakeSyncPanel order={o} />
-
-                              {/* Order items */}
-                              <div>
-                                <div className="text-xs font-semibold uppercase text-stone-500">Sản phẩm trong đơn:</div>
-                                {o.items && o.items.length > 0 ? (
-                                  <div className="mt-1 divide-y divide-stone-200 rounded-control border border-stone-200 bg-stone-0">
-                                    {o.items.map((it) => (
-                                      <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                                        <div>
-                                          <span className="font-medium text-stone-800">{it.productName}</span>
-                                          {it.variationName && <span className="text-stone-500"> ({it.variationName})</span>}
-                                          {!!it.backorderedQty && (
-                                            <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-semibold text-warning-fg">
-                                              Đặt trước {it.backorderedQty}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-right">
-                                          <span className="text-stone-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
-                                          <span className="ml-3 font-semibold text-stone-800">{formatVnd(it.total)}</span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-stone-500">Không có danh sách sản phẩm chi tiết.</p>
-                                )}
-                              </div>
-
-                              <OrderShippingAddress order={o} />
-
-                              {o.note && (
-                                <div className="text-xs text-stone-600">
-                                  <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
-                                </div>
-                              )}
-
-                              {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
-                                <div className="text-xs text-stone-600">
-                                  <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
-                                  {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
-                                </div>
-                              )}
-
-                              <OrderInvoicePanel order={o} />
-
-                              <RecyclingPanel order={o} />
-
-                              {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
-                              <DealerPaymentPanel order={o} />
-
-                              {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
-                              <DealerCreditPanel order={o} />
-
-                              {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-                              <OrderStatusActions order={o} />
-
-                              <OrderStatusHistory order={o} />
-                            </div>
+                            <OrderDetailBody o={o} isAdmin={isAdmin} />
                           </td>
                         </tr>
                       )}
@@ -1013,6 +1200,19 @@ function OrdersTab({
             </tbody>
           </table>
         </ScrollRegion>
+      )}
+
+      {narrow && expandedOrder && (
+        <SideDrawer title={`Đơn ${expandedOrder.code}`} onClose={() => setExpandedId(null)}>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <OrderStatusBadge status={expandedOrder.status} />
+            <span className="font-semibold text-forest-700">{formatVnd(expandedOrder.total)}</span>
+            <span className="text-xs text-stone-500">
+              {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
+            </span>
+          </div>
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} />
+        </SideDrawer>
       )}
 
       {/* Pagination Bar */}
@@ -1042,6 +1242,74 @@ function OrdersTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
+function OrderDetailBody({ o, isAdmin }: { o: AdminOrder; isAdmin: boolean }) {
+  return (
+    <div className="space-y-3">
+      <PancakeAttentionPanel order={o} />
+      <PancakeSyncPanel order={o} />
+
+      {/* Order items */}
+      <div>
+        <div className="text-xs font-semibold uppercase text-stone-500">Sản phẩm trong đơn:</div>
+        {o.items && o.items.length > 0 ? (
+          <div className="mt-1 divide-y divide-stone-200 rounded-control border border-stone-200 bg-stone-0">
+            {o.items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                <div>
+                  <span className="font-medium text-stone-800">{it.productName}</span>
+                  {it.variationName && <span className="text-stone-500"> ({it.variationName})</span>}
+                  {!!it.backorderedQty && (
+                    <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-semibold text-warning-fg">
+                      Đặt trước {it.backorderedQty}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right">
+                  <span className="text-stone-500">{it.quantity} x {formatVnd(it.unitPrice)}</span>
+                  <span className="ml-3 font-semibold text-stone-800">{formatVnd(it.total)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-stone-500">Không có danh sách sản phẩm chi tiết.</p>
+        )}
+      </div>
+
+      <OrderShippingAddress order={o} />
+
+      {o.note && (
+        <div className="text-xs text-stone-600">
+          <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
+        </div>
+      )}
+
+      {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
+        <div className="text-xs text-stone-600">
+          <span className="font-semibold">Vận chuyển:</span> {o.shippingPartner ?? ''} {o.shippingCode ?? ''}
+          {o.shippingStatus ? ` · ${o.shippingStatus}` : ''}
+        </div>
+      )}
+
+      {isAdmin && <OrderInvoicePanel order={o} />}
+
+      <RecyclingPanel order={o} />
+
+      {/* Đơn đại lý trả trước chờ chuyển khoản: admin xác nhận đã nhận tiền (tự ẩn khi không đủ điều kiện). */}
+      {isAdmin && <DealerPaymentPanel order={o} />}
+
+      {/* Sổ công nợ đại lý (mọi đơn ĐẠI LÝ, không riêng đơn ghi công nợ) — A5-09. */}
+      {isAdmin && <DealerCreditPanel order={o} />}
+
+      {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
+      <OrderStatusActions order={o} />
+
+      <OrderStatusHistory order={o} />
     </div>
   );
 }
@@ -1111,7 +1379,7 @@ function ReturnsTab() {
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
 
-function UsersTab() {
+function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
   // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
   // được. Thêm page state + nút chuyển trang, mirror đúng pattern OrdersTab cùng file.
@@ -1121,8 +1389,22 @@ function UsersTab() {
   const q = useQuery({ queryKey: ['admin-users', page, search], queryFn: () => listUsers(page, search || undefined) });
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const { confirm, ask, dialog } = useConfirm();
 
+  const exportAll = async () => {
+    setMsg(null);
+    setExporting(true);
+    try {
+      const r = await downloadUsersCsv(search || undefined);
+      setMsg({ ok: true, text: `Đã tải ${r.filename} — mọi người dùng khớp tìm kiếm, không chỉ trang đang xem.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+    } finally {
+      setExporting(false);
+    }
+  };
   const onError = (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' });
   const block = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
@@ -1173,18 +1455,20 @@ function UsersTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-base font-semibold text-stone-900">Quản lý người dùng & phân quyền</h2>
-        <button
-          type="button"
-          onClick={() => exportUsersToCsv(q.data?.data ?? [])}
-          disabled={!q.data || q.data.data.length === 0}
-          className={`${BTN_SECONDARY} flex items-center gap-1.5`}
-          title="Xuất danh sách người dùng ra file CSV"
-        >
-          <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
-          Xuất CSV người dùng
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => void exportAll()}
+            disabled={exporting || !q.data || q.data.meta.total === 0}
+            className={`${BTN_SECONDARY} flex items-center gap-1.5`}
+            title="Xuất mọi người dùng khớp tìm kiếm ra file CSV"
+          >
+            <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+            {exporting ? 'Đang xuất…' : 'Xuất CSV người dùng'}
+          </button>
+        )}
       </div>
-      <GrantRoleForm onDone={() => q.refetch()} />
+      {isAdmin && <GrantRoleForm onDone={() => q.refetch()} />}
       <form
         role="search"
         aria-label="Tìm người dùng"
@@ -1231,7 +1515,17 @@ function UsersTab() {
           <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái']} label="Danh sách người dùng">
             {q.data?.data.map((u) => (
               <tr key={u.id} className="border-t border-stone-100">
-                <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
+                <td className="px-3 py-2 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setDetailId(u.id)}
+                    aria-haspopup="dialog"
+                    className={`${BTN_LINK} text-left`}
+                    aria-label={`Xem chi tiết ${u.fullName ?? u.phone ?? u.id}`}
+                  >
+                    {u.fullName ?? '—'}
+                  </button>
+                </td>
                 <td className="px-3 py-2">{u.phone ?? '—'}</td>
                 <td className="px-3 py-2">{u.role}</td>
                 <td className="px-3 py-2">
@@ -1239,7 +1533,13 @@ function UsersTab() {
                 </td>
                 <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
                 <td className="min-w-[16rem] px-3 py-2">
-                  {u.isBlocked ? (
+                  {!isAdmin ? (
+                    u.isBlocked ? (
+                      <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
+                    ) : (
+                      <span className="text-stone-500">Đang hoạt động</span>
+                    )
+                  ) : u.isBlocked ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
                       <button
@@ -1303,6 +1603,7 @@ function UsersTab() {
         </>
       )}
       {dialog}
+      {detailId && <UserDetailDrawer userId={detailId} isAdmin={isAdmin} onClose={() => setDetailId(null)} />}
     </div>
   );
 }

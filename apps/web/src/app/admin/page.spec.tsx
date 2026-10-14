@@ -60,6 +60,12 @@ const mocks = vi.hoisted(() => ({
   addAcademyLesson: vi.fn(),
   updateAcademyLesson: vi.fn(),
   deleteAcademyLesson: vi.fn(),
+  inbox: vi.fn(),
+  access: { role: 'STAFF', staffPermissions: [] as string[] },
+  refundsCalls: 0,
+  downloadOrders: vi.fn(),
+  downloadUsers: vi.fn(),
+  userDetail: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -79,6 +85,11 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     ...actual,
     getDashboardStats: async () => ({
       totalRevenue: 1_000_000,
+      gmv: 1_500_000,
+      codPendingValue: 400_000,
+      returnedOrders: 2,
+      pendingReturns: 3,
+      returnRefundTotal: 120_000,
       totalOrders: 7,
       pendingOrders: 1,
       shippingOrders: 1,
@@ -95,7 +106,44 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     resolvePancakeAttention: (...args: unknown[]) => mocks.resolvePancakeAttention(...args),
     listDealerRewardClaims: async () => ({ data: [], meta: { total: mocks.claims, page: 1, limit: 1 } }),
     listPayouts: async () => ({ data: [], meta: { total: mocks.payouts, page: 1, limit: 1 } }),
-    listCustomerRefunds: async () => ({ data: [], meta: { total: mocks.refundsPending, page: 1, limit: 1 } }),
+    listCustomerRefunds: async () => {
+      mocks.refundsCalls += 1;
+      return { data: [], meta: { total: mocks.refundsPending, page: 1, limit: 1 } };
+    },
+    getOpsInbox: async () => {
+      mocks.inbox();
+      return {
+        generatedAt: '2026-10-14T03:00:00.000Z',
+        items: [
+          { key: 'pancakeAttention', count: 2 },
+          { key: 'returnsPending', count: 1 },
+          { key: 'refillPending', count: 0 },
+        ],
+      };
+    },
+    getOpsAccess: async () => mocks.access,
+    getOpsHealth: async () => ({
+      generatedAt: '2026-10-14T03:00:00.000Z',
+      thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6 },
+      pancake: {
+        configured: true, lastPushOkAt: null, lastWebhookAt: null, lastWebhookProcessedAt: null, webhookFailed24h: 0, webhookStuck: 0,
+        unsynced: 0, stuck: 0, stuckOrders: [], attention: 0, catalog: { lastOkAt: null, lastErrorAt: null, lastError: null, detail: null },
+      },
+      gomdon: { configured: false, connection: null, credentialsRejected: false, lastWebhookAt: null, webhookFailed24h: 0, openAlerts: 0, attention: 0 },
+      queues: { ok: true, items: [] },
+      problems: [],
+    }),
+    listLiveAttendance: async () => [],
+    listPendingRefills: async () => [],
+    downloadOrdersCsv: async (...args: unknown[]) => {
+      mocks.downloadOrders(...args);
+      return { filename: 'don-hang-2026-10-14.csv', bytes: 10 };
+    },
+    downloadUsersCsv: async (...args: unknown[]) => {
+      mocks.downloadUsers(...args);
+      return { filename: 'nguoi-dung-2026-10-14.csv', bytes: 10 };
+    },
+    getUserDetail: async (id: string) => mocks.userDetail(id),
     listOrders: async (...args: unknown[]) => {
       mocks.listOrders(...args);
       return { data: mocks.orders, meta: { total: 60, page: 1, limit: 20 } };
@@ -233,6 +281,12 @@ beforeEach(() => {
     mocks.createBrand, mocks.updateBrand, mocks.verifyBrand, mocks.detachBrandProducts,
     mocks.createPromotion, mocks.deletePromotion, mocks.createDealerReward, mocks.deleteDealerReward,
   ]) fn.mockReset();
+  mocks.inbox.mockReset();
+  mocks.access = { role: 'STAFF', staffPermissions: [] };
+  mocks.refundsCalls = 0;
+  mocks.downloadOrders.mockReset();
+  mocks.downloadUsers.mockReset();
+  mocks.userDetail.mockReset();
   window.history.replaceState(null, '', '/admin');
 });
 afterEach(() => {
@@ -259,16 +313,54 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(container.querySelectorAll('button').length).toBe(0);
   });
 
-  it('thanh tab cuộn ngang trong khung riêng, mỗi tab cao 44px ở điện thoại và tab đang chọn tô forest', async () => {
+  it('ADMINOPS-13: mục quản trị chia 9 nhóm (đủ 8 nhóm nghiệp vụ), mỗi mục cao 44px ở điện thoại, mục đang mở tô forest', async () => {
     const { container } = await mount();
-    const tabs = [...container.querySelectorAll('button')].filter((b) => b.textContent === 'Tổng quan KPI');
-    const bar = tabs[0]!.parentElement!;
-    expect(bar.className).toContain('overflow-x-auto');
-    const all = [...bar.querySelectorAll('button')];
-    expect(all).toHaveLength(24);
-    for (const b of all) expect(b.className).toContain('min-h-[44px]');
-    expect(tabs[0]!.className).toContain('border-forest-600');
-    expect(all[1]!.className).not.toContain('border-forest-600');
+    const nav = container.querySelector('nav[aria-label="Mục quản trị"]')!;
+    expect(nav.className).toContain('lg:block');
+    const groups = [...nav.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
+    expect(groups).toEqual([
+      'Tổng quan',
+      'Đơn hàng & giao vận',
+      'Hoàn tiền & đổi trả',
+      'Người bán',
+      'Khách hàng',
+      'Khuyến mãi',
+      'Nội dung',
+      'Nhân sự',
+      'Cấu hình & tích hợp',
+    ]);
+    const items = [...nav.querySelectorAll('button')];
+    expect(items).toHaveLength(28);
+    for (const b of items) expect(b.className).toContain('min-h-[44px]');
+    const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
+    expect(current.textContent).toBe('Việc cần xử lý');
+    expect(current.className).toContain('bg-forest-100');
+    expect(items.filter((b) => b.className.includes('bg-forest-100'))).toHaveLength(1);
+  });
+
+  it('trang chủ mặc định là "Việc cần xử lý"; bấm một mục ghi ?tab= lên URL, link cũ ?tab=orders&pancake=attention vẫn mở đúng chỗ', async () => {
+    const { container } = await mount();
+    expect(container.textContent).toContain('Việc cần xử lý');
+    expect(mocks.inbox).toHaveBeenCalled();
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan KPI')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=dashboard');
+    expect(container.textContent).toContain('Doanh thu đã thu');
+  });
+
+  it('điện thoại: nút "Đổi mục" mở ngăn kéo liệt kê đủ nhóm, chọn mục thì đóng ngăn kéo và mở mục đó', async () => {
+    const { container } = await mount();
+    const opener = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Đổi mục'))!;
+    expect(opener.className).toContain('min-h-[44px]');
+    expect(opener.textContent).toContain('Tổng quan · Việc cần xử lý');
+    click(opener);
+    await flush();
+    const drawer = document.body.querySelector('[role="dialog"]')!;
+    expect(drawer.querySelectorAll('[role="group"]')).toHaveLength(9);
+    click([...drawer.querySelectorAll('button')].find((b) => b.textContent === 'Đổi vỏ chai')!);
+    await flush();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(window.location.search).toBe('?tab=refill');
   });
 
   it('tab Hoàn tiền khách (Q-01) có trong thanh tab, bấm vào mở màn hoàn tiền và ghi tab lên URL', async () => {
@@ -316,6 +408,9 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
 });
 
 describe('admin/page — tab Tổng quan', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/admin?tab=dashboard');
+  });
   const BADGE: [string, string, string][] = [
     ['Chờ thanh toán', 'bg-warning-bg', 'text-warning-fg'],
     ['Đã xác nhận', 'bg-info-bg', 'text-info-fg'],
@@ -452,6 +547,7 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
 
   it('biểu ngữ tổng quan đếm đơn cần xử lý, bấm vào mở tab Đơn hàng đã lọc pancake=attention', async () => {
     mocks.pancake = 3;
+    window.history.replaceState(null, '', '/admin?tab=dashboard');
     const { container } = await mount();
     const banner = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('báo cáo Pancake'))!;
     expect(banner.textContent).toContain('3 đơn cần xử lý theo báo cáo Pancake');
@@ -459,14 +555,14 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
     act(() => banner.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'attention', undefined, undefined);
     const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý Pancake'))!;
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     expect(chip.textContent).toBe('Cần xử lý Pancake (3)');
     act(() => chip.click());
     await flush();
     expect(window.location.search).toBe('?tab=orders');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined);
   });
 
   it('đơn bị gắn cờ: huy hiệu ở dòng, chi tiết hiện lý do; "Đã xử lý" qua hộp xác nhận rồi gửi ghi chú', async () => {
@@ -1633,6 +1729,7 @@ describe('admin/page — vùng chạm tối thiểu 24px ở màn máy tính (ax
 // không cuộn tới phần bị che; khung phải tự nhận tab.
 describe('admin/page — khung cuộn bảng focus được bằng bàn phím', () => {
   it('tab Tổng quan (đơn gần đây) và tab Người dùng: khung bọc bảng có tabindex=0, role=region, aria-label', async () => {
+    window.history.replaceState(null, '', '/admin?tab=dashboard');
     const dash = await mount();
     expect(dash.container.querySelector('table')).not.toBeNull();
     expect(scrollRegionProblems(dash.container)).toEqual([]);
@@ -1658,7 +1755,7 @@ describe('admin/page — khung cuộn bảng focus được bằng bàn phím', 
 
 // PG-3 (axe heading-order): tiêu đề form của các tab sau h1 "Quản trị Tubu Tree" phải là h2, không nhảy h1 -> h3.
 describe('admin/page — thứ bậc heading của các tab', () => {
-  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders'])(
+  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'refill', 'attendance'])(
     'tab %s: không nhảy cấp heading',
     async (tab) => {
       window.history.replaceState(null, '', `/admin?tab=${tab}`);
@@ -1667,4 +1764,231 @@ describe('admin/page — thứ bậc heading của các tab', () => {
       expect(headingProblems(container)).toEqual([]);
     },
   );
+});
+
+describe('admin/page — KPI doanh thu (ADMINOPS-14)', () => {
+  it('thẻ doanh thu là tiền đã thu, tách giá trị đơn còn hiệu lực và COD chưa thu; thẻ đơn hiện đơn trả + tiền đã hoàn', async () => {
+    window.history.replaceState(null, '', '/admin?tab=dashboard');
+    const { container } = await mount();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Doanh thu đã thu');
+    expect(text).toContain('Đã thanh toán hoặc COD đã giao; trừ đơn huỷ/trả và tiền hoàn');
+    const dl = container.querySelector('[data-kpi-revenue-breakdown]')!;
+    expect(dl.textContent).toContain('Giá trị đơn còn hiệu lực1.500.000');
+    expect(dl.textContent).toContain('COD chưa thu400.000');
+    expect(text).toContain('2 đã trả hàng');
+    const refunds = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Đã hoàn khi trả hàng'))!;
+    expect(refunds.textContent).toContain('120.000');
+    expect(refunds.textContent).toContain('3 yêu cầu chờ duyệt');
+    click(refunds);
+    await flush();
+    expect(window.location.search).toBe('?tab=returns');
+  });
+});
+
+describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
+  const navItems = (c: HTMLElement) =>
+    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+
+  it('nhân viên KHO chỉ thấy mục của mình, không gọi API chỉ dành cho ADMIN', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    const { container } = await mount();
+    expect(navItems(container)).toEqual(['Việc cần xử lý', 'Đơn hàng', 'Đổi / Trả', 'Đổi vỏ chai']);
+    expect(mocks.refundsCalls).toBe(0);
+    expect(mocks.inbox).toHaveBeenCalled();
+  });
+
+  it('nhân viên không có nhóm việc: chỉ còn Đổi vỏ chai; link tới mục không được phép rơi về mục đầu tiên', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: [] };
+    window.history.replaceState(null, '', '/admin?tab=config');
+    const { container } = await mount();
+    expect(navItems(container)).toEqual(['Đổi vỏ chai']);
+    expect(container.textContent).toContain('Đổi vỏ chai chờ duyệt');
+    expect(container.textContent).not.toContain('Tất cả tham số');
+  });
+
+  it('CSKH ở tab Người dùng: xem chi tiết được, không có nút khoá, cấp quyền hay xuất CSV', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    expect(navItems(container)).toContain('Người dùng');
+    expect(navItems(container)).toContain('CSKH mẫu tin nhanh');
+    const labels = [...container.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels).not.toContain('Khoá');
+    expect(labels).not.toContain('Cấp quyền');
+    expect(labels.some((l) => l?.includes('Xuất CSV'))).toBe(false);
+    expect(container.textContent).toContain('Đang hoạt động');
+    expect(container.querySelector('button[aria-label="Xem chi tiết Nguyễn An"]')).not.toBeNull();
+  });
+
+  it('nhân viên ở tab Đơn hàng: không có nút Xuất CSV', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Xuất CSV'))).toBe(false);
+  });
+});
+
+describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
+  it('thẻ có việc hiện số và mở đúng hàng đợi; mục đang trống gom thành chip', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="pancakeAttention"]')!;
+    expect(card.textContent).toContain('2');
+    expect(card.textContent).toContain('Cần xử lý Pancake');
+    expect(container.querySelector('[data-inbox="returnsPending"]')!.textContent).toContain('Yêu cầu đổi / trả chờ duyệt');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đổi vỏ chai chờ duyệt · 0')).toBe(true);
+    click(card);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders&pancake=attention');
+  });
+});
+
+describe('admin/page — Đơn hàng: xuất CSV đầy đủ, lọc ngày, gian hàng tự giao, chi tiết trên điện thoại', () => {
+  const merchantOrder = {
+    id: 'o5',
+    code: 'TF5',
+    status: 'CONFIRMED',
+    total: 230000,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    fulfiller: 'MERCHANT',
+    fulfillerStorefront: { title: 'Mật ong Linh' },
+    createdAt: '2026-10-02T03:00:00.000Z',
+    user: { fullName: 'Khách C', phone: '0933333333' },
+    items: [{ id: 'i1', productName: 'Mật ong rừng', variationName: '500ml', unitPrice: 230000, quantity: 1, total: 230000 }],
+  };
+
+  it('Xuất CSV gửi đủ bộ lọc kể cả khoảng ngày (ADMINOPS-12), báo đã tải mọi đơn khớp lọc', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&pancake=unsynced');
+    const { container } = await mount();
+    const dates = container.querySelectorAll('input[type="date"]');
+    typeInto(dates[0]!, '2026-10-01');
+    typeInto(dates[1]!, '2026-10-14');
+    await flush();
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, 'unsynced', '2026-10-01', '2026-10-14');
+    click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV'))!);
+    await flush();
+    expect(mocks.downloadOrders).toHaveBeenCalledWith({
+      status: undefined,
+      search: undefined,
+      recycling: undefined,
+      invoice: undefined,
+      pancake: 'unsynced',
+      from: '2026-10-01',
+      to: '2026-10-14',
+    });
+    expect(container.textContent).toContain('mọi đơn khớp bộ lọc, không chỉ trang đang xem');
+  });
+
+  it('khoảng ngày ngược: báo lỗi, không gọi API với khoảng đó, khoá nút xuất', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const dates = container.querySelectorAll('input[type="date"]');
+    typeInto(dates[0]!, '2026-10-14');
+    typeInto(dates[1]!, '2026-10-01');
+    await flush();
+    expect(container.textContent).toContain('Ngày bắt đầu phải trước ngày kết thúc.');
+    expect(mocks.listOrders).not.toHaveBeenCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, '2026-10-14', '2026-10-01');
+    const exp = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV')) as HTMLButtonElement;
+    expect(exp.disabled).toBe(true);
+  });
+
+  it('đơn gian hàng tự giao có huy hiệu "Gian hàng tự giao" ở danh sách', async () => {
+    mocks.orders = [merchantOrder];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const badge = [...container.querySelectorAll('span')].find((x) => x.textContent === 'Gian hàng tự giao')!;
+    expect(badge.getAttribute('title')).toBe('Mật ong Linh');
+    expect(badge.className).toContain('bg-info-bg');
+  });
+
+  it('390px: bấm vào dòng mở ngăn kéo chi tiết đơn thay vì mở rộng trong bảng cuộn ngang', async () => {
+    const mm = vi.fn().mockImplementation((q: string) => ({
+      matches: q.includes('max-width'),
+      media: q,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    window.matchMedia = mm as unknown as typeof window.matchMedia;
+    try {
+      mocks.orders = [merchantOrder];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      act(() => (container.querySelector('tbody tr') as HTMLElement).click());
+      await flush();
+      const dialog = document.body.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain('Đơn TF5');
+      expect(dialog.textContent).toContain('Sản phẩm trong đơn');
+      expect(dialog.textContent).toContain('Mật ong rừng');
+      expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+      act(() => (dialog.querySelector('button[aria-label="Đóng"]') as HTMLButtonElement).click());
+      await flush();
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+});
+
+describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
+  const DETAIL = {
+    user: {
+      id: 'u1',
+      fullName: 'Nguyễn An',
+      phone: '0944444444',
+      email: null,
+      role: 'STAFF',
+      staffPermissions: ['CSKH'],
+      referralCode: 'AN1',
+      pointsBalance: 12,
+      pointsConvertedBalance: 0,
+      walletBalance: 50000,
+      isBlocked: false,
+      blockedAt: null,
+      blockedReason: null,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      tier: null,
+    },
+    orders: {
+      items: [{ id: 'o1', code: 'TT1', status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', total: 120000, createdAt: '2026-10-01T00:00:00.000Z', fulfiller: 'TUBU' }],
+      total: 1,
+    },
+    wallet: [{ id: 'w1', delta: 50000, balanceAfter: 50000, type: 'REFUND', refType: null, refId: null, reason: 'Hoàn đơn TT0', createdAt: '2026-10-02T00:00:00.000Z' }],
+    points: [{ id: 'p1', delta: 12, reason: 'Tích điểm đơn TT1', refType: null, refId: null, lot: 'STANDARD', expiresAt: null, createdAt: '2026-10-02T00:00:00.000Z' }],
+    roleHistory: [{ id: 'e1', kind: 'ROLE', fromValue: 'CUSTOMER', toValue: 'STAFF', reason: null, actorId: 'a1', actorName: 'Chủ shop', createdAt: '2026-10-03T00:00:00.000Z' }],
+    blockHistory: [{ id: 'e2', kind: 'BLOCK', fromValue: null, toValue: null, reason: 'bom hàng', actorId: 'a1', actorName: 'Chủ shop', createdAt: '2026-10-04T00:00:00.000Z' }],
+    grants: [],
+  };
+
+  it('bấm tên mở ngăn kéo: đơn, sổ ví, Điểm Xanh, lịch sử vai trò và khoá; ADMIN thấy ô nhóm việc của nhân viên', async () => {
+    mocks.userDetail.mockResolvedValue(DETAIL);
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    click(container.querySelector('button[aria-label="Xem chi tiết Nguyễn An"]'));
+    await flush();
+    expect(mocks.userDetail).toHaveBeenCalledWith('u1');
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    const text = dialog.textContent ?? '';
+    expect(text).toContain('TT1');
+    expect(text).toContain('Hoàn đơn TT0');
+    expect(text).toContain('Tích điểm đơn TT1');
+    expect(text).toContain('Vai trò Khách hàng → Nhân viên');
+    expect(text).toContain('Khoá tài khoản');
+    expect(text).toContain('bom hàng');
+    const boxes = [...dialog.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+  });
+
+  it('Xuất CSV người dùng tải mọi người khớp tìm kiếm qua API', async () => {
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV người dùng'))!);
+    await flush();
+    expect(mocks.downloadUsers).toHaveBeenCalledWith(undefined);
+    expect(container.textContent).toContain('mọi người dùng khớp tìm kiếm');
+  });
 });
