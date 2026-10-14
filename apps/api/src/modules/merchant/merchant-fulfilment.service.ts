@@ -15,11 +15,13 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
+  DEFAULT_MERCHANT_COMMISSION_PCT,
   DEFAULT_MERCHANT_CONFIRM_SLA_HOURS,
   DEFAULT_MERCHANT_DELIVER_SLA_DAYS,
   DEFAULT_MERCHANT_NEGATIVE_PAYOUT_DUE_DAYS,
   DEFAULT_MERCHANT_SETTLEMENT_HOLD_DAYS,
   DEFAULT_MERCHANT_SHIP_SLA_HOURS,
+  RETURN_REF_PREFIX,
 } from './merchant-config';
 
 const HOUR = 3_600_000;
@@ -107,14 +109,22 @@ export interface SettlementLine {
   orderId: string;
   orderCode: string;
   kind: 'SALE' | 'REVERSAL';
-  /** '' = dòng của cả đơn; `RETURN:<id>` = đảo một lần trả một phần (D3). */
+  /**
+   * '' = dòng của cả đơn; `RETURN:<id>` = đảo một lần trả một phần (D3). Hàng "Tubu giao hộ": `ITEM:<dòng hàng>` và
+   * `RETURN:<id>:ITEM:<dòng hàng>` (merchant-consignment.ts).
+   */
   refKey: string;
   goodsAmount: number;
   shippingFee: number;
   commissionAmount: number;
+  /** Phí Tubu giao hộ (chỉ dòng hàng giao hộ; 0 với đơn tự giao). */
+  opsFeeAmount: number;
   codCollected: number;
   netAmount: number;
   deliveredAt: Date | null;
+  /** Dòng hàng "Tubu giao hộ" của đơn kho Tubu; null = đơn gian hàng tự giao. */
+  orderItemId: string | null;
+  item?: { productName: string; variationName: string | null; quantity: number } | null;
 }
 
 /**
@@ -143,15 +153,17 @@ export function saleLineOf(o: {
     goodsAmount,
     shippingFee: o.shippingFee,
     commissionAmount,
+    opsFeeAmount: 0,
     codCollected,
     netAmount: goodsAmount + o.shippingFee - commissionAmount - codCollected,
     deliveredAt: o.deliveredAt,
+    orderItemId: null,
   };
 }
 
 type PayoutAmounts = Pick<SettlementLine, 'goodsAmount' | 'shippingFee' | 'commissionAmount' | 'codCollected' | 'netAmount'>;
 
-export const RETURN_REF_PREFIX = 'RETURN:';
+export { RETURN_REF_PREFIX };
 
 /** Lần trả một phần đã duyệt (p5, D3) của một đơn đối tác — đủ để tính phần đối tác trả lại. */
 export interface ApprovedPartialReturn {
@@ -202,9 +214,11 @@ export function partialReversalLinesOf(
       goodsAmount: -goods,
       shippingFee: -ship,
       commissionAmount: -commission,
+      opsFeeAmount: 0,
       codCollected: 0,
       netAmount: -(goods + ship - commission),
       deliveredAt: null,
+      orderItemId: null,
     });
   }
   return out;
@@ -221,7 +235,7 @@ export function reversalLineOf(
   sale: PayoutAmounts | null,
   partials: PayoutAmounts[] = [],
 ): SettlementLine | null {
-  const base = { orderId: o.id, orderCode: o.code, kind: 'REVERSAL' as const, refKey: '', deliveredAt: null };
+  const base = { orderId: o.id, orderCode: o.code, kind: 'REVERSAL' as const, refKey: '', deliveredAt: null, orderItemId: null, opsFeeAmount: 0 };
   if (sale) {
     const sum = (k: 'goodsAmount' | 'shippingFee' | 'commissionAmount') => sale[k] + partials.reduce((s, p) => s + p[k], 0);
     const goods = sum('goodsAmount');

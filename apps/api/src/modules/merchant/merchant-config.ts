@@ -19,3 +19,5 @@ export const DEFAULT_MERCHANT_DELIVER_SLA_DAYS = 7;
 export const DEFAULT_IDENTIFIER_COOLDOWN_DAYS = 90;
 /** Vai trò vào được Cổng người bán (MerchantController). Chủ gian hàng đối tác ngoài các vai trò này không xử lý được đơn tự giao. */
 export const MERCHANT_PORTAL_ROLES = ['DEALER', 'AFFILIATE', 'ADMIN'] as const;
+/** Khoá dòng đảo của một lần trả một phần (D3) trên phiếu đối soát: `RETURN:<id yêu cầu trả>`. */
+export const RETURN_REF_PREFIX = 'RETURN:';
