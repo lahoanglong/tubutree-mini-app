@@ -61,6 +61,8 @@ export interface MerchantReturnView {
   shopFault: boolean | null;
   orderCode: string;
   lines: { productName: string; variationName: string | null; quantity: number }[];
+  /** Ảnh khách chụp kèm yêu cầu — để gian hàng xem bằng chứng trước khi Tubu duyệt. */
+  images: string[];
 }
 
 function allocOrder(order: OrderWithItems): AllocOrder {
@@ -166,6 +168,12 @@ export class OrderReturnsService {
       throw err;
     }
     await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
+    const itemName = new Map(order.items.map((i) => [i.id, i.productName]));
+    await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_REQUESTED', {
+      order_code: code,
+      items: [...lines].map(([id, qty]) => `${itemName.get(id) ?? ''} ×${qty}`).join(', '),
+      reason,
+    });
     return req;
   }
 
@@ -387,6 +395,7 @@ export class OrderReturnsService {
           shopFault: r.shopFault,
           orderCode: order?.code ?? '',
           lines,
+          images: r.images,
         };
       });
   }

@@ -15,6 +15,12 @@ const STEP_LABEL = {
   DELIVER_OVERDUE: 'xác nhận đã giao',
 } as const;
 
+/** Bước chậm nói với khách — chỉ các bước trước khi gửi hàng, lúc khách còn tự huỷ được (D1). */
+const BUYER_STEP_LABEL: Partial<Record<keyof typeof STEP_LABEL, string>> = {
+  CONFIRM_OVERDUE: 'xác nhận đơn',
+  SHIP_OVERDUE: 'gửi hàng',
+};
+
 export type SlaReminderResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number; notified: number };
 
 /** Mỗi giờ nhắc đối tác các đơn tự giao quá hạn (docs/2026-10-14-merchant-fulfilment-design.md mục 6, 8). */
@@ -78,6 +84,15 @@ export class MerchantSlaCron {
       try {
         await this.notifications.notify(ownerId, 'MERCHANT_ORDER_OVERDUE', { order_code: o.code, step: STEP_LABEL[state] });
         notified++;
+        // Lần nhắc đầu: báo luôn khách đang chờ (R2-MERCHANT-11), để khách chọn chờ tiếp hoặc tự huỷ khi hàng chưa gửi.
+        const buyerStep = BUYER_STEP_LABEL[state];
+        if (buyerStep && !o.merchantSlaNotifiedAt) {
+          await this.notifications.notify(o.userId, 'ORDER_MERCHANT_DELAYED', {
+            order_code: o.code,
+            store: o.fulfillerStorefront?.title ?? 'Gian hàng',
+            step: buyerStep,
+          });
+        }
       } catch (err) {
         this.logger.warn(`Nhắc đối tác đơn ${o.code} lỗi: ${err instanceof Error ? err.message : err}`);
       }

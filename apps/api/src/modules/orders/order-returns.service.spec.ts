@@ -87,6 +87,26 @@ describe('OrderReturnsService.request — chọn dòng/số lượng (BUYERMINI-
     expect(data.refundMethod).toBe('WALLET');
   });
 
+  it('R2-MERCHANT-11: đơn gian hàng tự giao → báo chủ gian hàng ngay khi khách gửi yêu cầu (dòng, số lượng, lý do)', async () => {
+    const order = deliveredOrder({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
+    const { svc } = makeService(order);
+    (notifications.notify as jest.Mock).mockClear();
+    await svc.request('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', items: [{ orderItemId: 'a', quantity: 2 }] });
+    expect(notifications.notify).toHaveBeenCalledWith('shop-owner', 'MERCHANT_RETURN_REQUESTED', {
+      order_code: 'TUBU1',
+      items: 'SP a ×2',
+      reason: 'Sản phẩm lỗi, hỏng',
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_REQUESTED', { order_code: 'TUBU1' });
+  });
+
+  it('đơn kho Tubu → không báo gian hàng nào', async () => {
+    const { svc } = makeService(deliveredOrder({ fulfiller: 'TUBU', fulfillerStorefront: null }));
+    (notifications.notify as jest.Mock).mockClear();
+    await svc.request('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', items: [{ orderItemId: 'a', quantity: 1 }] });
+    expect((notifications.notify as jest.Mock).mock.calls.map((c) => c[1])).toEqual(['RETURN_REQUESTED']);
+  });
+
   it('app bản cũ không gửi dòng → trả mọi phần còn lại (trừ phần đã duyệt trả trước đó)', async () => {
     const { svc, create } = makeService(deliveredOrder(), {
       approved: [{ refundAmount: 0, shippingRefund: 0, pointsRefunded: 0, convertedPointsRefunded: 0, pointsReversed: 0, commissionReversed: 0, receivedAt: null, items: [{ orderItemId: 'a', quantity: 2 }] }],
@@ -316,6 +336,7 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
             reason: 'Hỏng',
             fullReturn: false,
             shopFault: true,
+            images: ['https://cdn.test/r1-a.jpg'],
             bankName: 'VCB',
             bankAccountNo: '0123456789',
             bankAccountName: 'NGUYEN VAN A',
@@ -328,7 +349,12 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
     const rows = await svc.listForMerchant('shop-owner');
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ orderCode: 'TUBU1', reasonLabel: 'Sản phẩm lỗi, hỏng', lines: [{ productName: 'Bưởi', quantity: 2 }] });
+    expect(rows[0]).toMatchObject({
+      orderCode: 'TUBU1',
+      reasonLabel: 'Sản phẩm lỗi, hỏng',
+      lines: [{ productName: 'Bưởi', quantity: 2 }],
+      images: ['https://cdn.test/r1-a.jpg'],
+    });
     expect(JSON.stringify(rows)).not.toContain('0123456789');
     expect(JSON.stringify(rows)).not.toContain('NGUYEN VAN A');
     expect((prisma.$queryRaw as jest.Mock).mock.calls[0].slice(1)).toContain('sf1');
