@@ -37,3 +37,8 @@ export function fulfillerLabel(f: LineFulfiller): string {
   if (f.kind === 'MERCHANT') return `${f.name} giao`;
   return 'Không giao được';
 }
+
+/** Tiền hàng phần kho Tubu giao — ngưỡng miễn phí vận chuyển chỉ tính trên phần này (hàng gian hàng tự giao có phí riêng). */
+export function tubuSubtotal<T extends { fulfiller?: LineFulfiller; total: number }>(items: T[]): number {
+  return items.reduce((s, it) => s + ((it.fulfiller?.kind ?? 'TUBU') === 'TUBU' ? it.total : 0), 0);
+}

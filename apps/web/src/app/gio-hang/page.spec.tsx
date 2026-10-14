@@ -155,4 +155,22 @@ describe('/gio-hang — chia theo nơi giao (D4)', () => {
     expect(container.textContent).toContain('mỗi nơi giao thành một đơn riêng');
     expect(container.textContent).toContain('miễn phí vận chuyển phần hàng Tubu Tree giao');
   });
+
+  it('ngưỡng miễn phí vận chuyển tính trên phần hàng Tubu Tree giao, không cộng hàng gian hàng tự giao', async () => {
+    state.cart = {
+      ...cartOf([
+        line({ id: 'm1', productName: 'Mật ong rừng', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }),
+        line({ id: 't1', fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } }),
+      ]),
+      subtotal: 600000,
+    };
+    const { container } = await mount();
+    expect(container.textContent).toMatch(/Mua thêm\s*200\.000/);
+  });
+
+  it('chỉ có hàng gian hàng tự giao: không hiện lời mời mua thêm để được miễn phí vận chuyển', async () => {
+    state.cart = cartOf([line({ id: 'm1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } })]);
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Mua thêm');
+  });
 });

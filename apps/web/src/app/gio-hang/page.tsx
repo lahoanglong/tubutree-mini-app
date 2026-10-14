@@ -8,7 +8,7 @@ import { getCart, updateCartItem, removeCartItem, formatVnd } from '@/lib/shop-c
 import { CouponBox } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired } from '@/components/login-required';
 import { ui } from '@/lib/guest-ui';
-import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders } from '@/lib/shipments';
+import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 
 export default function CartPage() {
   const phase = useAuthPhase();
@@ -47,13 +47,15 @@ export default function CartPage() {
   }
 
   const cart = cartQ.data;
-  const remainingFreeship = cart ? Math.max(0, cart.freeshipThreshold - cart.subtotal) : 0;
   // Checkout sẽ từ chối dòng hết hàng/vượt tồn: chặn từ giỏ để khách biết phải sửa gì thay vì gặp lỗi ở bước sau.
   const stockBlocked = !!cart?.items.some((it) => it.stock <= 0 || it.quantity > it.stock);
   // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
   const groups = groupByFulfiller(cart?.items ?? []);
   const withHeaders = showFulfillerHeaders(groups);
   const hasMerchant = groups.some((g) => g.fulfiller.kind === 'MERCHANT');
+  const freeshipBase = cart ? (hasMerchant ? tubuSubtotal(cart.items) : cart.subtotal) : 0;
+  const remainingFreeship =
+    cart && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
 
   return (
     <Shell>
