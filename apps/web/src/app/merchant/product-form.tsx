@@ -147,7 +147,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
             <input type="radio" name="merchant-product-fulfil" checked={tubuFulfils} onChange={() => setTubuFulfils(true)} className="mt-0.5 h-4 w-4 accent-forest-600" />
             <span>
               <span className="block font-semibold text-stone-900">Tubu giao hộ</span>
-              Hàng đã gửi vào kho Tubu Tree và có mã biến thể trên Pancake. Giá và tồn kho theo kho Tubu.
+              Hàng đã gửi vào kho Tubu Tree và có mã biến thể trên Pancake. Giá và tồn kho theo kho Tubu; tiền hàng Tubu thanh toán theo thoả thuận ký gửi, không qua tab Đối soát.
             </span>
           </label>
           {tubuFulfils && (
@@ -178,7 +178,12 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
                 <p role="status" className="flex items-start gap-1 text-xs text-success-fg">
                   <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>
-                    {linked.productName} ({linked.variationName}) · {formatVnd(linked.salePrice ?? linked.retailPrice)} · còn {linked.stock} trong kho Tubu
+                    {linked.productName} ({linked.variationName}) · {formatVnd(linked.salePrice ?? linked.retailPrice)}
+                    {linked.requiresAdminConfirm
+                      ? ' · mã này đang thuộc một sản phẩm Tubu Tree đang bán, chỉ được liên kết khi Tubu Tree xác nhận lúc duyệt.'
+                      : linked.stock != null
+                        ? ` · còn ${linked.stock} trong kho Tubu`
+                        : ''}
                   </span>
                 </p>
               )}
@@ -293,7 +298,10 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
               <input id="merchant-edit-price" type="number" inputMode="numeric" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} required min={1000} max={MAX_PRICE} className={INPUT} />
             </div>
             <div>
-              <label htmlFor="merchant-edit-stock" className="block text-xs font-medium text-stone-700">Tồn kho</label>
+              <label htmlFor="merchant-edit-stock" className="block text-xs font-medium text-stone-700">
+                Số còn bán được
+                {(product.heldQty ?? 0) > 0 && <span className="block font-normal text-stone-500">đã trừ {product.heldQty} sp khách đặt chưa gửi</span>}
+              </label>
               <input id="merchant-edit-stock" type="number" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} required min={0} max={MAX_STOCK} className={INPUT} />
             </div>
           </div>

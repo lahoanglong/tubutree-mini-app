@@ -288,7 +288,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
           </label>
           <label className="text-xs font-medium text-stone-700">
             Link tra cứu (không bắt buộc)
-            <input value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} type="url" placeholder="https://" className={`mt-1 w-full ${FIELD_XS}`} />
+            <input value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} type="text" inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="ghn.vn/…" className={`mt-1 w-full ${FIELD_XS}`} />
           </label>
           <div className="sm:col-span-3">
             <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>

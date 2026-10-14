@@ -31,6 +31,8 @@ export interface MerchantStore {
   /** Phí sàn riêng (phân số); null = mức mặc định `merchant.commission_pct`. */
   commissionPct?: string | number | null;
   isPublished: boolean;
+  /** Gian hàng "Tạm nghỉ" từ mốc này: hàng tự giao không đặt được. null = đang nhận đơn. */
+  ordersPausedAt?: string | null;
   collections?: {
     id: string;
     title: string;
@@ -76,6 +78,10 @@ export interface MerchantProduct {
   /** Mã biến thể Pancake xin "Tubu giao hộ" (chờ admin duyệt). */
   pancakeLinkCode?: string | null;
   variations?: MerchantProductVariation[];
+  /** Số đơn vị khách đã đặt (đơn tự giao) mà chưa gửi — đã trừ khỏi tồn kho. API cũ chưa trả. */
+  heldQty?: number;
+  /** LINKED: đang giữ biến thể Pancake; AWAITING: xin "Tubu giao hộ", chờ admin duyệt/liên kết lại. */
+  linkState?: 'LINKED' | 'AWAITING' | null;
   createdAt: string;
 }
 
@@ -133,14 +139,15 @@ export interface UpdateMerchantProductInput {
 
 /** Biến thể Pancake hợp lệ cho "Tubu giao hộ" (GET /merchant/pancake-variations/:code). */
 export interface LinkablePancakeVariation {
-  variationId: string;
   pancakeId: string;
-  productId: string;
   productName: string;
   variationName: string;
   retailPrice: number;
   salePrice: number | null;
-  stock: number;
+  /** null khi mã đang thuộc sản phẩm đang bán của Tubu (gian hàng không xem tồn kho của bên khác). */
+  stock: number | null;
+  /** Mã của sản phẩm Tubu đang bán: chỉ gửi xin được, admin xác nhận chuyển thì mới liên kết. */
+  requiresAdminConfirm?: boolean;
 }
 
 export const getMerchantStore = () =>
@@ -197,7 +204,13 @@ export interface MerchantOrder {
   id: string;
   code: string;
   status: string;
-  total: number;
+  /** null: đơn Tubu giao có hàng của nơi khác — gian hàng chỉ thấy tiền các dòng của mình (`ownTotal`). */
+  total: number | null;
+  ownTotal?: number;
+  /** Đơn chính gian hàng tự giao (xử lý ở tab Đơn cần giao). */
+  selfFulfilled?: boolean;
+  /** Đơn còn dòng hàng của nơi khác, đã ẩn. */
+  partial?: boolean;
   paymentMethod?: string;
   paymentStatus?: string;
   createdAt: string;
@@ -235,6 +248,10 @@ export const updateMerchantOrderStatus = (orderId: string, status: string) =>
 
 export const publishMerchantStore = (isPublished: boolean) =>
   apiFetch<MerchantStore>('/merchant/store/publish', { method: 'POST', body: { isPublished } });
+
+/** "Tạm nghỉ": hàng tự giao của gian hàng tạm không đặt được (khác ẩn trang gian hàng). */
+export const pauseMerchantOrders = (paused: boolean) =>
+  apiFetch<MerchantStore>('/merchant/store/pause', { method: 'POST', body: { paused } });
 
 
 // ── Đơn đối tác tự giao (D4) ──
@@ -322,12 +339,18 @@ export interface MerchantPayout {
   storefrontId: string;
   amount: number;
   status: 'PENDING' | 'PAID' | 'CANCELLED';
+  /** TO_TUBU: phiếu âm, đối tác nộp lại Tubu. API cũ chưa trả: suy từ dấu của amount. */
+  direction?: 'TO_MERCHANT' | 'TO_TUBU';
+  /** Nội dung chuyển khoản khi nộp phiếu âm. */
+  transferMemo?: string;
+  /** Hạn nộp phiếu âm chưa thu. */
+  dueAt?: string | null;
   bankInfo?: { bankName?: string | null; accountNo?: string | null; accountName?: string | null } | null;
   createdAt: string;
   paidAt?: string | null;
   bankRef?: string | null;
   note?: string | null;
-  lines: (SettlementLine & { id: string })[];
+  lines: (SettlementLine & { id: string; createdAt?: string })[];
   storefront?: { id: string; title: string };
 }
 
@@ -336,6 +359,20 @@ export interface MerchantStatement {
   lines: SettlementLine[];
   total: number;
   upcoming: (SettlementLine & { availableAt: string | null })[];
+}
+
+/** Hàng "Tubu giao hộ" đã giao: kho Tubu thu tiền, không vào phiếu đối soát — để đối chiếu theo thoả thuận nhập hàng. */
+export interface TubuFulfilledSales {
+  lines: { orderCode: string; deliveredAt: string | null; productName: string; variationName: string | null; quantity: number; total: number }[];
+  goods: number;
+}
+
+export interface MerchantSettlement extends MerchantStatement {
+  payouts: MerchantPayout[];
+  /** Tài khoản Tubu nhận tiền nộp lại của phiếu âm. */
+  tubuAccount?: { bankName: string; accountNo: string; accountName: string } | null;
+  negativeDueDays?: number;
+  tubuFulfilled?: TubuFulfilledSales;
 }
 
 // ── Hàng khách trả về gian hàng (đơn tự giao) ──
@@ -352,6 +389,8 @@ export interface MerchantReturn {
   shopFault: boolean | null;
   orderCode: string;
   lines: { productName: string; variationName: string | null; quantity: number }[];
+  /** Ảnh khách gửi kèm yêu cầu. API cũ chưa trả. */
+  images?: string[];
 }
 
 export const listMerchantReturns = () => apiFetch<MerchantReturn[]>('/merchant/returns');
@@ -359,8 +398,7 @@ export const listMerchantReturns = () => apiFetch<MerchantReturn[]>('/merchant/r
 export const markMerchantReturnReceived = (id: string) =>
   apiFetch<unknown>(`/merchant/returns/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
 
-export const getMerchantSettlement = () =>
-  apiFetch<MerchantStatement & { payouts: MerchantPayout[] }>('/merchant/settlement');
+export const getMerchantSettlement = () => apiFetch<MerchantSettlement>('/merchant/settlement');
 
 // ── Admin: giám sát đơn đối tác tự giao + đối soát ──
 
