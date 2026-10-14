@@ -937,7 +937,8 @@ async function main() {
     await prisma.gameQuiz.upsert({ where: { id: q.id }, update: q, create: q });
   }
   for (const m of MISSIONS) {
-    await prisma.mission.upsert({ where: { id: m.id }, update: m, create: m });
+    // Không ghi đè: admin sửa tiêu đề/điểm thưởng ở màn Nhiệm vụ & quà đổi điểm.
+    await prisma.mission.upsert({ where: { id: m.id }, update: {}, create: m });
   }
   console.log(`   → ${QUIZZES.length} quizzes, ${MISSIONS.length} missions.`);
 

@@ -29,7 +29,6 @@ const KEPT_WITHOUT_FE: ReadonlyArray<readonly [route: string, why: string]> = [
   ['GET /storefront/by-host', 'tra gian hàng theo tên miền riêng, audit A5-53 đề xuất middleware dùng'],
   ['GET /health', 'healthcheck hạ tầng'],
   ['POST /payments/zalopay/create', 'ZaloPay đang ẩn nhưng có runbook go-live (docs/ZALOPAY-SETUP.md)'],
-  ['GET /admin/dealer-prices/history', 'sổ lịch sử giá đại lý vẫn được ghi, đây là đường đọc duy nhất, A1-030'],
   ['POST /admin/payroll/:staffId/recompute', 'công cụ nhân sự, A1-030'],
   ['POST /admin/brands/:id/products', 'admin gán SP vào nhãn, chưa có UI nhưng gọi tay được'],
   ['PATCH /admin/promotions/:id', 'admin sửa khuyến mãi nhãn, chưa có UI'],

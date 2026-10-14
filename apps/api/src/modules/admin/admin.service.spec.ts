@@ -1075,3 +1075,39 @@ describe('AdminService.confirmOrderPayment', () => {
     await expect(svc.confirmOrderPayment('admin-1', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('AdminService.getDealerPriceHistory — sổ lịch sử giá đại lý cho màn admin (ADMINOPS-17)', () => {
+  it('kèm tên sản phẩm/biến thể, tên bậc và người đổi; lọc theo SKU', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      {
+        id: 'h1',
+        variationId: 'v1',
+        sku: 'SKU-1',
+        tierId: 'tier_gold',
+        oldPrice: 200000,
+        newPrice: 190000,
+        changedBy: 'a1',
+        createdAt: new Date('2026-10-10T00:00:00Z'),
+        variation: { name: 'Chai 500ml', product: { name: 'Nước rửa chén' } },
+      },
+    ]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = makePrisma({
+      dealerPriceHistory: { findMany, count },
+      dealerTier: { findMany: jest.fn().mockResolvedValue([{ id: 'tier_gold', name: 'Vàng' }]) },
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Chủ shop' }]) },
+    });
+    const res = await mkAdmin(prisma).getDealerPriceHistory({ sku: ' sku-1 ' }, 1, 20);
+    expect(findMany.mock.calls[0][0].where).toEqual({ sku: { contains: 'sku-1', mode: 'insensitive' } });
+    expect(res.data[0]).toMatchObject({
+      sku: 'SKU-1',
+      productName: 'Nước rửa chén',
+      variationName: 'Chai 500ml',
+      tierName: 'Vàng',
+      changedByName: 'Chủ shop',
+      oldPrice: 200000,
+      newPrice: 190000,
+    });
+    expect(res.meta.total).toBe(1);
+  });
+});

@@ -280,6 +280,7 @@ export class IssueInvoiceDto {
 
 export class DealerPriceHistoryQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(40) variationId?: string;
+  @IsOptional() @IsString() @MaxLength(64) sku?: string;
 }
 
 export class GomdonRetryDto {
@@ -530,7 +531,7 @@ export class AdminController {
 
   @Get('dealer-prices/history')
   dealerPriceHistory(@Query() q: DealerPriceHistoryQuery) {
-    return this.admin.getDealerPriceHistory(q.variationId, q.page, q.limit);
+    return this.admin.getDealerPriceHistory({ variationId: q.variationId, sku: q.sku }, q.page, q.limit);
   }
 
   // "Đã bán" gom từ sàn ngoài: dán "sku,số-đã-bán" hoặc rows JSON.

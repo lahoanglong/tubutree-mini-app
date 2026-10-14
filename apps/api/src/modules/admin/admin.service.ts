@@ -1214,18 +1214,38 @@ export class AdminService {
     };
   }
 
-  /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo variation nếu có. */
-  async getDealerPriceHistory(variationId: string | undefined, page: number, limit: number) {
-    const where = variationId ? { variationId } : {};
+  /** Lịch sử đổi giá đại lý (mới nhất trước), lọc theo biến thể hoặc SKU, kèm tên sản phẩm, bậc và người đổi. */
+  async getDealerPriceHistory(filter: { variationId?: string; sku?: string }, page: number, limit: number) {
+    const sku = filter.sku?.trim();
+    const where: Prisma.DealerPriceHistoryWhereInput = {
+      ...(filter.variationId ? { variationId: filter.variationId } : {}),
+      ...(sku ? { sku: { contains: sku, mode: 'insensitive' } } : {}),
+    };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerPriceHistory.findMany({
         where,
         orderBy: { createdAt: 'desc' },
+        include: { variation: { select: { name: true, product: { select: { name: true } } } } },
         ...skipTake(page, limit),
       }),
       this.prisma.dealerPriceHistory.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    const tierIds = [...new Set(items.map((h) => h.tierId))];
+    const adminIds = [...new Set(items.map((h) => h.changedBy))];
+    const [tiers, admins] = await Promise.all([
+      tierIds.length ? this.prisma.dealerTier.findMany({ where: { id: { in: tierIds } }, select: { id: true, name: true } }) : [],
+      adminIds.length ? this.prisma.user.findMany({ where: { id: { in: adminIds } }, select: { id: true, fullName: true } }) : [],
+    ]);
+    const tierName = new Map(tiers.map((t) => [t.id, t.name]));
+    const adminName = new Map(admins.map((a) => [a.id, a.fullName]));
+    const data = items.map(({ variation, ...h }) => ({
+      ...h,
+      productName: variation?.product.name ?? null,
+      variationName: variation?.name ?? null,
+      tierName: tierName.get(h.tierId) ?? null,
+      changedByName: adminName.get(h.changedBy) ?? null,
+    }));
+    return paginated(data, page, limit, total);
   }
 
   // ── Kiểm duyệt sản phẩm của đối tác ──
