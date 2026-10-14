@@ -228,6 +228,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     });
     expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_REQUESTED', expect.objectContaining({ bank: 'Techcombank ••• 5678' }));
 
+    await refunds.claim(adminUser.id, row.id);
     await refunds.markPaid(adminUser.id, row.id, { bankRef: 'FT26101400001' });
     expect(await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ status: 'COMPLETED', bankRef: 'FT26101400001' });
     expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_COMPLETED', expect.objectContaining({ bank_ref: 'FT26101400001' }));
@@ -307,7 +308,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     },
   );
 
-  it('khách chọn Ví đúng lúc admin bấm "Đã chuyển khoản" → đúng 1 bên thắng; Ví chỉ cộng khi Ví thắng', async () => {
+  it('khách chọn Ví đúng lúc admin bấm "Đang chuyển khoản" → đúng 1 bên thắng; Ví chỉ cộng khi Ví thắng', async () => {
     for (let round = 0; round < 5; round++) {
       const adminUser = await createUser(prisma, { role: 'ADMIN' });
       const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
@@ -323,7 +324,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
       const s = summarize(
         await Promise.allSettled([
           refunds.chooseDestination(user.id, row.id, { refundMethod: 'WALLET' }),
-          refunds.markPaid(adminUser.id, row.id, { bankRef: `FT${round}` }),
+          refunds.claim(adminUser.id, row.id).then(() => refunds.markPaid(adminUser.id, row.id, { bankRef: `FT${round}` })),
         ]),
       );
       expect(s.fulfilled.length).toBe(1);
