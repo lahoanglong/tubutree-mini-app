@@ -310,3 +310,53 @@ describe('/thanh-toan — hết hàng (R2-BUYERWEB-11)', () => {
     expect(r.container.querySelector('[role="alert"]')?.textContent).toContain('Địa chỉ không hợp lệ.');
   });
 });
+
+describe('/thanh-toan — COD theo từng đơn, báo giá quyết định phương thức dùng được (R4-CHECKOUT-2)', () => {
+  const COD_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.';
+  const COD_SPLIT_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa 5.000.000đ, mà đơn do Tubu Tree giao là 5.400.000đ. Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc đặt riêng phần hàng Tubu Tree giao để chuyển khoản.';
+  const SPLIT = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+  const BOTH_BLOCKED = { total: 5600000, blockedPaymentMethods: { COD: COD_SPLIT_OVER, BANK_TRANSFER: SPLIT } };
+
+  it('COD bị khoá: dòng COD mờ kèm đúng lý do máy chủ, tự chọn chuyển khoản, đặt hàng gửi BANK_TRANSFER', async () => {
+    m.quote.mockResolvedValue(quote({ total: 5400000, blockedPaymentMethods: { COD: COD_OVER } }));
+    const r = await mount();
+    const cod = radio(r, 'Thanh toán khi nhận hàng')!;
+    expect(cod.disabled).toBe(true);
+    expect(cod.checked).toBe(false);
+    expect(r.container.querySelector(`#${cod.getAttribute('aria-describedby')}`)!.textContent).toBe(COD_OVER);
+    expect(radio(r, 'Chuyển khoản ngân hàng')!.checked).toBe(true);
+    click(placeButton(r));
+    await flush(4);
+    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví thiếu: không chọn gì, nút Đặt hàng khoá, nói rõ chưa có cách thanh toán', async () => {
+    m.wallet = 0;
+    m.quote.mockResolvedValue(quote(BOTH_BLOCKED));
+    const r = await mount();
+    for (const label of ['Thanh toán khi nhận hàng', 'Chuyển khoản ngân hàng', 'Ví Tubu']) {
+      expect(radio(r, label)!.disabled).toBe(true);
+      expect(radio(r, label)!.checked).toBe(false);
+    }
+    expect(r.container.textContent).toContain('Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.');
+    expect(placeButton(r).disabled).toBe(true);
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví đủ: không tự trừ Ví, nhắc chọn; khách chọn Ví thì đặt được và gửi WALLET', async () => {
+    m.wallet = 9000000;
+    m.quote.mockResolvedValue(quote(BOTH_BLOCKED));
+    const r = await mount();
+    expect(radio(r, 'Ví Tubu')!.checked).toBe(false);
+    expect(r.container.textContent).toContain('Chọn một cách thanh toán cho đơn này để đặt hàng.');
+    expect(placeButton(r).disabled).toBe(true);
+    click(radio(r, 'Ví Tubu')!);
+    await flush(2);
+    expect(r.container.textContent).not.toContain('Chọn một cách thanh toán cho đơn này để đặt hàng.');
+    expect(placeButton(r).disabled).toBe(false);
+    click(placeButton(r));
+    await flush(4);
+    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'WALLET' });
+  });
+});

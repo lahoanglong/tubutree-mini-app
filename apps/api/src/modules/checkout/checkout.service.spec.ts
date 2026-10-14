@@ -2,7 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
-import type { CouponsService } from '../coupons/coupons.service';
+import { CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
+import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 // P0 A3-05 (quyền lợi hạng): các test "tier perks" bên dưới dựng PricingService THẬT (không mock)
 // để khẳng định khách THẬT SỰ nhận đúng số tiền hứa, không chỉ "hàm được gọi đúng tham số" — nên cần
 // import giá trị (class), không chỉ type.
@@ -243,17 +244,16 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(10); // calcPointsEarned mock = 10
   });
 
-  it('COD vượt hạn mức 5tr → BadRequest', async () => {
-    const { svc } = build({ total: 6_000_000 });
-    // ép subtotal lớn để total vượt mức
-    (CART as { subtotal: number }).subtotal = 6_000_000;
-    (CART.items[0] as { total: number }).total = 6_000_000;
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('COD');
-    // khôi phục
-    (CART as { subtotal: number }).subtotal = 100;
-    (CART.items[0] as { total: number }).total = 100;
+  it('COD vượt hạn mức 5tr → BadRequest PAYMENT_METHOD_NOT_ALLOWED, báo giá khoá COD với cùng lý do', async () => {
+    const big = { ...CART, subtotal: 6_000_000, items: [{ ...CART.items[0]!, total: 6_000_000 }] };
+    const { svc, orderCreate } = build({ cartData: big });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.blockedPaymentMethods.COD).toMatch(/^Thanh toán khi nhận hàng \(COD\) chỉ nhận đơn tối đa 5\.000\.000đ/);
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: BadRequestException) => e);
+    expect((err as BadRequestException).getResponse()).toEqual(
+      expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 
   it('idempotency: key đã tồn tại, cùng user + cùng payload → trả đơn cũ, không tạo mới', async () => {
@@ -1365,6 +1365,59 @@ describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa gi
     expect(ledger).not.toHaveBeenCalled();
   });
 
+  describe('R4-CHECKOUT-4: câu TOTAL_CHANGED nói đúng nguyên nhân thay vì luôn "do giá hoặc phí giao"', () => {
+    const totalChanged = async (b: ReturnType<typeof build>, expectedTotal: number) => {
+      const err = await b.svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      const res = (err as BadRequestException).getResponse() as { code: string; message: string };
+      expect(res.code).toBe('TOTAL_CHANGED');
+      expect(b.orderCreate).not.toHaveBeenCalled();
+      return res.message;
+    };
+
+    it('mã giảm giá bị gỡ khỏi giỏ ngay lúc đặt (admin tắt mã) → nêu mã và lý do, không đổ cho giá/phí giao', async () => {
+      const b = build({ cartData: { ...CART, couponRemoved: { code: 'GIAM50', reason: 'Mã giảm giá đã ngừng áp dụng.' } } });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ vì mã GIAM50 không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('mã còn trong giỏ nhưng lúc đặt không áp được → kèm lời báo của mã', async () => {
+      const b = build({
+        cartData: { ...CART, couponCode: 'XANH10' },
+        validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.')),
+      });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ. Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 150.000đ để dùng mã này. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('không liên quan mã → câu trung tính nêu cả ưu đãi, không khẳng định riêng giá hoặc phí giao', async () => {
+      expect(await totalChanged(build(), 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+  });
+
+  it('R4-CHECKOUT-3: mã gắn sản phẩm mà sản phẩm đó chỉ có ở giá giờ vàng → lời báo nói đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
+    const cartData = {
+      ...CART,
+      couponCode: 'PSGRAN',
+      items: [
+        { ...CART.items[0]!, isFlash: true, flashSaleItemId: 'fi1' },
+        { variationId: 'v2', productId: 'prod2', productName: 'Q', variationName: 'V', unitPrice: 50, quantity: 1, total: 50 },
+      ],
+      subtotal: 150,
+    };
+    const { svc } = build({ cartData, validateAndCompute: jest.fn().mockRejectedValue(new CouponProductScopeError(['prod1'])) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
+    expect(q.couponNotice).not.toContain('chưa có sản phẩm đó');
+  });
+
   it('PANCAKE-13: tổng bằng hoặc thấp hơn số đã thấy, hoặc client cũ không gửi → đặt bình thường', async () => {
     for (const expectedTotal of [100, 150, undefined]) {
       const { svc, orderCreate } = build();
@@ -1602,6 +1655,58 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.shipments).toHaveLength(1);
     expect(q.blockedPaymentMethods).toEqual({});
+  });
+
+  describe('R4-CHECKOUT-2: hạn mức COD theo từng đơn sau khi tách; báo giá là nguồn duy nhất của lựa chọn bị khoá', () => {
+    const big = (item: Record<string, unknown>, unitPrice: number, quantity: number) => ({ ...item, unitPrice, quantity, total: unitPrice * quantity });
+    // 2.600.000đ hàng Tubu + 3.000.000đ hàng đối tác = 5.600.000đ; mỗi đơn đều dưới 5.000.000đ.
+    const MIXED_BIG = {
+      items: [big(TUBU_ITEM, 260_000, 10), big(SHOP_ITEM, 150_000, 20)],
+      subtotal: 5_600_000, discount: 0, freeship: false, couponCode: null,
+    };
+    // Phần đối tác 5.200.000đ: riêng đơn đó vượt mức.
+    const SHOP_OVER = {
+      items: [big(TUBU_ITEM, 100_000, 1), big(SHOP_ITEM, 260_000, 20)],
+      subtotal: 5_300_000, discount: 0, freeship: false, couponCode: null,
+    };
+
+    it('giỏ tổng 5.600.000đ, từng đơn dưới mức → báo giá không khoá COD, đặt COD tạo đủ hai đơn', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: MIXED_BIG, walletBalance: 0 });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.total).toBeGreaterThan(5_000_000);
+      expect(q.blockedPaymentMethods.COD).toBeUndefined();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(2);
+      expect(orderCreate.mock.calls.map((c) => c[0].data.paymentMethod)).toEqual(['COD', 'COD']);
+    });
+
+    it('một đơn con vượt mức → báo giá khoá COD kèm lý do; đặt COD bị từ chối đúng câu đó, mã PAYMENT_METHOD_NOT_ALLOWED', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: SHOP_OVER });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(Object.keys(q.blockedPaymentMethods).sort()).toEqual(['BANK_TRANSFER', 'COD', 'ZALOPAY']);
+      expect(q.blockedPaymentMethods.COD).toContain('đơn do Shop A giao là 5.230.000đ');
+      const err = await svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+      );
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('mọi phương thức khoá trong báo giá đều bị đặt hàng từ chối, phương thức không khoá thì đặt được', async () => {
+      for (const cartData of [MIXED_BIG, SHOP_OVER, ONLY_SHOP]) {
+        const { svc } = buildSplit({ cartData, walletBalance: 100_000_000 });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        for (const method of ['COD', 'BANK_TRANSFER', 'ZALOPAY', 'WALLET']) {
+          const res = await svc
+            .placeOrder('u1', { addressId: 'addr1', paymentMethod: method, expectedTotal: q.total } as never)
+            .then(() => null, (e: BadRequestException) => (e.getResponse() as { message: string }).message);
+          expect([method, res]).toEqual([method, q.blockedPaymentMethods[method] ?? null]);
+        }
+      }
+    });
   });
 
   it('phí giao theo cấu hình của shop; miễn phí khi đạt ngưỡng của shop; mã freeship Tubu không miễn phí giao của đối tác', async () => {

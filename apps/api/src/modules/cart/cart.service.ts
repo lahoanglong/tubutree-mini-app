@@ -4,7 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { freeShipThreshold } from '../pricing/pricing.service';
-import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
+import { FlashSaleService } from '../flash-sale/flash-sale.service';
+import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation } from './sellable';
@@ -13,6 +14,7 @@ import {
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
   couponNotAppliedNotice,
+  couponRejectReason,
   couponRejectedWithFlash,
 } from '../coupons/coupon-notice';
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
@@ -20,15 +22,6 @@ import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessa
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
   return lines.filter((l) => !l.isFlash).map((l) => ({ productId: l.productId, total: l.total }));
-}
-
-/** Lý do dòng giờ vàng đang tính giá thường: số lượng vượt số suất khách còn mua được. */
-function flashLimitMessage(offer: EffectivePrice, quantity: number): string {
-  const allowance = offer.allowance ?? 0;
-  if (allowance <= 0) return 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.';
-  const tail = `Giảm số lượng còn ${allowance} để được giá giờ vàng, hoặc mua ${quantity} sản phẩm với giá thường.`;
-  if ((offer.quotaLeft ?? allowance) <= (offer.perUserLeft ?? allowance)) return `Chỉ còn ${allowance} suất giờ vàng. ${tail}`;
-  return `Giá giờ vàng chỉ áp dụng tối đa ${allowance} sản phẩm cho bạn. ${tail}`;
 }
 
 @Injectable()
@@ -103,12 +96,11 @@ export class CartService {
       userId,
     );
     const lines = sellable.map((it) => {
-      const offer = flashMap.get(it.variationId);
-      const fits = !offer || offer.allowance === undefined || it.quantity <= offer.allowance;
-      const flash = fits ? offer : undefined;
-      const flashLimitNotice = offer && !fits ? flashLimitMessage(offer, it.quantity) : null;
-      const standing = it.variation.salePrice ?? it.variation.retailPrice;
-      const unitPrice = flash ? Math.min(flash.flashPrice, standing) : standing;
+      const { unitPrice, flash, flashLimitNotice } = priceFlashLine(
+        it.variation.salePrice ?? it.variation.retailPrice,
+        it.quantity,
+        flashMap.get(it.variationId),
+      );
       return {
         id: it.id,
         variationId: it.variationId,
@@ -141,6 +133,8 @@ export class CartService {
     let freeship = false;
     let couponCode = cart.couponCode;
     let couponNotice: string | null = null;
+    // Mã vừa bị gỡ khỏi giỏ ở lần đọc này (hết hạn, bị tắt, hết lượt): checkout nói đúng lý do khi tổng tăng vì mất mã.
+    let couponRemoved: { code: string; reason: string } | null = null;
     if (couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase, couponLinesOf(lines));
@@ -167,10 +161,11 @@ export class CartService {
           await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
           discount = 0;
           freeship = false;
-          couponNotice = couponNotAppliedNotice(err.message, true);
+          couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), true);
         } catch (err2) {
           if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
+          couponRemoved = { code: couponCode, reason: err2.message };
           couponCode = null;
         }
       }
@@ -183,6 +178,7 @@ export class CartService {
       items: lines,
       couponCode,
       couponNotice,
+      couponRemoved,
       subtotal,
       discount,
       freeship,
@@ -317,6 +313,10 @@ export class CartService {
     } catch (err) {
       if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart))) {
         throw new BadRequestException(couponRejectedWithFlash(err.message, err.base));
+      }
+      if (err instanceof BadRequestException) {
+        const reason = couponRejectReason(err, cart.items);
+        if (reason !== err.message) throw new BadRequestException(reason);
       }
       throw err;
     }

@@ -229,6 +229,25 @@ export const createCtvOrder = (dto: {
   note?: string;
 }) => api.post<CtvOrderResult>('/affiliate/orders', dto).then((r) => r.data);
 
+export interface CtvOrderQuoteItem {
+  variationId: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  isFlash: boolean;
+  /** Vì sao dòng giờ vàng đang tính giá thường (vượt số suất còn mua được); null = không có. */
+  flashLimitNotice: string | null;
+}
+export interface CtvOrderQuote {
+  items: CtvOrderQuoteItem[];
+  goods: number;
+  shippingFee: number;
+  total: number;
+}
+/** Báo giá đơn hộ: đúng số tiền máy chủ sẽ ghi khi tạo đơn (giờ vàng như khách tự đặt, phí giao). Không giữ kho hay suất. */
+export const quoteCtvOrder = (items: CtvOrderItemInput[]) =>
+  api.post<CtvOrderQuote>('/affiliate/orders/quote', { items }).then((r) => r.data);
+
 // ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm) ──
 export interface ContentKitFaq {
   q: string;

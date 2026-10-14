@@ -39,6 +39,16 @@ export class CouponMinOrderError extends BadRequestException {
   }
 }
 
+/**
+ * Mã gắn sản phẩm mà các dòng được xét (đã loại flash) không có sản phẩm đó. `productIds` để caller nhận ra trường hợp sản phẩm
+ * vẫn nằm trong giỏ nhưng ở giá giờ vàng và nói đúng lý do (coupon-notice.ts couponRejectReason).
+ */
+export class CouponProductScopeError extends BadRequestException {
+  constructor(readonly productIds: string[]) {
+    super('Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.');
+  }
+}
+
 /** Sản phẩm mà mã bị giới hạn (null = áp cho mọi sản phẩm). */
 export function couponProductIds(applyTo: unknown): string[] | null {
   if (!applyTo || typeof applyTo !== 'object') return null;
@@ -80,9 +90,7 @@ export class CouponsService {
     const productIds = couponProductIds(coupon.applyTo);
     if (productIds) {
       const matched = (lines ?? []).filter((l) => productIds.includes(l.productId));
-      if (matched.length === 0) {
-        throw new BadRequestException('Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.');
-      }
+      if (matched.length === 0) throw new CouponProductScopeError(productIds);
       subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
     }
     if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);

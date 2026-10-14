@@ -1,3 +1,6 @@
+import type { BadRequestException } from '@nestjs/common';
+import { CouponProductScopeError } from './coupons.service';
+
 /** Lý do khi mã vẫn hợp lệ nhưng phần hàng được tính giảm ra 0đ (vd giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu). */
 export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong đơn được giảm theo mã này.';
 
@@ -25,4 +28,19 @@ export function couponFlashExcludedNotice(base: number): string {
 /** Lỗi áp mã khi giỏ có hàng giờ vàng: nói thêm hàng giờ vàng không được tính vào điều kiện của mã. */
 export function couponRejectedWithFlash(reason: string, base: number): string {
   return `${reason} Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là ${vnd(base)}.`;
+}
+
+/** Mã gắn sản phẩm mà sản phẩm đó chỉ có trong giỏ ở giá giờ vàng. */
+export const COUPON_PRODUCT_FLASH_REASON =
+  'Sản phẩm áp dụng mã đang có giá giờ vàng. Giá giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi giờ vàng kết thúc.';
+
+/**
+ * Câu lý do mã bị từ chối để báo khách: mã gắn sản phẩm mà sản phẩm đó có trong giỏ nhưng chỉ ở giá giờ vàng (dòng giờ vàng bị
+ * loại khỏi phần xét mã) thì nói đúng là đang giờ vàng, không nói "giỏ chưa có sản phẩm đó". Lỗi khác giữ nguyên thông điệp.
+ */
+export function couponRejectReason(err: BadRequestException, lines: { productId: string; isFlash: boolean }[]): string {
+  if (err instanceof CouponProductScopeError && lines.some((l) => l.isFlash && err.productIds.includes(l.productId))) {
+    return COUPON_PRODUCT_FLASH_REASON;
+  }
+  return err.message;
 }

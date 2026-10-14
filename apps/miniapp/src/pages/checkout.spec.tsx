@@ -720,6 +720,77 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
   });
 });
 
+describe('CheckoutPage — COD theo từng đơn, báo giá quyết định phương thức dùng được (R4-CHECKOUT-2)', () => {
+  const COD_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.';
+  const COD_SPLIT_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa 5.000.000đ, mà đơn do Tubu Tree giao là 5.400.000đ. Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc đặt riêng phần hàng Tubu Tree giao để chuyển khoản.';
+  const SPLIT = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+  const NONE = 'Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.';
+  const PICK = 'Chọn một cách thanh toán cho đơn này để đặt hàng.';
+  const BOTH_BLOCKED = { ...QUOTE, total: 5_600_000, blockedPaymentMethods: { COD: COD_SPLIT_OVER, BANK_TRANSFER: SPLIT } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  const placeButton = async () => (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+  const describedBy = (el: HTMLElement) => document.getElementById(el.getAttribute('aria-describedby')!)!.textContent;
+
+  it('COD bị khoá: dòng COD vô hiệu kèm đúng lý do máy chủ, tự chọn chuyển khoản, đặt hàng gửi BANK_TRANSFER', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, total: 5_400_000, blockedPaymentMethods: { COD: COD_OVER } });
+    renderPage();
+    const cod = await screen.findByRole('radio', { name: /^Thanh toán khi nhận hàng/ });
+    await waitFor(() => expect(cod).toHaveAttribute('aria-disabled', 'true'));
+    expect(describedBy(cod)).toBe(COD_OVER);
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true'));
+    expect(cod).toHaveAttribute('aria-checked', 'false');
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('BANK_TRANSFER');
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví thiếu: không phương thức nào được chọn, nút đặt hàng khoá, nói rõ chưa có cách thanh toán', async () => {
+    mocks.checkoutQuote.mockResolvedValue(BOTH_BLOCKED);
+    renderPage();
+    expect(await screen.findByText(NONE)).toBeInTheDocument();
+    for (const name of [/^Thanh toán khi nhận hàng/, /^Chuyển khoản ngân hàng/, /^Ví Tubu/]) {
+      const row = screen.getByRole('radio', { name });
+      expect(row).toHaveAttribute('aria-disabled', 'true');
+      expect(row).toHaveAttribute('aria-checked', 'false');
+    }
+    expect(await placeButton()).toBeDisabled();
+    fireEvent.click(await placeButton());
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví đủ: không tự trừ Ví, nhắc chọn; khách chọn Ví thì đặt được và gửi WALLET', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: 9_000_000 });
+    mocks.checkoutQuote.mockResolvedValue(BOTH_BLOCKED);
+    renderPage();
+    expect(await screen.findByText(PICK)).toBeInTheDocument();
+    const wallet = screen.getByRole('radio', { name: /^Ví Tubu/ });
+    expect(wallet).toHaveAttribute('aria-checked', 'false');
+    expect(await placeButton()).toBeDisabled();
+    fireEvent.click(wallet);
+    await waitFor(() => expect(wallet).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.queryByText(PICK)).toBeNull();
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('WALLET');
+  });
+});
+
 describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn thứ hai (R2-MONEY-2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

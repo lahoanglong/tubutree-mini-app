@@ -6,7 +6,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
-import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
+import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
@@ -63,6 +65,8 @@ export class AffiliateService {
     private readonly analytics: AnalyticsEventsService,
     // @Optional: test dựng service trực tiếp không truyền; AppModule luôn wiring (NotificationsModule là @Global).
     @Optional() private readonly notifications?: NotificationsService,
+    // @Optional cùng lý do; AffiliateModule import FlashSaleModule (affiliate.module.spec.ts giữ việc nối này).
+    @Optional() private readonly flashSale?: FlashSaleService,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -454,11 +458,108 @@ export class AffiliateService {
     return Math.round(gross * Math.min(pct, 1));
   }
 
+  /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng. */
+  private async customerOrderPlacer(ctvId: string) {
+    const ctv = await this.prisma.user.findUniqueOrThrow({ where: { id: ctvId } });
+    if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
+      throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
+    }
+    return ctv;
+  }
+
+  /**
+   * Giá đơn hộ, cùng luật giá với giỏ khách tự đặt (CartService.getCart → priceFlashLine): giá đang bán, hoặc giá giờ vàng khi
+   * còn suất và số lượng nằm trong số suất người đặt còn mua được. Người đặt là tài khoản CTV (Order.userId) nên suất giữ và
+   * hoàn khi huỷ theo tài khoản đó. Dòng trùng biến thể gộp lại để xét suất trên tổng số lượng. Phí giao như đơn của khách
+   * chưa có hạng. Kiểm SP còn bán (biến thể và SP cha đang bán, đã duyệt).
+   */
+  private async priceCustomerOrder(ctvId: string, items: { variationId: string; quantity: number }[]) {
+    const quantities = new Map<string, number>();
+    for (const i of items) quantities.set(i.variationId, (quantities.get(i.variationId) ?? 0) + i.quantity);
+    const variationIds = [...quantities.keys()];
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: variationIds } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
+    });
+    const vmap = new Map(variations.map((v) => [v.id, v]));
+    const offers = this.flashSale
+      ? await this.flashSale.resolveEffective(variationIds, new Date(), ctvId)
+      : new Map<string, EffectivePrice>();
+    const lines = [...quantities].map(([variationId, quantity]) => {
+      const v = vmap.get(variationId);
+      if (!v) throw new BadRequestException('Sản phẩm không còn khả dụng.');
+      if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
+      const price = priceFlashLine(v.salePrice ?? v.retailPrice, quantity, offers.get(v.id));
+      return {
+        variationId: v.id,
+        productName: v.product.name,
+        productSlug: v.product.slug,
+        variationName: v.name,
+        unitPrice: price.unitPrice,
+        quantity,
+        total: price.unitPrice * quantity,
+        flashSaleItemId: price.flash?.itemId ?? null,
+        flashLimitNotice: price.flashLimitNotice,
+      };
+    });
+    const goods = lines.reduce((s, l) => s + l.total, 0);
+    const shippingFee = await this.pricing.calcShippingFee({ subtotal: goods, tierId: null });
+    return { lines, goods, shippingFee, total: goods + shippingFee };
+  }
+
+  /** Báo giá cho form lên đơn hộ: đúng số tiền placeOrderForCustomer sẽ tính, không giữ kho hay suất giờ vàng. */
+  async quoteOrderForCustomer(ctvId: string, dto: QuoteOrderForCustomerDto) {
+    if (!dto.items || dto.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
+    await this.customerOrderPlacer(ctvId);
+    const priced = await this.priceCustomerOrder(ctvId, dto.items);
+    return {
+      items: priced.lines.map((l) => ({
+        variationId: l.variationId,
+        unitPrice: l.unitPrice,
+        quantity: l.quantity,
+        total: l.total,
+        isFlash: l.flashSaleItemId !== null,
+        flashLimitNotice: l.flashLimitNotice,
+      })),
+      goods: priced.goods,
+      shippingFee: priced.shippingFee,
+      total: priced.total,
+    };
+  }
+
+  /**
+   * Giữ suất giờ vàng của dòng trong transaction đơn hộ (như checkout). Vượt giới hạn mua giữ nguyên lỗi; hết suất hoặc hết giờ
+   * giữa lúc tính giá và lúc ghi đơn thì báo PRICE_CHANGED để CTV xem giá mới, không âm thầm tính giá giờ vàng đã hết.
+   */
+  private async consumeFlashQuota(
+    tx: Prisma.TransactionClient,
+    line: { flashSaleItemId: string | null; productName: string; quantity: number },
+    ctvId: string,
+    code: string,
+  ): Promise<void> {
+    if (!line.flashSaleItemId || !this.flashSale) return;
+    try {
+      await this.flashSale.consumeQuota(tx, line.flashSaleItemId, ctvId, line.quantity, new Date());
+    } catch (e) {
+      if (e instanceof BadRequestException && e.message === FLASH_OVER_LIMIT_MSG) throw e;
+      this.logger.error(
+        `consumeQuota lỗi cho đơn hộ ${code}, flashSaleItemId=${line.flashSaleItemId}: ${e instanceof Error ? e.message : e}`,
+      );
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'PRICE_CHANGED',
+        message: `Giá giờ vàng của "${line.productName}" vừa hết suất hoặc hết giờ. Vui lòng xem lại giá rồi tạo đơn lại.`,
+      });
+    }
+  }
+
   /**
    * CTV "lên đơn hộ khách": CTV đặt đơn giao cho khách cuối, CTV hưởng hoa hồng.
    * MONEY-CRITICAL — trừ stock ATOMIC (mirror checkout.placeOrder) + tạo hoa hồng cho CTV.
    * KHÔNG coupon/điểm, chỉ COD/chuyển khoản. Đơn đánh dấu placedForCustomer=true để
    * createCommissionForOrder cho phép self-referral (userId==referrerUserId==CTV).
+   * Giá như khách tự đặt (priceCustomerOrder), kể cả giờ vàng: suất giữ trong cùng transaction với đơn.
    */
   async placeOrderForCustomer(ctvId: string, dto: PlaceOrderForCustomerDto, idempotencyKey?: string) {
     // Chuẩn hoá key rỗng/khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder):
@@ -476,11 +577,7 @@ export class AffiliateService {
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
     }
-    // Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng.
-    const ctv = await this.prisma.user.findUniqueOrThrow({ where: { id: ctvId } });
-    if (ctv.role !== 'AFFILIATE' && ctv.role !== 'ADMIN') {
-      throw new BadRequestException('Chỉ CTV mới có thể lên đơn hộ khách.');
-    }
+    const ctv = await this.customerOrderPlacer(ctvId);
     // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
     // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
     // nhận) cũng chảy về CTV.
@@ -491,34 +588,7 @@ export class AffiliateService {
       );
     }
 
-    const variationIds = [...new Set(dto.items.map((i) => i.variationId))];
-    const variations = await this.prisma.variation.findMany({
-      where: { id: { in: variationIds } },
-      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
-    });
-    const vmap = new Map(variations.map((v) => [v.id, v]));
-
-    // Dựng line + validate (variation tồn tại + đang bán + SP cha đang bán và đã duyệt).
-    // unitPrice = salePrice ?? retailPrice.
-    const lines = dto.items.map((i) => {
-      const v = vmap.get(i.variationId);
-      if (!v) throw new BadRequestException('Sản phẩm không còn khả dụng.');
-      if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
-      const unitPrice = v.salePrice ?? v.retailPrice;
-      return {
-        variationId: v.id,
-        productName: v.product.name,
-        productSlug: v.product.slug,
-        variationName: v.name,
-        unitPrice,
-        quantity: i.quantity,
-        total: unitPrice * i.quantity,
-      };
-    });
-
-    const goods = lines.reduce((s, l) => s + l.total, 0);
-    const shippingFee = await this.pricing.calcShippingFee({ subtotal: goods, tierId: null });
-    const total = goods + shippingFee;
+    const { lines, goods, shippingFee, total } = await this.priceCustomerOrder(ctvId, dto.items);
 
     // Gian hàng của CTV (nếu có) → gắn slug để analytics theo gian hàng.
     const store = await this.prisma.storefront.findFirst({
@@ -542,6 +612,7 @@ export class AffiliateService {
           if (!hit) {
             throw new BadRequestException(`Sản phẩm "${line.productName}" không đủ tồn kho.`);
           }
+          await this.consumeFlashQuota(tx, line, ctvId, code);
         }
         const created = await tx.order.create({
           data: {
@@ -582,6 +653,7 @@ export class AffiliateService {
                 unitPrice: l.unitPrice,
                 quantity: l.quantity,
                 total: l.total,
+                flashSaleItemId: l.flashSaleItemId,
               })),
             },
           },
