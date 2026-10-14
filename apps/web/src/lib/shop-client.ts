@@ -99,7 +99,15 @@ export interface OrderDTO {
   paymentMethod: string;
   paymentStatus?: string;
   createdAt: string;
-  items: { productName: string; variationName: string; unitPrice: number; quantity: number; total: number }[];
+  items: {
+    productName: string;
+    variationName: string;
+    unitPrice: number;
+    quantity: number;
+    total: number;
+    /** Ảnh nhỏ của dòng (API ghép theo biến thể); thiếu → hiện biểu tượng lá. */
+    thumbnail?: string | null;
+  }[];
   /** Thu gom vật liệu tái chế (vận đơn đổi hàng Gomdon/BestExpress) — xem lib/recycling.ts. */
   hasRecyclingPickup?: boolean;
   recyclingNote?: string | null;
@@ -265,6 +273,8 @@ export interface OrderListFilter {
   status?: string;
   /** Nhóm trạng thái gộp của API (GET /orders?group=): processing = Đã xác nhận + Đang đóng gói, closed = Đã hủy + Đã hoàn. */
   group?: 'processing' | 'closed';
+  /** Tìm theo mã đơn hoặc tên sản phẩm (API bỏ dấu, không phân biệt hoa thường). */
+  q?: string;
 }
 export interface OrdersPage {
   data: OrderDTO[];
@@ -276,6 +286,7 @@ export const fetchOrdersPage = (page: number, filter: OrderListFilter = {}) => {
   const qs = new URLSearchParams({ page: String(page), limit: String(ORDERS_PAGE_SIZE) });
   if (filter.status) qs.set('status', filter.status);
   if (filter.group) qs.set('group', filter.group);
+  if (filter.q) qs.set('q', filter.q);
   return apiFetch<OrdersPage>(`/orders?${qs.toString()}`);
 };
 
