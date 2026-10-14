@@ -25,14 +25,14 @@ describe('homeMetadata', () => {
     const m = homeMetadata({ page: 2 }, true);
     expect(m.title).toBe('Sản phẩm sống xanh — Trang 2 | Tubu Tree');
     expect(m.description).toContain('Trang 2');
-    expect(m.alternates).toEqual({ canonical: '/?page=2' });
+    expect(m.alternates).toBeUndefined();
   });
 
   it('lọc theo nhãn: tiêu đề nêu tên nhãn; nhãn + trang 2 thì thêm số trang', () => {
     expect(homeMetadata({ brand: 'Hector', page: 1 }, true).title).toBe('Sản phẩm Hector | Tubu Tree');
     const p2 = homeMetadata({ brand: 'Hector', page: 2 }, true);
     expect(p2.title).toBe('Sản phẩm Hector — Trang 2 | Tubu Tree');
-    expect(p2.alternates).toEqual({ canonical: '/?brand=Hector&page=2' });
+    expect(p2.alternates).toBeUndefined();
     expect(homeMetadata({ brand: 'Hector' }, true).description).toContain('Hector');
   });
 

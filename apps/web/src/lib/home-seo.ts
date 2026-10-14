@@ -28,7 +28,10 @@ export function homeCanonicalPath({ brand, page }: HomeSeoFilter): string {
 export function homeMetadata(filter: HomeSeoFilter, brandKnown: boolean): Metadata {
   const brand = filter.brand?.slice(0, BRAND_TITLE_MAX).trim() || undefined;
   const page = filter.page && filter.page > 1 ? Math.floor(filter.page) : 1;
-  const meta: Metadata = { alternates: { canonical: homeCanonicalPath({ brand: filter.brand, page }) } };
+  const meta: Metadata = {};
+  // Next 14 bỏ phần query của canonical khi đường dẫn là "/" (mọi biến thể thành canonical gốc), nên chỉ trang gốc dùng
+  // metadata; trang lọc/phân trang tự in thẻ <link rel="canonical"> trong trang (xem HomeCanonicalLink).
+  if (homeCanonicalPath({ brand: filter.brand, page }) === '/') meta.alternates = { canonical: '/' };
 
   if (filter.brand && !brandKnown) meta.robots = { index: false, follow: true };
 

@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
 import { getProductsPage, getBrands, HOME_PAGE_SIZE } from '@/lib/api';
 import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
-import { homeMetadata } from '@/lib/home-seo';
+import { homeCanonicalPath, homeMetadata } from '@/lib/home-seo';
+import { SITE_URL } from '@/lib/site';
 import ProductCard from '@/components/product-card';
 import ProductPagination from '@/components/product-pagination';
 
@@ -41,8 +42,10 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
     redirect(pageHref({ brand, q }, totalPages));
   }
 
+  const canonicalPath = homeCanonicalPath({ brand, page });
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      {canonicalPath !== '/' && !q && <link rel="canonical" href={`${SITE_URL}${canonicalPath}`} />}
       {/* ── Hero ── */}
       <section className="relative mb-8 overflow-hidden rounded-sheet bg-forest-800 px-6 py-10 text-stone-0 shadow-raised sm:px-10 sm:py-14">
         {/* Hai mảng sáng mờ làm điểm nhấn nền, không mang thông tin */}
