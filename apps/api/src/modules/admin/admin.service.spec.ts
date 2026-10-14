@@ -79,26 +79,39 @@ function makePrisma(over: Record<string, unknown> = {}) {
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
-    // Mảng thao tác (ghi kèm sổ user_admin_events) chạy thật; callback giữ hành vi cũ.
-    $transaction: jest.fn((arg: unknown) => (Array.isArray(arg) ? Promise.all(arg) : Promise.resolve([]))),
+    $executeRaw: jest.fn().mockResolvedValue(0),
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  const prisma: Record<string, unknown> = { ...base, ...over };
+  // Mảng thao tác (ghi kèm sổ user_admin_events) và callback (setUserRole khoá danh sách admin) chạy thật trên mock.
+  prisma.$transaction ??= jest.fn((arg: unknown) =>
+    Array.isArray(arg) ? Promise.all(arg) : (arg as (tx: unknown) => Promise<unknown>)(prisma),
+  );
+  return prisma as unknown as PrismaService;
 }
 
 /** $transaction interactive (callback) cho reviewDealerApplication approve path. */
 function makeApproveTx(opts: {
   dealerAppUpdateMany?: jest.Mock;
   userUpdate?: jest.Mock;
+  applicantRole?: string;
+  otherActiveAdmins?: number;
 }) {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
+  const executeRaw = jest.fn().mockResolvedValue(0);
+  const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
+      $executeRaw: executeRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
-      user: { update: userUpdate },
+      user: {
+        update: userUpdate,
+        findUnique: jest.fn().mockResolvedValue({ role: opts.applicantRole ?? 'CUSTOMER' }),
+        count: userCount,
+      },
     }),
   );
-  return { $transaction, dealerAppUpdateMany, userUpdate };
+  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount };
 }
 
 describe('AdminService.reviewDealerApplication', () => {
@@ -177,6 +190,31 @@ describe('AdminService.reviewDealerApplication', () => {
     const meta = (userUpdate.mock.calls[0][0] as { data: { metadata: Record<string, unknown>; role: string } }).data;
     expect(meta.role).toBe('DEALER');
     expect(meta.metadata).toEqual({ segments: ['mom_baby'], onboardedAt: '2026-01-01', dealerTierId: 't1' });
+  });
+
+  // R4-ADMIN-6: duyệt đổi vai trò người nộp sang DEALER — người nộp là admin thì đây là một lần hạ quyền admin.
+  it('người nộp là admin cuối cùng còn hoạt động → từ chối, không duyệt, không đổi vai trò', async () => {
+    const { $transaction, dealerAppUpdateMany, userUpdate, executeRaw } = makeApproveTx({ applicantRole: 'ADMIN', otherActiveAdmins: 0 });
+    const prisma = makePrisma({
+      dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await expect(mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1')).rejects.toThrow(/quản trị viên cuối cùng/);
+    expect(executeRaw).toHaveBeenCalled();
+    expect(dealerAppUpdateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('admin tự duyệt hồ sơ đại lý của chính mình → từ chối (tự hạ quyền)', async () => {
+    const { $transaction, userUpdate } = makeApproveTx({ applicantRole: 'ADMIN', otherActiveAdmins: 3 });
+    const prisma = makePrisma({
+      dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'admin1' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await expect(mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1')).rejects.toThrow(/chính mình/);
+    expect(userUpdate).not.toHaveBeenCalled();
   });
 
   it('metadata null → vẫn set dealerTierId', async () => {
@@ -367,21 +405,50 @@ describe('AdminService.setUserRole', () => {
 
   it('hạ ADMIN CUỐI CÙNG → từ chối (không còn ai cấp lại quyền cho ai)', async () => {
     const update = jest.fn();
+    const count = jest.fn().mockResolvedValue(0);
     const prisma = makePrisma({
-      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(1) },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count },
     });
-    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).rejects.toThrow(/quản trị viên cuối cùng/);
     expect(update).not.toHaveBeenCalled();
+    // Admin bị khoá không tính: không vào được trang quản trị để cấp lại quyền cho ai.
+    expect(count).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false, id: { not: 'u2' } } });
   });
 
   it('hạ một ADMIN khi còn admin khác → cho qua', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'STAFF', fullName: 'X' });
     const prisma = makePrisma({
-      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(2) },
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u2', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(1) },
     });
     await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).resolves.toMatchObject({ ok: true });
+  });
+
+  // R4-ADMIN-6: đếm admin rồi mới ghi, không khoá → hai admin cuối cùng hạ nhau cùng lúc đều qua.
+  it('đọc vai trò và đếm admin SAU khoá advisory chung, trong cùng transaction với lần ghi', async () => {
+    const order: string[] = [];
+    const update = jest.fn(async () => {
+      order.push('update');
+      return { id: 'u2', phone: '0899625240', role: 'STAFF', fullName: 'X' };
+    });
+    const prisma = makePrisma({
+      $executeRaw: jest.fn(async () => {
+        order.push('lock');
+        return 0;
+      }),
+      user: {
+        findUnique: jest.fn(async () => {
+          order.push('read');
+          return { id: 'u2', phone: '0899625240', role: 'ADMIN' };
+        }),
+        update,
+        count: jest.fn(async () => {
+          order.push('count');
+          return 1;
+        }),
+      },
+    });
+    await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF');
+    expect(order).toEqual(['lock', 'read', 'count', 'update']);
   });
 
   it('rbac.revokeGrantsAbove lỗi → vẫn trả kết quả đổi role thành công (best-effort, không rollback role)', async () => {

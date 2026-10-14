@@ -17,6 +17,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+    $executeRaw: jest.fn().mockResolvedValue(0),
   };
   const merged = { ...base, ...over };
   // addGrant/revokeGrant chạy trong $transaction(tx => ...) — mock tx = chính client này để
@@ -258,13 +259,14 @@ describe('RbacService.revokeGrantsAbove', () => {
 });
 
 describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', () => {
-  function txWith(user: Record<string, unknown> | null, adminCount = 3) {
+  function txWith(user: Record<string, unknown> | null, otherActiveAdmins = 3) {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: {
         findUnique: jest.fn().mockResolvedValue(user),
         update: jest.fn().mockResolvedValue({}),
-        count: jest.fn().mockResolvedValue(adminCount),
+        count: jest.fn().mockResolvedValue(otherActiveAdmins),
       },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
       userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
@@ -284,15 +286,23 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
   });
 
   it('thu hồi ADMIN CUỐI CÙNG → từ chối', async () => {
-    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
-    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 0);
+    await expect(new RbacService(prisma).revokeGrant('admin1', '0899625240')).rejects.toThrow(/quản trị viên cuối cùng/);
     expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.user.count).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false, id: { not: 'u2' } } });
+  });
+
+  // R4-ADMIN-6: hai admin cuối cùng thu hồi nhau cùng lúc — khoá chung trước khi đọc vai trò và đếm.
+  it('lấy khoá advisory chung trước mọi lần đọc/ghi trong transaction', async () => {
+    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
+    await new RbacService(prisma).revokeGrant('admin1', '0899625240');
+    const lockAt = tx.$executeRaw.mock.invocationCallOrder[0]!;
+    expect(lockAt).toBeLessThan(tx.roleGrant.updateMany.mock.invocationCallOrder[0]!);
+    expect(lockAt).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
   });
 
   it('thu hồi một ADMIN khi còn admin khác → vẫn hạ role như cũ', async () => {
-    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 2);
+    const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
     const out = await new RbacService(prisma).revokeGrant('admin1', '0899625240');
     expect(tx.user.update).toHaveBeenCalled();
     expect(out.downgraded).toBe(true);
