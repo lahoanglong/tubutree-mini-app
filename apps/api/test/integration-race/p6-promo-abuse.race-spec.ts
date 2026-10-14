@@ -22,6 +22,7 @@ import { CashbackService } from '../../src/modules/cashback/cashback.service';
 import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/cashback-provider.registry';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { GameService } from '../../src/modules/game/game.service';
+import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
 import { REAL_USER_REQUIRED_MSG } from '../../src/common/real-user';
 import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
@@ -63,6 +64,8 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
         },
         { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
         { provide: CashbackProviderRegistry, useValue: { all: () => [] } },
+        // FlashSaleService báo wishlist khi đợt giờ vàng mở (p9); không thuộc phạm vi spec này.
+        { provide: LifecycleService, useValue: { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
     await moduleRef.init();
@@ -104,7 +107,7 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
