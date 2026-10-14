@@ -541,6 +541,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
   /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
   couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */
+  groupCouponCode?: string | null;
   couponDiscount?: number;
   comboDiscount?: number;
   tierDiscount?: number;
