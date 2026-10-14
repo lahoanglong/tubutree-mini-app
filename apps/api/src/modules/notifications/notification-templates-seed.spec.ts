@@ -157,6 +157,18 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_POST_REJECTED',
       'REFILL_APPROVED',
       'REFILL_REJECTED',
+      // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
+      'ORDER_AWAITING_PAYMENT',
+      'ORDER_PAYMENT_EXPIRED',
+      'ORDER_CANCELLED',
+      'RETURN_APPROVED_DETAIL',
+      'RETURN_REJECTED',
+      'RETURN_RECEIVED',
+      'REFUND_BANK_REQUESTED',
+      'REFUND_BANK_COMPLETED',
+      'REFUND_LATE_PAYMENT',
+      'REFUND_WALLET_CREDITED',
+      'OPS_REFUND_ALERT',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

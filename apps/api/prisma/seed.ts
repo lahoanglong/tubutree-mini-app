@@ -675,7 +675,8 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
   // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
-  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
+  // {{refund_note}}: tiền hoàn bao nhiêu, về đâu (Ví Tubu / tài khoản ngân hàng) — rỗng khi đơn chưa thanh toán.
+  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.{{refund_note}}' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
@@ -693,6 +694,18 @@ const NOTIFICATION_TEMPLATES = [
   // Cùng mã/nội dung với migration 20261012140000_pd3_review_b1_return_templates.
   { id: 'nt-return-ok-points', code: 'RETURN_APPROVED_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Đã hoàn {{points}} Điểm Xanh vào tài khoản của bạn 🌿', createOnly: true },
   { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
+  // P5 (D2/D3): đơn trả trước chờ tiền, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản. Cùng lời với migration
+  // 20261014091000_p5_refunds_returns_notification_templates.
+  { id: 'nt-order-awaiting-payment', code: 'ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đang chờ thanh toán {{amount}}. Vui lòng thanh toán trước {{deadline}}, quá hạn đơn sẽ tự huỷ.', createOnly: true },
+  { id: 'nt-order-payment-expired', code: 'ORDER_PAYMENT_EXPIRED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.', createOnly: true },
+  { id: 'nt-return-ok-detail', code: 'RETURN_APPROVED_DETAIL', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.{{refund_note}}', createOnly: true },
+  { id: 'nt-return-rejected', code: 'RETURN_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} chưa được chấp nhận. Lý do: "{{reason}}". Liên hệ Tubu qua Zalo OA nếu bạn cần hỗ trợ thêm.', createOnly: true },
+  { id: 'nt-return-received', code: 'RETURN_RECEIVED', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận lại hàng trả của đơn {{order_code}}. Cảm ơn bạn 🌿', createOnly: true },
+  { id: 'nt-refund-bank-requested', code: 'REFUND_BANK_REQUESTED', channel: 'INAPP', bodyTemplate: 'Tubu đã ghi nhận hoàn {{amount}} của đơn {{order_code}} về tài khoản {{bank}}. Tiền sẽ được chuyển trong 1-3 ngày làm việc, miễn phí.', createOnly: true },
+  { id: 'nt-refund-bank-completed', code: 'REFUND_BANK_COMPLETED', channel: 'INAPP', bodyTemplate: 'Tubu đã chuyển khoản hoàn {{amount}} của đơn {{order_code}} về tài khoản {{bank}} (mã giao dịch {{bank_ref}}) 🌿', createOnly: true },
+  { id: 'nt-refund-late-payment', code: 'REFUND_LATE_PAYMENT', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{amount}} cho đơn {{order_code}} nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).', createOnly: true },
+  { id: 'nt-refund-wallet-credited', code: 'REFUND_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: 'Đã hoàn {{amount}} của đơn {{order_code}} vào Ví Tubu 🌿', createOnly: true },
+  { id: 'nt-ops-refund', code: 'OPS_REFUND_ALERT', channel: 'INAPP', bodyTemplate: '💸 Hoàn tiền đơn {{order_code}}: {{message}}', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },
