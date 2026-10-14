@@ -449,6 +449,7 @@ function PayoutRow({ payout: p, onDone, onError }: { payout: MerchantPayout; onD
         <span className="font-semibold text-stone-900">{p.storefront?.title ?? p.storefrontId}</span>
         <span className="font-semibold">{signed(p.amount)}</span>
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
+        {p.status === 'PENDING' && toTubu && p.dueAt && new Date(p.dueAt).getTime() < Date.now() && <ToneBadge tone="danger">Quá hạn nộp</ToneBadge>}
         <span className="text-stone-500">
           {p.lines.length} khoản · lập {formatDate(p.createdAt)}
           {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}

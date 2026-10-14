@@ -369,6 +369,23 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(byText(r2.container, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
   });
 
+  it('R4-ADMIN-7: phiếu chờ thu đã quá hạn nộp hiện nhãn "Quá hạn nộp"; chưa tới hạn thì không', async () => {
+    const lateNeg = (dueAt: string) => ({ ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt });
+    for (const [dueAt, late] of [['2020-01-05T03:00:00.000Z', true], ['2099-01-05T03:00:00.000Z', false]] as const) {
+      setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [lateNeg(dueAt)], meta: { page: 1, limit: 20, total: 1 } } } });
+      const r = render(<MerchantFulfilmentTab />);
+      mounted.push(r);
+      await flush();
+      expect(r.container.textContent?.includes('Quá hạn nộp'), dueAt).toBe(late);
+      mounted.pop()!.unmount();
+    }
+    setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [{ ...PAYOUT, dueAt: '2020-01-05T03:00:00.000Z' }], meta: { page: 1, limit: 20, total: 1 } } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.textContent).not.toContain('Quá hạn nộp');
+  });
+
   it('lỗi API (ví dụ phiếu trùng) hiện thông báo danger role alert', async () => {
     setup({ '/admin/merchant-fulfilment/payouts': { status: 409, body: { message: 'Một phiếu đối soát khác vừa được lập cho các đơn này.' } } });
     const r = render(<MerchantFulfilmentTab />);
