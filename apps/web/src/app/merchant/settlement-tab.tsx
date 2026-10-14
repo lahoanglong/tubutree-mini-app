@@ -97,16 +97,17 @@ function PayoutItem({ payout: p, tubuAccount }: { payout: MerchantPayout; tubuAc
   const toTubu = payoutToTubu(p);
   const status = payoutStatus(p);
   const owe = toTubu && p.status === 'PENDING';
+  const cancelled = p.status === 'CANCELLED';
   const amount = toTubu
-    ? `${p.status === 'PAID' ? 'Đã nộp' : 'Bạn cần nộp'} ${formatVnd(-p.amount)}`
-    : `${p.status === 'PAID' ? 'Tubu đã chuyển' : 'Tubu sẽ chuyển'} ${formatVnd(p.amount)}`;
+    ? `${p.status === 'PAID' ? 'Đã nộp' : cancelled ? 'Phiếu nộp' : 'Bạn cần nộp'} ${formatVnd(-p.amount)}`
+    : `${p.status === 'PAID' ? 'Tubu đã chuyển' : cancelled ? 'Phiếu chuyển' : 'Tubu sẽ chuyển'} ${formatVnd(p.amount)}`;
   return (
     <li
       aria-label={`Phiếu ${p.transferMemo ?? p.id}`}
       className={`space-y-2 rounded-card border bg-stone-0 p-3 text-sm shadow-card ${owe ? 'border-warning-fg' : 'border-stone-200'}`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`font-semibold ${toTubu ? 'text-danger-fg' : 'text-stone-900'}`}>{amount}</span>
+        <span className={`font-semibold ${cancelled ? 'text-stone-500 line-through' : toTubu ? 'text-danger-fg' : 'text-stone-900'}`}>{amount}</span>
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         <span className="text-xs text-stone-500">
           lập {formatDate(p.createdAt)}
@@ -114,6 +115,20 @@ function PayoutItem({ payout: p, tubuAccount }: { payout: MerchantPayout; tubuAc
           {p.bankRef ? ` · mã GD ${p.bankRef}` : ''}
         </span>
       </div>
+      {cancelled && (
+        <div className="space-y-0.5 rounded-control bg-stone-100 px-3 py-2 text-xs text-stone-700">
+          <p>
+            Tubu Tree đã huỷ phiếu này{p.cancelledAt ? ` ngày ${formatDate(p.cancelledAt)}` : ''}
+            {p.cancelReason ? `: ${p.cancelReason}` : ''}.
+          </p>
+          <p>
+            {toTubu
+              ? 'Bạn chưa cần nộp khoản này; nếu đã chuyển khoản, liên hệ Tubu Tree để đối chiếu. '
+              : ''}
+            Các khoản của phiếu đã quay lại bảng kê và sẽ vào phiếu mới.
+          </p>
+        </div>
+      )}
       {owe && (
         <div className="space-y-0.5 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg">
           <p>
@@ -132,7 +147,9 @@ function PayoutItem({ payout: p, tubuAccount }: { payout: MerchantPayout; tubuAc
       )}
       {p.lines.length > 0 && (
         <details className="text-xs">
-          <summary className="flex min-h-[44px] cursor-pointer items-center font-medium text-forest-700 sm:min-h-6">Xem {p.lines.length} khoản</summary>
+          <summary className="flex min-h-[44px] cursor-pointer items-center font-medium text-forest-700 sm:min-h-6">
+            {cancelled ? `Xem ${p.lines.length} khoản lúc huỷ` : `Xem ${p.lines.length} khoản`}
+          </summary>
           <div className="mt-2">
             <SettlementTable lines={p.lines} label={`Các khoản của phiếu lập ${formatDate(p.createdAt)}`} dateHeader="Vào phiếu" dateOf={(l) => l.createdAt ?? l.deliveredAt} />
           </div>

@@ -106,6 +106,11 @@ export class UpdateMerchantProductDto {
   @IsOptional() @IsString() @MaxLength(IMAGE_MAX) thumbnail?: string;
   @IsOptional() @IsInt() @Min(0) @Max(MAX_STOCK) stock?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  /**
+   * Chỉ cho sản phẩm đã gỡ liên kết hoặc chưa được liên kết: chuỗi = đổi sang mã Pancake khác (gửi duyệt lại), null hoặc rỗng =
+   * bỏ mã, chuyển hẳn sang gian hàng tự giao.
+   */
+  @IsOptional() @Transform(trim) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(64) pancakeCode?: string | null;
 }
 
 export class AddResellProductDto {
@@ -145,7 +150,7 @@ export class ShipMerchantOrderDto {
 }
 
 export class MerchantOrderReasonDto {
-  @IsString() @IsNotEmpty() @MaxLength(300) reason!: string;
+  @Transform(trim) @IsString() @IsNotEmpty({ message: 'Cần nhập lý do để báo khách.' }) @MaxLength(300) reason!: string;
 }
 
 // Bug 3: /merchant/orders trước đây chỉ nhận `status` rời, không có page/limit thật.

@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { CreateMerchantProductDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
-import { CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
+import { CreateMerchantProductDto, MerchantOrderReasonDto, ShipMerchantOrderDto, UpdateMerchantProductDto, UpdateMerchantStoreDto } from './merchant.controller';
+import { CancelMerchantPayoutDto, CreateMerchantPayoutDto, MerchantStoreTermsDto } from './merchant-admin.controller';
 
 const pipe = createValidationPipe();
 const run = <T>(metatype: new () => T, value: unknown) =>
@@ -36,6 +36,13 @@ describe('DTO sản phẩm đối tác (R2-MERCHANT-10)', () => {
     const dto = await run(CreateMerchantProductDto, { ...OK, name: '  Xà phòng  ', description: ' Mô tả ' });
     expect(dto.name).toBe('Xà phòng');
     expect(dto.description).toBe('Mô tả');
+  });
+
+  it('R4-PARTNER-6: mã Pancake khi sửa — chuỗi được cắt khoảng trắng, null là bỏ mã, không nhận số/đối tượng', async () => {
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: '  PK-9 ' })).resolves.toMatchObject({ pancakeCode: 'PK-9' });
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: null })).resolves.toMatchObject({ pancakeCode: null });
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: 12 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(run(UpdateMerchantProductDto, { pancakeCode: 'x'.repeat(65) })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('bỏ giá khuyến mãi (null) khi sửa vẫn được', async () => {
@@ -97,5 +104,27 @@ describe('Lập phiếu kèm tổng bảng kê admin vừa xem (Q8)', () => {
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a' })).resolves.toMatchObject({ storefrontId: 'sf-a' });
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 1.5 })).rejects.toBeInstanceOf(BadRequestException);
     await expect(run(CreateMerchantPayoutDto, { storefrontId: 'sf-a', expectedTotal: 'abc' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Lý do huỷ / giao không thành công (R4-PARTNER-1)', () => {
+  it('chỉ có khoảng trắng hoặc rỗng → 400 tiếng Việt, không lọt xuống thông báo cho khách', async () => {
+    expect(await message(MerchantOrderReasonDto, { reason: '   ' })).toContain('Cần nhập lý do để báo khách.');
+    expect(await message(MerchantOrderReasonDto, { reason: ' \n\t ' })).toContain('Cần nhập lý do để báo khách.');
+    expect(await message(MerchantOrderReasonDto, { reason: '' })).toContain('Cần nhập lý do để báo khách.');
+    await expect(run(MerchantOrderReasonDto, {})).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lý do được cắt khoảng trắng hai đầu', async () => {
+    const dto = await run(MerchantOrderReasonDto, { reason: '  Khách không nghe máy  ' });
+    expect(dto.reason).toBe('Khách không nghe máy');
+  });
+});
+
+describe('Huỷ phiếu đối soát cần lý do (R4-PARTNER-4)', () => {
+  it('thiếu, rỗng hoặc chỉ khoảng trắng → 400 tiếng Việt; có lý do thì được cắt khoảng trắng', async () => {
+    expect(await message(CancelMerchantPayoutDto, {})).toContain('Cần nhập lý do huỷ phiếu để báo gian hàng.');
+    expect(await message(CancelMerchantPayoutDto, { reason: '   ' })).toContain('Cần nhập lý do huỷ phiếu để báo gian hàng.');
+    await expect(run(CancelMerchantPayoutDto, { reason: '  Lập nhầm kỳ  ' })).resolves.toMatchObject({ reason: 'Lập nhầm kỳ' });
   });
 });

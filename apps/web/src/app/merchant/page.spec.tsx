@@ -503,6 +503,23 @@ describe('cổng đối tác — tab Đơn cần giao (D4)', () => {
     await flush();
     expect(mocks.listFulfil).toHaveBeenLastCalledWith('SHIPPING', 1);
   });
+
+  it('R4-PARTNER-1: lý do chỉ có khoảng trắng không gửi được, nút xác nhận tắt cho tới khi có chữ', async () => {
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    const first = root.querySelector('article[aria-label="Đơn TF1"]')!;
+    mocks.fulfilAction.mockClear();
+    click(byText(first, 'button', 'Huỷ đơn'));
+    const submit = byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    typeInto(inputByLabel(first, 'Lý do huỷ'), '    ');
+    expect((byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement).disabled).toBe(true);
+    first.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(mocks.fulfilAction).not.toHaveBeenCalled();
+    typeInto(inputByLabel(first, 'Lý do huỷ'), 'Hết hàng');
+    expect((byText(first, 'button', 'Xác nhận huỷ đơn') as HTMLButtonElement).disabled).toBe(false);
+  });
 });
 
 describe('cổng đối tác — tab Đối soát', () => {
@@ -569,6 +586,36 @@ describe('cổng đối tác — tab Đối soát', () => {
     expect(root.textContent).toContain('trong 7 ngày');
   });
 
+  it('R4-PARTNER-4: phiếu đã huỷ hiện lý do, các khoản lúc huỷ và lời dặn; không lộ id nội bộ; phiếu âm đã huỷ nói chưa cần nộp', async () => {
+    const line = { id: 'l9', orderId: 'o9', orderCode: 'TF9', kind: 'SALE', goodsAmount: 210000, shippingFee: 0, commissionAmount: 31500, codCollected: 210000, netAmount: -31500, deliveredAt: null, createdAt: '2026-10-14T03:00:00.000Z' };
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      lines: [],
+      total: 0,
+      upcoming: [],
+      negativeDueDays: 7,
+      payouts: [
+        { id: 'pc2', storefrontId: 's1', amount: -31500, status: 'CANCELLED', direction: 'TO_TUBU', transferMemo: 'TUBU DS CCCC0002', dueAt: null, createdAt: '2026-10-14T03:00:00.000Z', cancelledAt: '2026-10-15T03:00:00.000Z', cancelReason: 'Lập nhầm kỳ', cancelledLineCount: 1, lines: [line] },
+        { id: 'pc1', storefrontId: 's1', amount: 87360, status: 'CANCELLED', direction: 'TO_MERCHANT', transferMemo: 'TUBU DS CCCC0001', dueAt: null, createdAt: '2026-10-12T03:00:00.000Z', cancelledAt: '2026-10-13T03:00:00.000Z', cancelReason: 'Sai tài khoản nhận', cancelledLineCount: 2, lines: [line, { ...line, id: 'l8', orderId: 'o8', orderCode: 'TF8' }] },
+      ],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const positive = root.querySelector('li[aria-label="Phiếu TUBU DS CCCC0001"]')!;
+    expect(positive.textContent).toContain('Đã huỷ');
+    expect(positive.textContent).toContain('Phiếu chuyển 87.360');
+    expect(positive.textContent).toContain('Tubu Tree đã huỷ phiếu này ngày 13/10/2026: Sai tài khoản nhận.');
+    expect(positive.textContent).toContain('Các khoản của phiếu đã quay lại bảng kê và sẽ vào phiếu mới.');
+    expect(positive.textContent).not.toContain('Bạn chưa cần nộp');
+    expect(positive.textContent).toContain('Xem 2 khoản lúc huỷ');
+    expect(positive.textContent).not.toContain('Tubu sẽ chuyển');
+    const negative = root.querySelector('li[aria-label="Phiếu TUBU DS CCCC0002"]')!;
+    expect(negative.textContent).toContain('Phiếu nộp 31.500');
+    expect(negative.textContent).toContain('Bạn chưa cần nộp khoản này; nếu đã chuyển khoản, liên hệ Tubu Tree để đối chiếu.');
+    expect(negative.textContent).not.toContain('Bạn cần nộp');
+    expect(negative.textContent).not.toContain('Chuyển vào tài khoản Tubu Tree');
+  });
+
   it('Q8: khoản hàng Tubu giao hộ nằm cùng bảng kê với đơn tự giao — nhãn, tên món, phí giao hộ; bỏ câu "thoả thuận ký gửi"', async () => {
     const item = { productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2 };
     const sale = {
@@ -592,7 +639,7 @@ describe('cổng đối tác — tab Đối soát', () => {
       lines: [
         { orderId: 'o1', orderCode: 'TF1', kind: 'SALE', refKey: '', goodsAmount: 200000, shippingFee: 30000, commissionAmount: 30000, codCollected: 0, netAmount: 200000, deliveredAt: '2026-10-01T03:00:00.000Z' },
         sale,
-        { ...sale, kind: 'REVERSAL', refKey: 'RETURN:r1:ITEM:i1', goodsAmount: -51000, commissionAmount: -5100, opsFeeAmount: -2220, netAmount: -43680, deliveredAt: null },
+        { ...sale, kind: 'REVERSAL', refKey: 'RETURN:r1:ITEM:i1', units: 1, goodsAmount: -51000, commissionAmount: -5100, opsFeeAmount: -2220, netAmount: -43680, deliveredAt: null },
       ],
       total: 243680,
       upcoming: [{ ...sale, orderId: 'o8', orderCode: 'TT8', refKey: 'ITEM:i9', orderItemId: 'i9', availableAt: '2026-10-20T03:00:00.000Z' }],
@@ -624,10 +671,32 @@ describe('cổng đối tác — tab Đối soát', () => {
     const rows = Array.from(pending.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(rows[0]).toEqual(['TF1', '01/10/2026', '200.000đ', '30.000đ', '−30.000đ', '—', '0đ', '200.000đ']);
     expect(rows[1]).toEqual(['TT7Tubu giao hộMật ong (Hũ 500g) × 2', '01/10/2026', '102.000đ', '—', '−10.200đ', '−4.440đ', '—', '87.360đ']);
-    expect(rows[2]).toEqual(['TT7(trả một phần)Tubu giao hộMật ong (Hũ 500g) × 2', '—', '−51.000đ', '—', '5.100đ', '2.220đ', '—', '−43.680đ']);
+    // R4-PARTNER-2: dòng đảo ghi số đơn vị trả (1/2), không phải "× 2" của cả dòng hàng.
+    expect(rows[2]).toEqual(['TT7(trả một phần)Tubu giao hộMật ong (Hũ 500g) · trả 1/2', '—', '−51.000đ', '—', '5.100đ', '2.220đ', '—', '−43.680đ']);
     const payout = root.querySelector('li[aria-label^="Phiếu"]')!;
     expect(payout.querySelector('table')!.textContent).toContain('Tubu giao hộ');
     expect(scrollRegionProblems(root)).toEqual([]);
+  });
+
+  it('R4-PARTNER-2: dòng đảo trả cả đơn hiện số đơn vị còn lại; dòng đảo cũ chưa có số đơn vị không hiện số lượng sai', async () => {
+    const item = { productName: 'Trà Shan', variationName: null, quantity: 3 };
+    const reversal = { orderId: 'o3', orderCode: 'TT3', kind: 'REVERSAL', orderItemId: 'i3', item, goodsAmount: -30000, shippingFee: 0, commissionAmount: -3000, opsFeeAmount: 0, codCollected: 0, netAmount: -27000, deliveredAt: null };
+    mocks.settlement = vi.fn(async () => ({
+      holdDays: 7,
+      consignmentTerms: { commissionPct: 0.1, feePct: 0, feeFixed: 0 },
+      lines: [
+        { ...reversal, refKey: 'ITEM:i3', units: 2 },
+        { ...reversal, orderId: 'o4', orderCode: 'TT4', refKey: 'ITEM:i4', orderItemId: 'i4' },
+      ],
+      total: -54000,
+      upcoming: [],
+      payouts: [],
+    }));
+    const root = await mount();
+    await openTab('Đối soát');
+    const pending = root.querySelector('[aria-label="Khoản chờ lập phiếu đối soát"]')!;
+    const rows = Array.from(pending.querySelectorAll('tbody tr')).map((tr) => tr.querySelector('td')!.textContent);
+    expect(rows).toEqual(['TT3(trả hàng)Tubu giao hộTrà Shan · trả 2/3', 'TT4(trả hàng)Tubu giao hộTrà Shan']);
   });
 
   it('Q8 review S5: món Tubu giao hộ chưa vào đối soát tự động — danh sách chỉ đọc kèm lý do, không cộng vào bảng kê', async () => {
@@ -640,24 +709,27 @@ describe('cổng đối tác — tab Đối soát', () => {
       payouts: [],
       consignmentExcluded: {
         settleFrom: '2026-10-01T00:00:00.000Z',
-        total: 3,
+        total: 4,
         lines: [
           { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: 'Hũ 500g', quantity: 2, goodsAmount: 180000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: '2026-10-07T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED', linkPending: true },
-          { orderId: 'o6', orderCode: 'TT6', orderItemId: 'i6', productName: 'Bột sắn dây', variationName: null, quantity: 1, goodsAmount: 70000, createdAt: '2026-10-04T03:00:00.000Z', deliveredAt: '2026-10-06T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED', linkPending: false },
+          { orderId: 'o6', orderCode: 'TT6', orderItemId: 'i6', productName: 'Mật ong', variationName: 'Hũ 250g', quantity: 1, goodsAmount: 95000, createdAt: '2026-10-06T03:00:00.000Z', deliveredAt: '2026-10-08T03:00:00.000Z', reason: 'TAKEOVER_BEFORE_CONFIRM', confirmedAt: '2026-10-09T03:00:00.000Z', linkPending: false },
+          { orderId: 'o7', orderCode: 'TT7', orderItemId: 'i7', productName: 'Bột sắn dây', variationName: null, quantity: 1, goodsAmount: 70000, createdAt: '2026-10-04T03:00:00.000Z', deliveredAt: '2026-10-06T03:00:00.000Z', reason: 'TAKEOVER_UNCONFIRMED', linkPending: false },
           { orderId: 'o4', orderCode: 'TT4', orderItemId: 'i4', productName: 'Trà Shan', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-09-20T03:00:00.000Z', deliveredAt: null, reason: 'BEFORE_SETTLE_FROM', linkPending: false },
         ],
       },
     }));
     const root = await mount();
     await openTab('Đối soát');
-    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (3 món)');
+    expect(root.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (4 món)');
     expect(root.textContent).toContain('Chờ lập phiếu (0 khoản)');
     const region = root.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động"]')!;
     expect(Array.from(region.querySelectorAll('th')).map((th) => th.textContent)).toEqual(['Đơn', 'Ngày đặt', 'Món', 'Tiền khách trả cho món', 'Lý do']);
     const rows = Array.from(region.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
     expect(rows).toEqual([
       ['TT5', '05/10/2026', 'Mật ong (Hũ 500g) × 2', '180.000đ', 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn'],
-      ['TT6', '04/10/2026', 'Bột sắn dây × 1', '70.000đ', 'Đặt lúc chưa xác nhận hàng ký gửi — liên hệ Tubu Tree để đối chiếu'],
+      // R4-PARTNER-3: đã xác nhận rồi thì không còn nói "chờ xác nhận"; nói rõ đơn đặt trước lúc xác nhận phải đối soát riêng.
+      ['TT6', '06/10/2026', 'Mật ong (Hũ 250g) × 1', '95.000đ', 'Đặt trước khi Tubu Tree xác nhận hàng ký gửi (09/10/2026) — đối soát riêng ngoài phiếu, liên hệ Tubu Tree'],
+      ['TT7', '04/10/2026', 'Bột sắn dây × 1', '70.000đ', 'Đặt lúc chưa xác nhận hàng ký gửi — liên hệ Tubu Tree để đối chiếu'],
       ['TT4', '20/09/2026', 'Trà Shan × 1', '90.000đ', 'Đặt trước 01/10/2026 — trước khi đối soát tự động'],
     ]);
     expect(scrollRegionProblems(root)).toEqual([]);
@@ -893,6 +965,145 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     click(byText(root, 'button', 'Mở bán lại'));
     await flush();
     expect(mocks.updateProduct).toHaveBeenLastCalledWith('z', { isActive: true });
+  });
+
+  describe('R4-PARTNER-6: sản phẩm đã gỡ liên kết Pancake đổi được mã hoặc chuyển sang tự giao', () => {
+    const UNLINKED = (extra: Record<string, unknown> = {}) =>
+      PRODUCT('u', 'APPROVED', { isActive: false, fulfilment: 'MERCHANT', pancakeLinkCode: 'PCK-OLD', linkState: 'AWAITING', ...extra });
+    const radioOf = (root: ParentNode, label: string) => byText(root, 'label', label)!.querySelector<HTMLInputElement>('input[type="radio"]')!;
+    async function openEdit(product: Record<string, unknown>) {
+      mocks.getProducts = vi.fn(async () => ({ ownProducts: [product], resellProducts: [], meta: { page: 1, limit: 20, ownTotal: 1, resellTotal: 0 } }));
+      const root = await mount();
+      await openTab('Sản phẩm');
+      const open = () => {
+        click(byText(root.querySelector('tbody')!, 'button', 'Sửa'));
+        return root.querySelector<HTMLElement>('.fixed.inset-0')!;
+      };
+      return { root, row: root.querySelector('tbody')!, open };
+    }
+
+    it('dòng sản phẩm nói rõ mã Pancake đã gỡ liên kết (không còn ghi "chờ duyệt" khi đã được duyệt)', async () => {
+      const { row } = await openEdit(UNLINKED());
+      expect(row.textContent).toContain('Mã Pancake PCK-OLD');
+      expect(row.textContent).toContain('đã gỡ liên kết');
+      expect(row.textContent).not.toContain('PCK-OLD, chờ duyệt');
+    });
+
+    it('mở Sửa: hiện mã hiện tại, ẩn giá và tồn kho (lấy theo kho Tubu); mặc định giữ mã nên không gửi pancakeCode', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      expect(overlay.textContent).toContain('PCK-OLD');
+      expect(overlay.querySelector('#merchant-edit-price')).toBeNull();
+      expect(overlay.querySelector('#merchant-edit-stock')).toBeNull();
+      expect(radioOf(overlay, 'Giữ mã hiện tại').checked).toBe(true);
+      typeInto(inputByLabel(overlay, 'Mô tả ngắn'), 'Ngắn hơn');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { shortDesc: 'Ngắn hơn' });
+    });
+
+    it('đổi sang mã khác: phải kiểm mã trước, rồi gửi đúng mã đã kiểm', async () => {
+      mocks.checkPancake = vi.fn(async (code: string) => ({
+        pancakeId: code.trim(),
+        productName: 'Bột giặt quế',
+        variationName: '1kg',
+        retailPrice: 150000,
+        salePrice: null,
+        stock: 40,
+      }));
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), ' PCK-NEW ');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Kiểm tra mã');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      expect(mocks.checkPancake).toHaveBeenCalledWith(' PCK-NEW ');
+      expect(overlay.querySelector('[role="status"]')!.textContent).toContain('Bột giặt quế (1kg)');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: 'PCK-NEW' });
+    });
+
+    it('sửa lại ô mã sau khi kiểm thì kết quả kiểm cũ mất hiệu lực', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'PCK-NEW');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'PCK-NEW2');
+      expect(overlay.querySelector('[role="status"]')).toBeNull();
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('mã mới không hợp lệ: hiện lỗi của API dưới ô mã, không gửi', async () => {
+      mocks.checkPancake = vi.fn(async () => {
+        throw new Error('Mã đã được gian hàng khác liên kết');
+      });
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'SAI');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain('Mã đã được gian hàng khác liên kết');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('chuyển sang tự giao: bỏ mã (pancakeCode null), hiện giá/tồn để nhập, gửi cùng lúc', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      expect(overlay.textContent).toContain('Bạn tự đóng gói');
+      typeInto(inputByLabel(overlay, 'Giá bán (đồng)'), '95000');
+      typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null, basePrice: 95000, stock: 12 });
+    });
+
+    it('chuyển sang tự giao mà chưa sửa giá/tồn vẫn gửi pancakeCode null (không bị coi là không đổi gì)', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null });
+    });
+
+    it('chọn lại "Giữ mã hiện tại" sau khi đổi ý thì ẩn lại giá/tồn và không gửi pancakeCode', async () => {
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
+      expect(overlay.querySelector('#merchant-edit-price')).not.toBeNull();
+      click(radioOf(overlay, 'Giữ mã hiện tại'));
+      expect(overlay.querySelector('#merchant-edit-price')).toBeNull();
+      click(byText(overlay, 'button', 'Lưu thay đổi'));
+      await flush();
+      expect(mocks.updateProduct).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm Tubu giao hộ đang liên kết: không có lựa chọn đổi mã', async () => {
+      const { open } = await openEdit(PRODUCT('t', 'APPROVED', { isActive: true, fulfilment: 'TUBU', pancakeLinkCode: 'PCK-1', linkState: 'LINKED' }));
+      const overlay = open();
+      expect(byText(overlay, 'label', 'Đổi sang mã Pancake khác')).toBeNull();
+      expect(byText(overlay, 'label', 'Chuyển sang gian hàng tự giao')).toBeNull();
+    });
+
+    it('sản phẩm tự giao không có mã: không có lựa chọn đổi mã, vẫn sửa được giá/tồn như cũ', async () => {
+      const { open } = await openEdit(PRODUCT('o', 'APPROVED', { isActive: true, fulfilment: 'MERCHANT', pancakeLinkCode: null, linkState: null }));
+      const overlay = open();
+      expect(byText(overlay, 'label', 'Đổi sang mã Pancake khác')).toBeNull();
+      expect(overlay.querySelector('#merchant-edit-price')).not.toBeNull();
+    });
   });
 
   it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {

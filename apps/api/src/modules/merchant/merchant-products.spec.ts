@@ -360,8 +360,10 @@ describe('SELLER-5: đơn của gian hàng lọc theo khoá ngoại, không so c
 });
 
 describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
-  function buildEdit(product: Record<string, unknown>) {
+  function buildEdit(product: Record<string, unknown>, linkable: unknown = PANCAKE_ROW) {
+    const variationFindFirst = jest.fn().mockResolvedValue(linkable);
     const productUpdate = jest.fn().mockResolvedValue({});
+    const productUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const variationUpdate = jest.fn().mockResolvedValue({});
     const draftUpsert = jest.fn().mockResolvedValue({});
     const draftDelete = jest.fn().mockResolvedValue({ count: 1 });
@@ -375,16 +377,19 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       product: {
         findFirst: jest.fn().mockResolvedValue(product),
         update: productUpdate,
+        updateMany: productUpdateMany,
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, editDraft: null }),
       },
       productEditDraft: { upsert: draftUpsert, deleteMany: draftDelete },
-      variation: { update: variationUpdate },
+      variation: { update: variationUpdate, findFirst: variationFindFirst },
       $transaction: jest.fn(),
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
     return {
       svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify } as never),
+      variationFindFirst,
       productUpdate,
+      productUpdateMany,
       variationUpdate,
       draftUpsert,
       draftDelete,
@@ -526,6 +531,137 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       expect(row.name).toBe('Mật ong');
       expect(row.pendingEdit).toEqual({ name: 'Mật ong rừng', description: 'x', shortDesc: null, images: [], thumbnail: null, submittedAt: submitted });
       expect(row).not.toHaveProperty('editDraft');
+    });
+  });
+
+  describe('R4-PARTNER-6: sản phẩm đã gỡ liên kết đổi được mã Pancake hoặc chuyển sang tự giao', () => {
+    const UNLINKED = {
+      ...OWN,
+      fulfilment: 'MERCHANT',
+      pancakeLinkCode: 'PK-OLD',
+      isActive: false,
+      variations: [{ id: 'v-a' }],
+    };
+
+    it('bỏ mã (null) → chuyển hẳn sang tự giao: xoá mã, vẫn APPROVED, không báo admin, không cần duyệt lại', async () => {
+      const { svc, productUpdate, productUpdateMany, notify } = buildEdit(UNLINKED);
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+      expect(productUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'prod-a', fulfilment: { not: 'TUBU' }, pancakeLinkCode: 'PK-OLD' },
+        data: { pancakeLinkCode: null },
+      });
+      expect(productUpdate.mock.calls[0]![0].data.approvalStatus).toBeUndefined();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('chuỗi rỗng cũng là bỏ mã; bỏ mã cùng lúc với sửa giá và tồn kho thì sửa được ngay (không còn "chờ liên kết")', async () => {
+      const { svc, productUpdate, productUpdateMany, variationUpdate } = buildEdit(UNLINKED);
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: '  ', basePrice: 90_000, stock: 5 });
+      expect(productUpdateMany.mock.calls[0]![0].data).toEqual({ pancakeLinkCode: null });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 90_000 });
+      expect(variationUpdate).toHaveBeenCalledWith({ where: { id: 'v-a' }, data: { retailPrice: 90_000, salePrice: null, stock: 5 } });
+    });
+
+    it('chưa bỏ mã thì vẫn không sửa được giá/tồn kho (400 như trước)', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED);
+      await expect(svc.updateProduct('u1', 'prod-a', { stock: 5 })).rejects.toThrow('theo kho Tubu');
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('đổi sang mã khác còn liên kết được → ghi mã mới, về chờ duyệt, báo admin "Tubu giao hộ"', async () => {
+      const { svc, productUpdate, productUpdateMany, notify, variationFindFirst } = buildEdit(
+        { ...UNLINKED, isActive: true },
+        { ...PANCAKE_ROW, pancakeId: 'PK-NEW' },
+      );
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: ' PK-NEW ' });
+      expect(variationFindFirst).toHaveBeenCalled();
+      expect(productUpdateMany.mock.calls[0]![0].data).toEqual({ pancakeLinkCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', rejectReason: null });
+      expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ mode: 'Tubu giao hộ' }));
+    });
+
+    it('sản phẩm đã bị admin gỡ liên kết (isActive=false) xin mã khác → mở bán lại cùng lúc, nếu không duyệt xong vẫn ẩn và SKU không bán ở đâu', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
+    });
+
+    it('sản phẩm bị từ chối rồi ngừng bán xin mã khác → cũng mở bán lại cùng lúc xin mã', async () => {
+      const { svc, productUpdate } = buildEdit({ ...UNLINKED, approvalStatus: 'REJECTED', rejectReason: 'Mã đã có chủ' }, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
+    });
+
+    it('vừa ngừng bán vừa xin mã Pancake mới là yêu cầu mâu thuẫn → 400, không ghi gì', async () => {
+      const { svc, productUpdate, productUpdateMany } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW', isActive: false })).rejects.toThrow('vừa ngừng bán vừa xin mã Pancake mới');
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('bỏ mã (tự giao) không tự mở bán: trạng thái bán do đối tác chọn', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED);
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+      expect(productUpdate.mock.calls[0]![0].data.isActive).toBeUndefined();
+    });
+
+    it('mã mới không có trong danh mục hoặc đã có chủ → 400, không ghi gì', async () => {
+      const { svc, productUpdate, productUpdateMany, notify } = buildEdit(UNLINKED, null);
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-XX' })).rejects.toThrow('Mã biến thể Pancake không có trong danh mục');
+      expect(productUpdate).not.toHaveBeenCalled();
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('đổi mã cùng lúc với sửa giá/tồn kho → 400 (sản phẩm đang chờ liên kết lấy giá và tồn theo Pancake)', async () => {
+      const { svc, productUpdate } = buildEdit(UNLINKED);
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW', basePrice: 90_000 })).rejects.toThrow('theo kho Tubu');
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('gửi lại đúng mã đang có → không đổi gì', async () => {
+      const { svc, productUpdate, productUpdateMany, notify } = buildEdit(UNLINKED);
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-OLD' });
+      expect(productUpdateMany).not.toHaveBeenCalled();
+      expect(productUpdate.mock.calls[0]![0].data.approvalStatus).toBeUndefined();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm bị từ chối vì mã đã có chủ: nhập mã khác → về chờ duyệt, xoá lý do từ chối cũ', async () => {
+      const { svc, productUpdate, productUpdateMany } = buildEdit({ ...UNLINKED, approvalStatus: 'REJECTED', rejectReason: 'Mã đã liên kết cho sản phẩm khác', isActive: true }, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdateMany.mock.calls[0]![0].data).toEqual({ pancakeLinkCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', rejectReason: null });
+    });
+
+    it('sản phẩm bị từ chối: bỏ mã chuyển sang tự giao → gửi duyệt lại kiểu "Đối tác tự giao"', async () => {
+      const { svc, productUpdate, productUpdateMany, notify } = buildEdit({ ...UNLINKED, approvalStatus: 'REJECTED', rejectReason: 'Mã đã liên kết cho sản phẩm khác', isActive: true });
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+      expect(productUpdateMany.mock.calls[0]![0].data).toEqual({ pancakeLinkCode: null });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', rejectReason: null });
+      expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_MERCHANT_PRODUCT_PENDING', expect.objectContaining({ mode: 'Đối tác tự giao' }));
+    });
+
+    it('sản phẩm Tubu giao hộ đang liên kết: không đổi/bỏ mã được, phải ngừng bán để gỡ liên kết trước', async () => {
+      const { svc, productUpdate } = buildEdit({ ...OWN, fulfilment: 'TUBU', pancakeLinkCode: 'PK-1' });
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: null })).rejects.toThrow('đang được Tubu giao hộ');
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-2' })).rejects.toThrow('đang được Tubu giao hộ');
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('sản phẩm tự giao chưa có mã: không đổi sang Tubu giao hộ bằng cách thêm mã (đã có đơn/biến thể gắn với hàng của gian hàng)', async () => {
+      const { svc, productUpdate, productUpdateMany } = buildEdit(OWN);
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-9' })).rejects.toThrow('Sản phẩm tự giao không đổi sang Tubu giao hộ');
+      expect(productUpdate).not.toHaveBeenCalled();
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 180_000 });
+      expect(productUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('admin duyệt (liên kết) cùng lúc: đổi mã có điều kiện trượt → 409, không ghi đè mã lên sản phẩm đã nhận biến thể', async () => {
+      const { svc, productUpdate, productUpdateMany } = buildEdit(UNLINKED);
+      productUpdateMany.mockResolvedValue({ count: 0 });
+      await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: null })).rejects.toThrow(ConflictException);
+      expect(productUpdate).not.toHaveBeenCalled();
     });
   });
 

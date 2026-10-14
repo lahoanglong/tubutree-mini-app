@@ -147,6 +147,8 @@ export interface UpdateMerchantProductInput {
   images?: string[];
   stock?: number;
   isActive?: boolean;
+  /** Chỉ cho sản phẩm chưa liên kết: chuỗi = đổi sang mã Pancake khác (gửi duyệt lại), null = bỏ mã để tự giao. */
+  pancakeCode?: string | null;
 }
 
 /** Biến thể Pancake hợp lệ cho "Tubu giao hộ" (GET /merchant/pancake-variations/:code). */
@@ -351,7 +353,10 @@ export interface SettlementLine {
   deliveredAt: string | null;
   /** Dòng hàng "Tubu giao hộ"; null/thiếu = đơn gian hàng tự giao. */
   orderItemId?: string | null;
+  /** `quantity` là số lượng của cả dòng hàng; dòng đảo dùng `units` cho số đơn vị trả. */
   item?: { productName: string; variationName: string | null; quantity: number } | null;
+  /** Dòng đảo của hàng giao hộ: số đơn vị trả lại. null/thiếu ở dòng khác và dòng đảo lập trước khi có cột này. */
+  units?: number | null;
 }
 
 /** Mức phí áp cho hàng "Tubu giao hộ": phần trăm là phân số (0.1 = 10%), phí cố định tính mỗi đơn. */
@@ -377,6 +382,13 @@ export interface MerchantPayout {
   paidAt?: string | null;
   bankRef?: string | null;
   note?: string | null;
+  /** Phiếu đã huỷ: lúc huỷ, lý do gửi cho gian hàng, số khoản và số đơn lúc huỷ (`lines` là ảnh chụp các khoản đó). */
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  cancelledLineCount?: number | null;
+  cancelledOrderCount?: number | null;
+  /** Chỉ admin thấy. */
+  cancelledBy?: string | null;
   lines: (SettlementLine & { id: string; createdAt?: string })[];
   storefront?: { id: string; title: string };
 }
@@ -393,8 +405,14 @@ export interface ConsignmentExcludedLine {
   goodsAmount: number;
   createdAt: string;
   deliveredAt: string | null;
-  /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
-  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+  /**
+   * BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt;
+   * TAKEOVER_BEFORE_CONFIRM: đã xác nhận nhưng đơn đặt trước lúc xác nhận (`confirmedAt`) nên không bao giờ tự vào phiếu.
+   * API cũ chỉ trả hai lý do đầu.
+   */
+  reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED' | 'TAKEOVER_BEFORE_CONFIRM';
+  /** Lúc admin xác nhận hàng ký gửi của liên kết (chỉ có với TAKEOVER_BEFORE_CONFIRM). */
+  confirmedAt?: string | null;
   /** Liên kết của món lúc đặt vẫn đang chờ admin xác nhận hàng ký gửi (còn việc để xác nhận); false = đã xác nhận sau lúc đặt hoặc đã gỡ. Thiếu ở API cũ. */
   linkPending?: boolean;
 }
@@ -509,5 +527,6 @@ export const markAdminMerchantPayoutPaid = (id: string, bankRef: string) =>
     body: { bankRef },
   });
 
-export const cancelAdminMerchantPayout = (id: string) =>
-  apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+/** `reason`: gửi nguyên văn cho gian hàng (bắt buộc); các khoản của phiếu quay lại bảng kê để lập phiếu mới. */
+export const cancelAdminMerchantPayout = (id: string, reason: string) =>
+  apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } });

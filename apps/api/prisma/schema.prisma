@@ -1621,20 +1621,29 @@ model MerchantPancakeLink {
 /// Phiếu đối soát đơn đối tác tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 7). amount > 0: Tubu chuyển cho
 /// đối tác; amount < 0: đối tác nộp lại Tubu (phí sàn trên đơn COD đối tác đã tự thu).
 model MerchantPayout {
-  id           String               @id @default(cuid())
-  storefrontId String
-  storefront   Storefront           @relation(fields: [storefrontId], references: [id])
-  amount       Int
-  status       MerchantPayoutStatus @default(PENDING)
+  id             String               @id @default(cuid())
+  storefrontId   String
+  storefront     Storefront           @relation(fields: [storefrontId], references: [id])
+  amount         Int
+  status         MerchantPayoutStatus @default(PENDING)
   /// Ảnh chụp tài khoản nhận lúc lập phiếu — đối tác đổi TK sau đó không đổi phiếu đã lập.
-  bankInfo     Json?
-  createdBy    String
-  createdAt    DateTime             @default(now())
-  paidAt       DateTime?
-  paidBy       String?
-  bankRef      String?
-  note         String?
-  lines        MerchantPayoutLine[]
+  bankInfo       Json?
+  createdBy      String
+  createdAt      DateTime             @default(now())
+  paidAt         DateTime?
+  paidBy         String?
+  bankRef        String?
+  /// Ghi chú admin nhập lúc lập phiếu; huỷ phiếu không đè lên đây (lý do huỷ có cột riêng).
+  note           String?
+  cancelledAt    DateTime?
+  /// Admin huỷ phiếu.
+  cancelledBy    String?
+  /// Lý do huỷ gửi cho gian hàng.
+  cancelReason   String?
+  /// Ảnh chụp các dòng lúc huỷ: dòng thật bị xoá để đơn quay lại bảng kê (unique (orderId, kind, refKey)), nên phiếu đã huỷ
+  /// vẫn xem lại được gồm những gì. `{ lineCount, orderCount, lines: [...] }`.
+  cancelSnapshot Json?
+  lines          MerchantPayoutLine[]
 
   @@index([storefrontId, createdAt])
   @@index([status, createdAt])
@@ -1665,6 +1674,9 @@ model MerchantPayoutLine {
   /// REVERSAL khi đơn RETURNED), `RETURN:<id yêu cầu trả>:ITEM:<orderItemId>` (trả một phần). Mỗi khoá một dòng duy nhất trên
   /// mọi phiếu.
   refKey           String                 @default("")
+  /// Số đơn vị của dòng hàng giao hộ mà dòng đảo này trả lại (trả một phần hoặc phần còn lại khi đơn bị trả); NULL = dòng SALE,
+  /// dòng đơn tự giao, hoặc dòng đảo lập trước khi có cột này.
+  units            Int?
   createdAt        DateTime               @default(now())
 
   @@unique([orderId, kind, refKey])

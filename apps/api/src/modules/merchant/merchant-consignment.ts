@@ -119,7 +119,7 @@ export interface ConsignmentSale {
 const shareOfUnits = (amount: number, units: number, quantity: number) =>
   units >= quantity ? amount : Math.round((amount * units) / quantity);
 
-function reversalOf(sale: ConsignmentSale, refKey: string, goods: number, commission: number, fee: number): SettlementLine {
+function reversalOf(sale: ConsignmentSale, refKey: string, units: number, goods: number, commission: number, fee: number): SettlementLine {
   return {
     orderId: sale.orderId,
     orderCode: sale.orderCode,
@@ -134,6 +134,7 @@ function reversalOf(sale: ConsignmentSale, refKey: string, goods: number, commis
     deliveredAt: null,
     orderItemId: sale.orderItemId,
     item: sale.item ?? null,
+    units,
   };
 }
 
@@ -158,19 +159,24 @@ export function consignmentPartialReversals(
     const goods = delta(sale.goodsAmount);
     const commission = delta(sale.commissionAmount);
     const fee = delta(sale.opsFeeAmount);
+    const units = after - before;
     before = after;
     if (goods === 0 && commission === 0 && fee === 0) continue;
-    out.push(reversalOf(sale, consignmentReturnRefKey(r.id, sale.orderItemId), goods, commission, fee));
+    out.push(reversalOf(sale, consignmentReturnRefKey(r.id, sale.orderItemId), units, goods, commission, fee));
   }
   return out;
 }
 
-/** Đơn bị trả (RETURNED) sau khi dòng đã vào phiếu: đảo phần còn lại sau các lần trả một phần; không còn gì thì null. */
+/**
+ * Đơn bị trả (RETURNED) sau khi dòng đã vào phiếu: đảo phần còn lại sau các lần trả một phần; không còn gì thì null. `units` của
+ * dòng đảo là số đơn vị trả lại (phần còn lại), không phải số lượng cả dòng hàng.
+ */
 export function consignmentWholeReversal(sale: ConsignmentSale, partials: SettlementLine[]): SettlementLine | null {
   const left = (k: 'goodsAmount' | 'commissionAmount' | 'opsFeeAmount') => sale[k] + partials.reduce((s, p) => s + p[k], 0);
   const goods = left('goodsAmount');
   const commission = left('commissionAmount');
   const fee = left('opsFeeAmount');
   if (goods === 0 && commission === 0 && fee === 0) return null;
-  return reversalOf(sale, consignmentRefKey(sale.orderItemId), goods, commission, fee);
+  const units = Math.max(0, sale.quantity - partials.reduce((s, p) => s + (p.units ?? 0), 0));
+  return reversalOf(sale, consignmentRefKey(sale.orderItemId), units, goods, commission, fee);
 }

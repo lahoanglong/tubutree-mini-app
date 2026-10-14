@@ -304,6 +304,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
           onSubmit={(e) => {
             e.preventDefault();
             const r = reason.trim();
+            if (!r) return;
             mut.mutate(() => (panel === 'fail' ? failFulfilOrder(o.id, r) : cancelFulfilOrder(o.id, r)));
           }}
         >
@@ -312,7 +313,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
             <input value={reason} onChange={(e) => setReason(e.target.value)} required maxLength={300} className={`mt-1 w-full ${FIELD_XS}`} />
           </label>
           <p className="text-xs text-stone-500">Đơn huỷ được hoàn kho; tiền khách đã trả trước được Tubu Tree hoàn theo chính sách.</p>
-          <button type="submit" disabled={busy} className={`${TOUCH_H} rounded-control bg-danger-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:opacity-50`}>
+          <button type="submit" disabled={busy || !reason.trim()} className={`${TOUCH_H} rounded-control bg-danger-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:opacity-50`}>
             {busy ? 'Đang huỷ…' : panel === 'fail' ? 'Xác nhận giao không thành công' : 'Xác nhận huỷ đơn'}
           </button>
         </form>

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { MerchantFulfilmentTab, pctInputToFraction, storeFeesText } from './merchant-fulfilment-tab';
 import { MerchantProductsTab } from './merchant-products-tab';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { scrollRegionProblems } from '@/test-utils/a11y';
 
 const inputByLabel = (root: ParentNode, label: string) => {
@@ -164,8 +164,11 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
   it('Q8 review S5: bảng kê của gian hàng kèm món giao hộ chưa vào đối soát tự động (chỉ đọc, kèm lý do), kể cả khi không còn khoản chờ lập phiếu', async () => {
     const excluded = {
       settleFrom: '2026-10-01T00:00:00.000Z',
-      total: 1,
-      lines: [{ orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: null, reason: 'TAKEOVER_UNCONFIRMED' }],
+      total: 2,
+      lines: [
+        { orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: null, reason: 'TAKEOVER_UNCONFIRMED' },
+        { orderId: 'o6', orderCode: 'TT6', orderItemId: 'i6', productName: 'Mật ong', variationName: null, quantity: 1, goodsAmount: 95000, createdAt: '2026-10-06T03:00:00.000Z', deliveredAt: null, reason: 'TAKEOVER_BEFORE_CONFIRM', confirmedAt: '2026-10-09T03:00:00.000Z' },
+      ],
     };
     setup({ '/admin/merchant-fulfilment/statements/': { body: { ...STATEMENT, lines: [], total: 0, consignmentExcluded: excluded } } });
     const r = render(<MerchantFulfilmentTab />);
@@ -175,10 +178,11 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     click(byText(row, 'button', 'Xem khoản'));
     await flush();
     expect(r.container.textContent).toContain('Không còn khoản nào chờ lập phiếu.');
-    expect(r.container.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (1 món)');
+    expect(r.container.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (2 món)');
     const region = r.container.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động của Trà Shan giao hộ"]')!;
     expect(region.textContent).toContain('TT5');
     expect(region.textContent).toContain('Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt');
+    expect(region.textContent).toContain('Đặt trước lúc xác nhận hàng ký gửi (09/10/2026) — đối soát riêng ngoài phiếu');
     expect(scrollRegionProblems(r.container)).toEqual([]);
   });
 
@@ -238,8 +242,56 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     const paid = api.calls.find((c) => c.url.includes('/payouts/mp1/paid'))!;
     expect(JSON.parse(String(paid.init!.body))).toEqual({ bankRef: 'FT555' });
     click(byText(root, 'button', 'Huỷ phiếu'));
+    await flush(1);
+    typeInto(confirmDialog()!.querySelector('textarea'), ' Sai tài khoản nhận ');
+    answerConfirm(true);
     await flush();
-    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/cancel'))).toBe(true);
+    const cancel = api.calls.find((c) => c.url.includes('/payouts/mp1/cancel'))!;
+    expect(JSON.parse(String(cancel.init!.body))).toEqual({ reason: 'Sai tài khoản nhận' });
+  });
+
+  it('R4-PARTNER-4: huỷ phiếu có hộp xác nhận bắt buộc nhập lý do; bấm Huỷ/Bỏ thì không gọi API', async () => {
+    const api = setup();
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    click(byText(root, 'button', 'Huỷ phiếu'));
+    await flush(1);
+    const dialog = confirmDialog()!;
+    expect(dialog.textContent).toContain('Huỷ phiếu đối soát?');
+    expect(dialog.textContent).toContain('Gian hàng đã được báo có phiếu sẽ nhận thông báo huỷ kèm lý do');
+    const accept = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Huỷ phiếu')!;
+    expect(accept.disabled).toBe(true);
+    typeInto(dialog.querySelector('textarea'), '   ');
+    expect(accept.disabled).toBe(true);
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/cancel'))).toBe(false);
+  });
+
+  it('R4-PARTNER-4: phiếu đã huỷ hiện lý do, ghi chú lúc lập, số khoản lúc huỷ và các khoản; không còn nút huỷ/đã chuyển', async () => {
+    const CANCELLED = {
+      ...PAYOUT,
+      status: 'CANCELLED',
+      note: 'Kỳ đầu tháng 10',
+      cancelledAt: '2026-10-13T03:00:00.000Z',
+      cancelledBy: 'adm1',
+      cancelReason: 'Sai tài khoản nhận',
+      cancelledLineCount: 2,
+    };
+    setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [CANCELLED], meta: { page: 1, limit: 20, total: 1 } } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('Đã huỷ');
+    expect(root.textContent).toContain('2 khoản lúc huỷ · lập 12/10/2026');
+    expect(root.textContent).toContain('Ghi chú lúc lập: Kỳ đầu tháng 10');
+    expect(root.textContent).toContain('Huỷ 13/10/2026 bởi adm1: Sai tài khoản nhận');
+    expect(byText(root, 'summary', 'Xem 2 khoản lúc huỷ')).not.toBeNull();
+    expect(byText(root, 'button', 'Huỷ phiếu')).toBeNull();
+    expect(byText(root, 'button', 'Đã chuyển')).toBeNull();
   });
 
   it('R2-MERCHANT-4: phiếu âm là tiền đối tác nộp — "Chờ thu", nội dung CK, hạn nộp; nút "Đã thu"', async () => {
@@ -410,6 +462,12 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(byText(mixed.container, 'button', 'Xác nhận hàng ký gửi')).not.toBeNull();
     expect(mixed.container.textContent).toContain('Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt');
     expect(mixed.container.textContent).toContain('Đặt lúc chưa xác nhận hàng ký gửi — xử lý ngoài phiếu');
+    mounted.pop()!.unmount();
+
+    const beforeConfirm = { ...line('i4', false), reason: 'TAKEOVER_BEFORE_CONFIRM', confirmedAt: '2026-10-09T03:00:00.000Z' };
+    const withConfirmed = await open([beforeConfirm, line('i5', true)]);
+    expect(withConfirmed.container.textContent).toContain('1 món đang chờ xác nhận hàng ký gửi');
+    expect(withConfirmed.container.textContent).toContain('Đặt trước lúc xác nhận hàng ký gửi (09/10/2026) — đối soát riêng ngoài phiếu');
   });
 
   it('R4-ADMIN-7: phiếu chờ thu đã quá hạn nộp hiện nhãn "Quá hạn nộp"; chưa tới hạn thì không', async () => {

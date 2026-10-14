@@ -247,8 +247,15 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
  */
 export function EditProductModal({ product, onClose, onSuccess }: { product: MerchantProduct; onClose: () => void; onSuccess: () => void }) {
   const tubu = product.fulfilment === 'TUBU';
+  const unlinkedCode = !tubu ? (product.pancakeLinkCode ?? null) : null;
   const live = product.approvalStatus === 'APPROVED';
   const base = product.pendingEdit ?? product;
+  const [codeMode, setCodeMode] = useState<'keep' | 'change' | 'selfShip'>('keep');
+  const [newCode, setNewCode] = useState('');
+  const [linked, setLinked] = useState<LinkablePancakeVariation | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const awaitingLink = !!unlinkedCode && codeMode !== 'selfShip';
+  const priceStockHidden = tubu || awaitingLink;
   const [name, setName] = useState(base.name);
   const [shortDesc, setShortDesc] = useState(base.shortDesc ?? '');
   const [description, setDescription] = useState(base.description);
@@ -263,15 +270,33 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     onError: (e: Error) => setMsg(e.message),
   });
 
+  const checkMut = useMutation({
+    mutationFn: (code: string) => checkPancakeVariation(code),
+    onSuccess: (v) => {
+      setLinked(v);
+      setCheckError(null);
+    },
+    onError: (e: Error) => {
+      setLinked(null);
+      setCheckError(e.message);
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    if (codeMode === 'change' && linked?.pancakeId !== newCode.trim()) {
+      setMsg('Bấm "Kiểm tra mã" để xác nhận mã biến thể Pancake mới trước khi lưu.');
+      return;
+    }
     const dto: UpdateMerchantProductInput = {};
     if (name.trim() !== base.name) dto.name = name.trim();
     if (shortDesc.trim() !== (base.shortDesc ?? '')) dto.shortDesc = shortDesc.trim();
     if (description.trim() !== base.description) dto.description = description.trim();
     if (imageUrl.trim() !== (base.images[0] ?? '')) dto.images = imageUrl.trim() ? [imageUrl.trim()] : [];
-    if (!tubu) {
+    if (codeMode === 'change') dto.pancakeCode = linked!.pancakeId;
+    if (codeMode === 'selfShip') dto.pancakeCode = null;
+    if (!priceStockHidden) {
       if (Number(basePrice) !== product.basePrice) dto.basePrice = Number(basePrice);
       if (Number(stock) !== (product.variations?.[0]?.stock ?? 0)) dto.stock = Number(stock);
     }
@@ -286,7 +311,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     <ModalShell title={`Sửa sản phẩm: ${product.name}`} onClose={onClose}>
       <div className="mt-3">
         <Notice>
-          {tubu ? 'Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu. ' : 'Giá và tồn kho có hiệu lực ngay. '}
+          {priceStockHidden ? 'Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu. ' : 'Giá và tồn kho có hiệu lực ngay. '}
           {live
             ? 'Đổi tên, mô tả hoặc ảnh thì Tubu Tree duyệt lại nội dung mới; trong lúc chờ, sản phẩm vẫn bán với nội dung cũ.'
             : 'Sản phẩm chưa hiển thị với khách; sửa xong Tubu Tree duyệt rồi mới bán.'}
@@ -304,7 +329,73 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
           <label htmlFor="merchant-edit-name" className="block text-xs font-medium text-stone-700">Tên sản phẩm</label>
           <input id="merchant-edit-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} className={INPUT} />
         </div>
-        {!tubu && (
+        {unlinkedCode && (
+          <fieldset className="space-y-2 rounded-control border border-stone-200 p-3">
+            <legend className="px-1 text-xs font-medium text-stone-700">Mã biến thể Pancake: {unlinkedCode}</legend>
+            <p className="text-xs text-stone-600">
+              Sản phẩm chưa được liên kết với kho Tubu (đã gỡ liên kết hoặc đang chờ Tubu Tree duyệt). Chọn cách tiếp tục bán:
+            </p>
+            <label className="flex items-start gap-2 text-xs text-stone-700">
+              <input type="radio" name="merchant-edit-code" checked={codeMode === 'keep'} onChange={() => setCodeMode('keep')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+              <span>
+                <span className="block font-semibold text-stone-900">Giữ mã hiện tại</span>
+                {product.isActive === false
+                  ? 'Bấm "Mở bán lại" ở danh sách để Tubu Tree duyệt liên kết lại mã này.'
+                  : 'Tubu Tree sẽ duyệt liên kết mã này.'}
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-xs text-stone-700">
+              <input type="radio" name="merchant-edit-code" checked={codeMode === 'change'} onChange={() => setCodeMode('change')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+              <span>
+                <span className="block font-semibold text-stone-900">Đổi sang mã Pancake khác</span>
+                Mã mới được Tubu Tree duyệt lại trước khi liên kết; sản phẩm tự mở bán lại ngay khi duyệt xong.
+              </span>
+            </label>
+            {codeMode === 'change' && (
+              <div className="space-y-2">
+                <label htmlFor="merchant-edit-new-code" className="block text-xs font-medium text-stone-700">Mã biến thể Pancake mới *</label>
+                <div className="flex gap-2">
+                  <input
+                    id="merchant-edit-new-code"
+                    value={newCode}
+                    onChange={(e) => {
+                      setNewCode(e.target.value);
+                      setLinked(null);
+                      setCheckError(null);
+                    }}
+                    maxLength={64}
+                    className={`${INPUT_CLASS} ${TOUCH_H} flex-1`}
+                  />
+                  <button type="button" onClick={() => checkMut.mutate(newCode)} disabled={!newCode.trim() || checkMut.isPending} className={BTN_XS_SECONDARY}>
+                    {checkMut.isPending ? 'Đang kiểm tra…' : 'Kiểm tra mã'}
+                  </button>
+                </div>
+                {linked && (
+                  <p role="status" className="flex items-start gap-1 text-xs text-success-fg">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      {linked.productName} ({linked.variationName}) · {formatVnd(linked.salePrice ?? linked.retailPrice)}
+                      {linked.requiresAdminConfirm ? ' · mã này đang thuộc một sản phẩm Tubu Tree đang bán, chỉ được liên kết khi Tubu Tree xác nhận lúc duyệt.' : ''}
+                    </span>
+                  </p>
+                )}
+                {checkError && (
+                  <p role="alert" className="text-xs text-danger-fg">
+                    {checkError}
+                  </p>
+                )}
+              </div>
+            )}
+            <label className="flex items-start gap-2 text-xs text-stone-700">
+              <input type="radio" name="merchant-edit-code" checked={codeMode === 'selfShip'} onChange={() => setCodeMode('selfShip')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+              <span>
+                <span className="block font-semibold text-stone-900">Chuyển sang gian hàng tự giao</span>
+                Bỏ mã Pancake. Bạn tự đóng gói, gửi hàng và tự đặt giá, tồn kho bên dưới.
+              </span>
+            </label>
+          </fieldset>
+        )}
+        {!priceStockHidden && (
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label htmlFor="merchant-edit-price" className="block text-xs font-medium text-stone-700">Giá bán (đồng)</label>

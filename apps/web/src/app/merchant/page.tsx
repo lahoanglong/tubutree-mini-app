@@ -1108,7 +1108,9 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                       <td className="px-3 py-2.5 text-xs text-stone-600">
                         {tubuFulfils ? 'Tubu giao hộ' : 'Gian hàng tự giao'}
                         {p.pancakeLinkCode && p.fulfilment !== 'TUBU' && (
-                          <div className="text-[11px] text-stone-500">Mã Pancake {p.pancakeLinkCode}, chờ duyệt</div>
+                          <div className="text-[11px] text-stone-500">
+                            Mã Pancake {p.pancakeLinkCode}, {p.approvalStatus === 'PENDING_REVIEW' ? 'chờ duyệt' : 'đã gỡ liên kết'}
+                          </div>
                         )}
                       </td>
                       <td className="px-3 py-2.5">
