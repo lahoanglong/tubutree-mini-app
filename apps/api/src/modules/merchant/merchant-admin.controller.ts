@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,6 +27,8 @@ export class MerchantStoreTermsDto {
 
 class MerchantPayoutListQuery extends PaginationQuery {
   @IsOptional() @IsString() storefrontId?: string;
+  /** PENDING = phiếu chờ chuyển cho đối tác hoặc chờ đối tác nộp lại. */
+  @IsOptional() @IsIn(['PENDING', 'PAID', 'CANCELLED']) status?: 'PENDING' | 'PAID' | 'CANCELLED';
 }
 
 /** Admin: giám sát đơn đối tác tự giao và đối soát (docs/2026-10-14-merchant-fulfilment-design.md mục 7, 8). */
@@ -58,7 +60,7 @@ export class MerchantAdminController {
 
   @Get('payouts')
   payouts(@Query() q: MerchantPayoutListQuery) {
-    return this.fulfilment.listPayouts(q.storefrontId, q.page, q.limit);
+    return this.fulfilment.listPayouts(q.storefrontId, q.page, q.limit, q.status);
   }
 
   @Post('payouts')

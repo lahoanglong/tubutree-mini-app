@@ -1,7 +1,7 @@
 import type { ConsignmentExcluded, ConsignmentExcludedLine, ConsignmentTerms, SettlementLine } from '@/lib/merchant-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { ScrollRegion, ToneBadge } from '@/components/admin/ui';
+import { BTN_XS_SECONDARY, ScrollRegion, ToneBadge } from '@/components/admin/ui';
 
 /** Số tiền có dấu: dương Tubu trả gian hàng, âm gian hàng nộp lại Tubu. */
 export function signedVnd(n: number): string {
@@ -104,8 +104,15 @@ export function SettlementTable<L extends SettlementLine>({
 
 export const CONSIGNMENT_EXCLUDED_TITLE = 'Hàng Tubu giao hộ chưa vào đối soát tự động';
 
+const awaitingConfirm = (l: ConsignmentExcludedLine) => l.reason === 'TAKEOVER_UNCONFIRMED' && l.linkPending !== false;
+
 function excludedReason(l: ConsignmentExcludedLine, settleFrom: string | null, viewer: 'merchant' | 'admin'): string {
   if (l.reason === 'BEFORE_SETTLE_FROM') return `Đặt trước ${formatDate(settleFrom)} — trước khi đối soát tự động`;
+  if (!awaitingConfirm(l)) {
+    return viewer === 'admin'
+      ? 'Đặt lúc chưa xác nhận hàng ký gửi — xử lý ngoài phiếu'
+      : 'Đặt lúc chưa xác nhận hàng ký gửi — liên hệ Tubu Tree để đối chiếu';
+  }
   return viewer === 'admin' ? 'Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt' : 'Chờ Tubu Tree xác nhận là hàng ký gửi của bạn';
 }
 
@@ -117,12 +124,16 @@ export function ConsignmentExcludedList({
   data,
   viewer = 'merchant',
   storeTitle,
+  onOpenConfirm,
 }: {
   data: ConsignmentExcluded | null | undefined;
   viewer?: 'merchant' | 'admin';
   storeTitle?: string;
+  /** Admin: mở màn xác nhận hàng ký gửi (Duyệt SP đối tác) cho các món chờ xác nhận. */
+  onOpenConfirm?: () => void;
 }) {
   if (!data || data.lines.length === 0) return null;
+  const unconfirmed = data.lines.filter(awaitingConfirm).length;
   const title = `${CONSIGNMENT_EXCLUDED_TITLE} (${data.total} món)`;
   const more = data.total - data.lines.length;
   return (
@@ -137,6 +148,16 @@ export function ConsignmentExcludedList({
           ? 'Kho Tubu Tree đã giao và thu tiền nhưng không tự vào bảng kê: đơn đặt trước mốc merchant.consignment_settle_from, hoặc biến thể nhận lại chưa được xác nhận hàng ký gửi lúc khách đặt. Chỉ để đối chiếu, không cộng vào phiếu.'
           : 'Kho Tubu Tree đã giao và thu tiền các món này nhưng chúng không tự vào bảng kê: đơn đặt trước ngày bắt đầu đối soát tự động (thanh toán theo thoả thuận trước đó), hoặc biến thể nhận lại chưa được Tubu Tree xác nhận là hàng ký gửi của bạn lúc khách đặt. Danh sách chỉ để đối chiếu; cần xử lý thì liên hệ Tubu Tree.'}
       </p>
+      {viewer === 'admin' && onOpenConfirm && unconfirmed > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-control border border-warning-fg bg-warning-bg px-3 py-2 text-xs text-warning-fg">
+          <span className="min-w-0 flex-1">
+            {unconfirmed} món đang chờ xác nhận hàng ký gửi: xác nhận thì đơn đặt từ lúc đó mới vào đối soát.
+          </span>
+          <button type="button" onClick={onOpenConfirm} className={BTN_XS_SECONDARY}>
+            Xác nhận hàng ký gửi
+          </button>
+        </div>
+      )}
       <ScrollRegion
         label={storeTitle ? `${CONSIGNMENT_EXCLUDED_TITLE} của ${storeTitle}` : CONSIGNMENT_EXCLUDED_TITLE}
         className="rounded-card border border-stone-200 bg-stone-0 shadow-card"

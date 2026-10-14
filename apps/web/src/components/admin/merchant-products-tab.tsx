@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Leaf, X } from 'lucide-react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,7 +18,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
 
 /**
  * "Duyệt SP đối tác" — P0 A6-07 (docs/audit-2026-09/06-web.md): API `/admin/merchant-products/pending`
@@ -31,7 +31,7 @@ import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_X
  * Endpoint này không nhận tham số `order` (PaginationQuery thường, khác DealerAppsQuery/
  * ReturnRequestsQuery) nên không dùng "cũ nhất lên đầu" — chỉ mergeQueuePages(pages, false).
  */
-export function MerchantProductsTab() {
+export function MerchantProductsTab({ focusConsignment = false }: { focusConsignment?: boolean }) {
   const q = useInfiniteQuery({
     queryKey: ['admin-merchant-products-pending'],
     queryFn: ({ pageParam }) => listPendingMerchantProducts(pageParam, ADMIN_QUEUE_PAGE_SIZE),
@@ -78,7 +78,7 @@ export function MerchantProductsTab() {
           {q.isFetchNextPageError && <p className="mt-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
         </div>
       )}
-      <LinkedMerchantProducts />
+      <LinkedMerchantProducts focusConsignment={focusConsignment} />
     </div>
   );
 }
@@ -131,20 +131,50 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
   );
 }
 
-function LinkedMerchantProducts() {
+/**
+ * "Đang liên kết mã Pancake": chip "Chờ xác nhận ký gửi" lọc đúng các liên kết nhận lại hàng Tubu đang bán mà admin chưa xác nhận
+ * (cùng điều kiện số trên "Việc cần xử lý"). `focusConsignment`: mở từ "Việc cần xử lý" hay từ bảng kê đối soát thì vào thẳng chip
+ * này và cuộn tới đây — danh sách nằm dưới hàng sản phẩm chờ duyệt.
+ */
+function LinkedMerchantProducts({ focusConsignment }: { focusConsignment: boolean }) {
+  const [filter, setFilter] = useState<'ALL' | 'PENDING'>(focusConsignment ? 'PENDING' : 'ALL');
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focusConsignment) section.current?.scrollIntoView?.({ block: 'start' });
+  }, [focusConsignment]);
   const q = useQuery({
-    queryKey: ['admin-merchant-products-linked'],
-    queryFn: () => listLinkedMerchantProducts(1, ADMIN_QUEUE_PAGE_SIZE),
+    queryKey: ['admin-merchant-products-linked', filter],
+    queryFn: () => listLinkedMerchantProducts(1, ADMIN_QUEUE_PAGE_SIZE, filter === 'PENDING' ? 'PENDING' : undefined),
+  });
+  const pendingQ = useQuery({
+    queryKey: ['admin-merchant-products-linked', 'PENDING', 'count'],
+    queryFn: () => listLinkedMerchantProducts(1, 1, 'PENDING'),
   });
   const rows = q.data?.data ?? [];
+  const pendingCount = pendingQ.data?.meta.total ?? 0;
   return (
-    <section className="mt-8" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
-      <h2 className="text-base font-semibold text-stone-900">Đang liên kết mã Pancake ({q.data?.meta.total ?? 0})</h2>
+    <section ref={section} className="mt-8 scroll-mt-4" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
+      <h2 className="text-base font-semibold text-stone-900">
+        {filter === 'PENDING' ? 'Liên kết chờ xác nhận hàng ký gửi' : 'Đang liên kết mã Pancake'} ({q.data?.meta.total ?? 0})
+      </h2>
       <p className="mt-1 text-xs text-stone-500">
         Sản phẩm đối tác &quot;Tubu giao hộ&quot; đang giữ biến thể Pancake. Gỡ liên kết trả biến thể về sản phẩm gốc và tắt bán sản phẩm đối tác.
+        Liên kết nhận lại hàng Tubu đang bán chỉ vào đối soát sau khi bạn xác nhận đó là hàng ký gửi.
       </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" aria-pressed={filter === 'ALL'} onClick={() => setFilter('ALL')} className={chipClass(filter === 'ALL')}>
+          Tất cả
+        </button>
+        <button type="button" aria-pressed={filter === 'PENDING'} onClick={() => setFilter('PENDING')} className={chipClass(filter === 'PENDING')}>
+          Chờ xác nhận ký gửi ({pendingCount})
+        </button>
+      </div>
       {q.isError && <p className="mt-2 text-sm text-danger-fg">Không tải được danh sách đang liên kết.</p>}
-      {q.data && rows.length === 0 && <p className="mt-2 text-sm text-stone-500">Chưa có sản phẩm đối tác nào liên kết mã Pancake.</p>}
+      {q.data && rows.length === 0 && (
+        <p className="mt-2 text-sm text-stone-500">
+          {filter === 'PENDING' ? 'Không còn liên kết nào chờ xác nhận hàng ký gửi.' : 'Chưa có sản phẩm đối tác nào liên kết mã Pancake.'}
+        </p>
+      )}
       <div className="mt-3 space-y-3">
         {rows.map((l) => (
           <LinkedRow key={l.id} link={l} />
@@ -258,6 +288,7 @@ function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
     onSuccess: () => {
       setAsking(false);
       void qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
+      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
     },
   });
   const store = l.product.storefront?.title ?? 'gian hàng';

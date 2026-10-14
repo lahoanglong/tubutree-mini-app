@@ -7,7 +7,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type MerchantPayoutStatus } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -664,9 +664,10 @@ export class MerchantFulfilmentService {
   async consignmentExcluded(storefrontId: string, db: Db = this.prisma) {
     const settleFrom = await this.consignmentSettleFrom(db);
     const store = Prisma.sql`${storefrontId}`;
-    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; total: number }[]>`
+    const rows = await db.$queryRaw<{ orderItemId: string; orderId: string; beforeSettleFrom: boolean; linkPending: boolean; total: number }[]>`
       SELECT oi."id" AS "orderItemId", o."id" AS "orderId",
              ${settleFrom ? Prisma.sql`(o."createdAt" < ${settleFrom})` : Prisma.sql`false`} AS "beforeSettleFrom",
+             ${consignmentLinkPendingSql(store)} AS "linkPending",
              COUNT(*) OVER ()::int AS "total"
         FROM "order_items" oi
         JOIN "orders" o ON o."id" = oi."orderId"
@@ -708,6 +709,7 @@ export class MerchantFulfilmentService {
           createdAt: found.order.createdAt,
           deliveredAt: found.order.deliveredAt,
           reason: r.beforeSettleFrom ? ('BEFORE_SETTLE_FROM' as const) : ('TAKEOVER_UNCONFIRMED' as const),
+          linkPending: r.linkPending,
         },
       ];
     });
@@ -1050,8 +1052,8 @@ export class MerchantFulfilmentService {
     return this.prisma.merchantPayout.findUniqueOrThrow({ where: { id: payoutId } });
   }
 
-  async listPayouts(storefrontId: string | undefined, page = 1, limit = 20) {
-    const where: Prisma.MerchantPayoutWhereInput = storefrontId ? { storefrontId } : {};
+  async listPayouts(storefrontId: string | undefined, page = 1, limit = 20, status?: MerchantPayoutStatus) {
+    const where: Prisma.MerchantPayoutWhereInput = { ...(storefrontId ? { storefrontId } : {}), ...(status ? { status } : {}) };
     const [total, rows, dueDays] = await Promise.all([
       this.prisma.merchantPayout.count({ where }),
       this.prisma.merchantPayout.findMany({
@@ -1278,6 +1280,20 @@ export class MerchantFulfilmentService {
     return this.prisma.order.count({ where: overdueWhere(await this.slaConfig(), now) });
   }
 
+  /**
+   * Số gian hàng đang có khoản đã đủ hạn chờ lập phiếu — đúng các dòng "Lập phiếu đối soát" bấm được ở tổng quan admin
+   * (settleableLines > 0). Chỉ dựng bảng kê cho gian hàng có khoản chờ (storesWithPending), lần lượt để không chiếm hết pool.
+   */
+  async countStoresToSettle(now = new Date()): Promise<number> {
+    const [candidates, cfg] = await Promise.all([this.storesWithPending(), this.settlementConfig()]);
+    let n = 0;
+    for (const storefrontId of candidates) {
+      const { lines } = await this.statementFor(storefrontId, now, this.prisma, cfg);
+      if (lines.length > 0) n += 1;
+    }
+    return n;
+  }
+
   private async notifyOwner(ownerUserId: string | null, template: string, data: Record<string, string>) {
     if (!ownerUserId || !this.notifications) return;
     await this.notifications
@@ -1320,6 +1336,18 @@ function consignmentLinkedSql(store: Prisma.Sql, confirmedOnly: boolean): Prisma
        WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
          AND o."createdAt" >= l."linkedAt" AND (l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")
          ${confirmedOnly ? Prisma.sql`AND (NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))` : Prisma.empty})`;
+}
+
+/**
+ * Liên kết của dòng `oi` lúc đặt đơn `o` vẫn đang chờ admin xác nhận hàng ký gửi (cùng điều kiện CONSIGNMENT_PENDING_LINK_WHERE
+ * của màn "Duyệt SP đối tác" và số "Việc cần xử lý"): còn việc để xác nhận. Liên kết đã xác nhận sau lúc đặt hoặc đã gỡ thì không.
+ */
+function consignmentLinkPendingSql(store: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`EXISTS (
+      SELECT 1 FROM "merchant_pancake_links" l
+       WHERE l."storefrontId" = ${store} AND l."variationId" = oi."variationId"
+         AND o."createdAt" >= l."linkedAt"
+         AND l."takeover" AND l."consignmentConfirmedAt" IS NULL AND l."unlinkedAt" IS NULL)`;
 }
 
 /**

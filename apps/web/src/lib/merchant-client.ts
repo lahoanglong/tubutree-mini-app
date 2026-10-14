@@ -395,6 +395,8 @@ export interface ConsignmentExcludedLine {
   deliveredAt: string | null;
   /** BEFORE_SETTLE_FROM: đặt trước mốc đối soát tự động; TAKEOVER_UNCONFIRMED: biến thể nhận lại chưa xác nhận hàng ký gửi lúc đặt. */
   reason: 'BEFORE_SETTLE_FROM' | 'TAKEOVER_UNCONFIRMED';
+  /** Liên kết của món lúc đặt vẫn đang chờ admin xác nhận hàng ký gửi (còn việc để xác nhận); false = đã xác nhận sau lúc đặt hoặc đã gỡ. Thiếu ở API cũ. */
+  linkPending?: boolean;
 }
 
 export interface ConsignmentExcluded {
@@ -493,8 +495,9 @@ export const updateAdminMerchantStoreTerms = (
 ) =>
   apiFetch<unknown>(`/admin/merchant-fulfilment/stores/${encodeURIComponent(storefrontId)}/terms`, { method: 'PATCH', body });
 
-export const listAdminMerchantPayouts = (page = 1, limit = MERCHANT_PAGE_SIZE) =>
-  apiFetch<Page<MerchantPayout>>(`/admin/merchant-fulfilment/payouts?page=${page}&limit=${limit}`);
+/** `status: 'PENDING'`: chỉ phiếu chờ chuyển cho đối tác hoặc chờ đối tác nộp lại. */
+export const listAdminMerchantPayouts = (page = 1, limit = MERCHANT_PAGE_SIZE, status?: 'PENDING') =>
+  apiFetch<Page<MerchantPayout>>(`/admin/merchant-fulfilment/payouts?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
 
 /** `expectedTotal`: tổng bảng kê admin đang xem — server tính lại khác số này thì từ chối (409) để admin xem lại. */
 export const createAdminMerchantPayout = (storefrontId: string, expectedTotal: number, note?: string) =>

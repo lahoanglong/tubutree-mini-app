@@ -39,6 +39,7 @@ import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
 import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
 import {
+  CONSIGNMENT_PENDING_LINK_WHERE,
   describePancakeLink,
   linkTubuFulfilledVariation,
   unlinkTubuFulfilledVariation,
@@ -1419,9 +1420,12 @@ export class AdminService {
     return paginated(data, page, limit, total);
   }
 
-  /** Sản phẩm đối tác đang giữ biến thể Pancake ("Tubu giao hộ" đã duyệt) — nơi admin gỡ liên kết. */
-  async listLinkedMerchantProducts(page: number, limit: number) {
-    const where = { unlinkedAt: null };
+  /**
+   * Sản phẩm đối tác đang giữ biến thể Pancake ("Tubu giao hộ" đã duyệt) — nơi admin gỡ liên kết và xác nhận hàng ký gửi.
+   * `consignment: 'PENDING'` chỉ lấy liên kết nhận lại còn chờ xác nhận, khớp số "Việc cần xử lý".
+   */
+  async listLinkedMerchantProducts(page: number, limit: number, consignment?: 'PENDING') {
+    const where: Prisma.MerchantPancakeLinkWhereInput = consignment === 'PENDING' ? CONSIGNMENT_PENDING_LINK_WHERE : { unlinkedAt: null };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.merchantPancakeLink.findMany({
         where,
