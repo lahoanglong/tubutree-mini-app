@@ -134,6 +134,22 @@ describe('OrderStatusService — D1: không huỷ sau khi bàn giao vận chuy�
     expect(reversal.reverseFinancials).not.toHaveBeenCalled();
   });
 
+  it('Pancake báo huỷ (status 6) đơn PACKED mới có mã vận đơn hãng (bưu tá chưa lấy) → huỷ + hoàn tiền, lật không ràng mã vận đơn', async () => {
+    const { svc, tx, reversal, pancakeHooks } = make(makeOrder({ status: 'PACKED' }));
+    await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'PANCAKE', note: 'Pancake: đơn đã huỷ' });
+    expect(tx.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.not.objectContaining({ shippingCode: expect.anything() }) }),
+    );
+    expect(reversal.reverseFinancials).toHaveBeenCalled();
+    expect(pancakeHooks.precheckCancel).not.toHaveBeenCalled();
+  });
+
+  it('admin vẫn không huỷ được đơn PACKED đã có mã vận đơn hãng (chỉ Pancake tự báo huỷ mới qua)', async () => {
+    const { svc, reversal } = make(makeOrder({ status: 'PACKED' }));
+    await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toBeInstanceOf(CancelAfterHandoverError);
+    expect(reversal.reverseFinancials).not.toHaveBeenCalled();
+  });
+
   it('cron/hệ thống gặp đơn đã bàn giao → không huỷ, đưa vào "Cần xử lý Pancake"', async () => {
     const { svc, prisma, tx } = make(makeOrder({ status: 'PACKED' }));
     await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toBeInstanceOf(

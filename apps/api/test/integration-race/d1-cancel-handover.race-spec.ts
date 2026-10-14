@@ -155,4 +155,33 @@ describe('D1 — không huỷ/hoàn tiền sau bàn giao vận chuyển (real Po
     expect(after.status).toBe('CONFIRMED');
     expect(await walletOf(user.id)).toBe(1_000_000);
   });
+  it('(e) Pancake báo huỷ (status 6) đơn PACKED mới đặt hãng (có mã vận đơn, bưu tá chưa lấy) → CANCELLED + hoàn Ví, không kẹt', async () => {
+    const { user, order } = await paidWalletOrder({ shippingCode: 'GHN555', shippingPartner: 'GHN' });
+
+    await status.setStatus(order.id, 'CANCELLED', { actorType: 'PANCAKE', note: 'Pancake: đơn đã huỷ' });
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('CANCELLED');
+    expect(after.paymentStatus).toBe('REFUNDED');
+    expect(await walletOf(user.id)).toBe(1_000_000 + order.total);
+  });
+
+  it('(f) Pancake báo huỷ khi webhook vận chuyển gán mã vận đơn chen giữa → vẫn huỷ + hoàn đúng 1 lần', async () => {
+    const { user, order } = await paidWalletOrder();
+    const original = prisma.order.findFirst.bind(prisma.order);
+    const spy = jest.spyOn(prisma.order, 'findFirst').mockImplementationOnce((async (args: Parameters<typeof original>[0]) => {
+      const snap = await original(args);
+      await prisma.order.update({ where: { id: order.id }, data: { shippingCode: 'GHN999', shippingPartner: 'GHN' } });
+      return snap;
+    }) as never);
+    try {
+      await status.setStatus(order.id, 'CANCELLED', { actorType: 'PANCAKE' });
+    } finally {
+      spy.mockRestore();
+    }
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('CANCELLED');
+    expect(after.paymentStatus).toBe('REFUNDED');
+    expect(await walletOf(user.id)).toBe(1_000_000 + order.total);
+  });
 });

@@ -222,6 +222,16 @@ describe('cancelHandover (D1: chỉ huỷ được tới khi bàn giao vận chu
     expect(cancelHandover({ ...back, gomdonStatus: '8' })).toBeNull();
     expect(cancelHandover({ ...back, gomdonStatus: '9' })).toBeNull();
   });
+
+  it('Pancake tự báo huỷ: mã vận đơn hãng (kho đã đặt hãng, bưu tá chưa lấy) chưa phải bàn giao — Pancake huỷ thì huỷ luôn vận đơn', () => {
+    const booked = { status: 'PACKED', shippingCode: 'GHN1', shippingPartner: 'GHN' };
+    expect(cancelHandover(booked, { pancakeReportedCancel: true })).toBeNull();
+    expect(cancelHandover(booked)?.kind).toBe('CARRIER_WAYBILL');
+    expect(cancelHandover({ ...booked, status: 'SHIPPING' }, { pancakeReportedCancel: true })?.kind).toBe('SHIPPING');
+    expect(cancelHandover({ ...booked, shippedAt: new Date() }, { pancakeReportedCancel: true })?.kind).toBe('MERCHANT_SHIPPED');
+    const picked = { status: 'CONFIRMED', hasRecyclingPickup: true, gomdonOrderId: '9', gomdonPartnerCode: 'B9', shippingCode: 'B9', gomdonStatus: '3' };
+    expect(cancelHandover(picked, { pancakeReportedCancel: true })?.kind).toBe('GOMDON_PICKED_UP');
+  });
 });
 
 describe('allowedNextStatuses — không hiện Huỷ sau khi bàn giao (D1)', () => {

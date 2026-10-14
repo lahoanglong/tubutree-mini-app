@@ -157,14 +157,18 @@ const GOMDON_GOODS_NOT_WITH_CARRIER: ReadonlySet<string> = new Set(['8', '9']);
  * (khách, admin, CSKH, kho, nhà bán). Mốc bàn giao là bất kỳ dấu hiệu nào: đơn đã SHIPPING, đã có mã vận đơn của hãng
  * (Pancake gán khi kho đặt hãng), gian hàng tự giao đã báo gửi (shippedAt), hay bưu tá Gomdon đã lấy hàng. Vận đơn
  * Gomdon vừa tạo (bưu tá chưa tới) chưa phải bàn giao. null = còn huỷ được.
+ *
+ * `pancakeReportedCancel`: chính Pancake báo huỷ. Mã vận đơn hãng chỉ là kho đã đặt hãng — Pancake chỉ cho huỷ khi hàng
+ * chưa gửi đi (trạng thái < 2) và huỷ luôn vận đơn đó, nên mã vận đơn một mình không chặn lệnh huỷ này; còn chặn nếu đơn
+ * đã SHIPPING, gian hàng đã gửi, hay bưu tá Gomdon đã lấy hàng (Pancake không biết các mốc đó).
  */
-export function cancelHandover(order: HandoverFacts): Handover | null {
+export function cancelHandover(order: HandoverFacts, opts: { pancakeReportedCancel?: boolean } = {}): Handover | null {
   const gomdonCodes = [order.gomdonPartnerCode, order.gomdonOrderId].filter((c): c is string => Boolean(c));
   const hasGomdonWaybill = Boolean(order.hasRecyclingPickup) && gomdonCodes.length > 0;
   if (hasGomdonWaybill && GOMDON_GOODS_NOT_WITH_CARRIER.has(order.gomdonStatus ?? '')) return null;
   if (order.status === 'SHIPPING') return { kind: 'SHIPPING', detail: 'đơn đang giao' };
   if (order.shippedAt) return { kind: 'MERCHANT_SHIPPED', detail: 'gian hàng đã gửi hàng cho đơn vị vận chuyển' };
-  if (order.shippingCode && !gomdonCodes.includes(order.shippingCode)) {
+  if (!opts.pancakeReportedCancel && order.shippingCode && !gomdonCodes.includes(order.shippingCode)) {
     return { kind: 'CARRIER_WAYBILL', detail: `đã có mã vận đơn ${order.shippingPartner ?? 'hãng vận chuyển'} ${order.shippingCode}` };
   }
   if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {

@@ -151,8 +151,9 @@ export class OrderStatusService {
       }
     }
 
+    const handoverOpts = { pancakeReportedCancel: opts.actorType === 'PANCAKE' };
     if (targetStatus === 'CANCELLED' && !opts.returnedToSender) {
-      const handover = cancelHandover(order);
+      const handover = cancelHandover(order, handoverOpts);
       if (handover) {
         const err = new CancelAfterHandoverError(order.code, from, handover);
         // Webhook Pancake tự đưa vào "Cần xử lý" (có báo động); cron/hệ thống không có ai đọc lỗi nên ghi dấu ở đây.
@@ -169,13 +170,16 @@ export class OrderStatusService {
         : undefined;
 
     // D1 trong cùng câu lật: webhook gán mã vận đơn / Gomdon báo đã lấy hàng / nhà bán báo đã gửi chen giữa lúc đọc
-    // và lúc lật thì lần huỷ này trượt (rồi báo lỗi bàn giao ở dưới), không hoàn tiền cho hàng đang nằm ở hãng.
+    // và lúc lật thì lần huỷ này trượt (rồi báo lỗi bàn giao ở dưới), không hoàn tiền cho hàng đang nằm ở hãng. Pancake tự
+    // báo huỷ thì mã vận đơn không phải mốc bàn giao (xem cancelHandover) nên không ràng cột đó.
     const handoverGuard =
       targetStatus === 'CANCELLED' && !opts.returnedToSender
         ? Object.fromEntries(
-            Object.entries({ shippedAt: order.shippedAt, shippingCode: order.shippingCode, gomdonStatus: order.gomdonStatus }).filter(
-              ([, v]) => v !== undefined,
-            ),
+            Object.entries({
+              shippedAt: order.shippedAt,
+              ...(handoverOpts.pancakeReportedCancel ? {} : { shippingCode: order.shippingCode }),
+              gomdonStatus: order.gomdonStatus,
+            }).filter(([, v]) => v !== undefined),
           )
         : {};
 
@@ -247,7 +251,7 @@ export class OrderStatusService {
     if (!won) {
       this.logger.warn(`setStatus thua race: đơn ${order.code} đã đổi trạng thái bởi request khác.`);
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
-      const handover = targetStatus === 'CANCELLED' && !opts.returnedToSender && current.status !== 'CANCELLED' ? cancelHandover(current) : null;
+      const handover = targetStatus === 'CANCELLED' && !opts.returnedToSender && current.status !== 'CANCELLED' ? cancelHandover(current, handoverOpts) : null;
       if (handover) throw new CancelAfterHandoverError(order.code, current.status as OrderStatus, handover);
       return current;
     }

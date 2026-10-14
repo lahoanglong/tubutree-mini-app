@@ -840,6 +840,15 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     expect(attentionFlags(txUpdateMany)[0]).toContain('Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (đơn đang giao)');
   });
 
+  it('"Đã huỷ" (6) khi đơn PACKED mới đặt hãng (có mã vận đơn, chưa giao) → huỷ, hoàn kho, đảo điểm như thường, không vào hàng đợi', async () => {
+    const order = { ...base, status: 'PACKED', shippingCode: 'GHN1', shippingPartner: 'GHN' };
+    const { proc, txUpdateMany, loyalty } = setup(order);
+    await proc.onStatusUpdated({ id: 'p1', status: 6 });
+    expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'CANCELLED' });
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+    expect(attentionFlags(txUpdateMany)).toHaveLength(0);
+  });
+
   it('"Đã hoàn" (5) sau "Đang hoàn" (4) → huỷ xong thì tự gỡ việc "ĐANG HOÀN" khỏi hàng đợi (R2-PANCAKE-4)', async () => {
     const order = { ...base, status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN (giao không thành…' };
     const { proc, prisma, orderUpdateMany } = setup(order);
