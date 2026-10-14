@@ -77,12 +77,13 @@ Bảng kê (statement) không lưu sẵn mà tính từ đơn lúc xem; dòng ch
    con hoàn đúng phần điểm của đơn đó.
 4. Phí giao **theo từng kiện**: kiện Tubu dùng luật hiện có (`shipping.free_threshold`, `shipping.flat_fee_below_threshold`,
    ưu đãi hạng) trên tiền hàng của kiện; kiện đối tác dùng `Storefront.shippingFee` (trống thì `merchant.default_shipping_fee`),
-   miễn phí khi tiền hàng của kiện đạt `Storefront.freeShipFrom`. Mã freeship (Tubu tài trợ) miễn phí mọi kiện; đối tác vẫn
-   được đối soát phí giao của kiện mình.
+   miễn phí khi tiền hàng của kiện đạt `Storefront.freeShipFrom`. Ngưỡng miễn phí của Tubu và mã freeship (Tubu tài trợ) chỉ
+   áp cho kiện Tubu: phí giao của kiện đối tác là tiền của đối tác, chỉ được miễn theo ngưỡng của chính gian hàng. Giỏ và trang
+   thanh toán vì vậy tính tiến độ "mua thêm để được miễn phí vận chuyển" trên tiền hàng phần Tubu giao.
 5. Thanh toán: kiện đối tác chỉ nhận **COD** (đối tác thu) hoặc **Ví Tubu** (Tubu giữ tiền). Chuyển khoản được Pancake đối soát
    theo mã đơn Pancake nên không có đường xác nhận cho đơn đối tác; ZaloPay đang ẩn ở cả hai app. Lần đặt bị tách cũng chỉ nhận
-   COD/Ví vì một lệnh thanh toán ngoài chỉ trỏ được một mã đơn. Báo giá trả `paymentMethods` để FE tắt sẵn lựa chọn không hợp
-   lệ và nói lý do; API vẫn chặn (mã lỗi `PAYMENT_METHOD_NOT_ALLOWED`).
+   COD/Ví vì một lệnh thanh toán ngoài chỉ trỏ được một mã đơn. Báo giá trả `blockedPaymentMethods` (phương thức → câu lý do)
+   để FE tắt sẵn lựa chọn không hợp lệ, hiện đúng lý do và tự chuyển về COD; API vẫn chặn (mã lỗi `PAYMENT_METHOD_NOT_ALLOWED`).
 6. Thu gom vỏ tái chế (Gomdon) chỉ gắn vào đơn Tubu; lần đặt không có hàng Tubu mà bật thu gom bị từ chối.
 7. Ghi đơn: một transaction tạo mọi đơn con, giữ tồn từng dòng, trừ điểm một lần dưới khoá dòng user rồi ghi sổ điểm theo
    từng đơn, trừ ví theo từng đơn, tạo hoa hồng CTV theo từng đơn. Mã giảm giá ghi nhận lượt dùng trên đơn đầu tiên
