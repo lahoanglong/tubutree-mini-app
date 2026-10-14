@@ -460,7 +460,7 @@ export class CheckoutService {
                 items: {
                   // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
                   // tính trên giá thực trả sau giảm combo (§7.2).
-                  create: shipment.lineIds.map((lineId) => {
+                  create: shipment.lineIds.map((lineId, idx) => {
                     const l = linesById.get(lineId)!;
                     return {
                       variationId: l.variationId,
@@ -471,6 +471,9 @@ export class CheckoutService {
                       unitPrice: l.unitPrice,
                       quantity: l.quantity,
                       total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
+                      // Tiền khách thực trả cho dòng (mỗi khoản giảm chỉ vào dòng được hưởng) — nền hoàn tiền, hoa hồng,
+                      // đối soát đối tác.
+                      paidTotal: shipment.linePaid[idx] ?? null,
                       flashSaleItemId: l.flashSaleItemId ?? null,
                     };
                   }),
@@ -861,6 +864,7 @@ export class CheckoutService {
     const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)
 
     let discount = 0; // coupon (sau combo)
+    let couponProductIds: string[] | null = null;
     let freeship = false;
     let couponValid = false;
     let couponNotice: string | null = null;
@@ -872,6 +876,7 @@ export class CheckoutService {
         }));
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
+        couponProductIds = r.productIds ?? null;
         freeship = r.freeship;
         couponValid = true;
       } catch (err) {
@@ -928,6 +933,7 @@ export class CheckoutService {
       comboPerLine: combo.perLine,
       comboTotal: combo.total,
       couponDiscount: discount,
+      couponProductIds,
       tierDiscount,
       pointsDiscount: redemption.discount,
       pointsUsed: redemption.pointsUsed,

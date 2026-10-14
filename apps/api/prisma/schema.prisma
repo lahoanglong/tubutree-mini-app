@@ -1056,6 +1056,10 @@ model OrderItem {
   unitPrice           Int
   quantity            Int
   total               Int
+  /// Tiền khách thực trả cho dòng lúc đặt: `total` trừ phần mã giảm giá, giảm hạng, Điểm Xanh mà checkout chia về đúng
+  /// dòng được hưởng (mã gắn sản phẩm chỉ dòng sản phẩm đó; mã/hạng không vào hàng flash). Nền hoàn tiền, hoa hồng CTV và
+  /// đối soát đối tác. Null ở đơn cũ và đơn không qua checkout — các nơi đọc chia `total − shippingFee` theo giá trị dòng.
+  paidTotal           Int?
   flashSaleItemId     String?
   /// Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ khi đặt vượt
   /// tồn (§ DealerService.placeOrder cho đặt trước thay vì từ chối). Với mọi đơn khác luôn 0.

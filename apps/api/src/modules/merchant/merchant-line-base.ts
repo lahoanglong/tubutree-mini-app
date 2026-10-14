@@ -1,4 +1,4 @@
-import { distributeByWeight } from '../orders/refund-allocation';
+import { distributeByWeight, storedLinePaid } from '../orders/refund-allocation';
 
 /**
  * Tiền khách thực trả từng dòng hàng: tiền hàng thực trả (`total − shippingFee`) chia theo giá trị dòng — cùng tỉ lệ
@@ -15,10 +15,18 @@ export function paidGoodsByLine(order: { total: number; shippingFee: number; ite
 
 /**
  * Nền tiền hàng của từng dòng trên phiếu đối soát, dùng chung cho đơn gian hàng tự giao và hàng Tubu giao hộ — chỗ DUY NHẤT
- * quyết định nền tính. Hiện là tiền khách thực trả cho dòng: mã giảm giá Tubu, Điểm Xanh, giảm hạng chia theo giá trị dòng và
- * gian hàng chịu. Phần dư chia theo thứ tự id dòng nên số không đổi theo thứ tự DB trả về; kết quả theo đúng thứ tự `items`.
+ * quyết định nền tính: tiền khách thực trả cho dòng. Đơn có `OrderItem.paidTotal` dùng đúng số checkout đã chia (mỗi khoản
+ * giảm chỉ vào dòng được hưởng: mã gắn sản phẩm chỉ dòng sản phẩm đó, mã/hạng không vào hàng flash) — cùng số hoàn tiền
+ * khách dùng. Đơn cũ: tiền hàng thực trả chia theo giá trị dòng, phần dư theo thứ tự id dòng nên số không đổi theo thứ tự DB
+ * trả về. Kết quả theo đúng thứ tự `items`.
  */
-export function merchantLineBase(order: { total: number; shippingFee: number; items: { id: string; total: number }[] }): number[] {
+export function merchantLineBase(order: {
+  total: number;
+  shippingFee: number;
+  items: { id: string; total: number; paidTotal?: number | null }[];
+}): number[] {
+  const stored = storedLinePaid(Math.max(0, order.total - Math.max(0, order.shippingFee)), order.items);
+  if (stored) return stored;
   const sorted = order.items.map((it, idx) => ({ it, idx })).sort((a, b) => a.it.id.localeCompare(b.it.id));
   const shares = paidGoodsByLine({ ...order, items: sorted.map((x) => x.it) });
   const out = new Array<number>(order.items.length).fill(0);

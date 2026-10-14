@@ -49,6 +49,8 @@ export interface ConsignmentItem {
   variationName: string | null;
   quantity: number;
   total: number;
+  /** Tiền khách thực trả cho dòng lúc đặt (OrderItem.paidTotal); null ở đơn cũ. */
+  paidTotal?: number | null;
 }
 
 export interface ConsignmentOrder {

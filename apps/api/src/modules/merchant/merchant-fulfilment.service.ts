@@ -161,7 +161,7 @@ export function saleLineOf(o: {
   shippingFee: number;
   merchantCommissionPct: Prisma.Decimal | number | null;
   deliveredAt: Date | null;
-  items: { id: string; total: number }[];
+  items: { id: string; total: number; paidTotal?: number | null }[];
 }): SettlementLine {
   const goodsAmount = merchantLineBase(o).reduce((s, v) => s + v, 0);
   const pct = o.merchantCommissionPct == null ? 0 : Number(o.merchantCommissionPct);
@@ -198,15 +198,22 @@ export interface ApprovedPartialReturn {
 
 /**
  * Tiền hàng từng dòng của đơn tự giao làm nền cho dòng đảo. Đã có SALE thì theo đúng tiền hàng đã lưu ở SALE (phiếu lập trước
- * khi đổi nền giữ số cũ): khớp nền hiện tại thì dùng luôn, khác thì chia số đã lưu theo giá trị dòng.
+ * khi đổi nền giữ số cũ): khớp nền hiện tại thì dùng luôn, khác thì chia số đã lưu theo giá trị dòng, phần dư theo thứ tự id
+ * dòng (số không đổi theo thứ tự DB trả về).
  */
 function selfShipLineBase(
-  o: { total: number; shippingFee: number; items: { id: string; total: number }[] },
+  o: { total: number; shippingFee: number; items: { id: string; total: number; paidTotal?: number | null }[] },
   saleGoods: number | undefined,
 ): number[] {
   const base = merchantLineBase(o);
   if (saleGoods === undefined || saleGoods === base.reduce((s, v) => s + v, 0)) return base;
-  return distributeByWeight(saleGoods, o.items.map((i) => Math.max(0, i.total)));
+  const sorted = o.items.map((it, idx) => ({ it, idx })).sort((a, b) => a.it.id.localeCompare(b.it.id));
+  const shares = distributeByWeight(saleGoods, sorted.map((x) => Math.max(0, x.it.total)));
+  const out = new Array<number>(o.items.length).fill(0);
+  sorted.forEach((x, k) => {
+    out[x.idx] = shares[k] ?? 0;
+  });
+  return out;
 }
 
 /**
@@ -223,7 +230,7 @@ export function partialReversalLinesOf(
     total: number;
     shippingFee: number;
     merchantCommissionPct: Prisma.Decimal | number | null;
-    items: { id: string; total: number; quantity: number }[];
+    items: { id: string; total: number; quantity: number; paidTotal?: number | null }[];
   },
   requests: ApprovedPartialReturn[],
   saleGoods?: number,
@@ -529,7 +536,7 @@ export class MerchantFulfilmentService {
       shippingFee: true,
       merchantCommissionPct: true,
       deliveredAt: true,
-      items: { select: { id: true, total: true, quantity: true } },
+      items: { select: { id: true, total: true, quantity: true, paidTotal: true } },
     } satisfies Prisma.OrderSelect;
     const storedSelect = { kind: true, refKey: true, goodsAmount: true, shippingFee: true, commissionAmount: true, codCollected: true, netAmount: true } as const;
     const base = { fulfiller: 'MERCHANT' as const, fulfillerStorefrontId: storefrontId };
@@ -667,7 +674,7 @@ export class MerchantFulfilmentService {
     if (anyLink.length === 0) {
       return { terms: null, lines: [] as SettlementLine[], upcoming: [] as (SettlementLine & { availableAt: Date | null })[] };
     }
-    const itemSelect = { id: true, variationId: true, productName: true, variationName: true, quantity: true, total: true } as const;
+    const itemSelect = { id: true, variationId: true, productName: true, variationName: true, quantity: true, total: true, paidTotal: true } as const;
     const [terms, history, pendingRows, returnedRows, partialRows] = await Promise.all([
       this.consignmentTerms(storefrontId, db, defaultCommissionPct),
       this.termsHistory(storefrontId, db, defaultCommissionPct),

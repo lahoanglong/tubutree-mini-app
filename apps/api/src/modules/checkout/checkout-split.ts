@@ -72,6 +72,8 @@ export function fulfillerKey(f: LineFulfiller): string {
 
 export interface SplitLine {
   variationId: string;
+  /** Sản phẩm của dòng — để mã gắn sản phẩm (`Coupon.applyTo.productIds`) chỉ rơi vào đúng dòng đó. */
+  productId?: string;
   total: number;
   isFlash: boolean;
   fulfiller: LineFulfiller;
@@ -119,6 +121,8 @@ export interface CheckoutTotals {
   comboPerLine: Record<string, number>;
   comboTotal: number;
   couponDiscount: number;
+  /** Sản phẩm mã giảm giá áp được (null/không có = mọi sản phẩm không flash). */
+  couponProductIds?: string[] | null;
   tierDiscount: number;
   pointsDiscount: number;
   pointsUsed: number;
@@ -137,36 +141,122 @@ export interface GroupAmounts {
   discount: number;
   /** Tiền hàng sau mọi khoản giảm (nền tích điểm). */
   goodsAfterAll: number;
+  /** Tiền khách thực trả từng dòng của kiện (cùng thứ tự `lines`) — lưu vào OrderItem.paidTotal; cộng lại = goodsAfterAll. */
+  linePaid: number[];
+}
+
+/** Các khoản giảm của một dòng và tiền khách thực trả cho dòng đó. */
+export interface LineAmounts {
+  total: number;
+  combo: number;
+  coupon: number;
+  tier: number;
+  points: number;
+  paid: number;
+}
+
+const sumOf = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+
+/** allocateProRata trên bộ trọng số đầu tiên có tổng dương (bộ sau là đường lùi khi bộ trước không có dòng nào được hưởng). */
+function spread(amount: number, ...weightSets: number[][]): number[] {
+  const chosen = weightSets.find((w) => sumOf(w.map((x) => Math.max(0, x))) > 0) ?? weightSets[weightSets.length - 1] ?? [];
+  return allocateProRata(amount, chosen);
+}
+
+/** Combo về đúng dòng không flash của nó; phần lệch (nếu có) vào dòng không flash đầu tiên. */
+function lineCombos(lines: SplitLine[], t: Pick<CheckoutTotals, 'comboPerLine' | 'comboTotal'>): number[] {
+  const combo = lines.map((l) => (l.isFlash ? 0 : (t.comboPerLine[l.variationId] ?? 0)));
+  const gap = t.comboTotal - sumOf(combo);
+  if (gap !== 0 && lines.length > 0) combo[Math.max(0, lines.findIndex((l) => !l.isFlash))]! += gap;
+  return combo;
+}
+
+function couponEligible(l: SplitLine, productIds: string[] | null | undefined): boolean {
+  return !l.isFlash && (!productIds || (l.productId != null && productIds.includes(l.productId)));
+}
+
+/** Nền từng bước của các dòng: sau combo (hàng không flash) và phần mã giảm giá được hưởng. */
+function lineBases(lines: SplitLine[], combo: number[], productIds: string[] | null | undefined) {
+  const afterCombo = lines.map((l, k) => (l.isFlash ? 0 : Math.max(0, l.total - combo[k]!)));
+  const eligible = lines.map((l, k) => (couponEligible(l, productIds) ? afterCombo[k]! : 0));
+  return { afterCombo, eligible };
+}
+
+function splitOverLines(
+  lines: SplitLine[],
+  combo: number[],
+  amounts: { coupon: number; tier: number; points: number },
+  productIds: string[] | null | undefined,
+): LineAmounts[] {
+  const { afterCombo, eligible } = lineBases(lines, combo, productIds);
+  const coupon = spread(amounts.coupon, eligible, afterCombo);
+  const afterCoupon = afterCombo.map((b, k) => Math.max(0, b - coupon[k]!));
+  const tier = spread(amounts.tier, afterCoupon, afterCombo);
+  const redeem = lines.map((l, k) => (l.isFlash ? Math.max(0, l.total) : Math.max(0, afterCoupon[k]! - tier[k]!)));
+  const points = allocateProRata(amounts.points, redeem);
+  return lines.map((l, k) => ({
+    total: l.total,
+    combo: combo[k]!,
+    coupon: coupon[k]!,
+    tier: tier[k]!,
+    points: points[k]!,
+    paid: l.total - combo[k]! - coupon[k]! - tier[k]! - points[k]!,
+  }));
 }
 
 /**
- * Phân bổ các khoản giảm của cả lần đặt về từng kiện, cùng thứ tự áp với CheckoutService.compute:
- * combo theo đúng dòng → mã (trên hàng không flash sau combo) → hạng (trên phần còn lại không flash) → Điểm Xanh (trên phần
- * còn lại cộng hàng flash). Mọi khoản chia theo nền của chính bước đó nên tổng từng kiện khớp từng đồng với cả lần đặt.
+ * Chia các khoản giảm của cả lần đặt về TỪNG DÒNG theo đúng dòng được hưởng, cùng thứ tự áp với CheckoutService.compute:
+ * combo về dòng của nó → mã trên các dòng không flash mà mã áp được (mã gắn sản phẩm: chỉ dòng sản phẩm đó), sau combo →
+ * hạng trên phần còn lại không flash → Điểm Xanh trên phần còn lại cộng hàng flash. Dòng không được hưởng khoản nào thì
+ * không gánh đồng nào của khoản đó (hàng giao hộ của đối tác không gánh mã gắn sản phẩm Tubu, hàng flash không gánh mã/hạng).
+ */
+export function allocateLineAmounts(lines: SplitLine[], t: CheckoutTotals): LineAmounts[] {
+  return splitOverLines(
+    lines,
+    lineCombos(lines, t),
+    { coupon: t.couponDiscount, tier: t.tierDiscount, points: t.pointsDiscount },
+    t.couponProductIds,
+  );
+}
+
+/**
+ * Phân bổ các khoản giảm của cả lần đặt về từng kiện rồi về từng dòng của kiện, cùng luật allocateLineAmounts: mã gắn sản
+ * phẩm chỉ vào kiện có sản phẩm đó, hàng flash không nhận mã/hạng. Mỗi khoản chia theo nền của chính bước đó nên tổng từng
+ * kiện (và từng dòng) khớp từng đồng với cả lần đặt.
  */
 export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: CheckoutTotals): GroupAmounts[] {
-  const subtotal = groups.map((g) => g.lines.reduce((s, l) => s + l.total, 0));
-  const combo = groups.map((g) =>
-    g.lines.filter((l) => !l.isFlash).reduce((s, l) => s + (t.comboPerLine[l.variationId] ?? 0), 0),
-  );
-  const comboGap = t.comboTotal - combo.reduce((s, x) => s + x, 0);
-  if (comboGap !== 0 && combo.length > 0) combo[0]! += comboGap;
-  const couponBase = groups.map((g, i) =>
-    Math.max(0, g.lines.filter((l) => !l.isFlash).reduce((s, l) => s + l.total, 0) - combo[i]!),
-  );
-  const coupon = allocateProRata(t.couponDiscount, couponBase);
-  const tierBase = couponBase.map((b, i) => Math.max(0, b - coupon[i]!));
-  const tier = allocateProRata(t.tierDiscount, tierBase);
-  const flash = groups.map((g) => g.lines.filter((l) => l.isFlash).reduce((s, l) => s + l.total, 0));
+  const flat = groups.flatMap((g) => g.lines);
+  const combo = lineCombos(flat, t);
+  const { afterCombo, eligible } = lineBases(flat, combo, t.couponProductIds);
+  const starts: number[] = [];
+  groups.reduce((at, g) => {
+    starts.push(at);
+    return at + g.lines.length;
+  }, 0);
+  const slice = <T>(xs: T[], i: number) => xs.slice(starts[i]!, starts[i]! + groups[i]!.lines.length);
+  const perGroup = (xs: number[]) => groups.map((_, i) => sumOf(slice(xs, i)));
+  const subtotal = perGroup(flat.map((l) => l.total));
+  const comboG = perGroup(combo);
+  const afterComboG = perGroup(afterCombo);
+  const coupon = spread(t.couponDiscount, perGroup(eligible), afterComboG);
+  const tierBase = afterComboG.map((b, i) => Math.max(0, b - coupon[i]!));
+  const tier = spread(t.tierDiscount, tierBase, afterComboG);
+  const flash = perGroup(flat.map((l) => (l.isFlash ? Math.max(0, l.total) : 0)));
   const redeemBase = tierBase.map((b, i) => Math.max(0, b - tier[i]!) + flash[i]!);
   const points = allocateProRata(t.pointsDiscount, redeemBase);
   const standard = allocateProRata(t.pointsUsed - t.pointsUsedConverted, points);
   const converted = allocateProRata(t.pointsUsedConverted, points);
-  return groups.map((_, i) => {
-    const discount = combo[i]! + coupon[i]! + tier[i]! + points[i]!;
+  return groups.map((g, i) => {
+    const discount = comboG[i]! + coupon[i]! + tier[i]! + points[i]!;
+    const lines = splitOverLines(
+      g.lines,
+      slice(combo, i),
+      { coupon: coupon[i]!, tier: tier[i]!, points: points[i]! },
+      t.couponProductIds,
+    );
     return {
       subtotal: subtotal[i]!,
-      comboDiscount: combo[i]!,
+      comboDiscount: comboG[i]!,
       couponDiscount: coupon[i]!,
       tierDiscount: tier[i]!,
       pointsDiscount: points[i]!,
@@ -174,6 +264,7 @@ export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: Checko
       pointsUsedConverted: converted[i]!,
       discount,
       goodsAfterAll: Math.max(0, subtotal[i]! - discount),
+      linePaid: lines.map((l) => l.paid),
     };
   });
 }
