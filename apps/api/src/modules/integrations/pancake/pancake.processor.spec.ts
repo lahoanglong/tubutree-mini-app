@@ -758,7 +758,7 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
   });
 
   it('"Đã hoàn" (5) khi đơn ĐANG GIAO (giao không thành) → huỷ đơn: hoàn kho, đảo điểm/hoa hồng, ghi chú lý do', async () => {
-    const { proc, txUpdateMany, txExecuteRaw, loyalty, affiliate } = setup({
+    const { proc, txUpdateMany, txExecuteRaw, loyalty, affiliate, historyCreate } = setup({
       ...base,
       status: 'SHIPPING',
       items: [{ id: 'i1', variationId: 'v1', quantity: 1, flashSaleItemId: null, backorderedQty: 0 }],
@@ -766,7 +766,12 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     await proc.onStatusUpdated({ id: 'p1', status: 5 });
     const flip = statusFlips(txUpdateMany)[0]!;
     expect(flip.where).toEqual({ id: 'o1', status: 'SHIPPING' });
-    expect(flip.data).toMatchObject({ status: 'CANCELLED', note: expect.stringContaining('hoàn về kho') });
+    expect(flip.data).toMatchObject({ status: 'CANCELLED' });
+    // Lý do đi vào lịch sử trạng thái, không nối vào Order.note là ghi chú khách tự viết (GOMDON-10).
+    expect(flip.data).not.toHaveProperty('note');
+    expect(historyCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ toStatus: 'CANCELLED', actorType: 'PANCAKE', note: expect.stringContaining('hoàn về kho') }),
+    });
     expect(txExecuteRaw).toHaveBeenCalled();
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
