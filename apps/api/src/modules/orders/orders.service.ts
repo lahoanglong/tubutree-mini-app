@@ -22,11 +22,17 @@ import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
+import { foldVietnamese } from '../catalog/search-text';
 
 export interface OrderListFilter {
   status?: OrderStatus;
   group?: OrderStatusGroup;
+  /** Tìm theo mã đơn hoặc tên sản phẩm trong đơn (không phân biệt hoa thường, không cần gõ dấu). */
+  q?: string;
 }
+
+/** Số đơn tối đa quét khi tìm kiếm: khách thật chỉ có vài chục đơn; trần này chặn tài khoản khổng lồ làm nặng truy vấn. */
+const ORDER_SEARCH_SCAN_CAP = 2000;
 
 export interface OrderItemMedia {
   thumbnail: string | null;
@@ -103,6 +109,8 @@ export class OrdersService {
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
     const where: Prisma.OrderWhereInput = { userId, ...statusWhere(filter) };
+    const needle = foldVietnamese((filter.q ?? '').replace(/^\s*#/, ''));
+    if (needle) return this.search(where, needle, page, limit);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -113,6 +121,29 @@ export class OrdersService {
       this.prisma.order.count({ where }),
     ]);
     return paginated(await this.attachItemMedia(items), page, limit, total);
+  }
+
+  /**
+   * Tìm trong đơn của một khách: khớp mã đơn hoặc tên sản phẩm sau khi bỏ dấu cả hai phía (cùng bảng với tìm sản phẩm).
+   * Tên sản phẩm của dòng đơn không có cột bỏ dấu và số đơn của một khách nhỏ, nên quét nhẹ (id, mã, tên dòng) rồi
+   * lọc ở bộ nhớ; chỉ trang cần hiển thị mới tải đủ dòng + ảnh.
+   */
+  private async search(where: Prisma.OrderWhereInput, needle: string, page: number, limit: number) {
+    const rows = await this.prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: ORDER_SEARCH_SCAN_CAP,
+      select: { id: true, code: true, items: { select: { productName: true } } },
+    });
+    const matched = rows
+      .filter((o) => foldVietnamese(o.code).includes(needle) || o.items.some((it) => foldVietnamese(it.productName).includes(needle)))
+      .map((o) => o.id);
+    const pageIds = matched.slice((page - 1) * limit, page * limit);
+    if (pageIds.length === 0) return paginated([], page, limit, matched.length);
+    const found = await this.prisma.order.findMany({ where: { id: { in: pageIds } }, include: { items: true } });
+    const byId = new Map(found.map((o) => [o.id, o]));
+    const ordered = pageIds.flatMap((id) => byId.get(id) ?? []);
+    return paginated(await this.attachItemMedia(ordered), page, limit, matched.length);
   }
 
   /** Số đơn đang xử lý — endpoint nhẹ cho badge tab Đơn hàng. */

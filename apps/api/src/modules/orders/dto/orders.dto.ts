@@ -14,6 +14,9 @@ export class OrderListQuery extends PaginationQuery {
   @IsOptional()
   @IsIn(ORDER_STATUS_GROUP_KEYS)
   group?: OrderStatusGroup;
+
+  /** Tìm theo mã đơn hoặc tên sản phẩm; tối đa 100 ký tự (cùng trần với tìm sản phẩm). */
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
 export class RepurchaseItemDto {
