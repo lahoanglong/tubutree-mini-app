@@ -5,6 +5,7 @@ import { Minus, Plus } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { requestReturn, type OrderDetailDTO, type ReturnRequestDTO } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
+import { EvidenceUpload } from '@/components/evidence-upload';
 import {
   EMPTY_BANK,
   RETURN_REASONS,
@@ -45,13 +46,11 @@ function initialLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): Retur
 export function ReturnRequestForm({
   order: o,
   returns,
-  supportEmail,
   onDone,
   onClose,
 }: {
   order: OrderDetailDTO;
   returns: ReturnRequestDTO[];
-  supportEmail: string;
   onDone: () => void;
   onClose: () => void;
 }) {
@@ -62,6 +61,7 @@ export function ReturnRequestForm({
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState<RefundMethodChoice>('WALLET');
   const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
+  const [images, setImages] = useState<string[]>([]);
   const [touched, setTouched] = useState(false);
 
   const bankAllowed = canRefundToBank(o.paymentMethod) && !o.placedForCustomer;
@@ -74,6 +74,7 @@ export function ReturnRequestForm({
       requestReturn(o.code, {
         reasonCode: reasonCode!,
         reason: reason.trim() || undefined,
+        ...(images.length > 0 ? { images } : {}),
         items: lines
           .filter((l) => l.selected && l.quantity > 0)
           .map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),
@@ -103,8 +104,8 @@ export function ReturnRequestForm({
           Yêu cầu đổi/trả
         </h3>
         <p className="mt-1 text-xs text-stone-600">
-          Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24 giờ. Cần gửi ảnh minh
-          chứng? Gửi kèm mã đơn {o.code} qua email {supportEmail}.
+          Chọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24 giờ. Hàng lỗi, vỡ hay giao
+          sai: đính kèm ảnh bên dưới để Tubu duyệt nhanh hơn.
         </p>
       </div>
 
@@ -201,6 +202,8 @@ export function ReturnRequestForm({
           />
         </label>
       </fieldset>
+
+      <EvidenceUpload value={images} onChange={setImages} disabled={submit.isPending} />
 
       {showsMoney &&
         (bankAllowed ? (

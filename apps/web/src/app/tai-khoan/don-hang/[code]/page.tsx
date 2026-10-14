@@ -163,7 +163,7 @@ export default function OrderDetailPage() {
       )}
 
       <OrderTimeline status={o.status} />
-      <OrderActions order={o} userId={user?.id} supportEmail={support.email} />
+      <OrderActions order={o} userId={user?.id} />
       {o.id && (o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELIVERED') && <OrderRefunds orderId={o.id} />}
 
       <section className={`mt-4 p-4 ${ui.card}`}>

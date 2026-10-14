@@ -368,6 +368,8 @@ export interface ReturnRequestDTO {
 export interface ReturnRequestBody {
   reasonCode: ReturnReasonCode;
   reason?: string;
+  /** Ảnh minh chứng (https Cloudinary hoặc data URL JPEG/PNG/WebP), tối đa 6 theo API; web gửi tối đa 3 như Mini App. */
+  images?: string[];
   items: { orderItemId: string; quantity: number }[];
 }
 export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
