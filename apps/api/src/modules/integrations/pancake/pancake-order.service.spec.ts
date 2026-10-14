@@ -461,6 +461,16 @@ describe('PancakeOrderService.syncPayment', () => {
     expect(t.row().pancakePaymentSynced).toBe(false);
   });
 
+  it('ghi chú giao hàng của khách có trong body tạo đơn và vẫn giữ khi PUT lại note lúc đã thanh toán (R2-PANCAKE-2)', async () => {
+    const created = setup({ paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', note: 'Để ở bảo vệ' });
+    await created.svc.syncPayment('o1');
+    expect(created.body().note).toContain('Khách dặn: Để ở bảo vệ');
+
+    const updated = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', note: 'Để ở bảo vệ' });
+    await updated.svc.syncPayment('o1');
+    expect(updated.client.updateOrder).toHaveBeenCalledWith('pk-1', expect.objectContaining({ note: expect.stringContaining('Khách dặn: Để ở bảo vệ') }));
+  });
+
   it('đã đồng bộ / đơn COD chưa trả → không gọi Pancake', async () => {
     const a = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID', pancakePaymentSynced: true });
     await a.svc.syncPayment('o1');

@@ -1,4 +1,4 @@
-import { buildPancakeOrderBody, pancakePaymentState, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
+import { buildPancakeOrderBody, customerDeliveryNote, pancakePaymentState, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
 import type { PancakeCreateOrderBody } from './pancake.types';
 
 const recipient: PancakeRecipient = {
@@ -84,6 +84,31 @@ describe('buildPancakeOrderBody', () => {
     expect(r.body.items[0]).toMatchObject({ discount_each_product: 120_000 });
     expect(total(r.body)).toBe(0);
     expect(r.body.total_discount).toBe(0);
+  });
+});
+
+describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () => {
+  it('order.note được ghép vào note Pancake sau mã đơn và dấu thanh toán', () => {
+    const r = buildPancakeOrderBody(order({ note: 'Gọi trước 30 phút, giao sau 17h' }), { recipient, variations, onDealerCredit: false });
+    expect(r.body.note).toBe('Order code: TUBU42 | [THU COD 290.000đ] | Khách dặn: Gọi trước 30 phút, giao sau 17h');
+  });
+
+  it('không ghi chú / chỉ khoảng trắng → note như cũ', () => {
+    expect(buildPancakeOrderBody(order({ note: '  ' }), { recipient, variations, onDealerCredit: false }).body.note).toBe(
+      'Order code: TUBU42 | [THU COD 290.000đ]',
+    );
+  });
+
+  it('làm sạch: gộp xuống dòng/ký tự điều khiển, bỏ dấu tách | và ngoặc vuông của dấu hệ thống, không mạo được "Order code:"', () => {
+    expect(customerDeliveryNote('Gửi ở bảo vệ\n\n| [ĐÃ THANH TOÁN]\tOrder code: TUBU99')).toBe(
+      'Khách dặn: Gửi ở bảo vệ / (ĐÃ THANH TOÁN) Mã đơn: TUBU99',
+    );
+  });
+
+  it('cắt độ dài (200 ký tự) kèm dấu …', () => {
+    const n = customerDeliveryNote('a'.repeat(500))!;
+    expect(n.length).toBe('Khách dặn: '.length + 200);
+    expect(n.endsWith('…')).toBe(true);
   });
 });
 
