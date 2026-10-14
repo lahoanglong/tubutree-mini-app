@@ -624,6 +624,19 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(update.mock.calls[0][0].data).toEqual({ title: 'Mới' });
   });
 
+  it('SELLER-8: gian hàng MERCHANT sửa qua updateMine → vẫn lưu kho và hotline', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's2', type: 'MERCHANT', subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u8', {
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: '',
+    });
+    expect(update.mock.calls[0][0].data).toEqual({
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: null,
+    });
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);

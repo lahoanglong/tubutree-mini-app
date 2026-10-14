@@ -150,13 +150,13 @@ export class StorefrontService {
       await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
-    // Gian hàng CTV không tự giao: bỏ qua kho gửi hàng (SELLER-8).
+    // Chỉ gian hàng MERCHANT tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
     // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
     // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
     // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
     const data: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(dto)) {
-      if (v === undefined || k.startsWith('warehouse')) continue;
+      if (v === undefined || (sf.type !== 'MERCHANT' && k.startsWith('warehouse'))) continue;
       data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
     }
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
