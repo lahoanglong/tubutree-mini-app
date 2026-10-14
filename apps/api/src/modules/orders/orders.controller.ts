@@ -21,7 +21,7 @@ export class OrdersController {
 
   @Get()
   list(@CurrentUser('sub') userId: string, @Query() query: OrderListQuery) {
-    return this.orders.list(userId, { status: query.status, group: query.group }, query.page, query.limit);
+    return this.orders.list(userId, { status: query.status, group: query.group, q: query.q }, query.page, query.limit);
   }
 
   // PHẢI đứng TRƯỚC @Get(':code'): Express khớp route theo thứ tự khai báo — đặt sau thì

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
 // BUYERWEB-10: bấm "+" trên dòng hết hàng làm dòng bị xoá (quantity kẹp về 0) mà không báo gì.
 // BUYERWEB-11: tên sản phẩm dài không khoảng trắng làm giỏ tràn ngang ở 390px.
@@ -45,6 +46,7 @@ const mount = async () => {
 const button = (c: HTMLElement, label: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
 
 beforeEach(() => {
+  sessionStorage.clear();
   state.updates = [];
   state.removed = [];
   state.cart = cartOf([line({})]);
@@ -172,5 +174,86 @@ describe('/gio-hang — chia theo nơi giao (D4)', () => {
     state.cart = cartOf([line({ id: 'm1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } })]);
     const { container } = await mount();
     expect(container.textContent).not.toContain('Mua thêm');
+  });
+});
+
+describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUYERWEB-6)', () => {
+  const two = () => ({
+    ...cartOf([
+      line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 150000 }),
+      line({ id: 'i2', productName: 'Xà phòng', quantity: 2, unitPrice: 50000, total: 100000 }),
+    ]),
+    subtotal: 250000,
+    itemCount: 3,
+  });
+  const pick = (c: HTMLElement, name: string) => c.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="Chọn ${name} để thanh toán"]`)!;
+  const selectAll = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="Chọn tất cả sản phẩm"]')!;
+  const pay = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]');
+
+  it('mặc định chọn hết; Thanh toán đếm tổng số lượng và nhớ "toàn giỏ"', async () => {
+    state.cart = two();
+    const { container } = await mount();
+    expect(pick(container, 'Dầu gội').checked).toBe(true);
+    expect(pick(container, 'Xà phòng').checked).toBe(true);
+    expect(selectAll(container).checked).toBe(true);
+    expect(pay(container)!.textContent).toBe('Thanh toán (3)');
+    click(pay(container));
+    expect(recallCheckoutSelection()).toBeNull();
+  });
+
+  it('bỏ chọn một món: tạm tính và số lượng theo phần đã chọn, nhớ đúng các dòng đã chọn', async () => {
+    state.cart = two();
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await flush(2);
+    expect(selectAll(container).checked).toBe(false);
+    expect(pay(container)!.textContent).toBe('Thanh toán (2)');
+    expect(container.textContent).toMatch(/Tạm tính\s*100\.000đ/);
+    click(pay(container));
+    expect(recallCheckoutSelection()).toEqual(['i2']);
+  });
+
+  it('bỏ chọn hết: không thanh toán được; Chọn tất cả chọn lại hết', async () => {
+    state.cart = two();
+    const { container } = await mount();
+    click(selectAll(container));
+    await flush(2);
+    expect(pay(container)).toBeNull();
+    const payBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Thanh toán'))!;
+    expect(payBtn.disabled).toBe(true);
+    click(selectAll(container));
+    await flush(2);
+    expect(pay(container)).not.toBeNull();
+  });
+
+  it('chỉ giảm giá khi chọn cả giỏ (phần chọn một phần do báo giá thanh toán tính lại)', async () => {
+    state.cart = { ...two(), couponCode: 'WELCOME', discount: 25000 };
+    const { container } = await mount();
+    expect(container.textContent).toContain('-25.000đ');
+    click(pick(container, 'Dầu gội'));
+    await flush(2);
+    expect(container.textContent).not.toContain('-25.000đ');
+  });
+
+  it('dòng hết hàng chỉ chặn khi đang được chọn: bỏ chọn nó thì thanh toán phần còn lại', async () => {
+    state.cart = cartOf([line({ id: 'i1' }), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    const { container } = await mount();
+    expect(pay(container)).toBeNull();
+    click(pick(container, 'Xà phòng'));
+    await flush(2);
+    expect(pay(container)).not.toBeNull();
+    click(pay(container));
+    expect(recallCheckoutSelection()).toEqual(['i1']);
+  });
+
+  it('món mới thêm vào giỏ tự được chọn, món đã xoá không còn nằm trong lựa chọn', async () => {
+    state.cart = two();
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    state.cart = { ...two(), items: [...two().items, line({ id: 'i3', productName: 'Mật ong', quantity: 1, total: 90000 })] };
+    click(container.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng Xà phòng"]'));
+    await flush(4);
+    expect(pick(container, 'Mật ong').checked).toBe(true);
+    expect(pick(container, 'Dầu gội').checked).toBe(false);
   });
 });

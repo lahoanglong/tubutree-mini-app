@@ -11,6 +11,7 @@ vi.mock('./client-api', async (orig) => ({
 }));
 
 import { AuthProvider, useAuth } from './auth-context';
+import { useAuthPhase } from './auth-phase';
 import { setSessionMarker, hasSessionMarker } from './client-api';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -85,5 +86,84 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     await mount();
     expect(text()).toBe('init|idle|-');
     expect(mocks.restoreSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthProvider — mất kết nối lúc mở trang (R2-BUYERWEB-5)', () => {
+  let root: Root;
+  let host: HTMLDivElement;
+
+  function PhaseProbe() {
+    const phase = useAuthPhase();
+    const { retrySession } = useAuth();
+    return (
+      <div>
+        <p id="phase">{phase}</p>
+        <button id="retry" type="button" onClick={() => void retrySession()}>
+          retry
+        </button>
+      </div>
+    );
+  }
+  const phase = () => host.querySelector('#phase')?.textContent;
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.restoreSession.mockReset();
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  async function mount() {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AuthProvider>
+            <PhaseProbe />
+          </AuthProvider>
+        </QueryClientProvider>,
+      );
+    });
+  }
+
+  it('cờ phiên còn mà API không trả lời → phase "unavailable", không phải "guest"', async () => {
+    setSessionMarker();
+    mocks.restoreSession.mockResolvedValue({ kind: 'transient' });
+    await mount();
+    expect(phase()).toBe('unavailable');
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('bấm Thử lại khi API đã sống lại → vào được phiên', async () => {
+    setSessionMarker();
+    mocks.restoreSession
+      .mockResolvedValueOnce({ kind: 'transient' })
+      .mockResolvedValueOnce({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    await mount();
+    expect(phase()).toBe('unavailable');
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('#retry')!.click();
+    });
+    expect(phase()).toBe('authenticated');
+  });
+
+  it('phiên chết thật (401) → "guest" ngay, không giả vờ mất mạng', async () => {
+    setSessionMarker();
+    mocks.restoreSession.mockImplementationOnce(async () => {
+      localStorage.clear();
+      return { kind: 'dead' };
+    });
+    await mount();
+    expect(phase()).toBe('guest');
+  });
+
+  it('khách chưa từng đăng nhập → "guest"', async () => {
+    await mount();
+    expect(phase()).toBe('guest');
   });
 });

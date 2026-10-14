@@ -107,6 +107,11 @@ export default function AddToCart({ slug, variations: isrVariations }: { slug: s
 
   const onAdd = async () => {
     if (phase === 'loading') return;
+    if (phase === 'unavailable') {
+      setSuccess(false);
+      setMsg('Chưa kết nối được tới Tubu Tree nên chưa thêm được vào giỏ. Bạn kiểm tra mạng rồi bấm lại nhé.');
+      return;
+    }
     if (phase === 'guest') {
       if (selected && available) rememberPendingAdd({ variationId: selected.id, quantity: qty });
       router.push(loginHref(`/san-pham/${encodeURIComponent(slug)}`));

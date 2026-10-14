@@ -1,24 +1,45 @@
 'use client';
 
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, MapPin } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { formatVnd } from '@/lib/shop-client';
+import { formatVnd, getMe } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
-import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { OrdersSection } from './orders-section';
+
+const TILE = 'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0';
 
 export default function AccountPage() {
   const { user, logout } = useAuth();
   const phase = useAuthPhase();
+  // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: sau khi đặt đơn dùng điểm, huỷ đơn có tiền về ví hay
+  // trả hàng thì số trên thẻ phải đổi ngay. Lấy lại mỗi lần vào trang và mỗi lần quay lại tab thay vì chờ F5;
+  // chưa lấy được (mất mạng) thì giữ số cũ.
+  const meQ = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    enabled: phase === 'authenticated',
+    refetchOnWindowFocus: true,
+  });
 
   if (phase === 'loading') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="sr-only">Tài khoản</h1>
         <AuthLoading />
+      </main>
+    );
+  }
+
+  if (phase === 'unavailable') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-6">
+        <h1 className={ui.pageTitle}>Tài khoản</h1>
+        <SessionUnavailable />
       </main>
     );
   }
@@ -33,7 +54,9 @@ export default function AccountPage() {
   }
 
   // Điểm Xanh = lô thường + lô quy đổi (tiền trả trước, không hết hạn): cùng một con số với Mini App.
-  const points = pointsSummary(user);
+  const balances = meQ.data ?? user;
+  const points = pointsSummary(balances);
+  const walletBalance = balances.walletBalance;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
@@ -45,16 +68,24 @@ export default function AccountPage() {
       <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised">
         <div className="text-lg font-bold">{user.fullName ?? 'Khách Tubu'}</div>
         <div className="mt-1 text-sm text-forest-100">Mã giới thiệu: {user.referralCode}</div>
-        <div className="mt-3 flex gap-6">
-          <div>
+        <div className="mt-4 grid grid-cols-2 gap-6">
+          <Link href="/tai-khoan/diem-xanh" className={TILE}>
             <div className="text-xl font-bold">{points.total.toLocaleString('vi-VN')}</div>
             <div className="text-xs text-forest-100">Điểm Xanh</div>
             {points.convertedNote && <div className="text-xs text-forest-100">{points.convertedNote}</div>}
-          </div>
-          <div>
-            <div className="text-xl font-bold">{formatVnd(user.walletBalance)}</div>
+            <div className="mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline">
+              Xem lịch sử
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </div>
+          </Link>
+          <Link href="/tai-khoan/vi-tubu" className={TILE}>
+            <div className="text-xl font-bold">{formatVnd(walletBalance)}</div>
             <div className="text-xs text-forest-100">Ví Tubu</div>
-          </div>
+            <div className="mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline">
+              Xem lịch sử
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </div>
+          </Link>
         </div>
       </section>
 

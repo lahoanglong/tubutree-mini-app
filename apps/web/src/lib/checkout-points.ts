@@ -1,5 +1,7 @@
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
-const group = (n: number) => n.toLocaleString('vi-VN');
+/** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
+export const formatCount = (n: number) => n.toLocaleString('vi-VN');
+const group = formatCount;
 
 /**
  * Điểm Xanh khách thấy: MỘT con số = lô thường (có hạn) + lô quy đổi từ xu cũ (không hết hạn, tiền trả trước).

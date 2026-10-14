@@ -9,7 +9,7 @@ import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import { createAddress, deleteAddress, getAddresses, updateAddress, type AddressDTO } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
-import { AuthLoading, LoginRequired } from '@/components/login-required';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 
 const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 
@@ -40,6 +40,13 @@ export default function AddressBookPage() {
     return (
       <Shell>
         <AuthLoading />
+      </Shell>
+    );
+  }
+  if (phase === 'unavailable') {
+    return (
+      <Shell>
+        <SessionUnavailable />
       </Shell>
     );
   }

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -18,7 +19,13 @@ const mocks = vi.hoisted(() => ({
   refunds: [] as unknown[],
   refundBank: null as Record<string, string> | null,
   chooseDestination: vi.fn(),
+  invalidateBalances: vi.fn(),
 }));
+vi.mock('@/lib/image-compress', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/image-compress')>()),
+  readAndCompressImage: async (f: File) => `data:image/jpeg;base64,${f.name}`,
+}));
+vi.mock('@/lib/balances', () => ({ invalidateBalances: mocks.invalidateBalances }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: mocks.user, status: 'authenticated', initialized: true }),
 }));
@@ -88,6 +95,7 @@ beforeEach(() => {
   mocks.refunds = [];
   mocks.refundBank = null;
   mocks.chooseDestination.mockReset();
+  mocks.invalidateBalances.mockReset();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -148,6 +156,14 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     await flush(8);
     expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined);
     expect(container.textContent).toContain('Đã hủy đơn hàng');
+  });
+
+  it('hủy xong làm mới số dư Điểm Xanh/Ví (tiền và điểm hoàn về) — R2-BUYERWEB-3', async () => {
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(8);
+    expect(mocks.invalidateBalances).toHaveBeenCalled();
   });
 
   it('D2: đơn chuyển khoản đã trả → mặc định hoàn về Ví Tubu', async () => {
@@ -300,6 +316,36 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(container.textContent).toContain('Đã gửi yêu cầu đổi/trả');
   });
 
+  it('R2-LIFECYCLE-10: form có ô tải ảnh minh chứng thay cho lời dặn gửi email; ảnh đi cùng yêu cầu', async () => {
+    mocks.order = delivered;
+    const { container } = await mount();
+    click(btn(container, 'Yêu cầu đổi/trả')!);
+    const form = container.querySelector('form[aria-labelledby="return-form-title"]')!;
+    expect(form.textContent).not.toContain('email');
+    expect(form.textContent).toContain('Ảnh minh chứng (khuyến khích, tối đa 3)');
+    const input = form.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'vo.jpg', { type: 'image/jpeg' })], configurable: true });
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(4);
+    expect(form.querySelectorAll('li img')).toHaveLength(1);
+    click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush(8);
+    expect(mocks.requestReturn.mock.calls[0]![1].images).toEqual(['data:image/jpeg;base64,vo.jpg']);
+  });
+
+  it('không đính ảnh thì body không có khoá images', async () => {
+    mocks.order = delivered;
+    const { container } = await mount();
+    click(btn(container, 'Yêu cầu đổi/trả')!);
+    click(radio(container, /^Sản phẩm lỗi, hỏng$/));
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush(8);
+    expect(mocks.requestReturn.mock.calls[0]![1]).not.toHaveProperty('images');
+  });
+
   it('D3: tăng số lượng tới số còn trả được (đã trừ phần đã duyệt trước)', async () => {
     mocks.order = { ...delivered, items: [{ ...BASE.items[0], quantity: 3 }] };
     mocks.returns = [{ id: 'r0', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 100000, items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 100000 }], createdAt: '2026-10-06T00:00:00Z' }];
@@ -413,6 +459,7 @@ describe('chi tiết đơn — hoàn tiền và hạn thanh toán (D2, BUYERMINI
     click(btn(container, 'Xác nhận')!);
     await flush(8);
     expect(mocks.chooseDestination).toHaveBeenCalledWith('rf1', { refundMethod: 'WALLET' });
+    expect(mocks.invalidateBalances).toHaveBeenCalled();
     expect(container.textContent).toContain('Đã hoàn 197.000đ vào Ví Tubu.');
   });
 

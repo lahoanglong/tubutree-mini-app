@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { ShieldCheck, Truck, RotateCcw, Sparkles, ChevronRight } from 'lucide-react';
 import { getProductsPage, getBrands, HOME_PAGE_SIZE } from '@/lib/api';
 import { firstParam, homeHref, normalizeSearchQuery, pageHref, parsePage } from '@/lib/catalog-filter';
+import { homeCanonicalPath, homeMetadata } from '@/lib/home-seo';
+import { SITE_URL } from '@/lib/site';
 import ProductCard from '@/components/product-card';
 import ProductPagination from '@/components/product-pagination';
 
@@ -11,10 +13,14 @@ export const revalidate = 300;
 
 type HomeSearchParams = Promise<{ brand?: string | string[]; q?: string | string[]; page?: string | string[] }>;
 
-// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả.
+// Mỗi từ khoá là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả. Nhãn và số trang thì mỗi biến
+// thể có tiêu đề + canonical riêng (xem home-seo) để không bị coi là bản trùng của trang chủ.
 export async function generateMetadata({ searchParams }: { searchParams: HomeSearchParams }): Promise<Metadata> {
-  const { q } = await searchParams;
-  return normalizeSearchQuery(q) ? { robots: { index: false, follow: true } } : {};
+  const sp = await searchParams;
+  if (normalizeSearchQuery(sp.q)) return { robots: { index: false, follow: true } };
+  const brand = firstParam(sp.brand);
+  const brandKnown = brand ? (await getBrands()).some((b) => b.brand === brand) : true;
+  return homeMetadata({ brand, page: parsePage(sp.page) }, brandKnown);
 }
 
 export default async function HomePage({ searchParams }: { searchParams: HomeSearchParams }) {
@@ -26,6 +32,8 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
     getProductsPage({ ...(brand ? { brand } : {}), ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) }),
     getBrands(),
   ]);
+  // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; không có liên kết nào khác dẫn tới nó từ trang chủ.
+  const brandSlug = brand ? (brands.find((b) => b.brand === brand)?.slug ?? null) : null;
   const products = result.data;
   const total = result.meta?.total ?? products.length;
   const totalPages = Math.max(1, Math.ceil(total / (result.meta?.limit || HOME_PAGE_SIZE)));
@@ -34,8 +42,10 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
     redirect(pageHref({ brand, q }, totalPages));
   }
 
+  const canonicalPath = homeCanonicalPath({ brand, page });
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      {canonicalPath !== '/' && !q && <link rel="canonical" href={`${SITE_URL}${canonicalPath}`} />}
       {/* ── Hero ── */}
       <section className="relative mb-8 overflow-hidden rounded-sheet bg-forest-800 px-6 py-10 text-stone-0 shadow-raised sm:px-10 sm:py-14">
         {/* Hai mảng sáng mờ làm điểm nhấn nền, không mang thông tin */}
@@ -119,6 +129,15 @@ export default async function HomePage({ searchParams }: { searchParams: HomeSea
             {total} sản phẩm {q ? 'phù hợp' : 'đang bán'}
           </span>
         </div>
+
+        {brandSlug && (
+          <p className="mb-3 text-sm">
+            <Link href={`/brand/${encodeURIComponent(brandSlug)}`} className="inline-flex min-h-11 items-center gap-1 font-semibold text-forest-700 underline">
+              Xem trang nhãn hàng {brand}
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </p>
+        )}
 
         {q && (
           <p role="status" className="mb-3 flex flex-wrap items-center gap-x-3 text-sm text-stone-700">

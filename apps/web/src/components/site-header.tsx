@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag, User } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart } from '@/lib/shop-client';
 import SiteSearch from '@/components/site-search';
 
 export default function SiteHeader() {
   const { user, status } = useAuth();
+  const sessionDown = useAuthPhase() === 'unavailable';
   const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
 
@@ -69,7 +71,7 @@ export default function SiteHeader() {
             )}
           </Link>
 
-          {status === 'authenticated' ? (
+          {status === 'authenticated' || sessionDown ? (
             <Link
               href="/tai-khoan"
               className="flex min-h-11 items-center gap-1.5 rounded-control border border-stone-200 bg-stone-0 px-3 text-xs font-semibold text-stone-800 shadow-card transition hover:border-stone-300 hover:bg-stone-50"

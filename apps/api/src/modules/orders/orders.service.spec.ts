@@ -568,6 +568,72 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
   });
 });
 
+describe('OrdersService.list — ô tìm kiếm theo mã đơn / tên sản phẩm (R2-BUYERWEB-8)', () => {
+  const order = (id: string, code: string, names: string[]) => ({
+    ...baseOrder, id, code, items: names.map((n, i) => ({ ...line(`${id}-${i}`, `v-${id}-${i}`), productName: n })),
+  });
+  const ORDERS = [
+    order('o1', 'TUBU2026101401', ['Dầu gội bưởi', 'Nước rửa chén']),
+    order('o2', 'TUBU2026101302', ['Mật ong rừng']),
+    order('o3', 'TUBU2026101203', ['Dầu gội bồ kết']),
+  ];
+
+  function makeSearchService() {
+    const findMany = jest.fn(async (args: { where: Record<string, unknown>; select?: unknown }) => {
+      if (args.select) return ORDERS.map(({ id, code, items }) => ({ id, code, items: items.map((i) => ({ productName: i.productName })) }));
+      const ids = (args.where.id as { in: string[] } | undefined)?.in;
+      return ids ? ORDERS.filter((o) => ids.includes(o.id)) : [];
+    });
+    const count = jest.fn().mockResolvedValue(999);
+    const prisma = {
+      order: { findMany, count },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), findMany, count };
+  }
+
+  it('gõ không dấu vẫn khớp tên sản phẩm có dấu, đơn mới nhất trước, tổng = số đơn khớp', async () => {
+    const { svc } = makeSearchService();
+    const res = await svc.list('u1', { q: 'dau goi' }, 1, 20);
+    expect(res.data.map((o) => o.code)).toEqual(['TUBU2026101401', 'TUBU2026101203']);
+    expect(res.meta).toEqual({ page: 1, limit: 20, total: 2 });
+  });
+
+  it('khớp mã đơn (không phân biệt hoa thường, bỏ dấu # đầu)', async () => {
+    const { svc } = makeSearchService();
+    const res = await svc.list('u1', { q: '#tubu20261013' }, 1, 20);
+    expect(res.data.map((o) => o.code)).toEqual(['TUBU2026101302']);
+  });
+
+  it('chỉ quét đơn của chính user và áp luôn bộ lọc trạng thái', async () => {
+    const { svc, findMany } = makeSearchService();
+    await svc.list('u1', { q: 'mat ong', group: 'closed' }, 1, 20);
+    expect(findMany.mock.calls[0]![0].where).toEqual({ userId: 'u1', status: { in: ['CANCELLED', 'RETURNED'] } });
+  });
+
+  it('phân trang trên tập đã khớp', async () => {
+    const { svc } = makeSearchService();
+    const page2 = await svc.list('u1', { q: 'dau goi' }, 2, 1);
+    expect(page2.data.map((o) => o.code)).toEqual(['TUBU2026101203']);
+    expect(page2.meta.total).toBe(2);
+  });
+
+  it('không khớp đơn nào → danh sách rỗng, không truy vấn trang', async () => {
+    const { svc, findMany } = makeSearchService();
+    const res = await svc.list('u1', { q: 'khong co' }, 1, 20);
+    expect(res.data).toEqual([]);
+    expect(res.meta.total).toBe(0);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('q rỗng/chỉ khoảng trắng → danh sách thường (đếm bằng count)', async () => {
+    const { svc, count } = makeSearchService();
+    await svc.list('u1', { q: '   ' }, 1, 20);
+    expect(count).toHaveBeenCalled();
+  });
+});
+
 describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo variationId, không thêm cột)', () => {
   const v = (id: string, over: Record<string, unknown> = {}, product: Record<string, unknown> = {}) => ({
     id, stock: 5, isActive: true, retailPrice: 60000, salePrice: null, ...over,

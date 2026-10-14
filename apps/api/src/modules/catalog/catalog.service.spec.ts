@@ -194,18 +194,59 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
   });
 });
 
+describe('CatalogService.getBySlug — liên kết sang trang nhãn hàng (BUYERWEB-18)', () => {
+  const row = (brandRef: unknown) => ({
+    id: 'p1', slug: 'tinh-dau', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0,
+    brand: 'Hector', brandId: 'b1', brandRef, variations: [], reviews: [],
+  });
+
+  it('nhãn đã công khai → trả brandSlug, không lộ cả bản ghi brandRef', async () => {
+    const findUnique = jest.fn().mockResolvedValue(row({ slug: 'hector', isPublished: true }));
+    const r = await new CatalogService({ product: { findUnique } } as unknown as PrismaService).getBySlug('tinh-dau');
+    expect(r.brandSlug).toBe('hector');
+    expect(r).not.toHaveProperty('brandRef');
+    const arg = findUnique.mock.calls[0]![0] as { include: { brandRef: { select: object } } };
+    expect(arg.include.brandRef.select).toEqual({ slug: true, isPublished: true });
+  });
+
+  it('nhãn chưa công khai (trang /brand/:slug sẽ 404) hoặc sản phẩm không gắn nhãn → brandSlug null', async () => {
+    const hidden = jest.fn().mockResolvedValue(row({ slug: 'hector', isPublished: false }));
+    expect((await new CatalogService({ product: { findUnique: hidden } } as unknown as PrismaService).getBySlug('x')).brandSlug).toBeNull();
+    const none = jest.fn().mockResolvedValue(row(null));
+    expect((await new CatalogService({ product: { findUnique: none } } as unknown as PrismaService).getBySlug('x')).brandSlug).toBeNull();
+  });
+});
+
 describe('CatalogService.brands cache 60s', () => {
   it('gọi 2 lần liên tiếp chỉ hit DB 1 lần (TTL chưa hết)', async () => {
     const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
-    const prisma = { product: { groupBy } } as unknown as PrismaService;
+    const prisma = { product: { groupBy }, brand: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
     const svc = new CatalogService(prisma);
 
     const a = await svc.brands();
     const b = await svc.brands();
 
     expect(groupBy).toHaveBeenCalledTimes(1);
-    expect(a).toEqual([{ brand: 'TuBu', count: 3 }]);
+    expect(a).toEqual([{ brand: 'TuBu', count: 3, slug: null }]);
     expect(b).toEqual(a);
+  });
+
+  it('nhãn đã công khai kèm slug để trang chủ dẫn tới /brand/:slug; nhãn chưa công khai thì slug null (BUYERWEB-18)', async () => {
+    const groupBy = jest.fn().mockResolvedValue([
+      { brand: 'Hector', _count: { _all: 2 } },
+      { brand: 'Gốm Bát Tràng', _count: { _all: 1 } },
+    ]);
+    const findMany = jest.fn().mockResolvedValue([{ name: 'Hector', slug: 'hector' }]);
+    const prisma = { product: { groupBy }, brand: { findMany } } as unknown as PrismaService;
+    const out = (await new CatalogService(prisma).brands()) as { brand: string; count: number; slug: string | null }[];
+    expect(out).toEqual([
+      { brand: 'Hector', count: 2, slug: 'hector' },
+      { brand: 'Gốm Bát Tràng', count: 1, slug: null },
+    ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isPublished: true, name: { in: ['Hector', 'Gốm Bát Tràng'] } },
+      select: { name: true, slug: true },
+    });
   });
 
   it('expire sau 60s → hit DB lần 2 (chứng minh TTL thực sự chạy)', async () => {
@@ -214,7 +255,7 @@ describe('CatalogService.brands cache 60s', () => {
     jest.useFakeTimers();
     try {
       const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
-      const prisma = { product: { groupBy } } as unknown as PrismaService;
+      const prisma = { product: { groupBy }, brand: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
       const svc = new CatalogService(prisma);
 
       await svc.brands();

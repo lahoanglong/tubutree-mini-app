@@ -90,12 +90,12 @@ describe('/thanh-toan — khách chưa có địa chỉ (BUYERWEB-20)', () => {
 });
 
 describe('/thanh-toan — ghi chú đơn hàng (BUYERWEB-20)', () => {
-  it('ghi chú đi cùng đơn đã cắt khoảng trắng, giới hạn 300 ký tự', async () => {
+  it('ghi chú đi cùng đơn đã cắt khoảng trắng, giới hạn 500 ký tự như Mini App', async () => {
     const c = await mount();
     const note = c.querySelector<HTMLTextAreaElement>('textarea')!;
-    expect(note.maxLength).toBe(300);
+    expect(note.maxLength).toBe(500);
     typeInto(note, '  Gọi trước khi giao, gửi ở bảo vệ  ');
-    expect(c.textContent).toContain('36/300 ký tự');
+    expect(c.textContent).toContain('36/500 ký tự');
     click(btn(c, 'Đặt hàng')!);
     await flush(8);
     expect(mocks.placeCalls).toHaveLength(1);

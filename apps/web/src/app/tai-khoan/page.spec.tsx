@@ -20,6 +20,7 @@ vi.mock('@/lib/auth-context', () => ({
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
+  getMe: async () => ({ pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 }),
   fetchOrdersPage: async (page: number, filter: Record<string, string> = {}) => {
     state.calls.push({ page, filter });
     if (state.failPage === page) throw new Error('boom');

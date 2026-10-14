@@ -16,6 +16,7 @@ import {
 } from '@/lib/shop-client';
 import { canCancelOrder, isReorderable } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { invalidateBalances } from '@/lib/balances';
 import {
   EMPTY_BANK,
   bankDetailsError,
@@ -41,15 +42,7 @@ function repurchaseSummary(r: RepurchaseResult): { added: number; short: number 
  * yêu cầu đổi/trả theo dòng và số lượng (đơn đã giao).
  * Quy tắc chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
  */
-export function OrderActions({
-  order: o,
-  userId,
-  supportEmail,
-}: {
-  order: OrderDetailDTO;
-  userId: string | null | undefined;
-  supportEmail: string;
-}) {
+export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; userId: string | null | undefined }) {
   const router = useRouter();
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -84,6 +77,7 @@ export function OrderActions({
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
+      invalidateBalances(qc);
     },
     onError: () => setConfirmCancel(false),
   });
@@ -227,7 +221,6 @@ export function OrderActions({
           key={returnKey}
           order={o}
           returns={orderReturns}
-          supportEmail={supportEmail}
           onClose={() => setReturnOpen(false)}
           onDone={() => {
             setReturnOpen(false);

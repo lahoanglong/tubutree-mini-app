@@ -70,7 +70,33 @@ describe('HomePage — tìm kiếm', () => {
 
   it('trang kết quả tìm kiếm không cho công cụ tìm kiếm lập chỉ mục (vô hạn biến thể URL)', async () => {
     expect(await generateMetadata({ searchParams: Promise.resolve({ q: 'gội' }) })).toEqual({ robots: { index: false, follow: true } });
-    expect(await generateMetadata({ searchParams: Promise.resolve({}) })).toEqual({});
+    expect(await generateMetadata({ searchParams: Promise.resolve({}) })).toEqual({ alternates: { canonical: '/' } });
+  });
+
+  it('trang phân trang và trang nhãn có tiêu đề + canonical riêng (R2-BUYERWEB-9); nhãn không có thật thì noindex', async () => {
+    const p2 = await generateMetadata({ searchParams: Promise.resolve({ page: '2' }) });
+    expect(p2.title).toBe('Sản phẩm sống xanh — Trang 2 | Tubu Tree');
+    expect(p2.alternates).toBeUndefined();
+    const brand = await generateMetadata({ searchParams: Promise.resolve({ brand: 'Tubu' }) });
+    expect(brand.title).toBe('Sản phẩm Tubu | Tubu Tree');
+    expect(brand.robots).toBeUndefined();
+    const fake = await generateMetadata({ searchParams: Promise.resolve({ brand: 'khong-co' }) });
+    expect(fake.robots).toEqual({ index: false, follow: true });
+  });
+
+  it('canonical của trang lọc/phân trang là thẻ <link> trong trang (Next bỏ query của canonical gốc "/")', async () => {
+    expect(await render({})).not.toContain('rel="canonical"');
+    expect(await render({ page: '2' })).toContain('<link rel="canonical" href="https://app.tubutree.com/?page=2"/>');
+    expect(await render({ brand: 'A&B' })).toContain('rel="canonical" href="https://app.tubutree.com/?brand=A%26B"');
+    expect(await render({ q: 'gội', brand: 'A&B' })).not.toContain('rel="canonical"');
+  });
+
+  it('nhãn đã công khai: lọc theo nhãn có liên kết tới /brand/:slug (BUYERWEB-18)', async () => {
+    mocks.getBrands.mockResolvedValue([{ brand: 'Tubu', count: 3, slug: 'tubu-xanh' }, { brand: 'A&B', count: 1, slug: null }]);
+    const withPage = await render({ brand: 'Tubu' });
+    expect(withPage).toMatch(/<a [^>]*href="\/brand\/tubu-xanh"[^>]*>Xem trang nhãn hàng Tubu/);
+    expect(await render({ brand: 'A&B' })).not.toContain('Xem trang nhãn hàng');
+    expect(await render({})).not.toContain('Xem trang nhãn hàng');
   });
 
   it('giữ cấu trúc heading: đúng một h1, h2 trước h3', async () => {
