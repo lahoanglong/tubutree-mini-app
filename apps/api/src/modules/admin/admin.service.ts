@@ -378,7 +378,8 @@ export class AdminService {
    * Cấp/đổi role cho user theo SĐT — THAY cho script SSH grant-admin.js (không audit, đi ngoài
    * hạ tầng quyền). Gọi qua endpoint @Roles('ADMIN') nên chỉ admin đăng nhập mới chạy được;
    * ghi log ai đổi (adminId) + role cũ→mới. KHÔNG tự tạo user (khác script test): SĐT chưa mở app
-   * → NotFound để admin biết đối tác cần đăng nhập Zalo Mini App ít nhất 1 lần trước.
+   * → NotFound để admin biết đối tác cần đăng nhập Zalo Mini App ít nhất 1 lần trước. SĐT dán từ Zalo (+84…, 84…,
+   * có khoảng trắng/chấm) về dạng User.phone đang lưu (0xxxxxxxxx) bằng cùng hàm ô tìm người dùng dùng.
    */
   async setUserRole(
     adminId: string,
@@ -386,7 +387,7 @@ export class AdminService {
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
     tierId?: string,
   ) {
-    const normalized = phone.trim();
+    const normalized = searchPhone(phone) ?? phone.trim();
     const dealerTierId = role === 'DEALER' ? tierId?.trim() : undefined;
     // DEALER không bậc → dealerContext trả tier null và đơn CREDIT bỏ qua hạn mức công nợ (C-008); cùng
     // luật với duyệt hồ sơ đại lý: bắt buộc chọn bậc tồn tại, merge vào metadata sẵn có (giữ segments/onboardedAt).
@@ -398,7 +399,7 @@ export class AdminService {
     const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
-      if (!user) throw new NotFoundException('Không tìm thấy user với SĐT này (cần mở Mini App Zalo ≥1 lần).');
+      if (!user) throw new NotFoundException(`Không tìm thấy người dùng có SĐT ${normalized} (cần mở Mini App Zalo ≥1 lần).`);
       const previousRole = user.role;
       // Hai cách khoá cả tổ chức ra ngoài, trước đây đều không có gì chặn — và khôi phục thì chỉ
       // còn đường vào thẳng DB bằng SQL. Nút "Thu hồi" trong app nằm ngay trên dòng của chính
