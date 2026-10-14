@@ -92,6 +92,18 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(screen.getAllByRole('img', { name: '5 trên 5 sao' })).toHaveLength(2);
   });
 
+  it('ảnh API phục vụ (đường dẫn tương đối) được ghép gốc API, ảnh Cloudinary giữ nguyên', async () => {
+    mocks.fetchReviews.mockResolvedValue({
+      average: 5,
+      count: 1,
+      items: [review('p', 5, { images: ['/reviews/p/images/0?v=abc1234567', 'https://res.cloudinary.com/x/a.jpg'] })],
+    });
+    renderSection();
+    await screen.findByText('Nhận xét p');
+    const srcs = screen.getAllByAltText('ảnh đánh giá').map((i) => i.getAttribute('src'));
+    expect(srcs).toEqual(['http://localhost:3001/api/reviews/p/images/0?v=abc1234567', 'https://res.cloudinary.com/x/a.jpg']);
+  });
+
   it('chip lọc: "5 sao", "Có ảnh", "Có video" lọc đúng danh sách, "Tất cả" trả lại đủ', async () => {
     renderSection();
     await screen.findByText('Nhận xét a');

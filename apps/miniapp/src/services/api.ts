@@ -11,6 +11,14 @@ const TIMEOUT_MS = 15_000;
  */
 export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
 
+/**
+ * Ảnh do chính API phục vụ (vd ảnh đánh giá base64 → "/reviews/:id/images/0?v=…") được trả dạng đường dẫn tương đối API
+ * để JSON nhẹ; ghép với gốc API cho thẻ img. URL tuyệt đối (Cloudinary), data URL và đường dẫn "//host" giữ nguyên.
+ */
+export function apiMediaUrl(src: string): string {
+  return src.startsWith('/') && !src.startsWith('//') ? `${BASE_URL.replace(/\/+$/, '')}${src}` : src;
+}
+
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
 /**

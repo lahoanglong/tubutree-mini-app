@@ -1,5 +1,5 @@
 import { describe, it, expect, vi as vitestVi, afterEach } from 'vitest';
-import { getErrorMessage } from './api';
+import { apiMediaUrl, getErrorMessage } from './api';
 import { vi as viCopy } from '../i18n/vi';
 
 function axiosError(overrides: Record<string, unknown>): unknown {
@@ -46,5 +46,20 @@ describe('getErrorMessage', () => {
   it('lỗi không phải AxiosError (vd throw string/Error thường) → copy generic', () => {
     expect(getErrorMessage(new Error('nope'))).toBe(viCopy.errors.generic);
     expect(getErrorMessage('nope')).toBe(viCopy.errors.generic);
+  });
+});
+
+describe('apiMediaUrl', () => {
+  it('đường dẫn tương đối của API được ghép với gốc API', () => {
+    expect(apiMediaUrl('/reviews/r1/images/0?v=abc')).toBe('http://localhost:3001/api/reviews/r1/images/0?v=abc');
+  });
+
+  it.each([
+    'https://res.cloudinary.com/x/a.jpg',
+    'data:image/png;base64,AAAA',
+    '//cdn.example.com/a.jpg',
+    '',
+  ])('giữ nguyên %j', (src) => {
+    expect(apiMediaUrl(src)).toBe(src);
   });
 });

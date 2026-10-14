@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,6 +12,20 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 const errCode = (err: unknown): string | undefined =>
   typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
+
+/** Ảnh raster base64 duy nhất được phục vụ qua endpoint ảnh (đã chặn SVG/HTML từ lúc nhận ở IsUploadedImage). */
+const SERVED_DATA_URL_RE = /^data:(image\/(?:png|jpe?g|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
+
+/**
+ * Ảnh đánh giá trong danh sách công khai. Ảnh base64 (khi chưa cấu hình Cloudinary) nặng tới ~700 nghìn ký tự/ảnh nên
+ * không nhúng trong JSON: trả đường dẫn tương đối tới API (`/reviews/:id/images/:i`) để trình duyệt tải lười và cache;
+ * `v` là mã băm nội dung để sửa đánh giá không dính ảnh cũ trong cache. Ảnh https (Cloudinary) giữ nguyên.
+ */
+export function reviewImageRef(reviewId: string, index: number, image: string): string {
+  if (!image.startsWith('data:')) return image;
+  const version = createHash('sha1').update(image).digest('hex').slice(0, 10);
+  return `/reviews/${reviewId}/images/${index}?v=${version}`;
+}
 
 /** Số lần thử lại khi tạo/sửa thua một request đồng thời của chính người đó (tạo cùng lúc, hoặc xoá đúng lúc sửa). */
 const SAVE_ATTEMPTS = 3;
@@ -256,7 +271,7 @@ export class ReviewsService {
         id: r.id,
         rating: r.rating,
         comment: r.comment,
-        images: r.images,
+        images: r.images.map((img, i) => reviewImageRef(r.id, i, img)),
         videoUrl: r.videoUrl,
         createdAt: r.createdAt,
         author: r.user.fullName ?? 'Khách Tubu',
@@ -265,6 +280,15 @@ export class ReviewsService {
         verifiedPurchase: true,
       })),
     };
+  }
+
+  /** Byte của ảnh base64 thứ `index` trong một đánh giá đang hiện (đích của `reviewImageRef`). */
+  async getImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId }, select: { isVisible: true, images: true } });
+    const image = review?.isVisible && Number.isInteger(index) && index >= 0 ? review.images[index] : undefined;
+    const match = image ? SERVED_DATA_URL_RE.exec(image) : null;
+    if (!match) throw new NotFoundException('Không tìm thấy ảnh.');
+    return { mime: match[1]!, data: Buffer.from(match[2]!, 'base64') };
   }
 
   async remove(userId: string, role: string, id: string) {

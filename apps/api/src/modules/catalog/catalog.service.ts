@@ -83,10 +83,10 @@ export class CatalogService {
     weight: true,
   } satisfies Prisma.VariationSelect;
 
+  // Không có images: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh, app đọc đánh giá qua GET /products/:slug/reviews.
   private readonly publicReviewSelect = {
     rating: true,
     comment: true,
-    images: true,
     videoUrl: true,
     isVerified: true,
     createdAt: true,

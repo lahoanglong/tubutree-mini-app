@@ -459,6 +459,52 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
   });
 });
 
+// R2-ENGAGE-3: ảnh base64 (chưa cấu hình Cloudinary) không nhét vào JSON danh sách mà tải riêng, lazy, cache được.
+describe('ReviewsService.listByProduct — ảnh base64 không nhúng trong JSON (R2-ENGAGE-3)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  const row = (over: Record<string, unknown>) => ({
+    id: 'r1', rating: 5, comment: null, images: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null }, ...over,
+  });
+
+  it('ảnh data URL → đường dẫn tải ảnh riêng kèm mã phiên bản; ảnh https giữ nguyên', async () => {
+    const prisma = makePrisma({
+      review: { findMany: jest.fn().mockResolvedValue([row({ images: [PNG, 'https://res.cloudinary.com/x/a.jpg'] })]) },
+    });
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    expect(r.items[0]!.images[0]).toMatch(/^\/reviews\/r1\/images\/0\?v=[0-9a-f]{10}$/);
+    expect(r.items[0]!.images[1]).toBe('https://res.cloudinary.com/x/a.jpg');
+    expect(JSON.stringify(r)).not.toContain('base64');
+  });
+
+  it('mã phiên bản đổi khi ảnh đổi (sửa đánh giá không bị cache ảnh cũ)', async () => {
+    const list = async (img: string) =>
+      (await new ReviewsService(makePrisma({ review: { findMany: jest.fn().mockResolvedValue([row({ images: [img] })]) } }), analytics, loyalty).listByProduct('tinh-dau')).items[0]!.images[0];
+    expect(await list(PNG)).not.toBe(await list('data:image/png;base64,AAAA'));
+  });
+});
+
+describe('ReviewsService.getImage', () => {
+  const svc = (review: unknown) =>
+    new ReviewsService(makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(review) } }), analytics, loyalty);
+  const PNG_B64 = 'iVBORw0KGgo=';
+
+  it('trả đúng loại ảnh + byte của ảnh base64 thứ i trong đánh giá đang hiện', async () => {
+    const img = await svc({ isVisible: true, images: ['https://x/a.jpg', `data:image/png;base64,${PNG_B64}`] }).getImage('r1', 1);
+    expect(img.mime).toBe('image/png');
+    expect(img.data.equals(Buffer.from(PNG_B64, 'base64'))).toBe(true);
+  });
+
+  it.each([
+    ['đánh giá không tồn tại', null, 0],
+    ['đánh giá bị ẩn', { isVisible: false, images: [`data:image/png;base64,${PNG_B64}`] }, 0],
+    ['chỉ số ngoài phạm vi', { isVisible: true, images: [`data:image/png;base64,${PNG_B64}`] }, 3],
+    ['ảnh https (không phải base64)', { isVisible: true, images: ['https://res.cloudinary.com/x/a.jpg'] }, 0],
+    ['SVG/HTML không phải ảnh raster', { isVisible: true, images: ['data:image/svg+xml;base64,PHN2Zy8+'] }, 0],
+  ])('%s → NotFound', async (_name, review, index) => {
+    await expect(svc(review).getImage('r1', index as number)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 type RemoveDb = {
   review: { delete: jest.Mock };
   pointsTransaction: { create: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
