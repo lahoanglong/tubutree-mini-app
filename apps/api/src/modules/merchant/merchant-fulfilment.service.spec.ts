@@ -72,16 +72,62 @@ describe('slaStateOf', () => {
 });
 
 describe('saleLineOf — công thức đối soát (thiết kế mục 7)', () => {
-  const items = [{ total: 180_000 }, { total: 20_000 }];
-  it('COD: đối tác đã thu cả tổng đơn → net = phần Tubu tài trợ − phí sàn (có thể âm)', () => {
-    // hàng 200k (sau combo), mã Tubu 30k, phí giao 30k → khách trả 200k; phí sàn 15% = 30k.
+  const items = [{ id: 'a', total: 180_000 }, { id: 'b', total: 20_000 }];
+  it('COD: tiền hàng = tiền khách thực trả cho hàng; gian hàng đã thu cả tổng đơn → nộp phí sàn trên phần đó', () => {
+    // hàng 200k (sau combo), mã Tubu 30k, phí giao 30k → khách trả 200k, tiền hàng thực trả 170k; phí sàn 15% = 25,5k.
     const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'COD', total: 200_000, shippingFee: 30_000, merchantCommissionPct: new Prisma.Decimal('0.15'), deliveredAt: NOW, items });
-    expect(l).toEqual(expect.objectContaining({ goodsAmount: 200_000, commissionAmount: 30_000, codCollected: 200_000, netAmount: 0 }));
+    expect(l).toEqual(expect.objectContaining({ goodsAmount: 170_000, shippingFee: 30_000, commissionAmount: 25_500, codCollected: 200_000, netAmount: -25_500 }));
   });
-  it('Ví Tubu: Tubu giữ tiền → trả đối tác hàng + phí giao − phí sàn', () => {
+  it('Ví Tubu: Tubu giữ tiền → trả gian hàng tiền hàng khách trả + phí giao − phí sàn; ví là cách trả, không phải giảm giá', () => {
     const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'WALLET', total: 200_000, shippingFee: 30_000, merchantCommissionPct: 0.1, deliveredAt: NOW, items });
-    expect(l.netAmount).toBe(200_000 + 30_000 - 20_000);
+    expect(l.goodsAmount).toBe(170_000);
+    expect(l.netAmount).toBe(170_000 + 30_000 - 17_000);
     expect(l.codCollected).toBe(0);
+  });
+  it('đơn không giảm giá: tiền hàng = tổng dòng như trước', () => {
+    const l = saleLineOf({ id: 'o', code: 'C', paymentMethod: 'WALLET', total: 230_000, shippingFee: 30_000, merchantCommissionPct: 0.1, deliveredAt: NOW, items });
+    expect(l).toMatchObject({ goodsAmount: 200_000, commissionAmount: 20_000, netAmount: 210_000 });
+  });
+});
+
+describe('Đơn tự giao — ví dụ tính tay (giống race spec merchant-selfship-paid-base)', () => {
+  // A 2 × 100k, B 1 × 100k; mã giảm 30k + Điểm Xanh 20k; phí giao 30k → khách trả 280k; phí sàn 10%.
+  const order = {
+    id: 'o',
+    code: 'C',
+    paymentMethod: 'COD',
+    paymentStatus: 'REFUNDED',
+    total: 280_000,
+    shippingFee: 30_000,
+    merchantCommissionPct: 0.1,
+    deliveredAt: NOW,
+    items: [
+      { id: 'iA', total: 200_000, quantity: 2 },
+      { id: 'iB', total: 100_000, quantity: 1 },
+    ],
+  };
+  const r1 = { id: 'r1', reviewedAt: NOW, shippingRefund: 0, items: [{ orderItemId: 'iA', quantity: 1 }] };
+
+  it('SALE −25.000; trả 1 × A −75.001; trả nốt −179.999; hàng/phí giao/phí sàn cộng lại = 0, thực nhận = −280.000 tiền COD', () => {
+    const sale = saleLineOf(order);
+    expect(sale).toMatchObject({ goodsAmount: 250_000, shippingFee: 30_000, commissionAmount: 25_000, codCollected: 280_000, netAmount: -25_000 });
+    const [partial] = partialReversalLinesOf(order, [r1]);
+    expect(partial).toMatchObject({ refKey: 'RETURN:r1', goodsAmount: -83_334, shippingFee: 0, commissionAmount: -8_333, netAmount: -75_001 });
+    const whole = reversalLineOf(order, sale, [partial!])!;
+    expect(whole).toMatchObject({ goodsAmount: -166_666, shippingFee: -30_000, commissionAmount: -16_667, codCollected: 0, netAmount: -179_999 });
+    const all = [sale, partial!, whole];
+    const total = (k: 'goodsAmount' | 'shippingFee' | 'commissionAmount' | 'netAmount') => all.reduce((s, l) => s + l[k], 0);
+    expect([total('goodsAmount'), total('shippingFee'), total('commissionAmount')]).toEqual([0, 0, 0]);
+    expect(total('netAmount')).toBe(-280_000);
+  });
+
+  it('SALE đã lưu theo nền cũ (tiền hàng 300.000) → dòng đảo chia trên số đã lưu: trả 1 × A = −100.000, phí sàn −10.000', () => {
+    const [partial] = partialReversalLinesOf(order, [r1], 300_000);
+    expect(partial).toMatchObject({ goodsAmount: -100_000, commissionAmount: -10_000, netAmount: -90_000 });
+  });
+
+  it('SALE đã lưu theo nền mới → dòng đảo giống hệt khi tính cùng SALE', () => {
+    expect(partialReversalLinesOf(order, [r1], 250_000)).toEqual(partialReversalLinesOf(order, [r1]));
   });
 });
 
@@ -353,7 +399,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
 
 describe('partialReversalLinesOf — trả nhiều lần cộng lại đúng bằng trả cả dòng', () => {
   it('ba lần trả 1/3 → tổng tiền hàng đảo = tổng dòng, phí sàn không lệch làm tròn', () => {
-    const order = { id: 'o', code: 'C', merchantCommissionPct: new Prisma.Decimal('0.15'), items: [{ id: 'i', total: 100_000, quantity: 3 }] };
+    const order = { id: 'o', code: 'C', total: 100_000, shippingFee: 0, merchantCommissionPct: new Prisma.Decimal('0.15'), items: [{ id: 'i', total: 100_000, quantity: 3 }] };
     const reqs = ['a', 'b', 'c'].map((id, n) => ({ id, reviewedAt: new Date(NOW.getTime() + n), shippingRefund: 0, items: [{ orderItemId: 'i', quantity: 1 }] }));
     const lines = partialReversalLinesOf(order, reqs);
     expect(lines.map((l) => l.refKey)).toEqual(['RETURN:a', 'RETURN:b', 'RETURN:c']);
