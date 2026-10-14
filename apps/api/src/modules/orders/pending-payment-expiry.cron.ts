@@ -101,7 +101,7 @@ export class PendingPaymentExpiryCron {
     let cancelled = 0;
     let failed = 0;
     for (const o of stale) {
-      // Chưa có API tra trạng thái cổng: khách đã mở lệnh thanh toán mà callback thất lạc thì có thể đã bị trừ tiền.
+      // ZaloPay có cron đối soát (ZalopayReconcileCron) hỏi cổng cả sau khi huỷ; cổng khác thì chưa — để lại dấu cho người đối soát.
       const gatewayAttempted = o.paymentMethod !== 'BANK_TRANSFER' && (o._count?.paymentAttempts ?? 0) > 0;
       try {
         const res = await this.orderStatus.setStatus(o.id, 'CANCELLED', {
