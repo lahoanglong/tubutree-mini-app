@@ -1,6 +1,7 @@
 'use client';
 
 import { apiFetch } from './client-api';
+import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 
 export interface CartLine {
   id: string;
@@ -217,12 +218,19 @@ export interface OrderDetailDTO extends OrderDTO {
   shippingPartner?: string | null;
   shippingCode?: string | null;
   trackingLink?: string | null;
-  items: (OrderDTO['items'][number] & { thumbnail?: string | null })[];
+  /** Hạn chuyển khoản của đơn trả trước đang chờ tiền (ISO); quá hạn đơn tự huỷ. */
+  paymentDeadline?: string | null;
+  items: (OrderDTO['items'][number] & { id?: string; thumbnail?: string | null })[];
 }
 export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);
 
-export const cancelOrder = (code: string) =>
-  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: {} });
+export type RefundDestinationBody =
+  | { refundMethod: 'WALLET' }
+  | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
+
+/** Đơn đã trả tiền: gửi kèm nơi nhận tiền hoàn (Ví Tubu hoặc tài khoản ngân hàng). */
+export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
+  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: destination ?? {} });
 
 export interface RepurchaseResult {
   results: { orderItemId: string; status: 'added' | 'partial' | 'skipped'; reason?: string; addedQuantity: number }[];
@@ -238,12 +246,37 @@ export interface ReturnRequestDTO {
   orderId: string;
   status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
   reason: string;
+  reasonCode?: string | null;
   adminNote?: string | null;
+  refundMethod?: 'WALLET' | 'BANK';
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  /** Tiền hàng hoàn khi duyệt (null khi chưa duyệt); phí ship hoàn nằm riêng ở `shippingRefund`. */
+  refundAmount?: number | null;
+  shippingRefund?: number;
+  pointsRefunded?: number;
+  fullReturn?: boolean;
+  receivedAt?: string | null;
+  items?: { orderItemId: string; quantity: number; refundAmount: number }[];
   createdAt: string;
 }
-export const requestReturn = (code: string, reason: string) =>
-  apiFetch<ReturnRequestDTO>(`/orders/${encodeURIComponent(code)}/return-request`, { method: 'POST', body: { reason } });
+export interface ReturnRequestBody {
+  reasonCode: ReturnReasonCode;
+  reason?: string;
+  items: { orderItemId: string; quantity: number }[];
+}
+export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
+  apiFetch<ReturnRequestDTO>(`/orders/${encodeURIComponent(code)}/return-request`, { method: 'POST', body });
 export const fetchMyReturns = () => apiFetch<ReturnRequestDTO[]>('/orders/me/returns');
+
+/** Các khoản hoàn tiền của khách cho một đơn (chuyển khoản chờ xử lý, tiền về muộn). */
+export const fetchMyRefunds = (orderId: string) =>
+  apiFetch<MyRefund[]>(`/orders/me/refunds?orderId=${encodeURIComponent(orderId)}`);
+/** Tài khoản ngân hàng khách dùng gần nhất — điền sẵn khi chọn hoàn về ngân hàng. */
+export const fetchRefundBank = () =>
+  apiFetch<{ bank: RefundBankInput | null }>('/orders/me/refund-bank').then((r) => r.bank);
+export const chooseRefundDestination = (refundId: string, body: RefundDestinationBody) =>
+  apiFetch<MyRefund>(`/orders/me/refunds/${encodeURIComponent(refundId)}/destination`, { method: 'POST', body });
 
 // Thanh toán chuyển khoản (VietQR) — A2-02 = A6-01 (docs/audit-2026-09): web chọn được
 // BANK_TRANSFER nhưng trước đây không có cách nào gọi endpoint này nên khách không bao giờ thấy
@@ -257,6 +290,8 @@ export interface BankQrDTO {
   memo: string;
   qrString: string;
   qrImageUrl: string;
+  /** Hạn chuyển khoản (ISO) khi đơn còn chờ tiền; null khi đã trả hoặc không có hạn. */
+  paymentDeadline?: string | null;
 }
 export const getBankQr = (code: string) => apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
 

@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   requestReturn: vi.fn(),
   returns: [] as unknown[],
   returnsError: false,
+  refunds: [] as unknown[],
+  refundBank: null as Record<string, string> | null,
+  chooseDestination: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ user: mocks.user, status: 'authenticated', initialized: true }),
@@ -37,6 +40,9 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     if (mocks.returnsError) throw new Error('boom');
     return mocks.returns;
   },
+  fetchMyRefunds: async () => mocks.refunds,
+  fetchRefundBank: async () => mocks.refundBank,
+  chooseRefundDestination: mocks.chooseDestination,
   getBankQr: async () => ({
     orderCode: 'TB-9', amount: 1, paymentStatus: 'UNPAID',
     bank: { bin: '1', name: 'B', accountNo: '1', accountName: 'A' }, memo: 'TB-9', qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
@@ -48,7 +54,7 @@ import OrderDetailPage from './page';
 const BASE = {
   id: 'o9', code: 'TB-9', status: 'CONFIRMED', subtotal: 300000, discount: 0, shippingFee: 0, total: 300000,
   paymentMethod: 'COD', paymentStatus: 'UNPAID', createdAt: '2026-10-01T03:00:00Z', deliveredAt: null,
-  items: [{ productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null }],
+  items: [{ id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null }],
   shippingAddress: null, shippingPartner: null, shippingCode: null, trackingLink: null, shippingHistory: null,
 };
 
@@ -61,6 +67,14 @@ const mount = async () => {
 };
 const btn = (c: HTMLElement, text: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined;
+const confirmCancelBtn = (c: HTMLElement) =>
+  Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Hủy đơn') ?? null;
+const radio = (c: HTMLElement, label: RegExp) =>
+  Array.from(c.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((r) => label.test(r.closest('label')?.textContent ?? '')) ?? null;
+const field = (c: HTMLElement, label: string) =>
+  Array.from(c.querySelectorAll<HTMLInputElement>('input, textarea')).find((i) =>
+    Array.from(i.labels ?? []).some((l) => (l.firstChild?.textContent ?? '').trim() === label),
+  ) ?? null;
 
 beforeEach(() => {
   mocks.user = { id: 'u1' };
@@ -71,6 +85,9 @@ beforeEach(() => {
   mocks.requestReturn.mockReset().mockResolvedValue({ id: 'r1' });
   mocks.returns = [];
   mocks.returnsError = false;
+  mocks.refunds = [];
+  mocks.refundBank = null;
+  mocks.chooseDestination.mockReset();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -127,17 +144,65 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
   it('xác nhận hủy: gọi API đúng mã đơn rồi báo đã hủy', async () => {
     const { container } = await mount();
     click(btn(container, 'Hủy đơn')!);
-    click(Array.from(container.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Hủy đơn') ?? null);
+    click(confirmCancelBtn(container));
     await flush(8);
-    expect(mocks.cancel).toHaveBeenCalledWith('TB-9');
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined);
     expect(container.textContent).toContain('Đã hủy đơn hàng');
+  });
+
+  it('D2: đơn chuyển khoản đã trả → mặc định hoàn về Ví Tubu', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' };
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    expect(container.querySelector('[role="alertdialog"] [role="radiogroup"]')?.getAttribute('aria-label')).toBe('Nơi nhận tiền hoàn');
+    click(confirmCancelBtn(container));
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', { refundMethod: 'WALLET' });
+  });
+
+  it('MONEY-9: chọn tài khoản ngân hàng → điền sẵn tài khoản gần nhất, thiếu số thì báo lỗi và không gọi API', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' };
+    mocks.refundBank = { bankName: 'Techcombank', accountNumber: '190312345678', accountName: 'NGUYEN VAN A' };
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(radio(container, /Tài khoản ngân hàng/));
+    await flush(8);
+    expect(field(container, 'Số tài khoản')?.value).toBe('190312345678');
+    typeInto(field(container, 'Số tài khoản'), '12');
+    click(confirmCancelBtn(container));
+    await flush();
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
+    typeInto(field(container, 'Số tài khoản'), '1903 1234 5678');
+    click(confirmCancelBtn(container));
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', {
+      refundMethod: 'BANK', bankName: 'Techcombank', accountNumber: '1903 1234 5678', accountName: 'NGUYEN VAN A',
+    });
+  });
+
+  it('MONEY-6: đơn chuyển khoản chưa ghi nhận tiền → cảnh báo đừng huỷ vội, tiền về muộn vẫn được hoàn', async () => {
+    mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    const note = container.querySelector('[role="alertdialog"] [role="note"]');
+    expect(note?.textContent).toContain('Nếu bạn vừa chuyển khoản');
+    expect(note?.textContent).toContain('Tiền về sau khi huỷ vẫn được hoàn');
+  });
+
+  it('đơn trả bằng Ví: báo hoàn ngay về Ví, không có lựa chọn ngân hàng', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'WALLET', paymentStatus: 'PAID' };
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    expect(container.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(container.textContent).toContain('300.000đ được hoàn ngay vào Ví Tubu.');
   });
 
   it('BE từ chối (đơn vừa vào quy trình giao): hiện nguyên văn lời BE', async () => {
     mocks.cancel.mockRejectedValue(new Error('Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.'));
     const { container } = await mount();
     click(btn(container, 'Hủy đơn')!);
-    click(Array.from(container.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Hủy đơn') ?? null);
+    click(confirmCancelBtn(container));
     await flush(8);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã vào quy trình giao');
   });
@@ -210,21 +275,73 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
   });
 
-  it('lý do dưới 5 ký tự: không gửi được; đủ thì gửi đúng mã đơn + lý do đã cắt khoảng trắng', async () => {
+  it('BUYERMINI-11 (web): chọn dòng + lý do chọn sẵn → gửi đúng dòng, số lượng, mã lý do, nhận về Ví', async () => {
     mocks.order = delivered;
     const { container } = await mount();
     click(btn(container, 'Yêu cầu đổi/trả')!);
-    const textarea = container.querySelector('textarea')!;
-    expect(btn(container, 'Gửi yêu cầu')!.disabled).toBe(true);
-    typeInto(textarea, 'ab');
-    expect(btn(container, 'Gửi yêu cầu')!.disabled).toBe(true);
-    expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    typeInto(textarea, '  Bao bì bị rách khi nhận  ');
-    expect(btn(container, 'Gửi yêu cầu')!.disabled).toBe(false);
+    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(box.checked).toBe(true);
+    click(radio(container, /^Sản phẩm lỗi, hỏng$/));
     click(btn(container, 'Gửi yêu cầu')!);
     await flush(8);
-    expect(mocks.requestReturn).toHaveBeenCalledWith('TB-9', 'Bao bì bị rách khi nhận');
-    expect(container.querySelector('textarea')).toBeNull();
+    expect(mocks.requestReturn).toHaveBeenCalledWith('TB-9', {
+      reasonCode: 'DEFECTIVE',
+      reason: undefined,
+      items: [{ orderItemId: 'i1', quantity: 1 }],
+      refundMethod: 'WALLET',
+    });
+    expect(container.querySelector('form[aria-labelledby="return-form-title"]')).toBeNull();
+    expect(container.textContent).toContain('Đã gửi yêu cầu đổi/trả');
+  });
+
+  it('D3: tăng số lượng tới số còn trả được (đã trừ phần đã duyệt trước)', async () => {
+    mocks.order = { ...delivered, items: [{ ...BASE.items[0], quantity: 3 }] };
+    mocks.returns = [{ id: 'r0', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 100000, items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 100000 }], createdAt: '2026-10-06T00:00:00Z' }];
+    const { container } = await mount();
+    click(btn(container, 'Trả thêm sản phẩm')!);
+    const plus = container.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng Dầu gội"]')!;
+    click(plus);
+    click(plus);
+    expect(plus.disabled).toBe(true);
+    expect(container.textContent).toContain('còn trả được 2');
+    click(radio(container, /^Giao sai sản phẩm$/));
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush(8);
+    expect(mocks.requestReturn.mock.calls[0]![1].items).toEqual([{ orderItemId: 'i1', quantity: 2 }]);
+  });
+
+  it('chưa chọn lý do / "Lý do khác" thiếu mô tả: báo lỗi, không gửi', async () => {
+    mocks.order = delivered;
+    const { container } = await mount();
+    click(btn(container, 'Yêu cầu đổi/trả')!);
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush();
+    expect(container.querySelector('form [role="alert"]')?.textContent).toBe('Chọn lý do đổi/trả.');
+    click(radio(container, /^Lý do khác$/));
+    typeInto(field(container, 'Mô tả thêm'), 'ab');
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush();
+    expect(container.querySelector('form [role="alert"]')?.textContent).toBe('Mô tả lý do (tối thiểu 5 ký tự).');
+    typeInto(field(container, 'Mô tả thêm'), '  Bao bì bị rách khi nhận  ');
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush(8);
+    expect(mocks.requestReturn.mock.calls[0]![1]).toMatchObject({ reasonCode: 'OTHER', reason: 'Bao bì bị rách khi nhận' });
+  });
+
+  it('MONEY-9: đơn COD trả hàng chọn hoàn về ngân hàng → gửi kèm tài khoản', async () => {
+    mocks.order = delivered;
+    const { container } = await mount();
+    click(btn(container, 'Yêu cầu đổi/trả')!);
+    click(radio(container, /^Bể vỡ, móp méo khi vận chuyển$/));
+    click(radio(container, /Tài khoản ngân hàng/));
+    typeInto(field(container, 'Tên ngân hàng'), 'VCB');
+    typeInto(field(container, 'Số tài khoản'), '0071000123456');
+    typeInto(field(container, 'Chủ tài khoản'), 'Le Van C');
+    click(btn(container, 'Gửi yêu cầu')!);
+    await flush(8);
+    expect(mocks.requestReturn.mock.calls[0]![1]).toMatchObject({
+      refundMethod: 'BANK', bankName: 'VCB', accountNumber: '0071000123456', accountName: 'Le Van C',
+    });
   });
 
   it('BE từ chối (quá hạn đổi/trả): giữ form và hiện nguyên văn lời BE', async () => {
@@ -232,23 +349,37 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.requestReturn.mockRejectedValue(new Error('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).'));
     const { container } = await mount();
     click(btn(container, 'Yêu cầu đổi/trả')!);
-    typeInto(container.querySelector('textarea'), 'Hàng bị lỗi nhà sản xuất');
+    click(radio(container, /^Sản phẩm lỗi, hỏng$/));
     click(btn(container, 'Gửi yêu cầu')!);
     await flush(8);
-    expect(container.querySelector('textarea')).not.toBeNull();
+    expect(container.querySelector('form[aria-labelledby="return-form-title"]')).not.toBeNull();
     expect(container.textContent).toContain('Quá hạn đổi/trả (7 ngày từ khi nhận hàng).');
   });
 
   it.each([
-    ['REQUESTED', 'đang được xử lý'],
-    ['APPROVED', 'đã được duyệt'],
+    ['REQUESTED', 'đang xử lý'],
     ['REJECTED', 'bị từ chối: Ảnh không rõ'],
-  ])('đã có yêu cầu %s: hiện trạng thái thay cho nút gửi lại', async (status, expected) => {
+  ])('đang có yêu cầu %s cho mọi dòng: hiện trạng thái', async (status, expected) => {
     mocks.order = delivered;
     mocks.returns = [{ id: 'r1', orderId: 'o9', status, reason: 'x', adminNote: status === 'REJECTED' ? 'Ảnh không rõ' : null, createdAt: '2026-10-06T00:00:00Z' }];
     const { container } = await mount();
-    expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
+    if (status === 'REQUESTED') expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
     expect(container.textContent).toContain(expected);
+  });
+
+  it('D3: yêu cầu đã duyệt nói rõ dòng trả, số tiền, nơi nhận và trạng thái nhận hàng; trả hết thì không còn nút', async () => {
+    mocks.order = delivered;
+    mocks.returns = [{
+      id: 'r1', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 285000, shippingRefund: 15000, refundMethod: 'WALLET',
+      receivedAt: null, items: [{ orderItemId: 'i1', quantity: 2, refundAmount: 285000 }], createdAt: '2026-10-06T00:00:00Z',
+    }];
+    const { container } = await mount();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đổi/trả đã duyệt — đã hoàn 300.000đ vào Ví Tubu');
+    expect(text).toContain('Trả: Dầu gội ×2');
+    expect(text).toContain('Tubu sẽ liên hệ để nhận lại hàng.');
+    expect(btn(container, 'Trả thêm sản phẩm')).toBeUndefined();
+    expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
   });
 
   it('không tải được danh sách yêu cầu cũ: vẫn cho gửi (BE chặn trùng bằng lời rõ ràng)', async () => {
@@ -256,6 +387,41 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     mocks.returnsError = true;
     const { container } = await mount();
     expect(btn(container, 'Yêu cầu đổi/trả')).toBeDefined();
+  });
+});
+
+describe('chi tiết đơn — hoàn tiền và hạn thanh toán (D2, BUYERMINI-7/8)', () => {
+  const LATE = {
+    id: 'rf1', orderId: 'o9', orderCode: 'TB-9', kind: 'LATE_PAYMENT', amount: 197000, method: 'MANUAL_TRANSFER', status: 'PENDING',
+    bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: null, createdAt: '2026-10-14T00:00:00Z',
+    canChooseDestination: true,
+  };
+
+  it('tiền về sau khi huỷ: nhắc chọn nơi nhận; chọn Ví Tubu gọi API và báo đã hoàn', async () => {
+    mocks.order = { ...BASE, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER' };
+    mocks.refunds = [LATE];
+    mocks.chooseDestination.mockResolvedValue({ ...LATE, method: 'WALLET', status: 'COMPLETED', canChooseDestination: false });
+    const { container } = await mount();
+    expect(container.textContent).toContain('Tiền về sau khi đơn đã huỷ: chờ bạn chọn nơi nhận · 197.000đ');
+    click(btn(container, 'Chọn nơi nhận tiền')!);
+    click(btn(container, 'Xác nhận')!);
+    await flush(8);
+    expect(mocks.chooseDestination).toHaveBeenCalledWith('rf1', { refundMethod: 'WALLET' });
+    expect(container.textContent).toContain('Đã hoàn 197.000đ vào Ví Tubu.');
+  });
+
+  it('đã chuyển khoản: hiện tài khoản che số và mã giao dịch, không còn nút chọn', async () => {
+    mocks.order = { ...BASE, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
+    mocks.refunds = [{ ...LATE, kind: 'CANCEL', status: 'COMPLETED', bankName: 'VCB', bankAccountNo: '0071000123456', bankRef: 'FT9', canChooseDestination: false }];
+    const { container } = await mount();
+    expect(container.textContent).toContain('Về VCB ••• 3456 · Mã GD FT9');
+    expect(btn(container, 'Chọn nơi nhận tiền')).toBeUndefined();
+  });
+
+  it('BUYERMINI-8 (web): đơn ZaloPay đang chờ tiền hiện hạn thanh toán giờ VN (chuyển khoản hiện trong khung QR)', async () => {
+    mocks.order = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', paymentDeadline: '2026-10-14T03:00:00Z' };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Thanh toán trước 10:00 14/10/2026 — quá hạn đơn sẽ tự huỷ.');
   });
 });
 

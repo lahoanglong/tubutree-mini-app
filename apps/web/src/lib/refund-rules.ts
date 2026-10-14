@@ -1,0 +1,188 @@
+import { formatVnd } from './shop-client';
+
+/** Web không dùng shared-types: trạng thái/phương thức là chuỗi API trả về. */
+type PaymentMethod = string;
+type PaymentStatus = string;
+type OrderStatus = string;
+
+/** Lý do đổi/trả chọn sẵn — cùng mã với API (return-reasons.ts). "Lý do khác" bắt buộc mô tả. */
+export const RETURN_REASONS = [
+  { code: 'DEFECTIVE', label: 'Sản phẩm lỗi, hỏng' },
+  { code: 'WRONG_ITEM', label: 'Giao sai sản phẩm' },
+  { code: 'DAMAGED', label: 'Bể vỡ, móp méo khi vận chuyển' },
+  { code: 'EXPIRED', label: 'Hết hạn hoặc sai hạn sử dụng' },
+  { code: 'OTHER', label: 'Lý do khác' },
+] as const;
+export type ReturnReasonCode = (typeof RETURN_REASONS)[number]['code'];
+
+export type RefundMethodChoice = 'WALLET' | 'BANK';
+
+export interface RefundBankInput {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+export const EMPTY_BANK: RefundBankInput = { bankName: '', accountNumber: '', accountName: '' };
+
+/** Phương thức có thể hoàn về tài khoản ngân hàng (D2). Đơn trả bằng Ví luôn hoàn về Ví. */
+const BANK_REFUNDABLE: readonly PaymentMethod[] = ['BANK_TRANSFER', 'ZALOPAY', 'VNPAY', 'COD'];
+
+export function canRefundToBank(method: PaymentMethod): boolean {
+  return BANK_REFUNDABLE.includes(method);
+}
+
+type CancelOrder = { paymentMethod: PaymentMethod; paymentStatus: PaymentStatus };
+
+/**
+ * Điều sheet huỷ đơn cần nói về tiền:
+ * - choose: đơn đã trả tiền và hoàn được về ngân hàng → khách chọn Ví Tubu hay tài khoản ngân hàng.
+ * - wallet: đơn đã trả bằng Ví → hoàn ngay về Ví.
+ * - unpaidTransfer: đơn chuyển khoản chưa ghi nhận tiền → cảnh báo nếu đã chuyển thì đừng huỷ vội.
+ * - none: chưa thu tiền (COD chưa giao) → không có gì để hoàn.
+ */
+export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidTransfer' | 'none' {
+  if (o.paymentStatus === 'PAID') return canRefundToBank(o.paymentMethod) ? 'choose' : 'wallet';
+  if (o.paymentStatus === 'UNPAID' && (o.paymentMethod === 'BANK_TRANSFER' || o.paymentMethod === 'ZALOPAY')) return 'unpaidTransfer';
+  return 'none';
+}
+
+/** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts) để báo lỗi ngay trên form. */
+export function bankDetailsError(b: RefundBankInput): string | null {
+  if (b.bankName.trim().length < 2) return 'Vui lòng nhập tên ngân hàng.';
+  const digits = b.accountNumber.replace(/[\s.-]/g, '');
+  if (!/^\d{6,24}$/.test(digits)) return 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
+  if (b.accountName.trim().length < 2) return 'Vui lòng nhập tên chủ tài khoản.';
+  return null;
+}
+
+/** Body nơi nhận tiền hoàn gửi API: chọn Ví thì không gửi tài khoản. */
+export function destinationBody(method: RefundMethodChoice, bank: RefundBankInput) {
+  return method === 'BANK'
+    ? { refundMethod: 'BANK' as const, bankName: bank.bankName.trim(), accountNumber: bank.accountNumber.trim(), accountName: bank.accountName.trim() }
+    : { refundMethod: 'WALLET' as const };
+}
+
+/** "Techcombank ••• 5678" — không hiện đủ số tài khoản trên màn hình. */
+export function maskedBank(bankName: string | null | undefined, accountNo: string | null | undefined): string {
+  const tail = (accountNo ?? '').slice(-4);
+  return [bankName?.trim() || 'Tài khoản', tail ? `••• ${tail}` : ''].filter(Boolean).join(' ');
+}
+
+export interface ReturnLineState {
+  orderItemId: string;
+  productName: string;
+  variationName: string;
+  /** Số còn trả được (đã trừ yêu cầu đã duyệt). */
+  remaining: number;
+  selected: boolean;
+  quantity: number;
+}
+
+interface ReturnHistory {
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  items?: { orderItemId: string; quantity: number }[];
+}
+
+/** Số còn trả được của từng dòng: số mua trừ số đã duyệt trả ở các yêu cầu trước. */
+export function remainingByLine(
+  items: { id: string; quantity: number }[],
+  returns: ReturnHistory[],
+): Map<string, number> {
+  const taken = new Map<string, number>();
+  for (const r of returns) {
+    if (r.status !== 'APPROVED') continue;
+    for (const it of r.items ?? []) taken.set(it.orderItemId, (taken.get(it.orderItemId) ?? 0) + it.quantity);
+  }
+  return new Map(items.map((i) => [i.id, Math.max(0, i.quantity - (taken.get(i.id) ?? 0))]));
+}
+
+/** Kiểm form đổi/trả trước khi gửi. Trả câu lỗi đầu tiên, hoặc null khi hợp lệ. */
+export function returnFormError(input: {
+  lines: ReturnLineState[];
+  reasonCode: ReturnReasonCode | null;
+  reason: string;
+  refundMethod: RefundMethodChoice;
+  bank: RefundBankInput;
+}): string | null {
+  if (!input.lines.some((l) => l.selected && l.quantity > 0)) return 'Chọn ít nhất một sản phẩm muốn trả.';
+  if (!input.reasonCode) return 'Chọn lý do đổi/trả.';
+  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5) return 'Mô tả lý do (tối thiểu 5 ký tự).';
+  if (input.refundMethod === 'BANK') return bankDetailsError(input.bank);
+  return null;
+}
+
+export interface MyRefund {
+  id: string;
+  orderId: string;
+  orderCode: string;
+  kind: 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
+  amount: number;
+  method: 'WALLET' | 'MANUAL_TRANSFER';
+  status: 'PENDING' | 'COMPLETED';
+  bankName: string | null;
+  bankAccountNo: string | null;
+  bankAccountName: string | null;
+  bankRef: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  canChooseDestination: boolean;
+}
+
+/** Một dòng trạng thái khoản hoàn cho khách: đang ở đâu, cần làm gì. */
+export function refundStatusText(r: MyRefund): { title: string; detail: string; tone: 'success' | 'warning' | 'muted' } {
+  const lead = r.kind === 'LATE_PAYMENT' ? 'Tiền về sau khi đơn đã huỷ' : r.kind === 'RETURN' ? 'Hoàn tiền trả hàng' : 'Hoàn tiền huỷ đơn';
+  if (r.status === 'COMPLETED') {
+    return r.method === 'WALLET'
+      ? { title: `${lead}: đã hoàn vào Ví Tubu`, detail: '', tone: 'success' }
+      : {
+          title: `${lead}: đã chuyển khoản`,
+          detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)}${r.bankRef ? ` · Mã GD ${r.bankRef}` : ''}`,
+          tone: 'success',
+        };
+  }
+  if (!r.bankAccountNo) {
+    return { title: `${lead}: chờ bạn chọn nơi nhận`, detail: 'Nhận về Ví Tubu ngay, hoặc tài khoản ngân hàng trong 1-3 ngày làm việc (miễn phí).', tone: 'warning' };
+  }
+  return {
+    title: `${lead}: Tubu đang chuyển khoản`,
+    detail: `Về ${maskedBank(r.bankName, r.bankAccountNo)} trong 1-3 ngày làm việc, miễn phí.`,
+    tone: 'muted',
+  };
+}
+
+/** Đơn trả trước đang chờ tiền và còn hạn — hiện "Thanh toán trước HH:mm dd/MM/yyyy". */
+export function showsPaymentDeadline(o: { status: OrderStatus; paymentStatus: PaymentStatus; paymentDeadline?: string | null }): boolean {
+  return o.status === 'PENDING_PAYMENT' && o.paymentStatus === 'UNPAID' && !!o.paymentDeadline;
+}
+
+export interface ReturnLike {
+  status: string;
+  adminNote?: string | null;
+  refundMethod?: 'WALLET' | 'BANK';
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  refundAmount?: number | null;
+  shippingRefund?: number;
+  receivedAt?: string | null;
+  items?: { orderItemId: string; quantity: number }[];
+}
+
+/** Câu trạng thái một yêu cầu đổi/trả: đã duyệt thì nói rõ hoàn bao nhiêu, về đâu (D2/D3). */
+export function returnStatusLabel(r: ReturnLike): string {
+  if (r.status === 'REJECTED') return `Đổi/trả bị từ chối${r.adminNote ? `: ${r.adminNote}` : ''}`;
+  if (r.status !== 'APPROVED') return 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
+  // Yêu cầu duyệt trước khi có trả theo dòng không lưu số tiền.
+  if (r.refundAmount == null) return 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu';
+  const money = r.refundAmount + (r.shippingRefund ?? 0);
+  if (money <= 0) return 'Đổi/trả đã duyệt';
+  return r.refundMethod === 'BANK' && r.bankAccountNo
+    ? `Đổi/trả đã duyệt — Tubu chuyển khoản ${formatVnd(money)} về ${maskedBank(r.bankName, r.bankAccountNo)} (1-3 ngày làm việc)`
+    : `Đổi/trả đã duyệt — đã hoàn ${formatVnd(money)} vào Ví Tubu`;
+}
+
+/** "Nước giặt ×1, Xịt khoáng ×2" — các dòng của một yêu cầu trả. */
+export function returnLinesText(r: ReturnLike, items: { id: string; productName: string }[]): string {
+  const names = new Map(items.map((i) => [i.id, i.productName]));
+  return (r.items ?? []).map((l) => `${names.get(l.orderItemId) ?? 'Sản phẩm'} ×${l.quantity}`).join(', ');
+}
