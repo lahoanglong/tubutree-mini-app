@@ -40,6 +40,8 @@ import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '.
 import { STAFF_PERMISSIONS, isStaffPermission } from '../../common/staff-permissions';
 import {
   CONSIGNMENT_PENDING_LINK_WHERE,
+  PANCAKE_CODE_CHANGED,
+  type MerchantReviewSeen,
   describePancakeLink,
   linkTubuFulfilledVariation,
   unlinkTubuFulfilledVariation,
@@ -50,6 +52,15 @@ import { maskPhone } from '../../common/mask-pii';
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
 const STALE_EDIT_REVIEW_MESSAGE = 'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.';
 const COUPON_PERCENT_NEEDS_CAP = 50;
+
+function pancakeCodeChanged(current: string | null) {
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: PANCAKE_CODE_CHANGED,
+    message: `Đối tác vừa đổi mã Pancake của sản phẩm này${current ? ` sang ${current}` : ''}, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.`,
+  });
+}
 
 /**
  * Nút "Đã nhận tiền" (confirmOrderPayment) có tác dụng: đơn lẻ chuyển khoản còn UNPAID và chưa huỷ/trả.
@@ -1496,6 +1507,7 @@ export class AdminService {
     rejectReason?: string,
     confirmTakeover = false,
     editVersion?: string,
+    seen: MerchantReviewSeen = {},
   ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -1504,11 +1516,19 @@ export class AdminService {
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const reason = approve ? null : (rejectReason?.trim() || 'Không đạt tiêu chuẩn xanh của Tubu Tree');
     if (editVersion !== undefined) {
-      const seen = new Date(editVersion).getTime();
-      if (product.approvalStatus !== 'APPROVED' || !product.editDraft || product.editDraft.updatedAt.getTime() !== seen) {
+      const seenAt = new Date(editVersion).getTime();
+      if (product.approvalStatus !== 'APPROVED' || !product.editDraft || product.editDraft.updatedAt.getTime() !== seenAt) {
         throw new BadRequestException(STALE_EDIT_REVIEW_MESSAGE);
       }
       return this.reviewProductEdit(adminId, product, product.editDraft, approve, reason);
+    }
+
+    // Duyệt đúng mã admin đã thấy trên màn duyệt, không phải mã đọc lúc request tới: đối tác đổi mã sau khi admin mở danh sách
+    // thì có thể là mã của một sản phẩm Tubu đang bán khác mà admin chưa hề xem. Thiếu mã đã xem (client cũ) cũng không duyệt.
+    const seenCode = seen.pancakeCode === undefined ? undefined : seen.pancakeCode?.trim() || null;
+    const readCode = product.pancakeLinkCode ?? null;
+    if (product.approvalStatus === 'PENDING_REVIEW' && (approve || seenCode !== undefined) && (seenCode ?? null) !== readCode) {
+      throw pancakeCodeChanged(readCode);
     }
 
     // CAS cố định theo PENDING_REVIEW (không theo trạng thái vừa đọc): hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn
@@ -1523,9 +1543,13 @@ export class AdminService {
         data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
       });
       if (moved.count === 0) {
+        const now = await tx.product.findUnique({ where: { id: productId }, select: { approvalStatus: true, pancakeLinkCode: true } });
+        if (now?.approvalStatus === 'PENDING_REVIEW' && (now.pancakeLinkCode ?? null) !== readCode) {
+          throw pancakeCodeChanged(now.pancakeLinkCode);
+        }
         throw new BadRequestException('Sản phẩm vừa được xử lý hoặc đối tác vừa đổi mã Pancake — tải lại danh sách để xem trạng thái mới.');
       }
-      if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover });
+      if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seen.takeoverProductId });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       else await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
     });

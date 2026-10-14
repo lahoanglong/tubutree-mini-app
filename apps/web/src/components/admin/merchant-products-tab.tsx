@@ -16,6 +16,7 @@ import {
   type AdminPendingProduct,
   type PancakeLinkPreview,
 } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
@@ -334,17 +335,34 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
   const qc = useQueryClient();
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
-  const [confirmTakeover, setConfirmTakeover] = useState(false);
   const link = p.pancakeLink ?? null;
   const takeover = link?.state === 'TAKEOVER';
+  const originId = takeover ? (link?.origin?.id ?? null) : null;
+  // Tích xác nhận gắn với đúng sản phẩm đang bán đang hiện: danh sách tải lại mà sản phẩm sẽ bị chuyển đã khác thì phải tích lại.
+  const [confirmedOrigin, setConfirmedOrigin] = useState<string | null>(null);
+  const confirmTakeover = !!originId && confirmedOrigin === originId;
   const approveBlocked = link?.state === 'UNAVAILABLE' || (takeover && !confirmTakeover);
 
   const reviewMut = useMutation({
     mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
-      reviewMerchantProduct(p.id, approve, reason, approve && takeover ? confirmTakeover : undefined, p.isEdit ? p.editVersion : undefined),
+      reviewMerchantProduct(
+        p.id,
+        approve,
+        reason,
+        approve && takeover ? confirmTakeover : undefined,
+        p.isEdit ? p.editVersion : undefined,
+        p.isEdit
+          ? undefined
+          : { pancakeCode: p.pancakeLinkCode ?? null, takeoverProductId: approve && confirmTakeover ? originId : undefined },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && (e.code === 'PANCAKE_CODE_CHANGED' || e.code === 'PANCAKE_TAKEOVER_CHANGED')) {
+        qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
+      }
     },
   });
 
@@ -391,7 +409,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
               <input
                 type="checkbox"
                 checked={confirmTakeover}
-                onChange={(e) => setConfirmTakeover(e.target.checked)}
+                onChange={(e) => setConfirmedOrigin(e.target.checked ? originId : null)}
                 className="mt-0.5 h-4 w-4 accent-forest-600"
               />
               <span>Tôi đã xem sản phẩm đang bán ở dưới và đồng ý chuyển nó sang gian hàng này</span>

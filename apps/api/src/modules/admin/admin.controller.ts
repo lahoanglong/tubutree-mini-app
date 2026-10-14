@@ -110,6 +110,13 @@ export class ReviewMerchantProductDto {
   @IsOptional() @IsBoolean() confirmTakeover?: boolean;
   /** Dòng "Bản sửa chờ duyệt": lần sửa gần nhất admin đã xem (`editVersion` của hàng chờ duyệt). Có thì chỉ xử lý đúng bản đó. */
   @IsOptional() @IsDateString() editVersion?: string;
+  /**
+   * Mã Pancake đang hiện trên dòng admin bấm (null: dòng không có mã). Bắt buộc khi duyệt sản phẩm có mã: đối tác đổi mã sau khi
+   * admin mở danh sách thì 409, không duyệt mã admin chưa xem.
+   */
+  @IsOptional() @IsString() @MaxLength(100) expectedPancakeCode?: string | null;
+  /** Sản phẩm đang bán (`pancakeLink.origin.id`) mà admin đã xem khi tích xác nhận chuyển. */
+  @IsOptional() @IsString() @MaxLength(100) expectedTakeoverProductId?: string;
 }
 export class UnlinkMerchantProductDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -582,7 +589,10 @@ export class AdminController {
     @Param('id') productId: string,
     @Body() dto: ReviewMerchantProductDto,
   ) {
-    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover, dto.editVersion);
+    return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover, dto.editVersion, {
+      pancakeCode: dto.expectedPancakeCode,
+      takeoverProductId: dto.expectedTakeoverProductId,
+    });
   }
 
   @Get('merchant-products/linked')

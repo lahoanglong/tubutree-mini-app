@@ -230,7 +230,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
           data: { approvalStatus: 'APPROVED' },
         });
         if (flipped.count === 0) throw new Error('đã xử lý');
-        await linkTubuFulfilledVariation(tx, p, { adminId: 'admin-it', confirmTakeover: true });
+        await linkTubuFulfilledVariation(tx, p, { adminId: 'admin-it', confirmTakeover: true, takeoverProductId: shell.id });
       });
     const results = await Promise.allSettled([approve(pa), approve(pb)]);
     const s = summarize(results);
@@ -268,7 +268,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
 
   it('(b2) sản phẩm "Tubu giao hộ" đã duyệt, đối tác sửa nội dung → vẫn bán với nội dung cũ và giữ biến thể Pancake → 2 admin duyệt bản sửa cùng lúc: 1 thắng', async () => {
     const pancakeVariationId = `itmf-pv-${randCode(8)}`;
-    await productWithVariation({ pancakeId: `itmf-pp-${randCode(8)}`, variationPancakeId: pancakeVariationId });
+    const shell = await productWithVariation({ pancakeId: `itmf-pp-${randCode(8)}`, variationPancakeId: pancakeVariationId });
     const { owner, store } = await merchantStore();
     const p = await productWithVariation({
       storefrontId: store.id,
@@ -279,7 +279,10 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     const none = {} as never;
     const notifications = { notify } as unknown as NotificationsService;
     const admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
-    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, {
+      pancakeCode: pancakeVariationId,
+      takeoverProductId: shell.id,
+    });
 
     const merchant = new MerchantService(prisma, orderStatus, notifications);
     await merchant.updateProduct(owner.id, p.id, { name: `${p.name} (mới)` });
