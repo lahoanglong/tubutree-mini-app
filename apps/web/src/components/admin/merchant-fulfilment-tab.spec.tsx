@@ -161,6 +161,27 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(scrollRegionProblems(r.container)).toEqual([]);
   });
 
+  it('Q8 review S5: bảng kê của gian hàng kèm món giao hộ chưa vào đối soát tự động (chỉ đọc, kèm lý do), kể cả khi không còn khoản chờ lập phiếu', async () => {
+    const excluded = {
+      settleFrom: '2026-10-01T00:00:00.000Z',
+      total: 1,
+      lines: [{ orderId: 'o5', orderCode: 'TT5', orderItemId: 'i5', productName: 'Mật ong', variationName: null, quantity: 1, goodsAmount: 90000, createdAt: '2026-10-05T03:00:00.000Z', deliveredAt: null, reason: 'TAKEOVER_UNCONFIRMED' }],
+    };
+    setup({ '/admin/merchant-fulfilment/statements/': { body: { ...STATEMENT, lines: [], total: 0, consignmentExcluded: excluded } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const row = Array.from(r.container.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Trà Shan giao hộ'))!;
+    click(byText(row, 'button', 'Xem khoản'));
+    await flush();
+    expect(r.container.textContent).toContain('Không còn khoản nào chờ lập phiếu.');
+    expect(r.container.textContent).toContain('Hàng Tubu giao hộ chưa vào đối soát tự động (1 món)');
+    const region = r.container.querySelector('[aria-label="Hàng Tubu giao hộ chưa vào đối soát tự động của Trà Shan giao hộ"]')!;
+    expect(region.textContent).toContain('TT5');
+    expect(region.textContent).toContain('Liên kết nhận lại chưa xác nhận hàng ký gửi lúc đặt');
+    expect(scrollRegionProblems(r.container)).toEqual([]);
+  });
+
   it('Q8: admin sửa phí sàn riêng và phí Tubu giao hộ — gửi phân số; để trống phí sàn là về mặc định', async () => {
     const api = setup();
     const r = render(<MerchantFulfilmentTab />);
