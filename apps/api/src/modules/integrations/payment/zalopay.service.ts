@@ -10,7 +10,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import type { Order } from '@prisma/client';
 import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -170,7 +169,7 @@ export class ZalopayService {
       // ghi nhận PAID vào đơn đã chết.
       const paidAmount = data.amount ?? attempt?.amount ?? order.total;
       if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-        await this.recordLatePayment(order, paidAmount, data.app_trans_id);
+        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
         return { return_code: 1, return_message: 'success' };
       }
       // Bug 1 (Critical, docs/2026-09-16): đọc rồi update() thẳng không atomic — 2 webhook (retry)
@@ -219,17 +218,26 @@ export class ZalopayService {
         await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
       } else {
         // Guard thua: hoặc callback trùng (đã PAID), hoặc khách/cron vừa huỷ đơn giữa lần đọc và lần lật.
-        const current = await this.prisma.order.findUnique({ where: { id: order.id } });
-        if (current && current.paymentStatus === 'UNPAID' && (current.status === 'CANCELLED' || current.status === 'RETURNED')) {
-          await this.recordLatePayment(current, paidAmount, data.app_trans_id);
-        }
+        await this.recordLatePayment(order.id, paidAmount, data.app_trans_id);
       }
     }
     return { return_code: 1, return_message: 'success' };
   }
 
-  /** Tiền về khi đơn đã huỷ/trả: không lật PAID, tạo yêu cầu hoàn tiền (khách chọn Ví hay ngân hàng). */
-  private async recordLatePayment(order: Order, amount: number, appTransId: string): Promise<void> {
+  /**
+   * Tiền về khi đơn đã huỷ/trả: không lật PAID, tạo yêu cầu hoàn tiền (khách chọn Ví hay ngân hàng). Chỉ khi đơn CHƯA
+   * từng nhận khoản này (UNPAID): đơn PAID/REFUNDED nghĩa là callback này là bản ZaloPay gửi lại của lần đã lật PAID
+   * (tiền đó đã nằm trong đơn và đã/sẽ được hoàn theo luồng huỷ/trả) — tạo thêm khoản là hoàn hai lần.
+   */
+  private async recordLatePayment(orderId: string, amount: number, appTransId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || (order.status !== 'CANCELLED' && order.status !== 'RETURNED')) return;
+    if (order.paymentStatus !== 'UNPAID') {
+      this.logger.warn(
+        `Callback ZaloPay ${appTransId} cho đơn ${order.code} (${order.status}, ${order.paymentStatus}) — đã ghi nhận tiền trước đó, bỏ qua.`,
+      );
+      return;
+    }
     await recordLatePaymentRefund({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order, {
       amount,
       source: 'ZALOPAY',

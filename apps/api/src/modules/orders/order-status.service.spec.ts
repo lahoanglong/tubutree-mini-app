@@ -649,6 +649,19 @@ describe('OrderStatusService.markPaid', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  // Đơn đã nhận tiền, rồi huỷ/trả và đã hoàn: một xác nhận tiền đến sau (webhook gửi lại) không phải tiền mới —
+  // CLOSED sẽ khiến caller tạo khoản hoàn tiền về muộn thứ hai.
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s đã REFUNDED → NOT_PAYABLE (không phải CLOSED)', async (status) => {
+    const { svc, prisma } = make([pending({ status, paymentStatus: 'REFUNDED' })]);
+    expect((await svc.markPaid('o1', { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('thua race: đọc lại thấy đơn vừa huỷ và đã hoàn (REFUNDED) → NOT_PAYABLE', async () => {
+    const { svc } = make([pending(), pending({ status: 'CANCELLED', paymentStatus: 'REFUNDED' })], [0]);
+    expect((await svc.markPaid('o1', { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+  });
+
   it('paymentStatus REFUNDED → NOT_PAYABLE', async () => {
     const { svc, prisma } = make([pending({ status: 'CONFIRMED', paymentStatus: 'REFUNDED' })]);
     expect((await svc.markPaid('o1', { actorType: 'ADMIN' })).outcome).toBe('NOT_PAYABLE');

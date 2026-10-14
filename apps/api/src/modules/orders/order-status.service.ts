@@ -30,8 +30,8 @@ function isHumanActor(actor: StatusActor | undefined): boolean {
 
 /**
  * PAID: lần gọi này lật thanh toán. ALREADY_PAID: đã PAID từ trước (bấm lặp / người khác thắng race).
- * CLOSED: đơn đã huỷ/trả — tiền về muộn phải hoàn thủ công, không "hồi sinh" đơn. NOT_PAYABLE: đã
- * REFUNDED/FAILED.
+ * CLOSED: đơn đã huỷ/trả khi CHƯA nhận tiền — tiền về muộn phải hoàn, không "hồi sinh" đơn. NOT_PAYABLE: đã
+ * REFUNDED/FAILED (kể cả đơn đã huỷ/trả: khoản tiền đó đã đi theo luồng hoàn của đơn).
  */
 export type MarkPaidOutcome = 'PAID' | 'ALREADY_PAID' | 'CLOSED' | 'NOT_PAYABLE';
 
@@ -244,8 +244,8 @@ export class OrderStatusService {
       const order = await this.prisma.order.findFirst({ where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] } });
       if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
       if (order.paymentStatus === 'PAID') return { outcome: 'ALREADY_PAID', order };
-      if (order.status === 'CANCELLED' || order.status === 'RETURNED') return { outcome: 'CLOSED', order };
       if (order.paymentStatus !== 'UNPAID') return { outcome: 'NOT_PAYABLE', order };
+      if (order.status === 'CANCELLED' || order.status === 'RETURNED') return { outcome: 'CLOSED', order };
 
       const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
       const won = await this.prisma.$transaction(async (tx) => {

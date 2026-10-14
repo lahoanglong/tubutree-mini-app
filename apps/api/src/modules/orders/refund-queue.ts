@@ -77,7 +77,8 @@ export async function announceBankRefund(
 /**
  * Tiền chuyển khoản / ZaloPay về khi đơn đã huỷ hoặc hết hạn (BUYERMINI-7, MONEY-6): không "hồi sinh" đơn mà ghi một
  * khoản hoàn LATE_PAYMENT (chưa có nơi nhận — khách tự chọn Ví hay ngân hàng ở chi tiết đơn), báo khách và admin.
- * Webhook gửi lại cùng giao dịch (refKey) không tạo khoản thứ hai, không báo lại. Trả true khi vừa tạo.
+ * Webhook gửi lại cùng giao dịch (refKey) không tạo khoản thứ hai, không báo lại; đơn đã PAID/REFUNDED (tiền này đã vào đơn,
+ * hoàn theo luồng huỷ/trả) không tạo khoản nào. Trả true khi vừa tạo.
  */
 export async function recordLatePaymentRefund(
   ctx: {
@@ -85,10 +86,11 @@ export async function recordLatePaymentRefund(
     notifications?: RefundNotifier;
     logger: Pick<Logger, 'warn' | 'log'>;
   },
-  order: Pick<Order, 'id' | 'code' | 'userId' | 'status'>,
+  order: Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'paymentStatus'>,
   input: { amount: number; source: 'PANCAKE' | 'ZALOPAY' | 'ADMIN'; refKey: string },
 ): Promise<boolean> {
   if (!(input.amount > 0)) return false;
+  if (order.paymentStatus !== 'UNPAID') return false;
   const created = await ctx.prisma.orderCustomerRefund.createMany({
     data: [
       {
