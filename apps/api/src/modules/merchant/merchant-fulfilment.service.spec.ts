@@ -127,6 +127,14 @@ describe('Đơn tự giao — ví dụ tính tay (giống race spec merchant-sel
     expect(partial).toMatchObject({ goodsAmount: -100_000, commissionAmount: -10_000, netAmount: -90_000 });
   });
 
+  it('SALE đã lưu khác nền: phần dư làm tròn chia theo id dòng — thứ tự dòng DB trả về không đổi số', () => {
+    const two = { ...order, total: 130_000, items: [{ id: 'iB', total: 50_000, quantity: 1 }, { id: 'iA', total: 50_000, quantity: 1 }] };
+    const rA = { ...r1, items: [{ orderItemId: 'iA', quantity: 1 }] };
+    const goodsOf = (o: typeof two) => partialReversalLinesOf(o, [rA], 100_001)[0]!.goodsAmount;
+    expect(goodsOf(two)).toBe(-50_001);
+    expect(goodsOf({ ...two, items: [...two.items].reverse() })).toBe(-50_001);
+  });
+
   it('SALE đã lưu theo nền mới → dòng đảo giống hệt khi tính cùng SALE', () => {
     expect(partialReversalLinesOf(order, [r1], 250_000)).toEqual(partialReversalLinesOf(order, [r1]));
   });
@@ -249,6 +257,14 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     deliveredAt: new Date(NOW.getTime() - 10 * 24 * H),
     items: [{ id: 'i9', total: 200_000, quantity: 1 }],
   };
+
+  it('sắp đủ hạn: bỏ đơn đã có SALE (mốc giao bị sửa lùi sau khi đã vào phiếu không làm đơn hiện lại)', async () => {
+    const { svc, prisma } = build();
+    await svc.statementFor('sf-a', NOW);
+    const upcomingWhere = prisma.order.findMany.mock.calls[1][0].where;
+    expect(upcomingWhere.deliveredAt).toHaveProperty('gt');
+    expect(upcomingWhere.merchantPayoutLines).toEqual({ none: { kind: 'SALE' } });
+  });
 
   it('bảng kê: đơn giao quá hạn giữ chưa đối soát (SALE) + đơn đã đối soát rồi bị trả (REVERSAL âm)', async () => {
     const { svc, prisma } = build();

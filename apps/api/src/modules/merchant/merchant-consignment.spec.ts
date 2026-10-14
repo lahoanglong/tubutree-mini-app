@@ -215,3 +215,15 @@ describe('Hàng giao hộ trên đơn có tiền thực trả từng dòng (Q8 r
     expect(consignmentSaleLines({ ...order, items: [T, C] }, onlyC, terms).map((l) => l.goodsAmount)).toEqual([86_667]);
   });
 });
+
+describe('Phí sàn 50% + phí giao hộ 50% trên tiền hàng lẻ (Q8 review nit)', () => {
+  it('làm tròn không đẩy thực nhận xuống âm: hàng 3đ → phí sàn 2đ, phí giao hộ 1đ, thực nhận 0đ', () => {
+    const order = { id: 'o', code: 'T', total: 3, shippingFee: 0, createdAt: ORDERED, deliveredAt: DELIVERED, items: [{ id: 'i', variationId: 'v', productName: 'Kẹo', variationName: null, quantity: 1, total: 3 }] };
+    const [line] = consignmentSaleLines(order, () => true, { commissionPct: 0.5, feePct: 0.5, feeFixed: 0 });
+    expect([line!.goodsAmount, line!.commissionAmount, line!.opsFeeAmount, line!.netAmount]).toEqual([3, 2, 1, 0]);
+    for (let goods = 0; goods <= 50; goods++) {
+      const [l] = consignmentSaleLines({ ...order, total: goods, items: [{ ...order.items[0]!, total: goods }] }, () => true, { commissionPct: 0.5, feePct: 0.5, feeFixed: 1_000 });
+      expect(l!.netAmount).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
