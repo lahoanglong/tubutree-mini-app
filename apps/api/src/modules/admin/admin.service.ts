@@ -405,14 +405,31 @@ export class AdminService {
     return { ok: true, ...updated, previousRole, ...(dealerTierId ? { dealerTierId } : {}) };
   }
 
+  /**
+   * KPI tổng quan (ADMINOPS-14). "Doanh thu" là tiền ĐÃ THU: đơn đã thanh toán, hoặc COD đã giao (bưu tá thu hộ),
+   * trừ đơn huỷ/trả/đã hoàn và phần đã hoàn của các lần trả một phần. Trước đây cộng mọi đơn CONFIRMED→DELIVERED nên
+   * đơn COD chưa giao (có thể bị huỷ/boom) và đơn chưa lên kho cũng thành doanh thu. Giá trị đơn đặt (GMV) và COD chưa
+   * thu tách ô riêng; đơn trả hàng có ô riêng.
+   */
   async getDashboardStats() {
+    const open: Prisma.OrderWhereInput = { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } };
+    const collected: Prisma.OrderWhereInput = {
+      status: { notIn: ['CANCELLED', 'RETURNED'] },
+      paymentStatus: { not: 'REFUNDED' },
+      OR: [{ paymentStatus: 'PAID' }, { status: 'DELIVERED' }],
+    };
     const [
       totalOrders,
       pendingOrders,
       shippingOrders,
       deliveredOrders,
       cancelledOrders,
-      revenueResult,
+      returnedOrders,
+      pendingReturns,
+      collectedResult,
+      gmvResult,
+      codPendingResult,
+      refundRows,
       totalUsers,
       totalAffiliates,
       totalProducts,
@@ -424,10 +441,25 @@ export class AdminService {
       this.prisma.order.count({ where: { status: { in: ['PACKED', 'SHIPPING'] } } }),
       this.prisma.order.count({ where: { status: 'DELIVERED' } }),
       this.prisma.order.count({ where: { status: 'CANCELLED' } }),
+      this.prisma.order.count({ where: { status: 'RETURNED' } }),
+      this.prisma.returnRequest.count({ where: { status: 'REQUESTED' } }),
+      this.prisma.order.aggregate({ _sum: { total: true }, where: collected }),
+      this.prisma.order.aggregate({ _sum: { total: true }, where: open }),
       this.prisma.order.aggregate({
         _sum: { total: true },
-        where: { status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] } },
+        where: { paymentMethod: 'COD', paymentStatus: 'UNPAID', status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING'] } },
       }),
+      this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
+        SELECT
+          SUM(r."refundAmount") AS all_refunds,
+          SUM(r."refundAmount") FILTER (
+            WHERE o.status NOT IN ('CANCELLED', 'RETURNED')
+              AND o."paymentStatus" <> 'REFUNDED'
+              AND (o."paymentStatus" = 'PAID' OR o.status = 'DELIVERED')
+          ) AS on_collected
+        FROM return_requests r
+        JOIN orders o ON o.id = r."orderId"
+        WHERE r.status = 'APPROVED'`,
       this.prisma.user.count(),
       this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
       this.prisma.product.count(),
@@ -446,14 +478,21 @@ export class AdminService {
         },
       }),
     ]);
+    const refunds = refundRows[0];
+    const partialRefunds = Number(refunds?.on_collected ?? 0);
 
     return {
-      totalRevenue: revenueResult._sum.total ?? 0,
+      totalRevenue: (collectedResult._sum.total ?? 0) - partialRefunds,
+      gmv: gmvResult._sum.total ?? 0,
+      codPendingValue: codPendingResult._sum.total ?? 0,
       totalOrders,
       pendingOrders,
       shippingOrders,
       deliveredOrders,
       cancelledOrders,
+      returnedOrders,
+      pendingReturns,
+      returnRefundTotal: Number(refunds?.all_refunds ?? 0),
       totalUsers,
       totalAffiliates,
       totalProducts,

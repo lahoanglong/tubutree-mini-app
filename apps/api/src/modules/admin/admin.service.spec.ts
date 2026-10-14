@@ -557,6 +557,8 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
 describe('AdminService.getDashboardStats', () => {
   it('tổng hợp đúng số lượng đơn, doanh thu và cây trồng', async () => {
     const prisma = makePrisma({
+      returnRequest: { count: jest.fn().mockResolvedValue(2) },
+      $queryRaw: jest.fn().mockResolvedValue([{ all_refunds: 300000n, on_collected: 200000n }]),
       order: {
         count: jest.fn().mockResolvedValue(15),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 1500000 } }),
@@ -576,7 +578,9 @@ describe('AdminService.getDashboardStats', () => {
     });
 
     const stats = await mkAdmin(prisma).getDashboardStats();
-    expect(stats.totalRevenue).toBe(1500000);
+    expect(stats.totalRevenue).toBe(1300000);
+    expect(stats.returnRefundTotal).toBe(300000);
+    expect(stats.pendingReturns).toBe(2);
     expect(stats.totalOrders).toBe(15);
     expect(stats.totalUsers).toBe(50);
     expect(stats.plantedTreesCount).toBe(8);
