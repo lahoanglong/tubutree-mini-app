@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { validateAdminConfigValue } from './admin-config-rules';
+import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
 
 const ok = (key: string, value: unknown) => expect(() => validateAdminConfigValue(key, value)).not.toThrow();
 const bad = (key: string, value: unknown) => expect(() => validateAdminConfigValue(key, value)).toThrow(BadRequestException);
@@ -115,6 +115,28 @@ describe('validateAdminConfigValue', () => {
     expect(v('shipping.eta_min_days', 3.5, null)).toThrow(BadRequestException);
     expect(v('shipping.eta_min_days', null, 4)).not.toThrow();
     expect(v('shipping.eta_max_days', null, 2)).not.toThrow();
+  });
+
+  // R4-ADMIN-8: cron nhắc giỏ bỏ quên lấy giỏ có updatedAt trong [now − max, now − min] mỗi giờ — min ≥ max là khoảng rỗng,
+  // không giỏ nào được nhắc mà admin vẫn thấy "đã lưu". Khoá đối ứng chưa có dòng thì so với mặc định cron đang dùng (6/72).
+  it('nhắc giỏ bỏ quên: max phải lớn hơn min hiện có (ít nhất 1 giờ); chưa có dòng thì so với mặc định 6/72', () => {
+    const v = (k: string, n: unknown, partner?: unknown) => () => validateAdminConfigValue(k, n, partner);
+    const MIN = 'remarketing.cart_abandon_min_hours';
+    const MAX = 'remarketing.cart_abandon_max_hours';
+    expect(configPartnerKey(MIN)).toBe(MAX);
+    expect(configPartnerKey(MAX)).toBe(MIN);
+    expect(v(MAX, 72, 6)).not.toThrow();
+    expect(v(MAX, 7, 6)).not.toThrow();
+    expect(v(MAX, 6, 6)).toThrow(BadRequestException);
+    expect(v(MAX, 6, 72)).toThrow(/remarketing\.cart_abandon_min_hours/);
+    expect(v(MIN, 72, 72)).toThrow(BadRequestException);
+    expect(v(MIN, 72, 6)).toThrow(/remarketing\.cart_abandon_max_hours/);
+    expect(v(MIN, 12, 72)).not.toThrow();
+    expect(v(MIN, 72, undefined)).toThrow(/72/);
+    expect(v(MIN, 71, undefined)).not.toThrow();
+    expect(v(MAX, 6, null)).toThrow(BadRequestException);
+    expect(v(MAX, 7, undefined)).not.toThrow();
+    expect(v(MIN, 1.5, 72)).toThrow(BadRequestException);
   });
 
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {

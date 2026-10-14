@@ -296,6 +296,9 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
   it.each([
     ['payment.bank_account_no', '9984606774', ['abc 12', '', '12345', '1'.repeat(21), 9984606774]],
     ['payment.bank_bin', '970407', ['', '97040', '9704071', 'abcdef']],
+    // R4-ADMIN-8: trang chuyển khoản của khách in hai dòng này — để trống là khách thấy "Ngân hàng: " trống trơn.
+    ['payment.bank_name', 'Techcombank', ['', '   ', 970407, 'x'.repeat(101)]],
+    ['payment.bank_account_name', 'CONG TY TUBU TREE', ['', ' \t ', 1, 'X'.repeat(101)]],
     ['shipping.tier_freeship_overrides', { LOC_BIEC: 99_000, DAI_THU: 0 }, [{ CO_THU: -50_000 }, { CO_THU: 1.5 }, [1], 'x']],
     [
       'subscribe.discount_tiers',
