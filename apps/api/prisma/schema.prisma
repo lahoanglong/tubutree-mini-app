@@ -242,6 +242,13 @@ model User {
   coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
   cashbackPending   Int             @default(0)
   isBlocked         Boolean         @default(false)
+  // Khoá do admin (POST /admin/users/:id/block): ai khoá, lúc nào, vì sao. Xoá tài khoản (ẩn danh) chỉ đặt isBlocked.
+  blockedAt         DateTime?
+  blockedReason     String?
+  blockedById       String?
+  // Mốc thu hồi toàn bộ phiên (khoá tài khoản, phát hiện refresh token bị dùng lại): token xoay trước mốc này
+  // không còn được hưởng khoảng ân hạn refresh đồng thời.
+  sessionsRevokedAt DateTime?
   // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
   notifyPromo       Boolean         @default(true)
   notifyGarden      Boolean         @default(true)
@@ -310,6 +317,8 @@ model RefreshToken {
   tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
+  // Thu hồi vì đã xoay sang token mới (khác logout/khoá). Chỉ token xoay mới được dùng lại trong khoảng ân hạn.
+  rotatedAt DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])

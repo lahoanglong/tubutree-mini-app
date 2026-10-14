@@ -296,3 +296,18 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
     expect(out.downgraded).toBe(true);
   });
 });
+
+// ADMINOPS-1: admin vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN cho SĐT của chính mình.
+describe('RbacService.addGrant — không tự cấp quyền cho chính mình', () => {
+  it('SĐT của chính admin đang thao tác → từ chối, không tạo grant, không nâng role', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn() },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ id: 'u_admin2', phone: '0900000098' })), update: jest.fn() },
+    });
+    await expect(new RbacService(prisma).addGrant('u_admin2', ' 0900000098 ', 'ADMIN')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.roleGrant.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});

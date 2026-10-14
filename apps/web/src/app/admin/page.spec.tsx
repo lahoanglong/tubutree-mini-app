@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
   ] as unknown[],
   setUserRole: vi.fn(),
+  listUsersArgs: [] as unknown[][],
+  blockUser: vi.fn(),
+  unblockUser: vi.fn(),
   createCoupon: vi.fn(),
   config: [] as unknown[],
   configFails: false,
@@ -132,11 +135,13 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       })),
       meta: { total: 3, page: 1, limit: 20 },
     }),
-    listUsers: async () => ({
-      data: mocks.users,
-      meta: { total: 45, page: 1, limit: 20 },
-    }),
+    listUsers: async (...args: unknown[]) => {
+      mocks.listUsersArgs.push(args);
+      return { data: mocks.users, meta: { total: 45, page: 1, limit: 20 } };
+    },
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
+    blockUser: (...args: unknown[]) => mocks.blockUser(...args),
+    unblockUser: (...args: unknown[]) => mocks.unblockUser(...args),
     createCoupon: (...args: unknown[]) => mocks.createCoupon(...args),
     getConfig: async () => {
       if (mocks.configFails) throw new Error('boom');
@@ -567,8 +572,75 @@ describe('admin/page — tab Người dùng', () => {
     const table = container.querySelector('table')!;
     expect(table.parentElement!.className).toContain('overflow-x-auto');
     const cells = [...table.querySelectorAll('tbody td')];
-    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', '01/09/2026']);
+    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'CUSTOMER', '12', '01/09/2026', 'Khoá']);
     for (const c of cells) expect(c.className).toContain('px-3');
+  });
+
+  // ADMINOPS-11: trước đây không tìm được người dùng (listUsers chỉ gửi page) và không có cách khoá tài khoản gian lận.
+  it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xóa lọc bỏ từ khoá', async () => {
+    mocks.listUsersArgs = [];
+    const { container } = await openUsers();
+    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    expect(input.getAttribute('aria-label')).toBe('Tìm theo SĐT, tên hoặc mã người dùng');
+    typeInto(input, ' 0944 ');
+    act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
+    await flush();
+    expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0944']);
+    const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xóa lọc')!;
+    act(() => clear.click());
+    await flush();
+    expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined]);
+  });
+
+  it('khoá người dùng: bắt buộc nhập lý do trong hộp thoại, gửi đúng id + lý do, báo thành công', async () => {
+    mocks.blockUser.mockReset().mockResolvedValue({ id: 'u1', isBlocked: true, blockedAt: null, blockedReason: 'Bom hàng COD', revokedSessions: 2 });
+    const { container } = await openUsers();
+    const btn = container.querySelector('button[aria-label="Khoá Nguyễn An"]') as HTMLButtonElement;
+    act(() => btn.click());
+    await flush();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Khoá Nguyễn An (0944444444)?');
+    const accept = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Khoá tài khoản')!;
+    expect(accept.disabled).toBe(true);
+    typeInto(dialog.querySelector('textarea'), 'Bom hàng COD');
+    expect(accept.disabled).toBe(false);
+    act(() => accept.click());
+    await flush();
+    expect(mocks.blockUser).toHaveBeenCalledWith('u1', 'Bom hàng COD');
+    const ok = container.querySelector('p[role="status"]')!;
+    expect(ok.textContent).toContain('Đã khoá Nguyễn An');
+    expect(ok.className).toContain('text-success-fg');
+  });
+
+  it('người dùng đã khoá: hiện nhãn Đã khoá + lý do, nút Mở khoá qua hộp xác nhận', async () => {
+    mocks.users = [
+      { id: 'u3', fullName: 'Trần Cường', phone: '0966666666', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-03T00:00:00.000Z', isBlocked: true, blockedReason: 'Farm voucher' },
+    ];
+    mocks.unblockUser.mockReset().mockResolvedValue({ id: 'u3', isBlocked: false, blockedAt: null, blockedReason: null });
+    const { container } = await openUsers();
+    const status = container.querySelectorAll('table tbody td')[5]!;
+    expect(status.textContent).toContain('Đã khoá');
+    expect(status.textContent).toContain('Lý do: Farm voucher');
+    act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
+    await flush();
+    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
+    act(() => (accept as HTMLButtonElement).click());
+    await flush();
+    expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
+  });
+
+  it('khoá thất bại (vd tự khoá mình) → báo lỗi màu danger, không nuốt lỗi', async () => {
+    mocks.blockUser.mockReset().mockRejectedValue(new Error('Không thể tự khoá tài khoản của chính mình.'));
+    const { container } = await openUsers();
+    act(() => (container.querySelector('button[aria-label^="Khoá "]') as HTMLButtonElement).click());
+    await flush();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    typeInto(dialog.querySelector('textarea'), 'thử');
+    act(() => ([...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Khoá tài khoản') as HTMLButtonElement).click());
+    await flush();
+    const bad = container.querySelector('p[role="status"]')!;
+    expect(bad.textContent).toBe('Không thể tự khoá tài khoản của chính mình.');
+    expect(bad.className).toContain('text-danger-fg');
   });
 
   it('PD-3: khách có điểm quy đổi → ô Điểm là tổng hai lô kèm phần không hết hạn, để nhân viên xử lý khiếu nại quy đổi', async () => {

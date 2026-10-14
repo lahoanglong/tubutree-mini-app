@@ -15,6 +15,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DataRetentionModule } from './modules/data-retention/data-retention.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { SessionStateModule } from './modules/auth/session-state.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -61,6 +62,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     CronLeaderModule,
     ThrottlerModule.forRoot(throttlerOptions),
     PrismaModule,
+    SessionStateModule,
     QueueModule,
     // Global cross-cutting
     SystemConfigModule,

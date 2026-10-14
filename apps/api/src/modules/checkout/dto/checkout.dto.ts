@@ -52,7 +52,7 @@ export class PlaceOrderDto {
    */
   @IsOptional() @IsInt() @Min(0) expectedTotal?: number;
 
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */
   @IsOptional() @IsString() referralCode?: string;

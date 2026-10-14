@@ -8,6 +8,7 @@ import {
   hasSessionMarker,
   setSessionMarker,
   clearSessionMarker,
+  restoreSession,
 } from './client-api';
 
 export interface WebUser {
@@ -79,6 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Khôi phục phiên từ cookie refresh (HttpOnly, do BE set). Cờ `tubu_web_session` trong
   // localStorage chỉ để biết CÓ ĐÁNG gọi hay không — khách vãng lai không tốn một lượt 401.
+  // Lỗi tạm (mất mạng, API khởi động lại, 429) được thử lại vài lần và KHÔNG xoá cờ; chỉ 400/401/403
+  // mới coi là phiên chết (client-api.ts xoá cờ).
+  const restore = useCallback(async () => {
+    const out = await restoreSession();
+    if (out.kind === 'ok') {
+      setUser((out.data as LoginResponse).user);
+      setStatus('authenticated');
+    } else {
+      setStatus('idle');
+    }
+  }, []);
+
   useEffect(() => {
     if (!hasSessionMarker()) {
       setStatus('idle');
@@ -86,20 +99,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setStatus('loading');
-    apiFetch<LoginResponse>('/auth/refresh', { method: 'POST', body: {}, auth: false })
-      .then((res) => {
-        setAccessToken(res.accessToken);
-        setSessionMarker();
-        setUser(res.user);
-        setStatus('authenticated');
-      })
-      .catch(() => {
-        // BE đã tự xoá cookie khi token chết; xoá nốt cờ phía client.
-        clearSessionMarker();
-        setStatus('idle');
-      })
-      .finally(() => setInitialized(true));
-  }, []);
+    void restore().finally(() => setInitialized(true));
+  }, [restore]);
+
+  // Mở trang lúc mất mạng: cờ phiên còn nhưng chưa vào được — có mạng lại hoặc quay lại tab thì thử tiếp.
+  useEffect(() => {
+    if (!initialized || status !== 'idle' || user) return;
+    const retry = () => {
+      if (document.visibilityState === 'visible' && hasSessionMarker()) void restore();
+    };
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', retry);
+    return () => {
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', retry);
+    };
+  }, [initialized, status, user, restore]);
 
   const startZaloLogin = useCallback(async () => {
     if (!ZALO_APP_ID) {

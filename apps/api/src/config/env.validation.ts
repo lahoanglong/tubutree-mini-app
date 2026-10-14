@@ -26,6 +26,9 @@ export const envSchema = z.object({
     .regex(/^\d+(ms|s|m|h|d|w|y)$/, "JWT_ACCESS_TTL phải dạng số+đơn vị (vd: 15m, 1h, 30d).")
     .default('15m'),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  // Giây một refresh token vừa xoay còn được dùng lại (nhiều tab refresh cùng lúc, gửi lại khi mất phản
+  // hồi) trước khi bị coi là token bị đánh cắp. 0 = tắt ân hạn.
+  JWT_REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).max(300).default(30),
 
   // Zalo Mini App / OA
   ZALO_APP_ID: z.string().default(''),

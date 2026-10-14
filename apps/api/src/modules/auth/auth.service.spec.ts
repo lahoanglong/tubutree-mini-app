@@ -27,6 +27,7 @@ const configValues: Record<string, unknown> = {
   JWT_ACCESS_SECRET: 'access-secret',
   JWT_ACCESS_TTL: '15m',
   JWT_REFRESH_TTL_DAYS: 30,
+  JWT_REFRESH_REUSE_GRACE_SECONDS: 30,
 };
 
 function makeService(over: Record<string, unknown> = {}) {
@@ -83,34 +84,76 @@ describe('AuthService.refresh (rotation atomic)', () => {
     expect(create).toHaveBeenCalledTimes(1); // lưu refresh mới (đã hash)
   });
 
-  it('reuse/double-submit: revoke-gate count=0 → Unauthorized "đã được sử dụng", không cấp token', async () => {
+  // MONEY-8 / BUYERWEB-3: nhiều tab cùng refresh một cookie, hoặc Mini App gửi lại sau khi mất phản hồi.
+  // Request thua (count=0) đọc lại dòng token: vừa bị XOAY trong khoảng ân hạn ⇒ cấp cặp token mới thay
+  // vì coi là đánh cắp. Trước đây nhánh này thu hồi toàn bộ phiên, kể cả token vừa cấp cho request thắng.
+  it('refresh đồng thời: revoke-gate count=0 nhưng token vừa xoay trong ân hạn → vẫn cấp token, KHÔNG thu hồi cả chuỗi', async () => {
     const { svc, prisma, create, updateMany } = makeService();
-    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
-      id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
-    });
-    (updateMany as jest.Mock).mockResolvedValue({ count: 0 }); // request khác đã revoke trước
-    await expect(svc.refresh('tok')).rejects.toThrow('đã được sử dụng');
-    expect(create).not.toHaveBeenCalled();
+    const live = { id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER };
+    const justRotated = { ...live, revokedAt: new Date(Date.now() - 200), rotatedAt: new Date(Date.now() - 200) };
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce(live).mockResolvedValueOnce(justRotated);
+    (updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    const r = await svc.refresh('tok');
+    expect(r.refreshToken).toBeTruthy();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'u1', revokedAt: null } }));
   });
 
-  // P1-2 (docs/2026-09-08-review-progress.md): trước đây reuse chỉ chặn ĐÚNG token bị replay —
-  // nếu kẻ trộm đã rotate 1 lần trước khi nạn nhân refresh lại, chuỗi refresh token của kẻ
-  // trộm (đã cấp mới, chưa revoke) vẫn sống nguyên 30 ngày. Phát hiện reuse phải thu hồi CẢ
-  // CHUỖI (mọi refresh token còn active của user đó), không chỉ token vừa bị replay.
-  it('reuse phát hiện → thu hồi TOÀN BỘ refresh token còn active của user (không chỉ token bị replay)', async () => {
-    const { svc, prisma, updateMany } = makeService();
+  it('token đã xoay vài giây trước (request đến sau khi request kia xong) → vẫn trong ân hạn, cấp token', async () => {
+    const { svc, prisma, create, updateMany } = makeService();
     (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
-      id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
+      id: 't1', userId: 'u1', revokedAt: new Date(Date.now() - 5_000), rotatedAt: new Date(Date.now() - 5_000),
+      expiresAt: new Date(Date.now() + 1e6), user: USER,
     });
-    (updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(svc.refresh('tok')).resolves.toMatchObject({ accessToken: 'access-jwt' });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  // P1-2 (docs/2026-09-08-review-progress.md): token đã xoay bị dùng lại SAU ân hạn là dấu hiệu bị lấy
+  // cắp — thu hồi CẢ CHUỖI (mọi refresh token còn active), không chỉ token bị replay.
+  it('token đã xoay bị dùng lại sau ân hạn → thu hồi TOÀN BỘ phiên của user, "đã được sử dụng"', async () => {
+    const { svc, prisma, create, updateMany } = makeService({
+      user: { update: jest.fn().mockResolvedValue({}) },
+    });
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1', userId: 'u1', revokedAt: new Date(Date.now() - 120_000), rotatedAt: new Date(Date.now() - 120_000),
+      expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
     await expect(svc.refresh('tok')).rejects.toThrow('đã được sử dụng');
+    expect(create).not.toHaveBeenCalled();
     expect(updateMany).toHaveBeenCalledWith({
       where: { userId: 'u1', revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     });
+    expect((prisma as unknown as { user: { update: jest.Mock } }).user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { sessionsRevokedAt: expect.any(Date) },
+    });
   });
 
-  it('rotation thành công bình thường (không reuse) → KHÔNG thu hồi cả chuỗi, chỉ token cũ', async () => {
+  it('trong ân hạn nhưng toàn bộ phiên đã bị thu hồi SAU lần xoay đó → không cấp lại', async () => {
+    const { svc, prisma, create } = makeService({ user: { update: jest.fn().mockResolvedValue({}) } });
+    const rotatedAt = new Date(Date.now() - 3_000);
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1', userId: 'u1', revokedAt: rotatedAt, rotatedAt, expiresAt: new Date(Date.now() + 1e6),
+      user: { ...USER, sessionsRevokedAt: new Date(Date.now() - 1_000) },
+    });
+    await expect(svc.refresh('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('token đã logout (revoke không do xoay) → Unauthorized, không thu hồi cả chuỗi', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 't1', userId: 'u1', revokedAt: new Date(Date.now() - 1_000), rotatedAt: null,
+      expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
+    await expect(svc.refresh('tok')).rejects.toThrow('không hợp lệ');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rotation thành công bình thường (không reuse) → KHÔNG thu hồi cả chuỗi, chỉ token cũ (đánh dấu rotatedAt)', async () => {
     const { svc, prisma, updateMany } = makeService();
     (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
       id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
@@ -120,7 +163,7 @@ describe('AuthService.refresh (rotation atomic)', () => {
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 't1', revokedAt: null },
-      data: { revokedAt: expect.any(Date) },
+      data: { revokedAt: expect.any(Date), rotatedAt: expect.any(Date) },
     });
   });
 });

@@ -104,6 +104,13 @@ describe('AuthController — giao refresh token theo client', () => {
       expect(cleared).toEqual([REFRESH_COOKIE]);
     });
 
+    it('refresh lỗi tạm (DB/mạng, không phải 401) → GIỮ cookie để lần sau còn khôi phục được phiên', async () => {
+      auth.refresh.mockRejectedValue(new Error('connection terminated'));
+      const { res, cleared } = makeRes();
+      await expect(c.refresh({}, webReq(`${REFRESH_COOKIE}=live`), res)).rejects.toThrow('connection terminated');
+      expect(cleared).toEqual([]);
+    });
+
     it('logout xoá cookie và thu hồi token trong DB', async () => {
       const { res, cleared } = makeRes();
       await c.logout({}, webReq(`${REFRESH_COOKIE}=tok`), res);

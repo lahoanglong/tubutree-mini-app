@@ -14,8 +14,11 @@ import {
   nextPageParam,
   type DealerApp,
   listUsers,
+  blockUser,
+  unblockUser,
   setUserRole,
   type UserRole,
+  type AdminUser,
   listOrders,
   getDashboardStats,
   type DashboardStats,
@@ -1181,8 +1184,58 @@ function UsersTab() {
   // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
   // được. Thêm page state + nút chuyển trang, mirror đúng pattern OrdersTab cùng file.
   const [page, setPage] = useState(1);
-  const q = useQuery({ queryKey: ['admin-users', page], queryFn: () => listUsers(page) });
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const q = useQuery({ queryKey: ['admin-users', page, search], queryFn: () => listUsers(page, search || undefined) });
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { confirm, ask, dialog } = useConfirm();
+
+  const onError = (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' });
+  const block = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
+    onSuccess: (_r, v) => {
+      setMsg({ ok: true, text: `Đã khoá ${v.label}. Mọi phiên đăng nhập của người này đã bị thu hồi.` });
+      void q.refetch();
+    },
+    onError,
+  });
+  const unblock = useMutation({
+    mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
+    onSuccess: (_r, v) => {
+      setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
+      void q.refetch();
+    },
+    onError,
+  });
+
+  const askBlock = async (u: AdminUser) => {
+    setMsg(null);
+    const label = u.fullName ?? u.phone ?? u.id;
+    const reason = await ask({
+      title: 'Khoá tài khoản',
+      message: `Khoá ${label}${u.phone ? ` (${u.phone})` : ''}? Người này bị đăng xuất khỏi Mini App và web ngay, không đăng nhập lại được cho tới khi mở khoá.`,
+      confirmLabel: 'Khoá tài khoản',
+      tone: 'danger',
+      input: { label: 'Lý do khoá', placeholder: 'VD: farm voucher nhiều tài khoản, bom hàng COD', required: true, maxLength: 500 },
+    });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do khoá cần ít nhất 3 ký tự.' });
+      return;
+    }
+    block.mutate({ id: u.id, reason, label });
+  };
+  const askUnblock = async (u: AdminUser) => {
+    setMsg(null);
+    const label = u.fullName ?? u.phone ?? u.id;
+    const ok = await confirm({
+      title: 'Mở khoá tài khoản',
+      message: `Mở khoá ${label}? Người này đăng nhập lại được ngay.`,
+      confirmLabel: 'Mở khoá',
+    });
+    if (ok) unblock.mutate({ id: u.id, label });
+  };
 
   return (
     <div className="space-y-4">
@@ -1200,11 +1253,50 @@ function UsersTab() {
         </button>
       </div>
       <GrantRoleForm onDone={() => q.refetch()} />
+      <form
+        role="search"
+        aria-label="Tìm người dùng"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(1);
+          setSearch(searchInput.trim());
+        }}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <input
+          type="search"
+          aria-label="Tìm theo SĐT, tên hoặc mã người dùng"
+          placeholder="Tìm theo SĐT, tên hoặc mã người dùng…"
+          maxLength={100}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className={`${FIELD_CLASS} ${TOUCH_H} min-w-0 flex-1`}
+        />
+        <button type="submit" className={`${BTN_PRIMARY} whitespace-nowrap`}>
+          Tìm kiếm
+        </button>
+        {search && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearchInput('');
+              setSearch('');
+              setPage(1);
+            }}
+            className={`${BTN_SECONDARY} whitespace-nowrap`}
+          >
+            Xóa lọc
+          </button>
+        )}
+      </form>
+      {msg && (
+        <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
+      )}
       {q.isError ? (
         <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
       ) : (
         <>
-          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày']} label="Danh sách người dùng">
+          <Table head={['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái']} label="Danh sách người dùng">
             {q.data?.data.map((u) => (
               <tr key={u.id} className="border-t border-stone-100">
                 <td className="px-3 py-2 font-medium">{u.fullName ?? '—'}</td>
@@ -1214,9 +1306,41 @@ function UsersTab() {
                   <UserPointsCell user={u} />
                 </td>
                 <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
+                <td className="min-w-[16rem] px-3 py-2">
+                  {u.isBlocked ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
+                      <button
+                        type="button"
+                        onClick={() => askUnblock(u)}
+                        disabled={unblock.isPending}
+                        className={BTN_SMALL}
+                        aria-label={`Mở khoá ${u.fullName ?? u.phone ?? u.id}`}
+                      >
+                        Mở khoá
+                      </button>
+                      {u.blockedReason && <p className="w-full text-xs text-stone-500">Lý do: {u.blockedReason}</p>}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => askBlock(u)}
+                      disabled={block.isPending}
+                      className={BTN_DANGER_OUTLINE}
+                      aria-label={`Khoá ${u.fullName ?? u.phone ?? u.id}`}
+                    >
+                      Khoá
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>
+          {q.data && q.data.data.length === 0 && (
+            <p className="text-sm text-stone-500">
+              {search ? `Không có người dùng nào khớp “${search}”.` : 'Chưa có người dùng nào.'}
+            </p>
+          )}
 
           {q.data && totalPages > 1 && (
             <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
@@ -1246,6 +1370,7 @@ function UsersTab() {
           )}
         </>
       )}
+      {dialog}
     </div>
   );
 }

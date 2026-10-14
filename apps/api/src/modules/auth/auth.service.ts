@@ -9,6 +9,7 @@ import type { Env } from '../../config/env.validation';
 import { ZaloService } from './zalo.service';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { roleClaims } from './session-state.service';
 
 @Injectable()
 export class AuthService {
@@ -536,39 +537,67 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  /** Xoay refresh token: validate hash chưa revoke/expire → cấp cặp token mới. */
+  /**
+   * Xoay refresh token: validate hash chưa revoke/expire → cấp cặp token mới.
+   *
+   * Khoảng ân hạn (JWT_REFRESH_REUSE_GRACE_SECONDS): web có nhiều tab dùng chung một cookie và cùng
+   * refresh lúc mở trang, Mini App gửi lại khi mất phản hồi. Token vừa XOAY trong khoảng đó được dùng lại
+   * để lấy một cặp token mới, không bị coi là đánh cắp. Ngoài khoảng đó, hoặc khi toàn bộ phiên đã bị
+   * thu hồi sau lần xoay, dùng lại token đã xoay vẫn thu hồi cả chuỗi như P1-2.
+   */
   async refresh(refreshToken: string): Promise<LoginResponse> {
     const tokenHash = this.hashToken(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
       include: { user: true },
     });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
     }
     // isBlocked được chặn tập trung trong issueTokens() (dùng chung cho login + refresh) —
     // không check riêng ở đây để tránh 1 user bị khoá đăng nhập lại (guest/zalo-mini-app/
     // zalo-oauth) lấy token mới, né hoàn toàn chặn refresh.
-    // Rotation ATOMIC: chỉ thu hồi được nếu CHƯA revoke. count=0 nghĩa là token đã
-    // bị dùng (double-submit / reuse) → từ chối, tránh 1 token cũ sinh 2 session.
-    const revoked = await this.prisma.refreshToken.updateMany({
-      where: { id: stored.id, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    if (revoked.count === 0) {
-      // Reuse phát hiện (P1-2, docs/2026-09-08-review-progress.md): trước đây chỉ chặn ĐÚNG
-      // token bị replay lần này — nếu kẻ trộm đã rotate 1 lần TRƯỚC KHI nạn nhân refresh lại,
-      // chuỗi refresh token của kẻ trộm (đã cấp mới, chưa revoke) vẫn sống nguyên tới hết
-      // JWT_REFRESH_TTL_DAYS. Thu hồi TOÀN BỘ token còn active của user — buộc cả kẻ trộm lẫn
-      // nạn nhân phải đăng nhập lại, thay vì chỉ chặn 1 token rồi coi như xong.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: stored.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
+    let current = stored;
+    if (!stored.revokedAt) {
+      // Rotation ATOMIC: chỉ thu hồi được nếu CHƯA revoke. count=0 nghĩa là request khác vừa
+      // thu hồi trước — đọc lại để biết đó là lần xoay song song hay logout/khoá.
+      const now = new Date();
+      const revoked = await this.prisma.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: now, rotatedAt: now },
       });
-      this.logger.warn(`Phát hiện refresh token bị dùng lại (reuse) — đã thu hồi toàn bộ phiên của user ${stored.userId}.`);
-      throw new UnauthorizedException('Refresh token đã được sử dụng.');
+      if (revoked.count === 1) return this.issueTokens(stored.user);
+      const fresh = await this.prisma.refreshToken.findUnique({ where: { id: stored.id }, include: { user: true } });
+      if (!fresh) throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+      current = fresh;
     }
-    return this.issueTokens(stored.user);
+    if (!current.rotatedAt) {
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
+    const sessionsRevokedAt = current.user.sessionsRevokedAt;
+    if (sessionsRevokedAt && sessionsRevokedAt >= current.rotatedAt) {
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
+    const graceMs = this.config.get('JWT_REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1000;
+    if (Date.now() - current.rotatedAt.getTime() <= graceMs) {
+      return this.issueTokens(current.user);
+    }
+    // Reuse phát hiện (P1-2, docs/2026-09-08-review-progress.md): nếu kẻ trộm đã rotate 1 lần TRƯỚC KHI
+    // nạn nhân refresh lại, chuỗi refresh token của kẻ trộm vẫn sống nguyên tới hết JWT_REFRESH_TTL_DAYS.
+    // Thu hồi TOÀN BỘ token còn active của user — buộc cả kẻ trộm lẫn nạn nhân phải đăng nhập lại.
+    await this.revokeAllSessions(current.userId);
+    this.logger.warn(`Phát hiện refresh token bị dùng lại (reuse) — đã thu hồi toàn bộ phiên của user ${current.userId}.`);
+    throw new UnauthorizedException('Refresh token đã được sử dụng.');
+  }
+
+  /** Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. */
+  private async revokeAllSessions(userId: string): Promise<void> {
+    const now = new Date();
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await this.prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -581,8 +610,7 @@ export class AuthService {
   private async issueTokens(user: User): Promise<LoginResponse> {
     // Chặn TẬP TRUNG ở đây (dùng chung cho login guest/zalo-mini-app/zalo-oauth VÀ refresh):
     // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
-    // hoàn toàn việc khoá. Access token đang có (TTL ngắn) vẫn còn hiệu lực tới khi hết hạn —
-    // đây là giới hạn chấp nhận được của JWT stateless, không phải bug.
+    // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
     if (user.isBlocked) {
       throw new UnauthorizedException('Tài khoản đã bị khoá.');
     }
@@ -594,8 +622,7 @@ export class AuthService {
       sub: user.id,
       role: user.role,
       zaloId: user.zaloId ?? undefined,
-      affiliateEnabled: user.role === 'AFFILIATE' || user.role === 'ADMIN',
-      dealerEnabled: user.role === 'DEALER',
+      ...roleClaims(user.role),
     };
 
     const accessToken = await this.jwt.signAsync(payload, {
