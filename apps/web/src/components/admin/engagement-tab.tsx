@@ -10,7 +10,7 @@ import {
   type AdminRewardCatalogItem,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
-import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice } from './ui';
+import { BTN_XS_PRIMARY, INPUT_CLASS, Notice } from './ui';
 
 const REWARD_POINTS_MAX = 500;
 
@@ -87,7 +87,7 @@ function MissionRow({ item }: { item: AdminMission }) {
             inputMode="numeric"
             value={f.rewardPoints}
             onChange={(e) => setF({ ...f, rewardPoints: e.target.value })}
-            className={`${FIELD_XS} w-full`}
+            className={INPUT_CLASS}
           />
         </label>
       </div>

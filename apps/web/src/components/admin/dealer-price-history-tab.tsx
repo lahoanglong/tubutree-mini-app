@@ -75,7 +75,7 @@ function PriceRow({ item: h }: { item: DealerPriceChange }) {
         <span className={`font-semibold ${up ? 'text-warning-fg' : 'text-forest-700'}`}>{formatVnd(h.newPrice)}</span>
       </div>
       <div className="mt-1 text-xs text-stone-500">
-        {h.changedByName ?? h.changedBy} · {formatDateTime(h.createdAt)}
+        {h.changedByName ?? 'Không rõ tên người đổi'} · {formatDateTime(h.createdAt)}
       </div>
     </li>
   );
