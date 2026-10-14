@@ -319,6 +319,23 @@ describe('GameService.spin', () => {
       expect((prisma3.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(120000);
     });
 
+    // R2-ENGAGE-6: sheet kết quả cần mã, đơn tối thiểu và hạn dùng của voucher vừa trúng để khách biết dùng thế nào.
+    it('R2-ENGAGE-6: trúng voucher → kết quả kèm mã, đơn tối thiểu và hạn dùng của chính coupon vừa tạo; giải khác không có coupon', async () => {
+      const prizes = [{ id: 'v', name: 'Voucher 20k', weight: 1, rewardType: 'COUPON', value: 20000 }];
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const prisma = makePrisma();
+      const res = (await spinWith(prisma, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': prizes }).spin('u1')) as {
+        prize: { coupon?: { code: string; minOrder: number; expiresAt: Date } };
+      };
+      const created = (prisma.coupon.create as jest.Mock).mock.calls[0][0].data;
+      expect(res.prize.coupon).toEqual({ code: created.code, minOrder: 120000, expiresAt: created.endAt });
+
+      const prisma2 = makePrisma();
+      const none = [{ id: 'n', name: 'Chúc may mắn', weight: 1, rewardType: 'NONE', value: 0 }];
+      const res2 = (await spinWith(prisma2, loyaltyWithExpiry(0).loyalty, { 'game.spin_prizes': none }).spin('u1')) as { prize: object };
+      expect(res2.prize).not.toHaveProperty('coupon');
+    });
+
     it('PF-6a (b): trúng giải không phải SEEDS → không đọc game.tank_capacity', async () => {
       const prisma = makePrisma();
       jest.spyOn(Math, 'random').mockReturnValue(0.9); // giải 'b' (NONE)
@@ -1271,6 +1288,22 @@ describe('GameService.getMissions', () => {
       { code: 'REVIEW_3', title: 'Nhà phê bình', description: undefined, rewardPoints: 15, progress: 2, goal: 3, completed: false, claimed: false },
       { code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: undefined, rewardPoints: 50, progress: 0, goal: 3, completed: false, claimed: false },
     ]);
+  });
+
+  // R2-ENGAGE-7: mô tả nhiệm vụ REVIEW_3 là "Viết 3 đánh giá có ảnh" nên chỉ đánh giá có ít nhất 1 ảnh được tính.
+  it('REVIEW_3 chỉ đếm đánh giá có ảnh (khớp mô tả nhiệm vụ)', async () => {
+    const reviewCount = jest.fn().mockResolvedValue(1);
+    const prisma = makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
+      order: { count: jest.fn().mockResolvedValue(0) },
+      review: { count: reviewCount },
+      user: { count: jest.fn().mockResolvedValue(0) },
+      mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
+      missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
+    expect(reviewCount).toHaveBeenCalledWith({ where: { userId: 'u1', NOT: { images: { isEmpty: true } } } });
+    expect(res.find((m) => m.code === 'REVIEW_3')).toMatchObject({ progress: 1, goal: 3, completed: false });
   });
 
   it('A1-02: nhiệm vụ đã có dòng mission_progress khớp (missionId, cycleKey hiện tại) → claimed=true', async () => {

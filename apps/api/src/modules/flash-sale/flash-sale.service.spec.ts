@@ -319,6 +319,45 @@ describe('FlashSaleService.removeItem', () => {
   });
 });
 
+describe('FlashSaleService.deleteSale (R2-ENGAGE-13: xoá đợt chưa bắt đầu)', () => {
+  const svc = (prisma: unknown) => new FlashSaleService(prisma as PrismaService, config, notifications, lifecycle);
+  const future = new Date(Date.now() + 3 * 864e5);
+  const past = new Date(Date.now() - 3600e3);
+
+  it('đợt không tồn tại → reject, không xoá', async () => {
+    const prisma = { flashSale: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() } };
+    await expect(svc(prisma).deleteSale('sX')).rejects.toThrow('Không tìm thấy đợt flash sale.');
+    expect(prisma.flashSale.delete).not.toHaveBeenCalled();
+  });
+
+  it('đợt đã bắt đầu → reject, chỉ cho tắt, KHÔNG xoá', async () => {
+    const prisma = {
+      flashSale: { findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: past, items: [] }), delete: jest.fn() },
+    };
+    await expect(svc(prisma).deleteSale('s1')).rejects.toThrow('Đợt flash sale đã bắt đầu, chỉ có thể tắt chứ không xoá.');
+    expect(prisma.flashSale.delete).not.toHaveBeenCalled();
+  });
+
+  it('đợt chưa bắt đầu nhưng có item đã phát sinh đơn → reject (lưới an toàn)', async () => {
+    const prisma = {
+      flashSale: { findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: future, items: [{ soldCount: 2 }] }), delete: jest.fn() },
+    };
+    await expect(svc(prisma).deleteSale('s1')).rejects.toThrow('đã phát sinh đơn');
+    expect(prisma.flashSale.delete).not.toHaveBeenCalled();
+  });
+
+  it('đợt chưa bắt đầu, chưa bán gì → xoá (item/nhắc tôi xoá theo cascade), trả { ok: true }', async () => {
+    const prisma = {
+      flashSale: {
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: future, items: [{ soldCount: 0 }] }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+    };
+    await expect(svc(prisma).deleteSale('s1')).resolves.toEqual({ ok: true });
+    expect(prisma.flashSale.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
+  });
+});
+
 describe('FlashSaleService.addItem (validate)', () => {
   const base = () => ({
     flashSale: {

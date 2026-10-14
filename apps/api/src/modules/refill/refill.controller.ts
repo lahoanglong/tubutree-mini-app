@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,10 +28,14 @@ export class RefillController {
     return this.refill.getSummary(userId);
   }
 
-  // Đổi N vỏ chai rỗng → tạo đơn PENDING chờ duyệt.
+  // Đổi N vỏ chai rỗng → tạo đơn PENDING chờ duyệt. Idempotency-Key: bấm đúp/retry không tạo yêu cầu thứ hai.
   @Post('return')
-  returnBottles(@CurrentUser('sub') userId: string, @Body() dto: ReturnBottlesDto) {
-    return this.refill.returnBottles(userId, dto.quantity);
+  returnBottles(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ReturnBottlesDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.refill.returnBottles(userId, dto.quantity, idempotencyKey);
   }
 
   // Admin/Staff: Lấy danh sách đổi vỏ chờ duyệt

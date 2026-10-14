@@ -4,6 +4,9 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 
+/** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
+const EXPIRE_BATCH = 200;
+
 interface GroupRow {
   id: string;
   productId: string;
@@ -249,13 +252,44 @@ export class GroupBuyService {
     return groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), userId));
   }
 
-  /** Cron: nhóm OPEN quá hạn → FAILED. Trả số nhóm bị đánh hỏng. */
+  /**
+   * Cron: nhóm OPEN quá hạn → FAILED, rồi báo từng thành viên (kể cả người mở nhóm) để khách đang chờ biết kết quả và
+   * quay lại mua với giá thường hoặc mở nhóm mới. Mỗi nhóm được "giành" bằng updateMany có guard OPEN nên hai lần quét
+   * chạy chồng nhau không báo trùng. Trả số nhóm bị đánh hỏng.
+   */
   async expireGroups(): Promise<number> {
-    const res = await this.prisma.groupBuy.updateMany({
+    const due = await this.prisma.groupBuy.findMany({
       where: { status: 'OPEN', expiresAt: { lte: new Date() } },
-      data: { status: 'FAILED' },
+      select: { id: true, product: { select: { name: true, slug: true } } },
+      orderBy: { expiresAt: 'asc' },
+      take: EXPIRE_BATCH,
     });
-    return res.count;
+    let failed = 0;
+    for (const g of due) {
+      const flip = await this.prisma.groupBuy.updateMany({
+        where: { id: g.id, status: 'OPEN', expiresAt: { lte: new Date() } },
+        data: { status: 'FAILED' },
+      });
+      if (flip.count === 0) continue;
+      failed += 1;
+      await this.notifyExpired(g.id, g.product);
+    }
+    return failed;
+  }
+
+  private async notifyExpired(groupBuyId: string, product: { name: string; slug: string }): Promise<void> {
+    if (!this.notifications) return;
+    const members = await this.prisma.groupBuyMember
+      .findMany({ where: { groupBuyId } })
+      .catch((e: unknown) => {
+        this.logger.warn(`Không lấy được thành viên nhóm ${groupBuyId} để báo hết hạn: ${(e as Error).message}`);
+        return [];
+      });
+    for (const m of members) {
+      await this.notifications
+        .notify(m.userId, 'GROUP_BUY_FAILED', { product: product.name, product_slug: product.slug })
+        .catch((e: unknown) => this.logger.warn(`notify hết hạn lỗi (nhóm ${groupBuyId}, user ${m.userId}): ${(e as Error).message}`));
+    }
   }
 
   private toView(

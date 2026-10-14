@@ -1,4 +1,5 @@
 import { BadRequestException, GoneException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { GameGardenService } from './game-garden.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -153,6 +154,30 @@ describe('GameGardenService.unlockPlot', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
     expect(prisma.gardenPlot.create).not.toHaveBeenCalled();
+  });
+
+  // R2-ENGAGE-15: bấm đúp, request thua ăn unique(userId, slot) nhưng ô đã được mở.
+  it('lệnh mở song song thua unique (P2002) → trả ô vừa được mở, không ném lỗi ràng buộc', async () => {
+    const prisma = makePrisma();
+    (prisma.gardenPlot.create as jest.Mock).mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' }),
+    );
+    (prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(plotRow({ slot: 1 }));
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.plot_unlock_seed_base': 100, 'game.max_plots': 5 }));
+    const r = await svc.unlockPlot('u1', 'SEEDS');
+    expect(r.slot).toBe(1);
+    expect((prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique).toHaveBeenCalledWith({
+      where: { userId_slot: { userId: 'u1', slot: 1 } },
+    });
+  });
+
+  it('P2002 nhưng không thấy ô nào (lỗi khác hẳn) → ném lại lỗi gốc, không nuốt', async () => {
+    const prisma = makePrisma();
+    const dup = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
+    (prisma.gardenPlot.create as jest.Mock).mockRejectedValue(dup);
+    (prisma.gardenPlot as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    const svc = new GameGardenService(prisma, makeConfig({ 'game.max_plots': 5 }));
+    await expect(svc.unlockPlot('u1', 'SEEDS')).rejects.toBe(dup);
   });
 
   it('đã đạt max lô → throw, không trừ gì', async () => {

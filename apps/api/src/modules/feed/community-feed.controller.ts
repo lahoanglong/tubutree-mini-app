@@ -122,6 +122,19 @@ export class CommunityFeedController {
     } as CreateEventInput);
   }
 
+  // Quản trị: sự kiện đang mở/đã đóng (kèm người thắng) và người dự thi để chọn người thắng. Literal path khai TRƯỚC @Get(':id').
+  @Roles('ADMIN')
+  @Get('admin/events')
+  adminEvents(@Query('status') status?: string) {
+    return this.feed.adminEvents(status === 'CLOSED' ? 'CLOSED' : 'OPEN');
+  }
+
+  @Roles('ADMIN')
+  @Get('admin/events/:id/participants')
+  adminEventParticipants(@Param('id') id: string) {
+    return this.feed.adminEventParticipants(id);
+  }
+
   @Roles('ADMIN')
   @Post('events/:id/close')
   closeEvent(@Param('id') id: string) {

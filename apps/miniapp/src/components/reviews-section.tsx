@@ -3,7 +3,7 @@ import { Input, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video, type LucideIcon } from 'lucide-react';
 import { fetchReviews, createReview, canReviewProduct, type MyReview } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -221,7 +221,7 @@ export function ReviewsSection({ slug }: { slug: string }) {
                     {r.images.map((img) => (
                       <img
                         key={img}
-                        src={img}
+                        src={apiMediaUrl(img)}
                         alt="ảnh đánh giá"
                         loading="lazy"
                         style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 'var(--radius-media)' }}

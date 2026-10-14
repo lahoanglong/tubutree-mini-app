@@ -577,7 +577,7 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
  * Sổ PointsTransaction giả lọc ĐÚNG theo where (userId/reason.startsWith/delta.gt/createdAt.gte/
  * refId.in) — test hành vi "điểm xét hạng" theo dữ liệu, không phụ thuộc hình dạng câu truy vấn.
  */
-type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date };
+type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date; expiresAt?: Date | null };
 function fakeLedger(rows: LedgerRow[]) {
   const all = rows.map((r) => ({ userId: 'u1', refId: null as string | null, createdAt: new Date(), ...r }));
   type W = {
@@ -773,6 +773,38 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, config).getOverview('u1');
     expect(ov.rates).toEqual({ vndPerPoint: 10_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2 });
+  });
+
+  // R2-ENGAGE-8
+  it('getOverview: trả điểm sắp hết hạn gần nhất của lô thường và số tháng hết hạn theo cấu hình', async () => {
+    const soon = new Date(Date.now() + 20 * 864e5);
+    const later = new Date(Date.now() + 200 * 864e5);
+    const ledger = fakeLedger([
+      { reason: 'DAILY_CHECKIN:DAY_1', delta: 70, createdAt: new Date(Date.now() - 300 * 864e5), expiresAt: soon },
+      { reason: 'GAME_SPIN_WIN:p1', delta: 30, createdAt: new Date(Date.now() - 10 * 864e5), expiresAt: later },
+    ]);
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 100, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: ledger,
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.point_expire_months' ? 6 : fb) as T } as unknown as SystemConfigService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.expiringPoints).toEqual({ amount: 70, expiresAt: soon.toISOString() });
+    expect(ov.pointExpireMonths).toBe(6);
+  });
+
+  it('getOverview: không có lô nào có hạn → expiringPoints null, pointExpireMonths mặc định 12', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
+    expect(ov.expiringPoints).toBeNull();
+    expect(ov.pointExpireMonths).toBe(12);
   });
 
   it('PD-3 getOverview: trả pointsConvertedBalance, pointsTotal, redeemableTotal; redeemablePoints giữ nghĩa lô STANDARD dùng được', async () => {

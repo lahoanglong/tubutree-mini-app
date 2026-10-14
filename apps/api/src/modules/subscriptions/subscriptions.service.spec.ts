@@ -822,6 +822,30 @@ describe('SubscriptionsService.list', () => {
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
   });
 
+  // R2-ENGAGE-9: thẻ định kỳ phải cho khách thấy số tiền thật bị tính mỗi kỳ, cùng công thức với đơn kỳ.
+  it('R2-ENGAGE-9: trả tiền hàng mỗi kỳ trước/sau giảm theo đúng công thức đơn kỳ (làm tròn xuống phần giảm)', async () => {
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 3, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date() },
+        ]),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: 99_990, retailPrice: 120_000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' ? ([{ minActive: 1, pct: 0.14 }] as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    const [row] = await svc.list('u1');
+    expect(row).toMatchObject({ cycleSubtotal: 299_970, cycleDiscount: 41_995, cycleGoods: 257_975 });
+  });
+
   it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { subscription: { findMany } } as unknown as PrismaService;

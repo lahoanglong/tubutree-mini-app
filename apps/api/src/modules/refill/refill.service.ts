@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -10,6 +10,8 @@ import { startOfVnMonth } from '../../common/vn-time';
  * Quản lý (Admin/Staff) xem & duyệt đơn trên trang Quản trị → tự động thưởng 💧 vào Vườn Xanh.
  */
 const LIST_PENDING_TAKE = 100;
+// Lần chạy tối đa của giao dịch Serializable khi đụng độ song song (P2034/P2002) trước khi báo bận.
+const REFILL_TX_ATTEMPTS = 3;
 
 @Injectable()
 export class RefillService {
@@ -19,51 +21,85 @@ export class RefillService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async returnBottles(userId: string, quantity: number) {
+  async returnBottles(userId: string, quantity: number, idempotencyKey?: string) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException('Số vỏ chai không hợp lệ.');
     }
+    // Key rỗng/toàn khoảng trắng = không có key: lưu '' sẽ làm lần đổi thứ hai của cùng người đụng unique (userId, key).
+    const key = idempotencyKey?.trim().slice(0, 200) || undefined;
     const [perBottle, monthlyCap] = await Promise.all([
       this.config.get<number>('refill.seeds_per_bottle', 50),
       this.config.get<number>('refill.monthly_cap_bottles', 20),
     ]);
 
-    try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const used = await this.usedThisMonthTx(tx, userId);
-          const remaining = Math.max(0, monthlyCap - used);
-          if (quantity > remaining) {
-            throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
-          }
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            if (key) {
+              const existing = await tx.bottleReturn.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey: key } } });
+              if (existing) return this.replayed(tx, existing, quantity);
+            }
+            const used = await this.usedThisMonthTx(tx, userId);
+            const remaining = Math.max(0, monthlyCap - used);
+            if (quantity > remaining) {
+              throw new BadRequestException(`Tháng này bạn chỉ còn đổi được ${remaining} vỏ chai (trần ${monthlyCap}/tháng).`);
+            }
 
-          const seedsAwarded = quantity * perBottle;
-          const item = await tx.bottleReturn.create({
-            data: { userId, quantity, seedsAwarded, status: 'PENDING' },
-          });
+            const seedsAwarded = quantity * perBottle;
+            const item = await tx.bottleReturn.create({
+              data: { userId, quantity, seedsAwarded, status: 'PENDING', idempotencyKey: key },
+            });
 
-          const totalRecycled = await this.totalRecycledTx(tx, userId);
-          return {
-            id: item.id,
-            quantity,
-            seedsAwarded,
-            status: 'PENDING',
-            monthlyRemaining: remaining - quantity,
-            totalRecycled,
-          };
-        },
-        // Serializable: đọc SUM tháng rồi INSERT không phải 1 phép atomic (không có cột đếm
-        // để updateMany+gte như stock/wallet) — 2 request đổi vỏ song song đọc CÙNG "used" rồi
-        // đều pass trần → vượt monthly_cap_bottles. Serializable buộc 1 trong 2 tx fail (P2034)
-        // thay vì âm thầm double-count (mirror dealer.service.ts credit-limit check).
-        { isolationLevel: 'Serializable' },
-      );
-    } catch (err) {
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+            const totalRecycled = await this.totalRecycledTx(tx, userId);
+            return {
+              id: item.id,
+              quantity,
+              seedsAwarded,
+              status: 'PENDING',
+              monthlyRemaining: remaining - quantity,
+              totalRecycled,
+            };
+          },
+          // Serializable: đọc SUM tháng rồi INSERT không phải 1 phép atomic (không có cột đếm
+          // để updateMany+gte như stock/wallet) — 2 request đổi vỏ song song đọc CÙNG "used" rồi
+          // đều pass trần → vượt monthly_cap_bottles. Serializable buộc 1 trong 2 tx fail (P2034)
+          // thay vì âm thầm double-count (mirror dealer.service.ts credit-limit check).
+          { isolationLevel: 'Serializable' },
+        );
+      } catch (err) {
+        const code = typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
+        // Hai request cùng key chạy song song: kẻ thua bị Serializable (P2034) hoặc unique (P2002) chặn. Chạy lại một
+        // lần nữa là thấy dòng của kẻ thắng và trả đúng kết quả đó thay vì báo "bận" cho một lần bấm đúp.
+        if ((code === 'P2034' || code === 'P2002') && attempt < REFILL_TX_ATTEMPTS) continue;
+        if (code === 'P2034' || code === 'P2002') throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+        throw err;
       }
-      throw err;
     }
+  }
+
+  /** Cùng Idempotency-Key trả lại đúng yêu cầu đã tạo; khác số vỏ nghĩa là client dùng nhầm key nên báo thay vì trả số cũ. */
+  private async replayed(
+    tx: Prisma.TransactionClient,
+    existing: { id: string; quantity: number; declaredQuantity: number | null; seedsAwarded: number; status: string; userId: string },
+    quantity: number,
+  ) {
+    if ((existing.declaredQuantity ?? existing.quantity) !== quantity) {
+      throw new ConflictException('Mã yêu cầu này đã dùng cho một lần đổi vỏ khác số lượng. Vui lòng gửi lại yêu cầu mới.');
+    }
+    const [used, monthlyCap, totalRecycled] = await Promise.all([
+      this.usedThisMonthTx(tx, existing.userId),
+      this.config.get<number>('refill.monthly_cap_bottles', 20),
+      this.totalRecycledTx(tx, existing.userId),
+    ]);
+    return {
+      id: existing.id,
+      quantity: existing.quantity,
+      seedsAwarded: existing.seedsAwarded,
+      status: existing.status,
+      monthlyRemaining: Math.max(0, monthlyCap - used),
+      totalRecycled,
+    };
   }
 
   async getSummary(userId: string) {

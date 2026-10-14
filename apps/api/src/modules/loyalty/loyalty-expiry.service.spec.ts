@@ -3,6 +3,7 @@ import {
   loadPointExpiryTxns,
   LoyaltyExpiryService,
   lotRecoverable,
+  nextPointExpiry,
   orderLotKey,
   reviewLotKey,
   type PointExpiryTxn,
@@ -34,6 +35,39 @@ const tx = (
 const review = (id: string, delta: number, createdAt: string, expiresAt: string | null, reviewId: string) =>
   tx(id, delta, createdAt, expiresAt, delta > 0 ? 'REVIEW:tinh-dau' : 'REVIEW_DELETE:p1', { refType: 'REVIEW', refId: reviewId });
 const expired = (id: string, amount: number, createdAt: string) => tx(id, -amount, createdAt, null, 'POINTS_EXPIRED');
+
+describe('nextPointExpiry (R2-ENGAGE-8: điểm sắp hết hạn gần nhất cho trang Điểm Xanh)', () => {
+  it('không có lô nào có hạn còn tồn → null', () => {
+    expect(nextPointExpiry([], NOW)).toBeNull();
+    expect(nextPointExpiry([tx('a', 100, '2026-01-01')], NOW)).toBeNull();
+  });
+
+  it('bỏ lô đã hết hạn và lô đã bị tiêu hết; lấy lô còn tồn có hạn sớm nhất', () => {
+    const r = nextPointExpiry(
+      [
+        tx('old', 40, '2025-01-01', '2026-01-01'),
+        tx('a', 100, '2025-09-01', '2026-09-01T03:00:00.000Z'),
+        tx('b', 60, '2025-12-01', '2026-12-01T03:00:00.000Z'),
+        tx('spend', -100, '2026-02-01'),
+      ],
+      NOW,
+    );
+    // FIFO: khoản tiêu 100 ăn lô 'old' (40, đã hết hạn) rồi 60 của lô 'a' → a còn 40.
+    expect(r).toEqual({ amount: 40, expiresAt: new Date('2026-09-01T03:00:00.000Z') });
+  });
+
+  it('gộp mọi lô hết hạn trong CÙNG ngày (giờ VN) với lô sớm nhất, không gộp ngày sau', () => {
+    const r = nextPointExpiry(
+      [
+        tx('a', 10, '2025-09-01', '2026-09-01T01:00:00.000Z'),
+        tx('b', 20, '2025-09-01', '2026-09-01T10:00:00.000Z'),
+        tx('c', 30, '2025-09-02', '2026-09-02T03:00:00.000Z'),
+      ],
+      NOW,
+    );
+    expect(r).toEqual({ amount: 30, expiresAt: new Date('2026-09-01T01:00:00.000Z') });
+  });
+});
 
 describe('computePointExpiry (pure FIFO helper)', () => {
   const WINDOW = 7 * DAY;

@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  * nằm trong khối đang ẩn (mất phần thưởng vừa nhận, trang kẹt khoá cuộn). Dùng vòng quay THẬT, không mock.
  */
 const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
   api: {
     getGameProfile: vi.fn(),
     getTodayQuiz: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   // class "zaui-page" để ModalWrapper của ZaUI bật/tắt "disable-scrolling" như trên máy thật.
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/game', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: vi.fn(), closeSnackbar: vi.fn() }),
 }));
@@ -125,6 +126,26 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     expect(screen.getByText('Chúc mừng!')).toBeVisible();
     expect(screen.getByText('Thưởng 50 Điểm Xanh')).toBeVisible();
     expect(screen.getByText('+50 Điểm Xanh đã vào tài khoản')).toBeVisible();
+  });
+
+  it('trúng voucher: "Dùng ngay" đóng hộp rồi đưa sang trang mua sắm', async () => {
+    mocks.api.spin.mockResolvedValue({
+      prize: {
+        id: 'p4',
+        name: 'Voucher 20k',
+        rewardType: 'COUPON',
+        value: 20000,
+        coupon: { code: 'GAME20000-ABCDE-1234', minOrder: 120000, expiresAt: '2026-11-13T09:00:00.000Z' },
+      },
+    });
+    const spinBtn = await openToday();
+    fireEvent.click(spinBtn);
+    await advance(SPIN_MS);
+    expect(screen.getByText('GAME20000-ABCDE-1234')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
+    await advance(500);
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+    expect(screen.queryByText('GAME20000-ABCDE-1234')).not.toBeInTheDocument();
   });
 
   it.each(['Vườn', 'Cộng đồng'])('đổi sang tab %s trong lúc quay: hộp kết quả vẫn nhìn thấy được', async (tabName) => {

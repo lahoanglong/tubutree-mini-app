@@ -24,7 +24,7 @@ describe('Duyệt đổi vỏ chai: số vỏ thực nhận và duyệt song son
         SystemConfigService,
         RefillService,
         { provide: AnalyticsEventsService, useValue: { recordBestEffort: jest.fn() } },
-        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue(true) } },
+        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue({ ok: true }) } },
         {
           provide: NotificationsService,
           inject: [PrismaService, ZnsClient, AnalyticsEventsService],

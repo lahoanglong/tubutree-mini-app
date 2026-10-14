@@ -166,6 +166,31 @@ describe('RefillPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(keyOf(2)).not.toBe(keyOf(0));
   });
 
+  it('đổi số vỏ sau một lần lỗi thì dùng key mới (server từ chối cùng key khác số lượng)', async () => {
+    mocks.returnBottles.mockRejectedValueOnce(new Error('mất mạng'));
+    renderPage();
+    await screen.findByText('vỏ đã tái chế');
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu đổi vỏ' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'mất mạng', type: 'error' }));
+
+    fireEvent.click(controls().plus);
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu đổi vỏ' }));
+    await waitFor(() => expect(mocks.returnBottles).toHaveBeenCalledTimes(2));
+    const call = (n: number) => mocks.returnBottles.mock.calls[n]! as [number, string];
+    expect(call(1)[0]).toBe(2);
+    expect(call(1)[1]).not.toBe(call(0)[1]);
+  });
+
+  it('bấm đúp sát nhau chỉ gửi một yêu cầu và chỉ báo thành công một lần', async () => {
+    renderPage();
+    const submit = await screen.findByRole('button', { name: 'Gửi yêu cầu đổi vỏ' });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(mocks.returnBottles).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
   it('lỗi khi gửi: giữ số vỏ đang chọn', async () => {
     mocks.returnBottles.mockRejectedValueOnce(new Error('Hết lượt'));
     const { container } = renderPage();

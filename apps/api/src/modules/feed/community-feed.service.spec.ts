@@ -47,6 +47,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     user: {
       findUnique: jest.fn().mockResolvedValue({ fullName: 'Người dùng' }),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     communityEvent: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -1332,6 +1333,63 @@ describe('containsBannedContent (pure fn)', () => {
   });
 });
 
+// R2-ENGAGE-11 / ENGAGE-16: bỏ dấu làm "cả đó", "cả cuộc", "trúng thưởng" trùng từ cấm nên bài hợp lệ bị giữ chờ duyệt.
+describe('containsBannedContent — câu tiếng Việt thường gặp không bị bắt nhầm (R2-ENGAGE-11)', () => {
+  it.each([
+    'Cả đó đều thích sản phẩm này',
+    'Cả cuộc đời mình gắn bó với vườn rau',
+    'Chúc mừng bạn đã trúng thưởng trong sự kiện ảnh đẹp của Tubu',
+    'Mình vừa trúng thưởng vòng quay, cả nhà vui lắm',
+    'Cả đó giờ mình chỉ dùng nước rửa chén sinh học',
+  ])('bài hợp lệ: %s', (text) => {
+    expect(containsBannedContent(text)).toBe(false);
+  });
+
+  it.each([
+    'Hội nhóm cá độ bóng đá uy tín',
+    'Nhận cá cược online, rút tiền ngay',
+    'Nhận ca do bong da, tài xỉu',
+    'ca cuoc bong da luc nao cung co keo',
+    'Group CÁ ĐỘ đổi thưởng',
+  ])('cờ bạc rõ ràng vẫn bị bắt: %s', (text) => {
+    expect(containsBannedContent(text)).toBe(true);
+  });
+
+  it('danh sách do admin cấu hình thay được mặc định: bỏ từ, thêm từ, từ có dấu khớp đúng dấu, từ không dấu khớp cả hai', () => {
+    expect(containsBannedContent('Hội nhóm cờ bạc', ['casino'])).toBe(false);
+    expect(containsBannedContent('Mở casino online', ['casino'])).toBe(true);
+    expect(containsBannedContent('Bán thuốc lá lậu', ['thuốc lá lậu'])).toBe(true);
+    expect(containsBannedContent('Bán thuoc la lau', ['thuốc lá lậu'])).toBe(false);
+    expect(containsBannedContent('Bán thuốc lá lậu', ['thuoc la lau'])).toBe(true);
+  });
+
+  it('link ngoài vẫn bị hạ cờ kể cả khi danh sách từ rỗng', () => {
+    expect(containsBannedContent('xem http://spam.biz/x', [])).toBe(true);
+  });
+});
+
+describe('CommunityFeedService — danh sách từ cấm lấy từ SystemConfig (R2-ENGAGE-11)', () => {
+  it('createPost: bài "cả đó" của user tin cậy vẫn PUBLISHED', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createPost('u1', 'STAFF', { body: 'Cả đó đều thích sản phẩm này' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PUBLISHED');
+  });
+
+  it('createPost dùng community.banned_keywords do admin đặt (từ mới vào hàng chờ duyệt)', async () => {
+    const prisma = makePrisma();
+    const config = makeConfig({ 'community.banned_keywords': ['thuốc lá lậu'] });
+    await makeSvc(prisma, undefined, undefined, config).createPost('u1', 'STAFF', { body: 'Bán thuốc lá lậu giá rẻ' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+
+  it('cấu hình sai kiểu (không phải mảng chuỗi) → dùng danh sách mặc định, không làm hỏng việc đăng bài', async () => {
+    const prisma = makePrisma();
+    const config = makeConfig({ 'community.banned_keywords': 'casino' });
+    await makeSvc(prisma, undefined, undefined, config).createPost('u1', 'STAFF', { body: 'Mở casino online' });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+  });
+});
+
 describe('CommunityFeedService.bumpReputation', () => {
   it('ghi 1 dòng sổ cái ReputationEvent (khoá theo reason+refId) rồi mới cộng điểm', async () => {
     const prisma = makePrisma();
@@ -1841,6 +1899,97 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
       where: { id: 'ev1', status: 'OPEN' },
       data: { winnerUserId: 'u1', status: 'CLOSED' },
     });
+  });
+});
+
+// R2-ENGAGE-14: người thắng không được báo, quản trị phải dán userId thô, sự kiện đã đóng biến mất khỏi danh sách.
+describe('CommunityFeedService.pickWinner — báo người thắng (R2-ENGAGE-14)', () => {
+  const setup = (rewardPoints = 5) => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', title: 'Thi khoe vườn', rewardPoints, status: 'OPEN' });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
+    (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+    return { prisma, reward, notify, svc: makeSvc(prisma, reward, notify) };
+  };
+
+  it('chốt xong thì báo người thắng kèm tên sự kiện và số Điểm Xanh được thưởng', async () => {
+    const { svc, notify } = setup(5);
+    await svc.pickWinner('ev1', 'u1');
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', {
+      title: 'Thi khoe vườn',
+      reward: ' Bạn được thưởng 5 Điểm Xanh.',
+    });
+  });
+
+  it('sự kiện không có thưởng điểm → câu báo không nhắc điểm', async () => {
+    const { svc, notify } = setup(0);
+    await svc.pickWinner('ev1', 'u1');
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' });
+  });
+
+  it('chốt thất bại (đã có người chốt) thì không báo ai', async () => {
+    const { prisma, svc, notify } = setup();
+    (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(svc.pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(notify.notify).not.toHaveBeenCalled();
+  });
+
+  it('gửi thông báo lỗi không làm hỏng việc chốt người thắng', async () => {
+    const { svc, notify } = setup();
+    notify.notify.mockRejectedValue(new Error('db'));
+    await expect(svc.pickWinner('ev1', 'u1')).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('CommunityFeedService.adminEvents (R2-ENGAGE-14)', () => {
+  it('mặc định chỉ sự kiện đang mở, sắp theo hạn chót gần nhất', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).adminEvents();
+    const args = (prisma.communityEvent.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toEqual({ status: 'OPEN' });
+    expect(args.orderBy).toEqual({ endAt: 'asc' });
+  });
+
+  it('"CLOSED" → liệt kê sự kiện đã đóng, mới nhất trước, kèm tên + ảnh người thắng', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findMany as jest.Mock).mockResolvedValue([
+      { id: 'ev1', title: 'Thi khoe vườn', status: 'CLOSED', winnerUserId: 'u1' },
+      { id: 'ev2', title: 'Không chọn', status: 'CLOSED', winnerUserId: null },
+    ]);
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([{ id: 'u1', fullName: 'An', avatarUrl: 'a.jpg' }]);
+    const r = await makeSvc(prisma).adminEvents('CLOSED');
+    const args = (prisma.communityEvent.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toEqual({ status: 'CLOSED' });
+    expect(args.orderBy).toEqual({ endAt: 'desc' });
+    expect(r[0]).toMatchObject({ id: 'ev1', winner: { id: 'u1', name: 'An', avatar: 'a.jpg' } });
+    expect(r[1]).toMatchObject({ id: 'ev2', winner: null });
+  });
+
+  it('giá trị lạ → coi như đang mở (không lộ toàn bộ bảng)', async () => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).adminEvents('whatever' as never);
+    expect((prisma.communityEvent.findMany as jest.Mock).mock.calls[0][0].where).toEqual({ status: 'OPEN' });
+  });
+});
+
+describe('CommunityFeedService.adminEventParticipants (R2-ENGAGE-14)', () => {
+  it('mỗi người dự thi một dòng (bài mới nhất) kèm tên, ảnh và số bài; chỉ bài PUBLISHED của sự kiện đó', async () => {
+    const prisma = makePrisma();
+    const at = (d: string) => new Date(`2026-10-${d}T00:00:00.000Z`);
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([
+      { id: 'p3', userId: 'u1', title: 'Vườn ban công', body: 'Mới nhất của An', createdAt: at('03'), user: { fullName: 'An', avatarUrl: 'a.jpg' } },
+      { id: 'p2', userId: 'u2', title: null, body: 'Bài của Bình khá dài '.repeat(10), createdAt: at('02'), user: { fullName: null, avatarUrl: null } },
+      { id: 'p1', userId: 'u1', title: 'Bài cũ', body: 'cũ', createdAt: at('01'), user: { fullName: 'An', avatarUrl: 'a.jpg' } },
+    ]);
+    const r = await makeSvc(prisma).adminEventParticipants('ev1');
+    const args = (prisma.feedPost.findMany as jest.Mock).mock.calls[0][0];
+    expect(args.where).toEqual({ status: 'PUBLISHED', meta: { path: ['eventId'], equals: 'ev1' } });
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ userId: 'u1', name: 'An', avatar: 'a.jpg', postId: 'p3', postTitle: 'Vườn ban công', postCount: 2 });
+    expect(r[1]).toMatchObject({ userId: 'u2', name: 'Bạn Tubu', avatar: null, postId: 'p2', postCount: 1 });
+    expect(r[1]!.postTitle.length).toBeLessThanOrEqual(81);
   });
 });
 

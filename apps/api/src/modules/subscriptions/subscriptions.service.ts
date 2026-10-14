@@ -125,6 +125,21 @@ interface LockedSubRow {
   paymentMethod: SubscriptionPaymentMethod;
 }
 
+/**
+ * Tiền hàng một kỳ định kỳ: phần giảm làm tròn xuống đồng, tiền hàng không âm. MỘT công thức cho cả đơn kỳ
+ * (runCycle) lẫn thẻ lịch định kỳ ở miniapp, để số khách thấy khớp số bị tính.
+ */
+export function subscriptionCycleAmounts(unitPrice: number, quantity: number, discountPct: number) {
+  const subtotal = unitPrice * quantity;
+  const discount = Math.floor(subtotal * discountPct);
+  return { subtotal, discount, goods: Math.max(0, subtotal - discount) };
+}
+
+function cycleAmountsView(unitPrice: number, quantity: number, discountPct: number) {
+  const { subtotal, discount, goods } = subscriptionCycleAmounts(unitPrice, quantity, discountPct);
+  return { cycleSubtotal: subtotal, cycleDiscount: discount, cycleGoods: goods };
+}
+
 /** Đơn kỳ vừa ghi xong, kèm phần việc chạy sau commit (Pancake, thông báo). */
 interface PlacedCycleOrder {
   order: Order;
@@ -406,6 +421,7 @@ export class SubscriptionsService {
         slug: v?.product.slug ?? null,
         unitPrice: v ? (v.salePrice ?? v.retailPrice) : 0,
         effectiveDiscountPct,
+        ...cycleAmountsView(v ? (v.salePrice ?? v.retailPrice) : 0, s.quantity, effectiveDiscountPct),
       };
     });
   }
@@ -658,10 +674,8 @@ export class SubscriptionsService {
     const user = await tx.user.findUniqueOrThrow({ where: { id: sub.userId } });
 
     const unitPrice = variation.salePrice ?? variation.retailPrice;
-    const subtotal = unitPrice * sub.quantity;
     const discountPct = await this.effectiveDiscountPct(sub.userId, tx);
-    const discount = Math.floor(subtotal * discountPct);
-    const goods = Math.max(0, subtotal - discount);
+    const { subtotal, discount, goods } = subscriptionCycleAmounts(unitPrice, sub.quantity, discountPct);
     const shippingFee = await this.pricing.calcShippingFee({ subtotal, tierId: user.tierId });
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
     const pointsEarned = await this.pricing.calcPointsEarned(goods, multiplier);

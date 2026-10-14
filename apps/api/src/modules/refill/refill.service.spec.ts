@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { RefillService } from './refill.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -80,6 +80,74 @@ describe('RefillService.returnBottles', () => {
     expect(prisma.gameProfile.upsert).not.toHaveBeenCalled(); // chưa cộng 💧 ngay
     const created = (prisma.bottleReturn.create as jest.Mock).mock.calls[0][0].data;
     expect(created).toMatchObject({ userId: 'u1', quantity: 3, seedsAwarded: 150, status: 'PENDING' });
+  });
+});
+
+describe('RefillService.returnBottles — Idempotency-Key (R2-ENGAGE-12)', () => {
+  const existingRow = { id: 'br0', userId: 'u1', quantity: 3, declaredQuantity: null, seedsAwarded: 150, status: 'PENDING' };
+
+  it('cùng key đã có yêu cầu → trả lại yêu cầu đó, không tạo dòng mới', async () => {
+    const prisma = makePrisma();
+    (prisma.bottleReturn.findUnique as jest.Mock).mockResolvedValue(existingRow);
+    (prisma.bottleReturn.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 3 } });
+    const svc = new RefillService(prisma, makeConfig({ 'refill.monthly_cap_bottles': 20 }), makeNotifications());
+
+    const r = await svc.returnBottles('u1', 3, 'key-1');
+
+    expect(r).toMatchObject({ id: 'br0', quantity: 3, seedsAwarded: 150, status: 'PENDING', monthlyRemaining: 17 });
+    expect(prisma.bottleReturn.create).not.toHaveBeenCalled();
+    expect(prisma.bottleReturn.findUnique).toHaveBeenCalledWith({ where: { userId_idempotencyKey: { userId: 'u1', idempotencyKey: 'key-1' } } });
+  });
+
+  it('cùng key nhưng số vỏ khác → 409, không tạo thêm', async () => {
+    const prisma = makePrisma();
+    (prisma.bottleReturn.findUnique as jest.Mock).mockResolvedValue(existingRow);
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+
+    await expect(svc.returnBottles('u1', 5, 'key-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.bottleReturn.create).not.toHaveBeenCalled();
+  });
+
+  it('key mới → tạo dòng kèm idempotencyKey (đã trim)', async () => {
+    const prisma = makePrisma();
+    (prisma.bottleReturn.findUnique as jest.Mock).mockResolvedValue(null);
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+
+    await svc.returnBottles('u1', 2, '  key-2  ');
+
+    expect((prisma.bottleReturn.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ idempotencyKey: 'key-2' });
+  });
+
+  it('không key hoặc key toàn khoảng trắng → không tra key, lưu idempotencyKey undefined', async () => {
+    const prisma = makePrisma();
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+
+    await svc.returnBottles('u1', 2, '   ');
+
+    expect(prisma.bottleReturn.findUnique).not.toHaveBeenCalled();
+    expect((prisma.bottleReturn.create as jest.Mock).mock.calls[0][0].data.idempotencyKey).toBeUndefined();
+  });
+
+  it('đụng Serializable lần đầu rồi chạy lại thấy dòng của request thắng → trả kết quả đó thay vì báo bận', async () => {
+    const prisma = makePrisma();
+    (prisma.bottleReturn.findUnique as jest.Mock).mockResolvedValue(existingRow);
+    (prisma.bottleReturn.aggregate as jest.Mock).mockResolvedValue({ _sum: { quantity: 3 } });
+    const realTx = prisma.$transaction as unknown as jest.Mock;
+    const impl = realTx.getMockImplementation()!;
+    realTx.mockRejectedValueOnce({ code: 'P2034' }).mockImplementation(impl);
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+
+    const r = await svc.returnBottles('u1', 3, 'key-1');
+
+    expect(r.id).toBe('br0');
+    expect(realTx).toHaveBeenCalledTimes(2);
+  });
+
+  it('đụng độ liên tục hết số lần chạy lại → báo bận, không 500', async () => {
+    const prisma = makePrisma({ $transaction: jest.fn().mockRejectedValue({ code: 'P2002' }) });
+    const svc = new RefillService(prisma, makeConfig(), makeNotifications());
+
+    await expect(svc.returnBottles('u1', 3, 'key-1')).rejects.toThrow('Hệ thống đang bận xử lý, vui lòng thử lại.');
   });
 });
 

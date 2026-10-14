@@ -90,4 +90,26 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     await flush();
     expect(row.textContent).toContain('Mã mẫu ZNS là dãy số Zalo cấp khi duyệt mẫu');
   });
+
+  it('mẫu ZNS có lượt lỗi: admin thấy số lượt và mã + lý do Zalo trả về của lần gần nhất', async () => {
+    const failing = {
+      id: 'nt-ship',
+      code: 'ORDER_SHIPPING',
+      channel: 'ZNS',
+      zaloTemplateId: '231570',
+      bodyTemplate: 'Đơn đang giao.',
+      delivery: 'ZNS',
+      sent30d: { INAPP: 10, ZNS: 4 },
+      znsFailed30d: 3,
+      znsLastError: { text: 'ZNS lỗi -118: user not exist', at: '2026-10-01T03:04:59.000Z' },
+    };
+    const m = mockFetch({ '/admin/notification-templates': { body: [failing, ...TEMPLATES] } });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-template="ORDER_SHIPPING"]')!;
+    expect(row.querySelector('[data-zns-failure]')?.textContent).toContain('3 lượt ZNS lỗi trong 30 ngày');
+    expect(row.textContent).toContain('ZNS lỗi -118: user not exist');
+    expect(container.querySelector('[data-template="ORDER_CONFIRMED"] [data-zns-failure]')).toBeNull();
+  });
 });

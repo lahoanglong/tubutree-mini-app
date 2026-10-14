@@ -1949,7 +1949,11 @@ model BottleReturn {
   reviewedBy       String? // userId nhân viên/admin duyệt hoặc từ chối
   reviewedAt       DateTime?
   rejectionReason  String?
+  // Idempotency-Key của POST /refill/return: bấm đúp / retry sau timeout trả lại đúng yêu cầu đã tạo thay vì tạo dòng thứ hai.
+  // Unique theo (userId, key) nên khoá của người khác không đụng; dòng cũ không có key (NULL không trùng nhau).
+  idempotencyKey   String?
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, createdAt])
   @@index([status])
   @@map("bottle_returns")

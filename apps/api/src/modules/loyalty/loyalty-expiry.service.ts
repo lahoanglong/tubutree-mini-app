@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
-import { formatVnDate } from '../../common/vn-time';
+import { formatVnDate, vnDateKey } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
@@ -249,6 +249,20 @@ export function computePointExpiry(
   }
 
   return { expiredNow, expiringSoon: { amount: soonAmount, earliestExpiresAt: earliest } };
+}
+
+/**
+ * Điểm sắp hết hạn gần nhất của lô thường để trang Điểm Xanh báo trước cho khách (không giới hạn trong cửa sổ nhắc):
+ * mốc hết hạn sớm nhất còn tương lai, cộng phần còn tồn của mọi lô cùng ngày hết hạn (giờ VN) với mốc đó. null nếu
+ * không còn lô có hạn nào. Lô đã quá hạn không tính: cron trừ chúng, không phải điểm "sắp" hết hạn.
+ */
+export function nextPointExpiry(txns: PointExpiryTxn[], now: Date): { amount: number; expiresAt: Date } | null {
+  const live = replayLots(txns).filter((l) => l.remaining > 0 && l.expiresAt != null && l.expiresAt.getTime() > now.getTime());
+  if (live.length === 0) return null;
+  const earliest = live.reduce((min, l) => (l.expiresAt!.getTime() < min.getTime() ? l.expiresAt! : min), live[0]!.expiresAt!);
+  const day = vnDateKey(earliest);
+  const amount = live.filter((l) => vnDateKey(l.expiresAt!) === day).reduce((sum, l) => sum + l.remaining, 0);
+  return { amount, expiresAt: earliest };
 }
 
 /**

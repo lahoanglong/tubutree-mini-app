@@ -55,9 +55,34 @@ describe('SubscriptionsPanel', () => {
     mocks.getSubscriptions.mockResolvedValue([SUB]);
     renderPanel();
     expect(await screen.findByText('Nước xả vải Tubu')).toBeInTheDocument();
-    expect(screen.getByText('Mỗi 4 tuần · 160.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Mỗi 4 tuần · 137.600đ')).toBeInTheDocument();
     expect(screen.getByText('Đang chạy')).toBeInTheDocument();
     expect(screen.getByText('Đang giảm 14% cho đơn định kỳ')).toBeInTheDocument();
+  });
+
+  // R2-ENGAGE-9
+  it('giá mỗi kỳ là giá SAU giảm; giá gốc gạch ngang kèm nhãn tiết kiệm', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, cycleSubtotal: 160000, cycleDiscount: 22400, cycleGoods: 137600 }]);
+    renderPanel();
+    expect(await screen.findByText('Mỗi 4 tuần · 137.600đ')).toBeInTheDocument();
+    const original = screen.getByText('160.000đ');
+    expect(original.tagName).toBe('S');
+    expect(screen.getByText('Tiết kiệm 14%')).toBeInTheDocument();
+    expect(screen.queryByText('Mỗi 4 tuần · 160.000đ')).toBeNull();
+  });
+
+  it('API cũ chưa trả cycle*: thẻ tự tính cùng công thức (phần giảm làm tròn xuống)', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, unitPrice: 99_990, quantity: 3, effectiveDiscountPct: 0.14 }]);
+    renderPanel();
+    expect(await screen.findByText('Mỗi 4 tuần · 257.975đ')).toBeInTheDocument();
+    expect(screen.getByText('299.970đ').tagName).toBe('S');
+  });
+
+  it('không giảm giá (0%): chỉ hiện giá mỗi kỳ, không gạch ngang, không nhãn tiết kiệm', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, effectiveDiscountPct: 0 }]);
+    renderPanel();
+    expect(await screen.findByText('Mỗi 4 tuần · 160.000đ')).toBeInTheDocument();
+    expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
   });
 
   it('thẻ hiện cách trả + địa chỉ giao (phân biệt các gói cùng SP khác địa chỉ)', async () => {

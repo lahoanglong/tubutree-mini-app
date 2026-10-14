@@ -6,6 +6,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
+import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
@@ -82,10 +83,10 @@ export class CatalogService {
     weight: true,
   } satisfies Prisma.VariationSelect;
 
+  // Không có images: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh, app đọc đánh giá qua GET /products/:slug/reviews.
   private readonly publicReviewSelect = {
     rating: true,
     comment: true,
-    images: true,
     videoUrl: true,
     isVerified: true,
     createdAt: true,
@@ -151,7 +152,7 @@ export class CatalogService {
    */
   private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
     const { brand, category, segment, minPrice, maxPrice, inStock, minRating } = query;
-    const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED' };
+    const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
@@ -209,7 +210,7 @@ export class CatalogService {
     });
     // P0 A2-03=A5-06=A6-04: SP chưa duyệt (PENDING_REVIEW) hoặc bị từ chối (REJECTED, kể cả từng
     // APPROVED rồi bị duyệt lại thành từ chối) không được lộ qua PDP công khai.
-    if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
+    if (!product || !isPublicProduct(product)) {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
     // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
@@ -223,7 +224,7 @@ export class CatalogService {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const items = await this.prisma.product.findMany({
-      where: { isActive: true, approvalStatus: 'APPROVED', brand: product.brand, id: { not: product.id } },
+      where: { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } },
       take: 8,
       include: { variations: { where: { isActive: true } } },
     });
@@ -255,7 +256,7 @@ export class CatalogService {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.productId);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: ids }, isActive: true, approvalStatus: 'APPROVED' },
+      where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
       include: { variations: { where: { isActive: true } } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
@@ -309,7 +310,7 @@ export class CatalogService {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
       if (followedBrandIds.length > 0) or.push({ brandId: { in: followedBrandIds } });
-      const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED', OR: or };
+      const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE, OR: or };
       items = await this.prisma.product.findMany({
         where,
         // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
@@ -321,7 +322,7 @@ export class CatalogService {
 
     if (items.length === 0) {
       items = await this.prisma.product.findMany({
-        where: { isActive: true, approvalStatus: 'APPROVED', isFeatured: true },
+        where: { ...PUBLIC_PRODUCT_WHERE, isFeatured: true },
         take: 200,
         include: { variations: { where: { isActive: true } } },
       });
@@ -343,7 +344,7 @@ export class CatalogService {
     }
     const rows = await this.prisma.product.groupBy({
       by: ['brand'],
-      where: { isActive: true },
+      where: PUBLIC_PRODUCT_WHERE,
       _count: { _all: true },
     });
     const value = rows.map((r) => ({ brand: r.brand, count: r._count._all }));
@@ -363,7 +364,7 @@ export class CatalogService {
     const [rows, products] = await Promise.all([
       this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
       this.prisma.product.findMany({
-        where: { isActive: true, approvalStatus: 'APPROVED' },
+        where: PUBLIC_PRODUCT_WHERE,
         select: { categoryIds: true },
       }),
     ]);
@@ -381,7 +382,7 @@ export class CatalogService {
     const text = await this.textWhere(q);
     if (!text) return [];
     return this.prisma.product.findMany({
-      where: { isActive: true, approvalStatus: 'APPROVED', AND: [text] },
+      where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
       select: { slug: true, name: true, thumbnail: true, basePrice: true },
     });

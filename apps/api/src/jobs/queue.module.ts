@@ -36,7 +36,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
       { name: QUEUE_GOMDON_EVENTS },
     ),
   ],
-  // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (retry gửi ZNS thất bại — xem
+  // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (gửi ZNS + thử lại lỗi tạm thời — xem
   // notifications.service.ts/notify()). Đăng ký ở đây thay vì NotificationsModule vì chỉ phụ
   // thuộc NotificationsService (được NotificationsModule export + @Global()); không cần
   // registerQueue lại vì QueueModule đã @Global() export toàn bộ Queue (cùng cách

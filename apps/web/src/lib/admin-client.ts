@@ -749,6 +749,7 @@ export const createFlashSale = (body: { title: string; startAt: string; endAt: s
   apiFetch<AdminFlashSale>('/admin/flash-sales', { method: 'POST', body });
 export const updateFlashSale = (id: string, body: Partial<{ title: string; startAt: string; endAt: string; isActive: boolean }>) =>
   apiFetch(`/admin/flash-sales/${id}`, { method: 'PATCH', body });
+export const deleteFlashSale = (id: string) => apiFetch(`/admin/flash-sales/${id}`, { method: 'DELETE' });
 export const addFlashSaleItem = (saleId: string, body: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) =>
   apiFetch(`/admin/flash-sales/${saleId}/items`, { method: 'POST', body });
 export const deleteFlashSaleItem = (itemId: string) =>
@@ -891,6 +892,9 @@ export interface AdminNotificationTemplate {
   bodyTemplate: string;
   delivery: NotificationDelivery;
   sent30d: { INAPP: number; ZNS: number };
+  /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
+  znsFailed30d?: number;
+  znsLastError?: { text: string; at: string } | null;
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (

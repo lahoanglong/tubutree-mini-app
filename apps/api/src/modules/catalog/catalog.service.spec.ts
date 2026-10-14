@@ -84,6 +84,19 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
   });
 });
 
+// R2-ENGAGE-3: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh; PDP là trang vào nhiều nhất và app đọc đánh giá
+// qua GET /products/:slug/reviews, nên PDP không nhúng ảnh đánh giá.
+describe('CatalogService.getBySlug — PDP không nhúng ảnh đánh giá (R2-ENGAGE-3)', () => {
+  it('select đánh giá nhúng không chứa images', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null);
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
+    const arg = findUnique.mock.calls[0]![0] as { include: { reviews: { select: Record<string, unknown> } } };
+    expect(arg.include.reviews.select).not.toHaveProperty('images');
+    expect(arg.include.reviews.select).toMatchObject({ rating: true, comment: true });
+  });
+});
+
 describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)', () => {
   it('product trả về không có pancakeId', async () => {
     const findUnique = jest.fn().mockResolvedValue({

@@ -41,6 +41,7 @@ import {
   createFlashSale,
   updateFlashSale,
   addFlashSaleItem,
+  deleteFlashSale,
   deleteFlashSaleItem,
   listFaqs,
   createFaq,
@@ -125,6 +126,7 @@ import {
   BTN_SECONDARY,
   BTN_SMALL,
   FIELD_CLASS,
+  Field,
   INPUT_CLASS,
   ScrollRegion,
   TOUCH_H,
@@ -2149,26 +2151,22 @@ function FlashSalesTab() {
       <div className={CARD_CLASS}>
         <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h2>
         <div className="flex flex-wrap items-end gap-2">
-          <input
-            placeholder="Tên đợt (vd Flash Sale cuối tuần)"
-            value={f.title}
-            onChange={(e) => setF({ ...f, title: e.target.value })}
-            className={`${field} grow basis-full sm:basis-48`}
-          />
-          <input
-            type="datetime-local"
-            aria-label="Flash Sale bắt đầu lúc"
-            value={f.startAt}
-            onChange={(e) => setF({ ...f, startAt: e.target.value })}
-            className={field}
-          />
-          <input
-            type="datetime-local"
-            aria-label="Flash Sale kết thúc lúc"
-            value={f.endAt}
-            onChange={(e) => setF({ ...f, endAt: e.target.value })}
-            className={field}
-          />
+          <div className="grow basis-full sm:basis-48">
+            <Field label="Tên đợt">
+              <input
+                placeholder="vd Flash Sale cuối tuần"
+                value={f.title}
+                onChange={(e) => setF({ ...f, title: e.target.value })}
+                className={`${field} w-full`}
+              />
+            </Field>
+          </div>
+          <Field label="Bắt đầu lúc">
+            <input type="datetime-local" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+          </Field>
+          <Field label="Kết thúc lúc">
+            <input type="datetime-local" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+          </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!f.title.trim() || !f.startAt || !f.endAt || create.isPending}
@@ -2189,8 +2187,19 @@ function FlashSalesTab() {
   );
 }
 
+/** Giá trị cho `<input type="datetime-local">` (giờ máy admin), cùng cách đọc với lúc tạo đợt: `new Date(value)`. */
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+const EMPTY_ITEM = { variationId: '', flashPrice: '', quota: '', perUserLimit: '' };
+
 function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
   const toggleActive = useMutation({
@@ -2203,7 +2212,44 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onSuccess: () => { setRowErr(null); refresh(); },
     onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
-  const [item, setItem] = useState({ variationId: '', flashPrice: 0, quota: 0, perUserLimit: '' });
+  const notStarted = new Date(sale.startAt).getTime() > Date.now();
+  const delSale = useMutation({
+    mutationFn: () => deleteFlashSale(sale.id),
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+  });
+  const askDeleteSale = async () => {
+    const ok = await confirm({
+      title: 'Xoá đợt flash sale',
+      message: `Xoá "${sale.title}"? Mọi sản phẩm và lượt nhắc trong đợt sẽ bị xoá theo, không hoàn tác được.`,
+      confirmLabel: 'Xoá đợt',
+      cancelLabel: 'Giữ lại',
+      tone: 'danger',
+    });
+    if (ok) delSale.mutate();
+  };
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ title: '', startAt: '', endAt: '' });
+  const startEdit = () => {
+    setDraft({ title: sale.title, startAt: toDatetimeLocal(sale.startAt), endAt: toDatetimeLocal(sale.endAt) });
+    setRowErr(null);
+    setEditing(true);
+  };
+  const original = { title: sale.title, startAt: toDatetimeLocal(sale.startAt), endAt: toDatetimeLocal(sale.endAt) };
+  const changed = draft.title !== original.title || draft.startAt !== original.startAt || draft.endAt !== original.endAt;
+  const saveEdit = useMutation({
+    mutationFn: () =>
+      updateFlashSale(sale.id, {
+        ...(draft.title !== original.title ? { title: draft.title.trim() } : {}),
+        ...(draft.startAt !== original.startAt ? { startAt: new Date(draft.startAt).toISOString() } : {}),
+        ...(draft.endAt !== original.endAt ? { endAt: new Date(draft.endAt).toISOString() } : {}),
+      }),
+    onSuccess: () => { setRowErr(null); setEditing(false); refresh(); },
+    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+  });
+
+  const [item, setItem] = useState(EMPTY_ITEM);
   const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
   const [itemErr, setItemErr] = useState<string | null>(null);
   const variationLabels = useVariationLabels(sale.items.map((it) => it.variationId));
@@ -2216,13 +2262,14 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         perUserLimit: item.perUserLimit ? Number(item.perUserLimit) : undefined,
       }),
     onSuccess: () => {
-      setItem({ variationId: '', flashPrice: 0, quota: 0, perUserLimit: '' });
+      setItem(EMPTY_ITEM);
       setPickedVariation(null);
       setItemErr(null);
       refresh();
     },
     onError: (e) => setItemErr(e instanceof Error ? e.message : 'Lỗi thêm sản phẩm'),
   });
+  const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
 
   const fmt = formatDateTime;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
@@ -2237,10 +2284,45 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           </div>
           <div className="break-words text-xs text-stone-500">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
         </div>
-        <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_SECONDARY} shrink-0`}>
-          {sale.isActive ? 'Tắt' : 'Bật'}
-        </button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <button onClick={() => (editing ? setEditing(false) : startEdit())} className={BTN_SECONDARY}>
+            Sửa đợt
+          </button>
+          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={BTN_SECONDARY}>
+            {sale.isActive ? 'Tắt' : 'Bật'}
+          </button>
+          {notStarted && (
+            <button onClick={() => void askDeleteSale()} disabled={delSale.isPending} className={BTN_DANGER_OUTLINE}>
+              Xoá đợt
+            </button>
+          )}
+        </div>
       </div>
+      {editing && (
+        <div className="mt-3 flex flex-wrap items-end gap-2 rounded-control border border-stone-200 bg-stone-50 p-3">
+          <div className="grow basis-full sm:basis-48">
+            <Field label="Tên đợt (sửa)">
+              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className={`${field} w-full`} />
+            </Field>
+          </div>
+          <Field label="Bắt đầu lúc (sửa)">
+            <input type="datetime-local" value={draft.startAt} onChange={(e) => setDraft({ ...draft, startAt: e.target.value })} className={field} />
+          </Field>
+          <Field label="Kết thúc lúc (sửa)">
+            <input type="datetime-local" value={draft.endAt} onChange={(e) => setDraft({ ...draft, endAt: e.target.value })} className={field} />
+          </Field>
+          <button
+            onClick={() => saveEdit.mutate()}
+            disabled={!changed || !draft.title.trim() || !draft.startAt || !draft.endAt || saveEdit.isPending}
+            className={BTN_PRIMARY}
+          >
+            {saveEdit.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
+          </button>
+          <button onClick={() => setEditing(false)} className={BTN_SECONDARY}>
+            Huỷ sửa
+          </button>
+        </div>
+      )}
       {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
 
       <div className="mt-3 border-t border-stone-200 pt-3">
@@ -2257,7 +2339,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-start gap-2">
+        <div className="mt-2 flex flex-wrap items-end gap-2">
           <ProductPicker
             mode="variation"
             label="Chọn biến thể sản phẩm cho đợt Flash Sale"
@@ -2268,16 +2350,29 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             }}
             className="min-w-[14rem] flex-1"
           />
-          <input type="number" placeholder="Giá flash" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: Number(e.target.value) })} className={`${field} w-28`} />
-          <input type="number" placeholder="Quota" value={item.quota} onChange={(e) => setItem({ ...item, quota: Number(e.target.value) })} className={`${field} w-24`} />
-          <input type="number" placeholder="Giới hạn/khách" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-32`} />
-          <button onClick={() => addItem.mutate()} disabled={!item.variationId.trim() || addItem.isPending} className={BTN_PRIMARY}>
+          <div className="w-28">
+            <Field label="Giá flash (đ)">
+              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 59000" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: e.target.value })} className={`${field} w-full`} />
+            </Field>
+          </div>
+          <div className="w-32">
+            <Field label="Số lượng bán (quota)">
+              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
+            </Field>
+          </div>
+          <div className="w-32">
+            <Field label="Giới hạn mỗi khách">
+              <input type="number" min={1} step={1} inputMode="numeric" placeholder="mặc định" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-full`} />
+            </Field>
+          </div>
+          <button onClick={() => addItem.mutate()} disabled={!itemReady || addItem.isPending} className={BTN_PRIMARY}>
             Thêm SP
           </button>
         </div>
         <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
         {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
       </div>
+      {dialog}
     </div>
   );
 }
