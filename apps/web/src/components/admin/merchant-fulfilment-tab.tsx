@@ -57,7 +57,11 @@ export function MerchantFulfilmentTab() {
     void qc.invalidateQueries({ queryKey: ['admin-merchant-payouts'] });
   };
   const onError = (e: unknown) => setError(e instanceof Error ? e.message : 'Không thực hiện được.');
-  const createMut = useMutation({ mutationFn: (storefrontId: string) => createAdminMerchantPayout(storefrontId), onSuccess: refresh, onError });
+  const createMut = useMutation({
+    mutationFn: (s: { storefrontId: string; settleableAmount: number }) => createAdminMerchantPayout(s.storefrontId, s.settleableAmount),
+    onSuccess: refresh,
+    onError,
+  });
   const [panel, setPanel] = useState<{ storefrontId: string; kind: 'lines' | 'fees' } | null>(null);
   const toggle = (storefrontId: string, kind: 'lines' | 'fees') =>
     setPanel((cur) => (cur?.storefrontId === storefrontId && cur.kind === kind ? null : { storefrontId, kind }));
@@ -115,7 +119,7 @@ export function MerchantFulfilmentTab() {
                       defaultPct={defaultPct}
                       creating={createMut.isPending}
                       open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
-                      onCreate={() => createMut.mutate(s.storefrontId)}
+                      onCreate={() => createMut.mutate(s)}
                       onToggle={(kind) => toggle(s.storefrontId, kind)}
                     />
                   ))}
@@ -333,8 +337,8 @@ function StoreTermsForm({
       </div>
       <p className="text-stone-500">
         Phí sàn để trống là theo mức mặc định. Phí Tubu giao hộ trừ thêm trên mỗi món giao hộ (theo số tiền khách thực trả cho
-        món), phí cố định chia cho các món giao hộ của gian hàng trong cùng đơn. Đơn tự giao đã đặt giữ phí sàn đã chốt; khoản
-        Tubu giao hộ chưa vào phiếu tính theo mức mới.
+        món), phí cố định chia cho các món giao hộ của gian hàng trong cùng đơn. Mức mới chỉ áp cho đơn đặt từ lúc lưu; đơn đã
+        đặt giữ mức cũ, kể cả khi chưa vào phiếu.
       </p>
     </form>
   );

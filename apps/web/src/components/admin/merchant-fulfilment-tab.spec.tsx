@@ -135,7 +135,8 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     click(buttons[0]!);
     await flush();
     const post = api.calls.find((c) => c.url.endsWith('/admin/merchant-fulfilment/payouts') && c.init?.method === 'POST')!;
-    expect(JSON.parse(String(post.init!.body))).toEqual({ storefrontId: 'sf1' });
+    // Tổng admin đang nhìn đi kèm: server tính lại khác số này thì từ chối lập phiếu.
+    expect(JSON.parse(String(post.init!.body))).toEqual({ storefrontId: 'sf1', expectedTotal: 185_000 });
     expect(Array.from(root.querySelectorAll('h2,h3,h4')).map((h) => h.tagName)).toEqual(['H2', 'H3', 'H3', 'H3']);
     expect(scrollRegionProblems(root)).toEqual([]);
   });
@@ -170,6 +171,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     click(byText(row, 'button', 'Sửa phí'));
     const form = r.container.querySelector('form')!;
     expect(inputByLabel(form, 'Phí sàn riêng (%)').placeholder).toBe('Mặc định 15%');
+    expect(form.textContent).toContain('Mức mới chỉ áp cho đơn đặt từ lúc lưu');
     typeInto(inputByLabel(form, 'Phí sàn riêng (%)'), '12');
     typeInto(inputByLabel(form, 'Phí Tubu giao hộ (%)'), '2.5');
     typeInto(inputByLabel(form, 'Phí Tubu giao hộ mỗi đơn (đ)'), '3400');

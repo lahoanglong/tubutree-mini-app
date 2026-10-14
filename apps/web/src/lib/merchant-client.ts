@@ -458,8 +458,9 @@ export const updateAdminMerchantStoreTerms = (
 export const listAdminMerchantPayouts = (page = 1, limit = MERCHANT_PAGE_SIZE) =>
   apiFetch<Page<MerchantPayout>>(`/admin/merchant-fulfilment/payouts?page=${page}&limit=${limit}`);
 
-export const createAdminMerchantPayout = (storefrontId: string, note?: string) =>
-  apiFetch<MerchantPayout>('/admin/merchant-fulfilment/payouts', { method: 'POST', body: { storefrontId, note } });
+/** `expectedTotal`: tổng bảng kê admin đang xem — server tính lại khác số này thì từ chối (409) để admin xem lại. */
+export const createAdminMerchantPayout = (storefrontId: string, expectedTotal: number, note?: string) =>
+  apiFetch<MerchantPayout>('/admin/merchant-fulfilment/payouts', { method: 'POST', body: { storefrontId, note, expectedTotal } });
 
 export const markAdminMerchantPayoutPaid = (id: string, bankRef: string) =>
   apiFetch<MerchantPayout>(`/admin/merchant-fulfilment/payouts/${encodeURIComponent(id)}/paid`, {
