@@ -48,13 +48,28 @@ export interface ProblemInput {
     credentialsRejected: boolean;
     backlog: number;
     backlogRefs: string[];
+    /** Hàng đợi "Cần xử lý thu gom": NEEDS_MANUAL_CHECK/FAILED, Gomdon hoàn/huỷ, huỷ vận đơn lỗi, báo động Gomdon chưa đóng. */
+    attention: number;
+    attentionRefs: string[];
   };
   queues: { ok: true; items: { name: string; failedLastHour: number }[] } | { ok: false; error: string };
 }
 
+/** Việc cho người trong một sự cố: số việc + mã đơn của vài việc cũ nhất — để biết lúc nào có việc MỚI. */
+export type OpsWorkItems = {
+  count: number;
+  refs: string[];
+};
+
 export interface OpsProblem {
   key: string;
   message: string;
+  /**
+   * Chỉ có ở hàng việc cho người (cần xử lý Pancake / thu gom): mỗi việc mới là một đơn phải có người làm, nên được báo ngay
+   * thay vì gộp vào lần nhắc lại sau `repeatHours`. Sự cố hạ tầng (đơn kẹt, webhook, hàng đợi) không có — số tăng dần trong
+   * lúc sự cố là chuyện đương nhiên, báo lại mỗi lượt chỉ là spam.
+   */
+  items?: OpsWorkItems;
 }
 
 const REFS_SHOWN = 5;
@@ -88,6 +103,7 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
       out.push({
         key: 'pancake.attention',
         message: `${s.pancake.attention} đơn cần xử lý tay trên Pancake${refList(s.pancake.attentionRefs, s.pancake.attention)}`,
+        items: { count: s.pancake.attention, refs: s.pancake.attentionRefs },
       });
     }
     const c = s.pancake.catalog;
@@ -111,6 +127,15 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
         message: `${s.gomdon.backlog} đơn thu gom quá ${t.gomdonBacklogMinutes} phút chưa tạo được vận đơn Gomdon${refList(s.gomdon.backlogRefs, s.gomdon.backlog)}`,
       });
     }
+    if (s.gomdon.attention > 0) {
+      out.push({
+        key: 'gomdon.attention',
+        message:
+          `${s.gomdon.attention} đơn thu gom cần xử lý tay (tra vận đơn trên Gomdon, tạo vận đơn tay, báo động chưa đóng)` +
+          refList(s.gomdon.attentionRefs, s.gomdon.attention),
+        items: { count: s.gomdon.attention, refs: s.gomdon.attentionRefs },
+      });
+    }
   }
   if (!s.queues.ok) {
     out.push({ key: 'queues.down', message: `Hàng đợi không phản hồi: ${s.queues.error}` });
@@ -128,6 +153,15 @@ export interface AlertMemory {
   keys: string[];
   alertSince: Date | null;
   alertedAt: Date | null;
+  /** Số việc + mã đơn đã biết của từng hàng việc cho người (OpsProblem.items) ở lượt trước. */
+  tracked?: Record<string, OpsWorkItems>;
+}
+
+/** Hàng việc có việc mới so với lượt trước: thêm việc, hoặc số giữ nguyên mà có mã đơn chưa từng thấy (một xong, một mới). */
+function hasNewWork(p: OpsProblem, prev: OpsWorkItems | undefined): boolean {
+  if (!p.items || !prev) return false;
+  if (p.items.count > prev.count) return true;
+  return p.items.count >= prev.count && p.items.refs.some((r) => !prev.refs.includes(r));
 }
 
 /**
@@ -146,10 +180,12 @@ export function decideAlert(
   }
   const prevKeys = prev?.keys ?? [];
   const alertSince = prevKeys.length > 0 && prev?.alertSince ? prev.alertSince : now;
-  const hasNew = keys.some((k) => !prevKeys.includes(k));
+  const hasNew = keys.some((k) => !prevKeys.includes(k)) || problems.some((p) => hasNewWork(p, prev?.tracked?.[p.key]));
   const due = !prev?.alertedAt || now.getTime() - prev.alertedAt.getTime() >= repeatHours * 3_600_000;
-  if (hasNew || due) return { send: 'ALERT', next: { keys, alertSince, alertedAt: now } };
-  return { send: null, next: { keys, alertSince, alertedAt: prev?.alertedAt ?? null } };
+  const work = problems.filter((p) => p.items);
+  const tracked = work.length > 0 ? Object.fromEntries(work.map((p) => [p.key, p.items!])) : undefined;
+  if (hasNew || due) return { send: 'ALERT', next: { keys, alertSince, alertedAt: now, tracked } };
+  return { send: null, next: { keys, alertSince, alertedAt: prev?.alertedAt ?? null, tracked } };
 }
 
 export interface AlertMessage {
