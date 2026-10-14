@@ -115,20 +115,28 @@ export class GameGardenService {
       throw new BadRequestException(`Đã mở tối đa ${maxPlots - 1} lô đất.`);
     }
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const cost = seedBase * slot;
-      // Trừ nước ATOMIC (guard gte) — chống mở lô khi không đủ / hai lệnh song song.
-      const dec = await tx.gameProfile.updateMany({
-        where: { userId, totalSeeds: { gte: cost } },
-        data: { totalSeeds: { decrement: cost } },
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const cost = seedBase * slot;
+        // Trừ nước ATOMIC (guard gte) — chống mở lô khi không đủ / hai lệnh song song.
+        const dec = await tx.gameProfile.updateMany({
+          where: { userId, totalSeeds: { gte: cost } },
+          data: { totalSeeds: { decrement: cost } },
+        });
+        if (dec.count === 0) throw new BadRequestException(`Cần ${cost}💧 để mở lô đất này.`);
+        return tx.gardenPlot.create({
+          data: { userId, slot, treeType: DEFAULT_TREE_TYPE, target: plotTarget },
+        });
       });
-      if (dec.count === 0) throw new BadRequestException(`Cần ${cost}💧 để mở lô đất này.`);
-      return tx.gardenPlot.create({
-        data: { userId, slot, treeType: DEFAULT_TREE_TYPE, target: plotTarget },
-      });
-    });
-
-    return this.toView(created);
+      return this.toView(created);
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      // Bấm đúp / mạng chậm: lệnh song song đã mở đúng ô này. Giao dịch của lần thua đã rollback nên 💧 chỉ bị trừ một
+      // lần; trả ô đã mở (idempotent) thay vì báo lỗi ràng buộc duy nhất cho một thao tác đã thành công.
+      const existing = await this.prisma.gardenPlot.findUnique({ where: { userId_slot: { userId, slot } } });
+      if (!existing) throw err;
+      return this.toView(existing);
+    }
   }
 
   // ── Tưới 1 lô phụ ──────────────────────────────────
