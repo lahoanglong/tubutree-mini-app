@@ -174,9 +174,31 @@ chưa đối soát, trả trước:        không lên bảng kê (Tubu giữ ti
 ```
 paid_i     = (order.total − shippingFee) chia theo OrderItem.total (distributeByWeight; phí giao là của Tubu)
 commission = round(paid_i × phí sàn của gian hàng)
-opsFee     = round(paid_i × consignmentFeePct) + phần của consignmentFeeFixed (chia theo paid_i giữa các món giao hộ của gian hàng trong đơn)
-net        = paid_i − commission − opsFee            (shippingFee = cod = 0)
+opsFee     = round(paid_i × consignmentFeePct)
+           + min(phần của consignmentFeeFixed, max(0, paid_i − commission − round(paid_i × consignmentFeePct)))
+             (phần cố định chia theo paid_i giữa các món giao hộ của gian hàng trong đơn; mọi paid_i = 0 thì không thu)
+net        = paid_i − commission − opsFee            (shippingFee = cod = 0, không âm)
 ```
+
+  `paid_i` nằm sau một hàm (`consignmentLineBase`) để đổi nền tính (tiền khách trả hay tiền hàng) chỉ sửa một chỗ.
+
+  Điều kiện một dòng hàng vào bảng kê (lọc trong SQL):
+  - Đơn `fulfiller = TUBU`, `DELIVERED`, Tubu đã thu tiền: `paymentStatus = PAID` hoặc `paymentMethod = COD` (cùng luật doanh thu
+    admin). Đơn công nợ đại lý (chuyển khoản, chưa trả) chờ tới khi PAID. Luật này áp cả cho đơn tự giao.
+  - Đơn đặt từ mốc `merchant.consignment_settle_from` (migration đặt bằng lúc triển khai): đơn cũ hơn không tự đối soát.
+  - Biến thể liên kết với gian hàng lúc đặt. Liên kết takeover (nhận lại mã của sản phẩm Tubu đang bán) chỉ tính đơn đặt từ lúc
+    admin bấm "Xác nhận hàng ký gửi" (`consignmentConfirmedAt`); màn liên kết hiện tồn lúc liên kết (`stockAtLink`) để đối chiếu.
+  - Hạn giữ tính từ `deliveredAt`; đơn DELIVERED thiếu `deliveredAt` lấy lần chuyển DELIVERED cuối trong
+    `order_status_history`, không có nữa thì `updatedAt`.
+
+  Phí chốt theo lúc đặt đơn: mỗi lần admin sửa phí ghi một dòng `storefront_terms_history` (`effectiveFrom` = lúc sửa, người
+  sửa); dòng hàng lấy mức có `effectiveFrom` lớn nhất không sau `order.createdAt`. Gian hàng chưa có lịch sử dùng mức hiện tại
+  (lần sửa đầu ghi mức cũ làm mốc gốc `effectiveFrom = 0`). Phí sàn để trống trong lịch sử theo `merchant.commission_pct` lúc
+  tính (mức mặc định không được chụp lại).
+
+  Lập và huỷ phiếu khoá theo gian hàng (`pg_advisory_xact_lock`), bảng kê tính lại trong transaction; "Lập phiếu" gửi tổng
+  admin đang xem, server tính khác thì từ chối (409). Tổng quan admin chỉ dựng bảng kê cho gian hàng mà một câu SQL thấy có khoản
+  chờ.
 
   Trả một phần: `REVERSAL` khoá `RETURN:<id yêu cầu>:ITEM:<orderItemId>`, phần của các đơn vị trả trên chính số của dòng SALE
   (luỹ kế). Đơn `RETURNED` (trả cả đơn, Pancake "Đã hoàn") sau khi đã vào phiếu: `REVERSAL` khoá `ITEM:<orderItemId>` đảo phần
