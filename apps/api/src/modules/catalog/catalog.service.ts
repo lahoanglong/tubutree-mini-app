@@ -8,19 +8,30 @@ import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { TUBU_FULFILLER_NAME } from '../checkout/checkout-split';
+import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
 import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
- * hàng (giống lúc checkout), không theo luật freeship của Tubu, và không đặt định kỳ/mua chung được.
+ * hàng (giống lúc checkout), không theo luật freeship của Tubu, và không đặt định kỳ/mua chung được. UNAVAILABLE: gian hàng đang
+ * tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (R3-MERCHANT-3) — trang vẫn hiện, nút mua tắt.
  */
 export interface ProductFulfiller {
-  kind: 'TUBU' | 'MERCHANT';
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
   name: string;
   shippingFee: number | null;
   freeShipFrom: number | null;
+  reason?: UnavailableReason;
 }
+
+type FulfillerStore = {
+  title: string;
+  type: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+  ordersPausedAt: Date | null;
+  owner: { role: string; isBlocked: boolean } | null;
+};
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
@@ -225,7 +236,17 @@ export class CatalogService {
           take: 20,
           select: this.publicReviewSelect,
         },
-        storefront: { select: { title: true, type: true, shippingFee: true, freeShipFrom: true } },
+        // ordersPausedAt + owner chỉ để suy ra "gian hàng chưa nhận đơn" (R3-MERCHANT-3); cả storefront bị bỏ khỏi phản hồi.
+        storefront: {
+          select: {
+            title: true,
+            type: true,
+            shippingFee: true,
+            freeShipFrom: true,
+            ordersPausedAt: true,
+            owner: { select: { role: true, isBlocked: true } },
+          },
+        },
       },
     });
     // P0 A2-03=A5-06=A6-04: SP chưa duyệt (PENDING_REVIEW) hoặc bị từ chối (REJECTED, kể cả từng
@@ -234,9 +255,9 @@ export class CatalogService {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
     // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
-    // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
-    // (variations đã loại qua publicVariationSelect).
-    const { pancakeId: _pancakeId, brandRef, storefront, ...publicProduct } = product;
+    // khai cần; admin dùng endpoint admin riêng. rejectReason là lời nhắn của admin cho đối tác (sản phẩm đang bán vẫn mang lý
+    // do từ chối bản sửa gần nhất). include trả mọi cột scalar nên phải bỏ tại đây (variations đã loại qua publicVariationSelect).
+    const { pancakeId: _pancakeId, rejectReason: _rejectReason, brandRef, storefront, ...publicProduct } = product;
     // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
@@ -247,11 +268,10 @@ export class CatalogService {
     };
   }
 
-  private async fulfillerOf(
-    fulfilment: string,
-    store: { title: string; type: string; shippingFee: number | null; freeShipFrom: number | null } | null,
-  ): Promise<ProductFulfiller> {
+  private async fulfillerOf(fulfilment: string, store: FulfillerStore | null): Promise<ProductFulfiller> {
     if (fulfilment !== 'MERCHANT') return { kind: 'TUBU', name: TUBU_FULFILLER_NAME, shippingFee: null, freeShipFrom: null };
+    const reason = store?.type === 'MERCHANT' ? merchantStoreUnavailableReason(store) : null;
+    if (store && reason) return { kind: 'UNAVAILABLE', reason, name: store.title, shippingFee: null, freeShipFrom: null };
     const defaultFee =
       (await this.config?.get<number>('merchant.default_shipping_fee', DEFAULT_MERCHANT_SHIPPING_FEE)) ??
       DEFAULT_MERCHANT_SHIPPING_FEE;

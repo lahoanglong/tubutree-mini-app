@@ -199,3 +199,25 @@ describe('/san-pham/[slug] — ai giao hàng (R2-MERCHANT-7, R2-BUYERWEB-10)', (
     expect(c.querySelector('[data-testid="pdp-fulfiller"]')).toBeNull();
   });
 });
+
+describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {
+  it('gian hàng tạm nghỉ: báo rõ chưa nhận đơn, không còn dòng phí giao/thanh toán', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const note = c.querySelector('[data-testid="pdp-unavailable"]')!;
+    expect(note.textContent).toContain('Gốm Minh An đang tạm nghỉ, chưa nhận đơn');
+    expect(c.querySelector('[data-testid="pdp-fulfiller"]')).toBeNull();
+  });
+
+  it('gian hàng đã ngừng bán: nói đã ngừng bán', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_CLOSED', name: 'Nến Shop B', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-unavailable"]')!.textContent).toContain('Nến Shop B đã ngừng bán trên Tubu Tree');
+  });
+
+  it('gian hàng nhận đơn bình thường: không có thông báo', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-unavailable"]')).toBeNull();
+  });
+});

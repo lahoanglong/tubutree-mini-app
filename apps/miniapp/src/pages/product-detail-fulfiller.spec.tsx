@@ -73,9 +73,43 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
       product({ fulfiller: { kind: 'MERCHANT', name: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 } }),
     );
     renderPdp();
-    expect(await screen.findByText('Gian hàng Xà phòng Cô Lan tự giao')).toBeInTheDocument();
+    expect(await screen.findByText('Xà phòng Cô Lan tự giao')).toBeInTheDocument();
     expect(screen.getByText('Phí giao 22.000đ, miễn phí cho đơn của gian hàng từ 300.000đ')).toBeInTheDocument();
     expect(screen.queryByText(/Miễn phí vận chuyển cho đơn từ 200\.000đ/)).toBeNull();
+  });
+
+  it('R3-MERCHANT-2: tên gian hàng mặc định đã có chữ "Gian hàng" thì không ghi lặp, và nói rõ chỉ nhận COD hoặc Ví Tubu', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ fulfiller: { kind: 'MERCHANT', name: 'Gian hàng của Nguyễn Văn Shop A', shippingFee: 30_000, freeShipFrom: null } }),
+    );
+    renderPdp();
+    expect(await screen.findByText('Gian hàng của Nguyễn Văn Shop A tự giao')).toBeInTheDocument();
+    expect(screen.queryByText(/Gian hàng Gian hàng/)).toBeNull();
+    expect(screen.getByText(/Thanh toán khi nhận hàng \(COD\) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay/)).toBeInTheDocument();
+  });
+
+  it('R3-MERCHANT-3: gian hàng tạm nghỉ → báo chưa nhận đơn, tắt nút mua, không mời đặt định kỳ/mua chung', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Shop A', shippingFee: null, freeShipFrom: null } }),
+    );
+    renderPdp();
+    expect(await screen.findByText('Shop A đang tạm nghỉ, chưa nhận đơn.')).toBeInTheDocument();
+    const blocked = screen.getByRole('button', { name: 'Tạm thời chưa mua được' });
+    expect(blocked).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Thêm vào giỏ' })).toBeNull();
+    expect(screen.queryByText(/Mua ngay/)).toBeNull();
+    expect(screen.queryByText(/Miễn phí vận chuyển/)).toBeNull();
+    expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();
+    expect(screen.queryByText(/Mở nhóm mua chung/)).toBeNull();
+  });
+
+  it('R3-MERCHANT-3: gian hàng đã ngừng bán → nói đã ngừng bán', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_CLOSED', name: 'Nến Shop B', shippingFee: null, freeShipFrom: null } }),
+    );
+    renderPdp();
+    expect(await screen.findByText('Nến Shop B đã ngừng bán trên Tubu Tree.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tạm thời chưa mua được' })).toBeDisabled();
   });
 
   it('hàng gian hàng tự giao: không có "Đặt định kỳ" và "Mở nhóm mua chung", có câu giải thích', async () => {

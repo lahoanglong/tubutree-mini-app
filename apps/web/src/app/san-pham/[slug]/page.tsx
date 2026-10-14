@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Truck } from 'lucide-react';
-import { getProduct, formatVnd, pdpFulfillerText } from '@/lib/api';
+import { AlertCircle, Check, Truck } from 'lucide-react';
+import { getProduct, formatVnd, pdpFulfillerText, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import ProductGallery from '@/components/product-gallery';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
@@ -44,6 +44,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const shortDesc = plainText(product.shortDesc);
   const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
   const fulfillerText = pdpFulfillerText(product);
+  const unavailableText = pdpUnavailableText(product);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -65,11 +66,22 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           )}
           <h1 className="font-display text-2xl font-semibold text-stone-900 sm:text-3xl">{product.name}</h1>
           <div className="mt-2 text-2xl font-bold text-stone-900">{formatVnd(price)}</div>
-          {fulfillerText && (
-            <p data-testid="pdp-fulfiller" className="mt-2 flex items-start gap-1.5 text-sm text-stone-700">
-              <Truck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-              <span>{fulfillerText}</span>
+          {unavailableText ? (
+            <p
+              data-testid="pdp-unavailable"
+              role="status"
+              className="mt-2 flex items-start gap-1.5 rounded-control bg-warning-bg px-3 py-2 text-sm font-medium text-warning-fg"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{unavailableText}</span>
             </p>
+          ) : (
+            fulfillerText && (
+              <p data-testid="pdp-fulfiller" className="mt-2 flex items-start gap-1.5 text-sm text-stone-700">
+                <Truck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <span>{fulfillerText}</span>
+              </p>
+            )
           )}
           {shortDesc && <p className="mt-3 whitespace-pre-line break-words text-stone-600">{shortDesc}</p>}
 
@@ -84,7 +96,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {product.variations.length > 0 && <AddToCart slug={product.slug} variations={product.variations} />}
+          {product.variations.length > 0 && (
+            <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} />
+          )}
         </div>
       </div>
 

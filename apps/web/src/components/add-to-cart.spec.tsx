@@ -161,3 +161,24 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     expect(addButton(container).disabled).toBe(false);
   });
 });
+
+describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
+  const mountBlocked = () => {
+    const r = render(<AddToCart slug="dau-goi" variations={VARIATIONS} blockedReason="Gốm Minh An đang tạm nghỉ, chưa nhận đơn." />);
+    mounted.push(r);
+    return r;
+  };
+
+  it('nút mua tắt và nói thẳng lý do, bấm cũng không gọi API thêm giỏ', async () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const { container } = mountBlocked();
+    await flush();
+    const btn = byText(container, 'button', 'Tạm thời chưa mua được') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(container.textContent).not.toContain('Thêm vào giỏ');
+    click(btn);
+    await flush();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+});

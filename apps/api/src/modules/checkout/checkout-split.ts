@@ -37,6 +37,20 @@ export interface FulfilmentSource {
 const PORTAL_ROLES: readonly string[] = MERCHANT_PORTAL_ROLES;
 
 /**
+ * Gian hàng đối tác không nhận đơn lúc này: chủ gian hàng bị khoá hoặc không còn vào được Cổng người bán (ngừng bán), hoặc đối tác
+ * bấm "Tạm nghỉ". Một nguồn cho giỏ, checkout và trang sản phẩm.
+ */
+export function merchantStoreUnavailableReason(store: {
+  ordersPausedAt: Date | null;
+  owner: { role: string; isBlocked: boolean } | null;
+}): UnavailableReason | null {
+  const owner = store.owner;
+  if (!owner || owner.isBlocked || !PORTAL_ROLES.includes(owner.role)) return 'STORE_CLOSED';
+  if (store.ordersPausedAt) return 'STORE_PAUSED';
+  return null;
+}
+
+/**
  * Nơi giao của một biến thể. Hàng đối tác tự giao cần thuộc gian hàng đối tác (chỉ chủ gian hàng MERCHANT có màn "Đơn cần
  * giao") mà chủ còn vào được Cổng người bán và gian hàng không tạm nghỉ; hàng Tubu cần mã Pancake thật.
  */
@@ -44,13 +58,8 @@ export function fulfillerOf(v: FulfilmentSource): LineFulfiller {
   if (v.product.fulfilment === 'MERCHANT') {
     const store = v.product.storefront;
     if (v.product.storefrontId && store?.type === 'MERCHANT') {
-      const owner = store.owner;
-      if (!owner || owner.isBlocked || !PORTAL_ROLES.includes(owner.role)) {
-        return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason: 'STORE_CLOSED' };
-      }
-      if (store.ordersPausedAt) {
-        return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason: 'STORE_PAUSED' };
-      }
+      const reason = merchantStoreUnavailableReason(store);
+      if (reason) return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason };
       return {
         kind: 'MERCHANT',
         storefrontId: v.product.storefrontId,
@@ -213,6 +222,13 @@ export function publicFulfiller(f: LineFulfiller): PublicLineFulfiller {
 /** Giỏ trả cho khách: nơi giao từng dòng không kèm ID chủ gian hàng (R2-MERCHANT-14). */
 export function toPublicCart<C extends { items: { fulfiller: LineFulfiller }[] }>(cart: C) {
   return { ...cart, items: cart.items.map((it) => ({ ...it, fulfiller: publicFulfiller(it.fulfiller) })) };
+}
+
+/** Câu báo cho khách khi thêm vào giỏ hàng của gian hàng chưa nhận đơn (R3-MERCHANT-3). */
+export function storeUnavailableOnAddMessage(productName: string, storeName: string, reason: UnavailableReason): string {
+  return reason === 'STORE_PAUSED'
+    ? `${storeName} đang tạm nghỉ, chưa nhận đơn "${productName}". Bạn quay lại đặt sau nhé.`
+    : `${storeName} đã ngừng bán trên Tubu Tree, "${productName}" không đặt được nữa.`;
 }
 
 /** Câu báo cho khách khi lần đặt có dòng không giao được. */

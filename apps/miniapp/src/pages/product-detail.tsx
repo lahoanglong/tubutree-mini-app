@@ -267,6 +267,10 @@ export default function ProductDetailPage() {
   const cartCount = cart.data?.itemCount ?? 0;
   // Hàng gian hàng tự giao (D4): kiện riêng theo phí của gian hàng, không đi định kỳ/mua chung (kho Tubu không giao).
   const merchant = p.fulfiller?.kind === 'MERCHANT' ? p.fulfiller : null;
+  // Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): xem được trang nhưng chưa mua được; không phải hàng Tubu nên cũng không có
+  // freeship, đặt định kỳ hay mua chung.
+  const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
+  const fromStore = merchant ?? unavailable;
 
   const handleAdd = async () => {
     if (status !== 'authenticated') {
@@ -403,13 +407,16 @@ export default function ProductDetailPage() {
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
             <Box>
               <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-                Gian hàng {merchant.name} tự giao
+                {merchant.name} tự giao
               </Text>
               {merchant.shippingFee != null && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
                   {merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}
                 </Text>
               )}
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.
+              </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 Hàng gian hàng tự giao chưa đặt định kỳ hay mua chung được.
               </Text>
@@ -417,8 +424,19 @@ export default function ProductDetailPage() {
           </Box>
         )}
 
+        {unavailable && (
+          <Box flex role="status" style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-status-warning-fg)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text size="xSmall" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
+              {unavailable.reason === 'STORE_PAUSED'
+                ? `${unavailable.name} đang tạm nghỉ, chưa nhận đơn.`
+                : `${unavailable.name} đã ngừng bán trên Tubu Tree.`}
+            </Text>
+          </Box>
+        )}
+
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {!merchant && config.isLoaded && (
+        {!fromStore && config.isLoaded && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
@@ -500,7 +518,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && !merchant && (
+        {selected && inStock && !fromStore && (
           <Box
             role="button"
             className="tubu-press"
@@ -572,7 +590,7 @@ export default function ProductDetailPage() {
       </Box>
 
       {/* ── Mua chung (§6.14.8) ── */}
-      {!merchant && (
+      {!fromStore && (
         <Box
           className="tubu-press"
           p={4}
@@ -784,7 +802,11 @@ export default function ProductDetailPage() {
           </Box>
         }
         primary={
-          inStock ? (
+          unavailable ? (
+            <Button variant="primary" size="lg" fullWidth disabled>
+              Tạm thời chưa mua được
+            </Button>
+          ) : inStock ? (
             // CTA đôi kiểu Shopee: Thêm giỏ (viền) + Mua ngay (đặc, tới thẳng checkout).
             <Box flex style={{ gap: 10 }}>
               <Button
