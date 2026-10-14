@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { CartService } from './cart.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService } from '../coupons/coupons.service';
+import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -234,6 +235,7 @@ describe('CartService guard tồn kho', () => {
       items: [],
       couponCode: null,
       couponNotice: null,
+      couponRemoved: null,
       subtotal: 0,
       discount: 0,
       freeship: false,
@@ -598,6 +600,23 @@ describe('CartService guard tồn kho', () => {
         expect(prisma.cart.update).not.toHaveBeenCalled();
       });
 
+      it('R4-CHECKOUT-3: sản phẩm của mã chỉ có trong giỏ ở giá giờ vàng → nói sản phẩm đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
+        const prisma = cartOf([line('vG', 'pG', 1, 140000), line('vX', 'pX', 1, 300000)]);
+        const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect((err as Error).message).toBe(COUPON_PRODUCT_FLASH_REASON);
+        expect((err as Error).message).not.toContain('chưa có sản phẩm đó');
+        expect(prisma.cart.update).not.toHaveBeenCalled();
+      });
+
+      it('R4-CHECKOUT-3: sản phẩm của mã không có trong giỏ (dù giỏ có hàng giờ vàng khác) → giữ câu "Giỏ hàng chưa có sản phẩm đó"', async () => {
+        const prisma = cartOf([line('vF', 'pF', 1, 140000), line('vX', 'pX', 1, 300000)]);
+        const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vF', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        expect((err as Error).message).toBe('Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.');
+      });
+
       it('chính sản phẩm của mã có dòng giờ vàng → nhắc giờ vàng, phần được tính là dòng sản phẩm đó giá thường', async () => {
         const prisma = cartOf([line('vG1', 'pG', 2, 90000), line('vG2', 'pG', 1, 100000), line('vX', 'pX', 1, 300000)]);
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
@@ -671,6 +690,55 @@ describe('CartService guard tồn kho', () => {
     expect(cart.couponNotice).toContain('Mã chưa được áp dụng');
     expect(cart.couponNotice).toContain('giờ vàng');
     expect(cart.couponNotice).toContain('minOrder');
+    expect(cart.couponRemoved).toBeNull();
+  });
+
+  describe('mã trong giỏ: sản phẩm của mã đang giờ vàng (R4-CHECKOUT-3), mã bị gỡ khỏi giỏ (R4-CHECKOUT-4)', () => {
+    const cartWith = (couponCode: string) =>
+      ({
+        cart: {
+          upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({
+            id: 'c1',
+            couponCode,
+            items: [
+              { id: 'ci1', variationId: 'vG', quantity: 1, variation: { isActive: true, productId: 'pG', salePrice: null, retailPrice: 140000, stock: 5, name: 'G', product: { name: 'Granola', slug: 'g', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } } },
+              { id: 'ci2', variationId: 'vX', quantity: 1, variation: { isActive: true, productId: 'pX', salePrice: null, retailPrice: 90000, stock: 5, name: 'X', product: { name: 'X', slug: 'x', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } } },
+            ],
+          }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+      }) as any;
+    const flashG = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
+    const couponsWith = (coupon: Record<string, unknown>) =>
+      new CouponsService({
+        coupon: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'cp', type: 'AMOUNT', value: 20000, minOrder: null, maxDiscount: null, isActive: true, scope: 'PUBLIC', scopeMeta: null,
+            startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null, ...coupon,
+          }),
+        },
+        couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0912345678', zaloId: 'z1' }) },
+      } as unknown as PrismaService);
+
+    it('mã gắn sản phẩm đang giờ vàng: giữ mã, lời báo nói sản phẩm đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
+      const prisma = cartWith('PSGRAN');
+      const c = await new CartService(prisma, couponsWith({ code: 'PSGRAN', applyTo: { productIds: ['pG'] } }), config, flashG, analytics).getCart('u1');
+      expect(c.couponCode).toBe('PSGRAN');
+      expect(c.discount).toBe(0);
+      expect(c.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
+      expect(c.couponNotice).not.toContain('chưa có sản phẩm đó');
+      expect(prisma.cart.update).not.toHaveBeenCalled();
+    });
+
+    it('mã bị admin tắt: gỡ khỏi giỏ và cho biết mã nào bị gỡ, vì sao (checkout dùng để giải thích tổng tăng)', async () => {
+      const prisma = cartWith('TAT50');
+      const c = await new CartService(prisma, couponsWith({ code: 'TAT50', isActive: false }), config, flashG, analytics).getCart('u1');
+      expect(c.couponCode).toBeNull();
+      expect(c.couponRemoved).toEqual({ code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.' });
+      expect(prisma.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
+    });
   });
 
   describe('getCart: mã hợp lệ nhưng giảm 0đ (giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu)', () => {

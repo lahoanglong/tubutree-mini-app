@@ -2,7 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
-import type { CouponsService } from '../coupons/coupons.service';
+import { CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
+import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 // P0 A3-05 (quyền lợi hạng): các test "tier perks" bên dưới dựng PricingService THẬT (không mock)
 // để khẳng định khách THẬT SỰ nhận đúng số tiền hứa, không chỉ "hàm được gọi đúng tham số" — nên cần
 // import giá trị (class), không chỉ type.
@@ -1362,6 +1363,59 @@ describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa gi
     });
     expect(orderCreate).not.toHaveBeenCalled();
     expect(ledger).not.toHaveBeenCalled();
+  });
+
+  describe('R4-CHECKOUT-4: câu TOTAL_CHANGED nói đúng nguyên nhân thay vì luôn "do giá hoặc phí giao"', () => {
+    const totalChanged = async (b: ReturnType<typeof build>, expectedTotal: number) => {
+      const err = await b.svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      const res = (err as BadRequestException).getResponse() as { code: string; message: string };
+      expect(res.code).toBe('TOTAL_CHANGED');
+      expect(b.orderCreate).not.toHaveBeenCalled();
+      return res.message;
+    };
+
+    it('mã giảm giá bị gỡ khỏi giỏ ngay lúc đặt (admin tắt mã) → nêu mã và lý do, không đổ cho giá/phí giao', async () => {
+      const b = build({ cartData: { ...CART, couponRemoved: { code: 'GIAM50', reason: 'Mã giảm giá đã ngừng áp dụng.' } } });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ vì mã GIAM50 không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('mã còn trong giỏ nhưng lúc đặt không áp được → kèm lời báo của mã', async () => {
+      const b = build({
+        cartData: { ...CART, couponCode: 'XANH10' },
+        validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.')),
+      });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ. Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 150.000đ để dùng mã này. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('không liên quan mã → câu trung tính nêu cả ưu đãi, không khẳng định riêng giá hoặc phí giao', async () => {
+      expect(await totalChanged(build(), 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+  });
+
+  it('R4-CHECKOUT-3: mã gắn sản phẩm mà sản phẩm đó chỉ có ở giá giờ vàng → lời báo nói đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
+    const cartData = {
+      ...CART,
+      couponCode: 'PSGRAN',
+      items: [
+        { ...CART.items[0]!, isFlash: true, flashSaleItemId: 'fi1' },
+        { variationId: 'v2', productId: 'prod2', productName: 'Q', variationName: 'V', unitPrice: 50, quantity: 1, total: 50 },
+      ],
+      subtotal: 150,
+    };
+    const { svc } = build({ cartData, validateAndCompute: jest.fn().mockRejectedValue(new CouponProductScopeError(['prod1'])) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
+    expect(q.couponNotice).not.toContain('chưa có sản phẩm đó');
   });
 
   it('PANCAKE-13: tổng bằng hoặc thấp hơn số đã thấy, hoặc client cũ không gửi → đặt bình thường', async () => {

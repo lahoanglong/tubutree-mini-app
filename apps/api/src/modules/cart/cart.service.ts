@@ -13,6 +13,7 @@ import {
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
   couponNotAppliedNotice,
+  couponRejectReason,
   couponRejectedWithFlash,
 } from '../coupons/coupon-notice';
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
@@ -141,6 +142,8 @@ export class CartService {
     let freeship = false;
     let couponCode = cart.couponCode;
     let couponNotice: string | null = null;
+    // Mã vừa bị gỡ khỏi giỏ ở lần đọc này (hết hạn, bị tắt, hết lượt): checkout nói đúng lý do khi tổng tăng vì mất mã.
+    let couponRemoved: { code: string; reason: string } | null = null;
     if (couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(couponCode, userId, couponBase, couponLinesOf(lines));
@@ -167,10 +170,11 @@ export class CartService {
           await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
           discount = 0;
           freeship = false;
-          couponNotice = couponNotAppliedNotice(err.message, true);
+          couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), true);
         } catch (err2) {
           if (!(err2 instanceof BadRequestException)) throw err2;
           await this.prisma.cart.update({ where: { id: cartId }, data: { couponCode: null } });
+          couponRemoved = { code: couponCode, reason: err2.message };
           couponCode = null;
         }
       }
@@ -183,6 +187,7 @@ export class CartService {
       items: lines,
       couponCode,
       couponNotice,
+      couponRemoved,
       subtotal,
       discount,
       freeship,
@@ -317,6 +322,10 @@ export class CartService {
     } catch (err) {
       if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart))) {
         throw new BadRequestException(couponRejectedWithFlash(err.message, err.base));
+      }
+      if (err instanceof BadRequestException) {
+        const reason = couponRejectReason(err, cart.items);
+        if (reason !== err.message) throw new BadRequestException(reason);
       }
       throw err;
     }
