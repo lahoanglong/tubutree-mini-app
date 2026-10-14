@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { freeShipThreshold } from '../pricing/pricing.service';
 import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { AddItemDto } from './dto/cart.dto';
@@ -48,6 +49,7 @@ export class CartService {
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
       include: {
+        user: { select: { tierId: true } },
         items: {
           include: {
             variation: {
@@ -150,8 +152,8 @@ export class CartService {
       }
     }
 
-    // Ngưỡng freeship (config-driven §15.2) để FE hiển thị progress khích lệ.
-    const freeshipThreshold = await this.config.get<number>('shipping.free_threshold', 200000);
+    // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
+    const freeshipThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
 
     return {
       items: lines,

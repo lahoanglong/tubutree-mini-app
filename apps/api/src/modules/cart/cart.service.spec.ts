@@ -104,6 +104,21 @@ describe('CartService guard tồn kho', () => {
     expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date), 'u1');
   });
 
+  it('getCart: ngưỡng freeship theo hạng của khách, cùng ngưỡng checkout dùng (R2-ENGAGE-16)', async () => {
+    const tierConfig = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        (k === 'shipping.tier_freeship_overrides' ? { LOC_BIEC: 99000 } : k === 'shipping.free_threshold' ? 200000 : fb) as T,
+    } as unknown as SystemConfigService;
+    const cartRow = (tierId: string | null) => ({ id: 'c1', couponCode: null, items: [], user: { tierId } });
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, tierConfig, flash, analytics);
+    expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
+    (prisma.cart.findUniqueOrThrow as jest.Mock).mockResolvedValue(cartRow(null));
+    expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
+  });
+
   it('addItem: chặn khi tổng số lượng vượt tồn kho', async () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
