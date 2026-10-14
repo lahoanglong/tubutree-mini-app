@@ -36,6 +36,8 @@ type FulfillerStore = {
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
+/** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
+const MAX_LIST_SLUGS = 20;
 
 /** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
 export const SUGGEST_MIN_CHARS = 2;
@@ -180,9 +182,13 @@ export class CatalogService {
    * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
    */
   private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
-    const { brand, category, segment, minPrice, maxPrice, inStock, minRating } = query;
+    const { brand, category, segment, minPrice, maxPrice, inStock, minRating, slugs } = query;
     const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
+    // Có tham số `slugs` mà rỗng thì không trả gì (không rơi về cả catalog).
+    if (slugs !== undefined) {
+      where.slug = { in: slugs.split(',').map((x) => x.trim()).filter(Boolean).slice(0, MAX_LIST_SLUGS) };
+    }
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (brandList.length === 1) {

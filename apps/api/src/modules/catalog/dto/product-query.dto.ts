@@ -34,6 +34,10 @@ export class ProductQuery extends PaginationQuery {
   @IsOptional() @Transform(toBool) @IsBoolean()
   inStock?: boolean;
 
+  /** Danh sách slug cách nhau bằng dấu phẩy (tối đa 20): lấy giá/trạng thái hiện hành của các sản phẩm đã xem gần đây. */
+  @IsOptional() @IsString() @MaxLength(2000)
+  slugs?: string;
+
   /** Điểm đánh giá trung bình tối thiểu (ratingAvg). Miniapp gửi 4 ("Từ 4★"). */
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(5)
   minRating?: number;
