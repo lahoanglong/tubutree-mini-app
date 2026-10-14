@@ -67,7 +67,7 @@ function mockAdminSession(api: MockApi) {
     freeshipThreshold: 0,
     itemCount: 0,
   });
-  // Huy hiệu tab "Hoàn tiền khách" (Q-01) gọi số khoản chờ chuyển khoản ở MỌI lần mở /admin.
+  // Huy hiệu tab "Hoàn tiền khách" (Q-01) gọi số khoản hoàn cần xử lý ở MỌI lần mở /admin.
   api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
 }
 

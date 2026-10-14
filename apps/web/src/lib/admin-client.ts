@@ -1250,7 +1250,9 @@ export interface RefundTakeOver {
   takeOverReason: string;
 }
 const takeOverBody = (t?: RefundTakeOver) => (t ? { takeOver: true, takeOverReason: t.takeOverReason.trim() } : {});
-export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
+/** Bộ lọc hàng đợi: một trạng thái, hoặc OPEN = mọi khoản còn việc (chờ đối soát + chờ chuyển khoản + đang chuyển khoản). */
+export type AdminCustomerRefundFilter = AdminCustomerRefundStatus | 'OPEN';
+export const listCustomerRefunds = (status?: AdminCustomerRefundFilter, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
   apiFetch<Page<AdminCustomerRefund>>(
     `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${kind ? `&kind=${kind}` : ''}`,
   );

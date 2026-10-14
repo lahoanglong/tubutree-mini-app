@@ -74,7 +74,9 @@ function mockList(api: MockApi, state: { rows: AdminCustomerRefund[] }) {
     const status = call.query.get('status');
     const limit = Number(call.query.get('limit') ?? 20);
     const pg = Number(call.query.get('page') ?? 1);
-    const rows = state.rows.filter((r) => !status || r.status === status);
+    // OPEN = mọi khoản còn việc, như CustomerRefundsService.list (OPEN_CUSTOMER_REFUND_STATUSES).
+    const open = ['UNVERIFIED', 'PENDING', 'PROCESSING'];
+    const rows = state.rows.filter((r) => !status || (status === 'OPEN' ? open.includes(r.status) : r.status === status));
     return page(rows.slice((pg - 1) * limit, pg * limit), pg, limit, rows.length);
   });
 }
@@ -110,13 +112,14 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await expect(p.locator('[data-refund-id="r2"]')).toContainText('Đơn trả hàng');
     await expect(r1.getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toBeVisible();
 
-    // Mặc định lọc PENDING; dòng WALLET (COMPLETED) không nằm trong hàng chờ.
+    // Mặc định lọc "Đang mở" (chờ đối soát + chờ chuyển khoản + đang chuyển khoản, R4-ADMIN-3); dòng WALLET (COMPLETED) không
+    // nằm trong hàng chờ.
     await expect(p.locator('[data-refund-id="r3"]')).toHaveCount(0);
     const list = api.callsTo('GET', '/admin/customer-refunds');
-    expect(list.some((c) => c.query.get('status') === 'PENDING' && c.query.get('limit') === '20')).toBe(true);
+    expect(list.some((c) => c.query.get('status') === 'OPEN' && c.query.get('limit') === '20')).toBe(true);
 
-    // Huy hiệu: một lần gọi limit=1 lấy meta.total (2 khoản PENDING).
-    expect(list.some((c) => c.query.get('status') === 'PENDING' && c.query.get('limit') === '1')).toBe(true);
+    // Huy hiệu: một lần gọi limit=1 lấy meta.total (2 khoản đang mở) — cùng tập với thẻ trang chủ.
+    expect(list.some((c) => c.query.get('status') === 'OPEN' && c.query.get('limit') === '1')).toBe(true);
     await expect(p.getByRole('button', { name: /^Hoàn tiền khách/ })).toContainText('2');
 
     // Dòng ví chỉ là dòng vết (tiền đã vào ví khách lúc huỷ/trả): hiện "Đã hoàn vào ví", không có nút hành động.
@@ -164,7 +167,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
 
     await expect(dialog).toHaveCount(0);
     await expect(p.getByText(/Đã ghi nhận chuyển khoản 1\.250\.000đ/)).toBeVisible();
-    await expect(p.getByText('Không có khoản hoàn nào đang chờ chuyển khoản.')).toBeVisible();
+    await expect(p.getByText('Không còn khoản hoàn nào cần xử lý.')).toBeVisible();
     await expect(p.locator('[data-refund-id="r1"]')).toHaveCount(0);
     await expect(p.getByRole('button', { name: /^Hoàn tiền khách/ })).not.toContainText('1');
     expect(api.callsTo('POST', MARK_PAID)).toHaveLength(1);

@@ -8,8 +8,8 @@ import {
   releaseCustomerRefund,
   verifyCustomerRefund,
   type AdminCustomerRefund,
+  type AdminCustomerRefundFilter,
   type AdminCustomerRefundKind,
-  type AdminCustomerRefundStatus,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { parseVndInput } from '@/lib/loyalty-pos';
@@ -49,13 +49,14 @@ const groupDigits = (n: number | null) => (n == null ? '' : String(n).replace(/\
 const fmtDate = formatDateTime;
 
 /**
- * Số khoản đang chờ chuyển khoản cạnh nhãn tab: một lần gọi limit=1 lấy meta.total (không thêm endpoint). Lỗi tải thì
- * không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid làm mới cả hai.
+ * Số khoản hoàn cần xử lý cạnh nhãn tab — bộ lọc "Đang mở", cùng tập với thẻ "Hoàn tiền khách" ở trang chủ: một lần gọi
+ * limit=1 lấy meta.total. Lỗi tải thì không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid
+ * làm mới cả hai.
  */
 export function CustomerRefundsPendingBadge() {
   const q = useQuery({
-    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'PENDING', 'count'],
-    queryFn: () => listCustomerRefunds('PENDING', 1, 1).then((r) => r.meta.total),
+    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'OPEN', 'count'],
+    queryFn: () => listCustomerRefunds('OPEN', 1, 1).then((r) => r.meta.total),
   });
   const n = q.data ?? 0;
   if (n <= 0) return null;
@@ -66,7 +67,7 @@ export function CustomerRefundsPendingBadge() {
     >
       <span className="sr-only">, </span>
       {n > 99 ? '99+' : n}
-      <span className="sr-only"> khoản chờ chuyển khoản</span>
+      <span className="sr-only"> khoản hoàn cần xử lý</span>
     </span>
   );
 }
@@ -80,7 +81,7 @@ export function CustomerRefundsPendingBadge() {
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
 export function CustomerRefundsTab({ meId }: { meId?: string } = {}) {
-  const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
+  const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
   const [target, setTarget] = useState<{ refund: AdminCustomerRefund; mode: RefundAction } | null>(null);

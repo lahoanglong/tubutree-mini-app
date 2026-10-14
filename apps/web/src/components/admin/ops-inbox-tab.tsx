@@ -9,7 +9,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   pancakeAttention: { title: 'Cần xử lý Pancake', hint: 'Pancake báo việc hệ thống không tự làm được' },
   pancakeUnsynced: { title: 'Đơn chưa lên Pancake', hint: 'Đơn còn ở kho mà kho Pancake chưa có' },
   gomdonAttention: { title: 'Cần xử lý thu gom', hint: 'Vận đơn Gomdon lỗi / hoàn / huỷ không được' },
-  customerRefunds: { title: 'Hoàn tiền khách', hint: 'Khoản chờ đối soát hoặc chờ chuyển khoản' },
+  customerRefunds: { title: 'Hoàn tiền khách', hint: 'Chờ đối soát, chờ chuyển khoản hoặc đang chuyển khoản' },
   returnsPending: { title: 'Yêu cầu đổi / trả chờ duyệt', hint: 'Khách gửi, chưa ai duyệt' },
   returnsToReceive: { title: 'Hàng trả chờ nhận về kho', hint: 'Đã duyệt, kho chưa bấm "Đã nhận hàng"' },
   merchantOverdue: { title: 'Đơn đối tác quá hạn giao', hint: 'Gian hàng tự giao quá hạn xác nhận / gửi / giao' },

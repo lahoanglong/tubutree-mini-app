@@ -66,6 +66,7 @@ const mocks = vi.hoisted(() => ({
   inbox: vi.fn(),
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
+  refundsArgs: [] as unknown[][],
   downloadOrders: vi.fn(),
   downloadUsers: vi.fn(),
   userDetail: vi.fn(),
@@ -110,8 +111,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     resolvePancakeAttention: (...args: unknown[]) => mocks.resolvePancakeAttention(...args),
     listDealerRewardClaims: async () => ({ data: [], meta: { total: mocks.claims, page: 1, limit: 1 } }),
     listPayouts: async () => ({ data: [], meta: { total: mocks.payouts, page: 1, limit: 1 } }),
-    listCustomerRefunds: async () => {
+    listCustomerRefunds: async (...args: unknown[]) => {
       mocks.refundsCalls += 1;
+      mocks.refundsArgs.push(args);
       return { data: [], meta: { total: mocks.refundsPending, page: 1, limit: 1 } };
     },
     getOpsInbox: async () => {
@@ -120,6 +122,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
         generatedAt: '2026-10-14T03:00:00.000Z',
         items: [
           { key: 'pancakeAttention', count: 2 },
+          { key: 'customerRefunds', count: 4 },
           { key: 'returnsPending', count: 1 },
           { key: 'returnsToReceive', count: 2 },
           { key: 'refillPending', count: 0 },
@@ -294,6 +297,7 @@ beforeEach(() => {
   mocks.inbox.mockReset();
   mocks.access = { role: 'STAFF', staffPermissions: [] };
   mocks.refundsCalls = 0;
+  mocks.refundsArgs = [];
   mocks.downloadOrders.mockReset();
   mocks.downloadUsers.mockReset();
   mocks.userDetail.mockReset();
@@ -384,23 +388,23 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     click(tab);
     await flush();
     expect(window.location.search).toBe('?tab=customerRefunds');
-    expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ chuyển khoản');
+    expect(container.textContent).toContain('Không còn khoản hoàn nào cần xử lý');
   });
 
   it('mở thẳng /admin?tab=customerRefunds vào đúng tab Hoàn tiền khách', async () => {
     window.history.replaceState(null, '', '/admin?tab=customerRefunds');
     const { container } = await mount();
     expect(container.textContent).toContain('Chờ chuyển khoản');
-    expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ chuyển khoản');
+    expect(container.textContent).toContain('Không còn khoản hoàn nào cần xử lý');
   });
 
-  it('huy hiệu số khoản chờ chuyển khoản cạnh nhãn tab, tông cảnh báo; 0 khoản thì không hiện huy hiệu', async () => {
+  it('huy hiệu số khoản hoàn cần xử lý (Đang mở, cùng tập với thẻ trang chủ) cạnh nhãn tab, tông cảnh báo; 0 khoản thì không hiện', async () => {
     mocks.refundsPending = 3;
     const withBadge = await mount();
     const tab = [...withBadge.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Hoàn tiền khách'))!;
     const badge = tab.querySelector('span[data-refunds-pending]')!;
     expect(badge.textContent).toContain('3');
-    expect(badge.textContent).toContain('khoản chờ chuyển khoản');
+    expect(badge.textContent).toContain('khoản hoàn cần xử lý');
     expect(badge.className).toContain('bg-warning-bg');
     expect(badge.className).toContain('text-warning-fg');
     withBadge.unmount();
@@ -2070,6 +2074,24 @@ describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
     click(card);
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
+  });
+
+  // R4-ADMIN-3: thẻ đếm chờ đối soát + chờ chuyển khoản + đang chuyển khoản; bấm vào trước đây mở bộ lọc chỉ "Chờ chuyển khoản".
+  it('thẻ Hoàn tiền khách nêu đủ ba loại việc, bấm vào mở hàng đợi lọc "Đang mở" (cùng tập với số trên thẻ và huy hiệu tab)', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="customerRefunds"]')!;
+    expect(card.textContent).toContain('4');
+    expect(card.textContent).toContain('Chờ đối soát, chờ chuyển khoản hoặc đang chuyển khoản');
+    const badgeCalls = mocks.refundsArgs.filter((a) => a[2] === 1);
+    expect(badgeCalls.length).toBeGreaterThan(0);
+    for (const a of badgeCalls) expect(a[0]).toBe('OPEN');
+    mocks.refundsArgs = [];
+    click(card);
+    await flush();
+    expect(window.location.search).toBe('?tab=customerRefunds');
+    expect(mocks.refundsArgs.some((a) => a[0] === 'OPEN' && a[2] === 20)).toBe(true);
+    const selected = container.querySelector('[role="tablist"][aria-label="Lọc theo trạng thái"] [aria-selected="true"]')!;
+    expect(selected.textContent).toBe('Đang mở');
   });
 });
 
