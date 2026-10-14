@@ -1,20 +1,44 @@
 import type { AdminCustomerRefund, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
 import { ApiError } from './client-api';
+import { formatVnd } from './shop-client';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
 export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
 
 export const CUSTOMER_REFUND_FILTERS: { status: AdminCustomerRefundStatus; label: string }[] = [
+  { status: 'UNVERIFIED', label: 'Chờ đối soát' },
   { status: 'PENDING', label: 'Chờ chuyển khoản' },
   { status: 'PROCESSING', label: 'Đang chuyển khoản' },
   { status: 'COMPLETED', label: 'Đã chuyển' },
+  { status: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
 export const CUSTOMER_REFUND_EMPTY: Record<AdminCustomerRefundStatus, string> = {
+  UNVERIFIED: 'Không có khoản tiền dư nào chờ đối soát.',
   PENDING: 'Không có khoản hoàn nào đang chờ chuyển khoản.',
   PROCESSING: 'Không có khoản hoàn nào đang được chuyển khoản.',
   COMPLETED: 'Chưa có khoản hoàn nào đã xử lý.',
+  DISMISSED: 'Chưa có khoản nào được đánh dấu không phải tiền dư.',
 };
+
+/** Lý do tối thiểu khi bỏ qua khoản chờ đối soát — khớp CustomerRefundsService.dismissOverpayment. */
+export const DISMISS_REASON_MIN = 5;
+
+/** Số dư thực nhận trên sao kê: 1đ..số Pancake báo dư (khớp CustomerRefundsService.verifyOverpayment). */
+export function overpaidAmountError(n: number | null, reported: number): string | null {
+  if (n == null || n <= 0) return 'Nhập số tiền dư thực nhận trên sao kê (lớn hơn 0đ).';
+  if (n > reported) return `Số tiền dư thực nhận không vượt quá ${formatVnd(reported)} (số Pancake báo dư).`;
+  return null;
+}
+
+/** Lỗi "Xác nhận tiền dư" / "Không phải tiền dư": 400 nghiệp vụ hiện nguyên câu API, lỗi khác nói rõ chưa chắc đã ghi được. */
+export function overpaymentFailure(e: unknown): string {
+  if (e instanceof ApiError && e.status === 400 && e.message) return e.message;
+  if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+    return 'Phiên đăng nhập đã hết hạn hoặc bạn không có quyền xử lý khoản này. Đăng nhập lại bằng tài khoản quản trị rồi thử lại.';
+  }
+  return 'Chưa rõ thao tác đã được ghi nhận chưa (lỗi mạng hoặc máy chủ). Thử lại; nếu đã ghi nhận, danh sách sẽ tự cập nhật.';
+}
 
 /** Bộ lọc loại khoản; chuỗi rỗng = mọi loại. */
 export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label: string }[] = [
@@ -72,7 +96,7 @@ export function claimHolderSuffix(r: Pick<AdminCustomerRefund, 'claimedBy' | 'cl
  * WALLET chỉ là dòng vết (tiền đã vào ví khách lúc huỷ/trả) nên không có thao tác; chỉ MANUAL_TRANSFER cần
  * admin chuyển khoản tay, khớp điều kiện của CustomerRefundsService.markPaid.
  */
-export type CustomerRefundView = 'WALLET' | 'PENDING' | 'PROCESSING' | 'COMPLETED';
+export type CustomerRefundView = 'WALLET' | AdminCustomerRefundStatus;
 export const customerRefundView = (r: Pick<AdminCustomerRefund, 'method' | 'status'>): CustomerRefundView =>
   r.method === 'WALLET' ? 'WALLET' : r.status;
 

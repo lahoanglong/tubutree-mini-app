@@ -194,18 +194,18 @@ describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => 
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    expect(tabs.map((t) => t.textContent)).toEqual(['Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Chờ đối soát', 'Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển', 'Không phải tiền dư']);
     for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
-    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
-    expect(tabs[0]!.className).toContain('bg-forest-600');
-    expect(tabs[2]!.getAttribute('aria-selected')).toBe('false');
+    expect(tabs[1]!.getAttribute('aria-selected')).toBe('true');
+    expect(tabs[1]!.className).toContain('bg-forest-600');
+    expect(tabs[3]!.getAttribute('aria-selected')).toBe('false');
 
-    click(tabs[2]!);
+    click(tabs[3]!);
     await flush();
     const last = api.calls[api.calls.length - 1]!.url;
     expect(last).toContain('status=COMPLETED');
     expect(last).toContain('page=1');
-    expect(tabs[2]!.getAttribute('aria-selected')).toBe('true');
+    expect(tabs[3]!.getAttribute('aria-selected')).toBe('true');
   });
 
   it('trạng thái rỗng: nói rõ không có khoản nào đang chờ (PENDING) hoặc chưa có khoản đã xử lý (COMPLETED)', async () => {
@@ -1123,5 +1123,160 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
       await flush();
       expect(api.lists().at(-1)!.url).toContain('kind=OVERPAYMENT');
     });
+  });
+});
+
+// Pancake báo khách trả dư là tín hiệu CHƯA xác thực: khoản nằm ở "Chờ đối soát", khách chưa thấy. Admin đối chiếu sao kê
+// rồi "Xác nhận tiền dư" (số dư thực nhận, khách được báo để chọn nơi nhận) hoặc "Không phải tiền dư" (bắt buộc lý do).
+describe('CustomerRefundsTab — tiền trả dư Pancake chờ đối soát', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const unverified = (over: Partial<AdminCustomerRefund> = {}) =>
+    refund({ kind: 'OVERPAYMENT', status: 'UNVERIFIED', userId: 'u1', reason: 'CONFIRMED', amount: 114_000, recipientName: null, phone: null, ...over });
+
+  function stub(list: () => AdminCustomerRefund[], respond: (url: string, init?: RequestInit) => Response | null = () => null) {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        const r = respond(url, init);
+        if (r) return r;
+        if (url.includes('/verify')) return json({ id: 'r1', status: 'PENDING' });
+        if (url.includes('/dismiss')) return json({ id: 'r1', status: 'DISMISSED' });
+        return json(page(list()));
+      }),
+    );
+    return {
+      calls,
+      verifies: () => calls.filter((c) => c.url.includes('/verify')),
+      dismisses: () => calls.filter((c) => c.url.includes('/dismiss')),
+    };
+  }
+  const openUnverified = async (container: HTMLElement) => {
+    click(byText(container, 'button', 'Chờ đối soát'));
+    await flush();
+    return container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+  };
+
+  it('bộ lọc "Chờ đối soát" đứng đầu và gọi status=UNVERIFIED; "Không phải tiền dư" gọi status=DISMISSED', async () => {
+    const api = stub(() => []);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')).map((b) => b.textContent);
+    expect(tabs).toEqual(['Chờ đối soát', 'Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển', 'Không phải tiền dư']);
+    click(byText(container, 'button', 'Chờ đối soát'));
+    await flush();
+    expect(api.calls.at(-1)!.url).toContain('status=UNVERIFIED');
+    expect(container.textContent).toContain('Không có khoản tiền dư nào chờ đối soát.');
+    click(byText(container, 'button', 'Không phải tiền dư'));
+    await flush();
+    expect(api.calls.at(-1)!.url).toContain('status=DISMISSED');
+  });
+
+  it('dòng chờ đối soát: nhãn rõ, nói khách chưa thấy, KHÔNG có nút chuyển khoản; có ô số tiền dư thực nhận (mặc định số Pancake báo)', async () => {
+    stub(() => [unverified()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await openUnverified(container);
+    expect(card.querySelector('[data-refund-status]')?.textContent).toBe('Chờ đối soát');
+    expect(card.textContent).toContain('Tiền trả dư');
+    expect(card.textContent).toContain('Khách chưa thấy khoản này');
+    expect(byText(card, 'button', 'Bắt đầu chuyển khoản')).toBeNull();
+    expect(byText(card, 'button', 'Đã chuyển khoản')).toBeNull();
+    expect((card.querySelector('input[name="overpaidAmount"]') as HTMLInputElement).value).toBe('114.000');
+    expect(Array.from(card.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Xác nhận tiền dư', 'Không phải tiền dư']);
+  });
+
+  it('"Xác nhận tiền dư": hỏi lại rồi gửi số dư thực nhận đã sửa; báo thành công', async () => {
+    const api = stub(() => [unverified()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await openUnverified(container);
+    typeInto(card.querySelector('input[name="overpaidAmount"]'), '50.000');
+    click(byText(card, 'button', 'Xác nhận tiền dư'));
+    await flush(1);
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('50.000đ');
+    expect(d.textContent).toContain('Chỉ bấm khi sao kê có khoản này');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(api.verifies()).toHaveLength(1);
+    expect(api.verifies()[0]!.url).toContain('/admin/customer-refunds/r1/verify');
+    expect(JSON.parse(String(api.verifies()[0]!.init?.body))).toEqual({ amount: 50_000 });
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã xác nhận tiền trả dư 50.000đ');
+  });
+
+  it.each([
+    ['0', 'lớn hơn 0đ'],
+    ['200.000', 'không vượt quá 114.000đ'],
+  ])('số tiền dư %s không hợp lệ → báo lỗi, không hỏi, không gửi', async (typed, msg) => {
+    const api = stub(() => [unverified()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await openUnverified(container);
+    typeInto(card.querySelector('input[name="overpaidAmount"]'), typed);
+    click(byText(card, 'button', 'Xác nhận tiền dư'));
+    await flush(1);
+    expect(confirmDialog()).toBeNull();
+    expect(api.verifies()).toHaveLength(0);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(msg);
+  });
+
+  it('"Không phải tiền dư": bắt buộc lý do ≥ 5 ký tự rồi mới gửi', async () => {
+    const api = stub(() => [unverified()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await openUnverified(container);
+    click(byText(card, 'button', 'Không phải tiền dư'));
+    await flush(1);
+    let d = confirmDialog()!;
+    expect(d.textContent).toContain('Khách sẽ không được báo');
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, 'sai');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(api.dismisses()).toHaveLength(0);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('ít nhất 5 ký tự');
+
+    click(byText(card, 'button', 'Không phải tiền dư'));
+    await flush(1);
+    d = confirmDialog()!;
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, '  Cùng một lần chuyển, sao kê chỉ có 1 khoản  ');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(JSON.parse(String(api.dismisses()[0]!.init?.body))).toEqual({ reason: 'Cùng một lần chuyển, sao kê chỉ có 1 khoản' });
+  });
+
+  it('admin khác vừa xử lý (API 400 "không còn chờ đối soát") → báo nguyên câu, tải lại danh sách', async () => {
+    const api = stub(
+      () => [unverified()],
+      (url) => (url.includes('/verify') ? json({ statusCode: 400, message: 'Khoản này không còn chờ đối soát — admin khác vừa xử lý, vui lòng tải lại.' }, 400) : null),
+    );
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await openUnverified(container);
+    const before = api.calls.filter((c) => !c.url.includes('/verify')).length;
+    click(byText(card, 'button', 'Xác nhận tiền dư'));
+    await flush(1);
+    click(confirmDialog()!.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('không còn chờ đối soát');
+    expect(api.calls.filter((c) => !c.url.includes('/verify')).length).toBeGreaterThan(before);
+  });
+
+  it('dòng "Không phải tiền dư": hiện lý do, ai bỏ qua, lúc nào; không có nút', async () => {
+    stub(() => [
+      unverified({ status: 'DISMISSED', adminNote: 'Cùng một lần chuyển', completedBy: 'a1', completedByName: 'Admin An', completedAt: '2026-10-14T03:00:00.000Z' }),
+    ]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    click(byText(container, 'button', 'Không phải tiền dư'));
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+    expect(card.querySelector('[data-refund-status]')?.textContent).toBe('Không phải tiền dư');
+    expect(card.textContent).toContain('Lý do: Cùng một lần chuyển');
+    expect(card.textContent).toContain('Admin bỏ qua: Admin An');
+    expect(card.textContent).toContain('Bỏ qua lúc: 10:00 14/10/2026');
+    expect(card.querySelectorAll('button')).toHaveLength(0);
   });
 });

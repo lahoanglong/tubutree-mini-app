@@ -1168,8 +1168,11 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
   });
 
 // ── Hoàn tiền khách: hàng đợi chuyển khoản tay (khách cuối đơn CTV lên hộ, khách chọn ngân hàng khi huỷ/trả, tiền về muộn) ──
-/** PROCESSING: admin đã bấm "Bắt đầu chuyển khoản" — nơi nhận bị khoá, khách không đổi sang Ví được nữa. */
-export type AdminCustomerRefundStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED';
+/**
+ * PROCESSING: admin đã bấm "Bắt đầu chuyển khoản" — nơi nhận bị khoá, khách không đổi sang Ví được nữa.
+ * UNVERIFIED: khoản dư Pancake báo, chờ admin đối chiếu sao kê (khách chưa thấy); DISMISSED: admin xác định không phải tiền dư.
+ */
+export type AdminCustomerRefundStatus = 'UNVERIFIED' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'DISMISSED';
 export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
 export type AdminCustomerRefundKind = 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT' | 'OVERPAYMENT';
 /** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
@@ -1224,6 +1227,15 @@ export const claimCustomerRefund = (id: string, input: { bankName?: string; acco
 /** Chưa chuyển được: PROCESSING -> PENDING, khách lại đổi được nơi nhận. */
 export const releaseCustomerRefund = (id: string, takeOver?: RefundTakeOver) =>
   apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/release`, { method: 'POST', body: takeOverBody(takeOver) });
+/** "Xác nhận tiền dư" sau khi đối chiếu sao kê: UNVERIFIED -> PENDING với số dư thực nhận; khách được báo để chọn nơi nhận. */
+export const verifyCustomerRefund = (id: string, input: { amount: number; note?: string }) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/verify`, {
+    method: 'POST',
+    body: { amount: input.amount, ...(input.note?.trim() ? { note: input.note.trim() } : {}) },
+  });
+/** "Không phải tiền dư": UNVERIFIED -> DISMISSED kèm lý do; khách không được báo. */
+export const dismissCustomerRefund = (id: string, reason: string) =>
+  apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: { reason: reason.trim() } });
 /** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
 export const markCustomerRefundPaid = (
   id: string,
