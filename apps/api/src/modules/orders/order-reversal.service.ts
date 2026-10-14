@@ -169,7 +169,7 @@ export class OrderReversalService {
 
     // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
     // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
-    await this.coupons.release(order.couponCode, order.id, tx);
+    await this.releaseCoupon(tx, order);
 
     // Đảo công nợ đại lý. Đơn đại lý "Ghi công nợ" tạo dòng DealerCreditLedger dương lúc đặt;
     // huỷ/trả đơn mà không đảo thì đại lý vẫn NỢ tiền một đơn không còn tồn tại, và khoản nợ ảo
@@ -204,6 +204,27 @@ export class OrderReversalService {
       }
     }
     return { moneyRefunded, pointsRefunded };
+  }
+
+  /**
+   * Lần đặt bị tách theo nơi giao chia phần giảm của mã cho mọi đơn con nhưng lượt dùng mã chỉ gắn đơn đầu. Trả lượt khi đơn
+   * đầu bị huỷ mà đơn gian hàng còn sống thì mã dùng lại được trong khi đơn kia vẫn giữ phần giảm, nên chỉ trả khi mọi đơn của
+   * nhóm đã huỷ/trả. Khoá theo nhóm: hai đơn con huỷ cùng lúc thì lần sau thấy lần trước đã commit, đúng một lần trả.
+   */
+  private async releaseCoupon(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<void> {
+    if (!order.checkoutGroup) {
+      await this.coupons.release(order.couponCode, order.id, tx);
+      return;
+    }
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`checkout-group-coupon:${order.checkoutGroup}`}))`;
+    const group = await tx.order.findMany({
+      where: { checkoutGroup: order.checkoutGroup },
+      select: { id: true, status: true, couponCode: true },
+    });
+    const live = group.some((o) => o.id !== order.id && o.status !== 'CANCELLED' && o.status !== 'RETURNED');
+    if (live) return;
+    const holder = group.find((o) => o.couponCode);
+    if (holder) await this.coupons.release(holder.couponCode, holder.id, tx);
   }
 
   /**

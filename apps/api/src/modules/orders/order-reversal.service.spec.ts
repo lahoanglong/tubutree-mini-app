@@ -424,6 +424,51 @@ describe('OrderReversalService', () => {
     await service.reverseFinancials(tx as never, order);
     expect(coupons.release).toHaveBeenCalledWith(null, 'o1', tx);
   });
+
+  describe('lần đặt bị tách theo nơi giao (checkoutGroup): mã giảm giá chia cho mọi đơn con, lượt dùng gắn đơn đầu', () => {
+    function groupTx(order: unknown, group: { id: string; status: string; couponCode: string | null }[]) {
+      const tx = makeTx(order) as MockTx & { order: { findMany: jest.Mock } };
+      tx.order.findMany = jest.fn().mockResolvedValue(group);
+      return tx;
+    }
+
+    it('huỷ đơn đầu (giữ lượt dùng mã) khi đơn gian hàng cùng lần đặt còn sống → KHÔNG trả lượt dùng mã', async () => {
+      const order = makeOrder({ id: 'o1', couponCode: 'ONCE', checkoutGroup: 'TUBU1', status: 'CONFIRMED' });
+      const tx = groupTx(order, [
+        { id: 'o1', status: 'CANCELLED', couponCode: 'ONCE' },
+        { id: 'o2', status: 'CONFIRMED', couponCode: null },
+      ]);
+      await service.reverseFinancials(tx as never, order);
+      expect(coupons.release).not.toHaveBeenCalled();
+      const sql = tx.$executeRaw.mock.calls.map((c: [TemplateStringsArray]) => c[0].join('?'));
+      expect(sql.some((q: string) => /pg_advisory_xact_lock\(hashtext\(/.test(q))).toBe(true);
+      expect(tx.order.findMany).toHaveBeenCalledWith({
+        where: { checkoutGroup: 'TUBU1' },
+        select: { id: true, status: true, couponCode: true },
+      });
+    });
+
+    it('đơn cuối cùng của nhóm bị huỷ/trả → trả lượt dùng mã theo đơn đầu (đơn đang giữ lượt)', async () => {
+      const order = makeOrder({ id: 'o2', couponCode: null, checkoutGroup: 'TUBU1', status: 'CONFIRMED' });
+      const tx = groupTx(order, [
+        { id: 'o1', status: 'RETURNED', couponCode: 'ONCE' },
+        { id: 'o2', status: 'CONFIRMED', couponCode: null },
+      ]);
+      await service.reverseFinancials(tx as never, order);
+      expect(coupons.release).toHaveBeenCalledTimes(1);
+      expect(coupons.release).toHaveBeenCalledWith('ONCE', 'o1', tx);
+    });
+
+    it('nhóm không dùng mã → không gọi release', async () => {
+      const order = makeOrder({ id: 'o2', couponCode: null, checkoutGroup: 'TUBU1' });
+      const tx = groupTx(order, [
+        { id: 'o1', status: 'CANCELLED', couponCode: null },
+        { id: 'o2', status: 'CANCELLED', couponCode: null },
+      ]);
+      await service.reverseFinancials(tx as never, order);
+      expect(coupons.release).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // Đơn đại lý ghi công nợ: huỷ đơn mà không đảo sổ thì đại lý vẫn NỢ tiền một đơn không còn
