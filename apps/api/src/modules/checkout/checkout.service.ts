@@ -426,6 +426,10 @@ export class CheckoutService {
                 // P0 A3-05: gồm cả tierDiscount (giảm hạng tự động) — 4 nguồn giảm giá đã tách riêng
                 // (combo/coupon/hạng/điểm) đều cộng vào cùng 1 cột Order.discount để hiển thị/đối soát.
                 discount: shipment.discount,
+                couponDiscount: shipment.couponDiscount,
+                comboDiscount: shipment.comboDiscount,
+                tierDiscount: shipment.tierDiscount,
+                pointsDiscount: shipment.pointsDiscount,
                 shippingFee: shipment.shippingFee,
                 total: shipment.total,
                 pointsEarned: shipment.pointsEarned,

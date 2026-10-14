@@ -1163,6 +1163,9 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     expect(data.total).toBeGreaterThan(0);
     expect(data.discount).toBeLessThan(data.subtotal);
     expect(data.discount + data.total).toBe(data.subtotal);
+    // R2-BUYERMINI-8: lưu từng phần để chi tiết đơn tách "Mã giảm giá" và "Điểm Xanh" bằng số tiền thật.
+    expect(data).toMatchObject({ comboDiscount: 50000, couponDiscount: 45000, tierDiscount: 20250, pointsDiscount: 76000 });
+    expect(data.comboDiscount + data.couponDiscount + data.tierDiscount + data.pointsDiscount).toBe(data.discount);
   });
 });
 
