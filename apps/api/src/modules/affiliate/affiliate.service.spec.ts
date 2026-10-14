@@ -438,6 +438,38 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       expect(executeRaw).not.toHaveBeenCalled();
     });
 
+    it('R7 #6a: giờ vàng hết giữa lúc báo giá và lúc tạo đơn (tổng cao hơn tổng CTV đã báo khách) → TOTAL_CHANGED, không giữ kho, không tạo đơn', async () => {
+      const { svc, orderCreate, executeRaw } = build({ variations: GRANOLA, shippingFee: 19000 });
+      const err = await svc
+        .placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 1 }], expectedTotal: 139000 }) as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'TOTAL_CHANGED',
+        message: 'Tổng tiền đơn vừa thay đổi từ 139.000đ thành 159.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+      });
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('R7 #6a: tổng lúc tạo đơn bằng hoặc thấp hơn tổng đã báo → tạo đơn bình thường', async () => {
+      for (const expectedTotal of [159000, 200000]) {
+        const { svc, orderCreate } = build({ variations: GRANOLA, shippingFee: 19000 });
+        await svc.placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 1 }], expectedTotal }) as never);
+        expect(orderCreate.mock.calls[0][0].data.total).toBe(159000);
+      }
+    });
+
+    it('R7 #6b: báo giá có hàng gian hàng đối tác tự giao → NOT_TUBU_FULFILLED như lúc tạo đơn', async () => {
+      const { svc, prisma } = build({ variations: GRANOLA });
+      const findMany = prisma.variation.findMany as jest.Mock;
+      findMany.mockReset();
+      findMany.mockResolvedValueOnce(GRANOLA).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'v1' }]);
+      await expect(svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] })).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NOT_TUBU_FULFILLED', message: expect.stringContaining('do gian hàng đối tác tự giao') }),
+      });
+    });
+
     it('báo giá đơn hộ: chỉ CTV/ADMIN', async () => {
       const { svc } = build({ role: 'CUSTOMER' });
       await expect(svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] })).rejects.toThrow('Chỉ CTV');

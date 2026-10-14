@@ -72,4 +72,10 @@ export class PlaceOrderForCustomerDto {
   paymentMethod!: 'COD' | 'BANK_TRANSFER';
 
   @IsOptional() @IsString() note?: string;
+
+  /**
+   * Tổng CTV đã thấy ở báo giá (và đã báo khách). Lúc tạo đơn tổng cao hơn số này (giờ vàng vừa hết, phí giao đổi) thì BE trả
+   * TOTAL_CHANGED thay vì ghi đơn đắt hơn; client cũ không gửi thì giữ hành vi cũ.
+   */
+  @IsOptional() @IsInt() @Min(0) expectedTotal?: number;
 }
