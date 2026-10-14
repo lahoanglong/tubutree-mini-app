@@ -287,7 +287,7 @@ describe('GroupBuyService.listOpen / expireGroups', () => {
   // ENGAGE-9: listOpen luôn trả joined=false nên người mở nhóm vẫn thấy nút "Tham gia" và bấm ra lỗi "đã tham gia".
   it('listOpen(userId): joined theo thành viên thật, isOwner cho người mở nhóm', async () => {
     const prisma = makePrisma();
-    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValueOnce([
       { ...group({ id: 'mine', initiatorId: 'u1' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 } },
       { ...group({ id: 'joined', initiatorId: 'u9' }), product: { name: 'B', slug: 'b', thumbnail: null }, _count: { members: 2 } },
       { ...group({ id: 'other', initiatorId: 'u9' }), product: { name: 'C', slug: 'c', thumbnail: null }, _count: { members: 2 } },
@@ -303,6 +303,37 @@ describe('GroupBuyService.listOpen / expireGroups', () => {
       where: { userId: 'u1', groupBuyId: { in: ['mine', 'joined', 'other'] } },
       select: { groupBuyId: true },
     });
+  });
+
+  it('R2-BUYERMINI-4: listOpen(userId) kèm nhóm đã đủ người của chính mình (còn hạn dùng mã) và mã giảm của mình', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock)
+      .mockResolvedValueOnce([
+        { ...group({ id: 'open1', initiatorId: 'u9' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 } },
+      ])
+      .mockResolvedValueOnce([
+        { ...group({ id: 'cmgroupdone1234', initiatorId: 'cmuserowner5678', status: 'SUCCESS' }), product: { name: 'B', slug: 'b', thumbnail: null }, _count: { members: 3 } },
+      ]);
+    const r = await new GroupBuyService(prisma, makeConfig()).listOpen('cmuserowner5678');
+    expect(r.map((g) => [g.id, g.status, g.joined, g.couponCode ?? null])).toEqual([
+      ['open1', 'OPEN', false, null],
+      ['cmgroupdone1234', 'SUCCESS', true, 'GBUY-DONE1234-WNER5678'],
+    ]);
+    const successWhere = (prisma.groupBuy.findMany as jest.Mock).mock.calls[1][0].where;
+    expect(successWhere).toMatchObject({ status: 'SUCCESS', members: { some: { userId: 'cmuserowner5678' } } });
+  });
+
+  it('getGroup: nhóm đã đủ người trả mã giảm của thành viên đang xem; người ngoài nhóm không có mã', async () => {
+    const prisma = makePrisma();
+    const svc = new GroupBuyService(prisma, makeConfig());
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue({
+      ...group({ id: 'cmgroupdone1234', status: 'SUCCESS' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 3 }, members: [{ id: 'm' }],
+    });
+    expect(await svc.getGroup('cmgroupdone1234', 'cmuserowner5678')).toMatchObject({ couponCode: 'GBUY-DONE1234-WNER5678' });
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue({
+      ...group({ id: 'cmgroupdone1234', status: 'SUCCESS' }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 3 }, members: [],
+    });
+    expect((await svc.getGroup('cmgroupdone1234', 'u2')).couponCode).toBeUndefined();
   });
 
   it('listOpen không có user (khách chưa đăng nhập): joined=false, isOwner=false, không truy vấn thành viên', async () => {

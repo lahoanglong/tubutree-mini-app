@@ -16,6 +16,14 @@ interface GroupRow {
   expiresAt: Date;
 }
 
+/** Số ngày mã giảm của nhóm đủ người còn dùng được. */
+const COUPON_VALID_DAYS = 30;
+
+/** Mã giảm TẤT ĐỊNH theo (nhóm, thành viên): cấp lại an toàn và hiện lại được cho đúng người mà không cần tra bảng mã. */
+export function groupBuyCouponCode(groupBuyId: string, userId: string): string {
+  return `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
+}
+
 /**
  * Mua chung / Group Buy (§6.14.8). User mở nhóm cho 1 sản phẩm với giá nhóm (giảm %);
  * đủ targetSize người trước hạn → SUCCESS, mỗi thành viên nhận coupon = phần giảm để
@@ -250,7 +258,17 @@ export class GroupBuyService {
       });
       for (const r of rows) mine.add(r.groupBuyId);
     }
-    return groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), userId));
+    const open = groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), userId));
+    if (!userId) return open;
+    // Nhóm của mình đã đủ người, mã giảm còn hạn: khách phải tìm lại được mã và mua tiếp ngay từ đây.
+    const since = new Date(Date.now() - COUPON_VALID_DAYS * 864e5);
+    const done = await this.prisma.groupBuy.findMany({
+      where: { status: 'SUCCESS', members: { some: { userId } }, expiresAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },
+    });
+    return [...open, ...done.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, true, userId))];
   }
 
   /** Cron: nhóm OPEN quá hạn → FAILED. Trả số nhóm bị đánh hỏng. */
@@ -281,10 +299,10 @@ export class GroupBuyService {
       expiresAt: g.expiresAt,
       joined,
       isOwner: viewerId !== undefined && g.initiatorId === viewerId,
+      ...(g.status === 'SUCCESS' && joined && viewerId ? { couponCode: groupBuyCouponCode(g.id, viewerId) } : {}),
     };
   }
 
-  /** Mã TẤT ĐỊNH theo (nhóm, user) → cấp lại an toàn: coupon.code @unique chặn trùng (P2002). */
   /**
    * Mã chỉ áp cho đúng sản phẩm của nhóm (`applyTo.productIds`) và đơn tối thiểu = giá nhóm tính trên
    * chính dòng sản phẩm đó: "mua với giá nhóm" là giá của sản phẩm này, không phải mã giảm ~15% cho mọi
@@ -297,9 +315,9 @@ export class GroupBuyService {
     minOrder: number,
     productId: string,
   ): Promise<string> {
-    const code = `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
+    const code = groupBuyCouponCode(groupBuyId, userId);
     const end = new Date();
-    end.setDate(end.getDate() + 30);
+    end.setDate(end.getDate() + COUPON_VALID_DAYS);
     await this.prisma.coupon.create({
       data: {
         code,
