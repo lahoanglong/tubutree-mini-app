@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   claims: 0,
   payouts: 0,
   refundsPending: 0,
+  returnsArgs: [] as unknown[][],
   orders: [] as unknown[],
   users: [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -118,6 +119,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
         items: [
           { key: 'pancakeAttention', count: 2 },
           { key: 'returnsPending', count: 1 },
+          { key: 'returnsToReceive', count: 2 },
           { key: 'refillPending', count: 0 },
         ],
       };
@@ -166,7 +168,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       ],
       meta: { total: 45, page: 1, limit: 20 },
     }),
-    listReturnRequests: async () => ({
+    listReturnRequests: async (...args: unknown[]) => (mocks.returnsArgs.push(args), {
       data: ['REQUESTED', 'APPROVED', 'REJECTED'].map((status, i) => ({
         id: `r${i}`,
         orderId: `o${i}`,
@@ -255,6 +257,7 @@ beforeEach(() => {
   mocks.claims = 0;
   mocks.payouts = 0;
   mocks.refundsPending = 0;
+  mocks.returnsArgs = [];
   mocks.orders = [];
   mocks.users = [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -1917,6 +1920,37 @@ describe('admin/page — Việc cần xử lý (ADMINOPS-13)', () => {
     click(card);
     await flush();
     expect(window.location.search).toBe('?tab=orders&pancake=attention');
+  });
+});
+
+describe('admin/page — thẻ "Hàng trả chờ nhận về kho" mở đúng danh sách (R2-ADMINOPS-4)', () => {
+  const returnsFilter = (c: HTMLElement) =>
+    c.querySelector<HTMLSelectElement>('select[aria-label="Lọc yêu cầu đổi/trả theo trạng thái"]')!;
+
+  it('bấm thẻ → tab Đổi/Trả lọc "Chờ nhận hàng về", không phải danh sách chờ duyệt', async () => {
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="returnsToReceive"]')!);
+    await flush();
+    expect(returnsFilter(container).value).toBe('TO_RECEIVE');
+    expect(returnsFilter(container).selectedOptions[0]!.textContent).toBe('Chờ nhận hàng về');
+    expect(mocks.returnsArgs.at(-1)).toEqual(['TO_RECEIVE', 1, undefined, 'asc']);
+  });
+
+  it('thẻ "chờ duyệt" vẫn mở danh sách REQUESTED', async () => {
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="returnsPending"]')!);
+    await flush();
+    expect(returnsFilter(container).value).toBe('REQUESTED');
+    expect(mocks.returnsArgs.at(-1)).toEqual(['REQUESTED', 1, undefined, 'asc']);
+  });
+
+  it('nhân viên chỉ có nhóm KHO mở tab Đổi/Trả: mặc định danh sách chờ nhận hàng về', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=returns');
+    const { container } = await mount();
+    expect(returnsFilter(container).value).toBe('TO_RECEIVE');
+    expect(mocks.returnsArgs.every((a) => a[0] === 'TO_RECEIVE')).toBe(true);
   });
 });
 

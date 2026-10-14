@@ -220,6 +220,30 @@ describe('OrderReturnsService.listForAdmin — kèm đơn, khách, tên dòng tr
   });
 });
 
+describe('OrderReturnsService.listForAdmin TO_RECEIVE — đúng tập thẻ "Hàng trả chờ nhận về kho" (R2-ADMINOPS-4)', () => {
+  it('lọc APPROVED chưa nhận, bỏ đơn gian hàng tự giao', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([{ orderId: 'o1' }, { orderId: 'o2' }, { orderId: 'o1' }])
+      .mockResolvedValueOnce([]);
+    const orderFindMany = jest.fn().mockResolvedValueOnce([{ id: 'o2' }]).mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      returnRequest: { findMany, count },
+      order: { findMany: orderFindMany },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
+    } as unknown as PrismaService;
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
+    await svc.listForAdmin('TO_RECEIVE', 1, 20);
+    expect(orderFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['o1', 'o2'] }, fulfiller: 'MERCHANT' });
+    const where = { status: 'APPROVED', receivedAt: null, orderId: { notIn: ['o2'] } };
+    expect(findMany.mock.calls[1][0].where).toEqual(where);
+    expect(count.mock.calls[0][0].where).toEqual(where);
+    expect(findMany.mock.calls[1][0].orderBy).toEqual({ createdAt: 'asc' });
+  });
+});
+
 describe('refundNote — khách được báo số tiền và nơi nhận (D2)', () => {
   it('Ví, ngân hàng (che số tài khoản), điểm, không có tiền', () => {
     expect(refundNote({ amount: 114_000, to: 'WALLET' }, null)).toBe(' Đã hoàn 114.000đ vào Ví Tubu.');

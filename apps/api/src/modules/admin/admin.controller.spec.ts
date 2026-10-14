@@ -254,6 +254,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(d).toEqual(expect.objectContaining({ status: 'PENDING', limit: 100 }));
     const r = (await asQuery(ReturnRequestsQuery, { status: 'REQUESTED' })) as ReturnRequestsQuery;
     expect(r.status).toBe('REQUESTED');
+    expect(((await asQuery(ReturnRequestsQuery, { status: 'TO_RECEIVE' })) as ReturnRequestsQuery).status).toBe('TO_RECEIVE');
     await expect(asQuery(DealerAppsQuery, { status: 'pending' })).rejects.toThrow();
     await expect(asQuery(ReturnRequestsQuery, { status: 'PENDING' })).rejects.toThrow();
   });

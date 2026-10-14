@@ -306,6 +306,7 @@ export default function AdminPage() {
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number } | null>(null);
+  const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
   const accessQ = useQuery({
@@ -354,10 +355,15 @@ export default function AdminPage() {
     if (k === 'pancakeAttention') return openPancakeQueue();
     if (k === 'pancakeUnsynced') return openUnsyncedQueue();
     if (k === 'gomdonAttention') return openRecyclingQueue();
-    const target: Record<Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention'>, Tab> = {
+    if (k === 'returnsPending' || k === 'returnsToReceive') {
+      setReturnsSeed({ filter: k === 'returnsToReceive' ? 'TO_RECEIVE' : 'REQUESTED', n: Date.now() });
+      return setTab('returns');
+    }
+    const target: Record<
+      Exclude<InboxKey, 'pancakeAttention' | 'pancakeUnsynced' | 'gomdonAttention' | 'returnsPending' | 'returnsToReceive'>,
+      Tab
+    > = {
       customerRefunds: 'customerRefunds',
-      returnsPending: 'returns',
-      returnsToReceive: 'returns',
       merchantOverdue: 'merchantFulfilment',
       merchantProducts: 'merchantProducts',
       dealerApplications: 'dealers',
@@ -394,6 +400,9 @@ export default function AdminPage() {
   const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
   const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.k)) })).filter((g) => g.items.length > 0);
   const active: Tab = allowed.has(tab) ? tab : (groups[0]?.items[0]?.k ?? DEFAULT_TAB);
+  const canReviewReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH');
+  const canReceiveReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO');
+  const returnsDefault: ReturnsFilter = canReceiveReturns && !canReviewReturns ? 'TO_RECEIVE' : 'REQUESTED';
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
@@ -433,8 +442,10 @@ export default function AdminPage() {
           )}
           {active === 'returns' && (
             <ReturnsTab
-              canReview={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')}
-              canReceive={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
+              key={`${returnsSeed?.n ?? 0}-${returnsDefault}`}
+              initialFilter={returnsSeed?.filter ?? returnsDefault}
+              canReview={canReviewReturns}
+              canReceive={canReceiveReturns}
             />
           )}
           {active === 'cashback' && <CashbackTab />}
@@ -1354,18 +1365,37 @@ function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin:
   );
 }
 
-function ReturnsTab({ canReview = true, canReceive = true }: { canReview?: boolean; canReceive?: boolean }) {
-  const [filter, setFilter] = useState('REQUESTED');
+type ReturnsFilter = 'REQUESTED' | 'TO_RECEIVE' | 'APPROVED' | 'REJECTED' | '';
+
+const RETURNS_FILTER_LABELS: Record<ReturnsFilter, string> = {
+  REQUESTED: 'Chờ duyệt (REQUESTED)',
+  TO_RECEIVE: 'Chờ nhận hàng về',
+  APPROVED: 'Đã duyệt (APPROVED)',
+  REJECTED: 'Đã từ chối (REJECTED)',
+  '': 'Tất cả trạng thái',
+};
+
+function ReturnsTab({
+  canReview = true,
+  canReceive = true,
+  initialFilter = 'REQUESTED',
+}: {
+  canReview?: boolean;
+  canReceive?: boolean;
+  initialFilter?: ReturnsFilter;
+}) {
+  const [filter, setFilter] = useState<ReturnsFilter>(initialFilter);
   // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
   // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
+  const oldestFirst = filter === 'REQUESTED' || filter === 'TO_RECEIVE';
   const q = useInfiniteQuery({
     queryKey: ['admin-returns', filter],
     queryFn: ({ pageParam }) =>
-      listReturnRequests(filter || undefined, pageParam, undefined, filter === 'REQUESTED' ? 'asc' : undefined),
+      listReturnRequests(filter || undefined, pageParam, undefined, oldestFirst ? 'asc' : undefined),
     initialPageParam: 1,
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
-  const pending = filter === 'REQUESTED';
+  const pending = oldestFirst;
   const view = mergeQueuePages(q.data?.pages, pending);
 
   return (
@@ -1374,18 +1404,12 @@ function ReturnsTab({ canReview = true, canReceive = true }: { canReview?: boole
         <select
           aria-label="Lọc yêu cầu đổi/trả theo trạng thái"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => setFilter(e.target.value as ReturnsFilter)}
           className={`${FIELD_CLASS} ${TOUCH_H}`}
         >
-          {['REQUESTED', 'APPROVED', 'REJECTED', ''].map((s) => (
+          {(Object.keys(RETURNS_FILTER_LABELS) as ReturnsFilter[]).map((s) => (
             <option key={s} value={s}>
-              {s === 'REQUESTED'
-                ? 'Chờ duyệt (REQUESTED)'
-                : s === 'APPROVED'
-                  ? 'Đã duyệt (APPROVED)'
-                  : s === 'REJECTED'
-                    ? 'Đã từ chối (REJECTED)'
-                    : 'Tất cả trạng thái'}
+              {RETURNS_FILTER_LABELS[s]}
             </option>
           ))}
         </select>
