@@ -1,5 +1,5 @@
 import type { OrderStatus, PaymentMethod } from '@tubutree/shared-types';
-import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
+import { isGomdonGoodsNotWithCarrier, isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
 
 /**
  * Bảng chuyển trạng thái đơn hàng — NGUỒN CHÂN LÝ DUY NHẤT.
@@ -149,9 +149,6 @@ export interface Handover {
   detail: string;
 }
 
-/** Gomdon: hàng đã hoàn về kho (8) hoặc hãng báo hỏng/mất (9) — không còn nằm ở hãng chờ giao tới khách. */
-const GOMDON_GOODS_NOT_WITH_CARRIER: ReadonlySet<string> = new Set(['8', '9']);
-
 /**
  * D1: đơn huỷ được tới khi hàng bàn giao cho đơn vị vận chuyển; sau mốc đó chỉ còn luồng hoàn/trả, với MỌI người bấm
  * (khách, admin, CSKH, kho, nhà bán). Mốc bàn giao là bất kỳ dấu hiệu nào: đơn đã SHIPPING, đã có mã vận đơn của hãng
@@ -165,7 +162,7 @@ const GOMDON_GOODS_NOT_WITH_CARRIER: ReadonlySet<string> = new Set(['8', '9']);
 export function cancelHandover(order: HandoverFacts, opts: { pancakeReportedCancel?: boolean } = {}): Handover | null {
   const gomdonCodes = [order.gomdonPartnerCode, order.gomdonOrderId].filter((c): c is string => Boolean(c));
   const hasGomdonWaybill = Boolean(order.hasRecyclingPickup) && gomdonCodes.length > 0;
-  if (hasGomdonWaybill && GOMDON_GOODS_NOT_WITH_CARRIER.has(order.gomdonStatus ?? '')) return null;
+  if (hasGomdonWaybill && isGomdonGoodsNotWithCarrier(order.gomdonStatus)) return null;
   if (order.status === 'SHIPPING') return { kind: 'SHIPPING', detail: 'đơn đang giao' };
   if (order.shippedAt) return { kind: 'MERCHANT_SHIPPED', detail: 'gian hàng đã gửi hàng cho đơn vị vận chuyển' };
   if (!opts.pancakeReportedCancel && order.shippingCode && !gomdonCodes.includes(order.shippingCode)) {

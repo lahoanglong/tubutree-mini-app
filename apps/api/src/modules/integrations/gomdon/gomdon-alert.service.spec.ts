@@ -2,7 +2,7 @@ import { GomdonAlertService, GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, PANCAKE_A
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 
-function build(opts: { order?: { id: string } | null; openSame?: boolean } = {}) {
+function build(opts: { order?: { id: string } | null; openSame?: boolean; orderStatus?: string } = {}) {
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(opts.order === undefined ? { id: 'o1' } : opts.order) },
     gomdonAlert: {
@@ -12,6 +12,7 @@ function build(opts: { order?: { id: string } | null; openSame?: boolean } = {})
     },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }, { id: 'admin2' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
+    $queryRaw: jest.fn().mockResolvedValue([{ status: opts.orderStatus ?? 'SHIPPING' }]),
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) => fn(prisma));
@@ -48,6 +49,17 @@ describe('GomdonAlertService (UAT GOMDON-2: báo động phải xem lại đư�
         where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'KHO' } }] },
       }),
     );
+  });
+
+  it.each([
+    ['SHIPPING', 1],
+    ['CANCELLED', 0],
+    ['RETURNED', 0],
+  ])('"hàng đã hoàn về kho" (GOODS_RETURNED) khi đơn đang %s → lưu %s báo động (đơn đã huỷ/trả thì việc với khách đã xong) (R3-CANCEL-3)', async (orderStatus, n) => {
+    const { svc, prisma, notifications } = build({ orderStatus });
+    await svc.alert('TUBU1', 'Gomdon báo "Đã hoàn hàng".', GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.GOODS_RETURNED);
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledTimes(n);
+    expect(notifications.notify).toHaveBeenCalledTimes(n * 2);
   });
 
   it('cùng nội dung còn đang mở → không lưu/gửi trùng (chống báo lặp sau khi API khởi động lại)', async () => {

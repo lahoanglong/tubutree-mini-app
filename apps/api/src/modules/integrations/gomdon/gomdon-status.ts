@@ -149,6 +149,11 @@ export function isGomdonPickedUp(status: string | null | undefined): boolean {
   return n != null && n !== 1 && n !== 2 && n !== 10;
 }
 
+/** Gomdon: hàng đã hoàn về kho (8) hoặc hãng báo hỏng/mất (9) — không còn nằm ở hãng chờ giao tới khách. */
+export function isGomdonGoodsNotWithCarrier(status: string | null | undefined): boolean {
+  return status === '8' || status === '9';
+}
+
 /** Đơn "thanh toán được" để giao: COD (thu khi giao) hoặc đã thanh toán. */
 export function isGomdonPayable(order: { paymentMethod: string; paymentStatus: string }): boolean {
   return order.paymentMethod === 'COD' || order.paymentStatus === 'PAID';

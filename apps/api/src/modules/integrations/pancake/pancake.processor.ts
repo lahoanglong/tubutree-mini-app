@@ -9,7 +9,12 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
-import { ATTENTION_PARTIAL_RETURN_ACK, ATTENTION_RETURN_APPROVED, clearPancakeAttention } from './pancake-attention';
+import {
+  ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_RETURN_APPROVED,
+  clearPancakeAttention,
+} from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
@@ -416,7 +421,7 @@ export class PancakeProcessor extends WorkerHost {
         // D1: sau bàn giao chỉ còn luồng hoàn/trả — lệnh huỷ từ Pancake là việc cho người, không phải lệnh hoàn tiền.
         await this.flagAttention(
           order,
-          `Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (${err.handover.detail}) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng ` +
+          `${ATTENTION_CANCEL_AFTER_HANDOVER} (${err.handover.detail}) — KHÔNG tự huỷ/hoàn tiền. Kiểm tra với kho/hãng ` +
             'vận chuyển: chặn giao và chờ Pancake báo "Đã hoàn" (đơn tự huỷ, hoàn tiền), hoặc khách đã nhận thì xử lý ở Đổi/Trả.',
         );
         return;

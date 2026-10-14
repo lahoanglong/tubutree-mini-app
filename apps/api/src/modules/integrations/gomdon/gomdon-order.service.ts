@@ -28,6 +28,7 @@ import {
   gomdonStatusNumber,
   gomdonStatusText,
   isGomdonPayable,
+  isGomdonGoodsNotWithCarrier,
   isGomdonPickedUp,
 } from './gomdon-status';
 
@@ -450,6 +451,12 @@ export class GomdonOrderService {
       }
       if (order.gomdonStatus === '2') {
         await this.setCancelStatus(order.id, GOMDON_CANCEL.CANCELLED);
+        await this.resolveAfterCancel(order.id);
+        return;
+      }
+      if (isGomdonGoodsNotWithCarrier(order.gomdonStatus)) {
+        // Vận đơn đã kết thúc (hàng đã về kho / hãng báo hỏng-mất): không còn gì để huỷ hay chặn giao.
+        await this.setCancelStatus(order.id, GOMDON_CANCEL.NOT_NEEDED);
         await this.resolveAfterCancel(order.id);
         return;
       }

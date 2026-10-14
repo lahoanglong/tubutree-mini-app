@@ -36,6 +36,7 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
   const pancakeHooks = {
@@ -125,6 +126,28 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
       await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true });
       expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.anything(), 'BACKGROUND');
       expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', { kind: 'DEFERRED', reason: 'timeout' });
+    });
+  });
+
+  it.each([
+    ['CANCELLED', 'CONFIRMED'],
+    ['RETURNED', 'DELIVERED'],
+  ])('đơn chuyển %s → đóng báo động Gomdon "hàng đã hoàn về kho" và gỡ việc Pancake "HUỶ sau bàn giao"/"ĐANG HOÀN" (R3-CANCEL-3)', async (to, from) => {
+    const { svc, prisma } = make(makeOrder({ status: from, pancakeOrderId: null, paymentStatus: 'UNPAID', paymentMethod: 'COD' }));
+    await svc.setStatus('o1', to as never, { actorType: 'ADMIN' });
+    expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'o1', resolvedAt: null, kind: { in: ['GOODS_RETURNED'] } },
+      data: { resolvedAt: expect.any(Date), resolvedById: null },
+    });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'o1',
+        OR: [
+          { pancakeAttention: { startsWith: 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển' } },
+          { pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } },
+        ],
+      },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
   });
 

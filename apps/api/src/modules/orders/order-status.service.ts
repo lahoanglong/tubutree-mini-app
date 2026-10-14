@@ -33,8 +33,9 @@ import {
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
-import { resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
-import { flagPancakeAttention } from '../integrations/pancake/pancake-attention';
+import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
+import { ATTENTION_CANCEL_AFTER_HANDOVER, clearPancakeAttention, flagPancakeAttention } from '../integrations/pancake/pancake-attention';
+import { GOMDON_ALERT_KIND, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { notifyMerchantOwner } from './merchant-order-notify';
 
 type StatusActor = 'ADMIN' | 'CUSTOMER' | 'MERCHANT' | 'PANCAKE' | 'SYSTEM';
@@ -289,6 +290,7 @@ export class OrderStatusService {
       await this.loyalty.reverseOrderPoints(order.id);
       await this.affiliate.reverseCommissionsForOrder(order.id);
     }
+    if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') await this.settleClosedOrderAlerts(order);
     if (targetStatus === 'CANCELLED') {
       await this.enqueueGomdonCancel(order);
       if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
@@ -466,6 +468,19 @@ export class OrderStatusService {
         );
       }
       throw new BadRequestException(err.message);
+    }
+  }
+
+  /**
+   * Đơn vừa huỷ/trả: việc "hàng đang/đã hoàn về kho — xử lý đơn với khách" (Gomdon) và "Pancake báo huỷ sau bàn giao /
+   * đang hoàn" (Pancake) đã có kết cục — đóng để hàng đợi chỉ còn việc thật. Best-effort: đơn đã đổi trạng thái xong.
+   */
+  private async settleClosedOrderAlerts(order: Pick<Order, 'id' | 'code'>): Promise<void> {
+    try {
+      await resolveGomdonAlertKinds(this.prisma, order.id, [GOMDON_ALERT_KIND.GOODS_RETURNED]);
+      await clearPancakeAttention(this.prisma, order.id, [ATTENTION_CANCEL_AFTER_HANDOVER, PANCAKE_RETURNING_PREFIX]);
+    } catch (err) {
+      this.logger.warn(`Không đóng được việc tồn của đơn ${order.code} sau khi huỷ/trả: ${err instanceof Error ? err.message : err}`);
     }
   }
 
