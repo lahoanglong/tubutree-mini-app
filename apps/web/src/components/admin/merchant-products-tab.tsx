@@ -106,14 +106,14 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
       )}
       {o && link.state === 'AVAILABLE' && (
         <p>
-          Đang thuộc sản phẩm Tubu không bán: <strong>{o.name}</strong> ({brand}). Duyệt thì biến thể chuyển sang gian hàng {storeTitle}.
+          Đang thuộc sản phẩm Tubu không bán: <strong>{o.name}</strong> ({brand}). Duyệt thì biến thể chuyển sang gian hàng “{storeTitle}”.
         </p>
       )}
       {o && link.state === 'TAKEOVER' && (
         <Notice tone="warning" role="alert">
           <p>
             Duyệt sẽ chuyển biến thể đang bán của <strong>{o.name}</strong> (thương hiệu {brand}) sang gian hàng{' '}
-            <strong>{storeTitle}</strong>: tồn kho {v?.stock ?? 0} sp, đã bán {o.sold}, {o.reviewCount} đánh giá.{' '}
+            <strong>“{storeTitle}”</strong>: tồn kho {v?.stock ?? 0} sp, đã bán {o.sold}, {o.reviewCount} đánh giá.{' '}
             {o.otherVariations === 0
               ? 'Sản phẩm gốc không còn biến thể nào nên sẽ bị tắt bán (trang sản phẩm, đánh giá, yêu thích không còn hiện).'
               : `Sản phẩm gốc vẫn bán ${o.otherVariations} biến thể còn lại.`}
@@ -121,7 +121,7 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
           <p className="mt-1 font-semibold">
             {link.brandMatchesStore
               ? `Gian hàng là chủ thương hiệu ${brand}.`
-              : `Gian hàng ${storeTitle} không phải chủ thương hiệu ${brand}: chỉ duyệt khi đã có thoả thuận giao hàng này cho gian hàng.`}
+              : `Gian hàng “${storeTitle}” không phải chủ thương hiệu ${brand}: chỉ duyệt khi đã có thoả thuận giao hàng này cho gian hàng.`}
           </p>
           <p className="mt-1">Gỡ liên kết sau này (hoặc từ chối khi đối tác sửa nội dung) trả biến thể về sản phẩm gốc.</p>
         </Notice>
@@ -265,26 +265,26 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex gap-3">
+        <div className="flex min-w-0 gap-3">
           {p.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnail} alt={p.name} className="h-20 w-20 rounded-control border border-stone-200 object-cover" />
+            <img src={p.thumbnail} alt={p.name} className="h-20 w-20 shrink-0 rounded-control border border-stone-200 object-cover" />
           ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-control bg-forest-50 text-forest-600">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-control bg-forest-50 text-forest-600">
               <Leaf className="h-8 w-8" aria-hidden />
             </div>
           )}
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-stone-900">{p.name}</h3>
+              <h3 className="break-words font-semibold text-stone-900">{p.name}</h3>
               <ToneBadge tone="warning">{p.isEdit ? 'Bản sửa chờ duyệt' : 'Chờ duyệt'}</ToneBadge>
-              <ToneBadge tone={p.pancakeLinkCode ? 'info' : 'neutral'}>
+              <ToneBadge tone={p.pancakeLinkCode ? 'info' : 'neutral'} wrap>
                 {p.pancakeLinkCode ? `Tubu giao hộ · mã Pancake ${p.pancakeLinkCode}` : 'Gian hàng tự giao'}
               </ToneBadge>
             </div>
-            <p className="text-xs text-stone-500">Slug: /{p.slug} · Thương hiệu: {p.brand || 'Riêng'} · Danh mục: {p.category}</p>
+            <p className="break-words text-xs text-stone-500">Slug: /{p.slug} · Thương hiệu: {p.brand || 'Riêng'} · Danh mục: {p.category}</p>
             {p.storefront && (
-              <p className="mt-1 text-xs font-medium text-forest-700">
+              <p className="mt-1 break-words text-xs font-medium text-forest-700">
                 Gian hàng: {p.storefront.title} {p.storefront.subdomain ? `(${p.storefront.subdomain}.tubutree.com)` : ''}
               </p>
             )}

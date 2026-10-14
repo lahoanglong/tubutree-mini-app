@@ -317,3 +317,52 @@ describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-
     expect(container.textContent).not.toContain('Bản sửa chờ duyệt');
   });
 });
+
+describe('MerchantProductsTab — 390px (R3-MERCHANT-7)', () => {
+  it('huy hiệu mã Pancake dài được xuống dòng và cột thông tin co được, không đẩy trang tràn ngang', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: { data: [product({ pancakeLinkCode: 'seed-BHN-PP-200-RẤT-DÀI-KHÔNG-CÓ-KHOẢNG-TRẮNG' })], meta: { page: 1, limit: 100, total: 1 } },
+      },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const badge = byText(container, 'span', 'Tubu giao hộ · mã Pancake')!;
+    expect(badge.className).toContain('whitespace-normal');
+    expect(badge.className).toContain('break-all');
+    expect(badge.className).not.toContain('whitespace-nowrap');
+    expect(badge.parentElement?.parentElement?.className).toContain('min-w-0');
+  });
+
+  it('tên gian hàng mặc định đã có chữ "Gian hàng": không ghép thêm chữ "Gian hàng" cố định trong lời cảnh báo', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: {
+          data: [
+            product({
+              pancakeLinkCode: 'X',
+              storefront: { id: 's', title: 'Gian hàng của Nguyễn Văn Shop A', subdomain: null, ownerUserId: 'u' },
+              pancakeLink: {
+                code: 'X',
+                state: 'TAKEOVER',
+                reason: null,
+                variation: { name: '200g', stock: 1, retailPrice: 1000, salePrice: null },
+                origin: { id: 'o', name: 'Tiêu đen', slug: 't', brand: 'BH', brandName: 'BH', isActive: true, onSale: true, sold: 1, reviewCount: 0, otherVariations: 0, storefrontTitle: null },
+                brandMatchesStore: false,
+              },
+            }),
+          ],
+          meta: { page: 1, limit: 100, total: 1 },
+        },
+      },
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).not.toContain('Gian hàng Gian hàng');
+    expect(container.textContent).not.toContain('gian hàng Gian hàng');
+  });
+});

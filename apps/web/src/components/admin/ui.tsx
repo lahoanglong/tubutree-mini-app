@@ -10,9 +10,13 @@ export const TONE_CLASS: Record<Tone, string> = {
   danger: 'bg-danger-bg text-danger-fg',
 };
 
-export function ToneBadge({ tone, children, title }: { tone: Tone; children: ReactNode; title?: string }) {
+/** `wrap`: nhãn có thể dài (mã Pancake, tên gian hàng) được xuống dòng thay vì đẩy dòng chứa nó tràn ngang ở 390px. */
+export function ToneBadge({ tone, children, title, wrap }: { tone: Tone; children: ReactNode; title?: string; wrap?: boolean }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${TONE_CLASS[tone]}`}>
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${wrap ? 'max-w-full whitespace-normal break-all' : 'whitespace-nowrap'} ${TONE_CLASS[tone]}`}
+    >
       {children}
     </span>
   );
