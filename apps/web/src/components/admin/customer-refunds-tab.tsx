@@ -2,20 +2,28 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listCustomerRefunds, type AdminCustomerRefund, type AdminCustomerRefundStatus } from '@/lib/admin-client';
+import {
+  listCustomerRefunds,
+  type AdminCustomerRefund,
+  type AdminCustomerRefundKind,
+  type AdminCustomerRefundStatus,
+} from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import {
   CUSTOMER_REFUNDS_QUERY_KEY,
   CUSTOMER_REFUND_EMPTY,
   CUSTOMER_REFUND_FILTERS,
+  CUSTOMER_REFUND_KINDS,
   CUSTOMER_REFUND_STALE_HINT,
   customerRefundView,
+  needsBankAccount,
+  refundKindLabel,
   refundReasonLabel,
   type CustomerRefundView,
 } from '@/lib/customer-refunds-admin';
 import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
-import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -54,20 +62,23 @@ export function CustomerRefundsPendingBadge() {
 }
 
 /**
- * Hàng đợi hoàn tiền thủ công cho khách cuối của đơn CTV lên hộ (PA-1 / Q-01). Khi đơn bị huỷ/trả mà khách không
- * có tài khoản dùng được, tiền không vào ví nào: BE ghi một dòng MANUAL_TRANSFER PENDING = Tubu đang nợ khách, admin
- * chuyển khoản tay theo SĐT rồi xác nhận để sổ khớp. Màn này chỉ ghi nhận việc đã chuyển, không chuyển tiền thật.
+ * Hàng đợi hoàn tiền chuyển khoản tay. Mỗi dòng MANUAL_TRANSFER PENDING là tiền Tubu đang nợ khách:
+ * - khách cuối của đơn CTV lên hộ (PA-1 / Q-01), chuyển theo SĐT;
+ * - khách chọn "Tài khoản ngân hàng" khi huỷ/trả đơn đã trả tiền (D2), chuyển về tài khoản khách đã nhập;
+ * - tiền về sau khi đơn đã huỷ/hết hạn (D2), chờ khách chọn nơi nhận hoặc admin nhập tài khoản khách cung cấp.
+ * Admin chuyển khoản bên ngoài rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
 export function CustomerRefundsTab() {
   const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
+  const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
   const [target, setTarget] = useState<AdminCustomerRefund | null>(null);
   const [flash, setFlash] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
   // Dòng vừa ghi xong: BE đã COMPLETED nhưng danh sách chưa tải lại xong, ẩn nút để không mở hộp lần hai.
   const [recorded, setRecorded] = useState<ReadonlySet<string>>(() => new Set());
   const q = useQuery({
-    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, filter, page],
-    queryFn: () => listCustomerRefunds(filter, page, PAGE_SIZE),
+    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, filter, kind, page],
+    queryFn: () => listCustomerRefunds(filter, page, PAGE_SIZE, kind || undefined),
   });
 
   const total = q.data?.meta.total ?? 0;
@@ -86,7 +97,7 @@ export function CustomerRefundsTab() {
       setRecorded((prev) => new Set(prev).add(r.id));
       setFlash({
         tone: 'success',
-        text: `Đã ghi nhận chuyển khoản ${formatVnd(r.amount)} cho ${r.recipientName || r.phone || 'khách'} (đơn ${r.orderCode}).`,
+        text: `Đã ghi nhận chuyển khoản ${formatVnd(r.amount)} cho ${r.recipientName || r.bankAccountName || r.phone || 'khách'} (đơn ${r.orderCode}).`,
       });
     } else {
       setFlash({ tone: 'warning', text: `${outcome.message} ${CUSTOMER_REFUND_STALE_HINT}` });
@@ -96,27 +107,45 @@ export function CustomerRefundsTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-stone-900">Hoàn tiền khách (đơn CTV lên hộ)</h2>
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
-          {CUSTOMER_REFUND_FILTERS.map((f) => (
-            <button
-              key={f.status}
-              type="button"
-              role="tab"
-              aria-selected={filter === f.status}
-              onClick={() => {
-                setFilter(f.status);
-                setPage(1);
-              }}
-              className={chipClass(filter === f.status)}
-            >
-              {f.label}
-            </button>
-          ))}
+        <h2 className="text-base font-semibold text-stone-900">Hoàn tiền khách</h2>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            aria-label="Lọc theo loại khoản hoàn"
+            value={kind}
+            onChange={(e) => {
+              setKind(e.target.value as AdminCustomerRefundKind | '');
+              setPage(1);
+            }}
+            className={`${FIELD_CLASS} ${TOUCH_H}`}
+          >
+            {CUSTOMER_REFUND_KINDS.map((k) => (
+              <option key={k.kind} value={k.kind}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
+            {CUSTOMER_REFUND_FILTERS.map((f) => (
+              <button
+                key={f.status}
+                type="button"
+                role="tab"
+                aria-selected={filter === f.status}
+                onClick={() => {
+                  setFilter(f.status);
+                  setPage(1);
+                }}
+                className={chipClass(filter === f.status)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <p className="text-xs text-stone-600">
-        Khách chưa có tài khoản nhận tiền: chuyển khoản tay theo SĐT dưới đây. Màn này chỉ ghi sổ, không tự chuyển tiền.
+        Chuyển khoản tay về tài khoản khách đã chọn (đơn CTV lên hộ: theo SĐT khách cuối), miễn phí và không giới hạn số tiền,
+        rồi bấm &quot;Đã chuyển khoản&quot; kèm mã giao dịch. Màn này chỉ ghi sổ, không tự chuyển tiền.
       </p>
 
       {flash && (
@@ -226,7 +255,7 @@ export function CustomerRefundRow({
             <span data-refund-status={view}>
               <ToneBadge tone={VIEW_TONE[view]}>{VIEW_LABEL[view]}</ToneBadge>
             </span>
-            <ToneBadge tone="neutral">{refundReasonLabel(r.reason)}</ToneBadge>
+            <ToneBadge tone="neutral">{r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}</ToneBadge>
           </div>
           <div className="mt-1 text-sm text-stone-600">
             Đơn <span className="break-all font-mono text-xs font-medium text-stone-800">{r.orderCode}</span>
@@ -236,25 +265,31 @@ export function CustomerRefundRow({
       </div>
 
       <div className="mt-2 space-y-1 text-sm text-stone-600">
-        <div>
-          Người nhận:{' '}
-          {r.recipientName ? (
-            <span className="break-words font-medium text-stone-800">{r.recipientName}</span>
-          ) : (
-            <span className="text-stone-500">Chưa có tên</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span>SĐT:</span>
-          {r.phone ? (
-            <>
-              <span className="font-medium text-stone-800">{r.phone}</span>
-              <CopyButton text={r.phone} label="Chép SĐT" />
-            </>
-          ) : (
-            <span className="text-warning-fg">Chưa có SĐT</span>
-          )}
-        </div>
+        {needsBankAccount(r) ? (
+          <BankAccountLines refund={r} />
+        ) : (
+          <>
+            <div>
+              Người nhận:{' '}
+              {r.recipientName ? (
+                <span className="break-words font-medium text-stone-800">{r.recipientName}</span>
+              ) : (
+                <span className="text-stone-500">Chưa có tên</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>SĐT:</span>
+              {r.phone ? (
+                <>
+                  <span className="font-medium text-stone-800">{r.phone}</span>
+                  <CopyButton text={r.phone} label="Chép SĐT" />
+                </>
+              ) : (
+                <span className="text-warning-fg">Chưa có SĐT</span>
+              )}
+            </div>
+          </>
+        )}
         <div>Phương thức: {manual ? 'Chuyển khoản thủ công' : 'Ví Tubu'}</div>
       </div>
 
@@ -295,5 +330,30 @@ export function CustomerRefundRow({
         </div>
       )}
     </div>
+  );
+}
+
+function BankAccountLines({ refund: r }: { refund: AdminCustomerRefund }) {
+  if (!r.bankAccountNo) {
+    return (
+      <div className="text-warning-fg">
+        Khách chưa chọn nơi nhận. Khách tự chọn ở chi tiết đơn; nếu khách gửi tài khoản qua hỗ trợ, nhập khi xác nhận đã chuyển.
+      </div>
+    );
+  }
+  return (
+    <>
+      <div>
+        Ngân hàng: <span className="break-words font-medium text-stone-800">{r.bankName || 'Chưa ghi tên ngân hàng'}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Số tài khoản:</span>
+        <span className="break-all font-medium text-stone-800">{r.bankAccountNo}</span>
+        <CopyButton text={r.bankAccountNo} label="Chép STK" />
+      </div>
+      <div>
+        Chủ tài khoản: <span className="break-words font-medium text-stone-800">{r.bankAccountName || 'Chưa có tên'}</span>
+      </div>
+    </>
   );
 }

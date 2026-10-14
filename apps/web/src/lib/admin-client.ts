@@ -222,14 +222,36 @@ export const reviewDealerApp = (id: string, approve: boolean, tierId?: string, r
   apiFetch(`/admin/dealer-applications/${id}/review`, { method: 'POST', body: { approve, tierId, reason } });
 
 // ── Đổi / Trả (§6.4) ──
+export interface AdminReturnLine {
+  orderItemId: string;
+  quantity: number;
+  /** Tiền hàng hoàn của dòng (chốt khi duyệt; 0 khi chưa duyệt). */
+  refundAmount: number;
+  productName: string | null;
+  variationName: string | null;
+  orderedQuantity: number | null;
+}
 export interface AdminReturnRequest {
   id: string;
   orderId: string;
   userId: string;
   reason: string;
+  /** Mã lý do khách chọn (DEFECTIVE/WRONG_ITEM/...) và nhãn tiếng Việt; null ở yêu cầu cũ. */
+  reasonCode?: string | null;
+  reasonLabel?: string | null;
   images: string[];
   status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
   refundMethod: string;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankAccountName?: string | null;
+  shopFault?: boolean | null;
+  fullReturn?: boolean;
+  refundAmount?: number | null;
+  shippingRefund?: number;
+  pointsRefunded?: number;
+  receivedAt?: string | null;
+  items?: AdminReturnLine[];
   adminNote: string | null;
   reviewedBy: string | null;
   reviewedAt: string | null;
@@ -240,6 +262,8 @@ export interface AdminReturnRequest {
     total: number;
     status: string;
     paymentMethod: string;
+    pancakeOrderId?: string | null;
+    placedForCustomer?: boolean;
   } | null;
   user?: {
     id: string;
@@ -251,11 +275,45 @@ export const listReturnRequests = (status?: string, page = 1, limit = ADMIN_QUEU
   apiFetch<AdminReturnRequest[] | Page<AdminReturnRequest>>(`/admin/return-requests?${queueQuery(page, limit, status, order)}`).then(
     (res) => asPage(res, page, limit),
   );
-export const reviewReturnRequest = (id: string, approve: boolean, note?: string) =>
-  apiFetch<AdminReturnRequest>(`/admin/return-requests/${id}/review`, {
+/** Số tiền/điểm sẽ hoàn nếu duyệt ngay (BE tính, không ghi gì) — bước xác nhận của admin (D3). */
+export interface AdminReturnPreview {
+  requestId: string;
+  shopFault: boolean;
+  defaultShopFault: boolean;
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  destination: {
+    method: 'WALLET' | 'BANK' | 'END_CUSTOMER';
+    bankName?: string | null;
+    accountNumber?: string | null;
+    accountName?: string | null;
+  };
+  pointsUsedBack: number;
+  pointsEarnedBack: number;
+  lines: { orderItemId: string; productName: string; variationName: string; quantity: number; orderedQuantity: number; refundAmount: number }[];
+  pancakeTask: boolean;
+}
+export const previewReturnRequest = (id: string, shopFault?: boolean) =>
+  apiFetch<AdminReturnPreview>(
+    `/admin/return-requests/${encodeURIComponent(id)}/preview${shopFault === undefined ? '' : `?shopFault=${shopFault}`}`,
+  );
+/** Duyệt gửi kèm số tiền admin đã thấy: BE tính lại khác số này (yêu cầu khác vừa duyệt) thì từ chối 409 để xem lại. */
+export const reviewReturnRequest = (
+  id: string,
+  approve: boolean,
+  note?: string,
+  opts: { shopFault?: boolean; expectedRefund?: number } = {},
+) =>
+  apiFetch<AdminReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/review`, {
     method: 'POST',
-    body: { approve, note },
+    body: { approve, note, ...opts },
   });
+/** Hàng trả đã về kho: lúc này BE mới cộng lại tồn kho các dòng trả. */
+export const markReturnReceived = (id: string) =>
+  apiFetch<AdminReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
 
 // ── Nhập giá đại lý B2B & số lượng bán ngoài ──
 export const importDealerPrices = (tierId: string, csv: string) =>
@@ -977,9 +1035,10 @@ export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
     },
   });
 
-// ── Hoàn tiền khách cuối của đơn CTV lên hộ (PA-1 / Q-01): hàng đợi chuyển khoản tay ──
+// ── Hoàn tiền khách: hàng đợi chuyển khoản tay (khách cuối đơn CTV lên hộ, khách chọn ngân hàng khi huỷ/trả, tiền về muộn) ──
 export type AdminCustomerRefundStatus = 'PENDING' | 'COMPLETED';
 export type AdminCustomerRefundMethod = 'WALLET' | 'MANUAL_TRANSFER';
+export type AdminCustomerRefundKind = 'END_CUSTOMER' | 'CANCEL' | 'RETURN' | 'LATE_PAYMENT';
 /** Khớp model OrderCustomerRefund (BE trả nguyên dòng, không che SĐT). `reason` là trạng thái đơn gây ra lần hoàn. */
 export interface AdminCustomerRefund {
   id: string;
@@ -998,18 +1057,31 @@ export interface AdminCustomerRefund {
   bankRef: string | null;
   adminNote: string | null;
   createdAt: string;
+  kind: AdminCustomerRefundKind;
+  /** Chủ đơn (khách có tài khoản); null với khoản khách cuối đơn CTV lên hộ. */
+  userId: string | null;
+  /** Tài khoản nhận khách đã chọn; trống = khách chưa chọn nơi nhận, admin nhập tài khoản khách cung cấp khi xác nhận. */
+  bankName: string | null;
+  bankAccountNo: string | null;
+  bankAccountName: string | null;
 }
-export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20) =>
+export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
   apiFetch<Page<AdminCustomerRefund>>(
-    `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`,
+    `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${kind ? `&kind=${kind}` : ''}`,
   );
 /** Chỉ ghi sổ việc admin ĐÃ chuyển khoản tay (BE: PENDING -> COMPLETED một lần, thua race trả 400); không chuyển tiền. */
-export const markCustomerRefundPaid = (id: string, input: { bankRef?: string; note?: string } = {}) =>
+export const markCustomerRefundPaid = (
+  id: string,
+  input: { bankRef?: string; note?: string; bankName?: string; accountNumber?: string; accountName?: string } = {},
+) =>
   apiFetch<AdminCustomerRefund>(`/admin/customer-refunds/${encodeURIComponent(id)}/mark-paid`, {
     method: 'POST',
     body: {
       ...(input.bankRef?.trim() ? { bankRef: input.bankRef.trim() } : {}),
       ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      ...(input.accountNumber?.trim()
+        ? { bankName: input.bankName?.trim() ?? '', accountNumber: input.accountNumber.trim(), accountName: input.accountName?.trim() ?? '' }
+        : {}),
     },
   });
 

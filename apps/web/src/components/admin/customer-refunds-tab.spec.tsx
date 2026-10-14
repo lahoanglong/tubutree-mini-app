@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from './customer-refunds-tab';
-import { byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCustomerRefund } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -35,6 +35,11 @@ const refund = (over: Partial<AdminCustomerRefund> = {}): AdminCustomerRefund =>
   bankRef: null,
   adminNote: null,
   createdAt: '2026-10-01T03:00:00.000Z',
+  kind: 'END_CUSTOMER',
+  userId: null,
+  bankName: null,
+  bankAccountNo: null,
+  bankAccountName: null,
   ...over,
 });
 
@@ -154,6 +159,23 @@ describe('CustomerRefundsTab — danh sách', () => {
 });
 
 describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => {
+  it('lọc theo loại khoản: "Trả hàng" gọi kind=RETURN trang 1; "Tất cả loại" bỏ tham số kind', async () => {
+    const api = mockFetch(LIST([refund()]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(byText(container, 'h2', 'Hoàn tiền khách')).not.toBeNull();
+    const select = container.querySelector('select[aria-label="Lọc theo loại khoản hoàn"]') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Tất cả loại', 'Huỷ đơn', 'Trả hàng', 'Tiền về muộn', 'Đơn CTV lên hộ']);
+    selectValue(select, 'RETURN');
+    await flush();
+    expect(api.calls.at(-1)!.url).toContain('kind=RETURN');
+    expect(api.calls.at(-1)!.url).toContain('page=1');
+    selectValue(select, '');
+    await flush();
+    expect(api.calls.at(-1)!.url).not.toContain('kind=');
+  });
+
   it('thanh lọc: "Chờ chuyển khoản" đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -364,6 +386,12 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   };
   const field = (d: HTMLElement, name: 'bankRef' | 'note') => d.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLTextAreaElement;
   const accept = (d: HTMLElement) => d.querySelector('[data-confirm="accept"]') as HTMLButtonElement;
+  /** Mã giao dịch bắt buộc (MONEY-7): bấm xác nhận sau khi điền mã nếu test chưa điền. */
+  const submit = (d: HTMLElement) => {
+    const ref = field(d, 'bankRef');
+    if (!ref.disabled && !ref.value.trim()) typeInto(ref, 'FT0');
+    click(accept(d));
+  };
   const cancel = (d: HTMLElement) => d.querySelector('[data-confirm="cancel"]') as HTMLButtonElement;
   const esc = () =>
     act(() => {
@@ -444,7 +472,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const d = await openDialog(container);
     typeInto(field(d, 'bankRef'), '  FT26275123456  ');
     typeInto(field(d, 'note'), ' Chuyển VCB 15h ');
-    click(accept(d));
+    submit(d);
     await flush();
     const pays = api.pays();
     expect(pays).toHaveLength(1);
@@ -461,15 +489,71 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ');
   });
 
-  it('để trống hai ô (hoặc chỉ khoảng trắng): gửi body {} — không gửi chuỗi rỗng', async () => {
+  it('MONEY-7: thiếu mã giao dịch (hoặc chỉ khoảng trắng) → báo lỗi, không gửi; ghi chú trống không gửi chuỗi rỗng', async () => {
     const api = stub({ list: () => [refund()] });
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
+    typeInto(field(d, 'bankRef'), '   ');
     typeInto(field(d, 'note'), '   ');
     click(accept(d));
     await flush();
-    expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({});
+    expect(api.pays()).toHaveLength(0);
+    expect(d.querySelector('[role="alert"]')?.textContent).toBe('Nhập mã giao dịch ngân hàng của lần chuyển khoản.');
+    expect(field(d, 'bankRef').getAttribute('aria-invalid')).toBe('true');
+    typeInto(field(d, 'bankRef'), 'FT1');
+    click(accept(d));
+    await flush();
+    expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({ bankRef: 'FT1' });
+  });
+
+  it('D2: khoản huỷ đơn khách đã chọn ngân hàng → dòng và hộp xác nhận hiện đủ tài khoản nhận, có nút chép số tài khoản', async () => {
+    const api = stub({
+      list: () => [
+        refund({ kind: 'CANCEL', userId: 'u1', phone: null, recipientName: null, bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'LE VAN C' }),
+      ],
+    });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+    expect(card.textContent).toContain('Huỷ đơn');
+    expect(card.textContent).toContain('Vietcombank');
+    expect(card.textContent).toContain('0071000123456');
+    expect(card.textContent).toContain('LE VAN C');
+    expect(card.textContent).not.toContain('Chưa có SĐT');
+    expect(card.querySelector('button[aria-label*="0071000123456"]')).not.toBeNull();
+    const d = await openDialog(container);
+    expect(d.textContent).toContain('Vietcombank');
+    expect(d.textContent).toContain('0071000123456');
+    expect(d.querySelector('[name="accountNumber"]')).toBeNull();
+    typeInto(field(d, 'bankRef'), 'FT9');
+    click(accept(d));
+    await flush();
+    expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({ bankRef: 'FT9' });
+  });
+
+  it('BUYERMINI-7: tiền về muộn chưa có tài khoản → hộp yêu cầu nhập tài khoản khách cung cấp và gửi kèm', async () => {
+    const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED', phone: null, recipientName: null })] });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+    expect(card.textContent).toContain('Tiền về muộn');
+    expect(card.textContent).toContain('Khách chưa chọn nơi nhận');
+    const d = await openDialog(container);
+    const input = (name: string) => d.querySelector(`[name="${name}"]`) as HTMLInputElement;
+    typeInto(field(d, 'bankRef'), 'FT7');
+    click(accept(d));
+    await flush();
+    expect(api.pays()).toHaveLength(0);
+    expect(d.querySelector('[role="alert"]')?.textContent).toBe('Vui lòng nhập tên ngân hàng.');
+    typeInto(input('bankName'), 'ACB');
+    typeInto(input('accountNumber'), '123456789');
+    typeInto(input('accountName'), 'Nguyen Van A');
+    click(accept(d));
+    await flush();
+    expect(JSON.parse(String(api.pays()[0]!.init?.body))).toEqual({
+      bankRef: 'FT7', bankName: 'ACB', accountNumber: '123456789', accountName: 'Nguyen Van A',
+    });
   });
 
   it('chống bấm lặp: đang gửi thì nút xác nhận/huỷ/ô nhập bị khoá, bấm thêm vẫn chỉ một POST, Escape/nền không đóng hộp', async () => {
@@ -485,7 +569,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush(1);
     expect(accept(d).disabled).toBe(true);
     expect(cancel(d).disabled).toBe(true);
@@ -517,7 +601,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     await flush();
     const before = api.lists().length;
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(STALE);
@@ -541,7 +625,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     await flush();
     const d = await openDialog(container);
     typeInto(field(d, 'bankRef'), 'FT1');
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBe(d);
     expect(d.querySelector('[role="alert"]')?.textContent).toContain('Không kết nối được');
@@ -551,7 +635,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(container.querySelector('[data-refund-id="r1"]')).not.toBeNull();
 
     offline = false;
-    click(accept(d));
+    submit(d);
     await flush();
     expect(api.pays()).toHaveLength(2);
     expect(confirmDialog()).toBeNull();
@@ -563,7 +647,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBe(d);
     const alert = d.querySelector('[role="alert"]')?.textContent ?? '';
@@ -577,7 +661,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBe(d);
     expect(d.querySelector('[role="alert"]')?.textContent).toContain('quyền');
@@ -600,7 +684,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
     expect(confirmDialog()).toBeNull();
@@ -639,7 +723,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(badge()?.textContent).toContain('1');
     expect(urls.some((u) => u.includes('status=PENDING') && u.includes('limit=1'))).toBe(true);
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     expect(badge()).toBeNull();
   });
@@ -660,7 +744,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const d = await openDialog(container);
     expect(d.querySelector('img')).toBeNull();
     expect(d.textContent).toContain('<img src=x onerror=alert(1)>');
-    click(accept(d));
+    submit(d);
     await flush();
     const pay = api.pays()[0]!;
     expect(pay.url).toContain('/admin/customer-refunds/r%2F1%3Fx/mark-paid');
@@ -718,7 +802,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
       await flush();
       const d = await openRow(container, 'r2');
       expectDialogIsRowB(d);
-      click(accept(d));
+      submit(d);
       await flush();
       expect(api.pays()).toHaveLength(1);
       expect(api.pays()[0]!.url).toContain('/admin/customer-refunds/r2/mark-paid');
@@ -755,7 +839,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
       expect(confirmDialog()).toBe(d);
       expectDialogIsRowB(d);
 
-      click(accept(d));
+      submit(d);
       await flush();
       expect(api.pays()).toHaveLength(1);
       expect(api.pays()[0]!.url).toContain('/admin/customer-refunds/r2/mark-paid');
@@ -777,7 +861,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush(1);
     expect(accept(d).disabled).toBe(true);
     for (const shiftKey of [false, true]) {
@@ -806,7 +890,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     typeInto(field(d, 'bankRef'), 'FT1');
     typeInto(field(d, 'note'), 'ghi chú của tôi');
     const before = api.lists().length;
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBe(d);
     const alert = d.querySelector('[role="alert"]')?.textContent ?? '';
@@ -824,7 +908,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const d = await openDialog(container);
-    click(accept(d));
+    submit(d);
     await flush();
     expect(confirmDialog()).toBeNull();
     const note = container.querySelector('[role="alert"]') as HTMLElement;

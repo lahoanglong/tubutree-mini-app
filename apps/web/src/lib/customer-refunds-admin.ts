@@ -1,4 +1,4 @@
-import type { AdminCustomerRefund, AdminCustomerRefundStatus } from './admin-client';
+import type { AdminCustomerRefund, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
 import { ApiError } from './client-api';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
@@ -13,6 +13,20 @@ export const CUSTOMER_REFUND_EMPTY: Record<AdminCustomerRefundStatus, string> = 
   PENDING: 'Không có khoản hoàn nào đang chờ chuyển khoản.',
   COMPLETED: 'Chưa có khoản hoàn nào đã xử lý.',
 };
+
+/** Bộ lọc loại khoản; chuỗi rỗng = mọi loại. */
+export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label: string }[] = [
+  { kind: '', label: 'Tất cả loại' },
+  { kind: 'CANCEL', label: 'Huỷ đơn' },
+  { kind: 'RETURN', label: 'Trả hàng' },
+  { kind: 'LATE_PAYMENT', label: 'Tiền về muộn' },
+  { kind: 'END_CUSTOMER', label: 'Đơn CTV lên hộ' },
+];
+
+export const refundKindLabel = (kind: AdminCustomerRefundKind) => CUSTOMER_REFUND_KINDS.find((k) => k.kind === kind)?.label ?? kind;
+
+/** Khoản của khách có tài khoản phải chuyển về tài khoản ngân hàng; khoản khách cuối đơn CTV chuyển theo SĐT. */
+export const needsBankAccount = (r: Pick<AdminCustomerRefund, 'kind'>) => r.kind !== 'END_CUSTOMER';
 
 const REASON_LABEL: Record<string, string> = {
   CANCELLED: 'Đơn bị huỷ',

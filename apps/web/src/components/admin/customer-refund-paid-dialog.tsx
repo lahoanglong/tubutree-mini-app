@@ -4,8 +4,9 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { markCustomerRefundPaid, type AdminCustomerRefund } from '@/lib/admin-client';
-import { CUSTOMER_REFUNDS_QUERY_KEY, markPaidFailure } from '@/lib/customer-refunds-admin';
+import { CUSTOMER_REFUNDS_QUERY_KEY, markPaidFailure, needsBankAccount } from '@/lib/customer-refunds-admin';
 import { formatVnd } from '@/lib/shop-client';
+import { EMPTY_BANK, bankDetailsError, type RefundBankInput } from '@/lib/refund-rules';
 import { INPUT_CLASS, Notice } from './ui';
 
 export type MarkPaidOutcome = { kind: 'paid' } | { kind: 'stale'; message: string };
@@ -36,12 +37,18 @@ export function CustomerRefundPaidDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
+  const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [error, setError] = useState<string | null>(null);
+  const [refMissing, setRefMissing] = useState(false);
+  const bankEntryRef = useRef<HTMLDivElement>(null);
+  const toBank = needsBankAccount(refund);
+  // Khoản của khách có tài khoản nhưng khách chưa chọn nơi nhận: admin nhập tài khoản khách gửi qua hỗ trợ.
+  const needsEntry = toBank && !refund.bankAccountNo;
   // Cờ đồng bộ chặn lần bấm thứ hai trước khi React kịp vẽ lại nút đã khoá.
   const inFlight = useRef(false);
 
   const mut = useMutation({
-    mutationFn: () => markCustomerRefundPaid(refund.id, { bankRef, note }),
+    mutationFn: () => markCustomerRefundPaid(refund.id, { bankRef, note, ...(needsEntry ? bank : {}) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
       onDone({ kind: 'paid' });
@@ -63,6 +70,18 @@ export function CustomerRefundPaidDialog({
 
   const submit = () => {
     if (inFlight.current || busy) return;
+    if (!bankRef.trim()) {
+      setRefMissing(true);
+      setError('Nhập mã giao dịch ngân hàng của lần chuyển khoản.');
+      bankRefRef.current?.focus();
+      return;
+    }
+    setRefMissing(false);
+    const bankError = needsEntry ? bankDetailsError(bank) : null;
+    if (bankError) {
+      setError(bankError);
+      return;
+    }
     inFlight.current = true;
     setError(null);
     mut.mutate();
@@ -88,7 +107,8 @@ export function CustomerRefundPaidDialog({
         e.preventDefault();
         if (!busyRef.current) onCloseRef.current();
       } else if (e.key === 'Tab') {
-        const order = [bankRefRef.current, noteRef.current, cancelRef.current, acceptRef.current].filter(
+        const bankInputs = Array.from(bankEntryRef.current?.querySelectorAll('input') ?? []);
+        const order = [...bankInputs, bankRefRef.current, noteRef.current, cancelRef.current, acceptRef.current].filter(
           (el): el is HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement => !!el && !el.disabled,
         );
         if (order.length === 0) {
@@ -139,21 +159,63 @@ export function CustomerRefundPaidDialog({
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-control bg-stone-50 p-3">
             <dt className="text-stone-500">Số tiền</dt>
             <dd className="font-semibold text-stone-900">{formatVnd(refund.amount)}</dd>
-            <dt className="text-stone-500">Người nhận</dt>
-            <dd className="min-w-0 break-words font-medium text-stone-800">{refund.recipientName || 'Chưa có tên'}</dd>
-            <dt className="text-stone-500">SĐT</dt>
-            <dd className={`min-w-0 font-medium ${refund.phone ? 'text-stone-800' : 'text-warning-fg'}`}>
-              {refund.phone || 'Chưa có SĐT'}
-            </dd>
+            {toBank ? (
+              refund.bankAccountNo && (
+                <>
+                  <dt className="text-stone-500">Ngân hàng</dt>
+                  <dd className="min-w-0 break-words font-medium text-stone-800">{refund.bankName || 'Chưa ghi tên ngân hàng'}</dd>
+                  <dt className="text-stone-500">Số tài khoản</dt>
+                  <dd className="min-w-0 break-all font-medium text-stone-800">{refund.bankAccountNo}</dd>
+                  <dt className="text-stone-500">Chủ tài khoản</dt>
+                  <dd className="min-w-0 break-words font-medium text-stone-800">{refund.bankAccountName || 'Chưa có tên'}</dd>
+                </>
+              )
+            ) : (
+              <>
+                <dt className="text-stone-500">Người nhận</dt>
+                <dd className="min-w-0 break-words font-medium text-stone-800">{refund.recipientName || 'Chưa có tên'}</dd>
+                <dt className="text-stone-500">SĐT</dt>
+                <dd className={`min-w-0 font-medium ${refund.phone ? 'text-stone-800' : 'text-warning-fg'}`}>
+                  {refund.phone || 'Chưa có SĐT'}
+                </dd>
+              </>
+            )}
             <dt className="text-stone-500">Đơn</dt>
             <dd className="min-w-0 break-all font-mono text-xs text-stone-800">{refund.orderCode}</dd>
           </dl>
         </div>
 
         <div className="mt-3 space-y-3">
+          {needsEntry && (
+            <div ref={bankEntryRef} className="space-y-2 rounded-control border border-warning-fg bg-warning-bg p-3">
+              <p className="text-xs text-warning-fg">Khách chưa chọn nơi nhận. Nhập tài khoản khách đã gửi cho Tubu.</p>
+              {(
+                [
+                  ['bankName', 'Tên ngân hàng'],
+                  ['accountNumber', 'Số tài khoản'],
+                  ['accountName', 'Chủ tài khoản'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="block">
+                  <span className="mb-1 block text-xs font-medium text-stone-700">{label}</span>
+                  <input
+                    name={key}
+                    type="text"
+                    autoComplete="off"
+                    inputMode={key === 'accountNumber' ? 'numeric' : undefined}
+                    maxLength={key === 'accountNumber' ? 40 : 120}
+                    value={bank[key]}
+                    disabled={busy}
+                    onChange={(e) => setBank((b) => ({ ...b, [key]: e.target.value }))}
+                    className={INPUT_CLASS}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
           <div>
             <label htmlFor={bankRefId} className="mb-1 block text-xs font-medium text-stone-700">
-              Mã giao dịch ngân hàng (tuỳ chọn)
+              Mã giao dịch ngân hàng
             </label>
             <input
               id={bankRefId}
@@ -164,6 +226,8 @@ export function CustomerRefundPaidDialog({
               autoComplete="off"
               value={bankRef}
               disabled={busy}
+              required
+              aria-invalid={refMissing ? true : undefined}
               onChange={(e) => setBankRef(e.target.value)}
               className={INPUT_CLASS}
             />

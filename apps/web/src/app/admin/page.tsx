@@ -60,8 +60,6 @@ import {
   updateQuickReply,
   deleteQuickReply,
   listReturnRequests,
-  reviewReturnRequest,
-  type AdminReturnRequest,
   type AdminBrand,
   type BrandCert,
   type AdminFlashSale,
@@ -88,7 +86,7 @@ import {
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
-import { EvidenceImages } from '@/components/admin/evidence-images';
+import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
@@ -1057,7 +1055,8 @@ function ReturnsTab() {
           ))}
         </select>
         <span className="text-xs text-stone-500">
-          Chỉ đơn lỗi NSX trong 7 ngày. Duyệt = hoàn tiền đúng kênh + restock + reverse điểm/hoa hồng.
+          Khách trả theo dòng và số lượng. Duyệt: xem số tiền tính sẵn rồi xác nhận (hoàn tiền, đảo điểm/hoa hồng);
+          kho chỉ cộng khi bấm &quot;Đã nhận hàng về&quot;.
         </span>
       </div>
       {q.data && (
@@ -1079,101 +1078,6 @@ function ReturnsTab() {
         onClick={() => void q.fetchNextPage()}
         error={q.isFetchNextPageError}
       />
-    </div>
-  );
-}
-
-function ReturnRow({ item: r }: { item: AdminReturnRequest }) {
-  const qc = useQueryClient();
-  const [note, setNote] = useState(r.adminNote ?? '');
-  const review = useMutation({
-    mutationFn: ({ approve }: { approve: boolean }) =>
-      reviewReturnRequest(r.id, approve, note.trim() || undefined),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['admin-returns'] });
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-    },
-  });
-
-  const statusBadge =
-    r.status === 'APPROVED' ? (
-      <span className="rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
-        Đã duyệt (Hoàn tiền)
-      </span>
-    ) : r.status === 'REJECTED' ? (
-      <span className="rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg">
-        Đã từ chối
-      </span>
-    ) : (
-      <span className="rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
-        Chờ duyệt
-      </span>
-    );
-
-  return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-stone-900">
-              Đơn: {r.order?.code ?? r.orderId}
-            </span>
-            {statusBadge}
-          </div>
-          <div className="mt-0.5 text-sm text-stone-600">
-            Khách: <span className="font-medium text-stone-800">{r.user?.fullName ?? 'Khách hàng'}</span>
-            {r.user?.phone ? ` · SĐT: ${r.user.phone}` : ''}
-            {r.order ? ` · Tổng đơn: ${formatVnd(r.order.total)} (${r.order.paymentMethod})` : ''}
-          </div>
-        </div>
-        <span className="text-xs text-stone-500">
-          {formatDateTime(r.createdAt)}
-        </span>
-      </div>
-
-      <div className="mt-2.5 break-words rounded-control bg-stone-50 p-2.5 text-sm text-stone-700">
-        <span className="font-medium text-stone-800">Lý do:</span> {r.reason}
-      </div>
-
-      {/* Ảnh do khách gửi — chỉ render https/ảnh base64 raster, không href javascript:/data: (C-050). */}
-      <EvidenceImages images={r.images} />
-
-      {r.status === 'REQUESTED' ? (
-        <div className="mt-3 border-t border-stone-200 pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              placeholder="Ghi chú duyệt / lý do từ chối (tuỳ chọn)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className={`${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-60`}
-            />
-            <button
-              onClick={() => review.mutate({ approve: true })}
-              disabled={review.isPending}
-              className={BTN_PRIMARY}
-            >
-              {review.isPending ? 'Đang duyệt…' : 'Duyệt hoàn tiền'}
-            </button>
-            <button
-              onClick={() => review.mutate({ approve: false })}
-              disabled={review.isPending}
-              className={BTN_DANGER_OUTLINE}
-            >
-              Từ chối
-            </button>
-          </div>
-          {review.isError && (
-            <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>
-          )}
-        </div>
-      ) : (
-        <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-500">
-          {r.adminNote && <div>Ghi chú admin: <span className="font-medium text-stone-700">{r.adminNote}</span></div>}
-          {r.reviewedAt && (
-            <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

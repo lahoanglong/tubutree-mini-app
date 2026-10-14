@@ -97,6 +97,24 @@ describe('listReturnRequests & reviewReturnRequest client', () => {
     expect(data.status).toBe('APPROVED');
     vitestVi.unstubAllGlobals();
   });
+
+  it('D3: xem trước số tiền (shopFault tuỳ chọn), duyệt kèm số đã xem, ghi nhận nhận hàng về', async () => {
+    const { previewReturnRequest, reviewReturnRequest, markReturnReceived } = await import('./admin-client');
+    const { vi: vitestVi } = await import('vitest');
+    const mockFetch = vitestVi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vitestVi.stubGlobal('fetch', mockFetch);
+    await previewReturnRequest('ret-1');
+    await previewReturnRequest('ret-1', false);
+    await reviewReturnRequest('ret-1', true, undefined, { shopFault: false, expectedRefund: 89000 });
+    await markReturnReceived('ret-1');
+    const calls = mockFetch.mock.calls.map((c) => [String(c[0]), (c[1] as RequestInit | undefined)?.method, (c[1] as RequestInit | undefined)?.body]);
+    expect(calls[0]![0]).toMatch(/\/admin\/return-requests\/ret-1\/preview$/);
+    expect(calls[1]![0]).toContain('/admin/return-requests/ret-1/preview?shopFault=false');
+    expect(JSON.parse(String(calls[2]![2]))).toEqual({ approve: true, shopFault: false, expectedRefund: 89000 });
+    expect(calls[3]![0]).toContain('/admin/return-requests/ret-1/received');
+    expect(calls[3]![1]).toBe('POST');
+    vitestVi.unstubAllGlobals();
+  });
 });
 
 describe('admin dashboard & order management client', () => {
