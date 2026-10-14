@@ -19,7 +19,11 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
-import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
+import {
+  COUPON_FREESHIP_NOTHING_REASON,
+  COUPON_ZERO_DISCOUNT_REASON,
+  couponNotAppliedNotice,
+} from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -752,7 +756,7 @@ export class CheckoutService {
 
     let discount = 0; // coupon (sau combo)
     let freeship = false;
-    let couponApplied = false; // coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true
+    let couponValid = false;
     let couponNotice: string | null = null;
     if (cart.couponCode) {
       try {
@@ -763,12 +767,7 @@ export class CheckoutService {
         const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         freeship = r.freeship;
-        // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ
-        // hết) → giảm 0đ. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
-        couponApplied = discount > 0 || freeship;
-        if (!couponApplied) {
-          couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, flashSubtotal > 0, combo.total > 0);
-        }
+        couponValid = true;
       } catch (err) {
         // Mã không đạt điều kiện trên phần hàng được tính (đã loại flash, trừ combo; hoặc tập con đã
         // chọn) → KHÔNG giảm và KHÔNG redeem, kể cả khi đặt toàn giỏ: trước đây toàn giỏ rơi về
@@ -831,6 +830,16 @@ export class CheckoutService {
       pointsUsedConverted: redemption.pointsUsedConverted,
     });
     const terms = await this.shipmentTerms(groups, amounts, user.tierId, freeship);
+    // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
+    // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không
+    // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
+    const freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
+    // couponApplied: coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true.
+    const couponApplied = couponValid && (discount > 0 || freeshipSaved > 0);
+    if (couponValid && !couponApplied) {
+      const reason = freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
+      couponNotice = couponNotAppliedNotice(reason, flashSubtotal > 0, combo.total > 0);
+    }
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
     const shipments: CheckoutShipment[] = [];
     for (const [i, g] of groups.entries()) {
@@ -877,14 +886,14 @@ export class CheckoutService {
   /**
    * Phí giao và phí sàn từng kiện. Kiện Tubu: luật phí giao hiện có trên tiền hàng của kiện. Kiện đối tác: phí gian hàng tự
    * đặt (trống thì merchant.default_shipping_fee), miễn khi tiền hàng của kiện đạt freeShipFrom. Mã freeship (Tubu tài trợ)
-   * miễn mọi kiện.
+   * chỉ miễn kiện Tubu; `freeshipWaived` là số mã thực sự miễn được.
    */
   private async shipmentTerms(
     groups: { fulfiller: LineFulfiller }[],
     amounts: GroupAmounts[],
     tierId: string | null,
     freeship: boolean,
-  ): Promise<{ shippingFee: number; commissionPct: number | null }[]> {
+  ): Promise<{ shippingFee: number; commissionPct: number | null; freeshipWaived: number }[]> {
     const merchantIds = groups.flatMap((g) => (g.fulfiller.kind === 'MERCHANT' ? [g.fulfiller.storefrontId] : []));
     const [stores, defaultFee, defaultPct] = merchantIds.length
       ? await Promise.all([
@@ -897,11 +906,11 @@ export class CheckoutService {
         ])
       : [[], DEFAULT_MERCHANT_SHIPPING_FEE, DEFAULT_MERCHANT_COMMISSION_PCT];
     const byId = new Map(stores.map((sf) => [sf.id, sf]));
-    const out: { shippingFee: number; commissionPct: number | null }[] = [];
+    const out: { shippingFee: number; commissionPct: number | null; freeshipWaived: number }[] = [];
     for (const [i, g] of groups.entries()) {
       if (g.fulfiller.kind !== 'MERCHANT') {
-        const fee = freeship ? 0 : await this.pricing.calcShippingFee({ subtotal: amounts[i]!.subtotal, tierId });
-        out.push({ shippingFee: fee, commissionPct: null });
+        const fee = await this.pricing.calcShippingFee({ subtotal: amounts[i]!.subtotal, tierId });
+        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0 });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
@@ -910,6 +919,7 @@ export class CheckoutService {
         // Mã freeship là Tubu tài trợ phí kho Tubu; phí giao của đối tác là tiền của đối tác nên chỉ miễn theo ngưỡng của shop.
         shippingFee: freeByShop ? 0 : sf?.shippingFee ?? defaultFee,
         commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
+        freeshipWaived: 0,
       });
     }
     return out;

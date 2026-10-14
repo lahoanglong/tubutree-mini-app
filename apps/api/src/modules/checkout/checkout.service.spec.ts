@@ -1429,8 +1429,9 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
     expect(q.couponNotice).toContain('giờ vàng');
   });
 
-  it('mã miễn phí vận chuyển (giảm hàng 0đ nhưng freeship) → vẫn tính là đã áp', async () => {
-    const { svc } = build({ cartData: ALL_FLASH, validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }) });
+  it('mã miễn phí vận chuyển (giảm hàng 0đ nhưng miễn được phí giao 19.000đ) → vẫn tính là đã áp', async () => {
+    const { svc, pricing } = build({ cartData: ALL_FLASH, validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }) });
+    (pricing.calcShippingFee as jest.Mock).mockResolvedValue(19_000);
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.couponApplied).toBe(true);
     expect(q.couponNotice).toBeNull();
@@ -1541,6 +1542,48 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     });
     await b2.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(b2.orderCreate.mock.calls[0][0].data.shippingFee).toBe(0);
+  });
+
+  it('mã freeship trên giỏ chỉ có hàng gian hàng tự giao → không miễn được gì: không tính là đã áp, không tiêu lượt, báo rõ', async () => {
+    const { svc, orderCreate, coupons } = buildSplit({
+      cartData: { ...ONLY_SHOP, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+    expect(q.couponNotice).toContain('Tubu Tree giao');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+    expect(orderCreate.mock.calls[0][0].data.couponCode).toBeNull();
+  });
+
+  it('mã freeship khi kiện Tubu đã được miễn phí giao (đạt ngưỡng) → không tiêu lượt', async () => {
+    const { svc, coupons, pricing } = buildSplit({
+      cartData: { ...MIXED, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    (pricing.calcShippingFee as jest.Mock).mockResolvedValue(0);
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  it('mã freeship khi kiện Tubu có phí giao → miễn phí giao kiện Tubu, tính là đã áp, phí gian hàng giữ nguyên', async () => {
+    const { svc, orderCreate, coupons } = buildSplit({
+      cartData: { ...MIXED, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
+    expect(tubu.shippingFee).toBe(0);
+    expect(shop.shippingFee).toBe(30_000);
+    expect(tubu.couponCode).toBe('FREESHIP');
+    expect(coupons.redeem).toHaveBeenCalledTimes(1);
   });
 
   it('thu gom tái chế mà đơn không có hàng Tubu → 400, không tạo đơn', async () => {
