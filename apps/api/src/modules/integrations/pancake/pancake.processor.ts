@@ -9,7 +9,7 @@ import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
-import { clearPancakeAttention } from './pancake-attention';
+import { ATTENTION_PARTIAL_RETURN_ACK, ATTENTION_RETURN_APPROVED, clearPancakeAttention } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount } from './pancake-payment.util';
 import { PANCAKE_CLAIM_STALE_MINUTES, PANCAKE_EVENT_STATUS, pancakeEventData, pancakeEventOrderCode } from './pancake-webhook-dedupe';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
@@ -295,6 +295,10 @@ export class PancakeProcessor extends WorkerHost {
       await this.flagAttention(order, action.reason);
       return;
     }
+    if (action.kind === 'partialReturned') {
+      await this.onPartialReturned(order, action.reason);
+      return;
+    }
     const target = this.targetStatus(order, action);
     if (!target) return;
     if (action.kind === 'returned' && target.status === 'RETURNED' && (await this.blockedByPartialReturn(order))) return;
@@ -324,7 +328,7 @@ export class PancakeProcessor extends WorkerHost {
   }
 
   /** "Đã hoàn" (hàng về kho): đơn chưa giao → huỷ (hoàn tiền, hoàn kho, đảo điểm); đã giao → trả hàng. */
-  private targetStatus(order: Order, action: Exclude<PancakeStatusAction, { kind: 'attention' }>): { status: OrderStatus; note?: string } | null {
+  private targetStatus(order: Order, action: Extract<PancakeStatusAction, { kind: 'status' | 'returned' }>): { status: OrderStatus; note?: string } | null {
     if (action.kind === 'status') return { status: action.status };
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') return null;
     return order.status === 'DELIVERED'
@@ -350,6 +354,49 @@ export class PancakeProcessor extends WorkerHost {
         : 'Pancake báo "Đã hoàn" (cả đơn) cho đơn đã duyệt trả một phần — hệ thống KHÔNG tự hoàn phần còn lại. Kiểm tra phiếu trả trên Pancake (trả một phần phải dùng "Hoàn một phần"); nếu khách thật sự trả nốt, duyệt yêu cầu trả các món còn lại trên Tubu.',
     );
     return true;
+  }
+
+  /**
+   * Pancake "Hoàn một phần" (15). Quy trình chuẩn: admin duyệt trả một phần trên Tubu (tiền đã hoàn ngay lúc duyệt) →
+   * hệ thống nhắc tạo phiếu "Hoàn một phần" trên Pancake → kho làm → Pancake báo 15. Lúc này KHÔNG được bảo hoàn tay
+   * (hoàn hai lần); chỉ ghi nhận và giữ nhắc "Đã nhận hàng về" (cộng kho) tới khi bấm. Lời "hoàn tay" chỉ dùng khi Tubu
+   * không có yêu cầu trả nào.
+   */
+  private async onPartialReturned(order: Order, manualReason: string): Promise<void> {
+    const requests = await this.prisma.returnRequest.findMany({
+      where: { orderId: order.id, status: { in: ['APPROVED', 'REQUESTED'] } },
+      select: { id: true, status: true, receivedAt: true },
+    });
+    const approved = requests.filter((r) => r.status === 'APPROVED');
+    if (approved.length === 0) {
+      await this.flagAttention(
+        order,
+        requests.length > 0
+          ? 'Pancake báo HOÀN MỘT PHẦN trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.'
+          : manualReason,
+      );
+      return;
+    }
+    const waiting = approved.filter((r) => !r.receivedAt).length;
+    if (waiting > 0) {
+      const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
+      // Kiểm "còn yêu cầu chưa nhận" ngay trong câu ghi: admin bấm "Đã nhận hàng về" chen giữa (đã gỡ nhắc sau commit)
+      // thì không ghi lại lời nhắc cũ.
+      await this.prisma.$executeRaw`
+        UPDATE "orders" SET "pancakeAttention" = ${reason}, "pancakeAttentionAt" = NOW()
+        WHERE "id" = ${order.id}
+          AND ("pancakeAttention" IS NULL OR "pancakeAttention" <> ${reason})
+          AND EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${order.id} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`;
+    } else {
+      await clearPancakeAttention(this.prisma, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
+    }
+    const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;
+    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+    if (!logged) {
+      await this.prisma.orderStatusHistory.create({
+        data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
+      });
+    }
   }
 
   /** `returnedToSender`: Pancake "Đã hoàn" — hàng đã về kho, được huỷ/hoàn tiền dù đơn đã bàn giao vận chuyển (D1). */

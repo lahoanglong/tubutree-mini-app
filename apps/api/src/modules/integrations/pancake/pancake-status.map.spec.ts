@@ -32,10 +32,12 @@ describe('resolvePancakeStatus — mã số Pancake POS', () => {
   });
 
   it('"Đang hoàn" (4), "Hoàn một phần" (15), "Đã xóa" (7) → cần người xử lý, KHÔNG tự đổi trạng thái/hoàn tiền', () => {
-    for (const code of [4, 15, 7]) {
+    for (const code of [4, 7]) {
       const r = resolvePancakeStatus(code);
       expect(r?.kind).toBe('attention');
     }
+    // 15: processor xét yêu cầu trả trên Tubu trước (đã duyệt + đã hoàn thì không bảo hoàn tay — R3-MONEY-2).
+    expect(resolvePancakeStatus(15)?.kind).toBe('partialReturned');
     expect(resolvePancakeStatus(4)).not.toEqual(status('RETURNED'));
     expect(resolvePancakeStatus(15)).not.toEqual(status('DELIVERED'));
   });

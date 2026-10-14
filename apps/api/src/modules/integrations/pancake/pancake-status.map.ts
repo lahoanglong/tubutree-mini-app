@@ -4,12 +4,15 @@ import type { OrderStatus } from '@tubutree/shared-types';
  * Việc cần làm với một trạng thái đơn Pancake:
  *  - `status`: chuyển đơn Tubu sang trạng thái này (qua OrderStatusService);
  *  - `returned`: hàng đã hoàn về kho — chưa giao thì huỷ đơn, đã giao thì trả hàng (processor quyết);
- *  - `attention`: hệ thống không tự xử lý được → đưa vào hàng đợi "Cần xử lý Pancake" cho admin.
+ *  - `attention`: hệ thống không tự xử lý được → đưa vào hàng đợi "Cần xử lý Pancake" cho admin;
+ *  - `partialReturned`: kho đã nhận lại một phần hàng — processor xét yêu cầu trả trên Tubu (đã duyệt thì tiền đã hoàn),
+ *    `reason` là lời cho trường hợp Tubu không có yêu cầu trả nào.
  */
 export type PancakeStatusAction =
   | { kind: 'status'; status: OrderStatus }
   | { kind: 'returned' }
-  | { kind: 'attention'; reason: string };
+  | { kind: 'attention'; reason: string }
+  | { kind: 'partialReturned'; reason: string };
 
 const to = (status: OrderStatus): PancakeStatusAction => ({ kind: 'status', status });
 const RETURNED: PancakeStatusAction = { kind: 'returned' };
@@ -39,9 +42,9 @@ const NUMERIC: Record<string, PancakeStatusAction | null> = {
   '16': to('DELIVERED'), // Đã thu tiền
   '4': RETURNING, // Đang hoàn
   '15': {
-    kind: 'attention',
+    kind: 'partialReturned',
     reason: 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.',
-  },
+  }, // Hoàn một phần
   '5': RETURNED, // Đã hoàn
   '6': to('CANCELLED'), // Đã hủy
   '7': {

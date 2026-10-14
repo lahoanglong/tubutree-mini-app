@@ -22,6 +22,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { ATTENTION_PARTIAL_RETURN_ACK } from '../integrations/pancake/pancake-attention';
 
 /** Bộ lọc admin "Chờ nhận hàng về": đã duyệt, chưa bấm "Đã nhận hàng về". */
 export const RETURNS_TO_RECEIVE = 'TO_RECEIVE';
@@ -480,6 +481,14 @@ export class OrderReturnsService {
       const prior = await partialReturnTotals(tx, order.id, id);
       return this.reversal.restockReturnedItems(tx, order, req.items, prior.restockedQty);
     });
+    // Pancake đã báo "Hoàn một phần" và chỉ còn chờ nhận hàng: nhận hết rồi thì việc trong "Cần xử lý Pancake" đã xong.
+    await this.prisma.$executeRaw`
+      UPDATE "orders" SET "pancakeAttention" = NULL, "pancakeAttentionAt" = NULL
+      WHERE "id" = ${req.orderId}
+        AND starts_with("pancakeAttention", ${ATTENTION_PARTIAL_RETURN_ACK})
+        AND NOT EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${req.orderId} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`.catch(
+      (err: unknown) => this.logger.error(`Không gỡ được việc chờ nhận hàng về của đơn ${req.orderId}: ${err instanceof Error ? err.message : err}`),
+    );
     const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
     this.logger.log(
       `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
