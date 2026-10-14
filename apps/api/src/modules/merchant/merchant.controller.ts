@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationQuery } from '../../common/pagination';
 import { MerchantService } from './merchant.service';
 import { MERCHANT_FULFIL_STATUSES, MerchantFulfilmentService } from './merchant-fulfilment.service';
+import { OrderReturnsService } from '../orders/order-returns.service';
 
 // Cùng trần với /storefront/me (storefront.controller.ts): ảnh có thể là data URL base64 khi chưa cấu hình Cloudinary.
 const IMAGE_MAX = 1_500_000;
@@ -142,6 +143,7 @@ export class MerchantController {
   constructor(
     private readonly merchant: MerchantService,
     private readonly fulfilment: MerchantFulfilmentService,
+    private readonly returns: OrderReturnsService,
   ) {}
 
   @Get('store')
@@ -248,5 +250,16 @@ export class MerchantController {
   @Get('settlement')
   settlement(@CurrentUser('sub') userId: string) {
     return this.fulfilment.myStatement(userId);
+  }
+
+  // Hàng khách trả về gian hàng (đơn tự giao, D3/D4): gian hàng xác nhận đã nhận thì mới cộng lại kho của gian hàng.
+  @Get('returns')
+  listReturns(@CurrentUser('sub') userId: string) {
+    return this.returns.listForMerchant(userId);
+  }
+
+  @Post('returns/:id/received')
+  markReturnReceived(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.returns.markReceivedByMerchant(userId, id);
   }
 }

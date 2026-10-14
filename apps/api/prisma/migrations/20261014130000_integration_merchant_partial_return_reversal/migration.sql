@@ -9,3 +9,8 @@ DROP INDEX "merchant_payout_lines_orderId_kind_key";
 
 -- CreateIndex
 CREATE UNIQUE INDEX "merchant_payout_lines_orderId_kind_refKey_key" ON "merchant_payout_lines"("orderId", "kind", "refKey");
+
+-- Báo chủ gian hàng tự giao khi yêu cầu trả hàng của đơn được duyệt: hàng về gian hàng, gian hàng xác nhận đã nhận.
+INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") VALUES
+  ('nt-merchant-return-approved', 'MERCHANT_RETURN_APPROVED', 'INAPP', 'Khách trả hàng đơn {{order_code}} ({{items}}) đã được duyệt. Khi nhận được hàng, hãy bấm "Đã nhận hàng trả" trong Cổng người bán để cộng lại tồn kho.')
+ON CONFLICT DO NOTHING;

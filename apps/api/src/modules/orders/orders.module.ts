@@ -28,6 +28,6 @@ import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hoo
   ],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
   // dùng chung để không lặp lại khối restock/refund + guard chuyển trạng thái.
-  exports: [OrderReversalService, OrderStatusService, OrdersService, PurchasedItemsService, CustomerRefundsService],
+  exports: [OrderReversalService, OrderStatusService, OrdersService, PurchasedItemsService, CustomerRefundsService, OrderReturnsService],
 })
 export class OrdersModule {}

@@ -230,3 +230,113 @@ describe('refundNote — khách được báo số tiền và nơi nhận (D2)',
     expect(refundNote(null, null)).toBe('');
   });
 });
+
+describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu (D3 × D4)', () => {
+  const approved = { id: 'r1', orderId: 'o1', userId: 'u1', status: 'APPROVED', receivedAt: null, items: [{ orderItemId: 'a', quantity: 1 }] };
+  function receiveHarness(order: Record<string, unknown>) {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const restockReturnedItems = jest.fn().mockResolvedValue(1);
+    const tx = {
+      returnRequest: { updateMany, findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(deliveredOrder()) },
+    };
+    const prisma = {
+      returnRequest: {
+        findUnique: jest.fn().mockResolvedValue(approved),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...approved, receivedAt: new Date() }),
+      },
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    } as unknown as PrismaService;
+    const svc = new OrderReturnsService(
+      prisma,
+      {} as never,
+      { restockReturnedItems } as unknown as OrderReversalService,
+      {} as never,
+      {} as never,
+      notifications,
+    );
+    jest.spyOn(svc as unknown as { withContext: (r: unknown) => unknown }, 'withContext').mockImplementation(async (r) => r);
+    return { svc, updateMany, restockReturnedItems };
+  }
+  const merchantOrder = {
+    code: 'TUBU1',
+    fulfiller: 'MERCHANT',
+    fulfillerStorefront: { ownerUserId: 'shop-owner', type: 'MERCHANT', title: 'Vườn Bà Năm' },
+  };
+
+  it('admin bấm "đã nhận hàng" cho đơn gian hàng → 400 chỉ đường về Cổng người bán, không lật, không cộng kho Tubu', async () => {
+    const h = receiveHarness(merchantOrder);
+    await expect(h.svc.markReceived('admin1', 'r1')).rejects.toThrow('gian hàng Vườn Bà Năm');
+    expect(h.updateMany).not.toHaveBeenCalled();
+    expect(h.restockReturnedItems).not.toHaveBeenCalled();
+  });
+
+  it('chủ gian hàng xác nhận nhận hàng → lật receivedBy = chủ gian hàng và cộng kho sản phẩm của gian hàng', async () => {
+    const h = receiveHarness(merchantOrder);
+    await h.svc.markReceivedByMerchant('shop-owner', 'r1');
+    expect(h.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', status: 'APPROVED', receivedAt: null }, data: expect.objectContaining({ receivedBy: 'shop-owner' }) }),
+    );
+    expect(h.restockReturnedItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('gian hàng khác, hoặc đơn kho Tubu → 404, không lật', async () => {
+    const other = receiveHarness(merchantOrder);
+    await expect(other.svc.markReceivedByMerchant('stranger', 'r1')).rejects.toThrow('gian hàng bạn');
+    expect(other.updateMany).not.toHaveBeenCalled();
+    const tubu = receiveHarness({ code: 'TUBU1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    await expect(tubu.svc.markReceivedByMerchant('shop-owner', 'r1')).rejects.toThrow('gian hàng bạn');
+    expect(tubu.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn kho Tubu: admin vẫn nhận hàng về kho như cũ', async () => {
+    const h = receiveHarness({ code: 'TUBU1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    await h.svc.markReceived('admin1', 'r1');
+    expect(h.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ receivedBy: 'admin1' }) }));
+    expect(h.restockReturnedItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {
+    const prisma = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1' }) },
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'r1' }]),
+      returnRequest: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'r1',
+            orderId: 'o1',
+            status: 'APPROVED',
+            createdAt: new Date(),
+            reviewedAt: new Date(),
+            receivedAt: null,
+            reasonCode: 'DEFECTIVE',
+            reason: 'Hỏng',
+            fullReturn: false,
+            shopFault: true,
+            bankName: 'VCB',
+            bankAccountNo: '0123456789',
+            bankAccountName: 'NGUYEN VAN A',
+            items: [{ orderItemId: 'a', quantity: 2 }],
+          },
+        ]),
+      },
+      order: { findMany: jest.fn().mockResolvedValue([{ id: 'o1', code: 'TUBU1', items: [{ id: 'a', productName: 'Bưởi', variationName: '1kg', quantity: 3 }] }]) },
+    } as unknown as PrismaService;
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
+    const rows = await svc.listForMerchant('shop-owner');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ orderCode: 'TUBU1', reasonLabel: 'Sản phẩm lỗi, hỏng', lines: [{ productName: 'Bưởi', quantity: 2 }] });
+    expect(JSON.stringify(rows)).not.toContain('0123456789');
+    expect(JSON.stringify(rows)).not.toContain('NGUYEN VAN A');
+    expect((prisma.$queryRaw as jest.Mock).mock.calls[0].slice(1)).toContain('sf1');
+  });
+
+  it('listForMerchant: tài khoản không có gian hàng tự giao → 403', async () => {
+    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) } } as unknown as PrismaService;
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
+    await expect(svc.listForMerchant('u1')).rejects.toThrow('gian hàng đối tác');
+  });
+});
