@@ -215,48 +215,48 @@ model PayrollMonth {
 }
 
 model User {
-  id                String          @id @default(cuid())
-  zaloId            String?         @unique // openId từ Zalo
+  id                     String          @id @default(cuid())
+  zaloId                 String?         @unique // openId từ Zalo
   /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
-  zaloAccessToken   String? // mã hóa
+  zaloAccessToken        String? // mã hóa
   /// @deprecated Không nơi nào ghi giá trị; chỉ account-deletion.service gán null (C-108).
-  zaloRefreshToken  String? // mã hóa
-  phone             String?         @unique
-  email             String?
-  fullName          String?
-  dob               DateTime?
-  avatarUrl         String?
-  role              UserRole        @default(CUSTOMER)
-  tierId            String?
-  tier              MembershipTier? @relation(fields: [tierId], references: [id])
-  tierGraceUntil    DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
-  referralCode      String          @unique
-  referredById      String?
+  zaloRefreshToken       String? // mã hóa
+  phone                  String?         @unique
+  email                  String?
+  fullName               String?
+  dob                    DateTime?
+  avatarUrl              String?
+  role                   UserRole        @default(CUSTOMER)
+  tierId                 String?
+  tier                   MembershipTier? @relation(fields: [tierId], references: [id])
+  tierGraceUntil         DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
+  referralCode           String          @unique
+  referredById           String?
   // Điểm Xanh lô STANDARD (có hạn, trần loyalty.max_redeem_pct). == SUM(points_transactions.delta) lot STANDARD.
-  pointsBalance     Int             @default(0)
+  pointsBalance          Int             @default(0)
   // PD-3 (Q-03a): Điểm Xanh lô CONVERTED, quy từ xu (tiền trả trước): không hết hạn, không trần, không
   // ra tiền. Cột riêng để mọi guard `gte pointsBalance` cũ (vòng quay, đổi voucher...) không chạm tới.
   // == SUM(delta) lot CONVERTED; CHECK users_points_converted_nonneg (>= 0) chỉ có trong migration SQL.
-  pointsConvertedBalance Int        @default(0)
-  walletBalance     Int             @default(0)
-  coinsBalance      Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
-  cashbackPending   Int             @default(0)
-  isBlocked         Boolean         @default(false)
+  pointsConvertedBalance Int             @default(0)
+  walletBalance          Int             @default(0)
+  coinsBalance           Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
+  cashbackPending        Int             @default(0)
+  isBlocked              Boolean         @default(false)
   // Khoá do admin (POST /admin/users/:id/block): ai khoá, lúc nào, vì sao. Xoá tài khoản (ẩn danh) chỉ đặt isBlocked.
-  blockedAt         DateTime?
-  blockedReason     String?
-  blockedById       String?
+  blockedAt              DateTime?
+  blockedReason          String?
+  blockedById            String?
   // Mốc thu hồi toàn bộ phiên (khoá tài khoản, phát hiện refresh token bị dùng lại): token xoay trước mốc này
   // không còn được hưởng khoảng ân hạn refresh đồng thời.
-  sessionsRevokedAt DateTime?
+  sessionsRevokedAt      DateTime?
   // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
-  notifyPromo       Boolean         @default(true)
-  notifyGarden      Boolean         @default(true)
+  notifyPromo            Boolean         @default(true)
+  notifyGarden           Boolean         @default(true)
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
-  pancakeCustomerId String?         @unique
-  metadata          Json?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  pancakeCustomerId      String?         @unique
+  metadata               Json?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
   // Quan hệ ngược
   addresses              Address[]
@@ -266,7 +266,7 @@ model User {
   coinTransactions       CoinTransaction[]
   xuPointsConversion     XuPointsConversion?
   walletTransactions     WalletTransaction[]
-  affiliateLinks        AffiliateLink[]
+  affiliateLinks         AffiliateLink[]
   commissions            Commission[]
   ctvMilestoneClaims     CtvMilestoneClaim[]
   storefronts            Storefront[]
@@ -838,85 +838,85 @@ enum InvoiceStatus {
 }
 
 model Order {
-  id                 String           @id @default(cuid())
-  code               String           @unique
-  idempotencyKey     String?          @unique // chống double-submit place-order (§12.1)
-  pancakeOrderId     String?          @unique
-  userId             String
-  user               User             @relation(fields: [userId], references: [id])
-  type               OrderType
-  status             OrderStatus
-  subtotal           Int
-  discount           Int              @default(0)
-  shippingFee        Int              @default(0)
-  total              Int
-  pointsEarned       Int              @default(0)
-  pointsUsed         Int              @default(0)
+  id                     String                @id @default(cuid())
+  code                   String                @unique
+  idempotencyKey         String?               @unique // chống double-submit place-order (§12.1)
+  pancakeOrderId         String?               @unique
+  userId                 String
+  user                   User                  @relation(fields: [userId], references: [id])
+  type                   OrderType
+  status                 OrderStatus
+  subtotal               Int
+  discount               Int                   @default(0)
+  shippingFee            Int                   @default(0)
+  total                  Int
+  pointsEarned           Int                   @default(0)
+  pointsUsed             Int                   @default(0)
   // Phần của pointsUsed lấy từ lô CONVERTED (PD-3); phần STANDARD = pointsUsed − pointsUsedConverted.
   // Cần để hoàn điểm khi huỷ/trả về đúng lô.
-  pointsUsedConverted Int             @default(0)
-  paymentMethod      PaymentMethod
-  paymentStatus      PaymentStatus
-  paymentTxnId       String?
-  shippingAddress    Json
-  shippingPartner    String?
-  shippingCode       String?
-  shippingStatus     String?
-  trackingLink       String?
-  shippingHistory    Json?
-  invoiceRequest     Json?
-  invoiceUrl         String?
-  invoiceStatus      InvoiceStatus?   @default(NOT_REQUESTED)
-  referrerUserId     String?
-  storefrontSlug     String?
+  pointsUsedConverted    Int                   @default(0)
+  paymentMethod          PaymentMethod
+  paymentStatus          PaymentStatus
+  paymentTxnId           String?
+  shippingAddress        Json
+  shippingPartner        String?
+  shippingCode           String?
+  shippingStatus         String?
+  trackingLink           String?
+  shippingHistory        Json?
+  invoiceRequest         Json?
+  invoiceUrl             String?
+  invoiceStatus          InvoiceStatus?        @default(NOT_REQUESTED)
+  referrerUserId         String?
+  storefrontSlug         String?
   // Đơn CTV "lên đơn hộ khách": userId==referrerUserId (CTV) nhưng VẪN được hưởng hoa hồng
   // (cho phép self-referral có kiểm soát — xem affiliate.createCommissionForOrder).
-  placedForCustomer  Boolean          @default(false)
+  placedForCustomer      Boolean               @default(false)
   /// @deprecated Không nơi nào ghi hoặc đọc, luôn 0 (C-108); hoa hồng CTV nằm ở bảng commissions.
-  commission         Int              @default(0)
-  source             String? // checkout | buy_now | ctv_assisted | subscription | dealer
-  platform           String? // miniapp | web — null cho đơn cũ trước migration này
-  paidAt             DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
-  subscriptionId     String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
-  endCustomerKey     String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
-  couponCode         String?
-  note               String?
+  commission             Int                   @default(0)
+  source                 String? // checkout | buy_now | ctv_assisted | subscription | dealer
+  platform               String? // miniapp | web — null cho đơn cũ trước migration này
+  paidAt                 DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
+  subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
+  endCustomerKey         String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
+  couponCode             String?
+  note                   String?
   // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
-  hasRecyclingPickup Boolean          @default(false)
-  recyclingNote      String?
-  gomdonOrderId      String?
-  gomdonPartnerCode  String?
+  hasRecyclingPickup     Boolean               @default(false)
+  recyclingNote          String?
+  gomdonOrderId          String?
+  gomdonPartnerCode      String?
   /// Trạng thái vận đơn Gomdon: mã số Gomdon ("1".."12") HOẶC trạng thái nội bộ
   /// (AWAITING_PAYMENT | CREATING | NEEDS_MANUAL_CHECK | FAILED | NOT_CONFIGURED) — xem gomdon-status.ts.
-  gomdonStatus       String?
+  gomdonStatus           String?
   /// Thời điểm (created_time từ Gomdon) của trạng thái Gomdon đang lưu — chặn webhook tới trễ lùi trạng thái.
-  gomdonStatusAt     DateTime?
+  gomdonStatusAt         DateTime?
   /// Kết quả huỷ vận đơn Gomdon khi đơn bị huỷ: CANCELLED | FAILED | TOO_LATE | NOT_NEEDED | MANUAL_HANDLED
   /// (null = chưa xử lý).
-  gomdonCancelStatus String?
+  gomdonCancelStatus     String?
   /// Mốc bắt đầu tự thử lại huỷ vận đơn sau lỗi tạm của Gomdon (cron cứu hộ thử lại trong một cửa sổ). null =
   /// không tự thử lại: chưa lỗi, hoặc Gomdon trả lời dứt khoát (vd "Không tìm thấy đơn hàng").
   gomdonCancelRetrySince DateTime?
   /// Số lần tạo lại vận đơn sau khi vận đơn cũ đã huỷ. Gomdon chặn trùng order_customer_id (kể cả vận đơn đã
   /// huỷ) nên lần tạo lại thứ n gửi `${code}-R${n}` — xem gomdonCustomerId().
-  gomdonAttempt      Int              @default(0)
-  gomdonAlerts       GomdonAlert[]
+  gomdonAttempt          Int                   @default(0)
+  gomdonAlerts           GomdonAlert[]
   /// Thời điểm đơn chuyển DELIVERED (OrderStatusService.setStatus) — mốc tính hạn đổi/trả. Trước đây
   /// dùng updatedAt: mọi lần ghi sau đó (webhook vận chuyển, yêu cầu hoá đơn…) kéo dài hạn đổi/trả.
-  deliveredAt        DateTime?
+  deliveredAt            DateTime?
   /// Lúc cron ReviewInviteService nhận đơn để gửi tin mời đánh giá (claim trước khi gửi, null lại nếu gửi lỗi).
-  reviewInvitedAt    DateTime?
+  reviewInvitedAt        DateTime?
   /// Hàng đợi "Cần xử lý Pancake": lý do mới nhất Pancake báo một việc hệ thống không tự làm được (đang hoàn,
   /// hoàn một phần, đơn bị xoá, trạng thái mâu thuẫn, đơn Pancake lạ mang mã đơn này...). Null = không có việc.
-  pancakeAttention   String?
+  pancakeAttention       String?
   /// Lúc ghi lý do cần xử lý gần nhất — admin bấm "Đã xử lý" thì cả hai cột về null.
-  pancakeAttentionAt DateTime?
-  items              OrderItem[]
-  commissions        Commission[]
-  paymentAttempts    PaymentAttempt[]
-  customerRefund     OrderCustomerRefund?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  pancakeAttentionAt     DateTime?
+  items                  OrderItem[]
+  commissions            Commission[]
+  paymentAttempts        PaymentAttempt[]
+  customerRefunds        OrderCustomerRefund[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([userId, status])
   @@index([referrerUserId])
@@ -1276,12 +1276,12 @@ model Commission {
   payoutBatchId       String?
   createdAt           DateTime         @default(now())
 
+  // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).
+  @@unique([orderId, affiliateUserId])
   @@index([affiliateUserId, status])
   // lockCommissionsForOrder/reverseCommissionsForOrder (affiliate.service.ts) updateMany theo
   // orderId trên mỗi chuyển trạng thái đơn — không có index riêng cho orderId trước đây.
   @@index([orderId])
-  // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).
-  @@unique([orderId, affiliateUserId])
   // Cron duyệt hoa hồng hết hold (approveDueCommissions): status = LOCKED AND lockedAt <= mốc.
   @@index([status, lockedAt])
   @@map("commissions")
@@ -1292,15 +1292,15 @@ model Commission {
 // @@unique(userId, milestoneId, monthKey) là khoá idempotency: 2 request claim đồng thời → request
 // thua ăn P2002 trên insert → rollback cả tx cấp xu → không bao giờ cộng 2 lần.
 model CtvMilestoneClaim {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  milestoneId String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
-  monthKey    String // 'YYYY-MM' theo giờ VN
-  rewardXu    Int
-  rewardPoints Int     @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
-  revenue     BigInt // doanh số đã chốt tại lúc nhận (đối soát)
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  milestoneId  String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
+  monthKey     String // 'YYYY-MM' theo giờ VN
+  rewardXu     Int
+  rewardPoints Int      @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
+  revenue      BigInt // doanh số đã chốt tại lúc nhận (đối soát)
+  createdAt    DateTime @default(now())
 
   @@unique([userId, milestoneId, monthKey])
   @@map("ctv_milestone_claims")
@@ -1319,25 +1319,50 @@ enum CustomerRefundStatus {
   COMPLETED
 }
 
-model OrderCustomerRefund {
-  id             String               @id @default(cuid())
-  orderId        String               @unique
-  order          Order                @relation(fields: [orderId], references: [id])
-  orderCode      String
-  amount         Int
-  phone          String? // SĐT khách cuối dạng nội địa 0xxxxxxxxx (endCustomerKey / snapshot)
-  recipientName  String?
-  customerUserId String? // tài khoản nhận tiền khi method = WALLET
-  method         CustomerRefundMethod
-  status         CustomerRefundStatus
-  reason         String // CANCELLED | RETURNED — trạng thái đơn gây ra lần hoàn
-  completedAt    DateTime?
-  completedBy    String? // adminId xác nhận đã chuyển khoản (MANUAL_TRANSFER)
-  bankRef        String?
-  adminNote      String?
-  createdAt      DateTime             @default(now())
+/// Vì sao Tubu nợ khách khoản này (D2). END_CUSTOMER: đơn CTV lên hộ, hoàn cho khách cuối (C-001).
+/// CANCEL / RETURN: khách huỷ hoặc trả hàng đơn trả trước và chọn nhận về tài khoản ngân hàng.
+/// LATE_PAYMENT: tiền chuyển khoản / ZaloPay về sau khi đơn đã huỷ hoặc hết hạn.
+enum CustomerRefundKind {
+  END_CUSTOMER
+  CANCEL
+  RETURN
+  LATE_PAYMENT
+}
 
+/// Hàng đợi hoàn tiền thủ công của admin. Dòng MANUAL_TRANSFER PENDING là tiền Tubu đang nợ khách; WALLET là
+/// dòng vết của khoản đã vào Ví. Một đơn có thể có nhiều khoản (trả hàng nhiều lần, tiền về muộn sau khi huỷ).
+model OrderCustomerRefund {
+  id              String               @id @default(cuid())
+  orderId         String
+  order           Order                @relation(fields: [orderId], references: [id])
+  orderCode       String
+  kind            CustomerRefundKind   @default(END_CUSTOMER)
+  /// Khoá chống tạo trùng trong cùng (đơn, loại): id yêu cầu trả hàng (RETURN), kênh + mã giao dịch
+  /// (LATE_PAYMENT), rỗng cho loại chỉ có một lần mỗi đơn (END_CUSTOMER, CANCEL).
+  refKey          String               @default("")
+  /// Chủ đơn — khách thấy khoản này ở chi tiết đơn và tự chọn nơi nhận. Null với END_CUSTOMER (khách cuối có
+  /// thể không có tài khoản).
+  userId          String?
+  amount          Int
+  phone           String? // SĐT khách cuối dạng nội địa 0xxxxxxxxx (endCustomerKey / snapshot)
+  recipientName   String?
+  customerUserId  String? // tài khoản nhận tiền khi method = WALLET
+  method          CustomerRefundMethod
+  status          CustomerRefundStatus
+  reason          String // CANCELLED | RETURNED — trạng thái đơn gây ra lần hoàn
+  /// Tài khoản nhận (MANUAL_TRANSFER). Trống = đang chờ khách chọn nơi nhận / nhập tài khoản.
+  bankName        String?
+  bankAccountNo   String?
+  bankAccountName String?
+  completedAt     DateTime?
+  completedBy     String? // adminId xác nhận đã chuyển khoản (MANUAL_TRANSFER)
+  bankRef         String?
+  adminNote       String?
+  createdAt       DateTime             @default(now())
+
+  @@unique([orderId, kind, refKey])
   @@index([status, createdAt])
+  @@index([userId, createdAt])
   @@map("order_customer_refunds")
 }
 
@@ -1749,13 +1774,13 @@ enum RefillStatus {
 
 // Refill / đổi vỏ chai (§6.14.6) — mỗi lần khách đổi vỏ chai rỗng lấy thưởng 💧.
 model BottleReturn {
-  id           String       @id @default(cuid())
-  userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  quantity     Int // số vỏ chai đổi lần này; khi duyệt = số vỏ nhân viên THỰC NHẬN (≤ số khách khai)
-  seedsAwarded Int // 💧 đã thưởng (khi APPROVED)
-  status       RefillStatus @default(PENDING)
-  createdAt    DateTime     @default(now())
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quantity         Int // số vỏ chai đổi lần này; khi duyệt = số vỏ nhân viên THỰC NHẬN (≤ số khách khai)
+  seedsAwarded     Int // 💧 đã thưởng (khi APPROVED)
+  status           RefillStatus @default(PENDING)
+  createdAt        DateTime     @default(now())
   // Chỉ có khi nhân viên duyệt số vỏ ít hơn khách khai: số khách khai ban đầu, để đối soát.
   declaredQuantity Int?
   reviewedBy       String? // userId nhân viên/admin duyệt hoặc từ chối
@@ -2069,21 +2094,59 @@ model OrderStatusHistory {
 }
 
 model ReturnRequest {
-  id           String       @id @default(cuid())
-  orderId      String
-  userId       String
-  reason       String
-  images       String[]     @default([])
-  status       ReturnStatus @default(REQUESTED)
-  refundMethod String       @default("WALLET") // WALLET | BANK
-  adminNote    String?
-  reviewedBy   String?
-  reviewedAt   DateTime?
-  createdAt    DateTime     @default(now())
+  id                      String              @id @default(cuid())
+  orderId                 String
+  userId                  String
+  reason                  String
+  /// DEFECTIVE | WRONG_ITEM | DAMAGED | EXPIRED | OTHER — null ở yêu cầu tạo trước khi trả theo dòng.
+  reasonCode              String?
+  images                  String[]            @default([])
+  status                  ReturnStatus        @default(REQUESTED)
+  refundMethod            String              @default("WALLET") // WALLET | BANK
+  /// Tài khoản nhận khi refundMethod = BANK.
+  bankName                String?
+  bankAccountNo           String?
+  bankAccountName         String?
+  /// Lỗi do shop (hoàn cả phí ship dù chỉ trả một phần). Admin chốt lúc duyệt.
+  shopFault               Boolean?
+  /// Yêu cầu này trả nốt mọi dòng còn lại của đơn → đơn chuyển RETURNED.
+  fullReturn              Boolean             @default(false)
+  /// Phần đã hoàn khi duyệt (chốt một lần): tiền hàng sau phân bổ giảm giá/điểm, phí ship, Điểm Xanh đã dùng trả
+  /// lại (tổng và phần lô quy đổi), Điểm Xanh tích bị thu hồi, hoa hồng CTV bị giảm. Các lần trả sau và lần đảo cả
+  /// đơn trừ phần đã hoàn này để tổng không vượt đơn.
+  refundAmount            Int?
+  shippingRefund          Int                 @default(0)
+  pointsRefunded          Int                 @default(0)
+  convertedPointsRefunded Int                 @default(0)
+  pointsReversed          Int                 @default(0)
+  commissionReversed      Int                 @default(0)
+  adminNote               String?
+  reviewedBy              String?
+  reviewedAt              DateTime?
+  /// Admin bấm "Đã nhận hàng về" — chỉ lúc đó mới cộng lại tồn kho các dòng trả.
+  receivedAt              DateTime?
+  receivedBy              String?
+  items                   ReturnRequestItem[]
+  createdAt               DateTime            @default(now())
 
   @@index([userId])
   @@index([status])
+  @@index([orderId])
   @@map("return_requests")
+}
+
+/// Dòng hàng và số lượng khách trả trong một yêu cầu (D3). refundAmount = phần tiền hàng của dòng, chốt khi duyệt.
+model ReturnRequestItem {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId     String
+  quantity        Int
+  refundAmount    Int           @default(0)
+
+  @@unique([returnRequestId, orderItemId])
+  @@index([orderItemId])
+  @@map("return_request_items")
 }
 
 enum ReturnStatus {
@@ -2375,25 +2438,25 @@ model Wishlist {
 }
 
 model Subscription {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   variationId   String
-  variation     Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
-  quantity      Int       @default(1)
+  variation     Variation     @relation(fields: [variationId], references: [id], onDelete: Cascade)
+  quantity      Int           @default(1)
   intervalWeeks Int // 4 / 6 / 8 / 10
   addressId     String
   // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
-  address       Address   @relation(fields: [addressId], references: [id], onDelete: Restrict)
-  status        String    @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  address       Address       @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  status        String        @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
   // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
   paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime
   // Số lần cron đã thử lại kỳ hiện tại vì hết hàng/lỗi tạm thời (reset về 0 khi ra đơn hoặc khi bỏ kỳ).
-  retryCount    Int       @default(0)
+  retryCount    Int           @default(0)
   lastOrderId   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([status, nextRunAt])
   @@index([userId])

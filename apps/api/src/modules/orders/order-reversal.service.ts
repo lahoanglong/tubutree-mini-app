@@ -9,11 +9,56 @@ import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { toLocalPhone } from '../../common/phone';
+import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
+import { createBankRefund } from './refund-queue';
+import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
+import { shareOf, type ReturnShares } from './refund-allocation';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
+export interface ReversalOptions {
+  /** Nơi khách chọn nhận tiền hoàn (D2). Mặc định Ví; chỉ đơn chuyển khoản/ZaloPay/VNPAY/COD đã thu mới về ngân hàng được. */
+  destination?: RefundDestination;
+  /** false = không cộng lại kho lúc này (trả hàng: chỉ cộng khi admin bấm "Đã nhận hàng về", D3). */
+  restock?: boolean;
+  /** Yêu cầu trả hàng đang duyệt (lần trả nốt cả đơn) — khoá chống trùng của khoản hoàn ngân hàng. */
+  returnRequestId?: string;
+}
+
+/** Tiền lần đảo này trả khách và trả về đâu (để báo khách đúng số tiền, đúng nơi nhận). */
+export interface RefundOutcome {
+  amount: number;
+  to: 'WALLET' | 'BANK' | 'END_CUSTOMER';
+  /** Khoản chờ chuyển khoản vừa ghi (to = BANK). */
+  refundId?: string;
+}
+
+export interface ReversalResult {
+  moneyRefunded: boolean;
+  pointsRefunded: number;
+  refund: RefundOutcome | null;
+}
+
+export interface PartialReversalResult {
+  refund: RefundOutcome | null;
+  /** Điểm Xanh đã dùng trả lại khách / điểm tích bị thu hồi thật (có thể ít hơn phần tính nếu số dư không đủ). */
+  pointsBack: number;
+  pointsTaken: number;
+  commissionCut: number;
+}
+
 /** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
 const XU_PER_POINT = 1000;
+
+/**
+ * Đơn đã giao có tiền thật để hoàn khi trả hàng: trả trước đã PAID (Ví/chuyển khoản/ZaloPay/VNPAY), hoặc COD (tài xế đã
+ * thu lúc giao — paymentStatus COD luôn UNPAID, xem reverseFinancials). Đơn XU cũ hoàn bằng điểm ở lần đảo cả đơn.
+ */
+export function isMoneyBackable(order: Pick<Order, 'paymentMethod' | 'paymentStatus' | 'status'>): boolean {
+  if (order.paymentMethod === 'COD') return order.status === 'DELIVERED' && order.paymentStatus === 'UNPAID';
+  if (order.paymentMethod === 'XU') return false;
+  return order.paymentStatus === 'PAID';
+}
 
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
@@ -48,7 +93,14 @@ export class OrderReversalService {
   async reverseFinancials(
     tx: Prisma.TransactionClient,
     order: OrderWithItems,
-  ): Promise<{ moneyRefunded: boolean; pointsRefunded: number }> {
+    opts: ReversalOptions = {},
+  ): Promise<ReversalResult> {
+    // Đơn đã giao có thể đã được trả một phần (D3): lần đảo cả đơn chỉ hoàn phần còn lại — tiền, điểm lô quy đổi,
+    // quota flash sale, kho đã nhận về. Đơn chưa giao thì không thể có lần trả nào.
+    const prior = order.status === 'DELIVERED' ? await partialReturnTotals(tx, order.id, opts.returnRequestId) : NO_PARTIAL_RETURNS;
+    const refundable = Math.max(0, order.total - prior.money);
+    const destination = opts.destination ?? WALLET_DESTINATION;
+    let refund: RefundOutcome | null = null;
     // Hoàn tiền — guard bằng updateMany, count=1 mới thực sự chi tiền, tránh hoàn 2 lần nếu bị
     // gọi lại (dù caller đã guard status, phòng thủ 2 lớp cho tiền).
     //
@@ -120,20 +172,31 @@ export class OrderReversalService {
       } else if (refunded.count === 1 && order.placedForCustomer) {
         // Đơn CTV lên hộ: người trả tiền là khách cuối, không phải CTV (C-001). Caller báo "đã hoàn
         // vào Ví" cho order.userId, nên chỉ để true khi chính người đó là ví vừa được cộng.
-        const creditedUserId = await this.refundEndCustomer(tx, order);
-        moneyRefunded = creditedUserId === order.userId && order.total > 0;
+        const creditedUserId = await this.refundEndCustomer(tx, order, refundable);
+        moneyRefunded = creditedUserId === order.userId && refundable > 0;
+        if (refundable > 0) refund = { amount: refundable, to: 'END_CUSTOMER' };
+      } else if (refunded.count === 1 && destination.method === 'BANK' && canRefundToBank(order.paymentMethod) && refundable > 0) {
+        // D2: khách chọn nhận về tài khoản ngân hàng — ghi khoản chờ admin chuyển tay (miễn phí, không tối thiểu).
+        const row = await createBankRefund(tx, {
+          order,
+          kind: order.status === 'DELIVERED' ? 'RETURN' : 'CANCEL',
+          refKey: opts.returnRequestId,
+          amount: refundable,
+          bank: destination.bank,
+          reason: order.status === 'DELIVERED' ? 'RETURNED' : 'CANCELLED',
+        });
+        refund = { amount: refundable, to: 'BANK', refundId: row.id };
       } else if (refunded.count === 1) {
-        // WALLET/ZALOPAY/BANK_TRANSFER/VNPAY/COD đều hoàn về Ví — COD không có "kênh gốc" nào
-        // khác để hoàn lại (khách trả tiền mặt, không có tài khoản/ví điện tử gốc lưu ở đây); Ví
-        // Tubu là đích hoàn nhất quán duy nhất, giống mọi kênh khác trong nhánh này.
-        moneyRefunded = await this.refundToWallet(tx, order.userId, order);
+        // Mặc định và mọi đơn trả bằng Ví: hoàn về Ví Tubu ngay.
+        moneyRefunded = await this.refundToWallet(tx, order.userId, order, refundable);
+        if (moneyRefunded) refund = { amount: refundable, to: 'WALLET' };
       }
     }
 
     // Điểm Xanh lô quy đổi đã tiêu cho đơn này là TIỀN TRẢ TRƯỚC (Q-03a) nên hoàn trong CÙNG tx với lần lật trạng
     // thái, như xu/Ví trước PD-3. Để ở LoyaltyService.reverseOrderPoints (chạy sau commit) thì nó ném lỗi
     // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
-    pointsRefunded += await this.refundConvertedPoints(tx, order);
+    pointsRefunded += await this.refundConvertedPoints(tx, order, prior.convertedBack);
 
     // Hoàn stock + release quota flash-sale — không có guard idempotency riêng ở đây vì
     // caller (status flip atomic) đảm bảo hàm này chỉ chạy đúng 1 lần cho mỗi đơn.
@@ -155,15 +218,16 @@ export class OrderReversalService {
       // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
       // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
-      const reserved = item.quantity - backordered;
-      if (reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
+      const reserved = item.quantity - backordered - (prior.restockedQty.get(item.id) ?? 0);
+      if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
       if (backordered > 0) {
         await tx.orderItem.update({ where: { id: item.id }, data: { backorderedQty: 0 } });
       }
-      if (item.flashSaleItemId) {
-        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, item.quantity);
+      const flashQty = item.quantity - (prior.approvedQty.get(item.id) ?? 0);
+      if (item.flashSaleItemId && flashQty > 0) {
+        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, flashQty);
       }
     }
 
@@ -203,7 +267,176 @@ export class OrderReversalService {
         );
       }
     }
-    return { moneyRefunded, pointsRefunded };
+    return { moneyRefunded, pointsRefunded, refund };
+  }
+
+  /**
+   * Trả MỘT PHẦN đơn đã giao (D3): hoàn tiền phần của các dòng trả (sau phân bổ giảm giá/điểm, cộng phí ship nếu lỗi do
+   * shop) về nơi khách chọn, trả lại Điểm Xanh đã dùng theo phần, thu hồi Điểm Xanh tích và giảm hoa hồng CTV cùng tỉ
+   * lệ, hoàn quota flash sale của số đơn vị trả. KHÔNG cộng kho (chỉ khi admin bấm "Đã nhận hàng về") và KHÔNG đổi
+   * trạng thái đơn (vẫn DELIVERED).
+   *
+   * Gọi trong tx, SAU KHI caller đã lật yêu cầu REQUESTED → APPROVED bằng guard atomic và khoá dòng đơn — guard đó là
+   * điều kiện một-lần; sổ Ví (userId, type, refId=yêu cầu) và points_transactions_return_request_unique là lớp hai.
+   */
+  async reversePartialReturn(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    input: {
+      requestId: string;
+      shares: ReturnShares;
+      destination: RefundDestination;
+      prior: PartialReturnTotals;
+      /** Hạn của điểm thường trả lại (đọc cấu hình ngoài tx). */
+      standardPointsExpiresAt: Date | null;
+    },
+  ): Promise<PartialReversalResult> {
+    const { shares, requestId } = input;
+    const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+    const amount = shares.goods + shares.shipping;
+    if (amount > 0 && isMoneyBackable(order)) {
+      if (order.placedForCustomer) {
+        await this.refundEndCustomer(tx, order, amount, { kind: 'RETURN', refKey: requestId });
+        result.refund = { amount, to: 'END_CUSTOMER' };
+      } else if (input.destination.method === 'BANK' && canRefundToBank(order.paymentMethod)) {
+        const row = await createBankRefund(tx, {
+          order,
+          kind: 'RETURN',
+          refKey: requestId,
+          amount,
+          bank: input.destination.bank,
+          reason: 'RETURNED',
+        });
+        result.refund = { amount, to: 'BANK', refundId: row.id };
+      } else {
+        await this.creditReturnToWallet(tx, order.userId, order, amount, requestId);
+        result.refund = { amount, to: 'WALLET' };
+      }
+    } else if (amount > 0) {
+      this.logger.warn(`Trả một phần đơn ${order.code} (${order.paymentMethod}/${order.paymentStatus}): không có khoản đã thu để hoàn ${amount}đ.`);
+    }
+
+    const converted = Math.min(shares.convertedBack, shares.pointsUsedBack);
+    if (converted > 0) {
+      const res = await applyPointsDelta(tx, {
+        userId: order.userId,
+        delta: converted,
+        lot: 'CONVERTED',
+        reason: `RETURN_REFUND_CONVERTED:${order.code}`,
+        refType: 'RETURN_REQUEST',
+        refId: requestId,
+        skipDuplicates: true,
+      });
+      if (res.applied) result.pointsBack += converted;
+    }
+    const standard = shares.pointsUsedBack - converted;
+    if (standard > 0) {
+      const res = await applyPointsDelta(tx, {
+        userId: order.userId,
+        delta: standard,
+        lot: 'STANDARD',
+        reason: `RETURN_REFUND_POINTS:${order.code}`,
+        refType: 'RETURN_REQUEST',
+        refId: requestId,
+        expiresAt: input.standardPointsExpiresAt,
+        skipDuplicates: true,
+      });
+      if (res.applied) result.pointsBack += standard;
+    }
+
+    // Điểm tích chỉ có sau khi đơn được cộng điểm lúc giao; thu hồi tối đa bằng số dư (như lần đảo cả đơn).
+    if (shares.pointsEarnedBack > 0) {
+      const credited = await tx.pointsTransaction.findFirst({
+        where: { userId: order.userId, reason: `ORDER_DELIVERED:${order.code}` },
+        select: { id: true },
+      });
+      if (credited) {
+        const [u] = await tx.$queryRaw<{ pointsBalance: number }[]>`
+          SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`;
+        const take = Math.min(shares.pointsEarnedBack, Math.max(0, u?.pointsBalance ?? 0));
+        if (take > 0) {
+          const res = await applyPointsDelta(tx, {
+            userId: order.userId,
+            delta: -take,
+            lot: 'STANDARD',
+            reason: `RETURN_REVERSED:${order.code}`,
+            refType: 'RETURN_REQUEST',
+            refId: requestId,
+          });
+          if (res.applied) result.pointsTaken = take;
+        }
+      }
+    }
+
+    // Hoa hồng CTV còn chờ (PENDING/LOCKED) giảm cùng tỉ lệ giá trị trả. Đã duyệt/đã chi thì không đụng — giống lần
+    // đảo cả đơn (reverseCommissionsForOrder chỉ huỷ PENDING/LOCKED).
+    const rows = await tx.commission.findMany({
+      where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED'] } },
+      select: { id: true, amount: true },
+    });
+    for (const row of rows) {
+      const original = row.amount + input.prior.commissionReversed;
+      const cut = Math.min(row.amount, Math.max(0, shareOf(original, shares.ratioAfter) - shareOf(original, shares.ratioBefore)));
+      if (cut <= 0) continue;
+      const res = await tx.commission.updateMany({
+        where: { id: row.id, amount: row.amount, status: { in: ['PENDING', 'LOCKED'] } },
+        data: { amount: { decrement: cut } },
+      });
+      if (res.count === 1) result.commissionCut += cut;
+    }
+
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    for (const line of shares.lines) {
+      const item = byId.get(line.orderItemId);
+      if (item?.flashSaleItemId && line.quantity > 0) {
+        await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Cộng lại kho các dòng của một yêu cầu trả khi admin xác nhận đã nhận hàng về (D3). Không vượt số đã thực trừ kho
+   * của dòng (trừ phần đặt trước chưa từng giữ và phần đã cộng lại ở lần nhận trước).
+   */
+  async restockReturnedItems(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    lines: { orderItemId: string; quantity: number }[],
+    alreadyRestocked: ReadonlyMap<string, number>,
+  ): Promise<number> {
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    let restocked = 0;
+    for (const line of lines) {
+      const item = byId.get(line.orderItemId);
+      if (!item) continue;
+      const cap = item.quantity - item.backorderedQty - (alreadyRestocked.get(item.id) ?? 0);
+      const qty = Math.min(line.quantity, cap);
+      if (qty > 0) {
+        await releaseVariationStock(tx, item.variationId, qty);
+        restocked += qty;
+      }
+    }
+    return restocked;
+  }
+
+  /** Mỗi yêu cầu trả một dòng sổ Ví riêng (refId = yêu cầu): trả nhiều lần cùng đơn không đụng khoá (userId, type, refId). */
+  private async creditReturnToWallet(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    order: OrderWithItems,
+    amount: number,
+    requestId: string,
+  ): Promise<void> {
+    if (amount <= 0) return;
+    await applyWalletDelta(tx, {
+      userId,
+      delta: amount,
+      type: 'ORDER_REFUND',
+      refType: 'RETURN_REQUEST',
+      refId: requestId,
+      reason: `Hoàn tiền trả hàng đơn ${order.code}`,
+    });
   }
 
   /**
@@ -236,8 +469,8 @@ export class OrderReversalService {
    * (reason `ORDER_REFUND_CONVERTED:<code>`) là lớp hai, dòng đã có thì skipDuplicates không cộng.
    * Chặn trên bằng pointsUsed phòng dữ liệu lệch (không hoàn nhiều hơn tổng đã tiêu).
    */
-  private async refundConvertedPoints(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<number> {
-    const points = Math.min(order.pointsUsed, order.pointsUsedConverted);
+  private async refundConvertedPoints(tx: Prisma.TransactionClient, order: OrderWithItems, alreadyBack = 0): Promise<number> {
+    const points = Math.min(order.pointsUsed, order.pointsUsedConverted) - alreadyBack;
     if (!(points > 0)) return 0;
     const res = await applyPointsDelta(tx, {
       userId: order.userId,
@@ -256,11 +489,16 @@ export class OrderReversalService {
   }
 
   /** true khi thực sự cộng tiền vào Ví (đơn 0đ không có gì để hoàn). */
-  private async refundToWallet(tx: Prisma.TransactionClient, userId: string, order: OrderWithItems): Promise<boolean> {
-    if (order.total <= 0) return false;
+  private async refundToWallet(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    order: OrderWithItems,
+    amount: number = order.total,
+  ): Promise<boolean> {
+    if (amount <= 0) return false;
     await applyWalletDelta(tx, {
       userId,
-      delta: order.total,
+      delta: amount,
       type: 'ORDER_REFUND',
       refType: 'ORDER',
       refId: order.id,
@@ -277,7 +515,12 @@ export class OrderReversalService {
    * orderId unique trên order_customer_refunds: lần gọi thứ hai cho cùng đơn ném P2002 → tx rollback,
    * không thể hoàn 2 lần dù guard PAID→REFUNDED phía trên bị lách.
    */
-  private async refundEndCustomer(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<string | null> {
+  private async refundEndCustomer(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    amount: number = order.total,
+    ref: { kind: 'END_CUSTOMER' | 'RETURN'; refKey: string } = { kind: 'END_CUSTOMER', refKey: '' },
+  ): Promise<string | null> {
     const snapshot = (order.shippingAddress ?? {}) as { phone?: unknown; recipient?: unknown };
     const phone =
       order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? toLocalPhone(snapshot.phone) : null);
@@ -297,12 +540,17 @@ export class OrderReversalService {
     }
 
     const reason = order.status === 'DELIVERED' ? 'RETURNED' : 'CANCELLED';
-    if (customerUserId) await this.refundToWallet(tx, customerUserId, order);
+    if (customerUserId) {
+      if (ref.kind === 'RETURN') await this.creditReturnToWallet(tx, customerUserId, order, amount, ref.refKey);
+      else await this.refundToWallet(tx, customerUserId, order, amount);
+    }
     await tx.orderCustomerRefund.create({
       data: {
         orderId: order.id,
         orderCode: order.code,
-        amount: order.total,
+        kind: ref.kind,
+        refKey: ref.refKey,
+        amount,
         phone,
         recipientName,
         customerUserId,
@@ -313,7 +561,7 @@ export class OrderReversalService {
       },
     });
     if (!customerUserId) {
-      this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${order.total}đ cho khách ${phone ?? '(không có SĐT)'}.`);
+      this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${amount}đ cho khách ${phone ?? '(không có SĐT)'}.`);
     }
     return customerUserId;
   }

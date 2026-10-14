@@ -10,6 +10,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -154,17 +155,21 @@ export class LoyaltyService {
    */
   async reverseOrderPoints(orderId: string): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    // D3: đơn trả một phần trước đó đã trả lại điểm đã dùng và thu hồi điểm tích theo phần — lần đảo cả đơn chỉ làm
+    // phần còn lại. Chỉ đơn đã giao (giờ RETURNED) mới có thể có lần trả một phần.
+    const prior = order.status === 'RETURNED' ? await partialReturnTotals(this.prisma, order.id) : NO_PARTIAL_RETURNS;
     // PD-3 (spec 2.5): chỉ phần STANDARD (đơn trước PD-3 có pointsUsedConverted = 0 → hoàn hết như cũ). Phần
     // CONVERTED là tiền trả trước, hoàn trong tx huỷ ở OrderReversalService.refundConvertedPoints (review B1).
     const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
-    const usedStandard = order.pointsUsed - usedConverted;
+    const usedStandard = Math.max(0, order.pointsUsed - usedConverted - (prior.pointsUsedBack - prior.convertedBack));
+    const earnedLeft = Math.max(0, order.pointsEarned - prior.pointsEarnedBack);
     // Điểm hoàn là điểm thường nên có hạn như mọi điểm thưởng khác (OQ-15). Đọc cấu hình NGOÀI tx: không giữ
     // kết nối tx trong lúc chờ SystemConfigService.
     const refundExpiresAt = usedStandard > 0 ? await this.pointsExpiresAt(new Date()) : null;
     try {
       await this.prisma.$transaction(async (tx) => {
         const lockedUser =
-          order.pointsEarned > 0 || usedStandard > 0
+          earnedLeft > 0 || usedStandard > 0
             ? await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`
             : [];
         // Re-check trong tx (sau khoá) để giảm xác suất chạy ops vô ích; unique index là guard cứng.
@@ -182,7 +187,7 @@ export class LoyaltyService {
 
         // pointsEarned CHỈ được cộng khi đơn DELIVERED (xem creditOrderPoints).
         // Nếu user hủy đơn CONFIRMED (chưa giao), điểm chưa cộng → KHÔNG trừ.
-        const wasCredited = order.pointsEarned > 0
+        const wasCredited = earnedLeft > 0
           ? Boolean(
               await tx.pointsTransaction.findFirst({
                 where: { userId: order.userId, reason: `ORDER_DELIVERED:${order.code}` },
@@ -214,7 +219,7 @@ export class LoyaltyService {
         if (wasCredited) {
           const balance = Math.max(0, (lockedUser[0]?.pointsBalance ?? 0) + usedStandard);
           const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
-          const take = Math.min(order.pointsEarned, recoverable ?? order.pointsEarned, balance);
+          const take = Math.min(earnedLeft, recoverable ?? earnedLeft, balance);
           // create() trước user.updateMany — nếu duplicate caller chạy đồng thời, P2002
           // bay ra TRƯỚC khi balance bị decrement lần 2 (xem catch ngoài tx).
           await tx.pointsTransaction.create({
@@ -234,8 +239,8 @@ export class LoyaltyService {
             });
             if (dec.count !== 1) throw new Error(`reverseOrderPoints ${order.code}: số dư đổi giữa chừng`);
           }
-          if (take < order.pointsEarned) {
-            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${order.pointsEarned} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
+          if (take < earnedLeft) {
+            this.logger.log(`reverseOrderPoints order=${order.code}: thu hồi ${take}/${earnedLeft} điểm, phần còn lại của lô đã hết hạn hoặc vượt số dư`);
           }
         }
       });

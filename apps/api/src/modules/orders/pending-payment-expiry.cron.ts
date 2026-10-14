@@ -14,6 +14,14 @@ export const MAX_TTL_HOURS = 24 * 30;
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 
+/** TTL đơn trả trước chờ thanh toán (giờ), kẹp trong [MIN, MAX] — dùng chung cho cron huỷ, hạn ghi trên QR và tin báo. */
+export async function readPendingPaymentTtlHours(systemConfig: Pick<SystemConfigService, 'get'>): Promise<number> {
+  const raw = await systemConfig.get<unknown>(PENDING_PAYMENT_TTL_KEY, DEFAULT_PENDING_PAYMENT_TTL_HOURS);
+  const n = typeof raw === 'number' ? raw : Number.NaN;
+  if (!Number.isFinite(n)) return DEFAULT_PENDING_PAYMENT_TTL_HOURS;
+  return Math.min(MAX_TTL_HOURS, Math.max(MIN_TTL_HOURS, n));
+}
+
 export type ExpireResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number; cancelled: number; failed: number };
 
 /**
@@ -97,6 +105,8 @@ export class PendingPaymentExpiryCron {
           }`,
           onlyIfUnpaid: true,
           expectedStatus: 'PENDING_PAYMENT',
+          // Khách cần biết VÌ SAO đơn huỷ và nếu lỡ chuyển khoản muộn thì tiền đi đâu (BUYERMINI-8).
+          notifyEvent: 'ORDER_PAYMENT_EXPIRED',
         });
         if (res.status === 'CANCELLED') {
           cancelled += 1;
@@ -114,10 +124,7 @@ export class PendingPaymentExpiryCron {
     return { scanned: stale.length, cancelled, failed };
   }
 
-  private async ttlHours(): Promise<number> {
-    const raw = await this.systemConfig.get<unknown>(PENDING_PAYMENT_TTL_KEY, DEFAULT_PENDING_PAYMENT_TTL_HOURS);
-    const n = typeof raw === 'number' ? raw : Number.NaN;
-    if (!Number.isFinite(n)) return DEFAULT_PENDING_PAYMENT_TTL_HOURS;
-    return Math.min(MAX_TTL_HOURS, Math.max(MIN_TTL_HOURS, n));
+  private ttlHours(): Promise<number> {
+    return readPendingPaymentTtlHours(this.systemConfig);
   }
 }

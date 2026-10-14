@@ -10,7 +10,12 @@ import { CartService } from '../cart/cart.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
-import { OrderReversalService } from './order-reversal.service';
+import { OrderReversalService, type ReversalResult } from './order-reversal.service';
+import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
+import { announceBankRefund } from './refund-queue';
+import { refundNote } from './order-returns.service';
+import { readPendingPaymentTtlHours } from './pending-payment-expiry.cron';
+import { PREPAID_METHODS } from './order-transition';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
 import { isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
@@ -29,7 +34,11 @@ export interface OrderItemMedia {
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 export type OrderItemView = OrderWithItems['items'][number] & OrderItemMedia;
-export type OrderView = Omit<OrderWithItems, 'items'> & { items: OrderItemView[] };
+export type OrderView = Omit<OrderWithItems, 'items'> & {
+  items: OrderItemView[];
+  /** Đơn trả trước chờ thanh toán: quá mốc này cron tự huỷ (BUYERMINI-8 — QR và chi tiết đơn ghi rõ hạn). */
+  paymentDeadline?: string | null;
+};
 
 const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
 
@@ -104,7 +113,15 @@ export class OrdersService {
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
     const [view] = await this.attachItemMedia([order]);
-    return view!;
+    return { ...view!, paymentDeadline: await this.paymentDeadline(order) };
+  }
+
+  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL với cron tự huỷ. Null với đơn khác. */
+  async paymentDeadline(order: Pick<OrderWithItems, 'type' | 'status' | 'paymentStatus' | 'paymentMethod' | 'createdAt'>): Promise<string | null> {
+    if (order.type !== 'RETAIL' || order.status !== 'PENDING_PAYMENT' || order.paymentStatus !== 'UNPAID') return null;
+    if (!(PREPAID_METHODS as readonly string[]).includes(order.paymentMethod)) return null;
+    const hours = await readPendingPaymentTtlHours(this.config);
+    return new Date(new Date(order.createdAt).getTime() + hours * 3_600_000).toISOString();
   }
 
   /** Ảnh + tồn kho + còn bán được của từng dòng, join theo variationId (OrderItem không có FK/ảnh —
@@ -138,7 +155,7 @@ export class OrdersService {
     return orders.map((o) => ({ ...o, items: o.items.map((it) => ({ ...it, ...media(it.variationId) })) }));
   }
 
-  async cancel(userId: string, code: string) {
+  async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
@@ -146,6 +163,10 @@ export class OrdersService {
     // bên dưới, không để assertCustomerCancellable báo "đã vào quy trình giao" cho một đơn vừa huỷ thành công.
     if (order.status === 'CANCELLED') return order;
     this.assertCustomerCancellable(order, userId);
+    // D2: khách chọn nhận tiền hoàn về Ví (ngay) hay tài khoản ngân hàng (admin chuyển tay). Kiểm trước tx để báo lỗi
+    // nhập liệu sớm; chỉ có tác dụng khi đơn thật sự đã thanh toán (guard PAID→REFUNDED trong reverseFinancials).
+    const destination = parseRefundDestination(refundInput, order.paymentMethod);
+    let reversed: ReversalResult | null = null;
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -181,7 +202,7 @@ export class OrdersService {
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
-      await this.reversal.reverseFinancials(tx, current);
+      reversed = await this.reversal.reverseFinancials(tx, current, { destination });
       return true;
     });
     if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
@@ -203,7 +224,17 @@ export class OrdersService {
     // hoàn ví/điểm/stock xong xuôi ở trên; guard đầu hàm (status !== PENDING_PAYMENT/CONFIRMED)
     // chặn mọi lần gọi lại cancel() sau đó nên nếu để throw ở đây, client sẽ nhận 500 vĩnh viễn
     // cho một thao tác thực ra đã thành công. Nhất quán với requestReturn() bên dưới.
-    await this.notifications.notify(userId, 'ORDER_CANCELLED', { order_code: code }).catch(() => undefined);
+    const refund = (reversed as ReversalResult | null)?.refund ?? null;
+    const bank = destination.method === 'BANK' ? { bankName: destination.bank.bankName, bankAccountNo: destination.bank.accountNumber } : null;
+    if (refund?.to === 'BANK' && bank) {
+      await announceBankRefund(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        { orderCode: code, amount: refund.amount, userId, ...bank },
+      );
+    }
+    await this.notifications
+      .notify(userId, 'ORDER_CANCELLED', { order_code: code, refund_note: refundNote(refund, bank) })
+      .catch(() => undefined);
     return this.detail(userId, code);
   }
 
@@ -300,64 +331,5 @@ export class OrdersService {
     }
     const cart = await this.cart.getCart(userId);
     return { ...cart, cart, results };
-  }
-
-  /** Yêu cầu đổi/trả (§6.4): chỉ đơn DELIVERED, trong window (config returns.window_days=7),
-   * chỉ-lỗi-NSX (user nêu lý do + ảnh). Admin duyệt sau (AdminService.reviewReturn). */
-  async requestReturn(userId: string, code: string, dto: { reason: string; images?: string[] }) {
-    const order = await this.detail(userId, code);
-    if (order.status !== 'DELIVERED') {
-      throw new BadRequestException('Chỉ yêu cầu đổi/trả với đơn đã giao.');
-    }
-    const windowDays = await this.config.get<number>('returns.window_days', 7);
-    // Mốc giao THẬT (OrderStatusService ghi deliveredAt khi lật DELIVERED; migration 20260926100000
-    // backfill đơn cũ). Trước đây dùng updatedAt: webhook vận chuyển/yêu cầu hoá đơn ghi sau khi giao
-    // làm hạn đổi/trả trôi dài quá mốc duyệt hoa hồng CTV (đổi trả được sau khi hoa hồng đã APPROVED).
-    const deliveredAt = order.deliveredAt ?? (await this.lastDeliveredAt(order.id)) ?? order.updatedAt ?? order.createdAt;
-    if (Date.now() - new Date(deliveredAt).getTime() > windowDays * 864e5) {
-      throw new BadRequestException(`Quá hạn đổi/trả (${windowDays} ngày từ khi nhận hàng).`);
-    }
-    // Pre-check nhanh + guard thật là unique index partial (orderId WHERE status='REQUESTED')
-    // — 2 request gửi đổi/trả song song (double-tap/2 tab) đều có thể đọc "chưa có" trước khi
-    // request đầu commit; P2002 chặn tạo trùng.
-    const existing = await this.prisma.returnRequest.findFirst({
-      where: { orderId: order.id, status: 'REQUESTED' },
-    });
-    if (existing) throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
-
-    let req: Awaited<ReturnType<typeof this.prisma.returnRequest.create>>;
-    try {
-      req = await this.prisma.returnRequest.create({
-        data: { orderId: order.id, userId, reason: dto.reason, images: dto.images ?? [] },
-      });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new BadRequestException('Đơn đang có yêu cầu đổi/trả chờ xử lý.');
-      }
-      throw err;
-    }
-    await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
-    return req;
-  }
-
-  /** Danh sách yêu cầu đổi/trả của user (hiện trạng thái ở chi tiết đơn). */
-  listMyReturns(userId: string) {
-    return this.prisma.returnRequest.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-  }
-
-  /** Fallback cho đơn chưa có deliveredAt: lần lật DELIVERED cuối trong sổ lịch sử trạng thái. */
-  private async lastDeliveredAt(orderId: string): Promise<Date | null> {
-    const h = await this.prisma.orderStatusHistory
-      ?.findFirst({
-        where: { orderId, toStatus: 'DELIVERED' },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
-      })
-      .catch(() => null);
-    return h?.createdAt ?? null;
   }
 }
