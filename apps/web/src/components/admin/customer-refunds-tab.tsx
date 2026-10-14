@@ -16,12 +16,15 @@ import {
   CUSTOMER_REFUND_FILTERS,
   CUSTOMER_REFUND_KINDS,
   CUSTOMER_REFUND_STALE_HINT,
+  TAKE_OVER_REASON_MIN,
+  claimHolderSuffix,
   customerRefundView,
   markPaidFailure,
   needsBankAccount,
   needsClaim,
   refundKindLabel,
   refundReasonLabel,
+  takeOverFrom,
   type CustomerRefundView,
   type RefundAction,
 } from '@/lib/customer-refunds-admin';
@@ -29,6 +32,7 @@ import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
 import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
+import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
@@ -74,7 +78,7 @@ export function CustomerRefundsPendingBadge() {
  * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
-export function CustomerRefundsTab() {
+export function CustomerRefundsTab({ meId }: { meId?: string } = {}) {
   const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
@@ -98,9 +102,11 @@ export function CustomerRefundsTab() {
   const rows = outOfRange ? [] : (q.data?.data ?? []);
 
   const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
   const release = useMutation({
-    mutationFn: (r: AdminCustomerRefund) => releaseCustomerRefund(r.id),
-    onSuccess: (_d, r) => {
+    mutationFn: ({ refund: r, takeOverReason }: { refund: AdminCustomerRefund; takeOverReason?: string }) =>
+      releaseCustomerRefund(r.id, takeOverReason ? { takeOverReason } : undefined),
+    onSuccess: (_d, { refund: r }) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
       setFlash({ tone: 'success', text: `Đã trả khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) về hàng chờ. Khách lại đổi được nơi nhận.` });
     },
@@ -109,6 +115,32 @@ export function CustomerRefundsTab() {
       setFlash({ tone: 'warning', text: markPaidFailure(e, 'claim').message });
     },
   });
+
+  const onRelease = async (r: AdminCustomerRefund) => {
+    setFlash(null);
+    const from = takeOverFrom(r, meId);
+    if (!from) {
+      release.mutate({ refund: r });
+      return;
+    }
+    const reason = await ask({
+      title: 'Tiếp quản khoản đang chuyển khoản',
+      message:
+        `Khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) đang do ${from.holder} chuyển khoản${from.since ? ` từ ${fmtDate(from.since)}` : ''}.\n\n` +
+        `Chỉ trả về hàng chờ khi chắc chắn ${from.holder} chưa chuyển và sẽ không chuyển nữa: khách sẽ đổi được sang Ví Tubu, ` +
+        'nếu tiền đã đi là hoàn hai lần. Lý do được lưu vào lịch sử đơn.',
+      confirmLabel: 'Trả về hàng chờ',
+      cancelLabel: 'Đóng',
+      tone: 'danger',
+      input: { label: 'Lý do tiếp quản', placeholder: `Vd: ${from.holder} báo chưa chuyển được`, maxLength: 300, required: true },
+    });
+    if (reason === null) return;
+    if (reason.length < TAKE_OVER_REASON_MIN) {
+      setFlash({ tone: 'warning', text: `Ghi lý do tiếp quản ít nhất ${TAKE_OVER_REASON_MIN} ký tự rồi bấm lại.` });
+      return;
+    }
+    release.mutate({ refund: r, takeOverReason: reason });
+  };
 
   const onDone = (r: AdminCustomerRefund, outcome: MarkPaidOutcome) => {
     setTarget(null);
@@ -209,16 +241,14 @@ export function CustomerRefundsTab() {
           <CustomerRefundRow
             key={r.id}
             refund={r}
+            meId={meId}
             recorded={recorded.has(r.id)}
-            releasing={release.isPending && release.variables?.id === r.id}
+            releasing={release.isPending && release.variables?.refund.id === r.id}
             onAction={(mode) => {
               setFlash(null);
               setTarget({ refund: r, mode });
             }}
-            onRelease={() => {
-              setFlash(null);
-              release.mutate(r);
-            }}
+            onRelease={() => void onRelease(r)}
           />
         ))}
         {q.data && !outOfRange && rows.length === 0 && (
@@ -263,22 +293,26 @@ export function CustomerRefundsTab() {
         <CustomerRefundPaidDialog
           refund={target.refund}
           mode={target.mode}
+          takeOverFrom={target.mode === 'paid' ? takeOverFrom(target.refund, meId) : null}
           onClose={() => setTarget(null)}
           onDone={(outcome) => onDone(target.refund, outcome)}
         />
       )}
+      {dialog}
     </div>
   );
 }
 
 export function CustomerRefundRow({
   refund: r,
+  meId,
   recorded = false,
   releasing = false,
   onAction,
   onRelease,
 }: {
   refund: AdminCustomerRefund;
+  meId?: string;
   recorded?: boolean;
   releasing?: boolean;
   onAction: (mode: RefundAction) => void;
@@ -286,6 +320,8 @@ export function CustomerRefundRow({
 }) {
   const view = customerRefundView(r);
   const manual = r.method === 'MANUAL_TRANSFER';
+  const from = takeOverFrom(r, meId);
+  const takeOverTag = from ? ' (tiếp quản)' : '';
 
   return (
     <div data-refund-id={r.id} className="min-w-0 rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -306,7 +342,7 @@ export function CustomerRefundRow({
       </div>
 
       <div className="mt-2 space-y-1 text-sm text-stone-600">
-        {needsBankAccount(r) ? (
+        {view === 'WALLET' ? null : needsBankAccount(r) ? (
           <BankAccountLines refund={r} />
         ) : (
           <>
@@ -348,14 +384,23 @@ export function CustomerRefundRow({
           ) : (
             <>
               {view === 'PROCESSING' && r.claimedAt && (
-                <span className="w-full text-xs text-stone-500">Bắt đầu chuyển lúc {fmtDate(r.claimedAt)} — khách không đổi được nơi nhận.</span>
+                <span className="w-full text-xs text-stone-500">
+                  Bắt đầu chuyển lúc {fmtDate(r.claimedAt)}
+                  {claimHolderSuffix(r, meId)} — khách không đổi được nơi nhận.
+                </span>
+              )}
+              {from && (
+                <span className="w-full text-xs text-warning-fg">
+                  Chỉ {from.holder} được xác nhận hoặc trả về hàng chờ. Chắc chắn {from.holder} không chuyển nữa thì tiếp quản
+                  kèm lý do (lưu vào lịch sử đơn).
+                </span>
               )}
               <button type="button" className={BTN_WARNING} onClick={() => onAction('paid')}>
-                Đã chuyển khoản
+                {`Đã chuyển khoản${takeOverTag}`}
               </button>
               {view === 'PROCESSING' && onRelease && (
                 <button type="button" className={BTN_SECONDARY} disabled={releasing} onClick={onRelease}>
-                  {releasing ? 'Đang trả…' : 'Trả về hàng chờ'}
+                  {releasing ? 'Đang trả…' : `Trả về hàng chờ${takeOverTag}`}
                 </button>
               )}
             </>
@@ -382,7 +427,15 @@ export function CustomerRefundRow({
           )}
           {manual && r.completedBy && (
             <div>
-              Admin xác nhận (mã): <span className="break-all text-stone-700">{r.completedBy}</span>
+              {r.completedByName ? (
+                <>
+                  Admin xác nhận: <span className="break-words text-stone-700">{r.completedByName}</span>
+                </>
+              ) : (
+                <>
+                  Admin xác nhận (mã): <span className="break-all text-stone-700">{r.completedBy}</span>
+                </>
+              )}
             </div>
           )}
         </div>

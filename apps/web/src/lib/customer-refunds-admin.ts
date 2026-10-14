@@ -22,6 +22,7 @@ export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label:
   { kind: 'CANCEL', label: 'Huỷ đơn' },
   { kind: 'RETURN', label: 'Trả hàng' },
   { kind: 'LATE_PAYMENT', label: 'Tiền về muộn' },
+  { kind: 'OVERPAYMENT', label: 'Tiền trả dư' },
   { kind: 'END_CUSTOMER', label: 'Đơn CTV lên hộ' },
 ];
 
@@ -45,6 +46,28 @@ export const refundReasonLabel = (reason: string) => REASON_LABEL[reason] ?? rea
  */
 export const needsClaim = (r: Pick<AdminCustomerRefund, 'userId'>) => r.userId !== null;
 
+/** Lý do tiếp quản tối thiểu — khớp CustomerRefundsService.claimGuard. */
+export const TAKE_OVER_REASON_MIN = 5;
+
+/**
+ * Khoản đang chuyển khoản do admin KHÁC giữ (R3-MONEY-4): chỉ người đó được xác nhận/trả về hàng chờ, người xem phải
+ * tiếp quản kèm lý do. null khi không phải (chưa ai giữ, chính mình giữ, hoặc không biết mình là ai — API vẫn chặn).
+ */
+export function takeOverFrom(
+  r: Pick<AdminCustomerRefund, 'status' | 'claimedBy' | 'claimedByName' | 'claimedAt'>,
+  meId: string | undefined,
+): { holder: string; since: string | null } | null {
+  if (r.status !== 'PROCESSING' || !r.claimedBy || !meId || r.claimedBy === meId) return null;
+  return { holder: r.claimedByName || 'một quản trị viên khác', since: r.claimedAt ?? null };
+}
+
+/** "bởi bạn" / "bởi Admin An" sau "Bắt đầu chuyển lúc …"; rỗng khi không biết ai. */
+export function claimHolderSuffix(r: Pick<AdminCustomerRefund, 'claimedBy' | 'claimedByName'>, meId: string | undefined): string {
+  if (!r.claimedBy) return '';
+  if (meId && r.claimedBy === meId) return ' bởi bạn';
+  return r.claimedByName ? ` bởi ${r.claimedByName}` : '';
+}
+
 /**
  * WALLET chỉ là dòng vết (tiền đã vào ví khách lúc huỷ/trả) nên không có thao tác; chỉ MANUAL_TRANSFER cần
  * admin chuyển khoản tay, khớp điều kiện của CustomerRefundsService.markPaid.
@@ -64,7 +87,8 @@ export const CUSTOMER_REFUND_STALE_HINT =
   'Khoản này có thể đã được ghi nhận, kể cả từ lần bấm trước bị lỗi mạng. Mở bộ lọc "Đã chuyển" để kiểm tra trước khi chuyển khoản lại.';
 
 /** Câu API khi khoản đã đổi trạng thái giữa chừng (khách vừa chọn Ví, admin khác vừa nhận/xác nhận). */
-const STALE_PATTERN = /không còn chờ|vừa được xử lý|vừa thay đổi|về Ví Tubu|đã được xác nhận chuyển khoản|quản trị viên khác|không còn ở trạng thái/i;
+const STALE_PATTERN =
+  /không còn chờ|vừa được xử lý|vừa thay đổi|về Ví Tubu|đã được xác nhận chuyển khoản|quản trị viên khác|không còn ở trạng thái|đang (?:được|do) .+ chuyển khoản/i;
 /** Câu nghiệp vụ của API (không phải lỗi DTO) — hiện nguyên văn, giữ hộp để admin sửa. */
 const BUSINESS_PATTERN = /chưa có tài khoản nhận|Bắt đầu chuyển khoản/i;
 

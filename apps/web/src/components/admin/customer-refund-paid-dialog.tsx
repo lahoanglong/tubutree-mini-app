@@ -4,8 +4,15 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { claimCustomerRefund, markCustomerRefundPaid, type AdminCustomerRefund } from '@/lib/admin-client';
-import { CUSTOMER_REFUNDS_QUERY_KEY, markPaidFailure, needsBankAccount, type RefundAction } from '@/lib/customer-refunds-admin';
+import {
+  CUSTOMER_REFUNDS_QUERY_KEY,
+  TAKE_OVER_REASON_MIN,
+  markPaidFailure,
+  needsBankAccount,
+  type RefundAction,
+} from '@/lib/customer-refunds-admin';
 import { formatVnd } from '@/lib/shop-client';
+import { formatDateTime } from '@/lib/format-date';
 import { EMPTY_BANK, bankDetailsError, type RefundBankInput } from '@/lib/refund-rules';
 import { INPUT_CLASS, Notice } from './ui';
 
@@ -20,11 +27,14 @@ export type MarkPaidOutcome = { kind: 'paid' } | { kind: 'claimed' } | { kind: '
 export function CustomerRefundPaidDialog({
   refund,
   mode = 'paid',
+  takeOverFrom = null,
   onClose,
   onDone,
 }: {
   refund: AdminCustomerRefund;
   mode?: RefundAction;
+  /** Khoản đang do admin khác chuyển khoản: hộp bắt ghi lý do tiếp quản (R3-MONEY-4). */
+  takeOverFrom?: { holder: string; since: string | null } | null;
   onClose: () => void;
   onDone: (outcome: MarkPaidOutcome) => void;
 }) {
@@ -34,13 +44,17 @@ export function CustomerRefundPaidDialog({
   const bodyId = useId();
   const bankRefId = useId();
   const noteId = useId();
+  const takeOverId = useId();
   const bankRefRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const takeOverRef = useRef<HTMLTextAreaElement>(null);
   const acceptRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
+  const [takeOverReason, setTakeOverReason] = useState('');
+  const [takeOverMissing, setTakeOverMissing] = useState(false);
   const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [error, setError] = useState<string | null>(null);
   const [refMissing, setRefMissing] = useState(false);
@@ -55,7 +69,11 @@ export function CustomerRefundPaidDialog({
     mutationFn: () =>
       claiming
         ? claimCustomerRefund(refund.id, needsEntry ? bank : {})
-        : markCustomerRefundPaid(refund.id, { bankRef, note, ...(needsEntry ? bank : {}) }),
+        : markCustomerRefundPaid(
+            refund.id,
+            { bankRef, note, ...(needsEntry ? bank : {}) },
+            takeOverFrom ? { takeOverReason } : undefined,
+          ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
       onDone({ kind: claiming ? 'claimed' : 'paid' });
@@ -84,6 +102,13 @@ export function CustomerRefundPaidDialog({
       return;
     }
     setRefMissing(false);
+    if (takeOverFrom && takeOverReason.trim().length < TAKE_OVER_REASON_MIN) {
+      setTakeOverMissing(true);
+      setError(`Ghi lý do tiếp quản (ít nhất ${TAKE_OVER_REASON_MIN} ký tự) — được lưu vào lịch sử đơn.`);
+      takeOverRef.current?.focus();
+      return;
+    }
+    setTakeOverMissing(false);
     const bankError = needsEntry ? bankDetailsError(bank) : null;
     if (bankError) {
       setError(bankError);
@@ -115,7 +140,7 @@ export function CustomerRefundPaidDialog({
         if (!busyRef.current) onCloseRef.current();
       } else if (e.key === 'Tab') {
         const bankInputs = Array.from(bankEntryRef.current?.querySelectorAll('input') ?? []);
-        const order = [...bankInputs, bankRefRef.current, noteRef.current, cancelRef.current, acceptRef.current].filter(
+        const order = [...bankInputs, bankRefRef.current, noteRef.current, takeOverRef.current, cancelRef.current, acceptRef.current].filter(
           (el): el is HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement => !!el && !el.disabled,
         );
         if (order.length === 0) {
@@ -159,6 +184,13 @@ export function CustomerRefundPaidDialog({
           {claiming ? 'Bắt đầu chuyển khoản' : 'Xác nhận đã chuyển khoản'}
         </h2>
         <div id={bodyId} className="mt-2 space-y-2 text-sm leading-relaxed text-stone-600">
+          {takeOverFrom && (
+            <Notice tone="warning">
+              Khoản này đang do {takeOverFrom.holder} chuyển khoản
+              {takeOverFrom.since ? ` từ ${formatDateTime(takeOverFrom.since)}` : ''}. Chỉ xác nhận thay khi chắc chắn tiền đã đi
+              đúng một lần (đối chiếu sao kê) — lý do tiếp quản được lưu vào lịch sử đơn.
+            </Notice>
+          )}
           {claiming ? (
             <p>
               Bấm trước khi chuyển tiền: nơi nhận được khoá, khách không đổi sang Ví Tubu được nữa. Chuyển khoản xong, bấm
@@ -264,6 +296,26 @@ export function CustomerRefundPaidDialog({
                   className={INPUT_CLASS}
                 />
               </div>
+              {takeOverFrom && (
+                <div>
+                  <label htmlFor={takeOverId} className="mb-1 block text-xs font-medium text-stone-700">
+                    Lý do tiếp quản
+                  </label>
+                  <textarea
+                    id={takeOverId}
+                    ref={takeOverRef}
+                    name="takeOverReason"
+                    rows={2}
+                    maxLength={300}
+                    value={takeOverReason}
+                    disabled={busy}
+                    required
+                    aria-invalid={takeOverMissing ? true : undefined}
+                    onChange={(e) => setTakeOverReason(e.target.value)}
+                    className={INPUT_CLASS}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
