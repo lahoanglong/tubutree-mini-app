@@ -258,6 +258,14 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
     expect(root.textContent).toContain('Gian hàng CTV bán lại sản phẩm của Tubu Tree');
     expect(root.textContent).toContain('SP r1');
   });
+
+  it('ADMIN trên gian hàng CTV cũng không đăng sản phẩm riêng (không có đường tự giao cho sản phẩm đó)', async () => {
+    mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+    mocks.store = { ...STORE, type: 'CTV' };
+    const root = await mount();
+    await openTab('Sản phẩm');
+    expect(byText(root, 'button', 'Đăng sản phẩm mới')).toBeNull();
+  });
 });
 
 describe('cổng đối tác — tab Gian hàng & Subdomain', () => {

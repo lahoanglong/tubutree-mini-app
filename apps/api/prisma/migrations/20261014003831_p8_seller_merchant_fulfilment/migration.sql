@@ -121,16 +121,24 @@ UPDATE "products" SET "fulfilment" = 'MERCHANT'
 UPDATE "variations" SET "pancakeId" = NULL WHERE "pancakeId" LIKE 'MCH\_%';
 UPDATE "products" SET "pancakeId" = NULL WHERE "pancakeId" LIKE 'MCH\_%';
 
--- Đơn cũ chưa từng lên Pancake mà chỉ gồm hàng đối tác tự giao của MỘT gian hàng: chuyển cho gian hàng đó xử lý. Đơn lẫn hàng
--- Tubu giữ TUBU (đẩy Pancake chỉ gom dòng Pancake và gắn cờ cần xử lý cho phần còn lại).
+-- Sản phẩm cũ đăng trên gian hàng không phải đối tác (CTV, gian hàng của admin): chủ gian hàng không có màn xử lý đơn tự giao
+-- nên ngừng bán; checkout cũng không nhận hàng tự giao ngoài gian hàng MERCHANT.
+UPDATE "products" p SET "isActive" = false
+ WHERE p."fulfilment" = 'MERCHANT' AND p."isActive"
+   AND NOT EXISTS (SELECT 1 FROM "storefronts" s WHERE s."id" = p."storefrontId" AND s."type" = 'MERCHANT');
+
+-- Đơn cũ chưa từng lên Pancake mà chỉ gồm hàng đối tác tự giao của MỘT gian hàng đối tác (MERCHANT): chuyển cho gian hàng đó
+-- xử lý. Đơn lẫn hàng Tubu, hoặc hàng trên gian hàng CTV/admin, giữ TUBU (đẩy Pancake chỉ gom dòng Pancake và gắn cờ cần xử lý
+-- cho phần còn lại, admin xử lý tay).
 UPDATE "orders" o
    SET "fulfiller" = 'MERCHANT', "fulfillerStorefrontId" = x."sid"
   FROM (
     SELECT oi."orderId", MIN(p."storefrontId") AS "sid", COUNT(DISTINCT p."storefrontId") AS "n",
-           BOOL_AND(p."fulfilment" = 'MERCHANT' AND p."storefrontId" IS NOT NULL) AS "allMerchant"
+           BOOL_AND(COALESCE(p."fulfilment" = 'MERCHANT' AND s."type" = 'MERCHANT', false)) AS "allMerchant"
       FROM "order_items" oi
       JOIN "variations" v ON v."id" = oi."variationId"
       JOIN "products" p ON p."id" = v."productId"
+      LEFT JOIN "storefronts" s ON s."id" = p."storefrontId"
      GROUP BY oi."orderId"
   ) x
  WHERE o."id" = x."orderId" AND x."allMerchant" AND x."n" = 1

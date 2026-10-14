@@ -50,7 +50,7 @@ export class CartService {
         items: {
           include: {
             variation: {
-              include: { product: { include: { storefront: { select: { title: true, ownerUserId: true } } } } },
+              include: { product: { include: { storefront: { select: { title: true, ownerUserId: true, type: true } } } } },
             },
           },
         },

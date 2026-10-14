@@ -185,12 +185,12 @@ export class MerchantService {
   ) {}
 
   /**
-   * Gian hàng được đăng sản phẩm riêng: gian hàng đối tác (đại lý đã duyệt) hoặc admin. CTV đăng ký một chạm, không duyệt,
-   * nên chỉ bán lại hàng Tubu (SELLER-1).
+   * Chỉ gian hàng đối tác (đại lý đã duyệt) đăng sản phẩm riêng: hàng tự giao chỉ có người xử lý đơn ở gian hàng MERCHANT. CTV
+   * đăng ký một chạm, không duyệt, nên chỉ bán lại hàng Tubu (SELLER-1); gian hàng của admin cũng là loại CTV.
    */
   private async assertCanSellOwnProducts(userId: string) {
-    const [store, role] = await Promise.all([this.getOrCreateStore(userId), this.getCallerRole(userId)]);
-    if (store.type !== 'MERCHANT' && role !== 'ADMIN') throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    const store = await this.getOrCreateStore(userId);
+    if (store.type !== 'MERCHANT') throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
     return store;
   }
 

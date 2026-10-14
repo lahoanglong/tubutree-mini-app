@@ -43,6 +43,13 @@ describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
     expect(productCreate).not.toHaveBeenCalled();
   });
 
+  it('ADMIN trên gian hàng CTV cũng không đăng được: sản phẩm tự giao trên gian hàng không phải đối tác không có ai xử lý đơn', async () => {
+    const { svc, productCreate } = build({ role: 'ADMIN', store: { ...MERCHANT_STORE, type: 'CTV' } });
+    await expect(svc.createProduct('u1', BASE)).rejects.toThrow(new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT));
+    await expect(svc.checkPancakeVariation('u1', 'PK-123')).rejects.toThrow(ForbiddenException);
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
   it('đối tác tự giao (mặc định): fulfilment MERCHANT, KHÔNG có mã Pancake nào (không còn mã giả MCH_), báo admin chờ duyệt', async () => {
     const { svc, productCreate, notify } = build();
     await svc.createProduct('u1', { ...BASE, stock: 12 });

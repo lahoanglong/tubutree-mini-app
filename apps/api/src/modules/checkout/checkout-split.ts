@@ -17,19 +17,23 @@ export interface FulfilmentSource {
   product: {
     fulfilment: string;
     storefrontId: string | null;
-    storefront?: { title: string; ownerUserId: string | null } | null;
+    storefront?: { title: string; ownerUserId: string | null; type: string } | null;
   };
 }
 
-/** Nơi giao của một biến thể. Hàng đối tác tự giao cần có gian hàng; hàng Tubu cần mã Pancake thật. */
+/**
+ * Nơi giao của một biến thể. Hàng đối tác tự giao cần thuộc gian hàng đối tác (chỉ chủ gian hàng MERCHANT có màn "Đơn cần
+ * giao"); hàng Tubu cần mã Pancake thật.
+ */
 export function fulfillerOf(v: FulfilmentSource): LineFulfiller {
   if (v.product.fulfilment === 'MERCHANT') {
-    if (v.product.storefrontId) {
+    const store = v.product.storefront;
+    if (v.product.storefrontId && store?.type === 'MERCHANT') {
       return {
         kind: 'MERCHANT',
         storefrontId: v.product.storefrontId,
-        name: v.product.storefront?.title ?? 'Gian hàng đối tác',
-        ownerUserId: v.product.storefront?.ownerUserId ?? null,
+        name: store.title,
+        ownerUserId: store.ownerUserId,
       };
     }
     return { kind: 'UNAVAILABLE', storefrontId: null, name: '', ownerUserId: null };

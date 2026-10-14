@@ -238,7 +238,7 @@ export default function MerchantPage() {
   const resellCount = productsQ.data?.meta?.resellTotal ?? 0;
   const fulfilCounts = fulfilQ.data?.counts;
   const toShip = (fulfilCounts?.CONFIRMED ?? 0) + (fulfilCounts?.PACKED ?? 0);
-  const canCreateProducts = selfFulfils || user?.role === 'ADMIN';
+  const canCreateProducts = selfFulfils;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">

@@ -25,13 +25,31 @@ describe('fulfillerOf', () => {
     expect(
       fulfillerOf({
         pancakeId: null,
-        product: { fulfilment: 'MERCHANT', storefrontId: 'sf-a', storefront: { title: 'Shop A', ownerUserId: 'u-a' } },
+        product: {
+          fulfilment: 'MERCHANT',
+          storefrontId: 'sf-a',
+          storefront: { title: 'Shop A', ownerUserId: 'u-a', type: 'MERCHANT' },
+        },
       }),
     ).toEqual(SHOP_A);
   });
 
   it('"Tubu giao hộ" (sản phẩm đối tác, fulfilment TUBU, biến thể có mã Pancake) → kho Tubu giao', () => {
     expect(fulfillerOf({ pancakeId: 'pv9', product: { fulfilment: 'TUBU', storefrontId: 'sf-a' } }).kind).toBe('TUBU');
+  });
+
+  it('hàng tự giao trên gian hàng không phải gian hàng đối tác (CTV, gian hàng của admin) → UNAVAILABLE: chủ gian hàng không có màn xử lý đơn', () => {
+    for (const type of ['CTV', 'BRAND']) {
+      expect(
+        fulfillerOf({
+          pancakeId: null,
+          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type } },
+        }).kind,
+      ).toBe('UNAVAILABLE');
+    }
+    expect(fulfillerOf({ pancakeId: null, product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: null } }).kind).toBe(
+      'UNAVAILABLE',
+    );
   });
 
   it('không có đường giao (hàng Tubu thiếu mã, mã giả MCH_, hàng đối tác mất gian hàng) → UNAVAILABLE', () => {
