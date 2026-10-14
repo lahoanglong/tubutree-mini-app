@@ -1,7 +1,9 @@
+import { computeReturnShares, storedLinePaid } from '../orders/refund-allocation';
 import {
   allocateGroupAmounts,
   allocateLineAmounts,
   allocateProRata,
+  allocationError,
   pointsRedeemBase,
   fulfillerOf,
   groupByFulfiller,
@@ -268,8 +270,8 @@ describe('Điểm Xanh không trả cho hàng của gian hàng đối tác (Q8 S
       line('m', 60_000, SHOP_A),
     ];
     // mã 36.000 chia theo nền không flash: t 200.000, c 100.000, m 60.000 → t 20.000; hạng 3% trên phần còn lại → t 5.400.
-    expect(pointsRedeemBase(lines, { ...none, couponDiscount: 36_000, tierDiscount: 9_720 })).toBe(200_000 - 20_000 - 5_400 + 50_000);
-    expect(pointsRedeemBase([partner('c', 100_000), line('m', 60_000, SHOP_A)], none)).toBe(0);
+    expect(pointsRedeemBase(groupByFulfiller(lines), { ...none, couponDiscount: 36_000, tierDiscount: 9_720 })).toBe(200_000 - 20_000 - 5_400 + 50_000);
+    expect(pointsRedeemBase(groupByFulfiller([partner('c', 100_000), line('m', 60_000, SHOP_A)]), none)).toBe(0);
   });
 
   it('dòng hàng giao hộ của gian hàng (cùng kiện Tubu) không nhận đồng Điểm Xanh nào', () => {
@@ -304,7 +306,7 @@ describe('Điểm Xanh không trả cho hàng của gian hàng đối tác (Q8 S
       const couponDiscount = rand() < 0.6 ? Math.min(afterCombo, int(0, 60_000)) : 0;
       const tierDiscount = Math.floor((afterCombo - couponDiscount) * 0.05);
       const flash = lines.filter((l) => l.isFlash).reduce((s, l) => s + l.total, 0);
-      expect(pointsRedeemBase(lines, { ...none, comboPerLine, comboTotal, couponDiscount, tierDiscount })).toBe(
+      expect(pointsRedeemBase(groupByFulfiller(lines), { ...none, comboPerLine, comboTotal, couponDiscount, tierDiscount })).toBe(
         afterCombo - couponDiscount - tierDiscount + flash,
       );
     }
@@ -404,6 +406,158 @@ describe('hồi quy: giỏ không có hàng đối tác ra đúng số như trư
       expect(linePoints.reduce((s, x) => s + x, 0)).toBe(before!.pointsDiscount);
       expect(linePaid.reduce((s, x) => s + x, 0)).toBe(before!.goodsAfterAll);
     }
+  });
+});
+
+describe('trần Điểm Xanh và phép chia từng dòng dùng chung một phép chia (Q8 review vòng 3 M1)', () => {
+  const none = { comboPerLine: {}, comboTotal: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0 };
+  const own = (variationId: string, total: number, fulfiller: LineFulfiller, partnerOwned = false): SplitLine => ({
+    ...line(variationId, total, fulfiller),
+    productId: `p-${variationId}`,
+    partnerOwned,
+  });
+
+  it('T 26.315 (Tubu) + C 60.000 (giao hộ) + M 35.000 (tự giao), hạng 6.065: trần 25.000đ đúng bằng phần T còn lại, T trả hết bằng điểm, C giữ 57.000', () => {
+    const groups = groupByFulfiller([own('T', 26_315, TUBU), own('C', 60_000, TUBU, true), own('M', 35_000, SHOP_A, true)]);
+    const t0 = { ...none, tierDiscount: 6_065 };
+    expect(pointsRedeemBase(groups, t0)).toBe(25_000);
+    const out = allocateGroupAmounts(groups, { ...t0, pointsDiscount: 25_000, pointsUsed: 25, pointsUsedConverted: 25 });
+    expect(out[0]).toMatchObject({ subtotal: 86_315, tierDiscount: 4_315, pointsDiscount: 25_000, goodsAfterAll: 57_000, linePaid: [0, 57_000], linePoints: [25_000, 0] });
+    expect(out[1]).toMatchObject({ subtotal: 35_000, tierDiscount: 1_750, pointsDiscount: 0, goodsAfterAll: 33_250, linePaid: [33_250], linePoints: [0] });
+    expect(allocationError(out)).toBeNull();
+  });
+
+  it('M 33.333 (tự giao, vào giỏ trước) + T 99.999 (Tubu), hạng 6.666: trần theo đúng thứ tự kiện (T trước) là 94.999đ, đơn Tubu không giảm quá tiền hàng', () => {
+    const groups = groupByFulfiller([own('M', 33_333, SHOP_A, true), own('T', 99_999, TUBU)]);
+    const t0 = { ...none, tierDiscount: 6_666 };
+    expect(pointsRedeemBase(groups, t0)).toBe(94_999);
+    const out = allocateGroupAmounts(groups, { ...t0, pointsDiscount: 94_000, pointsUsed: 94, pointsUsedConverted: 94 });
+    expect(out[0]).toMatchObject({ subtotal: 99_999, tierDiscount: 5_000, discount: 99_000, goodsAfterAll: 999, linePaid: [999] });
+    expect(out[1]).toMatchObject({ subtotal: 33_333, tierDiscount: 1_666, discount: 1_666, goodsAfterAll: 31_667 });
+    expect(allocationError(out)).toBeNull();
+  });
+
+  it('lưới an toàn: dòng âm, giảm quá tiền hàng, tiền các dòng lệch tiền hàng của kiện → báo lỗi (checkout ném lỗi, không tạo đơn)', () => {
+    const ok = { subtotal: 100, comboDiscount: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0, discount: 0, goodsAfterAll: 100, linePaid: [60, 40], linePoints: [0, 0] };
+    expect(allocationError([ok])).toBeNull();
+    expect(allocationError([ok, { ...ok, discount: 101, pointsDiscount: 101, goodsAfterAll: 0, linePaid: [-1, 0], linePoints: [101, 0] }])).toMatch(/kiện 2/);
+    expect(allocationError([{ ...ok, linePaid: [-1, 101] }])).toMatch(/âm/);
+    expect(allocationError([{ ...ok, discount: 120, goodsAfterAll: 0, linePaid: [0, 0] }])).toMatch(/vượt tiền hàng/);
+    expect(allocationError([{ ...ok, linePaid: [60, 39] }])).toMatch(/không khớp/);
+  });
+
+  it('5.000 giỏ ngẫu nhiên (hàng Tubu, giao hộ, tự giao; flash; combo; mã chung/gắn sản phẩm; hạng; điểm đúng trần; số lượng > 1): không dòng âm, tiền và điểm khớp từng đồng, trả hết hoàn đúng tiền đã trả, hàng đối tác không nhận điểm', () => {
+    const rand = rng(20261015);
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
+    const pick = <T,>(xs: T[]): T => xs[Math.floor(rand() * xs.length)]!;
+    const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+    let atCap = 0;
+    let tubuOnly = 0;
+    for (let n = 0; n < 5_000; n += 1) {
+      const mixed = rand() < 0.6;
+      const qty = new Map<string, number>();
+      const lines: SplitLine[] = Array.from({ length: int(1, 6) }, (_, k) => {
+        const unit = pick([int(1, 9) * 1_000, int(1_000, 500_000), int(10, 99) * 1_111, 33_333, 26_315, 99_000]);
+        const q = pick([1, 1, 1, 2, 3, 4, 7]);
+        qty.set(`v${k}`, q);
+        const r = rand();
+        const fulfiller = mixed && r < 0.3 ? pick([SHOP_A, SHOP_B]) : TUBU;
+        return { variationId: `v${k}`, productId: `p${int(0, 4)}`, total: unit * q, isFlash: rand() < 0.2, fulfiller, partnerOwned: fulfiller !== TUBU || (mixed && r < 0.55) };
+      });
+      const partner = (l: SplitLine) => l.partnerOwned === true;
+      const nonFlash = lines.filter((l) => !l.isFlash);
+      const comboPerLine: Record<string, number> = {};
+      const comboPct = rand() < 0.3 ? pick([5, 10, 12, 30]) : 0;
+      for (const l of nonFlash) if (comboPct > 0 && !partner(l) && rand() < 0.6) comboPerLine[l.variationId] = Math.floor((l.total * comboPct) / 100);
+      const comboTotal = sum(Object.values(comboPerLine));
+      const afterCombo = (l: SplitLine) => l.total - (comboPerLine[l.variationId] ?? 0);
+      const goodsAfterCombo = sum(nonFlash.map(afterCombo));
+      let couponDiscount = 0;
+      let couponProductIds: string[] | null = null;
+      if (rand() < 0.6 && goodsAfterCombo > 0) {
+        const scoped = rand() < 0.4 ? [pick(['p0', 'p1', 'p2', 'p3', 'p4'])] : null;
+        const base = scoped ? sum(nonFlash.filter((l) => scoped.includes(l.productId!)).map(afterCombo)) : goodsAfterCombo;
+        if (base > 0) {
+          couponProductIds = scoped;
+          couponDiscount = rand() < 0.5 ? Math.floor((base * pick([5, 10, 20, 50, 100])) / 100) : Math.min(base, pick([5_000, 20_000, 50_000, 1_000_000]));
+        }
+      }
+      const tierDiscount = Math.floor((goodsAfterCombo - couponDiscount) * pick([0, 0, 0.03, 0.05, 0.1]));
+      const groups = groupByFulfiller(lines);
+      const t0 = { ...none, comboPerLine, comboTotal, couponDiscount, couponProductIds, tierDiscount };
+      const base = pointsRedeemBase(groups, t0);
+      const cap = Math.floor(base / 1_000);
+      const pointsUsed = rand() < 0.6 ? cap : int(0, cap);
+      if (pointsUsed === cap && cap > 0) atCap += 1;
+      const t = { ...t0, pointsDiscount: pointsUsed * 1_000, pointsUsed, pointsUsedConverted: int(0, pointsUsed) };
+      const out = allocateGroupAmounts(groups, t);
+      const ctx = () => JSON.stringify({ n, lines, t });
+
+      expect(allocationError(out)).toBeNull();
+      expect(sum(out.map((g) => g.discount))).toBe(comboTotal + couponDiscount + tierDiscount + t.pointsDiscount);
+      expect(sum(out.flatMap((g) => g.linePoints))).toBe(t.pointsDiscount);
+      expect(sum(out.map((g) => g.pointsUsed))).toBe(pointsUsed);
+      expect(sum(out.map((g) => g.pointsUsedConverted))).toBe(t.pointsUsedConverted);
+      groups.forEach((g, i) => {
+        const a = out[i]!;
+        expect(a.discount).toBeLessThanOrEqual(a.subtotal);
+        expect(sum(a.linePaid)).toBe(a.subtotal - a.discount);
+        g.lines.forEach((l, k) => {
+          if (a.linePaid[k]! < 0) throw new Error(`dòng âm: ${ctx()}`);
+          if (partner(l)) expect(a.linePoints[k]).toBe(0);
+          if (l.isFlash) expect(a.linePaid[k]).toBe(l.total - a.linePoints[k]!);
+        });
+        if (!mixed) {
+          tubuOnly += 1;
+          const { linePaid: _p, linePoints: _q, ...amounts } = a;
+          expect(amounts).toEqual(preQ8GroupAmounts(groups, t)[i]);
+        }
+
+        const shippingFee = g.fulfiller.kind === 'MERCHANT' ? pick([0, 30_000]) : a.subtotal >= 200_000 ? 0 : 19_000;
+        const order = {
+          total: a.goodsAfterAll + shippingFee,
+          shippingFee,
+          pointsUsed: a.pointsUsed,
+          pointsUsedConverted: a.pointsUsedConverted,
+          pointsEarned: Math.floor(a.goodsAfterAll / 10_000),
+          items: g.lines.map((l, k) => ({
+            id: l.variationId,
+            total: afterCombo(l),
+            quantity: qty.get(l.variationId)!,
+            paidTotal: a.linePaid[k]!,
+            pointsDiscount: a.linePoints[k]!,
+          })),
+        };
+        expect(storedLinePaid(a.goodsAfterAll, order.items)).toEqual(a.linePaid);
+        const before = new Map<string, number>();
+        let money = 0;
+        let shipping = 0;
+        let pointsBack = 0;
+        for (;;) {
+          const left = order.items.filter((it) => (before.get(it.id) ?? 0) < it.quantity);
+          const req = new Map<string, number>();
+          for (const it of left) if (rand() < 0.5 || left.length === 1) req.set(it.id, int(1, it.quantity - (before.get(it.id) ?? 0)));
+          if (req.size === 0) continue;
+          const sh = computeReturnShares(order, before, req, { shopFault: rand() < 0.2, priorShipping: shipping });
+          const partnerOnly = [...req.keys()].every((id) => partner(g.lines.find((l) => l.variationId === id)!));
+          if (partnerOnly) expect(sh.pointsUsedBack).toBe(0);
+          for (const ln of sh.lines) expect(ln.refundAmount).toBeGreaterThanOrEqual(0);
+          if (sh.isFull) {
+            expect(sh.goods + sh.shipping).toBe(order.total - money);
+            expect(sh.pointsUsedBack).toBe(order.pointsUsed - pointsBack);
+            break;
+          }
+          money += sh.goods + sh.shipping;
+          shipping += sh.shipping;
+          pointsBack += sh.pointsUsedBack;
+          expect(money).toBeLessThanOrEqual(order.total);
+          expect(pointsBack).toBeLessThanOrEqual(order.pointsUsed);
+          for (const [id, q] of req) before.set(id, (before.get(id) ?? 0) + q);
+        }
+      });
+    }
+    expect(atCap).toBeGreaterThan(1_000);
+    expect(tubuOnly).toBeGreaterThan(1_500);
   });
 });
 
