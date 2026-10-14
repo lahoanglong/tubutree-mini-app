@@ -139,6 +139,21 @@ describe('validateAdminConfigValue', () => {
     expect(v(MIN, 1.5, 72)).toThrow(BadRequestException);
   });
 
+  // R4-ADMIN-11: giá flash phải giảm ít nhất min% và không quá max% — min > max thì không thêm được món nào.
+  it('flash sale: max_discount_pct không nhỏ hơn min_discount_pct (phân số); chưa có dòng thì so với mặc định 0/0,9', () => {
+    const v = (k: string, n: unknown, partner?: unknown) => () => validateAdminConfigValue(k, n, partner);
+    const MIN = 'flashsale.min_discount_pct';
+    const MAX = 'flashsale.max_discount_pct';
+    expect(configPartnerKey(MAX)).toBe(MIN);
+    expect(v(MAX, 0.9, 0)).not.toThrow();
+    expect(v(MAX, 0.5, 0.5)).not.toThrow();
+    expect(v(MAX, 0.3, 0.5)).toThrow(/flashsale\.min_discount_pct/);
+    expect(v(MIN, 0.95, 0.9)).toThrow(/flashsale\.max_discount_pct/);
+    expect(v(MIN, 0.95, undefined)).toThrow(BadRequestException);
+    expect(v(MIN, 0.2, undefined)).not.toThrow();
+    expect(v(MAX, 0.95, undefined)).not.toThrow();
+  });
+
   it('khoá khác: không can thiệp (SystemConfigService tự giữ kiểu/khoảng)', () => {
     ok('shipping.free_threshold', 200000);
     ok('misc.anything', { a: 1 });

@@ -559,7 +559,7 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
 
   it('scope=TIER + scopeMeta.tierId → ghi scopeMeta vào coupon.create', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'c1' });
-    const prisma = makePrisma({ coupon: { create } });
+    const prisma = makePrisma({ coupon: { create }, membershipTier: { findUnique: jest.fn().mockResolvedValue({ id: 'GOLD' }) } });
     await mkAdmin(prisma).createCoupon({ ...couponBase, scope: 'TIER', scopeMeta: { tierId: 'GOLD' } });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ scope: 'TIER', scopeMeta: { tierId: 'GOLD' } }) }),
@@ -568,7 +568,7 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
 
   it('scope=USER_GROUP + scopeMeta.userId → ghi scopeMeta vào coupon.create', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'c2' });
-    const prisma = makePrisma({ coupon: { create } });
+    const prisma = makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1' }) } });
     await mkAdmin(prisma).createCoupon({ ...couponBase, scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } }) }),
@@ -609,6 +609,48 @@ describe('AdminService.createCoupon — chặn giá trị gõ nhầm (ADMINOPS-8
   it('ngày kết thúc đã qua → 400', async () => {
     const { p } = run({ startAt: '2026-01-01T00:00:00.000Z', endAt: '2026-02-01T00:00:00.000Z' });
     await expect(p).rejects.toThrow('Ngày kết thúc đã qua');
+  });
+
+  // R4-ADMIN-11: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được (isCouponEligible so đúng id) mà
+  // admin vẫn thấy "Đã tạo voucher".
+  it('scope=TIER với hạng không tồn tại → 400, không tạo', async () => {
+    const create = jest.fn();
+    const findTier = jest.fn().mockResolvedValue(null);
+    const p = mkAdmin(makePrisma({ coupon: { create }, membershipTier: { findUnique: findTier } })).createCoupon({
+      ...base,
+      scope: 'TIER',
+      scopeMeta: { tierId: 'nope' },
+    });
+    await expect(p).rejects.toThrow('Hạng thành viên "nope" không tồn tại');
+    expect(findTier).toHaveBeenCalledWith({ where: { id: 'nope' }, select: { id: true } });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('scope=USER_GROUP với người dùng không tồn tại → 400, không tạo', async () => {
+    const create = jest.fn();
+    const p = mkAdmin(makePrisma({ coupon: { create }, user: { findUnique: jest.fn().mockResolvedValue(null) } })).createCoupon({
+      ...base,
+      scope: 'USER_GROUP',
+      scopeMeta: { userId: 'nope' },
+    });
+    await expect(p).rejects.toThrow('Không tìm thấy người dùng "nope"');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  // R4-ADMIN-11: AMOUNT 200.000đ cho đơn tối thiểu 50.000đ — đơn ở mức tối thiểu được giảm hết tiền hàng.
+  it('mã giảm tiền không nhỏ hơn đơn tối thiểu → 400; nhỏ hơn, hoặc không đặt đơn tối thiểu, thì được', async () => {
+    await expect(run({ type: 'AMOUNT', value: 200_000, minOrder: 50_000 }).p).rejects.toThrow('nhỏ hơn đơn tối thiểu');
+    await expect(run({ type: 'AMOUNT', value: 50_000, minOrder: 50_000 }).p).rejects.toThrow('nhỏ hơn đơn tối thiểu');
+    for (const over of [
+      { type: 'AMOUNT', value: 20_000, minOrder: 99_000 },
+      { type: 'AMOUNT', value: 20_000 },
+      { type: 'AMOUNT', value: 20_000, minOrder: 0 },
+      { type: 'PERCENT', value: 10, minOrder: 5 },
+    ]) {
+      const ok = run(over);
+      await ok.p;
+      expect(ok.create).toHaveBeenCalled();
+    }
   });
 
   it('giảm từ 50% mà không đặt Giảm tối đa → 400; có Giảm tối đa thì được', async () => {
