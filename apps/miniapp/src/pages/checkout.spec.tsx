@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { AxiosError, type AxiosResponse } from 'axios';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -71,6 +71,8 @@ vi.mock('../services/geo-api', () => ({
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import CheckoutPage from './checkout';
+import { createQueryClient } from '../services/query-client';
+import { vi as viCopy } from '../i18n/vi';
 
 const ADDRESS = {
   id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 Lê Lợi', province: 'TP. Hồ Chí Minh', provinceCode: '84_VN79',
@@ -816,5 +818,49 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
     fireEvent.click(row);
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.checkoutQuote.mock.calls.every((c) => c[1] === 0)).toBe(true);
+  });
+});
+
+describe('CheckoutPage — mất mạng khi bấm Đặt hàng (R4-BUYER-1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+  afterEach(() => {
+    onlineManager.setOnline(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('offline: yêu cầu đặt đơn vẫn được gửi, lỗi mạng hiện câu "mất mạng", nút bấm lại được và bật mạng lại không tự đặt thêm', async () => {
+    const qc = createQueryClient();
+    qc.setDefaultOptions({ ...qc.getDefaultOptions(), queries: { retry: false } });
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+
+    onlineManager.setOnline(false);
+    vi.stubGlobal('navigator', { ...window.navigator, onLine: false });
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viCopy.errors.offline, type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+
+    onlineManager.setOnline(true);
+    await qc.resumePausedMutations();
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
   });
 });
