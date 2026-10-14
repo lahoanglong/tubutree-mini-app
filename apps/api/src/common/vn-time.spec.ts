@@ -1,4 +1,4 @@
-import { formatVnDate, startOfVnDay, startOfVnMonth, vnDateParts, vnMonthKey } from './vn-time';
+import { formatVnDate, formatVnDateTime, startOfVnDay, startOfVnMonth, vnDateParts, vnMonthKey } from './vn-time';
 
 // Jest chạy với TZ=UTC (test/jest-global-utc.js) nên các phép tính dưới đây chỉ đúng nếu helper
 // thật sự tính theo lịch VN chứ không theo giờ local.
@@ -21,5 +21,10 @@ describe('vn-time (lịch giờ VN, độc lập TZ host)', () => {
 
   it('formatVnDate: hạn 00:00 ngày 10/10 VN hiển thị 10/10/2026, không lùi về 9/10', () => {
     expect(formatVnDate(new Date('2026-10-09T17:00:00Z'))).toBe('10/10/2026');
+  });
+
+  it('formatVnDateTime: hạn thanh toán "HH:mm dd/MM/yyyy" theo giờ VN', () => {
+    expect(formatVnDateTime(new Date('2026-10-13T17:05:00Z'))).toBe('00:05 14/10/2026');
+    expect(formatVnDateTime(new Date('2026-01-02T03:04:00Z'))).toBe('10:04 02/01/2026');
   });
 });

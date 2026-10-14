@@ -22,6 +22,12 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { COUPON_ZERO_DISCOUNT_REASON, couponNotAppliedNotice } from '../coupons/coupon-notice';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { readPendingPaymentTtlHours } from '../orders/pending-payment-expiry.cron';
+import { formatVnd } from '../orders/refund-destination';
+import { formatVnDateTime } from '../../common/vn-time';
+
+const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
 /** Mã lỗi ổn định: tổng lúc đặt cao hơn tổng khách đã thấy (giá/phí vừa đổi) — FE báo và tải lại báo giá. */
 export const TOTAL_CHANGED = 'TOTAL_CHANGED';
@@ -61,6 +67,8 @@ export class CheckoutService {
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
     @Optional() private readonly geo?: GeoService,
+    // Optional: test dựng tay không truyền; thiếu thì hạn thanh toán dùng TTL mặc định như cron tự huỷ.
+    @Optional() private readonly systemConfig?: SystemConfigService,
   ) {}
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -484,7 +492,17 @@ export class CheckoutService {
     }
     // Thông báo là side-effect — lỗi gửi không được làm hỏng đơn đã đặt (nhất quán với Pancake).
     try {
-      await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
+      if (status === 'PENDING_PAYMENT') {
+        // Đơn trả trước chưa có tiền: "đã xác nhận" làm khách tưởng xong và không chuyển khoản (BUYERMINI-8).
+        const hours = await readPendingPaymentTtlHours(this.systemConfig ?? DEFAULT_TTL_CONFIG);
+        await this.notifications.notify(userId, 'ORDER_AWAITING_PAYMENT', {
+          order_code: code,
+          amount: formatVnd(computed.total),
+          deadline: formatVnDateTime(new Date((order.createdAt ?? new Date()).getTime() + hours * 3_600_000)),
+        });
+      } else {
+        await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: code });
+      }
     } catch (err) {
       this.logger.error(`Gửi thông báo lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`);
     }
