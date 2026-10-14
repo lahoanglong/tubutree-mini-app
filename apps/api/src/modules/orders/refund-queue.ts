@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { CustomerRefundKind, Order, Prisma, PrismaClient } from '@prisma/client';
+import type { CustomerRefundKind, CustomerRefundStatus, Order, Prisma, PrismaClient } from '@prisma/client';
 import { notifyAdmins } from '../../common/notify-admins';
 import type { BankDetails } from './refund-destination';
 import { formatVnd, maskedBank } from './refund-destination';
@@ -9,6 +9,22 @@ import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
 export interface RefundNotifier {
   notify(userId: string, templateCode: string, data: Record<string, string>): Promise<void>;
 }
+
+/**
+ * Khoản chuyển khoản Tubu còn nợ khách: chưa ai chuyển (PENDING) hoặc admin đang chuyển (PROCESSING). Đơn đã lật REFUNDED
+ * mà còn khoản này thì tiền chưa tới tay khách — "Đang hoàn tiền" ở CSV đơn admin, cùng luật với web (order-view.ts,
+ * isRefundInProgress) cho danh sách đơn admin và chi tiết đơn của khách.
+ */
+export const BANK_REFUND_IN_PROGRESS = {
+  method: 'MANUAL_TRANSFER',
+  status: { in: ['PENDING', 'PROCESSING'] },
+} satisfies Prisma.OrderCustomerRefundWhereInput;
+
+/**
+ * Khoản hoàn còn việc cho admin: chờ đối soát (UNVERIFIED), chờ chuyển khoản (PENDING), đang chuyển khoản (PROCESSING). Một
+ * nguồn cho số trên thẻ "Hoàn tiền khách" (OpsInboxService), huy hiệu tab và bộ lọc "Đang mở" của hàng đợi.
+ */
+export const OPEN_CUSTOMER_REFUND_STATUSES = ['UNVERIFIED', 'PENDING', 'PROCESSING'] as const satisfies readonly CustomerRefundStatus[];
 
 export const OPS_REFUND_TEMPLATE = 'OPS_REFUND_ALERT';
 /** Báo admin tiền khách trả không khớp đơn (lệch số tiền ZaloPay). */

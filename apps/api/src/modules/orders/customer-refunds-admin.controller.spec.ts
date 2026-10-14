@@ -15,6 +15,10 @@ describe('Hàng chờ Hoàn tiền khách — khoản tiền dư Pancake chờ �
     expect(await errorsFor(ListCustomerRefundsQuery, { status: 'WHATEVER' })).toContain('status.isIn');
   });
 
+  it('R4-ADMIN-3: lọc được "Đang mở" (OPEN) — cùng tập với thẻ Hoàn tiền khách ở trang chủ', async () => {
+    expect(await errorsFor(ListCustomerRefundsQuery, { status: 'OPEN' })).toEqual([]);
+  });
+
   it('"Xác nhận tiền dư": số tiền tuỳ chọn, nếu có phải là số nguyên ≥ 1', async () => {
     expect(await errorsFor(VerifyOverpaymentDto, {})).toEqual([]);
     expect(await errorsFor(VerifyOverpaymentDto, { amount: 50_000, note: 'Sao kê VCB' })).toEqual([]);

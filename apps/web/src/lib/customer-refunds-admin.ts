@@ -1,11 +1,17 @@
-import type { AdminCustomerRefund, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
+import type { AdminCustomerRefund, AdminCustomerRefundFilter, AdminCustomerRefundKind, AdminCustomerRefundStatus } from './admin-client';
+import type { Tone } from './recycling';
 import { ApiError } from './client-api';
 import { formatVnd } from './shop-client';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
 export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
 
-export const CUSTOMER_REFUND_FILTERS: { status: AdminCustomerRefundStatus; label: string }[] = [
+/**
+ * "Đang mở" (mặc định) = mọi khoản còn việc: cùng tập với số trên thẻ "Hoàn tiền khách" ở Việc cần xử lý và huy hiệu tab
+ * (API OPEN_CUSTOMER_REFUND_STATUSES), nên bấm thẻ số mấy thì thấy đúng ngần ấy dòng.
+ */
+export const CUSTOMER_REFUND_FILTERS: { status: AdminCustomerRefundFilter; label: string }[] = [
+  { status: 'OPEN', label: 'Đang mở' },
   { status: 'UNVERIFIED', label: 'Chờ đối soát' },
   { status: 'PENDING', label: 'Chờ chuyển khoản' },
   { status: 'PROCESSING', label: 'Đang chuyển khoản' },
@@ -13,7 +19,8 @@ export const CUSTOMER_REFUND_FILTERS: { status: AdminCustomerRefundStatus; label
   { status: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
-export const CUSTOMER_REFUND_EMPTY: Record<AdminCustomerRefundStatus, string> = {
+export const CUSTOMER_REFUND_EMPTY: Record<AdminCustomerRefundFilter, string> = {
+  OPEN: 'Không còn khoản hoàn nào cần xử lý.',
   UNVERIFIED: 'Không có khoản tiền dư nào chờ đối soát.',
   PENDING: 'Không có khoản hoàn nào đang chờ chuyển khoản.',
   PROCESSING: 'Không có khoản hoàn nào đang được chuyển khoản.',
@@ -99,6 +106,24 @@ export function claimHolderSuffix(r: Pick<AdminCustomerRefund, 'claimedBy' | 'cl
 export type CustomerRefundView = 'WALLET' | AdminCustomerRefundStatus;
 export const customerRefundView = (r: Pick<AdminCustomerRefund, 'method' | 'status'>): CustomerRefundView =>
   r.method === 'WALLET' ? 'WALLET' : r.status;
+
+/** Huy hiệu trạng thái khoản hoàn — dùng chung cho hàng đợi Hoàn tiền khách và chi tiết đơn admin. */
+export const CUSTOMER_REFUND_VIEW_TONE: Record<CustomerRefundView, Tone> = {
+  UNVERIFIED: 'warning',
+  PENDING: 'warning',
+  PROCESSING: 'info',
+  COMPLETED: 'success',
+  DISMISSED: 'neutral',
+  WALLET: 'info',
+};
+export const CUSTOMER_REFUND_VIEW_LABEL: Record<CustomerRefundView, string> = {
+  UNVERIFIED: 'Chờ đối soát',
+  PENDING: 'Chờ chuyển khoản',
+  PROCESSING: 'Đang chuyển khoản',
+  COMPLETED: 'Đã chuyển khoản',
+  DISMISSED: 'Không phải tiền dư',
+  WALLET: 'Đã hoàn vào ví',
+};
 
 export interface MarkPaidFailure {
   /** true = khoản đã đổi trạng thái (admin khác vừa xử lý): đóng hộp và tải lại; false = giữ hộp để thử lại. */

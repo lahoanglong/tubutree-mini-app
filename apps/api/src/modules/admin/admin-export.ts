@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
+import { BANK_REFUND_IN_PROGRESS } from '../orders/refund-queue';
 
 /** Số dòng đọc mỗi lượt khi xuất CSV: đủ lớn để nhanh, đủ nhỏ để không giữ cả bảng trong bộ nhớ. */
 export const EXPORT_BATCH = 500;
@@ -64,12 +65,19 @@ const PAYMENT_STATUS: Record<string, string> = {
 };
 
 /**
- * Trạng thái thanh toán ghi vào CSV, cùng luật với giao diện admin (web/src/lib/order-view.ts, codCollected): đơn COD đã giao
- * giữ paymentStatus = UNPAID vì order-reversal dùng nó làm chốt hoàn tiền một lần, nhưng bưu tá đã thu tiền mặt nên ghi
- * "Đã thu COD" chứ không phải "Chưa thanh toán".
+ * Trạng thái thanh toán ghi vào CSV, cùng luật với giao diện admin (web/src/lib/order-view.ts, codCollected và
+ * isRefundInProgress): đơn COD đã giao giữ paymentStatus = UNPAID vì order-reversal dùng nó làm chốt hoàn tiền một lần,
+ * nhưng bưu tá đã thu tiền mặt nên ghi "Đã thu COD" chứ không phải "Chưa thanh toán". Đơn đã lật REFUNDED mà khoản chuyển
+ * khoản trả khách còn Chờ/Đang chuyển (`bankRefundsInProgress` > 0) thì tiền chưa về khách: "Đang hoàn tiền".
  */
-export function exportPaymentStatus(o: { status: string; paymentMethod: string; paymentStatus: string }): string {
+export function exportPaymentStatus(o: {
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  bankRefundsInProgress?: number;
+}): string {
   if (o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID') return 'Đã thu COD';
+  if (o.paymentStatus === 'REFUNDED' && (o.bankRefundsInProgress ?? 0) > 0) return 'Đang hoàn tiền';
   return PAYMENT_STATUS[o.paymentStatus] ?? o.paymentStatus;
 }
 
@@ -125,6 +133,7 @@ const ORDER_SELECT = {
   user: { select: { fullName: true, phone: true } },
   fulfillerStorefront: { select: { title: true } },
   items: { select: { quantity: true } },
+  _count: { select: { customerRefunds: { where: BANK_REFUND_IN_PROGRESS } } },
 } satisfies Prisma.OrderSelect;
 
 type ExportOrder = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;
@@ -141,7 +150,7 @@ function orderRow(o: ExportOrder): string {
     o.type === 'DEALER' ? 'Đại lý' : 'Bán lẻ',
     o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
     PAYMENT_METHOD[o.paymentMethod] ?? o.paymentMethod,
-    exportPaymentStatus(o),
+    exportPaymentStatus({ ...o, bankRefundsInProgress: o._count.customerRefunds }),
     ORDER_STATUS[o.status] ?? o.status,
     o.subtotal,
     o.discount,

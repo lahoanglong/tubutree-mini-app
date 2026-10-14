@@ -144,7 +144,8 @@ import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
-import { orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
+import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
+import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 
 type Tab =
   | 'inbox'
@@ -924,7 +925,8 @@ function OrdersTab({
         <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
           <input
             type="text"
-            placeholder="Tìm theo mã đơn, mã vận đơn, SĐT hoặc tên khách..."
+            aria-label="Tìm đơn theo mã đơn, mã vận đơn, mã Pancake, SĐT, tên khách hoặc tên người nhận"
+            placeholder={narrow ? 'Mã đơn, SĐT, tên…' : 'Tìm mã đơn, vận đơn, SĐT, tên khách hoặc người nhận…'}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
@@ -1195,21 +1197,19 @@ function OrdersTab({
                             <div className="text-[11px] text-stone-500">
                               {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                             </div>
+                            {o.paymentStatus && <PaymentStatusShort order={o} />}
                           </div>
                         </td>
                         <td className="px-3 py-3">
                           <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
                           {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
+                          <OrderRecipientLine order={o} />
                         </td>
                         <td className="hidden px-3 py-3 md:table-cell">
                           <div className="text-xs font-medium text-stone-700">
                             {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
-                          {o.paymentStatus && (
-                            <div className="text-[11px] text-stone-500">
-                              {orderPaymentStatusShort(o)}
-                            </div>
-                          )}
+                          {o.paymentStatus && <PaymentStatusShort order={o} />}
                           {o.type === 'DEALER' && (
                             <div className="text-[11px] font-medium text-warning-fg">
                               Đại lý{o.dealerOnCredit === true ? ' · công nợ' : o.dealerOnCredit === false ? ' · trả trước' : ''}
@@ -1299,10 +1299,34 @@ function OrdersTab({
   );
 }
 
+/** Ô gọn tình trạng thanh toán ở dòng đơn; "Đang hoàn tiền" tô cảnh báo vì tiền chưa về khách. */
+function PaymentStatusShort({ order: o }: { order: AdminOrder }) {
+  const pending = isRefundInProgress(o, o.customerRefunds);
+  return (
+    <div data-payment-short className={`text-[11px] ${pending ? 'font-medium text-warning-fg' : 'text-stone-500'}`}>
+      {orderPaymentStatusShort(o, o.customerRefunds)}
+    </div>
+  );
+}
+
+/** Đơn quà/đặt hộ: người nhận khác chủ tài khoản — hiện ra để kết quả tìm theo tên người nhận không trông như khớp nhầm. */
+function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
+  const recipient = o.shippingAddress?.recipient?.trim();
+  if (!recipient || recipient === o.user?.fullName?.trim()) return null;
+  const phone = o.shippingAddress?.phone?.trim();
+  return (
+    <div data-order-recipient className="mt-0.5 break-words text-[11px] text-stone-500">
+      Nhận: {recipient}
+      {phone ? ` · ${phone}` : ''}
+    </div>
+  );
+}
+
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
 function OrderDetailBody({ o, isAdmin, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canWarehouse: boolean }) {
   return (
     <div className="space-y-3">
+      <OrderPaymentSummary order={o} isAdmin={isAdmin} />
       {canWarehouse && <PancakeAttentionPanel order={o} />}
       {canWarehouse && <PancakeSyncPanel order={o} />}
 

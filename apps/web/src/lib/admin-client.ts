@@ -131,6 +131,19 @@ export interface AdminOrder {
   /** TUBU = kho Tubu (qua Pancake); MERCHANT = gian hàng đối tác tự giao, không bao giờ lên Pancake. */
   fulfiller?: 'TUBU' | 'MERCHANT' | string;
   fulfillerStorefront?: { title: string } | null;
+  /** Khoản hoàn của đơn, cũ nhất trước (trừ khoản đã bỏ qua) — "Đang hoàn tiền" khi khoản chuyển khoản còn Chờ/Đang chuyển. */
+  customerRefunds?: AdminOrderRefund[];
+}
+
+/** Khoản hoàn ở danh sách đơn admin (AdminService ORDER_LIST_REFUNDS): không kèm tài khoản ngân hàng của khách. */
+export interface AdminOrderRefund {
+  id: string;
+  kind: AdminCustomerRefundKind;
+  method: AdminCustomerRefundMethod;
+  status: AdminCustomerRefundStatus;
+  amount: number;
+  createdAt: string;
+  completedAt: string | null;
 }
 export interface DashboardStats {
   /** Tiền đã thu: đơn đã thanh toán hoặc COD đã giao (không gồm đơn đại lý ghi công nợ), trừ đơn huỷ/trả và phần đã hoàn khi trả một phần. */
@@ -1237,7 +1250,9 @@ export interface RefundTakeOver {
   takeOverReason: string;
 }
 const takeOverBody = (t?: RefundTakeOver) => (t ? { takeOver: true, takeOverReason: t.takeOverReason.trim() } : {});
-export const listCustomerRefunds = (status?: AdminCustomerRefundStatus, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
+/** Bộ lọc hàng đợi: một trạng thái, hoặc OPEN = mọi khoản còn việc (chờ đối soát + chờ chuyển khoản + đang chuyển khoản). */
+export type AdminCustomerRefundFilter = AdminCustomerRefundStatus | 'OPEN';
+export const listCustomerRefunds = (status?: AdminCustomerRefundFilter, page = 1, limit = 20, kind?: AdminCustomerRefundKind) =>
   apiFetch<Page<AdminCustomerRefund>>(
     `/admin/customer-refunds?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${kind ? `&kind=${kind}` : ''}`,
   );

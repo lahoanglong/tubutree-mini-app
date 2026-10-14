@@ -5,7 +5,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { CustomerRefundsService } from './customer-refunds.service';
 
-const CUSTOMER_REFUND_STATUSES = ['UNVERIFIED', 'PENDING', 'PROCESSING', 'COMPLETED', 'DISMISSED'] as const;
+/** OPEN = mọi khoản còn việc (chờ đối soát, chờ chuyển khoản, đang chuyển khoản) — cùng tập với thẻ "Hoàn tiền khách". */
+const CUSTOMER_REFUND_STATUSES = ['OPEN', 'UNVERIFIED', 'PENDING', 'PROCESSING', 'COMPLETED', 'DISMISSED'] as const;
 const CUSTOMER_REFUND_KINDS = ['END_CUSTOMER', 'CANCEL', 'RETURN', 'LATE_PAYMENT', 'OVERPAYMENT'] as const;
 
 export class ListCustomerRefundsQuery extends PaginationQuery {

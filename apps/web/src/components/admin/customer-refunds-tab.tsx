@@ -8,8 +8,8 @@ import {
   releaseCustomerRefund,
   verifyCustomerRefund,
   type AdminCustomerRefund,
+  type AdminCustomerRefundFilter,
   type AdminCustomerRefundKind,
-  type AdminCustomerRefundStatus,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { parseVndInput } from '@/lib/loyalty-pos';
@@ -19,6 +19,8 @@ import {
   CUSTOMER_REFUND_FILTERS,
   CUSTOMER_REFUND_KINDS,
   CUSTOMER_REFUND_STALE_HINT,
+  CUSTOMER_REFUND_VIEW_LABEL,
+  CUSTOMER_REFUND_VIEW_TONE,
   DISMISS_REASON_MIN,
   TAKE_OVER_REASON_MIN,
   claimHolderSuffix,
@@ -31,10 +33,8 @@ import {
   refundKindLabel,
   refundReasonLabel,
   takeOverFrom,
-  type CustomerRefundView,
   type RefundAction,
 } from '@/lib/customer-refunds-admin';
-import type { Tone } from '@/lib/recycling';
 import { CopyButton } from '@/components/copy-button';
 import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, FIELD_CLASS, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
@@ -43,36 +43,20 @@ import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
 
-const VIEW_TONE: Record<CustomerRefundView, Tone> = {
-  UNVERIFIED: 'warning',
-  PENDING: 'warning',
-  PROCESSING: 'info',
-  COMPLETED: 'success',
-  DISMISSED: 'neutral',
-  WALLET: 'info',
-};
-const VIEW_LABEL: Record<CustomerRefundView, string> = {
-  UNVERIFIED: 'Chờ đối soát',
-  PENDING: 'Chờ chuyển khoản',
-  PROCESSING: 'Đang chuyển khoản',
-  COMPLETED: 'Đã chuyển khoản',
-  DISMISSED: 'Không phải tiền dư',
-  WALLET: 'Đã hoàn vào ví',
-};
-
 /** "450000" → "450.000" để admin đọc đúng số tiền đang nhập. */
 const groupDigits = (n: number | null) => (n == null ? '' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
 
 const fmtDate = formatDateTime;
 
 /**
- * Số khoản đang chờ chuyển khoản cạnh nhãn tab: một lần gọi limit=1 lấy meta.total (không thêm endpoint). Lỗi tải thì
- * không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid làm mới cả hai.
+ * Số khoản hoàn cần xử lý cạnh nhãn tab — bộ lọc "Đang mở", cùng tập với thẻ "Hoàn tiền khách" ở trang chủ: một lần gọi
+ * limit=1 lấy meta.total. Lỗi tải thì không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid
+ * làm mới cả hai.
  */
 export function CustomerRefundsPendingBadge() {
   const q = useQuery({
-    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'PENDING', 'count'],
-    queryFn: () => listCustomerRefunds('PENDING', 1, 1).then((r) => r.meta.total),
+    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'OPEN', 'count'],
+    queryFn: () => listCustomerRefunds('OPEN', 1, 1).then((r) => r.meta.total),
   });
   const n = q.data ?? 0;
   if (n <= 0) return null;
@@ -83,7 +67,7 @@ export function CustomerRefundsPendingBadge() {
     >
       <span className="sr-only">, </span>
       {n > 99 ? '99+' : n}
-      <span className="sr-only"> khoản chờ chuyển khoản</span>
+      <span className="sr-only"> khoản hoàn cần xử lý</span>
     </span>
   );
 }
@@ -97,7 +81,7 @@ export function CustomerRefundsPendingBadge() {
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
 export function CustomerRefundsTab({ meId }: { meId?: string } = {}) {
-  const [filter, setFilter] = useState<AdminCustomerRefundStatus>('PENDING');
+  const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
   const [target, setTarget] = useState<{ refund: AdminCustomerRefund; mode: RefundAction } | null>(null);
@@ -429,7 +413,7 @@ export function CustomerRefundRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold text-stone-900">{formatVnd(r.amount)}</span>
             <span data-refund-status={view}>
-              <ToneBadge tone={VIEW_TONE[view]}>{VIEW_LABEL[view]}</ToneBadge>
+              <ToneBadge tone={CUSTOMER_REFUND_VIEW_TONE[view]}>{CUSTOMER_REFUND_VIEW_LABEL[view]}</ToneBadge>
             </span>
             <ToneBadge tone="neutral">{r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}</ToneBadge>
           </div>

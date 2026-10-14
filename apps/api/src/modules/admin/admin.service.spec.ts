@@ -812,6 +812,7 @@ describe('AdminService.listOrders with search', () => {
         { gomdonPartnerCode: { contains: '0901', mode: 'insensitive' } },
         { shippingCode: { contains: '0901', mode: 'insensitive' } },
         { pancakeOrderId: '0901' },
+        { recipientSearch: { contains: '0901' } },
         { userId: { in: ['u1', 'u2'] } },
       ],
     });
@@ -832,8 +833,69 @@ describe('AdminService.listOrders with search', () => {
         { gomdonPartnerCode: { contains: 'TB-123', mode: 'insensitive' } },
         { shippingCode: { contains: 'TB-123', mode: 'insensitive' } },
         { pancakeOrderId: 'TB-123' },
+        { recipientSearch: { contains: 'tb-123' } },
       ],
     });
+  });
+
+  // R4-ADMIN-5: Prisma `contains` dựng LIKE không escape — "%" hay "_" khớp mọi đơn và CSV xuất cả bảng.
+  it('% _ \\ trong chuỗi tìm được escape ở mọi nhánh LIKE (đơn, tên/SĐT khách, tên người nhận); mã Pancake so nguyên văn', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const userFindMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    const raw = String.raw`A%_\b`;
+    const esc = String.raw`A\%\_\\b`;
+    await mkAdmin(prisma).listOrders(1, 20, undefined, raw);
+    expect(userFindMany.mock.calls[0][0].where.OR).toEqual([
+      { phone: { contains: esc } },
+      { fullName: { contains: esc, mode: 'insensitive' } },
+      { fullNameSearch: { contains: esc.toLowerCase() } },
+    ]);
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      OR: [
+        { code: { contains: esc, mode: 'insensitive' } },
+        { gomdonPartnerCode: { contains: esc, mode: 'insensitive' } },
+        { shippingCode: { contains: esc, mode: 'insensitive' } },
+        { pancakeOrderId: raw },
+        { recipientSearch: { contains: esc.toLowerCase() } },
+      ],
+    });
+  });
+
+  // R4-ADMIN-4: Sức khoẻ hệ thống và Pancake POS hiện mã đơn Pancake dạng "#900033"; admin dán nguyên vào ô tìm.
+  it('bỏ "#" đứng trước chuỗi tìm (mã Pancake / mã đơn chép kèm #)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin({ ...prisma, $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService).listOrders(
+      1,
+      20,
+      undefined,
+      ' # 900033 ',
+    );
+    const or = findMany.mock.calls[0][0].where.OR;
+    expect(or).toEqual(expect.arrayContaining([{ pancakeOrderId: '900033' }, { code: { contains: '900033', mode: 'insensitive' } }]));
+  });
+
+  // R4-ADMIN-4: SĐT người nhận chép từ Excel mất số 0 đầu ("911222333") vẫn tra được index SĐT người nhận.
+  it('SĐT người nhận thiếu số 0 đầu → tra trước theo đủ dạng 0… / +84… / 84…', async () => {
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'o9' }]);
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      order: { findMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+    });
+    await mkAdmin({ ...prisma, $queryRaw } as unknown as PrismaService).listOrders(1, 20, undefined, '911222333');
+    expect($queryRaw.mock.calls[0]).toContainEqual(['0911222333', '+84911222333', '84911222333']);
+    expect(findMany.mock.calls[0][0].where.OR).toEqual(expect.arrayContaining([{ id: { in: ['o9'] } }]));
   });
 
   it('quá nhiều khách khớp (tìm quá chung) → giữ lọc theo quan hệ user để không cắt bớt kết quả', async () => {

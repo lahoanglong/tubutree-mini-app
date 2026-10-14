@@ -52,7 +52,8 @@ const LIST = (data: AdminCustomerRefund[], total = data.length) => ({
 // Q-01 (PA-1): khoản hoàn MANUAL_TRANSFER PENDING là tiền Tubu đang nợ khách cuối không có tài khoản. Màn này
 // chỉ đọc sổ (admin chuyển khoản tay ngoài hệ thống), nên phải hiển thị đủ để admin chuyển đúng người, đúng số tiền.
 describe('CustomerRefundsTab — danh sách', () => {
-  it('mặc định lọc PENDING, gọi đúng endpoint admin, có khung chờ khi đang tải', async () => {
+  // R4-ADMIN-3: thẻ "Hoàn tiền khách" ở trang chủ đếm mọi khoản còn việc; bấm vào phải thấy đúng ngần ấy dòng.
+  it('mặc định lọc "Đang mở" (status=OPEN), gọi đúng endpoint admin, có khung chờ khi đang tải', async () => {
     const api = mockFetch(LIST([refund()]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<CustomerRefundsTab />);
@@ -61,7 +62,7 @@ describe('CustomerRefundsTab — danh sách', () => {
     expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(api.calls).toHaveLength(1);
     expect(api.calls[0]!.url).toContain('/admin/customer-refunds?');
-    expect(api.calls[0]!.url).toContain('status=PENDING');
+    expect(api.calls[0]!.url).toContain('status=OPEN');
     expect(api.calls[0]!.url).toContain('page=1');
     expect(api.calls[0]!.url).toContain('limit=20');
   });
@@ -188,30 +189,40 @@ describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => 
     expect(api.calls.at(-1)!.url).not.toContain('kind=');
   });
 
-  it('thanh lọc: "Chờ chuyển khoản" đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
+  it('thanh lọc: "Đang mở" đứng đầu và đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    expect(tabs.map((t) => t.textContent)).toEqual(['Chờ đối soát', 'Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển', 'Không phải tiền dư']);
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      'Đang mở',
+      'Chờ đối soát',
+      'Chờ chuyển khoản',
+      'Đang chuyển khoản',
+      'Đã chuyển',
+      'Không phải tiền dư',
+    ]);
     for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
-    expect(tabs[1]!.getAttribute('aria-selected')).toBe('true');
-    expect(tabs[1]!.className).toContain('bg-forest-600');
-    expect(tabs[3]!.getAttribute('aria-selected')).toBe('false');
+    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
+    expect(tabs[0]!.className).toContain('bg-forest-600');
+    expect(tabs[4]!.getAttribute('aria-selected')).toBe('false');
 
-    click(tabs[3]!);
+    click(tabs[4]!);
     await flush();
     const last = api.calls[api.calls.length - 1]!.url;
     expect(last).toContain('status=COMPLETED');
     expect(last).toContain('page=1');
-    expect(tabs[3]!.getAttribute('aria-selected')).toBe('true');
+    expect(tabs[4]!.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('trạng thái rỗng: nói rõ không có khoản nào đang chờ (PENDING) hoặc chưa có khoản đã xử lý (COMPLETED)', async () => {
+  it('trạng thái rỗng: nói rõ không còn khoản cần xử lý (OPEN), không có khoản chờ chuyển (PENDING), chưa có khoản đã xử lý', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(container.textContent).toContain('Không còn khoản hoàn nào cần xử lý');
+    click(byText(container, '[role="tab"]', 'Chờ chuyển khoản'));
     await flush();
     expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ');
     click(byText(container, '[role="tab"]', 'Đã chuyển'));
@@ -506,7 +517,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     const ok = container.querySelector('[role="status"]:not([aria-busy])');
     expect(ok?.textContent).toContain('Đã ghi nhận chuyển khoản');
     expect(ok?.textContent).toContain('1.250.000đ');
-    expect(container.textContent).toContain('Không có khoản hoàn nào đang chờ');
+    expect(container.textContent).toContain('Không còn khoản hoàn nào cần xử lý');
   });
 
   it('MONEY-7: thiếu mã giao dịch (hoặc chỉ khoảng trắng) → báo lỗi, không gửi; ghi chú trống không gửi chuỗi rỗng', async () => {
@@ -803,7 +814,8 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     await flush();
     const badge = () => container.querySelector('[data-refunds-pending]');
     expect(badge()?.textContent).toContain('1');
-    expect(urls.some((u) => u.includes('status=PENDING') && u.includes('limit=1'))).toBe(true);
+    expect(urls.some((u) => u.includes('status=OPEN') && u.includes('limit=1'))).toBe(true);
+    expect(badge()?.textContent).toContain('khoản hoàn cần xử lý');
     const d = await openDialog(container);
     submit(d);
     await flush();
@@ -1001,7 +1013,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(note.className).not.toContain('bg-danger-bg');
   });
 
-  it('huy hiệu: tên truy cập tách khỏi nhãn tab ("Hoàn tiền khách, 1 khoản chờ chuyển khoản"), không dính liền', async () => {
+  it('huy hiệu: tên truy cập tách khỏi nhãn tab ("Hoàn tiền khách, 1 khoản hoàn cần xử lý"), không dính liền', async () => {
     stub({ list: () => [refund()] });
     const { container } = mount(
       <button type="button">
@@ -1010,7 +1022,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
       </button>,
     );
     await flush();
-    expect(container.textContent).toContain('Hoàn tiền khách, 1 khoản chờ chuyển khoản');
+    expect(container.textContent).toContain('Hoàn tiền khách, 1 khoản hoàn cần xử lý');
   });
 
   describe('R3-MONEY-4: chỉ người đang chuyển khoản được xác nhận / trả về hàng chờ', () => {
@@ -1159,12 +1171,12 @@ describe('CustomerRefundsTab — tiền trả dư Pancake chờ đối soát', (
     return container.querySelector('[data-refund-id="r1"]') as HTMLElement;
   };
 
-  it('bộ lọc "Chờ đối soát" đứng đầu và gọi status=UNVERIFIED; "Không phải tiền dư" gọi status=DISMISSED', async () => {
+  it('bộ lọc "Chờ đối soát" đứng ngay sau "Đang mở" và gọi status=UNVERIFIED; "Không phải tiền dư" gọi status=DISMISSED', async () => {
     const api = stub(() => []);
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')).map((b) => b.textContent);
-    expect(tabs).toEqual(['Chờ đối soát', 'Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển', 'Không phải tiền dư']);
+    expect(tabs).toEqual(['Đang mở', 'Chờ đối soát', 'Chờ chuyển khoản', 'Đang chuyển khoản', 'Đã chuyển', 'Không phải tiền dư']);
     click(byText(container, 'button', 'Chờ đối soát'));
     await flush();
     expect(api.calls.at(-1)!.url).toContain('status=UNVERIFIED');

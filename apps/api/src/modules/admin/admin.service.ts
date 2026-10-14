@@ -7,7 +7,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
-import { foldVietnamese } from '../catalog/search-text';
+import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
@@ -22,6 +22,7 @@ import {
   ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  normalizeAdminOrderSearch,
   recipientPhoneVariants,
   searchPhone,
   type AdminOrderFilter,
@@ -75,22 +76,33 @@ function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; pay
   );
 }
 
-/** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. */
+/** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. `%`/`_` khớp đúng nghĩa đen. */
 export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | undefined {
   const s = search?.trim();
   if (!s) return undefined;
+  const like = escapePrismaLike(s);
   const phone = searchPhone(s);
-  const folded = foldVietnamese(s);
+  const folded = escapePrismaLike(foldVietnamese(s));
   return {
     OR: [
-      { phone: { contains: s } },
+      { phone: { contains: like } },
       ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
-      { fullName: { contains: s, mode: 'insensitive' } },
+      { fullName: { contains: like, mode: 'insensitive' } },
       ...(folded ? [{ fullNameSearch: { contains: folded } }] : []),
       { id: s },
     ],
   };
 }
+
+/**
+ * Khoản hoàn của đơn cho danh sách/chi tiết đơn admin (nhãn "Đang hoàn tiền", dòng khoản hoàn ở ngăn kéo). Không gồm
+ * tài khoản ngân hàng: nhân viên CSKH/kho cũng xem danh sách này. DISMISSED không phải tiền Tubu nợ khách.
+ */
+const ORDER_LIST_REFUNDS = {
+  where: { status: { not: 'DISMISSED' } },
+  orderBy: { createdAt: 'asc' },
+  select: { id: true, kind: true, method: true, status: true, amount: true, createdAt: true, completedAt: true },
+} satisfies Prisma.Order$customerRefundsArgs;
 
 @Injectable()
 export class AdminService {
@@ -242,13 +254,13 @@ export class AdminService {
   async searchProducts(raw: string) {
     const q = raw.trim();
     if (q.length < 2) return [];
-    const folded = foldVietnamese(q);
+    const folded = escapePrismaLike(foldVietnamese(q));
     const products = await this.prisma.product.findMany({
       where: {
         OR: [
           { nameSearch: { contains: folded } },
           { slug: { contains: folded.replace(/ /g, '-') } },
-          { variations: { some: { sku: { contains: q, mode: 'insensitive' } } } },
+          { variations: { some: { sku: { contains: escapePrismaLike(q), mode: 'insensitive' } } } },
         ],
       },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
@@ -656,17 +668,18 @@ export class AdminService {
 
   /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
   private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
-    const s = search?.trim();
+    const s = normalizeAdminOrderSearch(search);
     if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
+    const like = escapePrismaLike(s);
     const phone = searchPhone(s);
     const folded = foldVietnamese(s);
     const rows = await this.prisma.user.findMany({
       where: {
         OR: [
-          { phone: { contains: s } },
+          { phone: { contains: like } },
           ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
-          { fullName: { contains: s, mode: 'insensitive' } },
-          ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: folded } }] : []),
+          { fullName: { contains: like, mode: 'insensitive' } },
+          ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: escapePrismaLike(folded) } }] : []),
         ],
       },
       select: { id: true },
@@ -677,7 +690,8 @@ export class AdminService {
 
   /** Đơn có SĐT người nhận khớp đúng số (index orders_shippingAddress_phone_idx trên đúng biểu thức này). */
   private async findSearchOrderIds(search?: string): Promise<string[] | undefined> {
-    const phone = search ? searchPhone(search) : null;
+    const s = normalizeAdminOrderSearch(search);
+    const phone = s ? searchPhone(s) : null;
     const variants = phone ? recipientPhoneVariants(phone) : [];
     if (variants.length === 0) return undefined;
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`
@@ -731,6 +745,7 @@ export class AdminService {
           items: true,
           user: { select: { id: true, phone: true, fullName: true } },
           fulfillerStorefront: { select: { title: true } },
+          customerRefunds: ORDER_LIST_REFUNDS,
           gomdonAlerts: {
             where: { resolvedAt: null },
             orderBy: { createdAt: 'desc' },
@@ -1168,7 +1183,7 @@ export class AdminService {
     const now = new Date();
     const keyword = q.q ? normalizeCouponCode(q.q) : '';
     const where: Prisma.CouponWhereInput = {
-      ...(keyword ? { code: { contains: keyword } } : {}),
+      ...(keyword ? { code: { contains: escapePrismaLike(keyword) } } : {}),
       ...(q.scope ? { scope: q.scope as Prisma.CouponWhereInput['scope'] } : keyword ? {} : { scope: { not: 'USER_GROUP' } }),
       ...(q.status === 'active' ? { isActive: true, endAt: { gte: now } } : {}),
       ...(q.status === 'inactive' ? { isActive: false } : {}),
@@ -1307,7 +1322,7 @@ export class AdminService {
     const sku = filter.sku?.trim();
     const where: Prisma.DealerPriceHistoryWhereInput = {
       ...(filter.variationId ? { variationId: filter.variationId } : {}),
-      ...(sku ? { sku: { contains: sku, mode: 'insensitive' } } : {}),
+      ...(sku ? { sku: { contains: escapePrismaLike(sku), mode: 'insensitive' } } : {}),
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerPriceHistory.findMany({
