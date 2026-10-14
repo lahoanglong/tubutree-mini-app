@@ -49,31 +49,11 @@ import {
 import { PARTNER_POINTS_NOTE } from '../cart/partner-goods';
 import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 import { forBuyer } from '../orders/buyer-order-fields';
+import { totalChangedError, totalChangedMessage } from './total-changed';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
-/** Mã lỗi ổn định: tổng lúc đặt cao hơn tổng khách đã thấy (giá/phí vừa đổi) — FE báo và tải lại báo giá. */
-export const TOTAL_CHANGED = 'TOTAL_CHANGED';
-export const TOTAL_CHANGED_MESSAGE_PREFIX = 'Tổng tiền đơn vừa thay đổi';
-
-/**
- * Câu báo TOTAL_CHANGED. Nêu đúng nguyên nhân khi máy chủ biết: mã giảm giá vừa bị gỡ khỏi giỏ ngay lần đặt này (hết hạn, bị
- * tắt, hết lượt), hoặc mã còn trong giỏ mà không áp được (kèm lời báo của mã). Còn lại là câu trung tính, không đổ riêng cho giá
- * hay phí giao.
- */
-export function totalChangedMessage(
-  expectedTotal: number,
-  total: number,
-  coupon: { removed: { code: string; reason: string } | null; notAppliedNotice: string | null },
-): string {
-  const head = `${TOTAL_CHANGED_MESSAGE_PREFIX} từ ${expectedTotal.toLocaleString('vi-VN')}đ thành ${total.toLocaleString('vi-VN')}đ`;
-  const tail = 'Vui lòng xem lại trước khi đặt.';
-  if (coupon.removed) {
-    return `${head} vì mã ${coupon.removed.code} không còn được áp dụng. Lý do: ${coupon.removed.reason} ${tail}`;
-  }
-  if (coupon.notAppliedNotice) return `${head}. ${coupon.notAppliedNotice} ${tail}`;
-  return `${head} do giá, phí giao hoặc ưu đãi vừa thay đổi. ${tail}`;
-}
+export { TOTAL_CHANGED, TOTAL_CHANGED_MESSAGE_PREFIX, totalChangedMessage } from './total-changed';
 
 /** Mã lỗi ổn định: giỏ đổi giữa lúc tính tiền và lúc ghi đơn (tab khác sửa giỏ, hoặc lần bấm trước vừa đặt xong). */
 export const CART_CHANGED = 'CART_CHANGED';
@@ -364,15 +344,12 @@ export class CheckoutService {
     }
     // Chỉ chặn khi ĐẮT HƠN số khách đã thấy; rẻ hơn (giảm giá vừa áp) thì có lợi cho khách, không hỏi lại.
     if (dto.expectedTotal != null && computed.total > dto.expectedTotal) {
-      throw new BadRequestException({
-        statusCode: 400,
-        error: 'Bad Request',
-        code: TOTAL_CHANGED,
-        message: totalChangedMessage(dto.expectedTotal, computed.total, {
+      throw totalChangedError(
+        totalChangedMessage(dto.expectedTotal, computed.total, {
           removed: cart.couponRemoved ?? null,
           notAppliedNotice: cart.couponCode && !computed.couponApplied ? computed.couponNotice : null,
         }),
-      });
+      );
     }
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
     const blocked = paymentMethodBlockReason(computed.shipments, paymentMethod);

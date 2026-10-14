@@ -641,6 +641,16 @@ describe('R2-MERCHANT-4: phiếu đối soát âm là đối tác nộp lại Tu
     expect(res.tubuAccount).toEqual({ bankName: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' });
     expect(res.payouts[0]).toMatchObject({ direction: 'TO_TUBU', dueAt: new Date('2026-10-19T03:00:00Z') });
   });
+
+  it('phiếu đã huỷ xếp theo mốc huỷ với phiếu cũ chưa có mốc (NULL) xuống cuối, nên phiếu vừa huỷ luôn nằm trong số được hiện', async () => {
+    const { svc, prisma } = build();
+    const findMany = jest.fn().mockResolvedValue([]);
+    (prisma as unknown as { merchantPayout: { findMany: jest.Mock } }).merchantPayout.findMany = findMany;
+    (prisma.order.findMany as jest.Mock).mockResolvedValue([]);
+    await svc.myStatement('u1');
+    const cancelledQuery = findMany.mock.calls.map((c) => c[0]).find((q) => q.where.status === 'CANCELLED');
+    expect(cancelledQuery.orderBy).toEqual([{ cancelledAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }]);
+  });
 });
 
 describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', () => {

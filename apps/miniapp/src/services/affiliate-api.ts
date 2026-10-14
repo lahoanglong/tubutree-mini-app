@@ -227,6 +227,8 @@ export const createCtvOrder = (dto: {
   customer: CtvOrderCustomerInput;
   paymentMethod: 'COD' | 'BANK_TRANSFER';
   note?: string;
+  /** Tổng CTV đang thấy ở báo giá: tổng lúc tạo đơn cao hơn thì máy chủ trả TOTAL_CHANGED thay vì ghi đơn đắt hơn. */
+  expectedTotal?: number;
 }) => api.post<CtvOrderResult>('/affiliate/orders', dto).then((r) => r.data);
 
 export interface CtvOrderQuoteItem {

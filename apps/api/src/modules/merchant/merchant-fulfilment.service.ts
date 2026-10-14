@@ -938,9 +938,11 @@ export class MerchantFulfilmentService {
         include: { lines: PAYOUT_LINES_INCLUDE },
       }),
       // Phiếu đã huỷ vẫn hiện (kèm lý do và các khoản lúc huỷ) để gian hàng đã được báo "đã lập phiếu" biết chuyện gì xảy ra.
+      // Phiếu huỷ trước khi có cột cancelledAt (NULL) xuống cuối: Postgres xếp NULL lên đầu khi DESC, đủ 10 phiếu cũ là che mất
+      // phiếu vừa huỷ.
       this.prisma.merchantPayout.findMany({
         where: { storefrontId: store.id, status: 'CANCELLED' },
-        orderBy: { cancelledAt: 'desc' },
+        orderBy: [{ cancelledAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
         take: CANCELLED_PAYOUTS_SHOWN,
         include: { lines: PAYOUT_LINES_INCLUDE },
       }),

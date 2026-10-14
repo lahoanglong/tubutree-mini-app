@@ -1,4 +1,5 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { saveRecentCustomer, loadRecentCustomers } from './recent-customers';
@@ -309,6 +310,81 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng 
     expect(screen.getByText('Chanh · 65.000đ')).toBeInTheDocument();
     expect(screen.getByText('Phí ship tính khi tạo đơn')).toBeInTheDocument();
     expect(screen.getByTestId('ctv-order-goods')).toHaveTextContent('65.000đ');
+  });
+});
+
+const rejected = (code: string, message: string) =>
+  new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, {
+    status: 400,
+    data: { statusCode: 400, code, message },
+  } as AxiosResponse);
+
+describe('CtvOrderSheet — đơn tạo ra đúng tổng CTV đã báo khách (R7 review #6)', () => {
+  const FLASH_QUOTE = {
+    items: [{ variationId: 'var1', unitPrice: 52_000, quantity: 1, total: 52_000, isFlash: true, flashLimitNotice: null }],
+    goods: 52_000, shippingFee: 19_000, total: 71_000,
+  };
+  const REGULAR_QUOTE = {
+    items: [{ variationId: 'var1', unitPrice: 65_000, quantity: 1, total: 65_000, isFlash: false, flashLimitNotice: null }],
+    goods: 65_000, shippingFee: 19_000, total: 84_000,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.suggestProducts.mockResolvedValue([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]);
+    mocks.fetchProduct.mockResolvedValue({
+      name: 'Nước rửa chén',
+      variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }],
+    });
+    mocks.createCtvOrder.mockResolvedValue({ code: 'TUBU9', total: 71_000, items: [] });
+  });
+
+  async function readyToSubmit() {
+    saveRecentCustomer('ctv1', AN, 1);
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: 'Nguyễn An · …567' }));
+    await addProduct();
+  }
+
+  it('tạo đơn gửi kèm tổng đang hiện ở báo giá (expectedTotal)', async () => {
+    mocks.quoteCtvOrder.mockResolvedValue(FLASH_QUOTE);
+    await readyToSubmit();
+    await waitFor(() => expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.createCtvOrder.mock.calls[0]![0]).toMatchObject({ expectedTotal: 71_000 });
+  });
+
+  it('giờ vàng vừa hết (TOTAL_CHANGED): báo CTV tổng mới, tải lại báo giá, không tạo đơn; bấm lại gửi tổng mới', async () => {
+    const message = 'Tổng tiền đơn vừa thay đổi từ 71.000đ thành 84.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.';
+    let ended = false;
+    mocks.quoteCtvOrder.mockImplementation(async () => (ended ? REGULAR_QUOTE : FLASH_QUOTE));
+    mocks.createCtvOrder.mockRejectedValueOnce(rejected('TOTAL_CHANGED', message)).mockResolvedValue({ code: 'TUBU9', total: 84_000, items: [] });
+    await readyToSubmit();
+    await waitFor(() => expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ'));
+
+    ended = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(message);
+    expect(alert).toHaveTextContent('Báo lại khách tổng tiền mới bên dưới rồi bấm tạo đơn lần nữa.');
+    await waitFor(() => expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('84.000đ'));
+    expect(screen.getByText('Chanh · 65.000đ')).toBeInTheDocument();
+    expect(screen.queryByText(/Đã tạo đơn hộ khách/)).toBeNull();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder.mock.calls[1]![0]).toMatchObject({ expectedTotal: 84_000 });
+  });
+
+  it('báo giá từ chối hàng gian hàng đối tác tự giao: hiện lý do ngay trên form, trước khi tạo đơn', async () => {
+    const message = 'Sản phẩm "Nước rửa chén" do gian hàng đối tác tự giao, chỉ đặt được qua giỏ hàng.';
+    mocks.quoteCtvOrder.mockRejectedValue(rejected('NOT_TUBU_FULFILLED', message));
+    await readyToSubmit();
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(mocks.createCtvOrder).not.toHaveBeenCalled();
   });
 });
 

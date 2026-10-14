@@ -1030,12 +1030,20 @@ export const listPendingMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_S
     `/admin/merchant-products/pending?page=${page}&limit=${limit}`,
   ).then((res) => asPage(res, page, limit));
 
+/** Những gì dòng chờ duyệt đang hiện lúc admin bấm: API chỉ duyệt khi sản phẩm vẫn đúng như vậy (đối tác đổi mã → 409). */
+export interface MerchantReviewSeen {
+  pancakeCode: string | null;
+  /** Sản phẩm đang bán admin đã tích xác nhận chuyển (`pancakeLink.origin.id`). */
+  takeoverProductId?: string | null;
+}
+
 export const reviewMerchantProduct = (
   productId: string,
   approve: boolean,
   rejectReason?: string,
   confirmTakeover?: boolean,
   editVersion?: string | null,
+  seen?: MerchantReviewSeen,
 ) =>
   apiFetch<{ id: string; approvalStatus: string }>(
     `/admin/merchant-products/${productId}/review`,
@@ -1046,6 +1054,8 @@ export const reviewMerchantProduct = (
         rejectReason,
         ...(confirmTakeover ? { confirmTakeover: true } : {}),
         ...(editVersion ? { editVersion } : {}),
+        ...(seen ? { expectedPancakeCode: seen.pancakeCode } : {}),
+        ...(seen?.takeoverProductId ? { expectedTakeoverProductId: seen.takeoverProductId } : {}),
       },
     },
   );

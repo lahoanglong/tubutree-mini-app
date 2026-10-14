@@ -4,6 +4,7 @@ import {
   linkTubuFulfilledVariation,
   unlinkTubuFulfilledVariation,
   LINK_TAKEN_MESSAGE,
+  PANCAKE_TAKEOVER_CHANGED,
   PANCAKE_TAKEOVER_UNCONFIRMED,
 } from './merchant-pancake-link';
 import { assertIdentifierAvailable } from '../storefront/identifier-validation';
@@ -188,9 +189,21 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
 
   it('R2-MERCHANT-1: admin xác nhận chuyển → chuyển và ghi takeover để gỡ liên kết trả về đúng chỗ', async () => {
     const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
-    await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true });
-    expect(t.variation.updateMany).toHaveBeenCalled();
+    await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId: 'tubu-shell' });
+    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a' } });
     expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originDeactivated: true });
+  });
+
+  it.each([
+    ['không kèm sản phẩm đã xem', undefined],
+    ['xác nhận cho sản phẩm đang bán khác', 'tubu-other'],
+  ])('xác nhận chuyển %s → 409 PANCAKE_TAKEOVER_CHANGED, không chuyển gì', async (_label, takeoverProductId) => {
+    const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
+    await expect(
+      linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId }),
+    ).rejects.toMatchObject({ status: 409, response: expect.objectContaining({ code: PANCAKE_TAKEOVER_CHANGED }) });
+    expect(t.variation.updateMany).not.toHaveBeenCalled();
+    expect(t.merchantPancakeLink.create).not.toHaveBeenCalled();
   });
 
   it('sản phẩm vỏ còn biến thể khác → giữ nguyên đang bán, gỡ liên kết không tự bật/tắt nó', async () => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { Trash2, Plus, Minus, UserPlus, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
@@ -29,7 +30,7 @@ import {
   type VariationDetail,
 } from '../../services/shop-api';
 import { createCtvOrder, quoteCtvOrder, type CtvOrderItemInput, type CtvOrderResult } from '../../services/affiliate-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorCode, getErrorMessage } from '../../services/api';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
@@ -51,6 +52,9 @@ interface OrderLine {
 
 const t = vi.ctvOrder;
 
+/** Giá hoặc tổng lúc tạo đơn đã khác báo giá CTV đang xem (giờ vàng hết giờ/hết suất, phí giao đổi). */
+const PRICE_MOVED = new Set(['TOTAL_CHANGED', 'PRICE_CHANGED']);
+
 /** Form CTV lên đơn hộ khách — tạo đơn + hoa hồng cho CTV. */
 export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const { openSnackbar } = useSnackbar();
@@ -65,6 +69,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [result, setResult] = useState<CtvOrderResult | null>(null);
+  const [priceMoved, setPriceMoved] = useState<{ message: string; itemsKey: string } | null>(null);
   const navigate = useNavigate();
   const userId = useAuthStore((s) => s.user?.id);
   const [recents, setRecents] = useState<RecentCustomer[]>(() => loadRecentCustomers(userId));
@@ -142,6 +147,10 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const quoteFresh = quotedKey === itemsKey;
   const quote = quoteFresh ? quoteQ.data : undefined;
   const quoteFailed = quoteFresh && quoteQ.isError;
+  // Máy chủ từ chối báo giá vì chính các dòng hàng (vd hàng gian hàng đối tác tự giao): bước tạo đơn cũng sẽ từ chối như vậy.
+  const quoteProblem =
+    quoteFailed && isAxiosError(quoteQ.error) && quoteQ.error.response?.status === 400 ? getErrorMessage(quoteQ.error) : null;
+  const priceMovedMessage = priceMoved?.itemsKey === itemsKey ? priceMoved.message : null;
   const quotedLines = new Map((quote?.items ?? []).map((i) => [i.variationId, i]));
   const goods = quote?.goods ?? lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
 
@@ -170,9 +179,11 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         },
         paymentMethod: payment,
         note: note.trim() || undefined,
+        ...(quote ? { expectedTotal: quote.total } : {}),
       }),
     onSuccess: (r) => {
       haptic('medium');
+      setPriceMoved(null);
       setResult(r);
       saveRecentCustomer(userId, {
         recipient: recipient.trim(),
@@ -190,7 +201,15 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       void qc.invalidateQueries({ queryKey: ['affiliate-product-breakdown'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-sf-analytics'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      const code = getErrorCode(e);
+      if (code && PRICE_MOVED.has(code)) {
+        setPriceMoved({ message: getErrorMessage(e), itemsKey });
+        void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
+        return;
+      }
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   const submit = () => {
@@ -346,6 +365,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         </div>
       ))}
       {showErrors && !itemsOk && <InlineError style={{ marginTop: 4 }}>{t.emptyItems}</InlineError>}
+      {quoteProblem && <InlineError style={{ marginTop: 4 }}>{quoteProblem}</InlineError>}
 
       <ProductVariationPicker onAdd={addLine} />
 
@@ -370,6 +390,14 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           rows={2}
         />
       </div>
+
+      {priceMovedMessage && (
+        <div role="alert" style={{ marginTop: 16 }}>
+          <InlineError>
+            {priceMovedMessage} {t.totalChangedHint}
+          </InlineError>
+        </div>
+      )}
 
       {/* Tạm tính + submit */}
       {lines.length > 0 && !quoteFailed ? (

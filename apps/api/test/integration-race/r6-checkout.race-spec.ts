@@ -334,5 +334,59 @@ describe('r6-checkout (UAT vòng 4) — real Postgres', () => {
       expect(items.map((i) => [i.unitPrice, i.flashSaleItemId])).toEqual([[140_000, null]]);
       expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(2);
     });
+
+    it('R7 #6a: giờ vàng kết thúc giữa lúc báo giá và lúc tạo đơn → TOTAL_CHANGED, không tạo đơn, không giữ kho/suất; báo giá lại rồi đặt theo tổng mới thì được', async () => {
+      const granola = await variation(140_000);
+      const item = await flashSale(granola.id, 120_000, 10, 5);
+      const ctv = await createUser(prisma, { role: 'AFFILIATE', phone: phone() });
+      const items = [{ variationId: granola.id, quantity: 1 }];
+      const quoted = await affiliate.quoteOrderForCustomer(ctv.id, { items });
+      expect(quoted).toMatchObject({ goods: 120_000, total: 139_000 });
+
+      await prisma.flashSale.update({ where: { id: item.flashSaleId }, data: { endAt: new Date(Date.now() - 1_000) } });
+      const place = (expectedTotal: number) =>
+        affiliate.placeOrderForCustomer(ctv.id, { items, customer: { ...CUSTOMER, phone: phone() }, paymentMethod: 'COD', expectedTotal } as never);
+      const err = await placeError(place(quoted.total));
+      expect(err).toMatchObject({ code: 'TOTAL_CHANGED', message: expect.stringContaining('từ 139.000đ thành 159.000đ') });
+      expect(await prisma.order.count({ where: { userId: ctv.id } })).toBe(0);
+      expect((await prisma.variation.findUniqueOrThrow({ where: { id: granola.id } })).stock).toBe(100);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(0);
+
+      const requoted = await affiliate.quoteOrderForCustomer(ctv.id, { items });
+      expect(requoted).toMatchObject({ goods: 140_000, total: 159_000 });
+      const placed = await place(requoted.total);
+      expect(placed).toMatchObject({ total: 159_000 });
+    });
+
+    it('R7 #6a: giờ vàng bắt đầu sau lúc báo giá → tổng thấp hơn tổng đã báo vẫn tạo đơn, theo giá giờ vàng', async () => {
+      const granola = await variation(140_000);
+      const ctv = await createUser(prisma, { role: 'AFFILIATE', phone: phone() });
+      const items = [{ variationId: granola.id, quantity: 1 }];
+      const quoted = await affiliate.quoteOrderForCustomer(ctv.id, { items });
+      expect(quoted.total).toBe(159_000);
+      await flashSale(granola.id, 120_000, 10, 5);
+      const placed = await affiliate.placeOrderForCustomer(ctv.id, {
+        items,
+        customer: { ...CUSTOMER, phone: phone() },
+        paymentMethod: 'COD',
+        expectedTotal: quoted.total,
+      } as never);
+      expect(placed).toMatchObject({ total: 139_000 });
+    });
+
+    it('R7 #6b: báo giá đơn hộ có hàng gian hàng đối tác tự giao → NOT_TUBU_FULFILLED ngay ở báo giá, như lúc tạo đơn', async () => {
+      const store = await shop();
+      const selfShip = await variation(90_000, store.id);
+      const tubu = await variation(50_000);
+      const ctv = await createUser(prisma, { role: 'AFFILIATE', phone: phone() });
+      const items = [{ variationId: tubu.id, quantity: 1 }, { variationId: selfShip.id, quantity: 1 }];
+      const atQuote = await placeError(affiliate.quoteOrderForCustomer(ctv.id, { items }));
+      const atOrder = await placeError(
+        affiliate.placeOrderForCustomer(ctv.id, { items, customer: { ...CUSTOMER, phone: phone() }, paymentMethod: 'COD' } as never),
+      );
+      expect(atQuote).toMatchObject({ code: 'NOT_TUBU_FULFILLED' });
+      expect(atQuote).toEqual(atOrder);
+      await expect(affiliate.quoteOrderForCustomer(ctv.id, { items: [items[0]!] })).resolves.toMatchObject({ goods: 50_000 });
+    });
   });
 });

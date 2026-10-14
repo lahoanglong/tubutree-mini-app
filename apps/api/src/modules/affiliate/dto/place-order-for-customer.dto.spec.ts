@@ -50,6 +50,12 @@ describe('PlaceOrderForCustomerDto', () => {
     expect(await errorKeys({ ...VALID, paymentMethod: 'WALLET' })).toContain('isIn');
   });
 
+  it('expectedTotal (tổng CTV đã báo khách) là số nguyên không âm, không gửi cũng được', async () => {
+    expect(await errorKeys({ ...VALID, expectedTotal: 139000 })).toHaveLength(0);
+    expect(await errorKeys({ ...VALID, expectedTotal: -1 })).toContain('min');
+    expect(await errorKeys({ ...VALID, expectedTotal: 1.5 })).toContain('isInt');
+  });
+
   it('thiếu recipient trong customer → lỗi (nested)', async () => {
     const keys = await errorKeys({ ...VALID, customer: { ...CUSTOMER, recipient: undefined } });
     expect(keys).toContain('isString');

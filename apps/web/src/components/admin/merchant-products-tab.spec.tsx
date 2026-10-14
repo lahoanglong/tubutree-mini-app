@@ -82,7 +82,7 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
     expect(call?.url).toContain('/admin/merchant-products/p1/review');
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: true }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, expectedPancakeCode: null }));
   });
 
   it('còn trang chưa tải → hiện "Tải thêm", bấm gọi tiếp trang 2', async () => {
@@ -156,7 +156,7 @@ describe('MerchantProductsTab — DS v2', () => {
     click(confirmBtn);
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận' }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận', expectedPancakeCode: null }));
   });
 });
 
@@ -232,7 +232,61 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     click(approve);
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, confirmTakeover: true }));
+    expect(call?.init?.body).toBe(
+      JSON.stringify({
+        approve: true,
+        confirmTakeover: true,
+        expectedPancakeCode: 'seed-BHN-PP-200',
+        expectedTakeoverProductId: 'p-bhnong-pepper',
+      }),
+    );
+  });
+
+  it('đối tác đổi mã sau khi admin tích xác nhận → API 409, danh sách tự tải lại hiện sản phẩm mới, bỏ tích và khoá Duyệt', async () => {
+    const swapped = {
+      data: [
+        product({
+          name: 'Tiêu đen Shop A',
+          pancakeLinkCode: 'seed-OTHER-200',
+          pancakeLink: preview({
+            code: 'seed-OTHER-200',
+            origin: { ...preview().origin!, id: 'p-other-pepper', name: 'Tiêu sọ Phú Quốc' },
+          }),
+          storefront: { id: 'sf-a', title: 'Shop A', subdomain: null, ownerUserId: 'u' },
+        }),
+      ],
+      meta: { page: 1, limit: 100, total: 1 },
+    };
+    let listCalls = 0;
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: listCalls++ === 0 ? pending(preview()) : swapped }),
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': {
+        status: 409,
+        body: {
+          statusCode: 409,
+          code: 'PANCAKE_CODE_CHANGED',
+          message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-OTHER-200, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.',
+        },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(container.querySelector('input[type="checkbox"]'));
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    const body = JSON.parse(String(api.calls.find((c) => c.url.includes('/review'))?.init?.body));
+    expect(body).toMatchObject({ expectedPancakeCode: 'seed-BHN-PP-200', expectedTakeoverProductId: 'p-bhnong-pepper' });
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đối tác vừa đổi mã Pancake');
+    expect(text).toContain('Tiêu sọ Phú Quốc');
+    expect(text).toContain('mã Pancake seed-OTHER-200');
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(false);
+    expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('mã không liên kết được → nêu lý do, khoá Duyệt (chỉ còn Từ chối)', async () => {

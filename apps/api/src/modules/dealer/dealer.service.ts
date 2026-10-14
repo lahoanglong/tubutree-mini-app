@@ -19,6 +19,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
+import { forBuyer } from '../orders/buyer-order-fields';
 
 interface BonusTier {
   min: number;
@@ -198,9 +199,7 @@ export class DealerService {
     // Double-tap/retry cùng key → trả lại đơn đã tạo, KHÔNG tạo đơn/ghi công nợ lần 2.
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-      if (existing && existing.userId === userId) {
-        return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
-      }
+      if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
     }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
@@ -329,7 +328,7 @@ export class DealerService {
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+        if (existing) return this.orderForDealer(existing.id);
       }
       throw err;
     }
@@ -353,16 +352,21 @@ export class DealerService {
     } else {
       this.logger.warn(`PancakeOrderService chưa wiring — đơn đại lý ${order.id} KHÔNG được đẩy sang kho.`);
     }
-    return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+    return this.orderForDealer(order.id);
   }
 
-  listOrders(userId: string) {
-    return this.prisma.order.findMany({
+  private async orderForDealer(id: string) {
+    return forBuyer(await this.prisma.order.findUniqueOrThrow({ where: { id }, include: { items: true } }));
+  }
+
+  async listOrders(userId: string) {
+    const orders = await this.prisma.order.findMany({
       where: { userId, type: 'DEALER' },
       orderBy: { createdAt: 'desc' },
       include: { items: true },
       take: 100,
     });
+    return orders.map(forBuyer);
   }
 
   async creditLedger(userId: string) {

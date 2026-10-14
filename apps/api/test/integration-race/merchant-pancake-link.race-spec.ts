@@ -2,7 +2,11 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
-import { PANCAKE_TAKEOVER_UNCONFIRMED } from '../../src/modules/merchant/merchant-pancake-link';
+import {
+  PANCAKE_CODE_CHANGED,
+  PANCAKE_TAKEOVER_CHANGED,
+  PANCAKE_TAKEOVER_UNCONFIRMED,
+} from '../../src/modules/merchant/merchant-pancake-link';
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { createOrder, createUser, randCode, sleep, summarize, warmPool } from './helpers';
@@ -65,6 +69,23 @@ describe('Merchant Pancake link (real Postgres)', () => {
     return { product, variation: product.variations[0]!, code, brand };
   }
 
+  /** Dòng ở màn "Duyệt SP đối tác" như admin đang thấy. */
+  async function pendingRow(productId: string) {
+    return (await admin.listPendingMerchantProducts(1, 500)).data.find((r) => r.id === productId)!;
+  }
+
+  /** Những gì màn duyệt gửi kèm khi bấm Duyệt: mã đang hiện và sản phẩm đang bán admin đã tích xác nhận chuyển. */
+  function seenOn(row: Awaited<ReturnType<typeof pendingRow>>) {
+    const origin = row.pancakeLink?.state === 'TAKEOVER' ? row.pancakeLink.origin?.id : undefined;
+    return { pancakeCode: row.pancakeLinkCode ?? null, takeoverProductId: origin };
+  }
+
+  /** Admin mở màn duyệt, tích xác nhận (nếu cần) rồi bấm Duyệt. */
+  async function approveShown(productId: string) {
+    const row = await pendingRow(productId);
+    return admin.reviewMerchantProduct('admin-it', productId, true, undefined, row.pancakeLink?.state === 'TAKEOVER', undefined, seenOn(row));
+  }
+
   async function requestLink(owner: { id: string }, code: string) {
     return merchant.createProduct(owner.id, {
       name: `Tiêu đen gian hàng ${randCode(4)}`,
@@ -82,15 +103,14 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(check).toMatchObject({ requiresAdminConfirm: true, stock: null });
     const p = await requestLink(owner, tubu.code);
 
-    const pending = await admin.listPendingMerchantProducts(1, 100);
-    const row = pending.data.find((r) => r.id === p.id)!;
+    const row = await pendingRow(p.id);
     expect(row.pancakeLink).toMatchObject({
       state: 'TAKEOVER',
       variation: { stock: 150 },
       origin: { id: tubu.product.id, name: tubu.product.name, brandName: tubu.brand.name, sold: 42, onSale: true },
     });
 
-    await expect(admin.reviewMerchantProduct('admin-it', p.id, true)).rejects.toMatchObject({
+    await expect(admin.reviewMerchantProduct('admin-it', p.id, true, undefined, false, undefined, seenOn(row))).rejects.toMatchObject({
       response: expect.objectContaining({ code: PANCAKE_TAKEOVER_UNCONFIRMED }),
     });
     const [v, origin, mine] = await Promise.all([
@@ -108,7 +128,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     const tubu = await tubuProduct();
     const a = await merchantStore();
     const p = await requestLink(a.owner, tubu.code);
-    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await approveShown(p.id);
 
     const linked = await prisma.variation.findUniqueOrThrow({ where: { id: tubu.variation.id } });
     expect(linked.productId).toBe(p.id);
@@ -163,7 +183,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
       const tubu = await tubuProduct();
       const { owner } = await merchantStore();
       const p = await requestLink(owner, tubu.code);
-      await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+      await approveShown(p.id);
       notify.mockClear();
 
       const results = await Promise.allSettled([
@@ -198,9 +218,10 @@ describe('Merchant Pancake link (real Postgres)', () => {
     const b = await merchantStore();
     const pa = await requestLink(a.owner, tubu.code);
     const pb = await requestLink(b.owner, tubu.code);
+    const [rowA, rowB] = await Promise.all([pendingRow(pa.id), pendingRow(pb.id)]);
     const results = await Promise.allSettled([
-      admin.reviewMerchantProduct('admin-it', pa.id, true, undefined, true),
-      admin.reviewMerchantProduct('admin-it', pb.id, true, undefined, true),
+      admin.reviewMerchantProduct('admin-it', pa.id, true, undefined, true, undefined, seenOn(rowA)),
+      admin.reviewMerchantProduct('admin-it', pb.id, true, undefined, true, undefined, seenOn(rowB)),
     ]);
     const s = summarize(results);
     expect(s.fulfilled).toHaveLength(1);
@@ -231,7 +252,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
       });
     const before = await order(new Date(Date.now() - 86_400_000));
     const p = await requestLink(owner, tubu.code);
-    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await approveShown(p.id);
     await sleep(10);
     const during = await order(new Date());
     await sleep(10);
@@ -254,7 +275,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     const b = await tubuProduct();
     const { owner } = await merchantStore();
     const p = await requestLink(owner, a.code);
-    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await approveShown(p.id);
     await admin.unlinkMerchantProduct('admin-it', p.id, 'Hết hợp tác');
 
     // Trước đây: kẹt — không sửa giá/tồn, không đổi được mã.
@@ -268,7 +289,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(requested).toMatchObject({ pancakeLinkCode: b.code, approvalStatus: 'PENDING_REVIEW', fulfilment: 'MERCHANT', isActive: true });
     const row = (await admin.listPendingMerchantProducts(1, 100)).data.find((r) => r.id === p.id)!;
     expect(row.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: b.product.id } });
-    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+    await approveShown(p.id);
     const [linked, mine, open] = await Promise.all([
       prisma.variation.findUniqueOrThrow({ where: { id: b.variation.id } }),
       prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
@@ -286,7 +307,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     // Bỏ mã: tự giao, sửa giá/tồn và mở bán lại ngay, không cần duyệt lại (nội dung đã được duyệt).
     const c = await tubuProduct();
     const q = await requestLink(owner, c.code);
-    await admin.reviewMerchantProduct('admin-it', q.id, true, undefined, true);
+    await approveShown(q.id);
     await admin.unlinkMerchantProduct('admin-it', q.id, 'Hết hợp tác');
     await merchant.updateProduct(owner.id, q.id, { pancakeCode: null, basePrice: 95_000, stock: 7 });
     await merchant.updateProduct(owner.id, q.id, { isActive: true });
@@ -302,37 +323,116 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect((await prisma.variation.findUnique({ where: { id: selfShip.variations[0]!.id } }))!.stock).toBe(9);
   });
 
-  it('(g) R4-PARTNER-6: admin duyệt liên kết chồng với đối tác đổi/bỏ mã → không bao giờ có sản phẩm Tubu giao hộ mang mã khác với biến thể đã liên kết', async () => {
+  it('(g) R4-PARTNER-6: admin duyệt liên kết chồng với đối tác đổi/bỏ mã → chỉ mã admin đã xem được liên kết, sản phẩm Tubu của mã mới không bị đụng tới', async () => {
     for (let round = 0; round < 6; round++) {
       const a = await tubuProduct();
       const b = await tubuProduct();
       const { owner } = await merchantStore();
       const p = await requestLink(owner, a.code);
+      const row = await pendingRow(p.id);
+      expect(row.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: a.product.id } });
+      const approve = () => admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, seenOn(row));
       const change = round % 2 === 0 ? { pancakeCode: b.code } : { pancakeCode: null };
       const results = await Promise.allSettled(
         round % 3 === 0
-          ? [merchant.updateProduct(owner.id, p.id, change), admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true)]
-          : [admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true), merchant.updateProduct(owner.id, p.id, change)],
+          ? [merchant.updateProduct(owner.id, p.id, change), approve()]
+          : [approve(), merchant.updateProduct(owner.id, p.id, change)],
       );
       const s = summarize(results);
       console.log('[g] round=%d errors=%j', round, s.errors);
-      const [mine, open, va, vb] = await Promise.all([
+      const [mine, open, va, vb, originB] = await Promise.all([
         prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
         prisma.merchantPancakeLink.findMany({ where: { productId: p.id, unlinkedAt: null } }),
         prisma.variation.findUniqueOrThrow({ where: { id: a.variation.id } }),
         prisma.variation.findUniqueOrThrow({ where: { id: b.variation.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: b.product.id } }),
       ]);
-      // Biến thể chỉ ở sản phẩm đối tác khi có đúng một liên kết mở trỏ tới nó, sản phẩm là TUBU và mã khớp.
-      for (const [v, tubu] of [[va, a], [vb, b]] as const) {
-        const movedHere = v.productId === p.id;
-        const links = open.filter((l) => l.variationId === v.id);
-        expect(links).toHaveLength(movedHere ? 1 : 0);
-        if (movedHere) expect(mine).toMatchObject({ fulfilment: 'TUBU', pancakeLinkCode: tubu.code, approvalStatus: 'APPROVED' });
+      // Admin chỉ xem và xác nhận chuyển sản phẩm A: biến thể B không bao giờ rời sản phẩm Tubu của nó.
+      expect(vb.productId).toBe(b.product.id);
+      expect(originB.isActive).toBe(true);
+      expect(open.filter((l) => l.variationId === vb.id)).toHaveLength(0);
+      const movedHere = va.productId === p.id;
+      expect(open).toHaveLength(movedHere ? 1 : 0);
+      if (movedHere) {
+        expect(open[0]).toMatchObject({ variationId: va.id, originProductId: a.product.id });
+        expect(mine).toMatchObject({ fulfilment: 'TUBU', pancakeLinkCode: a.code, approvalStatus: 'APPROVED' });
+      } else {
+        expect(mine.fulfilment).toBe('MERCHANT');
+        expect([a.code, b.code, null]).toContain(mine.pancakeLinkCode);
       }
-      if (mine.fulfilment === 'TUBU') expect(open).toHaveLength(1);
-      else expect(open).toHaveLength(0);
-      if (mine.fulfilment !== 'TUBU') expect([a.code, b.code, null]).toContain(mine.pancakeLinkCode);
       for (const r of s.rejected) expect([BadRequestException, ConflictException].some((E) => r.reason instanceof E)).toBe(true);
     }
+  });
+
+  it('(h) đối tác đổi sang mã của sản phẩm Tubu khác giữa lúc admin xem và bấm Duyệt → 409, không chuyển gì, sản phẩm Tubu kia vẫn bán', async () => {
+    const x = await tubuProduct();
+    const y = await tubuProduct();
+    const { owner } = await merchantStore();
+    const p = await requestLink(owner, x.code);
+    const shown = await pendingRow(p.id);
+    expect(shown.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: x.product.id } });
+
+    await merchant.updateProduct(owner.id, p.id, { pancakeCode: y.code });
+    const nothingMoved = async () => {
+      const [vx, vy, px, py, mine, links] = await Promise.all([
+        prisma.variation.findUniqueOrThrow({ where: { id: x.variation.id } }),
+        prisma.variation.findUniqueOrThrow({ where: { id: y.variation.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: x.product.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: y.product.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+        prisma.merchantPancakeLink.count({ where: { productId: p.id } }),
+      ]);
+      expect(vx.productId).toBe(x.product.id);
+      expect(vy.productId).toBe(y.product.id);
+      expect(px.isActive).toBe(true);
+      expect(py.isActive).toBe(true);
+      expect(mine).toMatchObject({ approvalStatus: 'PENDING_REVIEW', fulfilment: 'MERCHANT', pancakeLinkCode: y.code });
+      expect(links).toBe(0);
+    };
+
+    const stale = admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, seenOn(shown));
+    await expect(stale).rejects.toBeInstanceOf(ConflictException);
+    await expect(stale).rejects.toMatchObject({
+      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại') }),
+    });
+    await nothingMoved();
+    // Client không gửi mã đã xem cũng không duyệt được mã nào.
+    await expect(admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED }),
+    });
+    // Xác nhận chuyển gắn với sản phẩm admin đã xem: đúng mã mới nhưng xác nhận cho sản phẩm X → 409.
+    await expect(
+      admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, { pancakeCode: y.code, takeoverProductId: x.product.id }),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: PANCAKE_TAKEOVER_CHANGED }) });
+    await nothingMoved();
+
+    // Tải lại: màn duyệt hiện sản phẩm Y sẽ bị chuyển; xác nhận đúng Y thì mới chuyển.
+    const reloaded = await pendingRow(p.id);
+    expect(reloaded).toMatchObject({ pancakeLinkCode: y.code, pancakeLink: { state: 'TAKEOVER', origin: { id: y.product.id } } });
+    await approveShown(p.id);
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: y.variation.id } })).productId).toBe(p.id);
+    expect((await prisma.variation.findUniqueOrThrow({ where: { id: x.variation.id } })).productId).toBe(x.product.id);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: x.product.id } })).isActive).toBe(true);
+  });
+
+  it('(i) cùng mã nhưng biến thể đã sang sản phẩm đang bán khác sau khi admin xem → xác nhận cũ không còn hiệu lực (409)', async () => {
+    const x = await tubuProduct();
+    const z = await tubuProduct();
+    const { owner } = await merchantStore();
+    const p = await requestLink(owner, x.code);
+    const shown = await pendingRow(p.id);
+    await prisma.variation.update({ where: { id: x.variation.id }, data: { productId: z.product.id } });
+
+    await expect(admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, seenOn(shown))).rejects.toMatchObject({
+      response: expect.objectContaining({ code: PANCAKE_TAKEOVER_CHANGED }),
+    });
+    const [v, mine, pz] = await Promise.all([
+      prisma.variation.findUniqueOrThrow({ where: { id: x.variation.id } }),
+      prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+      prisma.product.findUniqueOrThrow({ where: { id: z.product.id } }),
+    ]);
+    expect(v.productId).toBe(z.product.id);
+    expect(mine.approvalStatus).toBe('PENDING_REVIEW');
+    expect(pz.isActive).toBe(true);
   });
 });

@@ -271,6 +271,9 @@ export default function CheckoutPage() {
         void queryClient.invalidateQueries({ queryKey: ['cart'] });
         return;
       }
+      // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự chọn
+      // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
+      if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') void queryClient.invalidateQueries({ queryKey: ['quote'] });
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });

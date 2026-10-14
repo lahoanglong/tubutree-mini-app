@@ -430,4 +430,29 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
   it('editVersion không phải thời điểm hợp lệ bị chặn', async () => {
     await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, editVersion: 'hôm qua' })).rejects.toBeDefined();
   });
+
+  it('mang mã Pancake và sản phẩm đang bán admin đã xem (null: dòng không có mã)', async () => {
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: true, confirmTakeover: true, expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' }),
+    ).resolves.toMatchObject({ expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: null })).resolves.toMatchObject({
+      expectedPancakeCode: null,
+    });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: 123 })).rejects.toBeDefined();
+  });
+
+  it('controller chuyển mã và sản phẩm đã xem xuống service', async () => {
+    const admin = { reviewMerchantProduct: jest.fn().mockResolvedValue({}) };
+    const dto = Object.assign(new ReviewMerchantProductDto(), {
+      approve: true,
+      confirmTakeover: true,
+      expectedPancakeCode: 'PK-1',
+      expectedTakeoverProductId: 'p-x',
+    });
+    await new AdminController(admin as never, {} as never).reviewMerchantProduct('admin-1', 'p1', dto);
+    expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
+      pancakeCode: 'PK-1',
+      takeoverProductId: 'p-x',
+    });
+  });
 });

@@ -96,6 +96,10 @@ export const LINK_TAKEN_MESSAGE =
   'Mã biến thể Pancake này vừa được liên kết cho sản phẩm khác. Từ chối sản phẩm kèm lý do để đối tác nhập mã khác.';
 
 export const PANCAKE_TAKEOVER_UNCONFIRMED = 'PANCAKE_TAKEOVER_UNCONFIRMED';
+/** Mã Pancake của sản phẩm đã khác mã admin thấy trên màn duyệt (đối tác đổi mã sau khi admin mở danh sách). */
+export const PANCAKE_CODE_CHANGED = 'PANCAKE_CODE_CHANGED';
+/** Biến thể sẽ bị chuyển giờ nằm ở sản phẩm đang bán khác với sản phẩm admin đã xác nhận chuyển. */
+export const PANCAKE_TAKEOVER_CHANGED = 'PANCAKE_TAKEOVER_CHANGED';
 
 /**
  * Liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận là hàng ký gửi: đơn của biến thể này chưa vào đối soát tự động.
@@ -110,10 +114,20 @@ export const CONSIGNMENT_PENDING_LINK_WHERE = {
 export const LEGACY_LINK_MESSAGE =
   'Liên kết này có từ trước khi hệ thống lưu sản phẩm gốc nên không tự trả biến thể về được. Liên hệ kỹ thuật để xử lý tay.';
 
+/** Những gì admin thấy trên dòng chờ duyệt lúc bấm Duyệt: chỉ duyệt khi sản phẩm vẫn đúng như vậy. */
+export interface MerchantReviewSeen {
+  /** Mã Pancake đang hiện trên dòng (null: dòng không có mã). */
+  pancakeCode?: string | null;
+  /** Sản phẩm đang bán mà admin đã xác nhận chuyển sang gian hàng. */
+  takeoverProductId?: string | null;
+}
+
 export interface LinkOptions {
   adminId: string;
   /** Admin đã xem và xác nhận chuyển sản phẩm đang bán sang gian hàng. */
   confirmTakeover?: boolean;
+  /** Sản phẩm đang bán mà admin đã xem trên màn duyệt khi tích xác nhận: chỉ chuyển biến thể khi nó vẫn nằm ở đúng sản phẩm này. */
+  takeoverProductId?: string | null;
 }
 
 /**
@@ -145,6 +159,16 @@ export async function linkTubuFulfilledVariation(
       error: 'Conflict',
       code: PANCAKE_TAKEOVER_UNCONFIRMED,
       message: `Mã ${target.pancakeId} đang thuộc sản phẩm đang bán "${target.productName}". Xem sản phẩm sẽ bị chuyển rồi tích xác nhận trước khi duyệt.`,
+    });
+  }
+  // Xác nhận chỉ có hiệu lực cho đúng sản phẩm admin đã xem; lệnh chuyển bên dưới có điều kiện `productId = target.productId`
+  // nên biến thể rời sản phẩm này sau lần đọc thì cũng trượt.
+  if (target.requiresAdminConfirm && opts.takeoverProductId !== target.productId) {
+    throw new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: PANCAKE_TAKEOVER_CHANGED,
+      message: `Mã ${target.pancakeId} giờ thuộc sản phẩm đang bán "${target.productName}", không phải sản phẩm bạn đã xác nhận chuyển. Tải lại danh sách để xem lại rồi mới duyệt.`,
     });
   }
 
