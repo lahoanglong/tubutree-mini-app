@@ -49,6 +49,7 @@ import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
 import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { AcademyModule } from './modules/academy/academy.module';
 import { CskhModule } from './modules/cskh/cskh.module';
+import { OpsModule } from './modules/ops/ops.module';
 import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -107,6 +108,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     ContentKitModule,
     AcademyModule,
     CskhModule,
+    OpsModule,
     ZaloOaModule,
   ],
   providers: [

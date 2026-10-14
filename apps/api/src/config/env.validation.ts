@@ -49,6 +49,9 @@ export const envSchema = z.object({
   PANCAKE_API_KEY: z.string().default(''),
   PANCAKE_SHOP_ID: z.string().default(''),
   PANCAKE_WEBHOOK_SECRET: z.string().default(''),
+  // PLATFORM-5: ngoài thông báo in-app cho admin, POST JSON báo động sức khoẻ vận hành (Slack/Google Chat/n8n...)
+  // tới URL này. Rỗng = chỉ báo in-app.
+  OPS_ALERT_WEBHOOK_URL: z.union([z.literal(''), z.string().url()]).default(''),
 
   // Gomdon (vận đơn đổi hàng BestExpress — thu gom vật liệu tái chế). Tính năng optional:
   // - GOMDON_BASE_URL trống → ở production dùng https://admin.gomdon.com.vn, ở dev/test coi như CHƯA

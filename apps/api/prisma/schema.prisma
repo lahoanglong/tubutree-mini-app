@@ -2565,6 +2565,22 @@ model GomdonAlert {
   @@map("gomdon_alerts")
 }
 
+/// Trạng thái vận hành ghi bền (PLATFORM-5), mỗi việc một dòng: lượt đồng bộ catalog Pancake gần nhất (process nào
+/// chạy cũng ghi, màn sức khoẻ đọc được dù request rơi vào instance khác) và trạng thái báo động sức khoẻ hệ thống
+/// (đang báo những gì, báo lần cuối lúc nào) để cron 5 phút không báo lặp.
+model OpsHealthState {
+  key         String    @id
+  lastOkAt    DateTime?
+  lastErrorAt DateTime?
+  lastError   String?
+  detail      Json?
+  alertSince  DateTime?
+  alertedAt   DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@map("ops_health_states")
+}
+
 model SystemConfig {
   key         String   @id
   value       Json

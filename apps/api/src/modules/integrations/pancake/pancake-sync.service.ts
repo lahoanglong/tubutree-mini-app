@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
+import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
@@ -184,11 +185,24 @@ export class PancakeSyncService implements OnModuleInit {
       }
       this.lastRunAt = startedAt;
       this.logger.log(`Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}.`);
+      await this.noteRun({ ok: true, count, failed });
       return count;
+    } catch (err) {
+      await this.noteRun({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      throw err;
     } finally {
       // Cờ phải được nhả kể cả khi fetch ném — nếu không, một lần Pancake timeout là mọi lượt
       // sync sau đều bị chính cờ này chặn cho tới lần restart.
       this.running = false;
+    }
+  }
+
+  /** Lượt đồng bộ vào màn sức khoẻ vận hành — best-effort: ghi lỗi không được làm hỏng/che lỗi của lượt đồng bộ. */
+  private async noteRun(run: CatalogRunResult): Promise<void> {
+    try {
+      await recordCatalogRun(this.prisma, run);
+    } catch (e) {
+      this.logger.warn(`Không ghi được trạng thái đồng bộ danh mục: ${e instanceof Error ? e.message : e}`);
     }
   }
 

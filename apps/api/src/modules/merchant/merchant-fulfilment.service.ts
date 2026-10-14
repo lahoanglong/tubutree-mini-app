@@ -667,18 +667,8 @@ export class MerchantFulfilmentService {
 
   /** Đơn đối tác đang quá SLA ở bất kỳ bước nào. */
   async overdueOrders(sla: SlaConfig, now: Date, take = 200) {
-    const confirmCut = new Date(now.getTime() - sla.confirmHours * HOUR);
-    const shipCut = new Date(now.getTime() - sla.shipHours * HOUR);
-    const deliverCut = new Date(now.getTime() - sla.deliverDays * DAY);
     return this.prisma.order.findMany({
-      where: {
-        fulfiller: 'MERCHANT',
-        OR: [
-          { status: 'CONFIRMED', merchantAcceptedAt: null, createdAt: { lt: confirmCut } },
-          { status: { in: ['CONFIRMED', 'PACKED'] }, createdAt: { lt: shipCut } },
-          { status: 'SHIPPING', shippedAt: { lt: deliverCut } },
-        ],
-      },
+      where: overdueWhere(sla, now),
       select: {
         id: true,
         code: true,
@@ -696,10 +686,29 @@ export class MerchantFulfilmentService {
     });
   }
 
+  /** Số đơn đối tác đang quá SLA — đếm thẳng, không bị trần `take` như danh sách. */
+  async countOverdue(now = new Date()): Promise<number> {
+    return this.prisma.order.count({ where: overdueWhere(await this.slaConfig(), now) });
+  }
+
   private async notifyOwner(ownerUserId: string | null, template: string, data: Record<string, string>) {
     if (!ownerUserId || !this.notifications) return;
     await this.notifications
       .notify(ownerUserId, template, data)
       .catch((e: unknown) => this.logger.warn(`Báo đối tác ${template} lỗi: ${e instanceof Error ? e.message : e}`));
   }
+}
+
+function overdueWhere(sla: SlaConfig, now: Date): Prisma.OrderWhereInput {
+  const confirmCut = new Date(now.getTime() - sla.confirmHours * HOUR);
+  const shipCut = new Date(now.getTime() - sla.shipHours * HOUR);
+  const deliverCut = new Date(now.getTime() - sla.deliverDays * DAY);
+  return {
+    fulfiller: 'MERCHANT',
+    OR: [
+      { status: 'CONFIRMED', merchantAcceptedAt: null, createdAt: { lt: confirmCut } },
+      { status: { in: ['CONFIRMED', 'PACKED'] }, createdAt: { lt: shipCut } },
+      { status: 'SHIPPING', shippedAt: { lt: deliverCut } },
+    ],
+  };
 }

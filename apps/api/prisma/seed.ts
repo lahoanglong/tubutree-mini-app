@@ -125,6 +125,12 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'merchant.confirm_sla_hours', value: 24, category: 'merchant', description: 'Đối tác phải xác nhận đơn tự giao trong chừng này giờ, quá hạn thì nhắc và hiện ở trang quản trị', createOnly: true },
   { key: 'merchant.ship_sla_hours', value: 48, category: 'merchant', description: 'Đối tác phải gửi hàng (nhập mã vận đơn) trong chừng này giờ kể từ khi khách đặt', createOnly: true },
   { key: 'merchant.deliver_sla_days', value: 7, category: 'merchant', description: 'Đơn đối tác đang giao quá chừng này ngày chưa xác nhận đã giao thì hiện ở danh sách quá hạn', createOnly: true },
+  // Ngưỡng báo động sức khoẻ vận hành (PLATFORM-5, ops-health.service). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'ops.alert_unsynced_minutes', value: 30, category: 'ops', description: 'Đơn còn ở kho mà quá số phút này chưa lên Pancake thì tính là đơn kẹt', createOnly: true },
+  { key: 'ops.alert_stuck_orders', value: 1, category: 'ops', description: 'Báo động khi số đơn kẹt chưa lên Pancake từ mức này trở lên', createOnly: true },
+  { key: 'ops.alert_webhook_failed', value: 1, category: 'ops', description: 'Báo động khi số webhook Pancake/Gomdon xử lý lỗi trong 24 giờ từ mức này trở lên', createOnly: true },
+  { key: 'ops.alert_queue_failed_1h', value: 5, category: 'ops', description: 'Báo động khi một hàng đợi có từ chừng này job lỗi trong 1 giờ qua', createOnly: true },
+  { key: 'ops.alert_repeat_hours', value: 6, category: 'ops', description: 'Sự cố chưa hết thì nhắc lại admin sau chừng này giờ', createOnly: true },
   { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
   { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
   { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },
@@ -693,6 +699,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
   // Báo động vận hành (chỉ gửi tài khoản ADMIN) — vận đơn thu gom Gomdon cần người xử lý.
   { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
+  { id: 'nt-ops-health', code: 'OPS_HEALTH_ALERT', channel: 'INAPP', bodyTemplate: '{{title}}: {{summary}}' },
   { id: 'nt-ops-pancake', code: 'OPS_PANCAKE_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Đơn {{order_code}} cần xử lý (Pancake): {{message}}' },
   { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
   { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },

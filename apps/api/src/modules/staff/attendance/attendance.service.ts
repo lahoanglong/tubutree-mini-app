@@ -245,19 +245,32 @@ export class AttendanceService {
       where: { checkoutAt: null },
       orderBy: { checkinAt: 'asc' },
       include: {
-        shift: { select: { id: true, workDate: true, startAt: true, endAt: true, approvedStart: true, approvedEnd: true } },
+        shift: {
+          select: {
+            id: true,
+            workDate: true,
+            startAt: true,
+            endAt: true,
+            approvedStart: true,
+            approvedEnd: true,
+            staff: { select: { id: true, fullName: true, phone: true } },
+          },
+        },
       },
     });
   }
 
   async manualCheckout(sessionId: string) {
-    const s = await this.prisma.attendanceSession.findUnique({ where: { id: sessionId } });
-    if (!s) throw new NotFoundException('Không tìm thấy phiên.');
-    if (s.checkoutAt) throw new BadRequestException('Phiên đã đóng.');
-    await this.prisma.attendanceSession.update({
-      where: { id: sessionId },
+    // Chỉ đóng phiên còn mở: nhân viên tự ra ca cùng lúc thì giữ giờ ra ca của họ, không ghi đè bằng giờ bấm nút.
+    const { count } = await this.prisma.attendanceSession.updateMany({
+      where: { id: sessionId, checkoutAt: null },
       data: { checkoutAt: new Date(), closeReason: 'ADMIN' },
     });
+    if (count === 0) {
+      const s = await this.prisma.attendanceSession.findUnique({ where: { id: sessionId }, select: { id: true } });
+      if (!s) throw new NotFoundException('Không tìm thấy phiên.');
+      throw new BadRequestException('Phiên đã đóng.');
+    }
     return { checkedOut: true };
   }
 
