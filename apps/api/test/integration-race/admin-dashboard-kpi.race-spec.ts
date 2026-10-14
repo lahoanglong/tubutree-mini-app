@@ -79,6 +79,27 @@ describe('ADMINOPS-14 — KPI doanh thu (real Postgres)', () => {
     expect(after.dealerDebtOutstanding - before.dealerDebtOutstanding).toBe(4_000_000);
   });
 
+  it('R3-MONEY-6: trả một phần do lỗi shop có hoàn cả phí ship → doanh thu đã thu trừ cả phí ship đã hoàn', async () => {
+    const before = await admin.getDashboardStats();
+    const u = await createUser(prisma);
+    const order = await createOrder(prisma, {
+      userId: u.id,
+      status: 'DELIVERED',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      subtotal: 120_000,
+      shippingFee: 19_000,
+      total: 139_000,
+    });
+    await prisma.returnRequest.create({
+      data: { orderId: order.id, userId: u.id, reason: 'IT', status: 'APPROVED', refundAmount: 95_000, shippingRefund: 19_000, shopFault: true },
+    });
+
+    const after = await admin.getDashboardStats();
+    expect(after.totalRevenue - before.totalRevenue).toBe(139_000 - 95_000 - 19_000);
+    expect(after.returnRefundTotal - before.returnRefundTotal).toBe(95_000 + 19_000);
+  });
+
   it('R2-ADMINOPS-6: COD đơn gian hàng tự giao (đối tác thu tiền mặt) không vào doanh thu đã thu; đơn gian hàng trả trước vẫn vào', async () => {
     const before = await admin.getDashboardStats();
     const u = await createUser(prisma);
