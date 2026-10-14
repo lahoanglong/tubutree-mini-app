@@ -395,7 +395,7 @@ function BankAccountLines({ refund: r }: { refund: AdminCustomerRefund }) {
   if (!r.bankAccountNo) {
     return (
       <div className="text-warning-fg">
-        Khách chưa chọn nơi nhận. Khách tự chọn ở chi tiết đơn; nếu khách gửi tài khoản qua hỗ trợ, nhập khi bấm "Bắt đầu chuyển khoản".
+        Khách chưa chọn nơi nhận. Khách tự chọn ở chi tiết đơn; nếu khách gửi tài khoản qua hỗ trợ, nhập khi bấm &quot;Bắt đầu chuyển khoản&quot;.
       </div>
     );
   }
