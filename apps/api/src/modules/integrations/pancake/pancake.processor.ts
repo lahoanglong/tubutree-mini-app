@@ -218,9 +218,11 @@ export class PancakeProcessor extends WorkerHost {
       case 'invoice.issued':
         await this.onInvoiceIssued(data);
         break;
-      case 'variation.stock_changed':
-        await this.onStockChanged(data);
+      case 'variation.stock_changed': {
+        const stale = await this.onStockChanged(data);
+        if (stale) return { ignored: stale };
         break;
+      }
       default:
         this.logger.debug(`Bỏ qua event chưa xử lý: ${eventType}`);
     }
@@ -690,7 +692,8 @@ export class PancakeProcessor extends WorkerHost {
     await this.notifications.notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code });
   }
 
-  private async onStockChanged(data: Record<string, unknown>): Promise<void> {
+  /** Trả lý do khi bỏ qua sự kiện cũ hơn số đã áp (để ghi IGNORED); undefined = đã áp hoặc không có gì để áp. */
+  private async onStockChanged(data: Record<string, unknown>): Promise<string | undefined> {
     const variationId = data['variation_id'] ?? data['id'];
     const stock = data['remain_quantity'];
     if (variationId == null || stock == null) return;
@@ -703,6 +706,22 @@ export class PancakeProcessor extends WorkerHost {
     // Cùng lớp lỗi với sync định kỳ (P0-3): webhook cũng từng ghi `stock` TUYỆT ĐỐI, nên một sự
     // kiện mang số cũ hơn đơn vừa đặt là hồi sinh hàng đã bán. Dùng chung công thức chênh lệch +
     // giữ chỗ với sync — xem catalog/variation-stock.ts.
-    await applyPancakeStock(this.prisma, String(variationId), n);
+    //
+    // Pancake không đảm bảo thứ tự giao webhook (và BullMQ thử lại làm lệch thêm): mang updated_at thì chỉ áp khi không cũ
+    // hơn sự kiện đã áp, không thì số cũ tới sau kéo tồn kho lùi lại tới lần đồng bộ danh mục sau (R4-SYNC-2).
+    const pancakeVariationId = String(variationId);
+    const eventAt = pancakeTime(data['updated_at']) ?? undefined;
+    const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { eventAt });
+    if (applied || !eventAt) return;
+    const current = await this.prisma.variation.findUnique({
+      where: { pancakeId: pancakeVariationId },
+      select: { pancakeStockEventAt: true },
+    });
+    if (!current?.pancakeStockEventAt) return;
+    this.logger.warn(`Bỏ qua tồn kho cũ của biến thể Pancake ${pancakeVariationId}: ${n} lúc ${data['updated_at']}.`);
+    return (
+      `Sự kiện tồn kho cũ hơn số đã áp (${n} lúc ${eventAt.toISOString()}, đã áp sự kiện lúc ` +
+      `${current.pancakeStockEventAt.toISOString()}) — không áp để tồn kho không lùi.`
+    );
   }
 }

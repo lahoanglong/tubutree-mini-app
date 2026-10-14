@@ -1390,3 +1390,52 @@ describe('PancakeProcessor.process — sự kiện đã IGNORED (R4-SYNC-1)', ()
     expect(where.OR[0].status.notIn).toEqual(expect.arrayContaining(['PROCESSED', 'PROCESSING', 'IGNORED']));
   });
 });
+
+describe('PancakeProcessor — variation.stock_changed tới không theo thứ tự (R4-SYNC-2)', () => {
+  function run(rawPayload: Record<string, unknown>, opts: { applied: number; lastEventAt?: Date | null } = { applied: 1 }) {
+    const ctx = setup(null);
+    const prisma = ctx.prisma as unknown as {
+      $executeRaw: jest.Mock;
+      variation: { findUnique: jest.Mock };
+      pancakeWebhookEvent: { findUnique: jest.Mock; update: jest.Mock };
+    };
+    prisma.$executeRaw.mockResolvedValue(opts.applied);
+    prisma.variation = {
+      findUnique: jest.fn().mockResolvedValue(opts.lastEventAt === undefined ? null : { pancakeStockEventAt: opts.lastEventAt }),
+    };
+    prisma.pancakeWebhookEvent.findUnique.mockResolvedValue({ id: 'e1', status: 'RECEIVED', eventType: 'variation.stock_changed', rawPayload });
+    return { prisma, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+  }
+  const saved = (p: { pancakeWebhookEvent: { update: jest.Mock } }) => p.pancakeWebhookEvent.update.mock.calls[0][0].data;
+
+  it('mang updated_at → áp kèm mốc đó (câu áp tự so mốc đã áp)', async () => {
+    const { prisma, go } = run({ variation_id: 'LP-ARA-250', remain_quantity: 80, updated_at: '2026-10-14T07:00:02Z' });
+    await go();
+    const call = prisma.$executeRaw.mock.calls[0]!;
+    expect((call[0] as string[]).join('?')).toContain('"pancakeStockEventAt" <= ?');
+    expect(call.slice(1)).toContainEqual(new Date('2026-10-14T07:00:02Z'));
+    expect(saved(prisma).status).toBe('PROCESSED');
+  });
+
+  it('cũ hơn số đã áp (90 lúc :01 tới sau 80 lúc :02) → không áp, sự kiện IGNORED kèm lý do', async () => {
+    const { prisma, go } = run(
+      { variation_id: 'LP-ARA-250', remain_quantity: 90, updated_at: '2026-10-14T07:00:01Z' },
+      { applied: 0, lastEventAt: new Date('2026-10-14T07:00:02Z') },
+    );
+    await go();
+    expect(saved(prisma)).toMatchObject({ status: 'IGNORED', error: expect.stringContaining('cũ hơn') });
+  });
+
+  it('biến thể không có trên Tubu → bỏ qua êm như trước (PROCESSED)', async () => {
+    const { prisma, go } = run({ variation_id: 'unknown', remain_quantity: 5, updated_at: '2026-10-14T07:00:01Z' }, { applied: 0 });
+    await go();
+    expect(saved(prisma).status).toBe('PROCESSED');
+  });
+
+  it('không có updated_at → áp như trước, không so mốc', async () => {
+    const { prisma, go } = run({ variation_id: 'LP-ARA-250', remain_quantity: 70 });
+    await go();
+    expect((prisma.$executeRaw.mock.calls[0]![0] as string[]).join('?')).not.toContain('pancakeStockEventAt');
+    expect(saved(prisma).status).toBe('PROCESSED');
+  });
+});

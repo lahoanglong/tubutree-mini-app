@@ -96,6 +96,29 @@ describe('variation-stock', () => {
       expect(argsOf($executeRaw, 0)).toContain("pv-'; DROP TABLE variations; --");
       expect(argsOf($executeRaw, 0)).toContain(7);
     });
+
+    it('không kèm mốc sự kiện (lượt đồng bộ danh mục) → áp như cũ, không đụng mốc sự kiện webhook', async () => {
+      const { tx, $executeRaw } = mockTx();
+      await expect(applyPancakeStock(tx, 'pv-1', 7)).resolves.toBe(true);
+      expect(sqlOf($executeRaw)).not.toContain('pancakeStockEventAt');
+    });
+
+    it('kèm mốc updated_at của webhook → chỉ áp khi không cũ hơn mốc đã áp, và ghi mốc trong CÙNG câu lệnh (R4-SYNC-2)', async () => {
+      const { tx, $executeRaw } = mockTx();
+      const at = new Date('2026-10-14T07:00:02.000Z');
+      await applyPancakeStock(tx, 'pv-1', 80, { eventAt: at });
+      expect($executeRaw).toHaveBeenCalledTimes(1);
+      const sql = sqlOf($executeRaw);
+      expect(sql).toContain('"pancakeStockEventAt" = ?');
+      expect(sql).toContain('("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ?)');
+      expect(argsOf($executeRaw).filter((a) => a === at)).toHaveLength(2);
+    });
+
+    it('0 dòng bị sửa (sự kiện cũ hơn / không có biến thể) → false', async () => {
+      const { tx, $executeRaw } = mockTx();
+      $executeRaw.mockResolvedValue(0);
+      await expect(applyPancakeStock(tx, 'pv-1', 90, { eventAt: new Date('2026-10-14T07:00:01.000Z') })).resolves.toBe(false);
+    });
   });
 
   describe('forcePancakeStock', () => {
