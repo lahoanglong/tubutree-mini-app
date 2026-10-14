@@ -1,6 +1,6 @@
 'use client';
 
-import { apiFetch } from './client-api';
+import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
 
 export interface DealerApp {
@@ -129,7 +129,16 @@ export interface AdminOrder {
   fulfillerStorefront?: { title: string } | null;
 }
 export interface DashboardStats {
+  /** Tiền đã thu: đơn đã thanh toán hoặc COD đã giao, trừ đơn huỷ/trả và phần đã hoàn khi trả một phần. */
   totalRevenue: number;
+  /** Giá trị đơn còn hiệu lực (gồm COD chưa thu) — API cũ chưa trả thì vắng. */
+  gmv?: number;
+  /** COD đang giao/chờ giao chưa thu tiền. */
+  codPendingValue?: number;
+  returnedOrders?: number;
+  pendingReturns?: number;
+  /** Tổng tiền đã hoàn cho các yêu cầu trả hàng đã duyệt. */
+  returnRefundTotal?: number;
   totalOrders: number;
   pendingOrders: number;
   shippingOrders: number;
@@ -385,11 +394,13 @@ export const listOrders = (
   limit = 20,
   invoice?: InvoiceFilter,
   pancake?: PancakeFilter,
+  from?: string,
+  to?: string,
 ) =>
   apiFetch<Page<AdminOrder>>(
     `/admin/orders?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${
       recycling ? `&recycling=${recycling}` : ''
-    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}`,
+    }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`,
   );
 /** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
 export const countInvoicePending = () =>
@@ -1284,3 +1295,198 @@ export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, li
   if (status) params.set('status', status);
   return apiFetch<Page<AdminSubscription>>(`/admin/subscriptions?${params.toString()}`);
 };
+
+// ── Xuất CSV đầy đủ (ADMINOPS-12): API ghi dần mọi dòng khớp bộ lọc, không giới hạn ở trang đang xem ──
+export interface OrderExportFilter {
+  status?: string;
+  search?: string;
+  recycling?: RecyclingFilter;
+  invoice?: InvoiceFilter;
+  pancake?: PancakeFilter;
+  /** 'YYYY-MM-DD' theo giờ VN, tính cả hai đầu. */
+  from?: string;
+  to?: string;
+}
+function orderFilterParams(f: OrderExportFilter): URLSearchParams {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
+  return q;
+}
+const todayKey = () => new Date().toISOString().slice(0, 10);
+export const downloadOrdersCsv = (f: OrderExportFilter) => {
+  const qs = orderFilterParams(f).toString();
+  return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);
+};
+export const downloadUsersCsv = (search?: string) => {
+  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+  return apiDownload(`/admin/users/export${qs}`, `nguoi-dung-${todayKey()}.csv`);
+};
+
+// ── Việc cần xử lý + sức khoẻ vận hành (ADMINOPS-13, PLATFORM-5) ──
+export type InboxKey =
+  | 'pancakeAttention'
+  | 'pancakeUnsynced'
+  | 'gomdonAttention'
+  | 'customerRefunds'
+  | 'returnsPending'
+  | 'returnsToReceive'
+  | 'merchantOverdue'
+  | 'merchantProducts'
+  | 'dealerApplications'
+  | 'dealerClaims'
+  | 'payouts'
+  | 'refillPending';
+export interface OpsInbox {
+  generatedAt: string;
+  items: { key: InboxKey; count: number }[];
+}
+export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
+
+export type StaffPermission = 'CSKH' | 'KHO';
+export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
+  CSKH: 'CSKH — đơn, đổi trả, người dùng, mẫu tin nhanh',
+  KHO: 'Kho — trạng thái đơn, đẩy lại Pancake, vận đơn thu gom, nhận hàng trả',
+};
+export interface OpsAccess {
+  role: string;
+  staffPermissions: StaffPermission[];
+}
+export const getOpsAccess = () => apiFetch<OpsAccess>('/admin/ops/access');
+
+export interface OpsStuckOrder {
+  id: string;
+  code: string;
+  status: string;
+  createdAt: string;
+  pancakePushStatus: string | null;
+  pancakePushAttempts: number;
+  pancakeLastAttemptAt: string | null;
+  pancakeSyncError: string | null;
+}
+export interface OpsQueueRow {
+  name: string;
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  failedLastHour: number;
+}
+export interface OpsHealth {
+  generatedAt: string;
+  thresholds: { unsyncedMinutes: number; stuckOrders: number; webhookFailed: number; queueFailed1h: number; repeatHours: number };
+  pancake: {
+    configured: boolean;
+    lastPushOkAt: string | null;
+    lastWebhookAt: string | null;
+    lastWebhookProcessedAt: string | null;
+    webhookFailed24h: number;
+    webhookStuck: number;
+    unsynced: number;
+    stuck: number;
+    stuckOrders: OpsStuckOrder[];
+    attention: number;
+    catalog: { lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null; detail: { count?: number; failed?: number } | null };
+  };
+  gomdon: {
+    configured: boolean;
+    connection: { lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null; credentialsRejected: boolean } | null;
+    credentialsRejected: boolean;
+    lastWebhookAt: string | null;
+    webhookFailed24h: number;
+    openAlerts: number;
+    attention: number;
+  };
+  queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
+  problems: { key: string; message: string }[];
+}
+export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
+/** Đồng bộ danh mục Pancake ngay (không ghi đè tồn kho trừ khi `withStock`). */
+export const runPancakeSync = (withStock = false) =>
+  apiFetch<{ synced: number; stockOverwritten: boolean }>(`/admin/pancake/sync${withStock ? '?withStock=1' : ''}`, { method: 'POST' });
+export const recomputeSoldCounts = () => apiFetch<{ updated: number }>('/admin/products/recompute-sold', { method: 'POST' });
+
+// ── Chấm công: phiên đang mở + chốt ra ca (ADMINOPS-17) ──
+export interface LiveAttendance {
+  id: string;
+  staffId: string;
+  checkinAt: string;
+  lastHeartbeatAt: string;
+  outOfRangeCount: number;
+  isLate: boolean;
+  shift: {
+    id: string;
+    workDate: string;
+    startAt: string;
+    endAt: string;
+    approvedStart: string | null;
+    approvedEnd: string | null;
+    staff?: { id: string; fullName: string | null; phone: string | null } | null;
+  };
+}
+export const listLiveAttendance = () => apiFetch<LiveAttendance[]>('/admin/attendance/live');
+export const manualCheckout = (sessionId: string) =>
+  apiFetch<{ checkedOut: boolean }>('/admin/attendance/manual-checkout', { method: 'POST', body: { sessionId } });
+
+// ── Đổi vỏ chai chờ duyệt (route chung với nhân viên quầy) ──
+export interface PendingRefill {
+  id: string;
+  quantity: number;
+  seedsAwarded: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  user: { id: string; fullName: string | null; phone?: string | null };
+}
+export const listPendingRefills = () => apiFetch<PendingRefill[]>('/refill/admin/pending');
+export const approveRefill = (id: string, receivedQuantity?: number) =>
+  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: receivedQuantity === undefined ? {} : { receivedQuantity },
+  });
+export const rejectRefill = (id: string, reason?: string) =>
+  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/reject`, { method: 'POST', body: reason ? { reason } : {} });
+
+// ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
+export interface AdminUserEvent {
+  id: string;
+  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK';
+  fromValue: string | null;
+  toValue: string | null;
+  reason: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+export interface AdminUserDetail {
+  user: {
+    id: string;
+    fullName: string | null;
+    phone: string | null;
+    email: string | null;
+    role: string;
+    staffPermissions: StaffPermission[];
+    referralCode: string | null;
+    pointsBalance: number;
+    pointsConvertedBalance: number;
+    walletBalance: number;
+    isBlocked: boolean;
+    blockedAt: string | null;
+    blockedReason: string | null;
+    createdAt: string;
+    tier: { name: string } | null;
+  };
+  orders: {
+    items: { id: string; code: string; status: string; paymentMethod: string; paymentStatus: string; total: number; createdAt: string; fulfiller: string }[];
+    total: number;
+  };
+  wallet: { id: string; delta: number; balanceAfter: number; type: string; refType: string | null; refId: string | null; reason: string | null; createdAt: string }[];
+  points: { id: string; delta: number; reason: string; refType: string | null; refId: string | null; lot: string | null; expiresAt: string | null; createdAt: string }[];
+  roleHistory: AdminUserEvent[];
+  blockHistory: AdminUserEvent[];
+  grants: { id: string; role: string; grantedBy: string; grantedByName: string | null; note: string | null; revokedAt: string | null; createdAt: string }[];
+}
+export const getUserDetail = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}/detail`);
+export const setStaffPermissions = (id: string, permissions: StaffPermission[]) =>
+  apiFetch<{ id: string; staffPermissions: StaffPermission[]; changed: boolean }>(`/admin/users/${encodeURIComponent(id)}/staff-permissions`, {
+    method: 'PUT',
+    body: { permissions },
+  });

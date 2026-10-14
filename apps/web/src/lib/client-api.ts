@@ -244,3 +244,48 @@ export async function apiFetch<T>(
   if (reply.status === 204) return undefined as T;
   return reply.body as T;
 }
+
+/** Xuất toàn bộ dữ liệu có thể lâu hơn hạn chờ thường của apiFetch (API ghi dần từng lô). */
+export const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Tải một tệp do API sinh (CSV xuất dữ liệu) bằng phiên hiện tại rồi mở hộp lưu tệp của trình duyệt. Thẻ <a href> trần
+ * không gửi được Authorization nên phải tải qua fetch; 401 thì làm mới phiên và thử lại một lần như apiFetch.
+ */
+export async function apiDownload(path: string, fallbackName: string, _retried = false): Promise<{ filename: string; bytes: number }> {
+  const headers: Record<string, string> = { 'X-Client-Platform': 'web' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), DOWNLOAD_TIMEOUT_MS);
+  let res: Response;
+  let blob: Blob;
+  try {
+    res = await fetch(`${BASE}${path}`, { headers, credentials: 'include', signal: ctrl.signal });
+    if (res.status === 401 && !_retried && hasSessionMarker() && (await rawRefresh())) {
+      return apiDownload(path, fallbackName, true);
+    }
+    if (!res.ok) {
+      const body: unknown = await res.json().catch(() => undefined);
+      const { message, code } = parseError(body);
+      throw new ApiError(message, res.status, code);
+    }
+    blob = await res.blob();
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new NetworkError(true);
+    if (e instanceof TypeError) throw new NetworkError(false);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { filename, bytes: blob.size };
+}
