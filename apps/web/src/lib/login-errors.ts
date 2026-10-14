@@ -5,6 +5,11 @@ import { ApiError, NetworkError } from './client-api';
 const VIETNAMESE_CHARS =
   /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 
+// API cũ ghép nguyên lời của Zalo vào sau tiền tố tiếng Việt ("Zalo OAuth thất bại: invalid code"): có dấu nên lọt bộ lọc
+// trên nhưng vẫn là chuỗi kỹ thuật. Nay API trả câu sạch; web vẫn chặn để bản API cũ không làm lộ chuỗi thô.
+const UPSTREAM_ZALO_FAILURE = /^Zalo (?:OAuth|verify) thất bại/i;
+const CODE_REJECTED = 'Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.';
+
 const GENERIC = 'Không đăng nhập được lúc này. Vui lòng thử lại; nếu vẫn lỗi, hãy liên hệ hotline để được hỗ trợ.';
 
 /** Lỗi Zalo trả về qua ?error=… ở trang callback. */
@@ -30,5 +35,6 @@ export function loginFailureMessage(e: unknown): string {
   if (e instanceof NetworkError) return e.message;
   if (e instanceof ApiError && e.status === 429) return 'Bạn thử đăng nhập quá nhiều lần. Vui lòng đợi ít phút rồi thử lại.';
   const message = e instanceof Error ? e.message.trim() : '';
+  if (UPSTREAM_ZALO_FAILURE.test(message)) return CODE_REJECTED;
   return message && VIETNAMESE_CHARS.test(message) ? message : GENERIC;
 }

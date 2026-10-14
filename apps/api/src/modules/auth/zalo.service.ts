@@ -45,7 +45,9 @@ export class ZaloService {
       });
       const data = res.data as { access_token?: string; error?: number; error_description?: string };
       if (!data.access_token) {
-        throw new UnauthorizedException(`Zalo OAuth thất bại: ${data.error_description ?? 'unknown'}`);
+        // Lời của Zalo ("invalid code") chỉ để chẩn đoán; khách nhận câu tiếng Việt và biết phải làm gì tiếp.
+        this.logger.warn(`Zalo exchangeOAuthCode bị từ chối: ${data.error ?? '?'} ${data.error_description ?? 'unknown'}`);
+        throw new UnauthorizedException('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
       }
       return data.access_token;
     } catch (err) {
@@ -75,7 +77,8 @@ export class ZaloService {
         picture?: { data?: { url?: string } };
       };
       if (!data.id || (data.error && data.error !== 0)) {
-        throw new UnauthorizedException(`Zalo verify thất bại: ${data.message ?? 'unknown'}`);
+        this.logger.warn(`Zalo getUserInfo bị từ chối: ${data.error ?? '?'} ${data.message ?? 'unknown'}`);
+        throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
       }
       return {
         zaloId: data.id,

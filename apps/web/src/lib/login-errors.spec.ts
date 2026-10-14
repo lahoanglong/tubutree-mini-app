@@ -39,6 +39,14 @@ describe('loginFailureMessage — lỗi khi đổi mã lấy phiên', () => {
     }
   });
 
+  it('API cũ còn ghép chuỗi thô của Zalo sau tiền tố tiếng Việt ("Zalo OAuth thất bại: invalid code") → câu sạch (BUYERWEB-19)', () => {
+    for (const raw of ['Zalo OAuth thất bại: invalid code', 'Zalo verify thất bại: Access token is invalid', 'Zalo OAuth thất bại: unknown']) {
+      const m = loginFailureMessage(new ApiError(raw, 401));
+      expect(m).not.toMatch(/invalid|unknown|Access token/i);
+      expect(m).toBe('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+  });
+
   it('429: nói rõ đợi rồi thử lại', () => {
     expect(loginFailureMessage(new ApiError('ThrottlerException: Too Many Requests', 429))).toContain('đợi ít phút');
   });
