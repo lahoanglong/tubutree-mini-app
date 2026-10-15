@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelAdminMerchantPayout,
   createAdminMerchantPayout,
@@ -21,6 +21,7 @@ import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, Scro
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
 import { useNarrowScreen } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
+import { mergeQueuePages, nextPageParam } from '@/lib/admin-client';
 
 const SLA_LABEL = { CONFIRM_OVERDUE: 'Quá hạn xác nhận', SHIP_OVERDUE: 'Quá hạn gửi hàng', DELIVER_OVERDUE: 'Quá hạn giao' } as const;
 
@@ -62,10 +63,13 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
   const narrow = useNarrowScreen();
   const [slipFilter, setSlipFilter] = useState<'PENDING' | 'ALL'>('PENDING');
   const overviewQ = useQuery({ queryKey: ['admin-merchant-fulfilment'], queryFn: getMerchantFulfilmentOverview });
-  const payoutsQ = useQuery({
+  const payoutsQ = useInfiniteQuery({
     queryKey: ['admin-merchant-payouts', slipFilter],
-    queryFn: () => listAdminMerchantPayouts(1, undefined, slipFilter === 'PENDING' ? 'PENDING' : undefined),
+    queryFn: ({ pageParam }) => listAdminMerchantPayouts(pageParam, undefined, slipFilter === 'PENDING' ? 'PENDING' : undefined),
+    initialPageParam: 1,
+    getNextPageParam: (last) => nextPageParam(last.meta),
   });
+  const slips = mergeQueuePages(payoutsQ.data?.pages, false);
   const [error, setError] = useState<string | null>(null);
   const refresh = () => {
     setError(null);
@@ -215,20 +219,26 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
           </button>
         </div>
         {payoutsQ.isError && <p className="text-sm text-danger-fg">Không tải được phiếu đối soát.</p>}
-        {payoutsQ.data && payoutsQ.data.data.length === 0 && (
+        {payoutsQ.data && slips.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-xs text-stone-500">
             {slipFilter === 'PENDING' ? 'Không có phiếu nào đang chờ chuyển hoặc chờ thu.' : 'Chưa có phiếu nào.'}
           </p>
         )}
         <ul className="space-y-2">
-          {payoutsQ.data?.data.map((p) => (
+          {slips.items.map((p) => (
             <PayoutRow key={p.id} payout={p} onDone={refresh} onError={onError} />
           ))}
         </ul>
-        {payoutsQ.data && payoutsQ.data.meta.total > payoutsQ.data.data.length && (
-          <p className="text-xs text-stone-500">
-            Đang hiện {payoutsQ.data.data.length} phiếu mới nhất, còn {payoutsQ.data.meta.total - payoutsQ.data.data.length} phiếu cũ hơn.
-          </p>
+        {slips.hasMore && (
+          <div className="text-center">
+            <p className="mb-2 text-xs text-stone-500">
+              Đang hiện {slips.items.length}/{slips.total} phiếu, còn {slips.total - slips.items.length} phiếu cũ hơn.
+            </p>
+            <button type="button" onClick={() => void payoutsQ.fetchNextPage()} disabled={payoutsQ.isFetchingNextPage} className={BTN_XS_SECONDARY}>
+              {payoutsQ.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
+            </button>
+            {payoutsQ.isFetchNextPageError && <p className="mt-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
+          </div>
         )}
       </section>
     </div>

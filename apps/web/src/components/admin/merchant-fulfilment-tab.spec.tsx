@@ -386,6 +386,41 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(allChip.getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('còn phiếu chờ cũ hơn trang đầu → "Tải thêm" lấy trang kế và phiếu cũ nhất bấm được "Đã chuyển"', async () => {
+    const OLD = { ...PAYOUT, id: 'mp-old', amount: 321000, createdAt: '2026-09-01T03:00:00.000Z' };
+    const api = setup({
+      '/admin/merchant-fulfilment/payouts?': (): { body: unknown } => ({ body: { data: [PAYOUT], meta: { page: 1, limit: 20, total: 21 } } }),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('/admin/merchant-fulfilment/payouts?') && url.includes('page=2')) {
+          api.calls.push({ url, init });
+          return new Response(JSON.stringify({ data: [OLD], meta: { page: 2, limit: 20, total: 21 } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return api.fn(url, init);
+      }),
+    );
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    expect(root.textContent).toContain('Đang hiện 1/21 phiếu, còn 20 phiếu cũ hơn.');
+    expect(root.textContent).not.toContain('321.000');
+
+    click(byText(root, 'button', 'Tải thêm')!);
+    await flush();
+    const pageCalls = api.calls.filter((c) => c.url.includes('/admin/merchant-fulfilment/payouts?'));
+    expect(pageCalls.at(-1)!.url).toContain('page=2');
+    expect(pageCalls.at(-1)!.url).toContain('status=PENDING');
+    expect(root.textContent).toContain('321.000');
+    expect(root.querySelectorAll('ul > li button[type="submit"]')).toHaveLength(2);
+    expect(byText(root, 'button', 'Tải thêm')).toBeNull();
+  });
+
   it('R4-ADMIN-7: không có phiếu nào chờ thì nói rõ, không phải "Chưa có phiếu nào"', async () => {
     setup({ '/admin/merchant-fulfilment/payouts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } } });
     const r = render(<MerchantFulfilmentTab />);
