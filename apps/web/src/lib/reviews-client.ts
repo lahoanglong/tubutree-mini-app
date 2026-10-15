@@ -69,8 +69,11 @@ export interface ReviewInput {
   comment?: string;
   images?: string[];
   videoUrl?: string;
-  /** Lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Thiếu thì máy chủ chọn đơn nhận sớm nhất chưa đánh giá. */
-  orderId?: string;
+  /**
+   * Lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn (bản app
+   * cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
+   */
+  orderId: string;
 }
 
 /** `updated`: lần gửi này sửa đánh giá đã có (không cộng điểm). `pointsEarned`: điểm của dòng đánh giá, 0 khi không được thưởng. */

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { focusManager } from '@tanstack/react-query';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -257,6 +259,37 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     await flush();
     expect(c.querySelector('[role="alert"]')?.textContent).toBe('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
     expect(form(c)).not.toBeNull();
+  });
+
+  it('can-review chưa về: không có nút viết hay sửa', async () => {
+    mocks.elig = new Promise(() => undefined);
+    const c = await mount();
+    expect(mocks.eligCalls).toBe(1);
+    expect(button(c, /Viết đánh giá|Sửa/)).toBeNull();
+    expect(form(c)).toBeNull();
+  });
+
+  // Gửi không kèm đơn thì máy chủ (giữ đường cho bản app cũ) sửa đè đánh giá mới nhất khi mọi lần mua đã có đánh giá.
+  it('form viết mới đang mở mà can-review làm mới thành ALL_REVIEWED (vừa đánh giá ở thiết bị khác) → vẫn gửi kèm đúng đơn chốt lúc mở', async () => {
+    try {
+      const c = await mount();
+      click(button(c, 'Viết đánh giá'));
+      await flush();
+      mocks.elig = structuredClone(ELIG_ALL);
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await flush();
+      expect(mocks.eligCalls).toBe(2);
+      expect(form(c)!.textContent).toContain('Đánh giá này cho đơn TB0002.');
+      click(button(c, 'Gửi đánh giá'));
+      await flush();
+      expect(mocks.saved).toHaveLength(1);
+      expect(mocks.saved[0]!.body.orderId).toBe('o2');
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 
   it('truy cập: nút và ô nhập có tên, vùng chạm 44px (cả khi form đang mở)', async () => {

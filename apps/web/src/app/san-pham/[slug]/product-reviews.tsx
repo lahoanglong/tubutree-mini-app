@@ -22,16 +22,20 @@ import {
   savedMessage,
   type MyReview,
   type MyReviewRef,
+  type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
 
 const PAGE_SIZE = 5;
 
 /**
- * Đánh giá đang soạn. Mỗi lần mua (đơn) một đánh giá: sửa thì gắn đúng dòng đánh giá của đơn đó; viết mới gắn đơn khách
- * chọn từ chi tiết đơn, không chọn thì đơn còn viết được nhận sớm nhất.
+ * Đánh giá đang soạn, luôn gắn một lần mua (đơn): viết mới cho đơn khách chọn từ chi tiết đơn, không chọn thì đơn còn viết
+ * được nhận sớm nhất, chốt lúc mở form; sửa gắn đúng dòng đánh giá của đơn đó. Không bao giờ gửi đánh giá mới thiếu đơn: máy
+ * chủ hiểu lần gửi không kèm đơn (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
  */
-type FormTarget = { kind: 'new'; orderId?: string } | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
+type FormTarget =
+  | { kind: 'new'; orderId: string; orderCode: string | null }
+  | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
 function Stars({ value, small = false }: { value: number; small?: boolean }) {
   return (
@@ -82,25 +86,26 @@ export function ProductReviews({ slug }: { slug: string }) {
   const myReviews = elig?.myReviews ?? [];
   const mineById = new Map(myReviews.map((r) => [r.id, r]));
   const latestMine = myReviews[0];
+  const nextOrder = elig?.canReview ? elig.reviewableOrders?.[0] : undefined;
 
   const openForm = (t: FormTarget) => {
     setNotice(null);
     setTarget(t);
   };
-  const openEdit = (r: MyReviewRef) => openForm({ kind: 'edit', reviewId: r.id, orderId: r.orderId, orderCode: r.orderCode });
+  const newTarget = (o: ReviewableOrder): FormTarget => ({ kind: 'new', orderId: o.orderId, orderCode: o.code });
+  const editTarget = (r: MyReviewRef): FormTarget => ({ kind: 'edit', reviewId: r.id, orderId: r.orderId, orderCode: r.orderCode });
+  const openEdit = (r: MyReviewRef) => openForm(editTarget(r));
 
   const deepLinked = useRef(false);
   useEffect(() => {
     if (!openForOrderId || !elig || deepLinked.current) return;
     deepLinked.current = true;
+    const order = elig.reviewableOrders?.find((o) => o.orderId === openForOrderId);
     const mine = elig.myReviews?.find((r) => r.orderId === openForOrderId);
-    if (elig.reviewableOrders?.some((o) => o.orderId === openForOrderId)) setTarget({ kind: 'new', orderId: openForOrderId });
-    else if (mine) setTarget({ kind: 'edit', reviewId: mine.id, orderId: mine.orderId, orderCode: mine.orderCode });
+    if (order) setTarget(newTarget(order));
+    else if (mine) setTarget(editTarget(mine));
   }, [openForOrderId, elig]);
 
-  const formOrderId = target?.kind === 'edit' ? target.orderId : (target?.orderId ?? elig?.reviewableOrders?.[0]?.orderId);
-  const formOrderCode =
-    target?.kind === 'edit' ? target.orderCode : (elig?.reviewableOrders?.find((o) => o.orderId === formOrderId)?.code ?? null);
   const returnTo = `/san-pham/${encodeURIComponent(slug)}${openForOrderId ? `?${REVIEW_ORDER_PARAM}=${encodeURIComponent(openForOrderId)}` : ''}`;
 
   const data = listQ.data;
@@ -120,17 +125,17 @@ export function ProductReviews({ slug }: { slug: string }) {
         )}
         {elig && !target && (
           <>
-            {elig.canReview ? (
-              <button type="button" className={ui.btnSecondary} onClick={() => openForm({ kind: 'new' })}>
+            {nextOrder ? (
+              <button type="button" className={ui.btnSecondary} onClick={() => openForm(newTarget(nextOrder))}>
                 Viết đánh giá
               </button>
             ) : elig.reason === 'ALL_REVIEWED' && latestMine ? (
               <button type="button" className={ui.btnSecondary} onClick={() => openEdit(latestMine)}>
                 Sửa đánh giá của bạn
               </button>
-            ) : (
+            ) : elig.reason === 'NOT_PURCHASED' ? (
               <span className="text-sm text-stone-600">Mua và nhận hàng để đánh giá</span>
-            )}
+            ) : null}
           </>
         )}
       </div>
@@ -146,8 +151,6 @@ export function ProductReviews({ slug }: { slug: string }) {
           key={target.kind === 'edit' ? `edit:${target.reviewId}` : 'new'}
           slug={slug}
           target={target}
-          orderId={formOrderId}
-          orderCode={formOrderCode}
           purchaseCount={elig?.purchaseCount ?? 0}
           rewardAvailable={elig?.rewardAvailable !== false}
           onCancel={() => setTarget(null)}
@@ -277,8 +280,6 @@ function ReviewEditor({
 }: {
   slug: string;
   target: FormTarget;
-  orderId?: string;
-  orderCode: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
   onCancel: () => void;
@@ -314,7 +315,16 @@ function ReviewEditor({
       </div>
     );
   }
-  return <ReviewForm slug={slug} isEdit={editingId !== null} initial={myQ.data} {...rest} />;
+  return (
+    <ReviewForm
+      slug={slug}
+      isEdit={editingId !== null}
+      initial={myQ.data}
+      orderId={target.orderId}
+      orderCode={target.orderCode}
+      {...rest}
+    />
+  );
 }
 
 function ReviewForm({
@@ -331,7 +341,7 @@ function ReviewForm({
   slug: string;
   isEdit: boolean;
   initial?: MyReview;
-  orderId?: string;
+  orderId: string;
   orderCode: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
