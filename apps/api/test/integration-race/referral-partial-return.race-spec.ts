@@ -527,23 +527,34 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const gate = new Promise<void>((resolve) => (release = resolve));
     let locked!: () => void;
     const held = new Promise<void>((resolve) => (locked = resolve));
+    let pid = 0;
     const done = prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR NO KEY UPDATE`;
+        [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
         locked();
         await gate;
       },
       { timeout: 30_000 },
     );
     await held;
-    return { release, done };
+    return { release, done, pid };
   }
 
-  /** Chờ tới khi đúng `n` phiên của DB test đang đứng chờ khoá (tx duyệt/cấp đã tới chỗ cần dòng người được mời). */
-  async function waitLockWaiters(n: number) {
+  /**
+   * Chờ tới khi có `n` phiên đứng chờ (trực tiếp hoặc xếp hàng sau phiên đang chờ) khoá do tx `holderPid` giữ — tức tx
+   * duyệt/cấp đã tới chỗ cần dòng người được mời. Chỉ đếm cây chờ của tx giữ khoá, không đếm phiên chờ khoá của spec khác
+   * chạy song song trên cùng DB. Phiên chờ thứ hai thường bị chặn bởi phiên chờ thứ nhất (khoá tuple), nên đi đệ quy.
+   */
+  async function waitLockWaiters(holderPid: number, n: number) {
     for (let i = 0; i < 200; i++) {
       const [row] = await prisma.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'`;
+        WITH RECURSIVE "w" AS (
+          SELECT "pid" FROM pg_stat_activity WHERE ${holderPid}::int = ANY(pg_blocking_pids("pid"))
+          UNION
+          SELECT a."pid" FROM pg_stat_activity a JOIN "w" ON "w"."pid" = ANY(pg_blocking_pids(a."pid"))
+        )
+        SELECT count(*)::int AS "n" FROM "w"`;
       if ((row?.n ?? 0) >= n) return;
       await sleep(25);
     }
@@ -561,9 +572,9 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const grant = () => rewards.grantReferralOrderReward(referee.id);
     const lock = await holdReferee(referee.id);
     const p1 = (first === 'APPROVE' ? approve : grant)();
-    await waitLockWaiters(1);
+    await waitLockWaiters(lock.pid, 1);
     const p2 = (first === 'APPROVE' ? grant : approve)();
-    await waitLockWaiters(2);
+    await waitLockWaiters(lock.pid, 2);
     lock.release();
     await lock.done;
     const s = summarize(await Promise.allSettled([p1, p2]));
