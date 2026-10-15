@@ -131,6 +131,11 @@ describe('R6-ADMIN-2 — đơn huỷ có khoản tiền về muộn đang chờ 
     }
   });
 
+  it('đơn đã PAID chuyển dư đang chờ hoàn vẫn là Đã thanh toán', () => {
+    const paid = { status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' };
+    expect(isRefundInProgress(paid, [{ kind: 'OVERPAYMENT', method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe(false);
+  });
+
   it('khoản đã xong, chờ đối soát hoặc đơn không có khoản nào thì giữ nhãn cũ', () => {
     expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Chưa TT');
     expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe('Chưa TT');

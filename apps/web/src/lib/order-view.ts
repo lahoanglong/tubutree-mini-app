@@ -115,11 +115,11 @@ const counted = (r: RefundFacts) => r.status === 'PENDING' || r.status === 'PROC
 /**
  * Đơn đã lật REFUNDED (lật ngay khi huỷ/trả) mà còn khoản chuyển khoản Tubu Chờ/Đang chuyển: tiền chưa tới tay khách. Một
  * luật cho chi tiết đơn của khách, danh sách/chi tiết đơn admin và CSV (API admin-export, BANK_REFUND_IN_PROGRESS).
- * Tiền về muộn/chuyển dư (LATE_PAYMENT, OVERPAYMENT) đang chờ hoàn thì đơn vẫn giữ UNPAID nhưng khách đã chuyển tiền: cũng là đang hoàn.
+ * Tiền về muộn/chuyển dư (LATE_PAYMENT, OVERPAYMENT) đang chờ hoàn thì đơn vẫn giữ UNPAID nhưng khách đã chuyển tiền: cũng là đang hoàn. Đơn đã PAID thì giữ "Đã thanh toán" (phần chuyển dư là khoản riêng).
  */
 export const isRefundInProgress = (o: PaymentView, refunds?: readonly RefundFacts[] | null): boolean => {
   const open = (r: RefundFacts) => r.status === 'PENDING' || r.status === 'PROCESSING';
-  if (refunds?.some((r) => (r.kind === 'LATE_PAYMENT' || r.kind === 'OVERPAYMENT') && open(r))) return true;
+  if (o.paymentStatus === 'UNPAID' && refunds?.some((r) => (r.kind === 'LATE_PAYMENT' || r.kind === 'OVERPAYMENT') && open(r))) return true;
   return o.paymentStatus === 'REFUNDED' && !!refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && open(r));
 };
 

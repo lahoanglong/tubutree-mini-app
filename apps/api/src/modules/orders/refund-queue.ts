@@ -23,6 +23,14 @@ export const BANK_REFUND_IN_PROGRESS = {
 } satisfies Prisma.OrderCustomerRefundWhereInput;
 
 /**
+ * Khoản còn mở mà CSV đơn admin cần để ghi "Đang hoàn tiền": chuyển khoản Tubu Chờ/Đang chuyển (đơn REFUNDED), hoặc tiền về
+ * muộn/chuyển dư Chờ/Đang chuyển (đơn còn UNPAID). Luật chọn nhãn nằm ở exportPaymentStatus, cùng luật web (order-view.ts).
+ */
+export const OPEN_REFUND_FOR_EXPORT = {
+  OR: [BANK_REFUND_IN_PROGRESS, { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } }],
+} satisfies Prisma.OrderCustomerRefundWhereInput;
+
+/**
  * Khoản hoàn còn việc cho admin: chờ đối soát (UNVERIFIED), chờ chuyển khoản (PENDING), đang chuyển khoản (PROCESSING). Một
  * nguồn cho số trên thẻ "Hoàn tiền khách" (OpsInboxService), huy hiệu tab và bộ lọc "Đang mở" của hàng đợi.
  */
