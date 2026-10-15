@@ -41,9 +41,24 @@ export class CronLeaderService implements OnApplicationShutdown {
     @Optional() @Inject(CRON_LEADER_OPTIONS) opts?: Partial<CronLeaderOptions>,
   ) {
     this.opts = { ...DEFAULTS, ...opts };
+    this.holdJobsUntilLeader();
   }
 
-  /** Gọi sau khi app đã bootstrap (main.ts): lúc đó ScheduleModule đã tạo và bật mọi cron job. */
+  /**
+   * ScheduleModule tạo và BẬT mọi @Cron ngay lúc bootstrap — trước app.listen và trước khi hỏi lease. Job nào đăng ký khi instance
+   * này chưa giữ lease thì dừng ngay trong cùng lượt đăng ký (chưa kịp tới lượt chạy nào), nên cron không bao giờ chạy khi chưa có
+   * lease, kể cả khi khởi động hỏng giữa chừng (listen EADDRINUSE…) mà process chưa kịp thoát (R5-SYNC-2).
+   */
+  private holdJobsUntilLeader(): void {
+    if (typeof this.registry.addCronJob !== 'function') return;
+    const add = this.registry.addCronJob.bind(this.registry);
+    this.registry.addCronJob = (name, job) => {
+      add(name, job);
+      if (!this.leader && job.running) job.stop();
+    };
+  }
+
+  /** Gọi sau khi app đã mở cổng (bootstrap.ts): giành lease rồi mới bật cron job. */
   start(): void {
     this.setJobsRunning(false);
     void this.tick();
