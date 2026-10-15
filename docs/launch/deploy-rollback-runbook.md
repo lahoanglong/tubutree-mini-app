@@ -16,7 +16,7 @@ Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã ch
 2. DỪNG API cũ TRƯỚC khi chạy `prisma migrate deploy` (migration đổi chỉ mục duy nhất của bảng đánh giá).
 3. Web mới lên CÙNG LÚC hoặc TRƯỚC API mới. Tab admin đã mở từ trước deploy phải được tải lại (xem mục 5, bước 12).
 4. Migration `20261014213300` khoá bảng `orders` (khoảng 14 giây cho mỗi 300.000 đơn, khoảng 2 giây dưới 50.000 đơn). Nếu PROD còn ở bản cũ, danh sách chờ áp còn có các migration nặng khác trên `orders` và `users` (bảng ở mục 1.0). Cách chọn giờ nằm ở mục 3.
-5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp dài hơn ba migration của đợt thì đường quay lại duy nhất là khôi phục bản backup (7.3).
+5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài năm migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ) thì đường quay lại duy nhất là khôi phục bản backup (7.3).
 
 ### 0.3 Hạ tầng hiện tại (đọc kỹ)
 
@@ -55,7 +55,7 @@ Tick từng ô. Chưa tick hết thì chưa chọn giờ deploy. Làm 1.0 TRƯ�
 
 ### 1.0 Việc đầu tiên: biết chính xác PROD đang chạy bản nào và sẽ áp những migration nào
 
-Không suy ra từ trí nhớ hay tài liệu cũ. `docs/2026-10-review/HANDOFF.md` (ghi ngày 2026-10-11) nói PROD chạy `cb92dc8` (115 migration); nhánh `main` hiện là `c7bfbdcd` (132 migration); SHA đã chốt cho lần này có nhiều hơn nữa (đếm lại bằng lệnh dưới; ngày 2026-10-15 là 180). Trong repo không có bằng chứng `main` đã được deploy sau ngày 2026-10-11, nên có thể 48 đến 65 migration sẽ được áp, không phải chỉ ba cái nêu ở đầu tài liệu. Mọi con số về cửa sổ (mục 3) và về quay lại (mục 7) phải tính từ danh sách thật.
+Không suy ra từ trí nhớ hay tài liệu cũ. `docs/2026-10-review/HANDOFF.md` (ghi ngày 2026-10-11) nói PROD chạy `cb92dc8` (115 migration); nhánh `main` hiện là `c7bfbdcd` (132 migration); SHA đã chốt cho lần này có nhiều hơn nữa (đếm lại bằng lệnh dưới; ngày 2026-10-15 là 181). Trong repo không có bằng chứng `main` đã được deploy sau ngày 2026-10-11, nên có thể 48 đến 65 migration sẽ được áp, không phải chỉ năm cái của đợt nêu ở đầu tài liệu. Mọi con số về cửa sổ (mục 3) và về quay lại (mục 7) phải tính từ danh sách thật.
 
 Phần A. Ghi lại image đang chạy và DB đang ở đâu:
 
@@ -78,11 +78,11 @@ SHA=<SHA đã chốt>
 git ls-tree -r --name-only "$SHA" -- apps/api/prisma/migrations | sed -nE 's#.*/migrations/([^/]+)/migration\.sql$#\1#p' | LC_ALL=C sort > /tmp/migrations_moi.txt
 psqlq -tAc "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL" | LC_ALL=C sort > /tmp/migrations_da_ap.txt
 wc -l < /tmp/migrations_moi.txt
-LC_ALL=C comm -13 /tmp/migrations_da_ap.txt /tmp/migrations_moi.txt | tee .pending-migrations | wc -l
-cat .pending-migrations
+LC_ALL=C comm -13 /tmp/migrations_da_ap.txt /tmp/migrations_moi.txt | tee /tmp/pending-migrations-1.0.txt | wc -l
+cat /tmp/pending-migrations-1.0.txt
 ```
 
-Số đầu là tổng migration của SHA đã chốt; số thứ hai là số migration CHỜ ÁP; file `.pending-migrations` (ở gốc repo, đã được `.gitignore`) giữ danh sách đầy đủ, dùng lại ở mục 5 (bước 4 và bước 7) và ở mục 7. `comm -13` chỉ in các tên có ở SHA mới mà DB chưa có; nếu DB có tên mà SHA mới không có (DB đi trước mã) thì dòng đó nằm ở `/tmp/migrations_da_ap.txt` chứ không hiện ở đây: kiểm `LC_ALL=C comm -23 /tmp/migrations_da_ap.txt /tmp/migrations_moi.txt` phải trống, nếu không thì DỪNG, gọi Tech lead.
+Số đầu là tổng migration của SHA đã chốt; số thứ hai là số migration CHỜ ÁP; file `/tmp/pending-migrations-1.0.txt` giữ bản nháp danh sách để đối chiếu (danh sách CHÍNH THỨC dùng cho bước 7 và mục 7 là `.pending-migrations`, do mục 5 bước 4 tạo từ image mới; hai danh sách phải khớp). `comm -13` chỉ in các tên có ở SHA mới mà DB chưa có; nếu DB có tên mà SHA mới không có (DB đi trước mã) thì dòng đó nằm ở `/tmp/migrations_da_ap.txt` chứ không hiện ở đây: kiểm `LC_ALL=C comm -23 /tmp/migrations_da_ap.txt /tmp/migrations_moi.txt` phải trống, nếu không thì DỪNG, gọi Tech lead.
 
 Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng dưới.
 
@@ -104,7 +104,7 @@ psqlq -tAc "SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_
 
 Hai số đầu phải là `0`; dòng thứ ba phải không có dòng nào (mặc định 1000) hoặc `1000`. Khác đi: đối soát tay với Tech lead TRƯỚC ngày deploy (đây là điều kiện sửa được trước, không phải lý do dừng giữa lúc đang bảo trì).
 
-Các migration còn lại trong danh sách chủ yếu thêm cột hoặc bảng nhỏ. Khi danh sách dài hơn ba cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
+Các migration còn lại trong danh sách chủ yếu thêm cột hoặc bảng nhỏ. Khi danh sách có migration ngoài năm cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
 
 - [ ] Đã ghi bản PROD đang chạy (image khớp DB) và số migration chờ áp
 - [ ] Đã đối chiếu từng tên với bảng migration nặng; PD-3 (nếu có) đã kiểm 0, 0, 1000
@@ -239,7 +239,7 @@ cửa sổ (phút) = 10 + thời gian backup đo ở mục 1.2 + 5 × (tổng th
 
 "Tổng thời gian migrate" là thời gian của TOÀN BỘ danh sách chờ áp (1.0), không chỉ r6: lấy số đo thật của diễn tập ở 3.4 nếu có; không thì lấy "ước tính khoá" ở 3.1 (đã nhân theo số migration nặng) và xin gấp đôi cửa sổ tính ra, vì phần PD-3, p4 trên `users` và p8 chưa được đo.
 
-10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (r6, p1, p4, p8 cùng chờ, ước tính 4 × 10 giây = 40 giây, tức 0,67 phút): 10 + 2 + 5 × 0,67 = 15,3, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có ba migration của đợt, 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
+10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (r6, p1, p4, p8 cùng chờ, ước tính 4 × 10 giây = 40 giây, tức 0,67 phút): 10 + 2 + 5 × 0,67 = 15,3, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có các migration của đợt (chỉ r6 nặng), 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
 
 ### 3.3 Chọn giờ vắng nhất
 
@@ -251,7 +251,7 @@ psqlq -c "SELECT extract(hour FROM \"createdAt\" AT TIME ZONE 'Asia/Ho_Chi_Minh'
 
 Tránh: giờ có flash sale hoặc chiến dịch, và lúc có đơn thu gom Gomdon đang chạy. Webhook của Gomdon chỉ thử lại 3 lần cách nhau 30 giây (xem [docs/integrations/gomdon.md](../integrations/gomdon.md)); sự kiện nào đến lúc API đang dừng quá lâu sẽ mất. Webhook Pancake và các cron đối soát (đẩy đơn mỗi 15 phút, sự kiện mỗi 10 phút) sẽ bù lại sau khi API chạy lại.
 
-### 3.4 Đo thật bằng diễn tập migrate trên bản sao (bắt buộc khi danh sách chờ áp dài hơn ba migration của đợt)
+### 3.4 Đo thật bằng diễn tập migrate trên bản sao (bắt buộc khi danh sách chờ áp có migration ngoài năm cái của đợt)
 
 Các migration ngoài r6 chưa được đo riêng, và PD-3 có thể dừng giữa chừng vì dữ liệu. Cách duy nhất biết chắc là chạy toàn bộ `migrate deploy` lên một bản sao của DB thật, bằng image MỚI. Cần mã mới và image mới đã có trên máy chủ: làm bước 1, bước 2 và bước 3 của mục 5 vào buổi tối trước (chúng không đổi container đang chạy; bước 2 đứng trước bước 3 để image cũ vẫn được ghi và gắn thẻ `rollback`), rồi diễn tập ngoài giờ cao điểm vì máy dùng chung và phải có chỗ đĩa cho một bản DB nữa:
 
@@ -339,9 +339,9 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
-- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách dài hơn ba migration của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
-- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có ba migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
-- Dòng `db.pending_scope` (chỉ có khi có migration ngoài ba cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
+- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài năm cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `db.refill_location` ("bảng điểm nhận vỏ chưa có": bảng đó do migration `20261015070000` tạo); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; và các dòng backup `không kiểm được` (xem ghi chú). Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
+- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có năm migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
+- Dòng `db.pending_scope` (chỉ có khi có migration ngoài năm cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
 
 Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. Hai việc còn lại kiểm tay trên máy chủ:
@@ -388,10 +388,10 @@ COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB 
 ROLLBACK_DUMP=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)
 echo "$ROLLBACK_DUMP" | tee .rollback-dump
 ls -lh "$ROLLBACK_DUMP" && gunzip -t "$ROLLBACK_DUMP" && echo "gunzip OK"
-psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations)"
+psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
 ```
 
-Kỳ vọng: backup in `OK`, `gunzip OK`, dung lượng cùng cỡ bản hôm qua. Ghi bộ 5 số đếm: orders ______ users ______ reviews ______ bottle_returns ______ migrations ______. Điểm dừng: lỗi hoặc file quá nhỏ.
+Kỳ vọng: backup in `OK`, `gunzip OK`, dung lượng cùng cỡ bản hôm qua. Ghi bộ 5 số đếm: orders ______ users ______ reviews ______ bottle_returns ______ migrations đã áp xong ______ (chỉ đếm dòng `finished_at IS NOT NULL AND rolled_back_at IS NULL`, cùng cách đếm với mục 1.0 phần A, 7.1 điểm 2 và mục 7.3). Điểm dừng: lỗi hoặc file quá nhỏ.
 
 ### Bước 7. Migrate bằng image MỚI
 
@@ -401,7 +401,7 @@ time $DC run --rm --no-deps api pnpm exec prisma migrate deploy
 date '+%H:%M:%S'
 ```
 
-Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả ba migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
+Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả năm migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
 
 Xác minh sau migrate:
 
@@ -531,21 +531,21 @@ cat .pending-migrations
 | Tình huống | Đường | Mất dữ liệu? |
 |---|---|---|
 | Migrate lỗi (chưa bật API) | 7.1 | Không |
-| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm đúng ba migration của đợt (r6, r8 điểm nhận vỏ, r8 đánh giá), và không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
-| Migrate xong nhưng danh sách chờ áp có BẤT KỲ migration nào khác ba cái đó (p1, p4, p8, PD-3, hoặc tên khác), hoặc `.pending-migrations` không còn | 7.3 (khôi phục bản backup). KHÔNG dùng 7.2 | Mất mọi thứ ghi sau bước 6 |
-| Quay image nhưng đã có khách ghi đánh giá lần hai cho cùng một sản phẩm | 7.3 (khôi phục bản backup) hoặc gộp tay đánh giá rồi 7.2 (chỉ khi danh sách chờ áp là ba migration) | 7.3 mất dữ liệu sau điểm backup |
+| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm các migration của đợt (r6, r8 điểm nhận vỏ, r8 đánh giá, r9 mốc tồn kho, r10 hàng trả cũ), và không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
+| Migrate xong nhưng danh sách chờ áp có BẤT KỲ migration nào ngoài năm cái đó (p1, p4, p8, PD-3, hoặc tên khác), hoặc `.pending-migrations` không còn | 7.3 (khôi phục bản backup). KHÔNG dùng 7.2 | Mất mọi thứ ghi sau bước 6 |
+| Quay image nhưng đã có khách ghi đánh giá lần hai cho cùng một sản phẩm | 7.3 (khôi phục bản backup) hoặc gộp tay đánh giá rồi 7.2 (chỉ khi danh sách chờ áp chỉ là các migration của đợt) | 7.3 mất dữ liệu sau điểm backup |
 | Hỏng nặng, không rõ nguyên nhân, cần về đúng trạng thái trước deploy | 7.3 | Mất mọi thứ ghi sau bước 6 |
 | Chỉ lỗi giao diện hoặc lỗi nhỏ, schema ổn | KHÔNG quay lại: sửa tiến bằng hotfix, deploy lại theo mục 5 (bỏ bước migrate nếu không có migration mới) | Không |
 
-**Điều cần hiểu trước (quay image có an toàn không):** quay lại bằng image chỉ hợp lệ khi image cũ chạy đúng trên schema SAU migrate. "Image cũ" ở đây là image đã ghi ở mục 5 bước 2, và nó mong đợi schema của bản PROD cũ (mục 1.0). Chỉ riêng ba migration của đợt thì schema sau migrate vẫn tương thích với image cũ (chúng chỉ thêm, trừ chỉ mục đánh giá, xem dưới). Nhưng nếu PROD cũ hơn thì danh sách chờ áp còn chứa các migration đổi dữ liệu và ràng buộc mà image cũ không chịu nổi, ví dụ:
+**Điều cần hiểu trước (quay image có an toàn không):** quay lại bằng image chỉ hợp lệ khi image cũ chạy đúng trên schema SAU migrate. "Image cũ" ở đây là image đã ghi ở mục 5 bước 2, và nó mong đợi schema của bản PROD cũ (mục 1.0). Chỉ riêng năm migration của đợt thì schema sau migrate vẫn tương thích với image cũ (chúng chỉ thêm cột, bảng, chỉ mục, hoặc đánh dấu `receivedAt` cho hàng trả cũ mà code cũ không đọc, trừ chỉ mục đánh giá, xem dưới). Nhưng nếu PROD cũ hơn thì danh sách chờ áp còn chứa các migration đổi dữ liệu và ràng buộc mà image cũ không chịu nổi, ví dụ:
 
 - p8 (`20261014003831_p8_seller_merchant_fulfilment`) đổi hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, cho `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`: code cũ khai báo cột này là chuỗi bắt buộc và duy nhất nên đọc các dòng đó bị lỗi.
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 
-Vì vậy: danh sách chờ áp dài hơn ba cái, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn ba migration của đợt chờ áp.
+Vì vậy: danh sách chờ áp có migration ngoài năm cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 
-Migration `20261015150000` (đánh giá nhiều lần) còn là **một chiều (forward-only)**. Sau khi áp, một khách có thể có nhiều đánh giá cho cùng một sản phẩm (mỗi lần mua một đánh giá). Chỉ mục cũ (một đánh giá cho mỗi khách và sản phẩm) không thể dựng lại nếu đã có đánh giá trùng. Vì vậy quay schema về bản cũ chỉ làm được bằng một trong hai cách: (a) khôi phục bản backup trước deploy (7.3), hoặc (b) khi danh sách chờ áp chỉ là ba migration: gộp các đánh giá trùng trước rồi dựng lại chỉ mục cũ (7.2). Các migration `20261014213300` (cột tìm kiếm người nhận + trigger) và `20261015070000` (bảng điểm nhận vỏ + cột `pickupLocationId` cho phép rỗng) chỉ THÊM, bản code cũ bỏ qua chúng nên không cần hoàn tác.
+Migration `20261015150000` (đánh giá nhiều lần) còn là **một chiều (forward-only)**. Sau khi áp, một khách có thể có nhiều đánh giá cho cùng một sản phẩm (mỗi lần mua một đánh giá). Chỉ mục cũ (một đánh giá cho mỗi khách và sản phẩm) không thể dựng lại nếu đã có đánh giá trùng. Vì vậy quay schema về bản cũ chỉ làm được bằng một trong hai cách: (a) khôi phục bản backup trước deploy (7.3), hoặc (b) khi danh sách chờ áp chỉ là các migration của đợt: gộp các đánh giá trùng trước rồi dựng lại chỉ mục cũ (7.2). Các migration `20261014213300` (cột tìm kiếm người nhận + trigger) và `20261015070000` (bảng điểm nhận vỏ + cột `pickupLocationId` cho phép rỗng) chỉ THÊM, bản code cũ bỏ qua chúng nên không cần hoàn tác.
 
 ### 7.1 Migrate lỗi giữa chừng (API vẫn đang dừng)
 
@@ -561,7 +561,7 @@ psqlq -c "SELECT migration_name, started_at, finished_at, rolled_back_at, left(l
 psqlq -tAc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL"
 ```
 
-So với số "migrations" ghi ở mục 5 bước 6. Bằng nhau: chưa migration nào của đợt xong, schema còn nguyên bản cũ. LỚN HƠN: đã có migration của đợt xong, schema đã đổi một phần: KHÔNG bật lại API cũ trên schema đó (không biết nó tương thích không); chọn giữa sửa tiến (điểm 3 và 4 rồi chạy lại mục 5 bước 7 cho phần còn lại) hoặc 7.3 (khôi phục backup).
+So với số "migrations đã áp xong" ghi ở mục 5 bước 6 (cùng cách đếm, chỉ dòng đã xong). Bằng nhau: chưa migration nào của đợt xong, schema còn nguyên bản cũ. LỚN HƠN: đã có migration của đợt xong, schema đã đổi một phần: KHÔNG bật lại API cũ trên schema đó (không biết nó tương thích không); chọn giữa sửa tiến (điểm 3 và 4 rồi chạy lại mục 5 bước 7 cho phần còn lại) hoặc 7.3 (khôi phục backup).
 3. Mỗi migration chạy trong một giao dịch, nên migration lỗi không để lại thay đổi dở dang trong schema (vẫn nên xác nhận bằng các truy vấn xác minh ở mục 5 bước 7). Không còn dòng nào ở điểm 1 thì migrate đã dừng sạch giữa các migration: sửa nguyên nhân (hết đĩa, lock bị giữ, v.v.) rồi chạy lại mục 5 bước 7.
 4. Còn dòng dở (ở điểm 1) thì đánh dấu đã hoàn tác rồi chạy lại: `$DC run --rm --no-deps api pnpm exec prisma migrate resolve --rolled-back <tên migration>`, sau đó mục 5 bước 7. Làm cùng Tech lead. Việc này BẮT BUỘC cả khi chỉ định trả dịch vụ ngay (điểm 6 bên dưới).
 5. Không sửa được trong 15 phút, hoặc không chắc schema còn nguyên, hoặc điểm 2 cho thấy một phần migration đã xong mà không sửa tiến được: 7.3 (khôi phục backup) rồi bật lại API cũ (xem 7.3).
@@ -579,13 +579,13 @@ Kỳ vọng: `api=healthy`, log có "No pending migrations to apply" và không 
 
 Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Hai điều kiện BẮT BUỘC (nếu không thoả, sang 7.3):
 
-1. Danh sách chờ áp đã áp ở mục 5 bước 7 là ĐÚNG ba migration của đợt, không thêm cái nào khác:
+1. Danh sách chờ áp đã áp ở mục 5 bước 7 chỉ gồm các migration của đợt (tối đa năm cái, không thêm cái nào khác):
 
 ```bash
 cat .pending-migrations
 ```
 
-Phải thấy đúng ba dòng: `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order`. Nhiều hơn ba dòng, khác tên, hoặc không còn file: DỪNG, đây là trường hợp 7.3 (7.0 nói vì sao: p8, PD-3... không quay lại được bằng image).
+Mọi dòng phải nằm trong năm tên này (PROD đã ở bản gần đây thì có thể chỉ thấy một vài dòng trong số đó): `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order`, `20261015160000_r9_sync_stock_same_clock_markers`, `20261015170000_r10_legacy_returns_received`. Có dòng tên khác, hoặc không còn file: DỪNG, đây là trường hợp 7.3 (7.0 nói vì sao: p8, PD-3... không quay lại được bằng image).
 
 2. Không có đánh giá trùng. Kiểm này làm trong khối lệnh dưới, SAU khi đã dừng API và web, vì nếu API mới còn phục vụ thì khách vẫn ghi thêm đánh giá giữa lúc kiểm và lúc dựng chỉ mục.
 
@@ -611,7 +611,7 @@ echo "mã thoát khối: $?"
 
 Kỳ vọng: in `CREATE INDEX`, rồi hai id image giống nhau, và `mã thoát khối: 0`. Mã thoát khác 0: chỉ mục chưa dựng được hoặc còn đánh giá trùng, API cũ chưa bật. Lúc này khách đang không đặt được hàng (API và web dừng): gọi ngay Tech lead và Chủ shop. Hoặc Chủ shop và Tech lead chọn đánh giá nào giữ (xoá hoặc gộp các đánh giá còn lại; xem các cặp trùng bằng `psqlq -c 'SELECT "userId", "productId", count(*) FROM reviews GROUP BY 1,2 HAVING count(*) > 1'`) rồi dán lại khối lệnh cho tới khi ra `mã thoát khối: 0`, hoặc khôi phục backup (7.3). Lệnh `$DC stop web api` trong khối chạy lại được vô hại.
 
-Giải thích: dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm ba migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
+Giải thích: dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm các migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
 
 Sau khi quay image: màn Quản trị, Sức khoẻ hệ thống và `curl .../api/health` phải ổn. Dữ liệu phát sinh sau deploy được giữ nguyên.
 
@@ -625,7 +625,7 @@ psqlq -c 'DROP INDEX "reviews_userId_productId_key"'
 
 MẤT mọi dữ liệu ghi sau bước 6 (đơn, thanh toán, đánh giá, đăng ký mới...). Chỉ làm khi Chủ shop đồng ý bằng lời trong nhóm chat.
 
-Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp dài hơn ba migration (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
+Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp có migration ngoài năm cái của đợt (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
 
 ```bash
 . ./.rollback-images
@@ -642,7 +642,7 @@ COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB 
 
 ```bash
 $DC start web
-psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations)"
+psqlq -tAc "SELECT (SELECT count(*) FROM orders), (SELECT count(*) FROM users), (SELECT count(*) FROM reviews), (SELECT count(*) FROM bottle_returns), (SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)"
 curl -s http://127.0.0.1:14001/api/health; echo
 ```
 

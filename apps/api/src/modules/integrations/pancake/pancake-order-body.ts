@@ -137,6 +137,8 @@ export function pancakeTags(
 }
 
 export const CUSTOMER_NOTE_MAX = 200;
+/** Bằng trần của checkout.dto cho ghi chú thu gom tái chế để không cắt chữ khách đã được phép nhập. */
+const RECYCLING_NOTE_MAX = 500;
 export const CUSTOMER_PAYMENT_HINT_HIDDEN = '(đã ẩn nội dung thanh toán)';
 
 /** Mỗi ký tự → một ký tự thường không dấu, giữ nguyên độ dài: vị trí khớp trên bản gấp cũng là vị trí trên chuỗi gốc. */
@@ -206,7 +208,7 @@ function hidePaymentHints(text: string): string {
  * của các dấu hệ thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), không chứa chỉ dẫn thu tiền, cắt
  * CUSTOMER_NOTE_MAX ký tự. Rỗng → null.
  */
-function sanitizeCustomerText(note: string | null | undefined): string | null {
+function sanitizeCustomerText(note: string | null | undefined, max = CUSTOMER_NOTE_MAX): string | null {
   const clean = hidePaymentHints(
     (note ?? '')
       .normalize('NFC')
@@ -220,7 +222,7 @@ function sanitizeCustomerText(note: string | null | undefined): string | null {
       .trim(),
   );
   if (!clean) return null;
-  return clean.length > CUSTOMER_NOTE_MAX ? `${clean.slice(0, CUSTOMER_NOTE_MAX - 1).trimEnd()}…` : clean;
+  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
 }
 
 /** Lời dặn của khách cho kho/shipper, đã làm sạch (xem sanitizeCustomerText). Rỗng → null. */
@@ -234,7 +236,7 @@ export function customerDeliveryNote(note: string | null | undefined): string | 
  * Pancake và trên vận đơn Gomdon) — cùng bộ lọc với lời dặn giao hàng để khách không mạo được dấu "[ĐÃ THANH TOÁN …]". Rỗng → ''.
  */
 export function recyclingNoteDetail(note: string | null | undefined): string {
-  const clean = sanitizeCustomerText(note);
+  const clean = sanitizeCustomerText(note, RECYCLING_NOTE_MAX);
   return clean ? ` - Ghi chú: ${clean}` : '';
 }
 

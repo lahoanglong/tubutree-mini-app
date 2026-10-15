@@ -581,6 +581,10 @@ export class OrderStatusService {
   /** Sau khi đơn đã huỷ ở Tubu bằng đường riêng (khách tự huỷ): ghi kết quả huỷ Pancake / xếp job huỷ. */
   async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<void> {
     await this.pancakeHooks?.afterLocalCancel(orderId, decision);
+    // Lần huỷ trước của khách có thể đã để dấu lệch Pancake–Tubu (xem flagPancakeCancelDivergence); lần này huỷ xong thì hết lệch.
+    await clearPancakeAttention(this.prisma, orderId, ATTENTION_CANCELLED_ON_PANCAKE_ONLY).catch((err: unknown) =>
+      this.logger.warn(`Không đóng dấu lệch huỷ Pancake của đơn ${orderId}: ${err instanceof Error ? err.message : err}`),
+    );
   }
 
   /**
@@ -607,7 +611,7 @@ export class OrderStatusService {
         this.opsAlerts(),
         current,
         `${ATTENTION_CANCELLED_ON_PANCAKE_ONLY} (đơn Pancake #${pancakeId ?? '?'}; ${why.slice(0, 200)}) — kho sẽ KHÔNG giao. ` +
-          'Kiểm tra: khách còn cần hàng thì tạo lại đơn trên Pancake, khách không cần thì huỷ đơn Tubu.',
+          'Huỷ đơn Tubu (hoàn tiền nếu đã thu); khách còn cần hàng thì đặt đơn mới cho khách, đừng tạo lại đơn Pancake cùng mã.',
         this.logger,
       );
     } catch (err) {

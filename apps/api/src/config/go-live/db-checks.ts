@@ -14,7 +14,17 @@ export const REQUIRED_MIGRATIONS = [
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
 
 /**
- * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ ba migration của đợt). `ordersLock`: viết
+ * Ba migration của đợt cộng hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một cột trên bảng trả hàng cũ). Image cũ
+ * vẫn chạy được trên schema có đủ năm cái, nên quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ gồm năm cái này.
+ */
+export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
+  ...REQUIRED_MIGRATIONS,
+  '20261015160000_r9_sync_stock_same_clock_markers',
+  '20261015170000_r10_legacy_returns_received',
+];
+
+/**
+ * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ các migration của đợt). `ordersLock`: viết
  * lại bảng orders hoặc dựng chỉ mục trên đó. Chưa đo riêng từng cái: ước theo migration r6.
  */
 export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean }> = [
@@ -129,19 +139,18 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
   }
 
   if (phase === 'pre-deploy' && pending.length > 0) {
-    const required: readonly string[] = REQUIRED_MIGRATIONS;
-    const extra = pending.filter((m) => !required.includes(m));
+    const extra = pending.filter((m) => !IMAGE_COMPATIBLE_MIGRATIONS.includes(m));
     const heavy = HEAVY_MIGRATIONS.filter((h) => pending.includes(h.name)).map((h) => h.name);
     const scopeTitle = 'Phạm vi migration sẽ áp';
     out.push(
       extra.length === 0
-        ? pass(G_DB, 'db.pending_scope', scopeTitle, `chỉ ba migration của đợt: quay lại bằng image cũ (runbook 7.2) hợp lệ`)
+        ? pass(G_DB, 'db.pending_scope', scopeTitle, `chỉ các migration của đợt (${pending.length}): quay lại bằng image cũ (runbook 7.2) hợp lệ`)
         : warn(
             G_DB,
             'db.pending_scope',
             scopeTitle,
-            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài ba migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
-            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ ba migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách dài hơn ba: chỉ còn khôi phục bản backup (runbook 7.3).',
+            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
+            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài năm cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
   }

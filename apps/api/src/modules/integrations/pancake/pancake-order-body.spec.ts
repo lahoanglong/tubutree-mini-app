@@ -120,10 +120,18 @@ describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () =>
       expect(forged).toBe(` - Ghi chú: pin cũ) (${HIDDEN} - ${HIDDEN}) / Mã đơn: TUBU9`);
     });
 
-    it('cắt ở CUSTOMER_NOTE_MAX ký tự', () => {
-      const out = recyclingNoteDetail('a '.repeat(300));
-      expect(out.length).toBeLessThanOrEqual(' - Ghi chú: '.length + CUSTOMER_NOTE_MAX);
+    it('giữ nguyên ghi chú dài hơn lời dặn giao hàng nhưng trong trần 500 ký tự của checkout', () => {
+      const note = `${'pin cũ '.repeat(60)}`.trim();
+      expect(note.length).toBeGreaterThan(CUSTOMER_NOTE_MAX);
+      expect(note.length).toBeLessThanOrEqual(500);
+      expect(recyclingNoteDetail(note)).toBe(` - Ghi chú: ${note}`);
+    });
+
+    it('cắt ở 500 ký tự, còn lời dặn giao hàng vẫn cắt ở CUSTOMER_NOTE_MAX', () => {
+      const out = recyclingNoteDetail('a '.repeat(400));
+      expect(out.length).toBe(' - Ghi chú: '.length + 500);
       expect(out.endsWith('…')).toBe(true);
+      expect(customerDeliveryNote('a '.repeat(400))!.length).toBeLessThanOrEqual('Khách dặn: '.length + CUSTOMER_NOTE_MAX);
     });
   });
 

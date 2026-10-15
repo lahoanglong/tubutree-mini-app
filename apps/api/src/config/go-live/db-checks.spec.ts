@@ -1,4 +1,4 @@
-import { estimateOrdersLockSeconds, evaluateDb, HEAVY_MIGRATIONS, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
+import { estimateOrdersLockSeconds, evaluateDb, HEAVY_MIGRATIONS, IMAGE_COMPATIBLE_MIGRATIONS, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { GOOD_DB, GOOD_ENV, byId, dbWith, envWith } from './go-live.fixtures';
@@ -116,9 +116,10 @@ describe('evaluateDb', () => {
       return dbWith({ orderCount, expectedMigrations, appliedMigrations });
     };
 
-    it('mọi tên migration nặng đều có thật trong thư mục prisma/migrations', () => {
+    it('mọi tên migration nặng và migration tương thích image đều có thật trong thư mục prisma/migrations', () => {
       const dirs = new Set(readdirSync(join(__dirname, '../../../prisma/migrations')));
       for (const h of HEAVY_MIGRATIONS) expect(dirs.has(h.name)).toBe(true);
+      for (const name of IMAGE_COMPATIBLE_MIGRATIONS) expect(dirs.has(name)).toBe(true);
     });
 
     it('ước tính nhân theo số migration nặng trên orders', () => {
@@ -132,6 +133,23 @@ describe('evaluateDb', () => {
       const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !required.includes(m)), orderCount: 300_000 });
       expect(status(s, 'db.pending_scope', 'pre-deploy')).toBe('PASS');
       expect(byId(run(s, 'pre-deploy'), 'db.orders_lock').detail).toContain('~14 giây');
+    });
+
+    it('năm migration của đợt (ba chính và hai migration nhỏ sau đó) chờ áp: db.pending_scope vẫn PASS', () => {
+      const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
+      expect(extraSmall).toHaveLength(2);
+      const s = behind(1_000, extraSmall);
+      const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('(5)');
+    });
+
+    it('năm migration của đợt cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài đợt', () => {
+      const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
+      const s = behind(1_000, [...extraSmall, P1]);
+      const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('6 migration chờ áp, 1 cái nằm ngoài');
     });
 
     it('thêm p1, p4, p8, pd3: db.pending_scope WARN, nêu tên migration nặng và chỉ đường 7.3', () => {

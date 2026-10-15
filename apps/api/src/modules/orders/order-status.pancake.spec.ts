@@ -192,6 +192,27 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     });
   });
 
+  describe('afterPancakeCancel: lần huỷ sau của khách xoá dấu lệch Pancake–Tubu của lần trước', () => {
+    const divergence = (c: [{ where: Record<string, unknown>; data: Record<string, unknown> }]) =>
+      JSON.stringify(c[0].where).includes('Pancake đã huỷ nhưng đơn Tubu còn hiệu lực');
+
+    it('đóng đúng dấu "Pancake đã huỷ nhưng đơn Tubu còn hiệu lực" sau khi gọi hook huỷ Pancake', async () => {
+      const { svc, prisma, pancakeHooks } = make(makeOrder());
+      await svc.afterPancakeCancel('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
+      expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', expect.objectContaining({ kind: 'CONFIRMED' }));
+      const clears = prisma.order.updateMany.mock.calls.filter((c) => c[0].data?.pancakeAttention === null);
+      expect(clears).toHaveLength(1);
+      expect(clears[0]![0].where.id).toBe('o1');
+      expect(divergence(clears[0] as never)).toBe(true);
+    });
+
+    it('lỗi khi xoá dấu không làm hỏng lần huỷ đã xong', async () => {
+      const { svc, prisma } = make(makeOrder());
+      prisma.order.updateMany.mockRejectedValue(new Error('db down'));
+      await expect(svc.afterPancakeCancel('o1')).resolves.toBeUndefined();
+    });
+  });
+
   describe('không hỏi được Pancake (R3-CANCEL-1, R2-PANCAKE-1)', () => {
     const unreachable = () => jest.fn().mockRejectedValue(new PancakeUnreachableError('timeout of 5000ms exceeded'));
 
