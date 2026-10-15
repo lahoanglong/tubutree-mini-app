@@ -420,8 +420,12 @@ export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
 
 const NOW_ISO = '2026-09-20T08:00:00.000Z';
 
-/** OrderDTO đầy đủ field bắt buộc (packages/shared-types/src/order.ts) — ghi đè phần cần test. */
+/**
+ * OrderDTO đầy đủ field bắt buộc (packages/shared-types/src/order.ts) — ghi đè phần cần test. Dòng mặc định mang trạng
+ * thái đánh giá như GET /orders/:code (mỗi lần mua một đánh giá): chưa đánh giá, viết được khi đơn lẻ đã giao.
+ */
 export function makeOrder(over: Partial<OrderDTO> & Pick<OrderDTO, 'code'>): OrderDTO {
+  const reviewable = over.status === 'DELIVERED' && (over.type ?? 'RETAIL') === 'RETAIL';
   return {
     id: `id-${over.code}`,
     type: 'RETAIL',
@@ -467,6 +471,8 @@ export function makeOrder(over: Partial<OrderDTO> & Pick<OrderDTO, 'code'>): Ord
         quantity: 2,
         backorderedQty: 0,
         total: 130000,
+        reviewId: null,
+        reviewable,
       },
     ],
     createdAt: NOW_ISO,
