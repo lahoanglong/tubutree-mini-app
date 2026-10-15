@@ -13,6 +13,7 @@ import {
   setUnauthorizedHandler,
 } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
+import { vi } from '../i18n/vi';
 
 const REFRESH_KEY = 'tubu_refresh_token';
 const DEVICE_KEY = 'tubu_device_id';
@@ -30,7 +31,12 @@ export async function getDeviceId(): Promise<string> {
 
 interface AuthState {
   user: AuthUser | null;
+  /**
+   * 'idle' = chưa/không còn đăng nhập (khách thật sự); 'error' = KHÔNG biết được vì mất mạng/API lỗi lúc khôi phục
+   * phiên (chưa phải khách: trang phải nói mất kết nối và cho thử lại, xem hooks/use-auth-phase.ts).
+   */
   status: 'idle' | 'loading' | 'authenticated' | 'error';
+  /** Câu tiếng Việt cho khách đọc; không bao giờ là message thô của axios/trình duyệt. */
   error?: string;
   /** Đăng nhập ngầm (không xin SĐT) — dùng khi mở app. */
   login: () => Promise<void>;
@@ -126,8 +132,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
-    } catch (err) {
-      set({ status: 'error', error: err instanceof Error ? err.message : 'Đăng nhập thất bại' });
+    } catch {
+      set({ status: 'error', error: vi.errors.sessionUnavailable });
     }
   },
 
@@ -139,7 +145,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * ngay, request đi trần → 401, và React Query (retry:false cho 4xx) kẹt luôn màn lỗi.
    */
   restore: async () => {
-    set({ status: 'loading' });
+    // Làm mới một phiên ĐANG đăng nhập (vd sau khi đặt hàng để cập nhật số dư): không nháy 'loading' và không bao giờ hạ
+    // phiên xuống 'error' chỉ vì lần làm mới này gặp lỗi mạng — khách vẫn đang đăng nhập với token còn dùng được.
+    const keepSession = get().status === 'authenticated' && get().user !== null;
+    if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
       try {
         const res = await refreshSession();
@@ -178,10 +187,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });
-      } catch (err) {
-        // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' +
-        // message để UI báo đúng "chưa kết nối được, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh).
-        set({ status: 'error', error: err instanceof Error ? err.message : 'Chưa kết nối được máy chủ' });
+      } catch {
+        // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' + câu tiếng Việt
+        // để UI báo đúng "mất kết nối, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh). Chỉ khi chưa có phiên nào để giữ.
+        if (!keepSession) set({ status: 'error', error: vi.errors.sessionUnavailable });
       }
     })();
     setAuthReady(done);

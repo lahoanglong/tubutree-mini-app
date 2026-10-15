@@ -28,9 +28,16 @@ export const vi = {
     server: 'Máy chủ đang bận, thử lại nhé.',
     generic: 'Có chút trục trặc, thử lại nhé',
     loadFailed: 'Chưa tải được nội dung',
+    sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+  },
+
+  refill: {
+    locationPaused: 'Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.',
+    pausedSuffix: ' (đã tạm ngưng)',
   },
 
   auth: {
+    guestHeading: 'Bạn chưa đăng nhập',
     loginCta: 'Tiếp tục với Zalo',
     loginHint: 'Đăng nhập để tích Điểm Xanh & đặt hàng',
     greetingFallback: 'bạn',

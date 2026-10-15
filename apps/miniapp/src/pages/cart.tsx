@@ -13,7 +13,8 @@ import {
 } from '../services/shop-api';
 import { cartProductIds } from '../utils/coupon-scope';
 import { getErrorMessage } from '../services/api';
-import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -69,9 +70,9 @@ export default function CartPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  const { status } = useAuthStore();
+  const phase = useAuthPhase();
 
-  const cart = useQuery({ queryKey: CART_KEY, queryFn: getCart, enabled: status === 'authenticated' });
+  const cart = useQuery({ queryKey: CART_KEY, queryFn: getCart, enabled: phase === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
@@ -126,40 +127,29 @@ export default function CartPage() {
       .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }));
   };
 
-  // Đang silent-login lúc mở app → skeleton thay vì chớp màn đăng nhập.
-  if (status === 'loading' || (status === 'authenticated' && cart.isLoading)) {
+  // Chưa đăng nhập xong: đang khôi phục → khung chờ (không chớp màn đăng nhập); mất kết nối → Thử lại; khách → mời đăng nhập.
+  if (phase !== 'authenticated') {
     return (
       <Shell>
-        <Box p={3} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-        </Box>
+        <AuthPhaseView phase={phase} loading={<CartSkeleton />} />
       </Shell>
     );
   }
 
-  if (cart.isError) {
+  if (cart.isLoading) {
     return (
       <Shell>
-        <ErrorState message={getErrorMessage(cart.error)} onRetry={() => void cart.refetch()} />
+        <CartSkeleton />
       </Shell>
     );
   }
 
-  // Chưa đăng nhập xong / query bị disable (status idle) → cart.data undefined.
-  // Hiện giỏ trống thay vì crash trắng màn (trước đây cart.data! gây lỗi).
+  // Chỉ thay cả trang bằng màn lỗi khi KHÔNG có giỏ để hiện: tải lại lỗi (vd mất mạng sau khi xoá món) không được làm trắng giỏ đang xem.
   const summary = cart.data;
   if (!summary) {
     return (
       <Shell>
-        <EmptyState
-          art="basket"
-          heading={vi.cart.emptyHeading}
-          body={vi.cart.emptyBody}
-          ctaLabel={vi.cart.emptyCta}
-          onCta={() => navigate('/browse')}
-        />
+        <ErrorState message={getErrorMessage(cart.error)} onRetry={() => void cart.refetch()} />
       </Shell>
     );
   }
@@ -332,6 +322,16 @@ function DiscontinuedNotice({ lines, onRemove }: { lines: UnavailableCartLine[];
           </Button>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+function CartSkeleton() {
+  return (
+    <Box p={3} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <LineItemSkeleton />
+      <LineItemSkeleton />
+      <LineItemSkeleton />
     </Box>
   );
 }

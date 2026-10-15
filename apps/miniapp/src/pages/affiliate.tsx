@@ -25,7 +25,8 @@ import {
 } from '../services/affiliate-api';
 import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
-import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatDate, formatPoints, formatVnd, formatVndShort } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
@@ -96,22 +97,25 @@ function payoutTax(gross: number, pit: { pct: number; threshold: number } | unde
 export default function AffiliatePage() {
   // /affiliate/me cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
-  const authed = useAuthStore((s) => s.status === 'authenticated');
-  const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: authed });
+  const phase = useAuthPhase();
+  const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: phase === 'authenticated' });
 
-  if (!authed || meQ.isLoading) {
+  if (phase !== 'authenticated' || meQ.isLoading) {
+    const skeleton = (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Skeleton height={120} radius="var(--radius-card)" />
+        <Skeleton height={80} radius="var(--radius-card)" />
+      </div>
+    );
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton height={120} radius="var(--radius-card)" />
-          <Skeleton height={80} radius="var(--radius-card)" />
-        </div>
+        {phase === 'authenticated' ? skeleton : <AuthPhaseView phase={phase} loading={skeleton} />}
       </Page>
     );
   }
 
-  if (meQ.isError) {
+  if (meQ.isError && !meQ.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />

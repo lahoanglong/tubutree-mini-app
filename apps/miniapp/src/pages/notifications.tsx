@@ -15,7 +15,8 @@ import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
-import { useAuthStore } from '../store/auth';
+import { AuthGate } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
@@ -160,8 +161,8 @@ export default function NotificationsPage() {
   // Trang này là CỬA VÀO từ push của Zalo: mở app từ thông báo thì restore() chưa kịp xong,
   // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
   // Mọi trang /me/* khác đều đã gate như vậy; riêng đây bị sót.
-  const authed = useAuthStore((s) => s.status === 'authenticated');
-  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed });
+  const phase = useAuthPhase();
+  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: phase === 'authenticated' });
   selectedIdRef.current = selectedNotif?.id ?? null;
 
   const readMut = useMutation({
@@ -233,72 +234,81 @@ export default function NotificationsPage() {
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Thông báo" />
 
-      {notifQ.isLoading ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-        </div>
-      ) : notifQ.isError ? (
-        <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
-      ) : notifQ.data && notifQ.data.length > 0 ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {notifQ.data.map((n) => {
-            const m = notificationMeta(n.templateCode);
-            const unread = n.status !== 'READ';
-            return (
-              <div
-                key={n.id}
-                role="button"
-                {...rowKeyboardProps()}
-                className="tubu-press"
-                onClick={() => onTap(n)}
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  padding: 12,
-                  background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-card)',
-                  border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
-                  boxShadow: 'var(--elevation-1)',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                  <Icon icon={m.Icon} tone="brand" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                      {m.title}
-                    </Text>
-                    {unread && (
-                      <span
-                        role="img"
-                        aria-label="chưa đọc"
-                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
-                      />
-                    )}
+      <AuthGate
+        loading={
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        }
+      >
+        {notifQ.isLoading ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        ) : notifQ.isError && !notifQ.data ? (
+          <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+        ) : notifQ.data && notifQ.data.length > 0 ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {notifQ.data.map((n) => {
+              const m = notificationMeta(n.templateCode);
+              const unread = n.status !== 'READ';
+              return (
+                <div
+                  key={n.id}
+                  role="button"
+                  {...rowKeyboardProps()}
+                  className="tubu-press"
+                  onClick={() => onTap(n)}
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    padding: 12,
+                    background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
+                    borderRadius: 'var(--radius-card)',
+                    border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
+                    boxShadow: 'var(--elevation-1)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                    <Icon icon={m.Icon} tone="brand" />
                   </div>
-                  {n.payload.body && (
-                    <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                      {n.payload.body}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text variant="body-sm" style={{ fontWeight: 600 }}>
+                        {m.title}
+                      </Text>
+                      {unread && (
+                        <span
+                          role="img"
+                          aria-label="chưa đọc"
+                          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
+                        />
+                      )}
+                    </div>
+                    {n.payload.body && (
+                      <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                        {n.payload.body}
+                      </Text>
+                    )}
+                    <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
+                      {relativeTime(n.sentAt)}
                     </Text>
-                  )}
-                  <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
-                    {relativeTime(n.sentAt)}
-                  </Text>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <EmptyState
-          art="leaf"
-          heading="Chưa có thông báo nào"
-          body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây."
-        />
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            art="leaf"
+            heading="Chưa có thông báo nào"
+            body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây."
+          />
+        )}
+      </AuthGate>
 
       {/* ── Detail View Overlay ── */}
       {selectedNotif && (

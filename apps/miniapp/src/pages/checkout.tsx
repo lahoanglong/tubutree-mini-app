@@ -9,6 +9,8 @@ import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
@@ -53,8 +55,9 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const { user, status } = useAuthStore();
-  const authed = status === 'authenticated';
+  const { user } = useAuthStore();
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const sfCtx = useStorefrontContext();
   // Chỉ gian hàng CTV (kind='ctv') mới gắn storefrontSlug (combo + attribution).
   // Trang nhãn (kind='brand') KHÔNG gửi → tránh ô nhiễm analytics CTV; vẫn giữ referralCode.
@@ -288,6 +291,16 @@ export default function CheckoutPage() {
           onContinue={() => navigate('/', { replace: true })}
         />
       </Page>
+    );
+  }
+
+  // Chưa vào được phiên: không được rơi xuống "Giỏ còn trống" (giỏ có thật, chỉ là chưa tải được).
+  if (phase === 'loading') return <CheckoutSkeleton />;
+  if (phase !== 'authenticated') {
+    return (
+      <Shell>
+        <AuthPhaseView phase={phase} />
+      </Shell>
     );
   }
 

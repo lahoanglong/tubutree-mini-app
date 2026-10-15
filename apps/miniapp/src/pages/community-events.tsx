@@ -11,6 +11,8 @@ import { ChevronLeft, Gift } from 'lucide-react';
 import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedPage } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { SessionUnavailable } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
@@ -66,9 +68,9 @@ function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefi
 }
 
 export default function CommunityEventsPage() {
-  const status = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
-  const authed = status === 'authenticated';
+  const authed = phase === 'authenticated';
   const [selected, setSelected] = useState<CommunityEvent | null>(null);
   const [composing, setComposing] = useState(false);
 
@@ -83,11 +85,22 @@ export default function CommunityEventsPage() {
   });
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
-  if (status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Page style={PAGE_BG}>
         <PageHeader title={vi.community.events} />
         <CardSkeletons height={140} gap={12} />
+      </Page>
+    );
+  }
+
+
+  // Mất kết nối lúc khôi phục phiên: không phải khách — nói đúng vậy + Thử lại, không mời đăng nhập lại.
+  if (phase === 'unavailable') {
+    return (
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.events} />
+        <SessionUnavailable />
       </Page>
     );
   }

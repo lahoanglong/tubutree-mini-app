@@ -24,7 +24,8 @@ import {
   type RewardItem,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
-import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
@@ -77,7 +78,8 @@ export default function LoyaltyPage() {
   const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
-  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
@@ -209,16 +211,22 @@ export default function LoyaltyPage() {
   const sheetReward = useLastNonNull(confirmReward);
   const sheetCelebrate = useLastNonNull(celebrate);
 
+  const pageSkeleton = (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Skeleton height={180} radius="var(--radius-card)" />
+      <Skeleton height={80} radius="var(--radius-card)" />
+    </div>
+  );
+
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
       <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
-      {!authed || loyaltyQ.isLoading ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton height={180} radius="var(--radius-card)" />
-          <Skeleton height={80} radius="var(--radius-card)" />
-        </div>
-      ) : loyaltyQ.isError ? (
+      {phase !== 'authenticated' ? (
+        <AuthPhaseView phase={phase} loading={pageSkeleton} />
+      ) : loyaltyQ.isLoading ? (
+        pageSkeleton
+      ) : loyaltyQ.isError && !loyaltyQ.data ? (
         <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>

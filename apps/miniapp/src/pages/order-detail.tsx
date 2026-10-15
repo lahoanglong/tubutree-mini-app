@@ -5,6 +5,8 @@ import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type Luci
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { LineItemSkeleton, Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import {
@@ -100,7 +102,7 @@ export default function OrderDetailPage() {
   const [cancelTouched, setCancelTouched] = useState(false);
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
-  const authStatus = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const meId = useAuthStore((s) => s.user?.id);
 
   // Guard auth: tránh gọi /orders/:code khi chưa silent-login xong (deeplink từ thông báo
@@ -108,7 +110,7 @@ export default function OrderDetailPage() {
   const order = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code!),
-    enabled: !!code && authStatus === 'authenticated',
+    enabled: !!code && phase === 'authenticated',
   });
   const myReturns = useQuery({
     queryKey: ['my-returns'],
@@ -212,17 +214,23 @@ export default function OrderDetailPage() {
     },
   });
 
-  if (authStatus === 'loading' || order.isLoading) {
+  const skeleton = (
+    <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Skeleton height={64} radius="var(--radius-card)" />
+      <LineItemSkeleton />
+      <Skeleton height={120} radius="var(--radius-card)" />
+    </Box>
+  );
+
+  if (phase !== 'authenticated') {
     return (
       <Shell>
-        <Box p={4} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Skeleton height={64} radius="var(--radius-card)" />
-          <LineItemSkeleton />
-          <Skeleton height={120} radius="var(--radius-card)" />
-        </Box>
+        <AuthPhaseView phase={phase} loading={skeleton} />
       </Shell>
     );
   }
+
+  if (order.isLoading) return <Shell>{skeleton}</Shell>;
 
   // Chỉ thay cả trang bằng màn lỗi khi KHÔNG có dữ liệu: refetch lỗi sau khi huỷ thành công không được làm trắng trang.
   if (!order.data) {
