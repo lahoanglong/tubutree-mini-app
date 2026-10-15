@@ -184,7 +184,7 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     const c = await mount();
     click(button(c, 'Viết đánh giá'));
     await flush();
-    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10 Điểm Xanh (chỉ chữ +5).');
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá được khi đã mua và nhận hàng.');
     click(button(c, 'Ảnh đánh giá (0)'));
     expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh!');
     click(star(c, 4));

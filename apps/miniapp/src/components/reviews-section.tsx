@@ -548,7 +548,7 @@ function WriteReview({
               ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`
               : images.length > 0
                 ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
-                : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
+                : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá được khi đã mua và nhận hàng.`}
         </Text>
       )}
       {!isEdit && !showReward && (

@@ -7,6 +7,16 @@ import { MultiImageUpload } from './image-upload';
 
 const px = (v: string) => Number.parseFloat(v);
 
+describe('MultiImageUpload — ô thêm ảnh (R5-BUYER-5)', () => {
+  it('nhãn ngắn vừa ô 72px và chừa lề hai bên, không dính viền nét đứt', () => {
+    render(<MultiImageUpload value={[]} onChange={() => {}} />);
+    const tile = screen.getByRole('button', { name: 'Thêm ảnh' });
+    expect(tile.textContent).toBe('Thêm ảnh');
+    expect(px(tile.style.paddingLeft)).toBeGreaterThanOrEqual(4);
+    expect(px(tile.style.paddingRight)).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe('MultiImageUpload — nút "Xóa ảnh"', () => {
   it('vùng chạm >= 44x44 nhưng nằm gọn trong ô ảnh 72px, không lấn sang ô kế tiếp', () => {
     render(<MultiImageUpload value={['https://i/1.jpg', 'https://i/2.jpg']} onChange={() => {}} />);

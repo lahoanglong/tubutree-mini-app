@@ -264,7 +264,7 @@ export default function ProfilePage() {
             </Text>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
               <Icon icon={Copy} size="sm" tone="brand" />
-              <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)' }}>
+              <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)', whiteSpace: 'nowrap' }}>
                 Sao chép
               </Text>
             </span>
