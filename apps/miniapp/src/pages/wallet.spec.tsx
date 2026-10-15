@@ -92,11 +92,11 @@ function renderPage() {
   );
 }
 
-function stubLoaded(wallet: object = WALLET) {
+function stubLoaded(wallet: object = WALLET, firstPage: object = TXN_PAGE_1) {
   mocks.getWallet.mockResolvedValue(wallet);
   mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
-  mocks.getWalletTransactions.mockImplementation((page: number) => Promise.resolve(page === 1 ? TXN_PAGE_1 : TXN_PAGE_2));
+  mocks.getWalletTransactions.mockImplementation((page: number) => Promise.resolve(page === 1 ? firstPage : TXN_PAGE_2));
 }
 
 /** Ô nhập theo nhãn hiển thị: ưu tiên liên kết <label for> (DS v2 `Field`), rơi về ô nhập gần nhất
@@ -476,5 +476,46 @@ describe('WalletPage — ẩn lối vào Hoàn tiền sàn ngoài (C-086, Q-15)'
       expect((await screen.findByText(/Tiền thật từ hoa hồng/)).textContent).toMatch(/hoàn tiền sàn ngoài/);
       expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
     });
+  });
+});
+
+describe('WalletPage — khách thường (R6-BUYER-13)', () => {
+  const PLAIN_WALLET = { ...WALLET, commissionApproved: 0, commissionPending: 0, cashbackPending: 0 };
+  const REFUND_TXNS = {
+    data: [
+      { id: 'r1', delta: 40_000, balanceAfter: 90_000, type: 'ORDER_REFUND', reason: 'Hoàn tiền trả hàng đơn TT001', orderId: null, createdAt: '2026-10-05T07:04:00' },
+      { id: 'r2', delta: 50_000, balanceAfter: 50_000, type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn TT002', orderId: 'o2', createdAt: '2026-10-04T07:04:00' },
+      { id: 'r3', delta: -20_000, balanceAfter: 0, type: 'ORDER_PAY', reason: 'Thanh toán đơn TT003', orderId: 'o3', createdAt: '2026-10-03T07:04:00' },
+    ],
+    meta: { page: 1, limit: 20, total: 3 },
+  };
+
+  it('không phải CTV và chưa có hoa hồng: ẩn hai thẻ hoa hồng, mô tả nói về thanh toán đơn', async () => {
+    stubLoaded(PLAIN_WALLET, REFUND_TXNS);
+    renderPage();
+    expect(await screen.findByText('Số dư dùng để thanh toán đơn')).toBeInTheDocument();
+    expect(screen.queryByText('Hoa hồng chờ duyệt')).toBeNull();
+    expect(screen.queryByText('Hoa hồng có thể rút')).toBeNull();
+    expect(screen.queryByText(/Tiền thật từ hoa hồng/)).toBeNull();
+  });
+
+  it('CTV hoặc đại lý vẫn thấy khối hoa hồng dù đang 0đ', async () => {
+    for (const role of ['AFFILIATE', 'DEALER']) {
+      mocks.role = role;
+      stubLoaded(PLAIN_WALLET, REFUND_TXNS);
+      const view = renderPage();
+      expect(await screen.findByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
+      expect(screen.getByText('Hoa hồng có thể rút')).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it('lịch sử đặt tiêu đề theo nguồn: trả hàng, huỷ đơn, thanh toán đơn', async () => {
+    stubLoaded(PLAIN_WALLET, REFUND_TXNS);
+    renderPage();
+    expect(await screen.findByText('Hoàn tiền trả hàng')).toBeInTheDocument();
+    expect(screen.getByText('Hoàn tiền huỷ đơn')).toBeInTheDocument();
+    expect(screen.getByText('Thanh toán đơn')).toBeInTheDocument();
+    expect(screen.queryByText('Hoàn tiền đơn hàng')).toBeNull();
   });
 });
