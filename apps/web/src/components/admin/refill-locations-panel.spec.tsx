@@ -113,7 +113,7 @@ describe('RefillLocationsPanel — admin quản lý điểm nhận vỏ', () => 
     typeInto(field(c, 'SĐT'), '09012');
     click(byText(c, 'button', 'Thêm điểm'));
     await flush();
-    expect(alertText(c)).toContain('SĐT phải là 10 số');
+    expect(alertText(c)).toContain('SĐT phải là di động');
     expect(writes(calls)).toHaveLength(0);
 
     typeInto(field(c, 'SĐT'), '0901234567');
@@ -129,6 +129,56 @@ describe('RefillLocationsPanel — admin quản lý điểm nhận vỏ', () => 
       },
     ]);
     expect(c.querySelector('form')).toBeNull();
+  });
+
+  it.each(['0901234567', '+84901234567', '02838221234', '02543812345', '+842838221234', '18001234', '1900123456'])(
+    'thêm điểm: SĐT %s (di động, số bàn hoặc tổng đài) được gửi nguyên chuỗi',
+    async (phone) => {
+      const calls = stub(listOnly([]));
+      const c = await mount(<RefillLocationsPanel />);
+      click(byText(c, 'button', 'Thêm điểm nhận'));
+      await flush();
+      typeInto(field(c, 'Tên điểm'), 'A');
+      typeInto(field(c, 'Địa chỉ'), 'B');
+      typeInto(field(c, 'SĐT'), phone);
+      click(byText(c, 'button', 'Thêm điểm'));
+      await flush();
+
+      expect(writes(calls)).toHaveLength(1);
+      expect(writes(calls)[0]!.body).toMatchObject({ phone });
+    },
+  );
+
+  it.each(['090123456', '09012345678', '028382212345', '+8428382212345', '1800123', '18001234567', '17001234', '+8418001234', '+'])(
+    'thêm điểm: SĐT %s sai dạng bị chặn ngay trên form, không gọi API',
+    async (phone) => {
+      const calls = stub(listOnly([]));
+      const c = await mount(<RefillLocationsPanel />);
+      click(byText(c, 'button', 'Thêm điểm nhận'));
+      await flush();
+      typeInto(field(c, 'Tên điểm'), 'A');
+      typeInto(field(c, 'Địa chỉ'), 'B');
+      typeInto(field(c, 'SĐT'), phone);
+      click(byText(c, 'button', 'Thêm điểm'));
+      await flush();
+
+      expect(alertText(c)).toContain('tổng đài 1800/1900');
+      expect(writes(calls)).toHaveLength(0);
+    },
+  );
+
+  it('ô SĐT có gợi ý cho cả ba loại số và nhận tới 13 ký tự (+84 + số bàn 10 số)', async () => {
+    stub(listOnly([]));
+    const c = await mount(<RefillLocationsPanel />);
+    click(byText(c, 'button', 'Thêm điểm nhận'));
+    await flush();
+
+    const input = field(c, 'SĐT');
+    expect(input.maxLength).toBe(13);
+    const hint = input.closest('label')!.textContent ?? '';
+    expect(hint).toContain('Di động');
+    expect(hint).toContain('số bàn');
+    expect(hint).toContain('tổng đài');
   });
 
   it('lỗi từ API khi thêm hiện nguyên văn trong form và giữ form mở', async () => {

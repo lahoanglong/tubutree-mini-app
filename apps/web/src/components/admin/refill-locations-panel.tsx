@@ -17,15 +17,18 @@ const QUERY_KEY = ['admin-refill-locations'];
 const NAME_MAX = 100;
 const ADDRESS_MAX = 300;
 const HOURS_MAX = 120;
-// Cùng luật với API (PICKUP_PHONE_PATTERN): trống = ẩn nút gọi, khác trống phải là 10 số bắt đầu bằng 0 hoặc +84.
-const PHONE_RE = /^(0|\+84)\d{9}$/;
+// Cùng luật với API (PICKUP_LOCATION_PHONE_PATTERN): trống = ẩn nút gọi; khác trống là di động (0 hoặc +84 rồi 9 số),
+// số bàn (0 hoặc +84 rồi mã vùng 2xx, tổng 10–11 số) hoặc tổng đài 1800/1900 rồi 4–6 số. Chuỗi lưu = chuỗi khách bấm gọi.
+const PHONE_RE = /^(?:(?:0|\+84)\d{9}|(?:0|\+84)2\d{9}|1[89]00\d{4,6})$/;
+const PHONE_MAX = 13;
+const PHONE_PROBLEM = 'SĐT phải là di động (0 hoặc +84 rồi 9 số), số bàn (02…, 10–11 số) hoặc tổng đài 1800/1900 — viết liền, hoặc để trống.';
 
 const EMPTY_FORM: RefillLocationInput = { name: '', address: '', hours: '', phone: '', isActive: true };
 
 function formProblem(f: RefillLocationInput): string | null {
   if (!f.name.trim()) return 'Nhập tên điểm nhận.';
   if (!f.address.trim()) return 'Nhập địa chỉ điểm nhận.';
-  if (f.phone.trim() && !PHONE_RE.test(f.phone.trim())) return 'SĐT phải là 10 số bắt đầu bằng 0 hoặc +84 (hoặc để trống).';
+  if (f.phone.trim() && !PHONE_RE.test(f.phone.trim())) return PHONE_PROBLEM;
   return null;
 }
 
@@ -299,12 +302,12 @@ function LocationForm({
             onChange={(e) => setF({ ...f, hours: e.target.value })}
           />
         </Field>
-        <Field label="SĐT gọi điểm nhận (không bắt buộc)">
+        <Field label="SĐT gọi điểm nhận (không bắt buộc)" hint="Di động 0901234567, số bàn 02838221234 hoặc tổng đài 19001234. Viết liền, không dấu cách.">
           <input
             className={field}
             value={f.phone}
             inputMode="tel"
-            maxLength={12}
+            maxLength={PHONE_MAX}
             placeholder="VD: 0901234567"
             onChange={(e) => setF({ ...f, phone: e.target.value.replace(/[^\d+]/g, '') })}
           />

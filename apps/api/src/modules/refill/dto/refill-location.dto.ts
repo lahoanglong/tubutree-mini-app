@@ -1,14 +1,15 @@
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Trim } from '../../../common/decorators/trim.decorator';
-import { PICKUP_PHONE_PATTERN } from '../../../common/phone';
+import { PICKUP_LOCATION_PHONE_PATTERN } from '../../../common/phone';
 
 export const REFILL_LOCATION_NAME_MAX = 100;
 export const REFILL_LOCATION_ADDRESS_MAX = 300;
 export const REFILL_LOCATION_HOURS_MAX = 120;
 
-// Rỗng = xoá số (app ẩn nút gọi); khác rỗng phải đúng dạng của khoá cũ refill.pickup_phone.
-const OPTIONAL_PHONE = new RegExp(`^(${PICKUP_PHONE_PATTERN.source})?$`);
-const PHONE_MESSAGE = 'SĐT điểm nhận phải để trống hoặc là 10 số bắt đầu bằng 0 hoặc +84.';
+// Rỗng = xoá số (app ẩn nút gọi); khác rỗng phải là di động, số bàn hoặc tổng đài 1800/1900 (xem PICKUP_LOCATION_PHONE_PATTERN).
+const OPTIONAL_PHONE = new RegExp(`^(${PICKUP_LOCATION_PHONE_PATTERN.source})?$`);
+const PHONE_MESSAGE =
+  'SĐT điểm nhận phải để trống hoặc là di động (10 số bắt đầu bằng 0 hoặc +84), số bàn (02…, 10–11 số) hoặc tổng đài 1800/1900 (viết liền, không dấu cách).';
 
 export class CreateRefillLocationDto {
   @Trim() @IsString({ message: 'Tên điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Tên điểm nhận không được để trống.' })

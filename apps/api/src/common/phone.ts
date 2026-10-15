@@ -45,3 +45,13 @@ export function parseVnPhoneStrict(s: string): string | null {
  * sang 0xxxxxxxxx) vì nó được in ra màn hình và đưa vào tel:. Dùng chung cho khoá cũ refill.pickup_phone và bảng điểm nhận.
  */
 export const PICKUP_PHONE_PATTERN = /^(0|\+84)\d{9}$/;
+
+/**
+ * SĐT một điểm nhận vỏ (bảng refill_pickup_locations), rộng hơn khoá cũ vì điểm nhận có thể là cửa hàng dùng số bàn hoặc tổng đài:
+ *  - di động: 0 hoặc +84 rồi 9 số (như khoá cũ);
+ *  - số bàn: 0 hoặc +84 rồi mã vùng 2xx, tổng 10–11 số kể cả số 0 đầu (02838221234, +842838221234; dạng 10 số trùng nhánh di động);
+ *  - tổng đài: 1800 hoặc 1900 rồi 4–6 số (đầu số dịch vụ gọi trong nước, không có dạng +84).
+ * Chỉ nhận số liền không dấu cách/chấm/gạch: chuỗi lưu trong DB đúng bằng chuỗi hiện lên nút "Gọi" và đi vào tel:
+ * (callPhone ở mini app chỉ bỏ ký tự ngoài số và dấu +, nên giữ nguyên chuỗi này).
+ */
+export const PICKUP_LOCATION_PHONE_PATTERN = /^(?:(?:0|\+84)\d{9}|(?:0|\+84)2\d{9}|1[89]00\d{4,6})$/;

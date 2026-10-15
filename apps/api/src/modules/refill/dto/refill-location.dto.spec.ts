@@ -35,19 +35,69 @@ describe('CreateRefillLocationDto', () => {
     });
   });
 
-  it.each(['0901234567', '+84901234567', ''])('SĐT %p hợp lệ (rỗng = không có số)', async (phone) => {
-    await expect(run(CreateRefillLocationDto, { name: 'A', address: 'B', phone })).resolves.toMatchObject({ phone });
-  });
+  const PHONE_MESSAGE =
+    'SĐT điểm nhận phải để trống hoặc là di động (10 số bắt đầu bằng 0 hoặc +84), số bàn (02…, 10–11 số) hoặc tổng đài 1800/1900 (viết liền, không dấu cách).';
 
-  it.each(['090123456', '09012345678', '84901234567', '0901 234 567', 'abc', '+8490123456'])('SĐT %p sai dạng → 400', async (phone) => {
-    expect(await messagesOf(CreateRefillLocationDto, { name: 'A', address: 'B', phone })).toEqual([
-      'SĐT điểm nhận phải để trống hoặc là 10 số bắt đầu bằng 0 hoặc +84.',
-    ]);
+  describe('SĐT từng loại', () => {
+    it.each([
+      ['di động 0', '0901234567'],
+      ['di động +84', '+84901234567'],
+      ['số bàn 11 số (mã vùng 3 số)', '02543812345'],
+      ['số bàn 11 số (Hà Nội 024)', '02438251234'],
+      ['số bàn 11 số (TP.HCM 028)', '02838221234'],
+      ['số bàn 10 số (02 + 8 số)', '0243825123'],
+      ['số bàn +84 11 số', '+842838221234'],
+      ['số bàn +84 10 số', '+84243825123'],
+      ['tổng đài 1800 + 4 số', '18001234'],
+      ['tổng đài 1800 + 6 số', '1800123456'],
+      ['tổng đài 1900 + 4 số', '19001234'],
+      ['tổng đài 1900 + 5 số', '190012345'],
+      ['tổng đài 1900 + 6 số', '1900123456'],
+      ['rỗng = không có số', ''],
+    ])('%s (%s) hợp lệ và lưu nguyên chuỗi', async (_label, phone) => {
+      await expect(run(CreateRefillLocationDto, { name: 'A', address: 'B', phone })).resolves.toMatchObject({ phone });
+      await expect(run(UpdateRefillLocationDto, { phone })).resolves.toMatchObject({ phone });
+    });
+
+    it.each([
+      ['thiếu một số di động', '090123456'],
+      ['thừa một số di động', '09012345678'],
+      ['+84 di động thiếu số', '+8490123456'],
+      ['số bàn 12 số', '028382212345'],
+      ['số bàn +84 11 số', '+8428382212345'],
+      ['11 số bắt đầu 0 nhưng không phải mã vùng 2xx', '09012345678'],
+      ['84 không có dấu +', '84901234567'],
+      ['có dấu cách', '0901 234 567'],
+      ['có dấu chấm', '028.3822.1234'],
+      ['có dấu gạch và ngoặc', '(028)3822-1234'],
+      ['+84 kèm 0 đầu (số bàn)', '+8402838221234'],
+      ['chữ', 'abc'],
+      ['1800 chỉ 3 số sau', '1800123'],
+      ['1800 tới 7 số sau', '18001234567'],
+      ['1900 chỉ 3 số sau', '1900123'],
+      ['1900 tới 7 số sau', '19001234567'],
+      ['đầu số 1700 không phải tổng đài', '17001234'],
+      ['đầu số 1801', '18011234'],
+      ['tổng đài dạng +84', '+8418001234'],
+      ['tổng đài kèm 0', '018001234'],
+      ['chỉ dấu +', '+'],
+    ])('%s (%s) → 400', async (_label, phone) => {
+      expect(await messagesOf(CreateRefillLocationDto, { name: 'A', address: 'B', phone })).toEqual([PHONE_MESSAGE]);
+      expect(await messagesOf(UpdateRefillLocationDto, { phone })).toEqual([PHONE_MESSAGE]);
+    });
+
+    it('cắt khoảng trắng hai đầu rồi mới kiểm; chuỗi lưu đúng bằng chuỗi callPhone đưa vào tel:', async () => {
+      const dto = await run(CreateRefillLocationDto, { name: 'A', address: 'B', phone: '  02838221234 ' });
+      expect(dto).toMatchObject({ phone: '02838221234' });
+      for (const phone of ['0901234567', '+84901234567', '02838221234', '+842838221234', '19001234']) {
+        expect(phone.replace(/[^\d+]/g, '')).toBe(phone);
+      }
+    });
   });
 
   it('SĐT không phải chuỗi → 400, không lọt qua như bỏ trống', async () => {
     expect(await messagesOf(CreateRefillLocationDto, { name: 'A', address: 'B', phone: 901234567 })).toEqual(
-      expect.arrayContaining(['SĐT điểm nhận phải để trống hoặc là 10 số bắt đầu bằng 0 hoặc +84.']),
+      expect.arrayContaining([PHONE_MESSAGE]),
     );
   });
 
