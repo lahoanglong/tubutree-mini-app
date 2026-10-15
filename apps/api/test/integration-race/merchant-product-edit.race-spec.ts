@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { CreateMerchantProductDto } from '../../src/modules/merchant/merchant.controller';
+import { createValidationPipe } from '../../src/common/validation-pipe';
 import { OpsInboxService } from '../../src/modules/ops/ops-inbox.service';
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -239,5 +241,26 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await prisma.variation.deleteMany({ where: { productId: product.id } });
     await prisma.product.delete({ where: { id: product.id } });
     expect(await prisma.productEditDraft.count({ where: { productId: product.id } })).toBe(0);
+  });
+
+  it('AUTHZ-3: thành phần qua ValidationPipe lưu vào cột Json thành mảng {name, percentage?, benefit?} và admin đọc lại đúng mảng đó; chuỗi/object bị chặn trước khi tới DB', async () => {
+    const owner = await createUser(prisma, { role: 'DEALER' });
+    const tag = randCode(8).toLowerCase();
+    await prisma.storefront.create({
+      data: { type: 'MERCHANT', slug: `itpe-ing-${tag}`, title: `Shop IT ${tag}`, ownerUserId: owner.id, commissionPct: 0.15 },
+    });
+    const pipe = createValidationPipe();
+    const body = (ingredients: unknown) =>
+      pipe.transform({ name: `Xà phòng ${tag}`, description: 'Mô tả', basePrice: 50_000, stock: 5, ingredients }, { type: 'body', metatype: CreateMerchantProductDto });
+
+    await expect(body('Sả, chanh')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(body({ name: 'Sả' })).rejects.toBeInstanceOf(BadRequestException);
+
+    const dto = (await body([{ name: ' Sả ', percentage: 60, benefit: 'Đuổi muỗi' }, { name: 'Dầu dừa' }])) as CreateMerchantProductDto;
+    const created = await merchant.createProduct(owner.id, dto);
+    const expected = [{ name: 'Sả', percentage: '60', benefit: 'Đuổi muỗi' }, { name: 'Dầu dừa' }];
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: created.id } })).ingredients).toEqual(expected);
+    const row = (await admin.listPendingMerchantProducts(1, 500)).data.find((r) => r.id === created.id)!;
+    expect(JSON.parse(JSON.stringify(row.ingredients))).toEqual(expected);
   });
 });

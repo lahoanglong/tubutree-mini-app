@@ -48,6 +48,49 @@ describe('DTO sản phẩm đối tác (R2-MERCHANT-10)', () => {
   it('bỏ giá khuyến mãi (null) khi sửa vẫn được', async () => {
     await expect(run(UpdateMerchantProductDto, { salePrice: null })).resolves.toMatchObject({ salePrice: null });
   });
+
+  describe('AUTHZ-3: thành phần đúng hình dạng mà miniapp và tab duyệt đọc được', () => {
+    it('mảng {name, percentage?, benefit?}: cắt khoảng trắng, số tỉ lệ đổi sang chuỗi; bỏ trống, null, mảng rỗng đều được', async () => {
+      const dto = await run(CreateMerchantProductDto, {
+        ...OK,
+        ingredients: [{ name: '  Tinh dầu sả ', percentage: 60, benefit: ' Đuổi muỗi ' }, { name: 'Dầu dừa', percentage: '40%' }, { name: 'Hương liệu' }],
+      });
+      expect(JSON.parse(JSON.stringify(dto.ingredients))).toEqual([
+        { name: 'Tinh dầu sả', percentage: '60', benefit: 'Đuổi muỗi' },
+        { name: 'Dầu dừa', percentage: '40%' },
+        { name: 'Hương liệu' },
+      ]);
+      await expect(run(CreateMerchantProductDto, OK)).resolves.toBeDefined();
+      await expect(run(CreateMerchantProductDto, { ...OK, ingredients: null })).resolves.toBeDefined();
+      await expect(run(CreateMerchantProductDto, { ...OK, ingredients: [] })).resolves.toBeDefined();
+    });
+
+    it('chuỗi, object, mảng chuỗi hoặc mục không phải object → 400 tiếng Việt (không lọt xuống cột Json làm vỡ trang)', async () => {
+      for (const bad of ['Sả, chanh', { name: 'Sả' }, ['Sả', 'Chanh'], [1, 2], [null], [['Sả']]]) {
+        expect(await message(CreateMerchantProductDto, { ...OK, ingredients: bad })).toContain('Thành phần phải là danh sách');
+      }
+    });
+
+    it('thiếu tên, tên/tỉ lệ/lợi ích quá dài, trường lạ, tỉ lệ không phải chuỗi/số, quá 30 mục → 400', async () => {
+      const bads: unknown[] = [
+        [{ percentage: '10%' }],
+        [{ name: '   ' }],
+        [{ name: 'x'.repeat(121) }],
+        [{ name: 'Sả', percentage: 'y'.repeat(21) }],
+        [{ name: 'Sả', benefit: 'z'.repeat(301) }],
+        [{ name: 'Sả', extra: 'x' }],
+        [{ name: 'Sả', percentage: { v: 1 } }],
+        [{ name: 'Sả', benefit: ['a'] }],
+        Array.from({ length: 31 }, (_, i) => ({ name: `Thành phần ${i}` })),
+      ];
+      for (const bad of bads) await expect(run(CreateMerchantProductDto, { ...OK, ingredients: bad })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(run(CreateMerchantProductDto, { ...OK, ingredients: Array.from({ length: 30 }, (_, i) => ({ name: `Thành phần ${i}` })) })).resolves.toBeDefined();
+    });
+
+    it('sửa sản phẩm không có đường nào ghi thành phần (trường lạ bị chặn)', async () => {
+      expect(await message(UpdateMerchantProductDto, { ingredients: [{ name: 'Sả' }] })).toContain('Không nhận trường «ingredients»');
+    });
+  });
 });
 
 describe('Link tra cứu vận đơn (R2-MERCHANT-12)', () => {

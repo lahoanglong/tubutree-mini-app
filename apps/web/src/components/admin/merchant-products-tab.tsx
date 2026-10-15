@@ -364,6 +364,27 @@ export interface ReviewConflict {
   message: string;
 }
 
+/**
+ * `Product.ingredients` là cột Json: dòng cũ có thể là chuỗi, mảng chuỗi, mảng {name, percentage} hay object lạ. Luôn trả chuỗi để
+ * render, không bao giờ để object/mảng thành React child làm vỡ cả tab duyệt.
+ */
+export function ingredientsText(value: unknown): string {
+  const part = (v: unknown): string => {
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    if (v === null || v === undefined || typeof v === 'boolean') return '';
+    if (typeof v === 'object' && !Array.isArray(v)) {
+      const { name, percentage } = v as { name?: unknown; percentage?: unknown };
+      if (typeof name === 'string' && name.trim()) {
+        const pct = part(percentage);
+        return pct ? `${name.trim()} (${pct})` : name.trim();
+      }
+    }
+    return JSON.stringify(v).slice(0, 200);
+  };
+  return (Array.isArray(value) ? value : [value]).map(part).filter(Boolean).join(', ');
+}
+
 function reviewConflictMessage(e: ApiError): string {
   const known = e.code ? REVIEW_CONFLICT_COPY[e.code] : undefined;
   if (known) return known;
@@ -386,6 +407,7 @@ export function MerchantProductRow({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const link = p.pancakeLink ?? null;
+  const ingredients = ingredientsText(p.ingredients);
   const takeover = link?.state === 'TAKEOVER';
   const originId = takeover ? (link?.origin?.id ?? null) : null;
   // Tích xác nhận gắn với đúng mã và sản phẩm đang bán đang hiện: danh sách tải lại mà mã hoặc sản phẩm sẽ bị chuyển đã khác thì phải tích lại.
@@ -542,10 +564,10 @@ export function MerchantProductRow({
       {link && <PancakeLinkPanel link={link} storeTitle={p.storefront?.title ?? 'đối tác'} />}
 
       {/* Chi tiết chứng nhận & thành phần xanh */}
-      {(p.ingredients || (p.certifications && p.certifications.length > 0) || (p.ecoBadges && p.ecoBadges.length > 0) || p.description) && (
+      {(ingredients || (p.certifications && p.certifications.length > 0) || (p.ecoBadges && p.ecoBadges.length > 0) || p.description) && (
         <div className="mt-3 border-t border-stone-200 pt-2 text-xs text-stone-600">
-          {p.ingredients && (
-            <p><strong className="text-stone-700">Thành phần:</strong> {p.ingredients}</p>
+          {ingredients && (
+            <p><strong className="text-stone-700">Thành phần:</strong> {ingredients}</p>
           )}
           {p.certifications && p.certifications.length > 0 && (
             <p className="mt-1"><strong className="text-stone-700">Chứng nhận:</strong> {p.certifications.join(', ')}</p>
