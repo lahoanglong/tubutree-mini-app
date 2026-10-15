@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RefillLocationsService } from './refill-locations.service';
 import { startOfVnMonth } from '../../common/vn-time';
 
 /**
@@ -19,14 +20,17 @@ export class RefillService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
+    private readonly locations: RefillLocationsService,
   ) {}
 
-  async returnBottles(userId: string, quantity: number, idempotencyKey?: string) {
+  /** `pickupLocationId`: điểm khách chọn; bỏ trống (bản app cũ) = điểm đầu tiên đang bật, xem RefillLocationsService.resolveForReturn. */
+  async returnBottles(userId: string, quantity: number, idempotencyKey?: string, pickupLocationId?: string) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException('Số vỏ chai không hợp lệ.');
     }
     // Key rỗng/toàn khoảng trắng = không có key: lưu '' sẽ làm lần đổi thứ hai của cùng người đụng unique (userId, key).
     const key = idempotencyKey?.trim().slice(0, 200) || undefined;
+    const requestedLocationId = pickupLocationId?.trim() || undefined;
     const [perBottle, monthlyCap] = await Promise.all([
       this.config.get<number>('refill.seeds_per_bottle', 50),
       this.config.get<number>('refill.monthly_cap_bottles', 20),
@@ -38,8 +42,9 @@ export class RefillService {
           async (tx) => {
             if (key) {
               const existing = await tx.bottleReturn.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey: key } } });
-              if (existing) return this.replayed(tx, existing, quantity);
+              if (existing) return this.replayed(tx, existing, quantity, requestedLocationId);
             }
+            const locationId = await this.locations.resolveForReturn(tx, requestedLocationId);
             const used = await this.usedThisMonthTx(tx, userId);
             const remaining = Math.max(0, monthlyCap - used);
             if (quantity > remaining) {
@@ -48,7 +53,7 @@ export class RefillService {
 
             const seedsAwarded = quantity * perBottle;
             const item = await tx.bottleReturn.create({
-              data: { userId, quantity, seedsAwarded, status: 'PENDING', idempotencyKey: key },
+              data: { userId, quantity, seedsAwarded, status: 'PENDING', idempotencyKey: key, pickupLocationId: locationId },
             });
 
             const totalRecycled = await this.totalRecycledTx(tx, userId);
@@ -78,14 +83,29 @@ export class RefillService {
     }
   }
 
-  /** Cùng Idempotency-Key trả lại đúng yêu cầu đã tạo; khác số vỏ nghĩa là client dùng nhầm key nên báo thay vì trả số cũ. */
+  /**
+   * Cùng Idempotency-Key trả lại đúng yêu cầu đã tạo; khác số vỏ hoặc khác điểm nhận đã nêu rõ nghĩa là client dùng nhầm key
+   * nên báo thay vì trả yêu cầu cũ (khách tưởng đã đổi sang điểm mới mà vỏ vẫn gắn điểm cũ). Không nêu điểm (bản app cũ) thì bỏ qua.
+   */
   private async replayed(
     tx: Prisma.TransactionClient,
-    existing: { id: string; quantity: number; declaredQuantity: number | null; seedsAwarded: number; status: string; userId: string },
+    existing: {
+      id: string;
+      quantity: number;
+      declaredQuantity: number | null;
+      seedsAwarded: number;
+      status: string;
+      userId: string;
+      pickupLocationId: string | null;
+    },
     quantity: number,
+    requestedLocationId: string | undefined,
   ) {
     if ((existing.declaredQuantity ?? existing.quantity) !== quantity) {
       throw new ConflictException('Mã yêu cầu này đã dùng cho một lần đổi vỏ khác số lượng. Vui lòng gửi lại yêu cầu mới.');
+    }
+    if (requestedLocationId && existing.pickupLocationId !== requestedLocationId) {
+      throw new ConflictException('Mã yêu cầu này đã dùng cho một lần đổi vỏ ở điểm nhận khác. Vui lòng gửi lại yêu cầu mới.');
     }
     const [used, monthlyCap, totalRecycled] = await Promise.all([
       this.usedThisMonthTx(tx, existing.userId),
@@ -103,16 +123,23 @@ export class RefillService {
   }
 
   async getSummary(userId: string) {
-    const [perBottle, monthlyCap, monthlyUsed, totalRecycled, recent, pickup] = await Promise.all([
+    const [perBottle, monthlyCap, monthlyUsed, totalRecycled, recent, pickupView] = await Promise.all([
       this.config.get<number>('refill.seeds_per_bottle', 50),
       this.config.get<number>('refill.monthly_cap_bottles', 20),
       this.usedThisMonth(userId),
       this.totalRecycled(userId),
-      this.prisma.bottleReturn.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 10 }),
-      this.pickupPoint(),
+      this.prisma.bottleReturn.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: { pickupLocation: { select: { id: true, name: true } } },
+      }),
+      this.locations.publicView(),
     ]);
     return {
-      pickup,
+      // `pickup` là dạng một điểm của bản app cũ (= điểm đầu tiên đang bật); bản mới đọc `pickupLocations`.
+      pickup: pickupView.pickup,
+      pickupLocations: pickupView.pickupLocations,
       perBottle,
       monthlyCap,
       monthlyUsed,
@@ -126,6 +153,7 @@ export class RefillService {
         createdAt: r.createdAt,
         declaredQuantity: r.declaredQuantity,
         rejectionReason: r.rejectionReason,
+        pickupLocation: r.pickupLocation ?? null,
       })),
     };
   }
@@ -144,6 +172,7 @@ export class RefillService {
             avatarUrl: true,
           },
         },
+        pickupLocation: { select: { id: true, name: true, address: true } },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take,
@@ -218,20 +247,6 @@ export class RefillService {
       .catch(() => undefined);
 
     return { ok: true, status: 'REJECTED' };
-  }
-
-  /** Điểm nhận vỏ: admin điền ở SystemConfig refill.pickup_*; trống/sai kiểu → null để app ẩn dòng đó. */
-  private async pickupPoint(): Promise<{ address: string | null; hours: string | null; phone: string | null }> {
-    const text = async (key: string): Promise<string | null> => {
-      const v = await this.config.get<unknown>(key, '');
-      return typeof v === 'string' && v.trim() ? v.trim() : null;
-    };
-    const [address, hours, phone] = await Promise.all([
-      text('refill.pickup_address'),
-      text('refill.pickup_hours'),
-      text('refill.pickup_phone'),
-    ]);
-    return { address, hours, phone };
   }
 
   private async usedThisMonth(userId: string): Promise<number> {

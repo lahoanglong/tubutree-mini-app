@@ -6,6 +6,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import { RefillService } from '../../src/modules/refill/refill.service';
+import { RefillLocationsService } from '../../src/modules/refill/refill-locations.service';
 import { createUser, summarize, warmPool } from './helpers';
 
 /**
@@ -22,6 +23,7 @@ describe('Duyệt đổi vỏ chai: số vỏ thực nhận và duyệt song son
       imports: [PrismaModule],
       providers: [
         SystemConfigService,
+        RefillLocationsService,
         RefillService,
         { provide: AnalyticsEventsService, useValue: { recordBestEffort: jest.fn() } },
         { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue({ ok: true }) } },

@@ -39,3 +39,9 @@ export function parseVnPhoneStrict(s: string): string | null {
   if (digits.startsWith('84') && digits.length === 11) digits = `0${digits.slice(2)}`;
   return LOCAL_MOBILE.test(digits) ? digits : null;
 }
+
+/**
+ * SĐT hiện cho khách bấm gọi (điểm nhận vỏ): 0 hoặc +84 rồi đúng 9 số, giữ nguyên dạng admin gõ (không chuẩn hoá
+ * sang 0xxxxxxxxx) vì nó được in ra màn hình và đưa vào tel:. Dùng chung cho khoá cũ refill.pickup_phone và bảng điểm nhận.
+ */
+export const PICKUP_PHONE_PATTERN = /^(0|\+84)\d{9}$/;

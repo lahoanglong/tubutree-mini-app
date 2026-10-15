@@ -5,6 +5,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { RefillService } from '../../src/modules/refill/refill.service';
+import { RefillLocationsService } from '../../src/modules/refill/refill-locations.service';
 import { createUser, randCode, warmPool } from './helpers';
 
 /**
@@ -19,7 +20,7 @@ describe('Đổi vỏ chai theo Idempotency-Key (real Postgres)', () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, RefillService, { provide: NotificationsService, useValue: { notify: jest.fn() } }],
+      providers: [SystemConfigService, RefillLocationsService, RefillService, { provide: NotificationsService, useValue: { notify: jest.fn() } }],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
