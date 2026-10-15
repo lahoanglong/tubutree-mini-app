@@ -503,6 +503,52 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       });
     });
 
+    describe('trả MỘT PHẦN: RETURN_REVERSED:<mã> (refType RETURN_REQUEST, refId = yêu cầu) ăn lô ORDER_DELIVERED:<mã>', () => {
+      const partialBack = (id: string, delta: number, createdAt: string, code = 'C1', requestId = 'rr1') =>
+        tx(id, delta, createdAt, null, `RETURN_REVERSED:${code}`, { refType: 'RETURN_REQUEST', refId: requestId });
+
+      it('lô game 30 không hạn, đơn +20 có hạn, trả một phần thu 8 → tới hạn chỉ còn 12 hết hạn (không trừ oan 8 của lô game)', () => {
+        const txns = [tx('g', 30, '2025-01-01', null), delivered('d', 20, '2025-05-01', PAST, 'o1'), partialBack('p', -8, '2025-05-02')];
+        expect(computePointExpiry(txns, NOW, WINDOW).expiredNow).toBe(12);
+        expect(lotRecoverable(txns, orderLotKey('o1'))).toBe(12);
+      });
+
+      it('trả một phần rồi trả nốt (ORDER_REVERSED phần còn lại): lô đơn hết đúng một lần, không đếm hai lần', () => {
+        const r = computePointExpiry(
+          [
+            tx('g', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1'),
+            partialBack('p', -8, '2025-05-02'),
+            reversed('v', -12, '2025-05-03', 'o1'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+      });
+
+      it('hai lần trả một phần của cùng đơn cộng dồn vào lô đơn; mã đơn khác không ăn lô này', () => {
+        const r = computePointExpiry(
+          [
+            tx('g', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1', 'C1'),
+            delivered('e', 10, '2025-05-01', FUTURE, 'o2', 'C2'),
+            partialBack('p1', -5, '2025-05-02', 'C1', 'rr1'),
+            partialBack('p2', -5, '2025-05-03', 'C1', 'rr2'),
+            partialBack('p3', -4, '2025-05-04', 'C2', 'rr3'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(10);
+      });
+
+      it('dòng RETURN_REVERSED không có lô đơn tương ứng (dòng cũ thiếu ORDER_DELIVERED) vẫn FIFO như cũ', () => {
+        const r = computePointExpiry([tx('g', 30, '2025-01-01', PAST), partialBack('p', -8, '2025-05-02', 'C9')], NOW, WINDOW);
+        expect(r.expiredNow).toBe(22);
+      });
+    });
+
     describe('thu hồi thưởng giới thiệu: dòng REVOKE ăn lô thưởng cùng hậu tố reason', () => {
       const REFERRAL = { refType: 'REFERRAL' };
       const grant = (id: string, delta: number, createdAt: string, expiresAt: string | null, refereeId: string) =>
