@@ -250,7 +250,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
       )}
 
       {showsReturns && orderReturns.map((r) => (
-          <ReturnStatus key={r.id} request={r} items={o.items} refund={refundOfReturn(refundsQ.data, r.id)} />
+          <ReturnStatus key={r.id} request={r} items={o.items} refund={refundOfReturn(refundsQ.data, r.id)} placedForCustomer={!!o.placedForCustomer} />
         ))}
       {returnSent && (
         <p role="status" className="mt-3 text-sm font-medium text-success-fg">
@@ -278,10 +278,12 @@ function ReturnStatus({
   request: r,
   items,
   refund,
+  placedForCustomer,
 }: {
   request: ReturnRequestDTO;
   items: OrderDetailDTO['items'];
   refund?: MyRefund;
+  placedForCustomer: boolean;
 }) {
   const view =
     r.status === 'APPROVED'
@@ -297,7 +299,7 @@ function ReturnStatus({
     <div role="status" className="mt-3 text-sm">
       <p className={`flex items-start gap-2 ${view.tone}`}>
         <view.Icon className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-        <span className="min-w-0 break-words">{returnStatusLabel(r, refund)}</span>
+        <span className="min-w-0 break-words">{returnStatusLabel(r, refund, placedForCustomer)}</span>
       </p>
       {lines && <p className="ml-6 text-xs text-stone-600">Trả: {lines}</p>}
       {r.status === 'APPROVED' && !!r.items?.length && (

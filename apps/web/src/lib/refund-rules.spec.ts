@@ -184,6 +184,13 @@ describe('showsPaymentDeadline', () => {
 });
 
 describe('returnStatusLabel / returnLinesText', () => {
+  it('đơn CTV lên hộ: tiền hoàn trả cho khách, không nói vào Ví Tubu của người xem', () => {
+    const ret = { status: 'APPROVED', refundAmount: 89_000, shippingRefund: 15_000, refundMethod: 'WALLET' as const };
+    expect(returnStatusLabel(ret, undefined, true)).toBe('Đổi/trả đã duyệt — Tubu hoàn 104.000đ cho khách của bạn');
+    expect(returnStatusLabel({ status: 'APPROVED', refundAmount: null }, undefined, true)).toBe('Đổi/trả đã duyệt');
+    expect(returnStatusLabel({ status: 'REJECTED', adminNote: 'Quá hạn' }, undefined, true)).toBe('Đổi/trả bị từ chối: Quá hạn');
+  });
+
   it('đã duyệt: nói rõ số tiền và nơi nhận', () => {
     expect(returnStatusLabel({ status: 'APPROVED', refundAmount: 89_000, shippingRefund: 15_000, refundMethod: 'WALLET' })).toBe(
       'Đổi/trả đã duyệt — đã hoàn 104.000đ vào Ví Tubu',

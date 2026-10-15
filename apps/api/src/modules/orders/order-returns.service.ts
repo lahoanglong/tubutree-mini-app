@@ -549,7 +549,7 @@ export class OrderReturnsService {
     ) {
       throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
     }
-    assertNotOwnReturn(actor.userId, req);
+    if (actor.kind === 'ADMIN') assertNotOwnReturn(actor.userId, req);
     const restocked = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.returnRequest.updateMany({
         where: { id, status: 'APPROVED', receivedAt: null },

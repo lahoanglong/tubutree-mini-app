@@ -956,7 +956,11 @@ export class AdminService {
         alreadyPaid: false,
         latePayment: true,
         message: created
-          ? `Đơn ${order.code} đã huỷ/trả — đã ghi khoản hoàn ${formatVnd(received)} tiền về muộn, xem mục Hoàn tiền khách (khách chọn nhận về Ví hay tài khoản ngân hàng).`
+          ? `Đơn ${order.code} đã huỷ/trả — đã ghi khoản hoàn ${formatVnd(received)} tiền về muộn, xem mục Hoàn tiền khách (${
+              current.placedForCustomer
+                ? 'đơn CTV lên hộ: Tubu chuyển khoản tay cho khách cuối theo SĐT'
+                : 'khách chọn nhận về Ví hay tài khoản ngân hàng'
+            }).`
           : `Khoản tiền về muộn của đơn ${order.code} đã được ghi trước đó (tự động từ Pancake hoặc admin khác) — không tạo thêm khoản hoàn, xem mục Hoàn tiền khách.`,
         order: await this.prisma.order.findUniqueOrThrow({
           where: { id: order.id },

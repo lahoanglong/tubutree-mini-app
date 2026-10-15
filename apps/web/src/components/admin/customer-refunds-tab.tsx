@@ -457,8 +457,11 @@ export function CustomerRefundRow({
         <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
           <p className="text-xs text-warning-fg">
             Pancake báo khách đã trả nhiều hơn tổng đơn. Khách chưa thấy khoản này. Đối chiếu sao kê: đúng là khách chuyển dư thì
-            xác nhận số dư thực nhận (khách được báo để chọn nhận về Ví hay ngân hàng); cùng một lần chuyển hoặc nhân viên sửa đơn
-            trên Pancake thì bấm &quot;Không phải tiền dư&quot;.
+            xác nhận số dư thực nhận (
+            {r.userId === null
+              ? 'đơn CTV lên hộ: khách cuối không được báo, Tubu chuyển khoản tay theo SĐT'
+              : 'khách được báo để chọn nhận về Ví hay ngân hàng'}
+            ); cùng một lần chuyển hoặc nhân viên sửa đơn trên Pancake thì bấm &quot;Không phải tiền dư&quot;.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex w-full items-center gap-1.5 text-xs text-stone-700 sm:w-auto">

@@ -232,7 +232,9 @@ export function ReturnRequestForm({
           />
         ) : (
           <p className="text-xs text-stone-600">
-            Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.
+            {o.placedForCustomer
+              ? 'Tiền hoàn của đơn này trả cho khách của bạn (vào Ví Tubu của khách, hoặc Tubu chuyển khoản nếu khách chưa có tài khoản), không vào ví của bạn.'
+              : 'Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.'}
           </p>
         ))}
       {estimated && (

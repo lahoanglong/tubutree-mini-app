@@ -437,6 +437,14 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     expect(h.restockReturnedItems).not.toHaveBeenCalled();
   });
 
+  it('chủ gian hàng tự mua hàng của gian hàng mình vẫn xác nhận được nhận hàng trả (tiền đã do người khác duyệt, kho là của họ)', async () => {
+    const own = { ...merchantOrder, fulfillerStorefront: { ...(merchantOrder.fulfillerStorefront as object), ownerUserId: 'u1' } };
+    const h = receiveHarness(own);
+    await h.svc.markReceivedByMerchant('u1', 'r1');
+    expect(h.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ receivedBy: 'u1' }) }));
+    expect(h.restockReturnedItems).toHaveBeenCalledTimes(1);
+  });
+
   it('chủ gian hàng xác nhận nhận hàng → lật receivedBy = chủ gian hàng và cộng kho sản phẩm của gian hàng', async () => {
     const h = receiveHarness(merchantOrder);
     await h.svc.markReceivedByMerchant('shop-owner', 'r1');

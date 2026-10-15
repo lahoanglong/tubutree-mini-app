@@ -27,7 +27,6 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
   let orders: OrdersService;
   let status: OrderStatusService;
   let cron: PendingPaymentExpiryCron;
-  let adminId: string;
   const precheckCancel = jest.fn();
   const notify = jest.fn().mockResolvedValue(undefined);
 
@@ -61,7 +60,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
     orders = moduleRef.get(OrdersService);
     status = moduleRef.get(OrderStatusService);
     cron = moduleRef.get(PendingPaymentExpiryCron);
-    adminId = (await createUser(prisma, { role: 'ADMIN' })).id;
+    await createUser(prisma, { role: 'ADMIN' });
   });
 
   afterAll(async () => {
@@ -90,9 +89,15 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
 
   const read = (id: string) => prisma.order.findUniqueOrThrow({ where: { id } });
   const adminResolves = (id: string) => prisma.order.update({ where: { id }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
-  /** Báo động "Cần xử lý Pancake" in-app tới admin của spec này (mỗi admin một tin; DB có thể có admin của spec khác). */
-  const opsAlerts = (code: string) =>
-    notify.mock.calls.filter((c) => c[0] === adminId && c[1] === 'OPS_PANCAKE_ALERT' && c[2]?.order_code === code).length;
+  /**
+   * Số lượt báo động "Cần xử lý Pancake" in-app cho đơn này: mỗi lượt gửi mỗi admin một tin, và người nhận bị chặn ở 20 admin
+   * đầu nên admin của spec này không chắc nằm trong đó khi DB dùng chung đã có nhiều admin của spec khác.
+   */
+  const opsAlerts = (code: string) => {
+    const calls = notify.mock.calls.filter((c) => c[1] === 'OPS_PANCAKE_ALERT' && c[2]?.order_code === code);
+    const recipients = new Set(calls.map((c) => c[0]));
+    return recipients.size === 0 ? 0 : calls.length / recipients.size;
+  };
   /** Số lần hỏi Pancake cho đúng đơn này: lượt cron còn quét cả đơn chờ quá hạn mà spec khác để lại trong DB. */
   const prechecks = (id: string) => precheckCancel.mock.calls.filter((c) => c[0]?.id === id).length;
 
