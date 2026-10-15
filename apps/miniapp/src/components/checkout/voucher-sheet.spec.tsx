@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
@@ -19,11 +19,14 @@ const COUPONS = [
   { code: 'FREESHIP', type: 'FREESHIP', value: 20_000, minOrder: 500_000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z' },
 ];
 
-function renderSheet(currentCode?: string, extra: { onClose?: () => void; onCouponApplied?: () => void } = {}) {
+function renderSheet(
+  currentCode?: string,
+  extra: { onClose?: () => void; onCouponApplied?: () => void; subtotal?: number; shippingFee?: number } = {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={100_000} />
+      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={extra.subtotal ?? 100_000} shippingFee={extra.shippingFee} />
     </QueryClientProvider>,
   );
 }
@@ -221,5 +224,42 @@ describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMI
     renderWith(['p-chia']);
     expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
     expect(screen.getByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
+  });
+});
+
+describe('VoucherSheet: số tiền giảm cho đơn này và mã freeship (R6-BUYER-12)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('mã phần trăm dùng được: ghi số tiền giảm theo tạm tính, tôn trọng trần', async () => {
+    mocks.getCoupons.mockResolvedValue(COUPONS.slice(0, 1));
+    renderSheet(undefined, { subtotal: 438_000 });
+    expect(await screen.findByText('Giảm 43.800đ cho đơn này')).toBeInTheDocument();
+  });
+
+  it('vượt trần thì ghi đúng trần; mã chưa đủ điều kiện không ghi số tiền giảm', async () => {
+    mocks.getCoupons.mockResolvedValue(COUPONS);
+    renderSheet(undefined, { subtotal: 900_000 });
+    expect(await screen.findByText('Giảm 50.000đ cho đơn này')).toBeInTheDocument();
+    cleanup();
+    renderSheet(undefined, { subtotal: 100_000 });
+    await screen.findByText('Cần đơn tối thiểu 500.000đ');
+    expect(screen.getByText('Giảm 10.000đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getAllByText(/cho đơn này/)).toHaveLength(1);
+  });
+
+  it('phí ship đã 0: mã freeship bị làm mờ và khoá, ghi lý do', async () => {
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[1], minOrder: null }]);
+    renderSheet(undefined, { shippingFee: 0 });
+    expect(await screen.findByText('Đơn này đã miễn phí ship')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Không cần dùng' })).toBeDisabled();
+  });
+
+  it('phí ship còn hoặc chưa biết: mã freeship dùng bình thường', async () => {
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[1], minOrder: null }]);
+    renderSheet(undefined, { shippingFee: 30_000 });
+    expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
+    cleanup();
+    renderSheet();
+    expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
   });
 });

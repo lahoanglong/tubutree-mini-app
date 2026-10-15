@@ -14,12 +14,15 @@ import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { autoCouponName } from '../../utils/coupon-name';
+import { couponDiscountFor } from '../../utils/coupon-discount';
 
 export interface VoucherSheetProps {
   visible: boolean;
   onClose: () => void;
   currentCode?: string | null;
   subtotal: number;
+  /** Phí ship hiện tại của đơn (chỉ thanh toán biết); bằng 0 thì mã freeship bị làm mờ vì không giảm thêm được gì. */
+  shippingFee?: number;
   /** Sản phẩm của các dòng đang mua — mã chỉ áp cho sản phẩm khác thì báo "Chỉ áp cho ..." và khoá nút dùng. */
   productIds?: string[];
   onCouponApplied?: () => void;
@@ -30,6 +33,7 @@ export function VoucherSheet({
   onClose,
   currentCode,
   subtotal,
+  shippingFee,
   productIds,
   onCouponApplied,
 }: VoucherSheetProps) {
@@ -162,7 +166,9 @@ export function VoucherSheet({
                 const scope = coupon.products?.length ? coupon.products : null;
                 const wrongProducts = !!scope && !!productIds && !scope.some((x) => productIds.includes(x.id));
                 const belowMin = coupon.minOrder != null && subtotal < coupon.minOrder;
-                const notEligible = wrongProducts || belowMin;
+                const shipAlreadyFree = coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
+                const notEligible = wrongProducts || belowMin || shipAlreadyFree;
+                const saving = notEligible ? 0 : couponDiscountFor(coupon, subtotal);
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
@@ -209,6 +215,16 @@ export function VoucherSheet({
                       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                         {formatCouponDesc(coupon)}
                       </Text>
+                      {saving > 0 && (
+                        <Text variant="caption" tone="success" as="div" style={{ marginTop: 2, fontWeight: 600 }}>
+                          {`Giảm ${formatVnd(saving)} cho đơn này`}
+                        </Text>
+                      )}
+                      {shipAlreadyFree && (
+                        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+                          Đơn này đã miễn phí ship
+                        </Text>
+                      )}
                       {scope && (
                         <Text variant="caption" tone={wrongProducts ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
                           {wrongProducts && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
@@ -246,7 +262,7 @@ export function VoucherSheet({
                           onPress={() => applyMut.mutate(coupon.code)}
                           style={{ minWidth: 0 }}
                         >
-                          {wrongProducts ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : 'Dùng mã'}
+                          {wrongProducts ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : shipAlreadyFree ? 'Không cần dùng' : 'Dùng mã'}
                         </Button>
                       )}
                     </div>
