@@ -116,6 +116,31 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
     expect(setEnv.indexOf('exit 1', check)).toBeLessThan(setEnv.indexOf('set_if OPS_ALERT_EMAIL_TO'));
   });
 
+  it('OPS_ALERT_ENV_LABEL đi bằng biến repo (vars.*, không phải secret), qua SSH, set-env ghi được, audit in SET/EMPTY', () => {
+    expect(wf).toMatch(/^\s+OPS_ALERT_ENV_LABEL: \$\{\{ vars\.OPS_ALERT_ENV_LABEL \|\| '' \}\}$/m);
+    expect(wf).not.toContain('secrets.OPS_ALERT_ENV_LABEL');
+    expect((/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',')).toContain('OPS_ALERT_ENV_LABEL');
+    expect(setEnv).toContain('set_if OPS_ALERT_ENV_LABEL "$OPS_ALERT_ENV_LABEL"');
+    expect(audit).toContain('envstate OPS_ALERT_ENV_LABEL');
+    expect(setEnv).toContain('envstate OPS_ALERT_ENV_LABEL');
+  });
+
+  it('set-env kiểm nhãn môi trường (≤ 24 ký tự, một dòng, không [ ]) TRƯỚC khi ghi bất kỳ khoá email nào — khớp luật boot của API', () => {
+    const label = setEnv.indexOf('case "${OPS_ALERT_ENV_LABEL:-}" in');
+    expect(label).toBeGreaterThan(-1);
+    expect(label).toBeLessThan(setEnv.indexOf('set_if OPS_ALERT_EMAIL_TO'));
+    expect(setEnv).toContain('-gt 24');
+    const check = setEnv.slice(label, setEnv.indexOf('E_TO=$(effective'));
+    expect(check).toContain('*[][]*');
+    expect(check).toContain("$'\\n'");
+    expect(check).toContain('exit 1');
+  });
+
+  it('nhãn môi trường một mình không phải "đã đặt cấu hình email": không tính vào kiểm cấu hình dở dang', () => {
+    const emailBlock = setEnv.slice(setEnv.indexOf('E_TO=$(effective'), setEnv.indexOf('=== Trạng thái sau khi set'));
+    expect(emailBlock).not.toContain('OPS_ALERT_ENV_LABEL');
+  });
+
   it('không bao giờ in giá trị SMTP_PASS ra log', () => {
     const lines = wf.split('\n').filter((l) => !l.trim().startsWith('#'));
     expect(lines.filter((l) => /\becho\b.*\$\{?SMTP_PASS|\bprintf\b.*\$\{?SMTP_PASS|\bset -x\b/.test(l))).toEqual([]);
@@ -136,6 +161,12 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
     for (const k of [...EMAIL_KEYS, 'OPS_ALERT_ENV_LABEL']) expect({ k, documented: section.includes(k) }).toEqual({ k, documented: true });
     expect(section).toContain('alert-email/test');
     expect(section).toContain('Sức khoẻ hệ thống');
+  });
+
+  it('GO-LIVE-KEYS.md dặn đặt nhãn môi trường bằng biến (gh variable set), không phải secret', () => {
+    const doc = read('docs/GO-LIVE-KEYS.md');
+    expect(doc).toContain('gh variable set OPS_ALERT_ENV_LABEL');
+    expect(doc).not.toContain('gh secret set OPS_ALERT_ENV_LABEL');
   });
 });
 

@@ -2,7 +2,8 @@ name: VM Ops (maintenance)
 
 # Workflow bảo trì máy chủ prod — dispatch TAY (không tự chạy theo push).
 # Dùng đúng 3 secret như deploy.yml: VM_HOST / VM_USER / VM_SSH_KEY, cùng 2 biến repo DEPLOY_DIR /
-# COMPOSE_FILE (mặc định VPS Vietnix: /opt/tubutree + docker-compose.vietnix.yml).
+# COMPOSE_FILE (mặc định VPS Vietnix: /opt/tubutree + docker-compose.vietnix.yml). Giá trị KHÔNG bí mật đi bằng biến
+# (vars.*, `gh variable set`) chứ không bằng secret: BACKUP_RCLONE_REMOTE cho crontab, OPS_ALERT_ENV_LABEL cho set-env.
 # Mỗi lần chọn 1 action. KHÔNG bao giờ in giá trị secret ra log (chỉ SET/EMPTY).
 #
 #   gh workflow run ops.yml -f action=audit
@@ -64,6 +65,8 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          # Nhãn môi trường trong tiêu đề email ("staging"): giá trị thường, đặt bằng biến repo (vars) chứ không phải secret.
+          OPS_ALERT_ENV_LABEL: ${{ vars.OPS_ALERT_ENV_LABEL || '' }}
           # action=crontab: URL dead-man switch (healthchecks.io...) báo khi backup lỗi/không chạy.
           BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
           # Chỉ dùng cho action=grant-admin — SĐT tài khoản cần cấp quyền ADMIN. GitHub tự mask
@@ -74,7 +77,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,BACKUP_HEALTHCHECK_URL
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -149,6 +152,7 @@ jobs:
                 envstate SMTP_USER
                 envstate SMTP_PASS
                 envstate SMTP_FROM
+                envstate OPS_ALERT_ENV_LABEL
                 echo "=== API health (db + redis) ==="
                 $COMPOSE exec -T api node -e 'fetch("http://localhost:3001/api/health").then(async r=>console.log(r.status, await r.text())).catch(e=>console.log("ERR", e.message))' || true
                 echo "=== Redis: policy + bộ nhớ ==="
@@ -245,6 +249,15 @@ jobs:
                   *) echo "  OPS_ALERT_WEBHOOK_URL: secret không bắt đầu bằng https:// (hoặc http://) — KHÔNG ghi, sửa secret rồi chạy lại"; exit 1;;
                 esac
                 echo "=== Báo động vận hành qua email (SMTP) ==="
+                # Nhãn môi trường (biến repo OPS_ALERT_ENV_LABEL, không phải secret). API không khởi động khi nhãn quá 24 ký tự,
+                # nhiều dòng hoặc có [ ] (nằm trong tiêu đề email) — kiểm trước khi ghi, và trước mọi khoá SMTP.
+                case "${OPS_ALERT_ENV_LABEL:-}" in
+                  "") echo "  OPS_ALERT_ENV_LABEL: biến repo rỗng — giữ nguyên (tiêu đề email dùng NODE_ENV)";;
+                  *[][]*|*$'\n'*|*$'\r'*) echo "  OPS_ALERT_ENV_LABEL: có xuống dòng hoặc [ ] — KHÔNG ghi, sửa biến repo rồi chạy lại"; exit 1;;
+                  *)
+                    if [ "${#OPS_ALERT_ENV_LABEL}" -gt 24 ]; then echo "  OPS_ALERT_ENV_LABEL: quá 24 ký tự — KHÔNG ghi, sửa biến repo rồi chạy lại"; exit 1; fi
+                    set_if OPS_ALERT_ENV_LABEL "$OPS_ALERT_ENV_LABEL";;
+                esac
                 # API từ chối khởi động khi cấu hình email dở dang. Gộp secret mới với giá trị đã có trong .env; còn thiếu thì
                 # KHÔNG ghi khoá nào (không để lại cấu hình nửa vời làm deploy sau bị chặn).
                 effective() { if [ -n "${2:-}" ]; then printf '%s' "$2"; else grep -E "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true; fi; }
@@ -291,6 +304,7 @@ jobs:
                 envstate SMTP_USER
                 envstate SMTP_PASS
                 envstate SMTP_FROM
+                envstate OPS_ALERT_ENV_LABEL
                 envstate DEEPSEEK_API_KEY
                 envstate GEMINI_API_KEY
                 envstate GEMINI_BASE_URL

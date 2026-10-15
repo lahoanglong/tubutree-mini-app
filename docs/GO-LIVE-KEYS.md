@@ -288,7 +288,7 @@ sau gửi lại riêng email; kênh đã gửi được không bị gửi lại)
 | `SMTP_SECURE` | `true` = TLS ngay từ đầu (thường cổng 465); `false`/trống = STARTTLS (cổng 587). Có tài khoản mà không dùng TLS ngay từ đầu thì bắt buộc STARTTLS, không gửi mật khẩu dạng thô |
 | `SMTP_USER`, `SMTP_PASS` | Tài khoản đăng nhập SMTP, đi **cặp** (cả hai hoặc không cái nào). Mật khẩu nên là mật khẩu ứng dụng, không chứa `$` hay dấu nháy |
 | `SMTP_FROM` | Địa chỉ gửi: `alerts@tubutree.com` hoặc `Tubu Tree <alerts@tubutree.com>`. Để trống thì dùng `SMTP_USER` nếu nó là địa chỉ email |
-| `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod |
+| `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod. Tối đa 24 ký tự, một dòng, không chứa `[` `]`. **Không bí mật**: đặt bằng biến GitHub (`gh variable set`), không dùng `gh secret set` |
 
 Bỏ trống **cả bảy** biến email = tắt kênh, app chạy như cũ. Đã đặt một biến thì phải đủ (`OPS_ALERT_EMAIL_TO`,
 `SMTP_HOST`, và `SMTP_FROM` hoặc `SMTP_USER` là địa chỉ email) và đúng định dạng — dở dang thì API không khởi động và
@@ -307,8 +307,9 @@ gh secret set SMTP_HOST --body "smtp.example.com"
 gh secret set SMTP_USER --body "alerts@tubutree.com"
 gh secret set SMTP_PASS --body "<mat_khau_ung_dung>"      # KHÔNG commit, không nhập vào tab Cấu hình admin
 gh secret set SMTP_FROM --body "Tubu Tree <alerts@tubutree.com>"
+gh variable set OPS_ALERT_ENV_LABEL --body "staging"      # tuỳ chọn, biến (vars) chứ không phải secret; prod để trống
 gh workflow run ops.yml -f action=set-env
-gh workflow run ops.yml -f action=audit   # in SET/EMPTY từng khoá email (SMTP_PORT, SMTP_SECURE trống là bình thường)
+gh workflow run ops.yml -f action=audit   # in SET/EMPTY từng khoá email (SMTP_PORT, SMTP_SECURE, OPS_ALERT_ENV_LABEL trống là bình thường)
 ```
 
 **Gửi thử** (không đụng trí nhớ chống báo lặp, không làm mất hay thêm báo động thật), bằng token đăng nhập của admin:
