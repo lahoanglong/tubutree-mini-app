@@ -354,7 +354,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
         p.isEdit ? p.editVersion : undefined,
         p.isEdit
           ? undefined
-          : { pancakeCode: p.pancakeLinkCode ?? null, takeoverProductId: approve && confirmTakeover ? originId : undefined },
+          : { pancakeCode: p.pancakeLinkCode ?? '', takeoverProductId: approve && confirmTakeover ? originId : undefined },
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });

@@ -82,7 +82,47 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
     expect(call?.url).toContain('/admin/merchant-products/p1/review');
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, expectedPancakeCode: null }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, expectedPancakeCode: '' }));
+  });
+
+  it('dòng không có mã Pancake: Duyệt luôn gửi expectedPancakeCode chuỗi rỗng (không bỏ trống, không null) để API không duyệt mã đối tác thêm sau đó', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [product({ pancakeLinkCode: null })], meta: { page: 1, limit: 100, total: 1 } } },
+      '/review': { body: { id: 'p1', approvalStatus: 'APPROVED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    const body = JSON.parse(String(api.calls.find((c) => c.url.includes('/review'))?.init?.body));
+    expect(body).toHaveProperty('expectedPancakeCode', '');
+    expect(body).not.toHaveProperty('expectedTakeoverProductId');
+  });
+
+  it('dòng không có mã mà đối tác vừa thêm mã (API 409 PANCAKE_CODE_CHANGED) → danh sách tải lại hiện mã mới, không duyệt', async () => {
+    let listCalls = 0;
+    const withCode = { data: [product({ pancakeLinkCode: 'seed-NEW-1' })], meta: { page: 1, limit: 100, total: 1 } };
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({
+        body: listCalls++ === 0 ? { data: [product({ pancakeLinkCode: null })], meta: { page: 1, limit: 100, total: 1 } } : withCode,
+      }),
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': {
+        status: 409,
+        body: { statusCode: 409, code: 'PANCAKE_CODE_CHANGED', message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-NEW-1, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.' },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đối tác vừa đổi mã Pancake');
+    expect(text).toContain('mã Pancake seed-NEW-1');
   });
 
   it('còn trang chưa tải → hiện "Tải thêm", bấm gọi tiếp trang 2', async () => {
@@ -156,7 +196,7 @@ describe('MerchantProductsTab — DS v2', () => {
     click(confirmBtn);
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận', expectedPancakeCode: null }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận', expectedPancakeCode: '' }));
   });
 });
 
@@ -335,6 +375,28 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     await flush();
     await flush();
     expect(listCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  it('API trả 409 PANCAKE_TAKEOVER_CHANGED (biến thể đã sang sản phẩm đang bán khác) → danh sách tự tải lại, bỏ tích xác nhận', async () => {
+    let listCalls = 0;
+    const moved = pending(preview({ origin: { ...preview().origin!, id: 'p-other-pepper', name: 'Tiêu sọ Phú Quốc' } }));
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: listCalls++ === 0 ? pending(preview()) : moved }),
+      '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
+      '/review': { status: 409, body: { statusCode: 409, code: 'PANCAKE_TAKEOVER_CHANGED', message: 'Mã seed-BHN-PP-200 giờ thuộc sản phẩm đang bán "Tiêu sọ Phú Quốc".' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(container.querySelector('input[type="checkbox"]'));
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    expect(container.textContent ?? '').toContain('Tiêu sọ Phú Quốc');
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(false);
+    expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('mã không liên kết được → nêu lý do, khoá Duyệt (chỉ còn Từ chối)', async () => {
