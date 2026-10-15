@@ -7,6 +7,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import {
   countReferralSuccesses,
   findReferralRewardedOrders,
+  fullyReturnedOrderIds,
   hasReferralEntry,
   LEGACY_REFERRAL_CASHBACK_PREFIX,
   legacyXuToPoints,
@@ -208,7 +209,7 @@ export class RewardPointsService {
       // ⇒ đó là cùng một người được mời đã được thưởng; khác người mời thì chỉ bỏ các đơn đó ra.
       const rewardedOrders = await findReferralRewardedOrders(tx, refereeId);
       if (rewardedOrders.some((r) => r.referrerId === referrerId)) return false;
-      const [first, second] = await tx.order.findMany({
+      const candidates = await tx.order.findMany({
         where: {
           id: { notIn: rewardedOrders.map((r) => r.orderId) },
           userId: refereeId,
@@ -218,9 +219,11 @@ export class RewardPointsService {
           total: { gte: Math.max(Number(minOrder) || 0, 0) },
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: 2,
         select: { id: true, createdAt: true },
       });
+      // Đơn đã trả hết phần có tiền (chỉ còn dòng quà 0đ nên vẫn DELIVERED) không tính, như đơn đã RETURNED.
+      const returnedAll = await fullyReturnedOrderIds(tx, candidates.map((o) => o.id));
+      const [first, second] = candidates.filter((o) => !returnedAll.has(o.id));
       if (!first || !second) return false;
       if (second.createdAt.getTime() - first.createdAt.getTime() > windowDays * 864e5) return false;
 

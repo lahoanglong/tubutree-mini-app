@@ -5,7 +5,9 @@ import { partialReturnTotals } from '../orders/return-ledger';
 /**
  * Chương trình giới thiệu duy nhất (Q-05): người mời (users.referredById của người được mời) nhận
  * referral.referrer_reward_points Điểm Xanh khi người được mời có đơn THỨ 2 giao thành công trong
- * referral.window_days ngày kể từ đơn đầu; thu hồi nếu một trong hai đơn đó bị trả.
+ * referral.window_days ngày kể từ đơn đầu; thu hồi nếu một trong hai đơn đó bị trả. Đơn đã trả hết phần có tiền qua các
+ * lần trả một phần đã duyệt (còn DELIVERED chỉ vì dòng quà 0đ) không được chọn vào cặp, như đơn đã RETURNED
+ * (fullyReturnedOrderIds); đơn mới trả một phần thì vẫn được chọn và bị thu theo tỷ lệ.
  *
  * Dòng thưởng: refType REFERRAL, reason REFERRAL_ORDER2:<refereeId> (partial unique index theo reason ở
  * cả points_transactions_referral_unique lẫn coin_transactions_referral_unique cũ ⇒ mỗi người được mời
@@ -392,6 +394,34 @@ export async function revokeReferralRewardPartially(
     }
   }
   return anyRevoked ? total : null;
+}
+
+/**
+ * Trong các đơn ứng viên của cặp thưởng, các đơn đã trả hết phần có tiền qua các yêu cầu trả một phần ĐÃ DUYỆT (tiền hàng đã
+ * trả luỹ kế >= tiền hàng của đơn, cùng returnedGoods như revokeReferralRewardForPriorReturns). Đơn như vậy còn DELIVERED chỉ vì
+ * dòng quà 0đ chưa trả, nên bị loại khỏi cặp như đơn đã RETURNED. Gọi sau lockReferee: tx duyệt trả cũng lấy khoá đó trước khi
+ * commit nên yêu cầu vừa duyệt không lọt. Hai truy vấn gộp cho mọi đơn ứng viên.
+ */
+export async function fullyReturnedOrderIds(tx: Db, orderIds: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (orderIds.length === 0) return out;
+  const requests = await tx.returnRequest.findMany({
+    where: { orderId: { in: orderIds }, status: 'APPROVED', fullReturn: false },
+    select: { orderId: true, items: { select: { orderItemId: true, quantity: true } } },
+  });
+  if (requests.length === 0) return out;
+  const qtyByOrder = new Map<string, Map<string, number>>();
+  for (const r of requests) {
+    const qty = qtyByOrder.get(r.orderId) ?? new Map<string, number>();
+    for (const it of r.items) qty.set(it.orderItemId, (qty.get(it.orderItemId) ?? 0) + it.quantity);
+    qtyByOrder.set(r.orderId, qty);
+  }
+  const orders = await tx.order.findMany({ where: { id: { in: [...qtyByOrder.keys()] } }, include: { items: true } });
+  for (const order of orders) {
+    const goods = returnedGoods(order, qtyByOrder.get(order.id) ?? new Map());
+    if (goods.goods > 0 && goods.returned >= goods.goods) out.add(order.id);
+  }
+  return out;
 }
 
 /**

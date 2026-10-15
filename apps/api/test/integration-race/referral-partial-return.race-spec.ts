@@ -573,6 +573,85 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
   });
 
+  /** Đơn COD đã giao: 3 × 50.000 có tiền + 1 quà 0đ. Trả hết dòng có tiền thì đơn vẫn DELIVERED (còn dòng quà). */
+  async function giftOrder(userId: string, createdAt: Date) {
+    const v = await variation();
+    const gift = await variation();
+    const order = await createOrder(prisma, {
+      userId,
+      status: 'DELIVERED',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      subtotal: 3 * UNIT,
+      shippingFee: 0,
+      total: 3 * UNIT,
+      createdAt,
+      deliveredAt: new Date(),
+      items: {
+        create: [
+          { variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: UNIT, quantity: 3, total: 3 * UNIT, paidTotal: 3 * UNIT },
+          { variationId: gift.id, productName: 'Quà tặng', variationName: 'Túi', unitPrice: 0, quantity: 1, total: 0, paidTotal: 0 },
+        ],
+      },
+    });
+    const items = await prisma.orderItem.findMany({ where: { orderId: order.id } });
+    return { ...order, paid: items.find((i) => i.total > 0)!, gift: items.find((i) => i.total === 0)! };
+  }
+
+  async function returnLines(refereeId: string, code: string, items: { orderItemId: string; quantity: number }[]) {
+    const req = await returns.request(refereeId, code, { reasonCode: 'OTHER', reason: 'Không còn nhu cầu dùng nữa', items });
+    await returns.review(admin.id, req.id, { approve: true });
+  }
+
+  /** A trả theo `returnA`, rồi B giao (chưa đủ cặp nếu A bị loại), rồi C giao → cấp cho cặp (B, C). */
+  async function excludedFirstOrder(returnA: (refereeId: string, a: Awaited<ReturnType<typeof giftOrder>>) => Promise<void>) {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const a = await giftOrder(referee.id, new Date(Date.now() - 20 * 864e5));
+    await returnA(referee.id, a);
+    const b = await deliveredOrder(referee.id, 3, new Date(Date.now() - 10 * 864e5));
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(false);
+    const c = await deliveredOrder(referee.id, 3, new Date(Date.now() - 5 * 864e5));
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(true);
+    const grant = await prisma.pointsTransaction.findFirstOrThrow({ where: { userId: referrer.id, reason: `REFERRAL_ORDER2:${referee.id}` } });
+    expect(grant.refId).toBe(`${b.id}:${c.id}`);
+    const r = await revocations(referrer.id);
+    expect(r.rows).toHaveLength(0);
+    expect(await balanceOf(referrer.id)).toBe(REWARD);
+    expect(await successes(referrer.id)).toBe(1);
+    return a;
+  }
+
+  it('(p) đơn đầu đã trả hết dòng có tiền (còn quà 0đ, vẫn DELIVERED) bị loại khỏi cặp: B một mình chưa cấp, C giao → cặp (B, C), giữ đủ thưởng', async () => {
+    const a = await excludedFirstOrder((refereeId, o) => returnLines(refereeId, o.code, [{ orderItemId: o.paid.id, quantity: 3 }]));
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('DELIVERED');
+  });
+
+  it('(p2) cùng kịch bản nhưng đơn đầu bị trả CẢ đơn (RETURNED) → kết quả giống hệt (p)', async () => {
+    const a = await excludedFirstOrder((refereeId, o) =>
+      returnLines(refereeId, o.code, [
+        { orderItemId: o.paid.id, quantity: 3 },
+        { orderItemId: o.gift.id, quantity: 1 },
+      ]),
+    );
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('RETURNED');
+  });
+
+  it('(p3) đơn đầu chỉ trả 2/3 phần có tiền (chưa hết) → vẫn được chọn vào cặp, lúc cấp thu theo tỷ lệ 66', async () => {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const a = await giftOrder(referee.id, new Date(Date.now() - 20 * 864e5));
+    await returnLines(referee.id, a.code, [{ orderItemId: a.paid.id, quantity: 2 }]);
+    const b = await deliveredOrder(referee.id, 3, new Date(Date.now() - 10 * 864e5));
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(true);
+    const grant = await prisma.pointsTransaction.findFirstOrThrow({ where: { userId: referrer.id, reason: `REFERRAL_ORDER2:${referee.id}` } });
+    expect(grant.refId).toBe(`${a.id}:${b.id}`);
+    const r = await revocations(referrer.id);
+    expect(r.partial).toEqual([expect.objectContaining({ refId: a.id, delta: -66 })]);
+    expect(r.full).toHaveLength(0);
+    expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+  });
+
   it('(o) cấp thưởng song song cho hai người được mời của cùng người mời, một người đã trả một phần trước → không deadlock, cả hai được cấp', async () => {
     for (let round = 0; round < 3; round++) {
       const referrer = await createUser(prisma, { role: 'CUSTOMER' });
