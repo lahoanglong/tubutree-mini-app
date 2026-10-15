@@ -625,6 +625,7 @@ export default function LoyaltyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
                         gap: 8,
                         paddingTop: 8,
                         borderTop: '1px dashed var(--color-border-subtle)',
@@ -634,6 +635,7 @@ export default function LoyaltyPage() {
                         HSD 30 ngày sau đổi
                       </Text>
                       <Button
+                        style={{ flexShrink: 0, marginLeft: 'auto' }}
                         disabled={!r.canRedeem || redeemMut.isPending}
                         onPress={() => {
                           haptic('light');
