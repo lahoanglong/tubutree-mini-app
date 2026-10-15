@@ -22,7 +22,7 @@ export interface StorefrontCollection {
 export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'items'> { sortOrder: number; items: StorefrontItemEdit[]; }
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
-  type: 'CTV' | 'BRAND' | 'MERCHANT'; title: string; headerNote: string | null;
+  type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean; title: string; headerNote: string | null;
   ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;

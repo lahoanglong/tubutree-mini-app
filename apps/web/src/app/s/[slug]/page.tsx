@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { getStorefront, formatSold } from '@/lib/api';
 import { StorefrontTracker } from '@/components/storefront-tracker';
+import { isPartnerStore } from '@/lib/partner-store';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
 export const revalidate = 300;
@@ -62,7 +63,7 @@ export default async function StorefrontPage({
   const themeColor = sf.themeColor || 'var(--color-action-primary-bg)';
   // Chỉ gian hàng tự giao mới gửi hàng từ kho riêng; gian hàng CTV/nhãn hàng bán hàng kho Tubu, địa chỉ cũ còn lưu không được
   // hiện như "kho xuất hàng" (SELLER-8).
-  const selfFulfils = sf.type === 'MERCHANT';
+  const selfFulfils = isPartnerStore(sf);
   const warehouseParts = [
     sf.warehouseAddress,
     sf.warehouseWard,

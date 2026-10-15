@@ -33,6 +33,7 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ImageUpload } from '../components/image-upload';
+import { isPartnerStore } from '../utils/partner-store';
 
 const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
 const TEMPLATE_HINT =
@@ -840,7 +841,7 @@ function MerchantConfigSheet({
   });
 
   // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
-  const selfFulfils = sf.type === 'MERCHANT';
+  const selfFulfils = isPartnerStore(sf);
   const saveMut = useMutation({
     mutationFn: () =>
       updateStorefront({

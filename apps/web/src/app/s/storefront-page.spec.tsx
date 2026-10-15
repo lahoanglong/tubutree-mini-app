@@ -56,4 +56,16 @@ describe('/s/[slug] — gian hàng mở qua subdomain', () => {
     expect(mounted.container.textContent).toContain('Kho xuất hàng: 1 Lê Lợi, TP.HCM');
     expect(mounted.container.textContent).toContain('0912345678');
   });
+
+  it('CTV của đại lý (isPartner=true) hiện kho xuất hàng và hotline; isPartner=false thì ẩn', async () => {
+    api.storefront = { ...SF, isPartner: true };
+    mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
+    expect(mounted.container.textContent).toContain('Kho xuất hàng: 1 Lê Lợi, TP.HCM');
+    expect(mounted.container.textContent).toContain('0912345678');
+    mounted.unmount();
+    api.storefront = { ...SF, isPartner: false };
+    mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
+    expect(mounted.container.textContent).not.toContain('Kho xuất hàng');
+    expect(mounted.container.textContent).not.toContain('0912345678');
+  });
 });

@@ -412,6 +412,21 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
     expect(mocks.updateStorefront.mock.calls[0]![0]).not.toHaveProperty('bankAccountNo');
   });
 
+  it('CTV của đại lý (isPartner=true): có ô kho xuất hàng và hotline; isPartner=false thì không', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: true }));
+    const first = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    let sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' })).toBeInTheDocument();
+    first.unmount();
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).queryByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeNull();
+  });
+
   it('tài khoản ngân hàng cũ: báo không dùng để thu tiền và cho gỡ (gửi chuỗi rỗng)', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ bankName: 'Vietcombank', bankAccountNo: '0123456789' }));
     renderPage();
