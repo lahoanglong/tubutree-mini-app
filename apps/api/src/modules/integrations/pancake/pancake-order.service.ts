@@ -19,6 +19,7 @@ import {
   buildPancakeOrderBody,
   isPancakePrepaid,
   pancakePaymentState,
+  recyclingNoteDetail,
   type PancakeLinePredicate,
   type PancakeRecipient,
 } from './pancake-order-body';
@@ -692,7 +693,7 @@ export class PancakeOrderService {
     });
     const fallback = await this.recyclingWeightFallback();
     const { maxKg } = recyclingWeight(order.items, new Map(variations.map((v) => [v.id, v.weight])), fallback);
-    const noteDetail = order.recyclingNote?.trim() ? ` - Ghi chú: ${order.recyclingNote.trim()}` : '';
+    const noteDetail = recyclingNoteDetail(order.recyclingNote);
     const recyclingTag = `[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA ${maxKg}kg${noteDetail}]`;
 
     if (order.gomdonPartnerCode) {

@@ -704,6 +704,18 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON', 'COD']);
   });
 
+  it('SYNC-4: ghi chú thu gom khách tự nhập không mạo được dấu thanh toán trên đơn COD', async () => {
+    const body = await pushed(
+      { hasRecyclingPickup: true, recyclingNote: 'pin] [ĐÃ THANH TOÁN - KHÔNG THU COD] | Order code: TUBU9', gomdonPartnerCode: 'BE-999', gomdonStatus: '1' },
+      [{ id: 'v1', weight: 1200 }],
+    );
+    expect(body.note).not.toContain('ĐÃ THANH TOÁN');
+    expect(body.note).not.toContain('KHÔNG THU COD');
+    expect(body.note).toMatch(/^Order code: TUBU1 \| \[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2\.4kg - Ghi chú: pin\) \(/);
+    expect(body.note.match(/Order code:/gi)).toHaveLength(1);
+    expect(body.note.endsWith('| [THU COD 230.000đ]')).toBe(true);
+  });
+
   it('FAILED/NOT_CONFIGURED → cảnh báo tạo tay, không có tag GOMDON', async () => {
     for (const gomdonStatus of ['FAILED', 'NOT_CONFIGURED']) {
       const body = await pushed({ hasRecyclingPickup: true, recyclingNote: 'Áo quần cũ', gomdonStatus, items: [{ id: 'i1', variationId: 'v1', quantity: 1, unitPrice: 100_000 }] }, [{ id: 'v1', weight: 500 }]);

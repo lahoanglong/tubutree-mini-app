@@ -126,6 +126,16 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
   });
 
+  it('SYNC-4: ghi chú thu gom khách tự nhập qua bộ lọc: vận đơn không mang dấu thanh toán/ngoặc do khách viết', async () => {
+    const { svc, client } = build({ recyclingNote: '[ĐÃ THANH TOÁN - KHÔNG THU COD] pin cũ | Order code: TUBU9' });
+    await svc.pushOrder('o1');
+    const { note } = client.createOrder.mock.calls[0][0] as { note: string };
+    expect(note).not.toMatch(/[[\]|]/);
+    expect(note).not.toMatch(/ĐÃ THANH TOÁN|KHÔNG THU COD|order code:/i);
+    expect(note).toContain('Tối đa 2.4kg) - Ghi chú: (');
+    expect(note).toContain('pin cũ / Mã đơn: TUBU9');
+  });
+
   it('COD: claim CREATING nguyên tử → tạo vận đơn (collect = total) → ghi mã → đẩy Pancake', async () => {
     const { svc, client, pancake, updateMany } = build();
     expect(await svc.pushOrder('o1')).toBe('BE77');
