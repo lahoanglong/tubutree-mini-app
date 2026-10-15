@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Landmark, Wallet } from 'lucide-react';
 import { fetchRefundBank } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
@@ -41,18 +41,29 @@ export function RefundDestinationPicker({
 }: Props) {
   const name = useId();
 
+  // Điền sẵn đúng một lần, lúc khách chọn "Tài khoản ngân hàng" đầu tiên và cả ba ô còn trống; sau đó khách sửa hay xoá ô nào
+  // cũng không bị ghi đè. Bản trả về muộn cũng chỉ điền khi khách chưa gõ gì.
+  const prefillStarted = useRef(false);
+  const mounted = useRef(true);
+  const latest = useRef({ bank, onBank });
+  latest.current = { bank, onBank };
   useEffect(() => {
-    if (method !== 'BANK' || bank.accountNumber) return;
-    let alive = true;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (method !== 'BANK' || prefillStarted.current) return;
+    prefillStarted.current = true;
+    if (bank.bankName || bank.accountNumber || bank.accountName) return;
     fetchRefundBank()
-      .then((b) => {
-        if (alive && b) onBank(b);
+      .then((saved) => {
+        const { bank: cur, onBank: apply } = latest.current;
+        if (mounted.current && saved && !cur.bankName && !cur.accountNumber && !cur.accountName) apply(saved);
       })
       .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [method, bank.accountNumber, onBank]);
+  }, [method, bank]);
 
   const input = (
     label: string,
