@@ -139,18 +139,18 @@ describe('evaluateEnv', () => {
 
   describe('THROTTLE_BYPASS_TOKEN', () => {
     const token = 'tb-Mn4Bv7Cx1Zl9Kj2Hg5Fd8Sa3Pq6Wr0Ey';
-    it('không đặt thì PASS', () => expect(status({ THROTTLE_BYPASS_TOKEN: '' }, 'env.throttle_bypass')).toBe('PASS'));
-    it('đặt ở production thì FAIL, không in token', () => {
+    it('không đặt thì WARN kèm cách sinh token', () => {
+      const r = byId(evaluateEnv(envWith({ THROTTLE_BYPASS_TOKEN: '' })), 'env.throttle_bypass');
+      expect(r.status).toBe('WARN');
+      expect(r.hint).toContain('openssl rand -hex 32');
+    });
+    it('đặt đủ 32 ký tự thì PASS và không in token', () => {
       const r = byId(evaluateEnv(envWith({ THROTTLE_BYPASS_TOKEN: token })), 'env.throttle_bypass');
-      expect(r.status).toBe('FAIL');
+      expect(r.status).toBe('PASS');
       expect(JSON.stringify(r)).not.toContain(token);
-      expect(r.hint).toContain('GO_LIVE_ALLOW_THROTTLE_BYPASS=1');
     });
-    it('đặt kèm cờ cho phép thì hạ xuống WARN', () => {
-      expect(status({ THROTTLE_BYPASS_TOKEN: token, GO_LIVE_ALLOW_THROTTLE_BYPASS: '1' }, 'env.throttle_bypass')).toBe('WARN');
-    });
-    it('cờ cho phép khác "1" không có tác dụng', () => {
-      expect(status({ THROTTLE_BYPASS_TOKEN: token, GO_LIVE_ALLOW_THROTTLE_BYPASS: 'true' }, 'env.throttle_bypass')).toBe('FAIL');
+    it('ngắn hơn 32 ký tự thì FAIL vì API không khởi động', () => {
+      expect(status({ THROTTLE_BYPASS_TOKEN: 'ngan-qua-khong-du-32-ky-tu' }, 'env.throttle_bypass')).toBe('FAIL');
     });
   });
 

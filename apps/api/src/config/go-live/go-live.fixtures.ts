@@ -32,7 +32,7 @@ export const GOOD_ENV: Env = {
   CORS_ORIGINS: 'https://app.tubutree.com,https://tubutree.com',
   AUTH_COOKIE_SAMESITE: 'lax',
   AUTH_COOKIE_DOMAIN: '.tubutree.com',
-  THROTTLE_BYPASS_TOKEN: '',
+  THROTTLE_BYPASS_TOKEN: 'tb-Mn4Bv7Cx1Zl9Kj2Hg5Fd8Sa3Pq6Wr0Ey',
   ZALO_APP_ID: '2070857098114207963',
   ZALO_APP_SECRET: 'zalo-app-secret-Qm8Xv2Lp9Rt4Nb7',
   ZALO_OA_ID: '1234567890123456789',

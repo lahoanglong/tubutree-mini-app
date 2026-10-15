@@ -151,25 +151,21 @@ function cookieDomainCheck(env: Env): CheckResult {
 }
 
 function throttleBypassCheck(env: Env): CheckResult {
-  const title = 'THROTTLE_BYPASS_TOKEN không đặt ở production';
+  const title = 'THROTTLE_BYPASS_TOKEN cho các lượt render phía máy chủ của web';
   const v = envValue(env, 'THROTTLE_BYPASS_TOKEN');
-  if (!v) return pass(G_CORE, 'env.throttle_bypass', title, 'không đặt (đường miễn giới hạn tốc độ đang tắt)');
-  if (envValue(env, 'GO_LIVE_ALLOW_THROTTLE_BYPASS') === '1') {
+  if (!v) {
     return warn(
       G_CORE,
       'env.throttle_bypass',
       title,
-      `đang đặt (${describeSecret(v)}), đã cho phép bằng GO_LIVE_ALLOW_THROTTLE_BYPASS=1`,
-      'Chỉ giữ khi đã quyết định cho SSR của web đi qua đường miễn (xem docs/2026-10-review/impl/PA-2.md); token phải được giữ bí mật.',
+      'chưa đặt: web render phía máy chủ đi ra từ một IP nên khi đông có thể dính giới hạn 300 yêu cầu/phút cho mỗi route (lỗi 429)',
+      'Sinh bằng `openssl rand -hex 32`, đặt CÙNG một giá trị cho api và web trong .env rồi tạo lại hai container. Không thêm tiền tố NEXT_PUBLIC_ (xem docs/2026-10-review/impl/PA-2.md).',
     );
   }
-  return fail(
-    G_CORE,
-    'env.throttle_bypass',
-    title,
-    `đang đặt (${describeSecret(v)})`,
-    'Quy tắc go-live: xoá THROTTLE_BYPASS_TOKEN khỏi .env (api và web) rồi deploy lại. Lưu ý .env.production.example và PA-2.md đang khuyên đặt nó để SSR của web khỏi dính 429; nếu quyết giữ, chạy với GO_LIVE_ALLOW_THROTTLE_BYPASS=1 để hạ xuống WARN.',
-  );
+  if (v.length < 32) {
+    return fail(G_CORE, 'env.throttle_bypass', title, `${describeSecret(v)}, ngắn hơn 32 ký tự nên API không khởi động`, 'Dùng chuỗi dài ít nhất 32 ký tự: `openssl rand -hex 32`.');
+  }
+  return pass(G_CORE, 'env.throttle_bypass', title, describeSecret(v));
 }
 
 function secretRow(group: string, id: string, title: string, key: string, env: Env, missing: { status: 'FAIL' | 'WARN'; hint: string; note?: string }): CheckResult {

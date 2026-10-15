@@ -106,11 +106,11 @@ Mở file bằng `nano .env` (hoặc trỏ lại GitHub Actions ở mục 2 rồ
 | `OPS_ALERT_ENV_LABEL` | Ví dụ `production`. Tối đa 24 ký tự, không có `[` `]` |
 | `CORS_ORIGINS` | Ví dụ `https://app.tubutree.com,https://tubutree.com` |
 | `AUTH_COOKIE_SAMESITE`, `AUTH_COOKIE_DOMAIN` | `lax` và (nếu cần chia sẻ phiên giữa subdomain) `.tubutree.com` |
-| `THROTTLE_BYPASS_TOKEN` | **Không đặt** (xem ghi chú dưới) |
+| `THROTTLE_BYPASS_TOKEN` | Chuỗi ngẫu nhiên từ 32 ký tự (`openssl rand -hex 32`), CÙNG một giá trị cho `api` và `web` (xem ghi chú dưới) |
 
-Ghi chú về `THROTTLE_BYPASS_TOKEN`: quy tắc go-live của tech lead là KHÔNG đặt ở production, và `go-live:check` báo FAIL nếu có. Cần biết: `.env.production.example` và [docs/2026-10-review/impl/PA-2.md](../2026-10-review/impl/PA-2.md) từng khuyên đặt nó để các lượt render phía máy chủ của web (đi ra từ một IP) khỏi dính giới hạn 300 yêu cầu/phút cho mỗi route. Bỏ token thì lúc đông có thể thấy lỗi 429 ở web; theo dõi bằng `$DC logs --since 1h web | grep -c 429`. Nếu thấy 429 thật, báo tech lead quyết định (đặt lại token và chạy go-live với `GO_LIVE_ALLOW_THROTTLE_BYPASS=1` để hạ cảnh báo xuống WARN).
+Ghi chú về `THROTTLE_BYPASS_TOKEN`: production nên đặt (xem [docs/2026-10-review/impl/PA-2.md](../2026-10-review/impl/PA-2.md)). Web render phía máy chủ gọi API từ một IP, nên không có token thì khi đông các lượt render cùng dính giới hạn 300 yêu cầu/phút cho mỗi route và khách thấy lỗi 429. Token dài dưới 32 ký tự thì API không khởi động. Không thêm tiền tố `NEXT_PUBLIC_` (sẽ lộ ra trình duyệt). `go-live:check` báo WARN khi chưa đặt, FAIL khi quá ngắn. Theo dõi 429 bằng `$DC logs --since 1h web | grep -c 429`.
 
-- [ ] `.env` đủ khoá, `THROTTLE_BYPASS_TOKEN` trống
+- [ ] `.env` đủ khoá, `THROTTLE_BYPASS_TOKEN` đã đặt (≥ 32 ký tự, cùng giá trị cho api và web)
 
 ### 1.4 Chọn giờ (mục 3) và báo trước
 
@@ -257,7 +257,7 @@ rclone listremotes
 
 Phải thấy dòng cron có `RCLONE_REMOTE=` khác rỗng và tên remote có trong `rclone listremotes`.
 
-Nếu `go-live:check` báo `env.throttle_bypass` FAIL: gỡ `THROTTLE_BYPASS_TOKEN` khỏi `.env` (xem mục 1.3).
+Nếu `go-live:check` báo `env.throttle_bypass` WARN (chưa đặt) hoặc FAIL (ngắn hơn 32 ký tự): đặt `THROTTLE_BYPASS_TOKEN` đủ dài, cùng giá trị cho api và web (xem mục 1.3).
 
 ### Bước 5. Bắt đầu cửa sổ: dừng API cũ
 
