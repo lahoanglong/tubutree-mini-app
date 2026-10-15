@@ -374,8 +374,13 @@ export class OrderReversalService {
         select: { id: true },
       });
       if (credited) {
+        // NO KEY UPDATE, không phải UPDATE: tx này đã UPDATE users (hoàn Ví/Điểm Xanh ở trên) nên đang giữ NO KEY UPDATE, và mọi
+        // đường ghi số dư cũng lấy NO KEY UPDATE qua UPDATE nên đọc ở mức này vẫn xếp hàng sau chúng. FOR UPDATE nâng khoá đang
+        // giữ lên mức mạnh hơn nên phải xếp hàng sau tx khác đang chờ khoá dòng này (huỷ đơn trả bằng Ví chờ NO KEY UPDATE của
+        // ta), còn tx đó chờ ta xong ⇒ 40P01; nó còn đụng KEY SHARE của FK dòng sổ điểm/ví của tx cùng khách (creditOrderPoints
+        // lúc giao đơn khác) đang chờ NO KEY UPDATE của ta.
         const [u] = await tx.$queryRaw<{ pointsBalance: number }[]>`
-          SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`;
+          SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR NO KEY UPDATE`;
         // Như reverseOrderPoints: không quá phần lô điểm của đơn còn thu hồi được (trừ phần cron đã trừ vì hết hạn và phần các
         // lần trả trước đã lấy), nếu không lô đơn đã hết hạn thì phần trả ăn sang điểm của lô khác. Đọc sổ sau khoá user ở trên.
         // Cột pointsReversed của yêu cầu vẫn ghi phần chia chưa kẹp (caller), chỉ số thực trừ bị kẹp.
