@@ -9,6 +9,7 @@ import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { loginFailureMessage } from '@/lib/login-errors';
 import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
+import { formatPhoneDisplay } from '@/lib/phone-display';
 
 function LoginInner() {
   const router = useRouter();
@@ -61,7 +62,7 @@ function LoginInner() {
 
       {unavailable && (
         <p role="alert" className={`mt-4 ${ui.error}`}>
-          Đăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline {support.hotline}{' '}
+          Đăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline {formatPhoneDisplay(support.hotline)}{' '}
           để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.
         </p>
       )}

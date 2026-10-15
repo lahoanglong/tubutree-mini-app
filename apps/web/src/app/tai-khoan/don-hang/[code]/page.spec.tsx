@@ -115,6 +115,14 @@ describe('/tai-khoan/don-hang/[code] — lời liên hệ hủy/đổi đơn (Q-
     expect(t).toContain('Zalo OA Tubu Tree Official');
   });
 
+  it('hotline cấu hình số liền 18001234 được ghi "1800 1234" cho dễ đọc (R5-BUYER-5)', async () => {
+    mocks.support = { hotline: '18001234', email: 'cskh@tubutree.com' };
+    const { container } = await mount();
+    const t = contact(container);
+    expect(t).toContain('Gọi hotline 1800 1234');
+    expect(t).not.toContain('18001234');
+  });
+
   it('đọc cấu hình lỗi: vẫn hiện hotline/email mặc định, không nhắc Zalo OA', async () => {
     mocks.support = new Error('boom');
     const { container } = await mount();

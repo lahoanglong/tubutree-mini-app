@@ -7,6 +7,7 @@ import { DEFAULT_SUPPORT, fetchSupportContact } from '../pages/about-data';
 import { callPhone, hasOA, openOAChat } from '../services/zmp-bridge';
 import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
+import { formatPhoneDisplay } from '../utils/phone';
 import { vi } from '../i18n/vi';
 
 /**
@@ -47,7 +48,7 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
       )}
       {hotline && (
         <Button variant="ghost" icon={Phone} onPress={() => void callPhone(hotline)}>
-          {`Gọi hotline ${hotline}`}
+          {`Gọi hotline ${formatPhoneDisplay(hotline)}`}
         </Button>
       )}
       {email && (

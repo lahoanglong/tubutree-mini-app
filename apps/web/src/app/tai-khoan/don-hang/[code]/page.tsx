@@ -28,6 +28,7 @@ import { RecyclingStatus } from '@/components/recycling-status';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
+import { formatPhoneDisplay } from '@/lib/phone-display';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
@@ -234,7 +235,7 @@ export default function OrderDetailPage() {
       )}
 
       <p className="mt-6 text-sm text-stone-600">
-        Cần hủy hoặc đổi đơn? Gọi hotline {support.hotline} hoặc email {support.email}
+        Cần hủy hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
         {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
       </p>
     </Shell>

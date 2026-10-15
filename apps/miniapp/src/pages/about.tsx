@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronDown, TreePine } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
+import { formatPhoneDisplay } from '../utils/phone';
 import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { openOAChat, hasOA, callPhone } from '../services/zmp-bridge';
@@ -76,7 +77,7 @@ export default function AboutPage() {
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
   const supportRows = [
-    { label: 'Hotline', value: support?.hotline },
+    { label: 'Hotline', value: support?.hotline ? formatPhoneDisplay(support.hotline) : support?.hotline },
     { label: 'Zalo OA', value: support?.zaloOaName },
     { label: 'Email', value: support?.email },
   ].filter((r): r is { label: string; value: string } => Boolean(r.value));

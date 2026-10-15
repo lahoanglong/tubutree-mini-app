@@ -1,6 +1,7 @@
 import { Clock, MapPin, Phone } from 'lucide-react';
 import type { RefillLocation } from '../services/refill-api';
 import { haptic } from '../utils/haptic';
+import { formatPhoneDisplay } from '../utils/phone';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
@@ -44,7 +45,7 @@ function LocationLines({ location, showName = true }: { location: LocationInfoFi
 function CallButton({ phone, onCall }: { phone: string } & CallProps) {
   return (
     <Button variant="secondary" icon={Phone} onPress={() => void onCall(phone)}>
-      {`Gọi ${phone}`}
+      {`Gọi ${formatPhoneDisplay(phone)}`}
     </Button>
   );
 }

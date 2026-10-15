@@ -22,6 +22,7 @@ import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Heading, Text } from '../components/ui/text';
 import { formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { formatPhoneDisplay } from '../utils/phone';
 import { newIdempotencyKey } from '../utils/idempotency';
 
 export default function RefillPage() {
@@ -241,7 +242,7 @@ export default function RefillPage() {
                     {pickup?.phone && (
                       <div>
                         <Button variant="secondary" icon={Phone} onPress={() => void callPhone(pickup.phone!)}>
-                          {`Gọi ${pickup.phone}`}
+                          {`Gọi ${formatPhoneDisplay(pickup.phone)}`}
                         </Button>
                       </div>
                     )}

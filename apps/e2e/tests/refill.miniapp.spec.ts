@@ -40,7 +40,7 @@ test.describe('Đổi vỏ chai — nhiều điểm nhận', () => {
     await expect(group.getByRole('radio')).toHaveCount(2);
     await expect(group.getByText('12 Lê Lợi, Quận 1, TP.HCM')).toBeVisible();
     await expect(group.getByText('8h–20h hằng ngày')).toBeVisible();
-    await expect(group.getByRole('button', { name: 'Gọi 0912345678' })).toBeVisible();
+    await expect(group.getByRole('button', { name: 'Gọi 0912 345 678' })).toBeVisible();
 
     const submit = page.getByRole('button', { name: 'Chọn điểm nhận vỏ để gửi yêu cầu' });
     await expect(submit).toBeDisabled();

@@ -412,7 +412,7 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(screen.getByText('5 Võ Văn Ngân, Thủ Đức')).toBeInTheDocument();
     expect(screen.getByText('9h–18h')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Gọi / })).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0912345678' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0912 345 678' }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0912345678');
     expect(screen.queryByText(/Chưa có địa chỉ điểm nhận/)).toBeNull();
   });
@@ -464,7 +464,7 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(await screen.findByText('Cửa hàng Quận 1')).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.getByText('12 Lê Lợi, Quận 1')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0901234567' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0901 234 567' }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
     fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu đổi vỏ' }));
 
@@ -638,7 +638,7 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(screen.getByText('Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.')).toBeInTheDocument();
     expect(screen.getByText('9 Nguyễn Huệ, Quận 1')).toBeInTheDocument();
     expect(screen.getByText('9h–17h')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0907654321' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0907 654 321' }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0907654321');
     expect(screen.getByText('Điểm nhận: Kho Cũ (đã tạm ngưng)')).toBeInTheDocument();
     expect(screen.getByTestId('support-contact')).toBeInTheDocument();
