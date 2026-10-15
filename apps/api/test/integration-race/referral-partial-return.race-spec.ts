@@ -37,6 +37,14 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
   let reversal: OrderReversalService;
   let rewards: RewardPointsService;
   let admin: { id: string };
+  const CONFIG_KEYS = [
+    'returns.window_days',
+    'referral.referrer_reward_points',
+    'referral.window_days',
+    'referral.min_order_amount',
+    'referral.milestones_points',
+  ];
+  let savedConfig: { key: string; value: unknown }[] = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -67,7 +75,9 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     returns = moduleRef.get(OrderReturnsService);
     reversal = moduleRef.get(OrderReversalService);
     rewards = moduleRef.get(RewardPointsService);
-    await setConfig(prisma, 'returns.window_days', 30);
+    // DB race dùng chung giữa các spec: nhớ giá trị cũ để trả lại ở afterAll (loyalty.race dựa vào hạn đổi/trả mặc định 7 ngày).
+    savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
+    await setConfig(prisma, 'returns.window_days', 7);
     await setConfig(prisma, 'referral.referrer_reward_points', REWARD);
     await setConfig(prisma, 'referral.window_days', 30);
     await setConfig(prisma, 'referral.min_order_amount', 100_000);
@@ -76,6 +86,10 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
   });
 
   afterAll(async () => {
+    if (prisma) {
+      await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });
+      for (const c of savedConfig) await setConfig(prisma, c.key, c.value as never);
+    }
     await moduleRef?.close();
   });
 

@@ -60,7 +60,8 @@ describe('trả một phần không thu điểm tích đã hết hạn (real Pos
     loyalty = moduleRef.get(LoyaltyService);
     expiry = moduleRef.get(LoyaltyExpiryService);
     returns = moduleRef.get(OrderReturnsService);
-    await setConfig(prisma, 'returns.window_days', 30);
+    // 7 như các spec khác dùng chung DB race (loyalty.race dựa vào hạn đổi/trả mặc định 7 ngày).
+    await setConfig(prisma, 'returns.window_days', 7);
     await setConfig(prisma, 'loyalty.point_expire_months', 12);
     admin = await createUser(prisma, { role: 'ADMIN' });
   });
