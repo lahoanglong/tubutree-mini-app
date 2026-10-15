@@ -14,7 +14,7 @@ function makePrisma() {
       aggregate: jest.fn().mockResolvedValue({ _sum: { total: null } }),
     },
     order: { count: jest.fn().mockResolvedValue(0) },
-    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   } as any;
 }
 
@@ -86,21 +86,16 @@ describe('BrandService.getOwnedSales (C-034, Q-18): doanh thu nhãn chỉ-đọc
     ]);
   });
 
-  it('trừ đơn vị/doanh thu đã trả một phần (APPROVED, fullReturn=false) bằng hai truy vấn gộp, không N+1', async () => {
+  it('trừ đơn vị/doanh thu đã trả một phần (APPROVED, fullReturn=false) bằng MỘT truy vấn gộp trong DB, không N+1', async () => {
     const { prisma, svc } = setup();
     prisma.orderItem.groupBy.mockResolvedValue([{ variationId: 'v1', _sum: { quantity: 3, total: 300_000 } }]);
     prisma.orderItem.aggregate.mockResolvedValue({ _sum: { total: 300_000 } });
-    prisma.returnRequest.findMany.mockResolvedValue([
-      { orderId: 'o1', items: [{ orderItemId: 'i1', quantity: 1 }] },
-      { orderId: 'o1', items: [{ orderItemId: 'i1', quantity: 1 }] },
-    ]);
-    prisma.order.findMany = jest.fn().mockResolvedValue([
-      { status: 'DELIVERED', items: [{ id: 'i1', variationId: 'v1', quantity: 3, total: 300_000 }, { id: 'i2', variationId: 'other', quantity: 1, total: 9_000 }] },
-    ]);
+    prisma.$queryRaw.mockResolvedValue([{ variationId: 'v1', quantity: 3, total: 300_000, status: 'DELIVERED', returned: 2n }]);
     const out = await svc.getOwnedSales('owner1', '30d', NOW);
-    expect(prisma.returnRequest.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.returnRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: 'APPROVED', fullReturn: false }) }));
-    expect(prisma.order.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = prisma.$queryRaw.mock.calls[0][0];
+    expect(sql.values).toContain('b1');
+    expect(sql.sql).toContain(`rr."status" = 'APPROVED' AND rr."fullReturn" = false`);
     expect(out).toMatchObject({ unitsSold: 1, revenue: 100_000, delivered: { revenue: 100_000 } });
     expect(out.topProducts[0]).toMatchObject({ quantity: 1, revenue: 100_000 });
   });
