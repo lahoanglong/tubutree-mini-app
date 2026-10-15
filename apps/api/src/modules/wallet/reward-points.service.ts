@@ -26,6 +26,9 @@ import {
  */
 export const POINTS_GRANT_HARD_MAX = 2000;
 
+/** Số đơn ứng viên đọc mỗi lần khi chọn cặp thưởng giới thiệu; dừng ngay khi đủ 2 đơn không bị loại. */
+const REFERRAL_CANDIDATE_PAGE = 10;
+
 export interface ReferralMilestone {
   count: number;
   bonusPoints: number;
@@ -214,21 +217,34 @@ export class RewardPointsService {
       // ⇒ đó là cùng một người được mời đã được thưởng; khác người mời thì chỉ bỏ các đơn đó ra.
       const rewardedOrders = await findReferralRewardedOrders(tx, refereeId);
       if (rewardedOrders.some((r) => r.referrerId === referrerId)) return false;
-      const candidates = await tx.order.findMany({
-        where: {
-          id: { notIn: rewardedOrders.map((r) => r.orderId) },
-          userId: refereeId,
-          status: 'DELIVERED',
-          type: 'RETAIL',
-          placedForCustomer: false,
-          total: { gte: Math.max(Number(minOrder) || 0, 0) },
-        },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        select: { id: true, createdAt: true },
-      });
-      // Đơn đã trả hết phần có tiền (chỉ còn dòng quà 0đ nên vẫn DELIVERED) không tính, như đơn đã RETURNED.
-      const returnedAll = await fullyReturnedOrderIds(tx, candidates.map((o) => o.id));
-      const [first, second] = candidates.filter((o) => !returnedAll.has(o.id));
+      // Hai đơn đầu tiên (createdAt, id) không bị loại; đọc theo trang (keyset) và dừng khi đủ hai, để chi phí trong lúc
+      // giữ khoá người được mời không tăng theo số đơn của họ.
+      const picked: { id: string; createdAt: Date }[] = [];
+      let after: { id: string; createdAt: Date } | undefined;
+      while (picked.length < 2) {
+        const page = await tx.order.findMany({
+          where: {
+            id: { notIn: rewardedOrders.map((r) => r.orderId) },
+            userId: refereeId,
+            status: 'DELIVERED',
+            type: 'RETAIL',
+            placedForCustomer: false,
+            total: { gte: Math.max(Number(minOrder) || 0, 0) },
+            ...(after && {
+              OR: [{ createdAt: { gt: after.createdAt } }, { createdAt: after.createdAt, id: { gt: after.id } }],
+            }),
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true, createdAt: true },
+          take: REFERRAL_CANDIDATE_PAGE,
+        });
+        // Đơn đã trả hết phần có tiền (chỉ còn dòng quà 0đ nên vẫn DELIVERED) không tính, như đơn đã RETURNED.
+        const returnedAll = await fullyReturnedOrderIds(tx, page.map((o) => o.id));
+        picked.push(...page.filter((o) => !returnedAll.has(o.id)).slice(0, 2 - picked.length));
+        if (page.length < REFERRAL_CANDIDATE_PAGE) break;
+        after = page[page.length - 1];
+      }
+      const [first, second] = picked;
       if (!first || !second) return false;
       if (second.createdAt.getTime() - first.createdAt.getTime() > windowDays * 864e5) return false;
 
