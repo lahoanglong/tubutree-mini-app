@@ -6,6 +6,7 @@ import { AlertCircle, Check, Truck } from 'lucide-react';
 import { getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import { PdpPrice } from '@/components/flash-price';
+import { PdpSelectionProvider } from '@/components/pdp-selection';
 import ProductGallery from '@/components/product-gallery';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
@@ -56,6 +57,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </Link>
       <div className="mt-2 grid gap-8 md:grid-cols-2">
         <ProductGallery images={images} name={product.name} />
+        <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
         <div>
           {product.brandSlug ? (
             <Link
@@ -108,6 +110,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} />
           )}
         </div>
+        </PdpSelectionProvider>
       </div>
 
       {description && (

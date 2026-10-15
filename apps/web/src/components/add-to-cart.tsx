@@ -10,6 +10,7 @@ import { ui } from '@/lib/guest-ui';
 import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
+import { usePdpSelection } from './pdp-selection';
 
 interface Variation {
   id: string;
@@ -47,7 +48,10 @@ export default function AddToCart({
     [isrVariations, stockQ.data],
   );
   const inStock = isrVariations.filter((v) => v.stock > 0);
-  const [selectedId, setSelectedId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
+  const shared = usePdpSelection();
+  const [localId, setLocalId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
+  const selectedId = shared?.selectedId ?? localId;
+  const setSelectedId = shared?.setSelectedId ?? setLocalId;
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
