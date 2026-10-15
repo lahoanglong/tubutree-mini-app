@@ -17,6 +17,8 @@ export async function recordCatalogRun(prisma: Pick<PrismaClient, 'opsHealthStat
 }
 
 export const EMAIL_STATE_KEY = 'alert.email';
+/** Lỗi vĩnh viễn gần nhất (AUTH/PERMANENT) và dấu vân tay cấu hình lúc đó: cái duy nhất `blockLifted()` so với cấu hình hiện tại. */
+export const EMAIL_BLOCK_KEY = 'alert.email.block';
 
 /** Lỗi gửi kèm loại (xem ops-email-error.ts) và dấu vân tay cấu hình lúc lỗi; thiếu `kind` = không phải lỗi SMTP (cấu hình dở dang). */
 export type EmailDeliveryResult =
@@ -26,10 +28,17 @@ export type EmailDeliveryResult =
 /**
  * Lần gửi email báo động gần nhất (thành công hoặc lỗi). Tách khỏi hàng `alert` (trí nhớ chống báo lặp, ghi đè cả cụm
  * mỗi lượt cron) để lỗi SMTP không phụ thuộc việc lượt cron có lưu được hay không; lỗi cũ không bị xoá khi gửi được lại —
- * màn hình so lastErrorAt với lastOkAt. `detail` của lỗi giữ loại lỗi (màn hình chỉ cách sửa) và dấu vân tay cấu hình để biết
- * khi nào cấu hình đã đổi so với lúc lỗi vĩnh viễn.
+ * màn hình so lastErrorAt với lastOkAt. `detail` của lỗi giữ loại lỗi để màn hình chỉ cách sửa.
+ *
+ * Lỗi vĩnh viễn còn được ghi riêng ở hàng `alert.email.block` (loại + dấu vân tay + giờ). Hàng đó chỉ ghi khi lỗi là
+ * AUTH/PERMANENT, nên một lần gửi thử lỗi tạm thời (mạng, 4xx) dưới cấu hình mới không ghi đè được lý do cron đang chặn,
+ * và hai lần ghi chạy song song (cron với nút "Gửi email thử") không giẫm lên nhau.
  */
 export async function recordEmailDelivery(prisma: Pick<PrismaClient, 'opsHealthState'>, run: EmailDeliveryResult, now = new Date()) {
+  if (!run.ok && (run.kind === 'AUTH' || run.kind === 'PERMANENT')) {
+    const block = { lastErrorAt: now, lastError: run.error.slice(0, 500), detail: { kind: run.kind, fingerprint: run.fingerprint ?? null } };
+    await prisma.opsHealthState.upsert({ where: { key: EMAIL_BLOCK_KEY }, create: { key: EMAIL_BLOCK_KEY, ...block }, update: block });
+  }
   const data = run.ok
     ? { lastOkAt: now }
     : { lastErrorAt: now, lastError: run.error.slice(0, 500), detail: { kind: run.kind ?? null, fingerprint: run.fingerprint ?? null } };

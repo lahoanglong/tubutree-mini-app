@@ -8,7 +8,7 @@ import { OPS_EMAIL_KEYS, resolveOpsEmailConfig, type OpsEmailConfig } from '../.
 import type { AlertMessage } from './ops-alerts';
 import { alertEmail, emailEnvLabel, OPS_EMAIL_APP_NAME, scrubSecrets, testEmail, type AlertEmail } from './ops-email';
 import { classifySmtpError, isSmtpFailureKind, smtpFailureHint, type SmtpFailureKind } from './ops-email-error';
-import { EMAIL_STATE_KEY, recordEmailDelivery, type EmailDeliveryResult } from './ops-state';
+import { EMAIL_BLOCK_KEY, EMAIL_STATE_KEY, recordEmailDelivery, type EmailDeliveryResult } from './ops-state';
 
 type Ready = Extract<OpsEmailConfig, { state: 'ready' }>;
 
@@ -166,18 +166,22 @@ export class OpsEmailService {
   }
 
   /**
-   * Một lượt gửi đã BLOCKED nay đáng thử lại chưa: cấu hình đã đổi so với lúc lỗi (sửa mật khẩu rồi deploy), hoặc email thử
-   * của admin đã gửi được. Cấu hình không còn sẵn sàng thì cũng trả true để cron gọi sendAlert, nơi ghi nhận và nhả khoá.
-   * Đọc DB lỗi → false (cứ chờ).
+   * Một lượt gửi đã BLOCKED nay đáng thử lại chưa: cấu hình đã đổi so với lúc lỗi vĩnh viễn (sửa mật khẩu rồi deploy), hoặc
+   * email thử của admin đã gửi được sau lỗi đó. Chỉ lỗi vĩnh viễn (hàng `alert.email.block`) mới làm mốc so sánh: lần gửi
+   * thử lỗi tạm thời không đổi được mốc, nên không khoá lại một cấu hình mới chưa từng bị máy chủ từ chối. Cấu hình không
+   * còn sẵn sàng thì cũng trả true để cron gọi sendAlert, nơi ghi nhận và nhả khoá. Đọc DB lỗi → false (cứ chờ).
    */
   async blockLifted(): Promise<boolean> {
     try {
       const cfg = this.resolve();
       if (cfg.state !== 'ready') return true;
-      const row = await this.prisma.opsHealthState.findUnique({ where: { key: EMAIL_STATE_KEY } });
-      if (!row?.lastErrorAt) return true;
-      if (row.lastOkAt && row.lastOkAt >= row.lastErrorAt) return true;
-      const failedWith = (row.detail as { fingerprint?: unknown } | null)?.fingerprint;
+      const [block, last] = await Promise.all([
+        this.prisma.opsHealthState.findUnique({ where: { key: EMAIL_BLOCK_KEY } }),
+        this.prisma.opsHealthState.findUnique({ where: { key: EMAIL_STATE_KEY } }),
+      ]);
+      if (!block?.lastErrorAt) return true;
+      if (last?.lastOkAt && last.lastOkAt >= block.lastErrorAt) return true;
+      const failedWith = (block.detail as { fingerprint?: unknown } | null)?.fingerprint;
       return failedWith !== this.fingerprint(cfg);
     } catch (e) {
       this.logger.warn(`Không đọc được trạng thái gửi email báo động: ${e instanceof Error ? e.message : String(e)}`);

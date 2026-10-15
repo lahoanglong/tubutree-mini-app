@@ -370,6 +370,59 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
       expect(await blocked()).toMatchObject({ emailBlocked: true });
     });
 
+    it('R5-ADMIN-5: bị chặn (AUTH) → đổi cấu hình → email thử lỗi tạm thời → cron vẫn thử lại đúng một lần (rồi chặn lại nếu vẫn sai)', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      env.SMTP_HOST = 'smtp2.invalid';
+      sendMail.mockReset().mockRejectedValue(Object.assign(new Error('Greeting never received'), { code: 'ETIMEDOUT' }));
+      await expect(email.sendTest()).resolves.toMatchObject({ ok: false, reason: 'SEND_FAILED', kind: 'TRANSIENT' });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect((await snapshotAt(6)).alertChannels.email).toMatchObject({ lastErrorKind: 'TRANSIENT', lastErrorHint: null });
+
+      sendMail.mockReset().mockRejectedValue(authError());
+      await expect(check(10)).resolves.toMatchObject({ sent: null });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(String((sendMail.mock.calls[0][0] as { subject: string }).subject)).toContain('Sự cố vận hành');
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+      await check(15);
+      await check(20);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+    });
+
+    it('R5-ADMIN-5: email thử lỗi tạm thời chạy song song với lượt cron — dù thứ tự nào, lý do chặn vẫn là của lần lỗi vĩnh viễn', async () => {
+      for (const order of ['test-first', 'cron-first'] as const) {
+        await prisma.opsHealthState.deleteMany({});
+        queueFailures['notifications'] = 9;
+        sendMail.mockReset().mockRejectedValue(authError());
+        await check(0);
+        expect(await blocked()).toMatchObject({ emailBlocked: true });
+        const before = sendMail.mock.calls.length;
+
+        env.SMTP_HOST = `smtp-${order}.invalid`;
+        sendMail.mockReset().mockImplementation(async (msg: { subject: string }) => {
+          if (/Email thử/.test(msg.subject)) throw Object.assign(new Error('Greeting never received'), { code: 'ETIMEDOUT' });
+          throw authError();
+        });
+        const runs = order === 'test-first' ? [email.sendTest(), check(5)] : [check(5), email.sendTest()];
+        await Promise.all(runs);
+
+        const subjectsNow = subjects();
+        expect(subjectsNow.filter((x) => x.includes('Sự cố vận hành')).length).toBeLessThanOrEqual(1);
+        expect(before).toBe(1);
+        const block = await prisma.opsHealthState.findUniqueOrThrow({ where: { key: 'alert.email.block' } });
+        expect((block.detail as { kind: string }).kind).toBe('AUTH');
+        const calls = sendMail.mock.calls.length;
+        await check(10);
+        await check(15);
+        expect(sendMail.mock.calls.length).toBe(calls);
+        expect(await blocked()).toMatchObject({ emailBlocked: true });
+      }
+    });
+
     it('máy chủ từ chối hẳn (550) cũng chặn như sai mật khẩu; lỗi tạm thời (451) thì vẫn gửi lại mỗi lượt', async () => {
       queueFailures['notifications'] = 9;
       sendMail.mockRejectedValue(Object.assign(new Error("Can't send mail - all recipients were rejected: 550 5.1.1 User unknown"), { code: 'EENVELOPE', responseCode: 550 }));
