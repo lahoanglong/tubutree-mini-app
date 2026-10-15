@@ -58,3 +58,10 @@ docs/2026-10-review/screens/
 scripts/loadtest/results/
 scripts/uiux/results/
 scripts/uiux/.probe/
+
+# Dấu vết lần deploy ghi ở gốc repo trên máy chủ (runbook mục 1.0, mục 5 bước 2 và 6, deploy.yml). Không ignore thì
+# `git status --short` ở bước 1 của lần phát hành sau không bao giờ trống.
+.rollback-images
+.rollback-dump
+.last-deployed-sha
+.pending-migrations
