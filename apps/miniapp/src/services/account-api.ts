@@ -230,8 +230,13 @@ export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/memb
 
 // ── View helper thuần cho trang Hạng thành viên (test: account-api.spec.ts) ──
 
-/** Nhãn tiếng Việt cho `reason` của sổ Điểm Xanh — không bao giờ hiện mã kỹ thuật thô. */
-export function pointsReasonLabel(reason: string): string {
+/**
+ * Nhãn tiếng Việt cho `reason` của sổ Điểm Xanh — không bao giờ hiện mã kỹ thuật thô. Cùng bảng với màn quản trị
+ * (apps/web ledger-labels.ts): sửa một bên thì sửa cả bên kia.
+ */
+export function pointsReasonLabel(rawReason: string): string {
+  // Gộp phiên khách vãng lai đổi khoá một số dòng thành `MERGED:<id>:<reason cũ>` (auth.service).
+  const reason = rawReason.replace(/^MERGED:[^:]+:/, '');
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
   if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
@@ -240,16 +245,22 @@ export function pointsReasonLabel(reason: string): string {
   if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
   if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
+  if (reason.startsWith('RETURN_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
+  if (reason.startsWith('RETURN_REFUND')) return 'Hoàn lại điểm đã dùng (trả hàng)';
   if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';
   if (reason.startsWith('XU_TO_POINTS')) return 'Chuyển từ xu cũ sang Điểm Xanh';
   if (reason.startsWith('REFERRAL')) {
+    if (reason.includes('DEBT')) return 'Ghi nợ thu hồi thưởng giới thiệu';
     return reason.includes('REVOKE') ? 'Thu hồi thưởng giới thiệu' : 'Thưởng giới thiệu bạn bè';
   }
   if (reason.startsWith('COMMUNITY')) return 'Thưởng cộng đồng';
   if (reason.startsWith('STOREFRONT_QUEST')) return 'Thưởng nhiệm vụ gian hàng';
   if (reason.startsWith('CTV_MILESTONE')) return 'Thưởng mốc doanh số CTV';
   if (reason.startsWith('GAME_BUY_TREE')) return 'Góp quỹ trồng cây';
+  if (reason.startsWith('GAME_SPIN_COST')) return 'Quay vòng quay may mắn';
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
+  if (reason.startsWith('MISSION')) return 'Thưởng nhiệm vụ Vườn Xanh';
+  if (reason.startsWith('REVIEW_DELETE')) return 'Thu hồi điểm đánh giá đã xoá';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
 }

@@ -45,6 +45,16 @@ describe('pointsReasonLabel', () => {
     ['STOREFRONT_QUEST:PROFILE', 'Thưởng nhiệm vụ gian hàng'],
     ['CTV_MILESTONE:m1:2026-10', 'Thưởng mốc doanh số CTV'],
     ['GAME_BUY_TREE:TUBU-ABC', 'Góp quỹ trồng cây'],
+    // R5-ADMIN-4: cùng bảng nhãn với màn quản trị (apps/web ledger-labels.ts) cho các mã API ghi mà trước đây rơi về nhãn chung hoặc nhãn sai.
+    ['RETURN_REVERSED:TUBU2026101538731', 'Thu hồi điểm của đơn trả hàng'],
+    ['RETURN_REFUND_POINTS:TUBU2026101538731', 'Hoàn lại điểm đã dùng (trả hàng)'],
+    ['RETURN_REFUND_CONVERTED:TUBU2026101538731', 'Hoàn lại điểm đã dùng (trả hàng)'],
+    ['GAME_SPIN_COST:p1', 'Quay vòng quay may mắn'],
+    ['MISSION:m1:2026-10-15', 'Thưởng nhiệm vụ Vườn Xanh'],
+    ['REVIEW_DELETE:r1', 'Thu hồi điểm đánh giá đã xoá'],
+    ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
+    ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
+    ['MERGED:guest-1:ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
   ])('%s → %s', (reason, label) => {
     expect(pointsReasonLabel(reason)).toBe(label);
   });
