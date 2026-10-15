@@ -507,23 +507,70 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await successes(referrer.id)).toBe(0);
   });
 
-  it('(n) duyệt trả 2/3 đơn đầu song song với cấp thưởng → luôn thu đúng 66, thứ tự nào cũng vậy', async () => {
-    for (let round = 0; round < 4; round++) {
-      const { referrer, referee, a } = await unrewarded();
-      const req = await returns.request(referee.id, a.code, {
-        reasonCode: 'OTHER',
-        reason: 'Không còn nhu cầu dùng nữa',
-        items: [{ orderItemId: a.item.id, quantity: 2 }],
-      });
-      const jobs = [() => returns.review(admin.id, req.id, { approve: true }), () => rewards.grantReferralOrderReward(referee.id)];
-      if (round % 2) jobs.reverse();
-      const s = summarize(await Promise.allSettled(jobs.map((j) => j())));
-      expect(s.errors).toEqual([]);
-      const r = await revocations(referrer.id);
-      expect(r.partial.map((p) => p.delta)).toEqual([-66]);
-      expect(r.total).toBe(66);
-      expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+  /** Tx thứ ba giữ khoá dòng users của người được mời cho tới khi `release()`; các tx duyệt/cấp xếp hàng chờ nó. */
+  async function holdReferee(refereeId: string) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => (locked = resolve));
+    const done = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR NO KEY UPDATE`;
+        locked();
+        await gate;
+      },
+      { timeout: 30_000 },
+    );
+    await held;
+    return { release, done };
+  }
+
+  /** Chờ tới khi đúng `n` phiên của DB test đang đứng chờ khoá (tx duyệt/cấp đã tới chỗ cần dòng người được mời). */
+  async function waitLockWaiters(n: number) {
+    for (let i = 0; i < 200; i++) {
+      const [row] = await prisma.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'`;
+      if ((row?.n ?? 0) >= n) return;
+      await sleep(25);
     }
+    throw new Error(`Không thấy ${n} phiên chờ khoá`);
+  }
+
+  async function forcedOrder(first: 'APPROVE' | 'GRANT') {
+    const { referrer, referee, a } = await unrewarded();
+    const req = await returns.request(referee.id, a.code, {
+      reasonCode: 'OTHER',
+      reason: 'Không còn nhu cầu dùng nữa',
+      items: [{ orderItemId: a.item.id, quantity: 2 }],
+    });
+    const approve = () => returns.review(admin.id, req.id, { approve: true });
+    const grant = () => rewards.grantReferralOrderReward(referee.id);
+    const lock = await holdReferee(referee.id);
+    const p1 = (first === 'APPROVE' ? approve : grant)();
+    await waitLockWaiters(1);
+    const p2 = (first === 'APPROVE' ? grant : approve)();
+    await waitLockWaiters(2);
+    lock.release();
+    await lock.done;
+    const s = summarize(await Promise.allSettled([p1, p2]));
+    expect(s.errors).toEqual([]);
+    return { referrer, referee, a, reqId: req.id };
+  }
+
+  it('(n1) thứ tự ép: tx duyệt trả lấy khoá người được mời và commit TRƯỚC, tx cấp đọc yêu cầu đã duyệt SAU → lúc cấp thu 66', async () => {
+    const { referrer, referee, a } = await forcedOrder('APPROVE');
+    const r = await revocations(referrer.id);
+    expect(r.partial).toEqual([
+      expect.objectContaining({ reason: `REFERRAL_ORDER2_PARTIAL_REVOKE:${referee.id}:GRANT-${a.id}`, delta: -66 }),
+    ]);
+    expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+  });
+
+  it('(n2) thứ tự ép: tx cấp lấy khoá và commit TRƯỚC (chưa thấy yêu cầu đang duyệt), tx duyệt thấy thưởng SAU → lúc duyệt thu 66', async () => {
+    const { referrer, referee, reqId } = await forcedOrder('GRANT');
+    const r = await revocations(referrer.id);
+    expect(r.partial).toEqual([expect.objectContaining({ reason: `REFERRAL_ORDER2_PARTIAL_REVOKE:${referee.id}:${reqId}`, delta: -66 })]);
+    expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
   });
 
   it('(o) cấp thưởng song song cho hai người được mời của cùng người mời, một người đã trả một phần trước → không deadlock, cả hai được cấp', async () => {
