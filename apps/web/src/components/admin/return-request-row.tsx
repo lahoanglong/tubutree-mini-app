@@ -236,9 +236,24 @@ export function ReturnRow({
                 <p className="text-sm text-stone-700">Đang tính số tiền hoàn…</p>
               )}
               {preview.isError && (
-                <p role="alert" className="text-sm text-danger-fg">
-                  {errorText(preview.error, 'Không tính được số tiền hoàn.')}
-                </p>
+                <>
+                  <p role="alert" className="text-sm text-danger-fg">
+                    {errorText(preview.error, 'Không tính được số tiền hoàn.')}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setConfirming(false)} className={BTN_SECONDARY}>
+                      Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void preview.refetch()}
+                      disabled={preview.isFetching}
+                      className={BTN_PRIMARY}
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </>
               )}
               {p && (
                 <>

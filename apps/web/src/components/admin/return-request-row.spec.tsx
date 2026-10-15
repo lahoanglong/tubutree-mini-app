@@ -210,6 +210,27 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(c.querySelector('[aria-label="Xác nhận duyệt đổi/trả"]')).not.toBeNull();
   });
 
+  it('không tính được số tiền hoàn: có "Thử lại" (tính lại rồi duyệt được) và "Quay lại" (đóng bước xác nhận, mở lại được)', async () => {
+    mocks.preview.mockRejectedValueOnce(new Error('Không tính được số tiền hoàn.'));
+    const c = await mount(REQ());
+    click(btn(c, 'Duyệt hoàn tiền'));
+    await flush(8);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không tính được số tiền hoàn.');
+    expect(btn(c, 'Xác nhận hoàn 104.000đ')).toBeNull();
+    expect(btn(c, 'Quay lại')).not.toBeNull();
+
+    click(btn(c, 'Thử lại'));
+    await flush(8);
+    expect(btn(c, 'Xác nhận hoàn 104.000đ')).not.toBeNull();
+    expect(btn(c, 'Thử lại')).toBeNull();
+
+    mocks.preview.mockReset().mockRejectedValue(new Error('Mất kết nối'));
+    click(btn(c, 'Quay lại'));
+    await flush();
+    expect(c.querySelector('[aria-label="Xác nhận duyệt đổi/trả"]')).toBeNull();
+    expect(btn(c, 'Duyệt hoàn tiền')).not.toBeNull();
+  });
+
   it('từ chối bắt buộc ghi lý do để báo khách', async () => {
     const c = await mount(REQ());
     click(btn(c, 'Từ chối'));
