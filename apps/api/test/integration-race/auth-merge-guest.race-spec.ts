@@ -209,9 +209,14 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(fs.find((p) => p.flashSaleItemId === fsA.id)?.quantity).toBe(2);
     expect(fs.find((p) => p.flashSaleItemId === fsB.id)?.quantity).toBe(2);
 
+    // Mỗi lần mua một đánh giá: đánh giá đi theo đơn của nó. Đơn của khách chuyển sang target thì đánh giá của đơn đó cũng
+    // chuyển, kể cả khi target đã đánh giá cùng sản phẩm ở đơn khác; để lại thì target viết được đánh giá thứ hai cho
+    // cùng lần mua trong khi đánh giá cũ vẫn hiện dưới tài khoản khách.
     const tReviews = await prisma.review.findMany({ where: { userId: target.id } });
-    expect(tReviews.map((r) => r.productId).sort()).toEqual([a.product.id, b.product.id].sort());
-    expect(tReviews.find((r) => r.productId === a.product.id)?.rating).toBe(3);
+    expect(tReviews.map((r) => `${r.productId}:${r.orderId}:${r.rating}`).sort()).toEqual(
+      [`${a.product.id}:other-order:3`, `${a.product.id}:${guestOrder.id}:5`, `${b.product.id}:${guestOrder.id}:4`].sort(),
+    );
+    expect(await prisma.review.count({ where: { userId: guest.id } })).toBe(0);
 
     expect(await prisma.returnRequest.count({ where: { userId: target.id, orderId: guestOrder.id } })).toBe(1);
     expect((await prisma.order.findUniqueOrThrow({ where: { id: guestOrder.id } })).userId).toBe(target.id);

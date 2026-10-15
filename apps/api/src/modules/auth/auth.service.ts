@@ -367,7 +367,8 @@ export class AuthService {
       await tx.coinTransaction.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
       // 6) Bảng giới hạn lượt theo user. Flash sale: cộng dồn số đã mua để perUserLimit tính cả
-      //    hai bên. Đánh giá: mỗi user một đánh giá/SP, trùng thì giữ của target.
+      //    hai bên. Đánh giá: mỗi lần mua (đơn) một đánh giá và đơn của khách đã sang target ở trên, nên đánh giá đi theo
+      //    đơn của nó; trùng khoá (target, SP, đơn) thì giữ của target.
       await tx.$executeRaw`
         UPDATE "flash_sale_purchases" t SET "quantity" = t."quantity" + g."quantity", "updatedAt" = now()
           FROM "flash_sale_purchases" g
@@ -380,7 +381,8 @@ export class AuthService {
       await tx.$executeRaw`
         UPDATE "reviews" g SET "userId" = ${tid}
          WHERE g."userId" = ${gid}
-           AND NOT EXISTS (SELECT 1 FROM "reviews" t WHERE t."userId" = ${tid} AND t."productId" = g."productId")`;
+           AND NOT EXISTS (SELECT 1 FROM "reviews" t
+                            WHERE t."userId" = ${tid} AND t."productId" = g."productId" AND t."orderId" = g."orderId")`;
 
       // Danh sách theo dõi/nhắc: unique (userId, khoá), trùng thì giữ dòng của target.
       await tx.$executeRaw`
