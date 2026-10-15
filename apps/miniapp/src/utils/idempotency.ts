@@ -41,6 +41,10 @@ export function createOrderKeyRing(make: () => string = newIdempotencyKey) {
       }
       return key;
     },
+    /** Key đã cấp cho nội dung này (undefined = chưa gửi lần nào), không cấp key mới. */
+    peek(body: object): string | undefined {
+      return keys.get(fingerprintOf(body));
+    },
     reset(): void {
       keys.clear();
     },

@@ -142,6 +142,35 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(mocks.fetchProduct.mock.calls.map((c) => c[0])).toEqual(['a', 'b', 'c']);
   });
 
+  describe('hàng gian hàng đối tác không có đặt định kỳ (R5-CHECKOUT-8, D4)', () => {
+    const HONEY = { id: 'i2', variationId: 'var-honey', productName: 'Mật ong ký gửi', productSlug: 'mat-ong-ky-gui', variationName: null, unitPrice: 180000, quantity: 1, total: 180000, backorderedQty: 0 };
+    const byslug = (extra: Record<string, Record<string, unknown>>) => async (slug: string) =>
+      slug === 'nrc' ? PRODUCT(10) : { slug, variations: [{ id: 'var-honey', stock: 10 }], ...extra[slug] };
+
+    it.each([
+      ['hàng ký gửi (Tubu giao hộ)', { partnerOwned: true }],
+      ['gian hàng tự giao', { partnerOwned: true, fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }],
+      ['gian hàng tạm nghỉ', { fulfiller: { kind: 'UNAVAILABLE', storefrontId: 'sf1', name: 'Mật ong Linh' } }],
+    ])('đơn chỉ có %s → không gợi ý định kỳ', async (_label, extra) => {
+      mocks.fetchProduct.mockImplementation(byslug({ 'mat-ong-ky-gui': extra }));
+      const order = { ...ORDER, items: [HONEY] } as unknown as OrderDTO;
+      const { qc } = renderSuccess({ order });
+      await waitFor(() => expect(qc.getQueryState(['product', 'mat-ong-ky-gui'])?.status).toBe('success'));
+      expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+      expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
+    });
+
+    it('đơn trộn hàng ký gửi (dòng đầu) với hàng Tubu → gợi ý đúng món Tubu, mở SubscribeSheet đúng variation Tubu', async () => {
+      mocks.fetchProduct.mockImplementation(byslug({ 'mat-ong-ky-gui': { partnerOwned: true } }));
+      const order = { ...ORDER, items: [HONEY, ORDER.items[0]] } as unknown as OrderDTO;
+      renderSuccess({ order });
+      fireEvent.click(await screen.findByRole('button', { name: 'Đặt định kỳ' }));
+      expect(screen.getByText('subscribe-open:var-1')).toBeInTheDocument();
+      expect(screen.getByText(/Nước rửa chén/)).toBeInTheDocument();
+      expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
+    });
+  });
+
   it('gợi ý định kỳ nằm SAU hai CTA để không đẩy nút "Theo dõi đơn" khi sản phẩm tải xong', async () => {
     renderSuccess();
     const track = screen.getByRole('button', { name: 'Theo dõi đơn' });

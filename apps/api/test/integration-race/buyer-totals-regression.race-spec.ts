@@ -54,6 +54,8 @@ const ROUNDING = 'làm tròn theo từng dòng (paidTotal) thay vì theo tỉ l�
 const FLASH = 'hàng giờ vàng không gánh mã giảm giá: hoàn đúng giá giờ vàng đã trả (trừ phần Điểm Xanh), dòng thường hoàn ít hơn';
 const SCOPED = 'mã gắn sản phẩm chỉ trừ vào dòng sản phẩm đó: dòng đó hoàn ít hơn, dòng khác hoàn nhiều hơn';
 const POINTS = 'Điểm Xanh hoàn theo đúng phần điểm của dòng (OrderItem.pointsDiscount) thay vì theo giá trị dòng: tiền hoàn + điểm hoàn của một dòng khớp giá trị dòng đó';
+const EARNED =
+  'Điểm Xanh tích thu hồi theo tiền khách thực trả của các đơn vị trả (OrderItem.paidTotal), đúng cơ sở lúc cộng điểm, thay vì theo giá trị dòng: dòng gánh mã trả ít tiền nên thu ít điểm hơn';
 const PER_LINE_CHANGES: Record<string, { now: unknown; why: string }> = {
   'wallet-flash-coupon-points.orders[0].refunds.1 × F.pointsUsedBack': { now: 13, why: POINTS },
   'wallet-flash-coupon-points.orders[0].refunds.1 × A.pointsUsedBack': { now: 7, why: POINTS },
@@ -75,6 +77,10 @@ const PER_LINE_CHANGES: Record<string, { now: unknown; why: string }> = {
   },
   'groupbuy-coupon.orders[0].refunds.1 × G.goods': { now: 145_154, why: `mã mua chung là ${SCOPED}` },
   'groupbuy-coupon.orders[0].refunds.1 × A.goods': { now: 39_846, why: `mã mua chung là ${SCOPED}` },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsEarnedBack': { now: 11, why: EARNED },
+  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsEarnedBack': { now: 5, why: EARNED },
+  'groupbuy-coupon.orders[0].refunds.1 × G.pointsEarnedBack': { now: 14, why: EARNED },
+  'groupbuy-coupon.orders[0].refunds.1 × A.pointsEarnedBack': { now: 4, why: EARNED },
 };
 
 describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng số như trước nhánh Q8 (real Postgres)', () => {

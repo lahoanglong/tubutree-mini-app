@@ -110,4 +110,38 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     await flush(8);
     expect(calls.pointsToUse.every((p) => p === 0)).toBe(true);
   });
+
+  // R5-CHECKOUT-5: bản sửa R4-BUYER-2 ở Mini App (8aea1a0d) chưa sang web — web vẫn hứa lô quy đổi "trả tới 100% giá trị hàng"
+  // ngay dưới câu Điểm Xanh không dùng cho hàng của gian hàng đối tác.
+  describe('dòng điểm quy đổi (R5-CHECKOUT-5)', () => {
+    const CONVERTED = { pointsBalance: 93, redeemablePoints: 93, pointsConvertedBalance: 300, redeemableConvertedPoints: 300 };
+
+    it('giỏ có hàng của gian hàng đối tác: nói phần không hết hạn, không hứa "trả tới 100% giá trị hàng"', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 393, pointsPartnerNote: NOTE };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain(NOTE);
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn');
+      expect(r.container.textContent).not.toContain('trả tới 100% giá trị hàng');
+    });
+
+    it('giỏ chỉ hàng Tubu bị trần theo giá trị hàng: cũng không hứa 100%', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 50, pointsPartnerNote: null };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('Đơn này dùng tối đa 50 Điểm Xanh');
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn');
+      expect(r.container.textContent).not.toContain('trả tới 100% giá trị hàng');
+    });
+
+    it('đơn không bị trần: giữ câu "trả tới 100% giá trị hàng" như trước', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 393, pointsPartnerNote: null };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn, trả tới 100% giá trị hàng');
+    });
+  });
 });

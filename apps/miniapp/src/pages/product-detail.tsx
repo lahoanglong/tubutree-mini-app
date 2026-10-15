@@ -32,6 +32,7 @@ import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands'
 import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -276,8 +277,7 @@ export default function ProductDetailPage() {
   // freeship, đặt định kỳ hay mua chung.
   const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
   const fromStore = merchant ?? unavailable;
-  // Hàng của gian hàng đối tác (kể cả Tubu giao hộ) chỉ bán giá lẻ: không đặt định kỳ, không mua chung (Q8 S2).
-  const retailOnly = !!fromStore || p.partnerOwned === true;
+  const retailOnly = isRetailOnly(p);
 
   const handleAdd = async () => {
     if (status !== 'authenticated') {

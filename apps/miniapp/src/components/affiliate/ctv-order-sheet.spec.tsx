@@ -440,3 +440,197 @@ describe('CtvOrderSheet — ô tìm sản phẩm chỉ gợi ý từ 2 ký tự'
     expect(screen.queryByText('Nước rửa chén')).toBeNull();
   });
 });
+
+const REGULAR = {
+  items: [{ variationId: 'var1', unitPrice: 65_000, quantity: 1, total: 65_000, isFlash: false, flashLimitNotice: null }],
+  goods: 65_000, shippingFee: 19_000, total: 84_000, blockedPaymentMethods: {},
+};
+const timeoutError = () => new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED');
+const submitBtn = () => screen.getByRole('button', { name: 'Tạo đơn hộ khách' });
+
+function resetMocks() {
+  vi.clearAllMocks();
+  localStorage.clear();
+  mocks.suggestProducts.mockResolvedValue([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]);
+  mocks.fetchProduct.mockResolvedValue({
+    name: 'Nước rửa chén',
+    variations: [{ id: 'var1', name: 'Chanh', retailPrice: 65_000, salePrice: null, stock: 10 }],
+  });
+  mocks.quoteCtvOrder.mockResolvedValue(REGULAR);
+  mocks.createCtvOrder.mockResolvedValue({ code: 'TUBU9', total: 84_000, items: [] });
+}
+
+async function readyWithAn() {
+  saveRecentCustomer('ctv1', AN, 1);
+  renderSheet();
+  fireEvent.click(screen.getByRole('button', { name: 'Nguyễn An · …567' }));
+  await addProduct();
+}
+
+const keyOfCall = (n: number) => mocks.createCtvOrder.mock.calls[n]![1] as string;
+
+describe('CtvOrderSheet — mạng chậm không tạo đơn thứ hai (R5-CHECKOUT-1)', () => {
+  beforeEach(resetMocks);
+
+  it('mỗi lần tạo đơn gửi kèm Idempotency-Key', async () => {
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(keyOfCall(0)).toEqual(expect.any(String));
+    expect(keyOfCall(0).length).toBeGreaterThan(0);
+  });
+
+  it('quá thời gian: tự kiểm tra lại bằng đúng key cũ và báo "Đang kiểm tra đơn…", không mời CTV bấm lại; lần kiểm tra trả đơn đã tạo → màn thành công', async () => {
+    let resolveCheck: (v: unknown) => void = () => {};
+    mocks.createCtvOrder
+      .mockRejectedValueOnce(timeoutError())
+      .mockImplementationOnce(() => new Promise((r) => { resolveCheck = r; }));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+
+    expect(await screen.findByText(/Đang kiểm tra đơn…/)).toBeInTheDocument();
+    expect(submitBtn()).toHaveClass('zaui-btn-loading');
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2), { timeout: 4000 });
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+
+    resolveCheck({ code: 'TUBU9', total: 84_000, items: [] });
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it('kiểm tra lại vẫn không được: báo ngay trên form (không snackbar), nút thành "Gửi lại đơn" và gửi đúng key cũ', async () => {
+    mocks.createCtvOrder
+      .mockRejectedValueOnce(timeoutError())
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ code: 'TUBU9', total: 84_000, items: [] });
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+
+    const alert = await screen.findByRole('alert', {}, { timeout: 4000 });
+    expect(alert).toHaveTextContent('Mạng yếu nên chưa biết đơn đã được tạo chưa.');
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi lại đơn' }));
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(3);
+    expect(keyOfCall(2)).toBe(keyOfCall(0));
+  });
+
+  it('chưa rõ kết quả rồi CTV sửa đơn: cảnh báo đơn trước có thể đã tạo; gửi là đơn mới với key mới', async () => {
+    mocks.createCtvOrder
+      .mockRejectedValueOnce(timeoutError())
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ code: 'TUBU9', total: 149_000, items: [] });
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await screen.findByRole('button', { name: 'Gửi lại đơn' }, { timeout: 4000 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Đơn gửi lúc nãy có thể đã được tạo');
+    await waitFor(() => expect(submitBtn()).not.toBeDisabled());
+    fireEvent.click(submitBtn());
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(keyOfCall(2)).not.toBe(keyOfCall(0));
+  });
+
+  it('máy chủ từ chối (400): không tự gửi lại, báo lỗi như cũ', async () => {
+    mocks.createCtvOrder.mockRejectedValueOnce(rejected('OUT_OF_STOCK', 'Sản phẩm "Nước rửa chén" không đủ tồn kho.'));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Sản phẩm "Nước rửa chén" không đủ tồn kho.' })),
+    );
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('đơn tạo xong, "Lên đơn khác" với cùng khách và cùng món → đơn mới, key mới', async () => {
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    fireEvent.click(screen.getByRole('button', { name: 'Lên đơn khác' }));
+    await addProduct();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2));
+    expect(keyOfCall(1)).not.toBe(keyOfCall(0));
+  });
+});
+
+describe('CtvOrderSheet — trần COD 5.000.000đ báo trước khi gửi (R5-CHECKOUT-3)', () => {
+  const COD_OVER = 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chọn chuyển khoản.';
+  const BIG = {
+    items: [{ variationId: 'var1', unitPrice: 5_381_000, quantity: 1, total: 5_381_000, isFlash: false, flashLimitNotice: null }],
+    goods: 5_381_000, shippingFee: 19_000, total: 5_400_000, blockedPaymentMethods: { COD: COD_OVER },
+  };
+  beforeEach(resetMocks);
+
+  it('báo giá khoá COD: thẻ COD mờ kèm lý do ngay dưới, tự chuyển sang Chuyển khoản, đơn gửi BANK_TRANSFER', async () => {
+    mocks.quoteCtvOrder.mockResolvedValue(BIG);
+    await readyWithAn();
+    const cod = screen.getByRole('button', { name: /COD/ });
+    const bank = screen.getByRole('button', { name: /Chuyển khoản/ });
+    await waitFor(() => expect(bank).toHaveAttribute('aria-pressed', 'true'));
+    expect(cod).toHaveAttribute('aria-disabled', 'true');
+    expect(cod).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(COD_OVER)).toBeInTheDocument();
+
+    fireEvent.click(cod);
+    expect(bank).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.createCtvOrder.mock.calls[0]![0].paymentMethod).toBe('BANK_TRANSFER');
+  });
+
+  it('báo giá không khoá COD: giữ COD mặc định, không có câu trần COD', async () => {
+    await readyWithAn();
+    expect(screen.getByRole('button', { name: /COD/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /COD/ })).not.toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByText(/chỉ nhận đơn tối đa/)).toBeNull();
+  });
+
+  it('báo giá cũ còn cho COD mà máy chủ từ chối (PAYMENT_METHOD_NOT_ALLOWED) → tải lại báo giá, khoá COD và chuyển khoản', async () => {
+    let blocked = false;
+    mocks.quoteCtvOrder.mockImplementation(async () => (blocked ? BIG : { ...BIG, blockedPaymentMethods: {} }));
+    mocks.createCtvOrder.mockRejectedValueOnce(rejected('PAYMENT_METHOD_NOT_ALLOWED', COD_OVER));
+    await readyWithAn();
+    blocked = true;
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Chuyển khoản/ })).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByRole('button', { name: /COD/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText(COD_OVER)).toBeInTheDocument();
+  });
+});
+
+describe('CtvOrderSheet — SĐT và tên người nhận cùng luật với máy chủ (R5-CHECKOUT-2)', () => {
+  beforeEach(resetMocks);
+
+  async function fillManual(recipient: string, phone: string) {
+    renderSheet();
+    fireEvent.change(inputNear('Tên người nhận'), { target: { value: recipient } });
+    fireEvent.change(inputNear('Số điện thoại'), { target: { value: phone } });
+    fireEvent.change(inputNear('Địa chỉ (số nhà, đường)'), { target: { value: '9 Trần Phú' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn địa bàn thử' }));
+    await addProduct();
+    fireEvent.click(submitBtn());
+  }
+
+  it('SĐT gõ có dấu chấm hay 84 đầu vẫn hợp lệ, gửi dạng 0xxxxxxxxx', async () => {
+    await fillManual('  Lê Cúc ', '84.933.444.555');
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.createCtvOrder.mock.calls[0]![0].customer).toMatchObject({ recipient: 'Lê Cúc', phone: '0933444555' });
+  });
+
+  it('SĐT 9 số không có 0 đầu → báo chưa đúng, không gửi', async () => {
+    await fillManual('Lê Cúc', '933444555');
+    expect(screen.getByText('Số điện thoại chưa đúng')).toBeInTheDocument();
+    expect(mocks.createCtvOrder).not.toHaveBeenCalled();
+  });
+
+  it('tên người nhận 1 ký tự → báo cần ít nhất 2 ký tự, không gửi', async () => {
+    await fillManual(' A ', '0933444555');
+    expect(screen.getByText('Tên người nhận cần ít nhất 2 ký tự')).toBeInTheDocument();
+    expect(mocks.createCtvOrder).not.toHaveBeenCalled();
+  });
+});

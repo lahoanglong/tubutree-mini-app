@@ -9,7 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
-import { COD_MAX_PER_ORDER } from '../checkout/checkout-split';
+import { COD_MAX_PER_ORDER, PAYMENT_METHOD_NOT_ALLOWED } from '../checkout/checkout-split';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
@@ -19,7 +19,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CTV_NOTIFICATION } from './ctv-notification-codes';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { paginated, skipTake } from '../../common/pagination';
-import { toLocalPhone } from '../../common/phone';
+import { normalizeZaloPhone, parseTypedVnPhone, TYPED_VN_PHONE_MESSAGE } from '../../common/phone';
 import {
   CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
@@ -42,6 +42,21 @@ export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 type Db = PrismaService | Prisma.TransactionClient;
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+
+/**
+ * Lý do đơn hộ không thu hộ (COD) được, null = được. Cùng trần mỗi đơn với checkout (COD_MAX_PER_ORDER); đơn hộ không trả bằng
+ * Ví nên chỉ còn chuyển khoản. Báo giá trả câu này để form khoá COD trước, tạo đơn từ chối đúng câu đó.
+ */
+function ctvCodBlockReason(total: number): string | null {
+  if (total <= COD_MAX_PER_ORDER) return null;
+  return `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${vnd(COD_MAX_PER_ORDER)}, đơn này là ${vnd(total)}. Vui lòng chọn chuyển khoản.`;
+}
+
+/** Cùng dạng `blockedPaymentMethods` của báo giá checkout: phương thức → lý do, chỉ có các phương thức bị khoá. */
+function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_TRANSFER', string>> {
+  const cod = ctvCodBlockReason(total);
+  return cod ? { COD: cod } : {};
+}
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -531,6 +546,7 @@ export class AffiliateService {
       goods: priced.goods,
       shippingFee: priced.shippingFee,
       total: priced.total,
+      blockedPaymentMethods: blockedCtvPaymentMethods(priced.total),
     };
   }
 
@@ -583,11 +599,14 @@ export class AffiliateService {
       throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
     }
     const ctv = await this.customerOrderPlacer(ctvId);
+    // Kiểm lại ở đây chứ không chỉ ở DTO: so với SĐT của CTV và khoá gộp khách đều cần đúng một dạng 0xxxxxxxxx.
+    const customerPhone = parseTypedVnPhone(dto.customer.phone);
+    if (!customerPhone) throw new BadRequestException(TYPED_VN_PHONE_MESSAGE);
     // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
     // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
     // nhận) cũng chảy về CTV.
-    const ctvPhone = ctv.phone ? toLocalPhone(ctv.phone) : null;
-    if (ctvPhone && ctvPhone === toLocalPhone(dto.customer.phone)) {
+    const ctvPhone = ctv.phone ? normalizeZaloPhone(ctv.phone) : null;
+    if (ctvPhone && ctvPhone === customerPhone) {
       throw new BadRequestException(
         'Không thể lên đơn hộ với SĐT của chính bạn. Hãy đặt hàng như khách thường cho đơn của mình.',
       );
@@ -599,10 +618,9 @@ export class AffiliateService {
     if (dto.expectedTotal != null && total > dto.expectedTotal) {
       throw totalChangedError(totalChangedMessage(dto.expectedTotal, total));
     }
-    if (dto.paymentMethod === 'COD' && total > COD_MAX_PER_ORDER) {
-      throw new BadRequestException(
-        `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${COD_MAX_PER_ORDER.toLocaleString('vi-VN')}đ, đơn này là ${total.toLocaleString('vi-VN')}đ. Vui lòng chọn chuyển khoản.`,
-      );
+    const codBlocked = dto.paymentMethod === 'COD' ? ctvCodBlockReason(total) : null;
+    if (codBlocked) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PAYMENT_METHOD_NOT_ALLOWED, message: codBlocked });
     }
 
     // Gian hàng của CTV (nếu có) → gắn slug để analytics theo gian hàng.
@@ -614,7 +632,7 @@ export class AffiliateService {
 
     const status = dto.paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING_PAYMENT';
     const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
-    const shippingAddress = this.customerSnapshot(dto.customer);
+    const shippingAddress = this.customerSnapshot({ ...dto.customer, phone: customerPhone });
 
     let order: { id: string };
     try {
@@ -650,13 +668,13 @@ export class AffiliateService {
             source: 'ctv_assisted',
             platform: 'miniapp',
             // KHÔNG PHẢI hash mật mã — SĐT người nhận chuẩn hoá về DẠNG NỘI ĐỊA 0xxxxxxxxx (xem
-            // toLocalPhone ở common/phone.ts), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
+            // parseTypedVnPhone ở common/phone.ts), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
             // trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn CTV lên hộ tạo
             // Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là nơi DUY NHẤT
             // set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này (hoặc chuẩn hoá sai dạng)
             // thì quyết định "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không
             // có hiệu lực / gộp sai người.
-            endCustomerKey: toLocalPhone(dto.customer.phone),
+            endCustomerKey: customerPhone,
             note: dto.note,
             idempotencyKey: key ?? null,
             items: {
@@ -697,11 +715,12 @@ export class AffiliateService {
         return created;
       });
     } catch (err) {
-      // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
-      // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
-      if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+      // Race idempotency: lần gửi lại cùng key chạy chồng lên lần đầu (CTV bấm lại sau khi quá thời gian) chờ khoá dòng kho của
+      // lần đầu, rồi ăn unique-violation (P2002) trên idempotencyKey, hoặc báo hết hàng / hết suất giờ vàng vì chính lần đầu vừa
+      // giữ. Đơn của key đó đã có thì trả lại đơn đó thay vì báo lỗi cho một đơn đã tạo.
+      if (key) {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.orderForCtv(existing.id);
+        if (existing && existing.userId === ctvId) return this.orderForCtv(existing.id);
       }
       throw err;
     }
@@ -724,7 +743,7 @@ export class AffiliateService {
   /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */
   private customerSnapshot(c: PlaceOrderForCustomerDto['customer']): Prisma.InputJsonValue {
     return {
-      recipient: c.recipient,
+      recipient: c.recipient.trim(),
       phone: c.phone,
       province: c.province,
       district: c.district ?? '',

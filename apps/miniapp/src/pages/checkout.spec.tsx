@@ -683,6 +683,7 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
     mocks.getCart.mockResolvedValue(SPLIT_CART);
     mocks.checkoutQuote.mockResolvedValue(SPLIT_QUOTE);
     mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
@@ -707,6 +708,42 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
     expect(bank).toHaveAttribute('aria-checked', 'false');
     const body = await placeOrderClick();
     expect(body.paymentMethod).toBe('COD');
+  });
+
+  it('R5-CHECKOUT-4: giỏ chỉ hàng gian hàng tự giao (một kiện) → nói gian hàng nào giao, không nói "1 nơi giao… 1 đơn riêng"', async () => {
+    mocks.getCart.mockResolvedValue({ ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...SPLIT_QUOTE, subtotal: 200_000, shippingFee: 25_000, total: 225_000, shipments: [SPLIT_QUOTE.shipments[1]!] });
+    renderPage();
+    const shop = await screen.findByRole('region', { name: 'Mật ong Linh giao' });
+    expect(shop.textContent).toContain('Mật ong rừng');
+    expect(screen.getByText('Đơn này do Mật ong Linh giao, phí giao theo gian hàng.')).toBeInTheDocument();
+    expect(screen.queryByText(/nơi giao nên sẽ thành/)).toBeNull();
+  });
+
+  it('R5-CHECKOUT-6: giỏ đổi ở nơi khác sang hàng gian hàng tự giao, máy chủ từ chối cách thanh toán (PAYMENT_METHOD_NOT_ALLOWED) → tải lại cả giỏ, kiện mới có đủ món', async () => {
+    const TUBU_QUOTE = {
+      ...QUOTE,
+      shipments: [{ key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 }],
+    };
+    const SHOP_QUOTE = { ...SPLIT_QUOTE, subtotal: 200_000, shippingFee: 25_000, total: 225_000, shipments: [SPLIT_QUOTE.shipments[1]!] };
+    let changed = false;
+    mocks.getCart.mockImplementation(async () => (changed ? { ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 } : CART));
+    mocks.checkoutQuote.mockImplementation(async () => (changed ? SHOP_QUOTE : TUBU_QUOTE));
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: BLOCK_REASON } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    const bank = await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ });
+    await waitFor(() => expect(bank).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.click(bank);
+    await waitFor(() => expect(bank).toHaveAttribute('aria-checked', 'true'));
+
+    changed = true;
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('BANK_TRANSFER');
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: BLOCK_REASON, type: 'error' }));
+    const shop = await screen.findByRole('region', { name: 'Mật ong Linh giao' });
+    await waitFor(() => expect(shop.textContent).toContain('Mật ong rừng'));
+    expect(screen.queryByText('Xà bông thảo mộc')).toBeNull();
   });
 
   it('giỏ toàn hàng Tubu: không chia nhóm, không báo tách đơn', async () => {

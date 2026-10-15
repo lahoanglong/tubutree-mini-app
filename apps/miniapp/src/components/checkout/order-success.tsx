@@ -8,6 +8,7 @@ import { usePublicConfig } from '../../hooks/use-public-config';
 import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
 import { formatVnd } from '../../utils/format';
+import { isRetailOnly } from '../../utils/retail-only';
 import { shippingEtaLabel } from '../../utils/shipping-eta';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
@@ -28,8 +29,8 @@ export interface SubscribeCandidate {
 
 /**
  * Sản phẩm đầu tiên của đơn cho phép "Đặt định kỳ" — CÙNG điều kiện PDP đang dùng để hiện nút
- * (product-detail.tsx: `selected && inStock`, tức variation đang bán và stock > 0). Dùng chung
- * queryKey ['product', slug] với PDP. Đơn không có dòng nào đủ điều kiện → null (ẩn gợi ý).
+ * (product-detail.tsx: `selected && inStock && !retailOnly`, tức variation đang bán, stock > 0 và không phải hàng gian hàng
+ * đối tác). Dùng chung queryKey ['product', slug] với PDP. Đơn không có dòng nào đủ điều kiện → null (ẩn gợi ý).
  */
 export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | null {
   const slugs = [...new Set(order.items.map((it) => it.productSlug).filter((s): s is string => !!s))].slice(0, MAX_SUBSCRIBE_CHECKS);
@@ -43,7 +44,9 @@ export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | nul
   });
   for (const it of order.items) {
     const idx = it.productSlug ? slugs.indexOf(it.productSlug) : -1;
-    const variation = idx >= 0 ? products[idx]?.data?.variations.find((v) => v.id === it.variationId) : undefined;
+    const product = idx >= 0 ? products[idx]?.data : undefined;
+    if (!product || isRetailOnly(product)) continue;
+    const variation = product.variations.find((v) => v.id === it.variationId);
     if (variation && variation.stock > 0) {
       return { variationId: it.variationId, quantity: it.quantity, productName: it.productName };
     }

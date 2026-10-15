@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -29,16 +29,21 @@ import {
   type ProductSuggestion,
   type VariationDetail,
 } from '../../services/shop-api';
-import { createCtvOrder, quoteCtvOrder, type CtvOrderItemInput, type CtvOrderResult } from '../../services/affiliate-api';
-import { getErrorCode, getErrorMessage } from '../../services/api';
+import {
+  createCtvOrder,
+  quoteCtvOrder,
+  type CtvOrderInput,
+  type CtvOrderItemInput,
+  type CtvOrderResult,
+} from '../../services/affiliate-api';
+import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../../services/api';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { createOrderKeyRing } from '../../utils/idempotency';
+import { parseTypedVnPhone } from '../../utils/vn-phone';
 import { vi } from '../../i18n/vi';
-
-/** SĐT Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx. */
-const VN_PHONE = /^(0|\+84)\d{9}$/;
 
 interface OrderLine {
   variationId: string;
@@ -54,6 +59,15 @@ const t = vi.ctvOrder;
 
 /** Giá hoặc tổng lúc tạo đơn đã khác báo giá CTV đang xem (giờ vàng hết giờ/hết suất, phí giao đổi). */
 const PRICE_MOVED = new Set(['TOTAL_CHANGED', 'PRICE_CHANGED']);
+/** Tên người nhận tối thiểu, cùng luật máy chủ (PlaceOrderForCustomerDto). */
+const RECIPIENT_MIN = 2;
+/** Chờ trước khi tự gửi lại đúng đơn đó (cùng key) sau quá thời gian/mất kết nối: một lần, rồi để CTV tự bấm "Gửi lại đơn". */
+const RECHECK_DELAY_MS = 1_500;
+
+interface Submission {
+  body: CtvOrderInput;
+  key: string;
+}
 
 /** Form CTV lên đơn hộ khách — tạo đơn + hoa hồng cho CTV. */
 export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
@@ -70,6 +84,11 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const [showErrors, setShowErrors] = useState(false);
   const [result, setResult] = useState<CtvOrderResult | null>(null);
   const [priceMoved, setPriceMoved] = useState<{ message: string; itemsKey: string } | null>(null);
+  // Mỗi lần điền form một key (như checkout): gửi lại cùng nội dung sau quá thời gian/mất mạng là cùng key, máy chủ trả lại
+  // đơn đã tạo. Đổi món/khách/cách trả là đơn khác nên key khác; tạo đơn xong thì reset.
+  const orderKeys = useRef(createOrderKeyRing());
+  // Key của lần gửi chưa biết kết quả (quá thời gian, mất kết nối, 5xx sau khi đã tự kiểm tra lại một lần).
+  const [unconfirmedKey, setUnconfirmedKey] = useState<string | null>(null);
   const navigate = useNavigate();
   const userId = useAuthStore((s) => s.user?.id);
   const [recents, setRecents] = useState<RecentCustomer[]>(() => loadRecentCustomers(userId));
@@ -154,47 +173,61 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const quotedLines = new Map((quote?.items ?? []).map((i) => [i.variationId, i]));
   const goods = quote?.goods ?? lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
 
-  const phoneClean = phone.replace(/\s/g, '');
-  const recipientOk = recipient.trim().length > 0;
-  const phoneOk = VN_PHONE.test(phoneClean);
+  const phoneLocal = parseTypedVnPhone(phone);
+  const recipientOk = recipient.trim().length >= RECIPIENT_MIN;
+  const phoneOk = phoneLocal !== null;
   const streetOk = street.trim().length > 0;
   const geoOk = !!geo.provinceCode && !!geo.wardCode;
   const itemsOk = lines.length > 0;
   const valid = recipientOk && phoneOk && streetOk && geoOk && itemsOk;
   // Báo giá đang tính: gửi đơn lúc này sẽ không kèm tổng đã báo cho khách nên máy chủ không bắt được giá đổi. Báo giá lỗi hẳn thì vẫn cho đặt như trước.
   const quotePending = itemsOk && !quote && !quoteFailed;
+  // Trần COD mỗi đơn (máy chủ trả lý do trong báo giá, cùng câu nó từ chối lúc tạo đơn): khoá COD, tự chuyển sang chuyển khoản.
+  const codBlocked = quote?.blockedPaymentMethods?.COD ?? null;
+  useEffect(() => {
+    if (codBlocked && payment === 'COD') setPayment('BANK_TRANSFER');
+  }, [codBlocked, payment]);
+
+  const body: CtvOrderInput = {
+    items: lines.map((l) => ({ variationId: l.variationId, quantity: l.quantity })),
+    customer: {
+      recipient: recipient.trim(),
+      phone: phoneLocal ?? phone.trim(),
+      province: geo.province,
+      district: '',
+      ward: geo.ward,
+      street: street.trim(),
+      provinceCode: geo.provinceCode,
+      districtCode: '',
+      wardCode: geo.wardCode,
+    },
+    paymentMethod: payment,
+    note: note.trim() || undefined,
+    ...(quote ? { expectedTotal: quote.total } : {}),
+  };
+  const resendSameOrder = unconfirmedKey !== null && orderKeys.current.peek(body) === unconfirmedKey;
 
   const mut = useMutation({
-    mutationFn: () =>
-      createCtvOrder({
-        items: lines.map((l) => ({ variationId: l.variationId, quantity: l.quantity })),
-        customer: {
-          recipient: recipient.trim(),
-          phone: phoneClean,
-          province: geo.province,
-          district: '',
-          ward: geo.ward,
-          street: street.trim(),
-          provinceCode: geo.provinceCode,
-          districtCode: '',
-          wardCode: geo.wardCode,
-        },
-        paymentMethod: payment,
-        note: note.trim() || undefined,
-        ...(quote ? { expectedTotal: quote.total } : {}),
-      }),
-    onSuccess: (r) => {
+    mutationFn: (s: Submission) => createCtvOrder(s.body, s.key),
+    // Quá thời gian/mất kết nối: máy chủ có thể đã ghi đơn. Tự gửi lại đúng đơn đó (cùng key, máy chủ trả lại đơn đã có) thay
+    // vì để CTV bấm lại; lỗi nghiệp vụ 4xx thì không.
+    retry: (failureCount, error) => failureCount < 1 && isOutcomeUnknown(error),
+    retryDelay: RECHECK_DELAY_MS,
+    onSuccess: (r, s) => {
       haptic('medium');
+      orderKeys.current.reset();
+      setUnconfirmedKey(null);
       setPriceMoved(null);
       setResult(r);
+      const c = s.body.customer;
       saveRecentCustomer(userId, {
-        recipient: recipient.trim(),
-        phone: phoneClean,
-        street: street.trim(),
-        province: geo.province,
-        provinceCode: geo.provinceCode,
-        ward: geo.ward,
-        wardCode: geo.wardCode,
+        recipient: c.recipient,
+        phone: c.phone,
+        street: c.street,
+        province: c.province,
+        provinceCode: c.provinceCode,
+        ward: c.ward,
+        wardCode: c.wardCode,
         usedAt: Date.now(),
       });
       setRecents(loadRecentCustomers(userId));
@@ -203,21 +236,29 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       void qc.invalidateQueries({ queryKey: ['affiliate-product-breakdown'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-sf-analytics'] });
     },
-    onError: (e) => {
+    onError: (e, s) => {
+      if (isOutcomeUnknown(e)) {
+        setUnconfirmedKey(s.key);
+        return;
+      }
+      setUnconfirmedKey(null);
       const code = getErrorCode(e);
       if (code && PRICE_MOVED.has(code)) {
         setPriceMoved({ message: getErrorMessage(e), itemsKey });
         void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
         return;
       }
+      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
+      if (code === 'PAYMENT_METHOD_NOT_ALLOWED') void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
+  const checking = mut.isPending && mut.failureCount > 0;
 
   const submit = () => {
     setShowErrors(true);
-    if (!valid || quotePending) return;
-    mut.mutate();
+    if (!valid || quotePending || (payment === 'COD' && codBlocked)) return;
+    mut.mutate({ body, key: orderKeys.current.keyFor(body) });
   };
 
   // Sheet ZaUI đã tự đệm safe-area đáy (xem ui/bottom-sheet.tsx) nên chỉ đệm 16px, không cộng thêm.
@@ -290,7 +331,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
             {recents.map((c) => (
               <Chip
                 key={normalizeCustomerPhone(c.phone)}
-                selected={normalizeCustomerPhone(c.phone) === phoneClean}
+                selected={normalizeCustomerPhone(c.phone) === phoneLocal}
                 onPress={() => applyCustomer(c)}
               >
                 {recentCustomerLabel(c)}
@@ -303,7 +344,12 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       {/* Người nhận */}
       <GroupLabel>{t.recipientHeading}</GroupLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <FieldInput label={t.recipient} value={recipient} onChange={setRecipient} error={showErrors && !recipientOk ? t.requiredField : undefined} />
+        <FieldInput
+          label={t.recipient}
+          value={recipient}
+          onChange={setRecipient}
+          error={showErrors && !recipientOk ? (recipient.trim() ? t.recipientTooShort : t.requiredField) : undefined}
+        />
         <FieldInput
           label={t.phone}
           value={phone}
@@ -374,7 +420,14 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       {/* Thanh toán */}
       <GroupLabel style={{ marginTop: 16 }}>{t.paymentHeading}</GroupLabel>
       <div style={{ display: 'flex', gap: 8 }}>
-        <ChoiceCard active={payment === 'COD'} title={t.cod} sub={t.codHint} onPress={() => setPayment('COD')} />
+        <ChoiceCard
+          active={payment === 'COD'}
+          title={t.cod}
+          sub={t.codHint}
+          onPress={() => setPayment('COD')}
+          disabled={!!codBlocked}
+          describedBy={codBlocked ? 'ctv-cod-blocked' : undefined}
+        />
         <ChoiceCard
           active={payment === 'BANK_TRANSFER'}
           title={t.bankTransfer}
@@ -382,6 +435,13 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           onPress={() => setPayment('BANK_TRANSFER')}
         />
       </div>
+      {codBlocked && (
+        <div id="ctv-cod-blocked" style={{ marginTop: 6 }}>
+          <Text variant="caption" tone="secondary" as="div">
+            {codBlocked}
+          </Text>
+        </div>
+      )}
 
       <div style={{ marginTop: 12 }}>
         <Input.TextArea
@@ -433,6 +493,31 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           </Text>
         </div>
       )}
+      {checking && (
+        <div role="status" style={{ marginTop: 12 }}>
+          <Text variant="caption" tone="secondary" as="div">
+            {t.checking}
+          </Text>
+        </div>
+      )}
+      {unconfirmedKey && !mut.isPending && (
+        <div role="alert" style={{ marginTop: 12 }}>
+          <Text variant="caption" tone="warning" as="div">
+            {resendSameOrder ? t.unconfirmed : t.unconfirmedChanged}
+          </Text>
+          {!resendSameOrder && (
+            <Button
+              variant="ghost"
+              onPress={() => {
+                onClose();
+                navigate('/orders');
+              }}
+            >
+              {t.viewOrders}
+            </Button>
+          )}
+        </div>
+      )}
       <Button
         fullWidth
         loading={mut.isPending}
@@ -440,7 +525,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         onPress={submit}
         style={{ marginTop: 12 }}
       >
-        {t.submit}
+        {resendSameOrder ? t.resend : t.submit}
       </Button>
     </div>
   );

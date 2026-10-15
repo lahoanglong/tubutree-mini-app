@@ -30,6 +30,17 @@ describe('createOrderKeyRing — Idempotency-Key đặt hàng theo nội dung đ
     expect(ring.keyFor(body)).toBe(k1);
   });
 
+  it('peek: xem key đã cấp cho nội dung này mà không cấp key mới', () => {
+    const make = vi.fn().mockReturnValueOnce('k1').mockReturnValueOnce('k2');
+    const ring = createOrderKeyRing(make);
+    expect(ring.peek(body)).toBeUndefined();
+    expect(make).not.toHaveBeenCalled();
+    const k1 = ring.keyFor(body);
+    expect(ring.peek({ ...body, expectedTotal: 5 })).toBe(k1);
+    expect(ring.peek({ ...body, paymentMethod: 'COD' })).toBeUndefined();
+    expect(make).toHaveBeenCalledTimes(1);
+  });
+
   it('đặt thành công → reset: đơn sau dù giống hệt là đơn mới, key mới', () => {
     const ring = createOrderKeyRing();
     const k1 = ring.keyFor(body);

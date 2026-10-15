@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } from '../services/shop-api';
 import { cartProductIds } from '../utils/coupon-scope';
-import { fulfillerLabel } from '../utils/shipments';
+import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
@@ -272,8 +272,12 @@ export default function CheckoutPage() {
         return;
       }
       // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự chọn
-      // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
-      if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') void queryClient.invalidateQueries({ queryKey: ['quote'] });
+      // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở nơi khác: kiện của báo giá
+      // mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
+      if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') {
+        void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+      }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
@@ -350,6 +354,7 @@ export default function CheckoutPage() {
   // Mỗi nơi giao thành một đơn riêng (D4): chia danh sách món và phí giao theo kiện máy chủ báo.
   const shipments = quote.data?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((sh) => sh.fulfiller.kind === 'MERCHANT');
+  const splitNote = shipmentsNote(shipments);
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -408,9 +413,9 @@ export default function CheckoutPage() {
           <Text bold size="small" style={{ marginBottom: 10 }}>
             Sản phẩm ({shownCount})
           </Text>
-          {split && (
+          {splitNote && (
             <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginBottom: 10 }}>
-              Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
+              {splitNote}
             </Text>
           )}
           {(split

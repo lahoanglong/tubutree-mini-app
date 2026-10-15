@@ -1,6 +1,6 @@
 import { parseMemberCode } from '../modules/loyalty/loyalty.service';
 import { OrderReversalService } from '../modules/orders/order-reversal.service';
-import { normalizeZaloPhone, parseVnPhoneStrict, toLocalPhone } from './phone';
+import { normalizeZaloPhone, parseTypedVnPhone, parseVnPhoneStrict, toLocalPhone } from './phone';
 
 type Out = string | null;
 
@@ -100,5 +100,41 @@ describe('chuẩn hoá SĐT (đặc tả hành vi từng nơi)', () => {
     ['84123', null],
   ])('parseVnPhoneStrict trần: %j → %j', (raw, expected) => {
     expect(parseVnPhoneStrict(raw)).toBe(expected);
+  });
+});
+
+// R5-CHECKOUT-2: SĐT người nhận CTV gõ tay ở form lên đơn hộ. Nhận cả dạng có dấu cách/chấm/gạch, nhưng không tự thêm 0 cho
+// dãy 9 số (từng lọt qua chặn "SĐT của chính CTV" vì '922222221' không trùng '0922222221').
+describe('parseTypedVnPhone (SĐT người nhận gõ tay)', () => {
+  it.each([
+    ['0922222221', '0922222221'],
+    ['+84922222221', '0922222221'],
+    ['84922222221', '0922222221'],
+    ['+84 92 222 2221', '0922222221'],
+    ['092.222.2221', '0922222221'],
+    ['092-222-2221', '0922222221'],
+    ['  0922 222 221  ', '0922222221'],
+    ['(+84) 922 222 221', '0922222221'],
+  ])('%j → %j', (raw, expected) => {
+    expect(parseTypedVnPhone(raw)).toBe(expected);
+  });
+
+  it.each([
+    [''],
+    ['   '],
+    ['abc'],
+    ['922222221'],
+    ['0922 222 22'],
+    ['09222222211'],
+    ['+840922222221'],
+    ['8492222222'],
+    ['tel: 0922222221'],
+    ['0922222221a'],
+    ['+0922222221'],
+    ['---'],
+    ['0012345678'],
+    ['+84012345678'],
+  ])('%j → null', (raw) => {
+    expect(parseTypedVnPhone(raw)).toBeNull();
   });
 });

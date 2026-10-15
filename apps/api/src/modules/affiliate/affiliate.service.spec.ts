@@ -353,6 +353,41 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(bank.orderCreate).toHaveBeenCalledTimes(1);
   });
 
+  // R5-CHECKOUT-3: form lên đơn hộ khoá COD ngay từ báo giá, cùng trần và cùng câu với lúc tạo đơn.
+  describe('trần COD mỗi đơn ở báo giá (R5-CHECKOUT-3)', () => {
+    const priced = (retailPrice: number) => ({
+      variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice, name: 'Bộ', product: { name: 'Bộ', isActive: true, approvalStatus: 'APPROVED' } }],
+    });
+
+    it('tổng 5.400.000đ: báo giá khoá COD kèm lý do; tạo đơn COD bị từ chối PAYMENT_METHOD_NOT_ALLOWED đúng câu đó, không giữ kho', async () => {
+      const { svc, orderCreate, executeRaw } = build({ ...priced(1_800_000) });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 3 }] });
+      expect(q.total).toBe(5_400_000);
+      expect(q.blockedPaymentMethods).toEqual({
+        COD: 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chọn chuyển khoản.',
+      });
+      const err = await svc
+        .placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 3 }] }) as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'PAYMENT_METHOD_NOT_ALLOWED',
+        message: q.blockedPaymentMethods.COD,
+      });
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('tổng đúng 5.000.000đ (kể cả phí giao): COD dùng được ở báo giá và tạo đơn được', async () => {
+      const { svc, orderCreate } = build({ ...priced(2_490_000), shippingFee: 20_000 });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 2 }] });
+      expect(q.total).toBe(5_000_000);
+      expect(q.blockedPaymentMethods).toEqual({});
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('BANK_TRANSFER → đơn PENDING_PAYMENT', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);
@@ -431,6 +466,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
         goods: 120000,
         shippingFee: 19000,
         total: 139000,
+        blockedPaymentMethods: {},
       });
       const over = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 2 }] });
       expect(over.items[0]).toMatchObject({ unitPrice: 140000, isFlash: false, flashLimitNotice: expect.stringContaining('tối đa 1') });
@@ -547,6 +583,9 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
     ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
     ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+    ['CTV gõ 84 không có dấu +', '0922222221', '84922222221'],
+    ['CTV gõ có dấu gạch', '0922222221', '092-222-2221'],
+    ['CTV gõ (+84) có ngoặc', '0922222221', '(+84) 922 222 221'],
   ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
     const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
     await expect(
@@ -627,6 +666,29 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     }
   });
 
+  it('R5-CHECKOUT-1: lần gửi lại cùng key chồng lên lần đầu, báo hết hàng vì lần đầu vừa giữ kho → trả lại đơn lần đầu đã tạo', async () => {
+    const { svc, prisma, orderCreate } = build({ stockCount: 0 });
+    (prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null) // kiểm key đầu hàm: lần đầu chưa commit
+      .mockResolvedValueOnce(null) // generateUniqueOrderCode
+      .mockResolvedValueOnce({ id: 'o-first', userId: 'ctv' }); // sau lỗi: lần đầu đã commit
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-first', code: 'TUBU1', items: [] });
+    const r = (await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-race')) as { id: string };
+    expect(r.id).toBe('o-first');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('lỗi khi tạo đơn mà key chưa có đơn nào (hoặc là đơn của người khác) → giữ nguyên lỗi', async () => {
+    const none = build({ stockCount: 0 });
+    await expect(none.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-x')).rejects.toThrow('không đủ tồn kho');
+    const other = build({ stockCount: 0 });
+    (other.prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'o-other', userId: 'ctv-khac' });
+    await expect(other.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-y')).rejects.toThrow('không đủ tồn kho');
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');
@@ -672,10 +734,27 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     );
   });
 
-  it('endCustomerKey: SĐT không còn chữ số nào sau chuẩn hoá → null (KHÔNG lưu chuỗi rỗng)', async () => {
+  // R5-CHECKOUT-2: SĐT rỗng/rác từng tạo đơn kẹt đẩy Pancake; '922222221' (SĐT của CTV bỏ số 0 đầu) từng lọt chặn SĐT của chính
+  // CTV. Bước tạo đơn tự kiểm lại, không chỉ dựa vào DTO.
+  it.each(['', '---', 'abc', '922222221', '09111111'])(
+    'SĐT người nhận %j không phải SĐT di động VN → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng',
+    async (phone) => {
+      const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone: '0922222221' });
+      await expect(svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone } }) as never)).rejects.toThrow(
+        'Số điện thoại người nhận không hợp lệ',
+      );
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(commissionCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('SĐT người nhận lưu vào đơn (gửi Pancake, khoá gộp khách) ở dạng 0xxxxxxxxx dù CTV gõ +84 có dấu cách', async () => {
     const { svc, orderCreate } = build();
-    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '---' } }) as never);
-    expect(orderCreate.mock.calls[0][0].data.endCustomerKey).toBeNull();
+    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, recipient: '  Khách A ', phone: '+84 90 123 4567' } }) as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.shippingAddress).toMatchObject({ recipient: 'Khách A', phone: '0901234567' });
+    expect(data.endCustomerKey).toBe('0901234567');
   });
 
   // P0 (review Task 10): ctv-order-sheet.tsx (FE) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx cho SĐT

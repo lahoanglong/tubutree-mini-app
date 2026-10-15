@@ -23,7 +23,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer, pointsCapState, zeroTotalNote } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -47,7 +47,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { EMPTY_INVOICE, InvoiceSection, loadSavedInvoice, saveInvoice } from './invoice-section';
-import { fulfillerLabel } from '@/lib/shipments';
+import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
@@ -109,8 +109,9 @@ export default function CheckoutPage() {
   // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
-  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null; convertedNote: string | null }>({
+  const [pointsOffer, setPointsOffer] = useState<CheckoutPointsOffer>({
     usable: 0,
+    converted: 0,
     lockNote: null,
     convertedNote: null,
   });
@@ -142,6 +143,7 @@ export default function CheckoutPage() {
   const quote = quoteQ.isError ? undefined : quoteQ.data;
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
+  const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -149,6 +151,7 @@ export default function CheckoutPage() {
   const zeroNote = quote ? zeroTotalNote(quote) : null;
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
+  const splitNote = shipmentsNote(shipments);
   // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
   // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
   const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
@@ -207,8 +210,10 @@ export default function CheckoutPage() {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
         // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự
-        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
+        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở tab khác: kiện của
+        // báo giá mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
         void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof Error && isCartFixableError(e.message)) {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       }
@@ -503,11 +508,7 @@ export default function CheckoutPage() {
               </Link>
             </p>
           )}
-          {split && (
-            <p className="mt-2 text-xs text-stone-600">
-              Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
-            </p>
-          )}
+          {splitNote && <p className="mt-2 text-xs text-stone-600">{splitNote}</p>}
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
@@ -550,7 +551,7 @@ export default function CheckoutPage() {
           )}
           {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.capNote}</p>}
           {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
-          {pointsOffer.convertedNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.convertedNote}</p>}
+          {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
             <span>Tổng cộng</span>
