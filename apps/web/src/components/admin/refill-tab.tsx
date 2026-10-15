@@ -79,7 +79,7 @@ function RefillRow({ item: r }: { item: PendingRefill }) {
       message: `Khách không nhận nước tưới cho ${r.quantity} vỏ này.`,
       confirmLabel: 'Từ chối',
       tone: 'danger',
-      input: { label: 'Lý do (khách thấy)', placeholder: 'VD: vỏ không đúng loại' },
+      input: { label: 'Lý do (khách thấy)', placeholder: 'VD: vỏ không đúng loại', maxLength: 200 },
     });
     if (reason !== null) reject.mutate(reason);
   };
