@@ -41,6 +41,8 @@ function makePrisma(opts: {
   const prisma = {
     user: { findUnique, update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'ABC123' }) },
     order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
+    // Không có yêu cầu trả một phần đã duyệt: cấp thưởng không thu hồi gì thêm (đường đó kiểm ở race referral-partial-return).
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     coinTransaction: {
       findFirst: jest.fn().mockResolvedValue(opts.coinFindFirst ?? null),
       count: opts.coinCount ?? jest.fn().mockResolvedValue(0),

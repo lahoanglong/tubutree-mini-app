@@ -12,6 +12,7 @@ import { OrderReturnsService } from '../../src/modules/orders/order-returns.serv
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
+import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { partialReturnTotals } from '../../src/modules/orders/return-ledger';
 import { WALLET_DESTINATION } from '../../src/modules/orders/refund-destination';
 import { countReferralSuccesses, milestoneGrantReason } from '../../src/modules/wallet/referral-reward';
@@ -34,6 +35,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
   let prisma: PrismaService;
   let returns: OrderReturnsService;
   let reversal: OrderReversalService;
+  let rewards: RewardPointsService;
   let admin: { id: string };
 
   beforeAll(async () => {
@@ -45,6 +47,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
         OrderReversalService,
         OrderStatusService,
         OrderReturnsService,
+        RewardPointsService,
         {
           provide: AffiliateService,
           useValue: {
@@ -63,7 +66,12 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     await warmPool(prisma);
     returns = moduleRef.get(OrderReturnsService);
     reversal = moduleRef.get(OrderReversalService);
+    rewards = moduleRef.get(RewardPointsService);
     await setConfig(prisma, 'returns.window_days', 30);
+    await setConfig(prisma, 'referral.referrer_reward_points', REWARD);
+    await setConfig(prisma, 'referral.window_days', 30);
+    await setConfig(prisma, 'referral.min_order_amount', 100_000);
+    await setConfig(prisma, 'referral.milestones_points', []);
     admin = await createUser(prisma, { role: 'ADMIN' });
   });
 
@@ -449,6 +457,73 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(r.total).toBe(REWARD);
     expect(await balanceOf(referrer.id)).toBe(0);
     expect(await successes(referrer.id)).toBe(0);
+  });
+
+  /** Người được mời có hai đơn đã giao (A 10 ngày trước, B 5 ngày trước), CHƯA nhận thưởng. */
+  async function unrewarded() {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const a = await deliveredOrder(referee.id, 3, new Date(Date.now() - 10 * 864e5));
+    const b = await deliveredOrder(referee.id, 3, new Date(Date.now() - 5 * 864e5));
+    return { referrer, referee, a, b };
+  }
+
+  it('(l) trả 2/3 đơn đầu TRƯỚC khi cấp thưởng → lúc cấp thu ngay 66; cấp lại không thu lần hai', async () => {
+    const { referrer, referee, a } = await unrewarded();
+    await returnUnits(referee.id, a, 2);
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(true);
+    let r = await revocations(referrer.id);
+    expect(r.partial).toEqual([
+      expect.objectContaining({ reason: `REFERRAL_ORDER2_PARTIAL_REVOKE:${referee.id}:GRANT-${a.id}`, delta: -66, refId: a.id }),
+    ]);
+    expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+    expect(await successes(referrer.id)).toBe(1);
+
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(false);
+    r = await revocations(referrer.id);
+    expect(r.partial).toHaveLength(1);
+    expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+
+    // Trả nốt đơn đầu sau khi cấp: chỉ thu phần còn lại.
+    await returnUnits(referee.id, a, 1);
+    r = await revocations(referrer.id);
+    expect(r.full.map((p) => p.delta)).toEqual([-34]);
+    expect(r.total).toBe(REWARD);
+  });
+
+  it('(m) trả 2/3 cả hai đơn trước khi cấp → lúc cấp thu 66 + 34, không quá thưởng, thu hồi hoàn toàn', async () => {
+    const { referrer, referee, a, b } = await unrewarded();
+    await returnUnits(referee.id, a, 2);
+    await returnUnits(referee.id, b, 2);
+    expect(await rewards.grantReferralOrderReward(referee.id)).toBe(true);
+    const r = await revocations(referrer.id);
+    expect(r.partial.map((p) => [p.refId, p.delta])).toEqual([
+      [a.id, -66],
+      [b.id, -34],
+    ]);
+    expect(r.full.map((p) => p.delta)).toEqual([0]);
+    expect(r.total).toBe(REWARD);
+    expect(await balanceOf(referrer.id)).toBe(0);
+    expect(await successes(referrer.id)).toBe(0);
+  });
+
+  it('(n) duyệt trả 2/3 đơn đầu song song với cấp thưởng → luôn thu đúng 66, thứ tự nào cũng vậy', async () => {
+    for (let round = 0; round < 4; round++) {
+      const { referrer, referee, a } = await unrewarded();
+      const req = await returns.request(referee.id, a.code, {
+        reasonCode: 'OTHER',
+        reason: 'Không còn nhu cầu dùng nữa',
+        items: [{ orderItemId: a.item.id, quantity: 2 }],
+      });
+      const jobs = [() => returns.review(admin.id, req.id, { approve: true }), () => rewards.grantReferralOrderReward(referee.id)];
+      if (round % 2) jobs.reverse();
+      const s = summarize(await Promise.allSettled(jobs.map((j) => j())));
+      expect(s.errors).toEqual([]);
+      const r = await revocations(referrer.id);
+      expect(r.partial.map((p) => p.delta)).toEqual([-66]);
+      expect(r.total).toBe(66);
+      expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+    }
   });
 
   it('(j2) song song: trả cả đơn đầu + trả một phần đơn thứ hai → không deadlock, tổng thu hồi đúng bằng thưởng', async () => {

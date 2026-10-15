@@ -1,4 +1,6 @@
 import type { PointsLot, Prisma } from '@prisma/client';
+import { returnedGoods } from '../orders/refund-allocation';
+import { partialReturnTotals } from '../orders/return-ledger';
 
 /**
  * Chương trình giới thiệu duy nhất (Q-05): người mời (users.referredById của người được mời) nhận
@@ -388,6 +390,34 @@ export async function revokeReferralRewardPartially(
         total.shortfall += milestones.shortfall;
       }
     }
+  }
+  return anyRevoked ? total : null;
+}
+
+/**
+ * Ngay sau khi CẤP thưởng (cùng tx, đã khoá người được mời): đơn trong cặp có thể đã được duyệt trả một phần TRƯỚC lúc cấp —
+ * lần duyệt đó chạy revokeReferralRewardPartially khi chưa có dòng thưởng nên không thu gì. Thu theo tỷ lệ tiền hàng đã trả
+ * luỹ kế của các yêu cầu trả một phần đã duyệt, mỗi đơn một requestId tất định `GRANT-<id đơn>` (reason không trùng giữa hai
+ * đơn; chạy lại không trừ lần hai). Lần duyệt trả song song: tx duyệt lấy lockReferee trước khi đọc dòng thưởng, tx cấp lấy
+ * nó trước khi đọc yêu cầu đã duyệt, nên bên commit sau luôn thấy bên kia và đúng một bên thu.
+ */
+export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: string[]): Promise<{ revoked: number; shortfall: number } | null> {
+  const total = { revoked: 0, shortfall: 0 };
+  let anyRevoked = false;
+  for (const orderId of orderIds) {
+    const prior = await partialReturnTotals(tx, orderId);
+    if (prior.approvedQty.size === 0) continue;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    const goods = returnedGoods(order, prior.approvedQty);
+    const res = await revokeReferralRewardPartially(tx, order, {
+      requestId: `GRANT-${orderId}`,
+      returnedGoods: goods.returned,
+      orderGoods: goods.goods,
+    });
+    if (!res) continue;
+    anyRevoked = true;
+    total.revoked += res.revoked;
+    total.shortfall += res.shortfall;
   }
   return anyRevoked ? total : null;
 }
