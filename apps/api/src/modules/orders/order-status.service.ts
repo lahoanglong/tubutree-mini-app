@@ -357,7 +357,7 @@ export class OrderStatusService {
       notifyData.refund_note =
         (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +
         refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
-        (noteCarriesRefund ? receivedRefundNote(receivedBack) : '');
+        (noteCarriesRefund ? receivedRefundNote(receivedBack, order.placedForCustomer) : '');
     }
     await this.notifications
       .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)

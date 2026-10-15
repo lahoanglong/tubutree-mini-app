@@ -39,6 +39,12 @@ const CUSTOMER_VISIBLE: CustomerRefundStatus[] = ['PENDING', 'PROCESSING', 'COMP
 /** Lý do tối thiểu khi admin bỏ qua một khoản chờ đối soát — khớp web admin. */
 const DISMISS_REASON_MIN = 5;
 
+/**
+ * Khoản của khách cuối đơn CTV lên hộ: không có chủ tài khoản (userId null) nên không ai chọn nơi nhận; admin chuyển khoản
+ * tay theo SĐT, không bắt gõ tài khoản nhận trước. Gồm cả khoản huỷ/trả/tiền về muộn/trả dư của đơn hộ, không riêng END_CUSTOMER.
+ */
+const isEndCustomerRow = (row: { kind: CustomerRefundKind; userId: string | null }) => row.kind === 'END_CUSTOMER' || row.userId === null;
+
 const MINE_SELECT = {
   id: true,
   orderId: true,
@@ -154,7 +160,7 @@ export class CustomerRefundsService {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     const typedBank = opts.accountNumber?.trim() ? normalizeBankDetails(opts) : null;
-    if (row.kind !== 'END_CUSTOMER' && !row.bankAccountNo && !typedBank) {
+    if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi chuyển khoản.');
     }
     const res = await this.prisma.orderCustomerRefund.updateMany({
@@ -214,7 +220,7 @@ export class CustomerRefundsService {
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     const typedBank = opts.accountNumber?.trim() ? normalizeBankDetails(opts) : null;
     // Khoản của khách có tài khoản (huỷ/trả/tiền về muộn) phải có tài khoản nhận; khoản khách cuối đơn CTV chuyển theo SĐT.
-    if (row.kind !== 'END_CUSTOMER' && !row.bankAccountNo && !typedBank) {
+    if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi xác nhận.');
     }
     // Khách tự đổi được nơi nhận (khoản có chủ tài khoản) thì chỉ xác nhận được khoản đã khoá bằng "Bắt đầu chuyển khoản":
@@ -319,6 +325,8 @@ export class CustomerRefundsService {
               kind: 'OVERPAYMENT',
               refKey: `${row.refKey}:rest`,
               userId: row.userId,
+              phone: row.phone,
+              recipientName: row.recipientName,
               amount: row.amount - amount,
               method: 'MANUAL_TRANSFER',
               status: 'DISMISSED',

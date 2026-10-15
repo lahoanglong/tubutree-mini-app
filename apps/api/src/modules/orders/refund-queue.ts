@@ -1,6 +1,8 @@
 import type { Logger } from '@nestjs/common';
 import type { CustomerRefundKind, CustomerRefundStatus, Order, Prisma, PrismaClient } from '@prisma/client';
 import { notifyAdmins } from '../../common/notify-admins';
+import { maskPhone } from '../../common/mask-pii';
+import { toLocalPhone } from '../../common/phone';
 import type { BankDetails } from './refund-destination';
 import { formatVnd, maskedBank } from './refund-destination';
 import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
@@ -29,6 +31,29 @@ export const OPEN_CUSTOMER_REFUND_STATUSES = ['UNVERIFIED', 'PENDING', 'PROCESSI
 export const OPS_REFUND_TEMPLATE = 'OPS_REFUND_ALERT';
 /** Báo admin tiền khách trả không khớp đơn (lệch số tiền ZaloPay). */
 export const OPS_PAYMENT_TEMPLATE = 'OPS_PAYMENT_ALERT';
+
+/**
+ * Người nhận tiền hoàn của đơn CTV lên hộ: khách cuối, chỉ có SĐT (endCustomerKey; đơn hộ cũ chưa có thì đọc snapshot địa chỉ)
+ * và tên người nhận — không có tài khoản trên đơn. Dùng chung cho mọi khoản hoàn của đơn hộ (huỷ/trả, tiền về muộn, trả dư).
+ */
+export function endCustomerPayee(order: Pick<Order, 'endCustomerKey' | 'shippingAddress'>): { phone: string | null; recipientName: string | null } {
+  const snapshot = (order.shippingAddress ?? {}) as { phone?: unknown; recipient?: unknown };
+  return {
+    phone: order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? toLocalPhone(snapshot.phone) : null),
+    recipientName: typeof snapshot.recipient === 'string' ? snapshot.recipient : null,
+  };
+}
+
+type RefundOwnerFacts = Pick<Order, 'userId' | 'placedForCustomer' | 'endCustomerKey' | 'shippingAddress'>;
+
+/**
+ * Ai là chủ khoản hoàn tiền về muộn / trả dư. Đơn thường: người đặt (thấy khoản ở chi tiết đơn và tự chọn nơi nhận). Đơn CTV
+ * lên hộ: userId là CTV nhưng tiền là của khách cuối (C-001) — khoản không có chủ tài khoản, mang SĐT + tên người nhận, CTV không
+ * thấy và không chọn được nơi nhận (chọn Ví sẽ cộng tiền khách cuối vào Ví CTV).
+ */
+function refundOwner(order: RefundOwnerFacts): { userId: string | null; phone?: string | null; recipientName?: string | null } {
+  return order.placedForCustomer ? { userId: null, ...endCustomerPayee(order) } : { userId: order.userId };
+}
 
 /**
  * Ghi một khoản Tubu phải chuyển khoản trả khách (D2) trong tx của caller. Caller giữ guard một lần (lật trạng thái
@@ -131,7 +156,7 @@ type LateCtx = {
   notifications?: RefundNotifier;
   logger: Pick<Logger, 'warn' | 'log'>;
 };
-type LateOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'paymentStatus'>;
+type LateOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'paymentStatus'> & RefundOwnerFacts;
 type LateSource = 'PANCAKE' | 'ZALOPAY' | 'ADMIN';
 
 /** refKey của khoản admin ghi tay: một đơn chỉ có một khoản như vậy (unique orderId+kind+refKey là lớp hai). */
@@ -245,14 +270,18 @@ export async function refundReportedUnderpayment(ctx: LateCtx, orderId: string, 
   return recordCumulativeLatePayment(ctx, order, { reportedTotal: reported, source: 'PANCAKE' }, { notifyCustomer: opts.notifyCustomer ?? false });
 }
 
-/** Câu thêm vào tin huỷ khi đã ghi khoản hoàn cho số tiền khách chuyển thiếu. */
-export function receivedRefundNote(amount: number): string {
-  return amount > 0
-    ? ` Tubu đã nhận ${formatVnd(amount)} chuyển khoản của đơn này — vào chi tiết đơn để chọn nhận lại về Ví Tubu (ngay) hoặc tài khoản ngân hàng.`
-    : '';
+/**
+ * Câu thêm vào tin huỷ khi đã ghi khoản hoàn cho số tiền khách chuyển thiếu. Đơn CTV lên hộ: tin đi tới CTV, còn tiền là của
+ * khách cuối do admin chuyển khoản tay — không mời CTV "chọn nhận về Ví".
+ */
+export function receivedRefundNote(amount: number, toEndCustomer = false): string {
+  if (!(amount > 0)) return '';
+  return toEndCustomer
+    ? ` Tubu đã nhận ${formatVnd(amount)} chuyển khoản của đơn này và sẽ hoàn lại cho người nhận hàng.`
+    : ` Tubu đã nhận ${formatVnd(amount)} chuyển khoản của đơn này — vào chi tiết đơn để chọn nhận lại về Ví Tubu (ngay) hoặc tài khoản ngân hàng.`;
 }
 
-type OverOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'total'>;
+type OverOrder = Pick<Order, 'id' | 'code' | 'userId' | 'status' | 'total'> & RefundOwnerFacts;
 
 /**
  * Khách trả thêm cho đơn đã nhận đủ tiền qua ZaloPay (R3-MONEY-1): lệnh thứ hai cũng thành công (callback lần đầu thất lạc,
@@ -323,7 +352,7 @@ function overRow(
     orderCode: order.code,
     kind: 'OVERPAYMENT',
     refKey,
-    userId: order.userId,
+    ...refundOwner(order),
     amount,
     method: 'MANUAL_TRANSFER',
     status,
@@ -334,9 +363,12 @@ function overRow(
 async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: number) {
   const amount = formatVnd(rawAmount);
   ctx.logger.warn(`Khách trả thêm ${amount} qua ZaloPay cho đơn ${order.code} đã nhận đủ tiền — đã tạo khoản hoàn tiền trả dư.`);
-  await ctx.notifications
-    ?.notify(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount })
-    .catch(() => undefined);
+  // Đơn CTV lên hộ: người trả là khách cuối, CTV không có quyền chọn nơi nhận nên không báo CTV.
+  if (!order.placedForCustomer) {
+    await ctx.notifications
+      ?.notify(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount })
+      .catch(() => undefined);
+  }
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
     {
@@ -344,7 +376,9 @@ async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: nu
       subject: `tiền trả dư đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message: `ZaloPay xác nhận khách trả thêm ${amount} (một lệnh thanh toán khác) cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", chờ khách chọn nơi nhận.`,
+        message:
+          `ZaloPay xác nhận khách trả thêm ${amount} (một lệnh thanh toán khác) cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", ` +
+          (order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận.'),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
@@ -363,8 +397,10 @@ async function announceUnverifiedOverpayment(ctx: LateCtx, order: OverOrder, raw
         message:
           `Pancake báo đã nhận ${formatVnd(reportedTotal)} cho đơn đã nhận đủ ${formatVnd(order.total)} — có thể khách chuyển dư ${amount}. ` +
           'Khách CHƯA được báo. Đối chiếu sao kê: đúng là khách chuyển dư thì ở mục Hoàn tiền khách, bộ lọc "Chờ đối soát", bấm ' +
-          '"Xác nhận tiền dư" (khách được báo để chọn nhận về Ví hay ngân hàng); cùng một lần chuyển hoặc nhân viên sửa đơn trên ' +
-          'Pancake thì bấm "Không phải tiền dư".',
+          (order.placedForCustomer
+            ? `"Xác nhận tiền dư" (đơn CTV lên hộ: khoản là của khách cuối ${maskPhone(endCustomerPayee(order).phone)}, không ai được báo — admin chuyển khoản tay theo SĐT); `
+            : '"Xác nhận tiền dư" (khách được báo để chọn nhận về Ví hay ngân hàng); ') +
+          'cùng một lần chuyển hoặc nhân viên sửa đơn trên Pancake thì bấm "Không phải tiền dư".',
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
@@ -380,7 +416,7 @@ function lateRow(order: LateOrder, refKey: string, amount: number, note?: string
     orderCode: order.code,
     kind: 'LATE_PAYMENT',
     refKey,
-    userId: order.userId,
+    ...refundOwner(order),
     amount,
     method: 'MANUAL_TRANSFER',
     status: 'PENDING',
@@ -393,6 +429,11 @@ function channelOf(source: LateSource): string {
   return source === 'ZALOPAY' ? 'ZaloPay' : 'chuyển khoản';
 }
 
+/** Lời cho admin: khoản của khách cuối đơn CTV lên hộ nằm ở hàng đợi chuyển khoản tay, không ai chọn nơi nhận. */
+function endCustomerQueueNote(order: RefundOwnerFacts): string {
+  return `khoản của khách cuối ${maskPhone(endCustomerPayee(order).phone)} (đơn CTV lên hộ, không phải của CTV) — liên hệ khách xin tài khoản, chuyển khoản tay rồi xác nhận ở mục Hoàn tiền khách.`;
+}
+
 function adminRecordedReason(order: LateOrder, rawAmount: number, source: LateSource): string {
   const amount = formatVnd(rawAmount);
   return `${source === 'ZALOPAY' ? 'ZaloPay' : 'Pancake'} báo nhận ${amount} ${channelOf(source)} cho đơn đã ${order.status === 'RETURNED' ? 'trả' : 'huỷ'}, nhưng admin đã ghi tay khoản tiền về muộn của đơn này — KHÔNG tạo thêm khoản hoàn. Đối soát sao kê: cùng một lần chuyển thì bỏ qua; khách chuyển thêm lần nữa thì hoàn tay phần chênh.`;
@@ -401,7 +442,8 @@ function adminRecordedReason(order: LateOrder, rawAmount: number, source: LateSo
 async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: number, source: LateSource, notifyCustomer = true) {
   const amount = formatVnd(rawAmount);
   ctx.logger.warn(`Tiền ${source} ${amount} về cho đơn ${order.code} đã ${order.status} — đã tạo yêu cầu hoàn tiền.`);
-  if (notifyCustomer) {
+  // Đơn CTV lên hộ: tiền là của khách cuối, CTV không được mời chọn Ví hay ngân hàng cho khoản này.
+  if (notifyCustomer && !order.placedForCustomer) {
     await ctx.notifications
       ?.notify(order.userId, 'REFUND_LATE_PAYMENT', { order_code: order.code, amount })
       .catch(() => undefined);
@@ -413,7 +455,9 @@ async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: nu
       subject: `tiền về muộn đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message: `nhận ${amount} qua ${channelOf(source)} sau khi đơn đã huỷ — đã tạo yêu cầu hoàn tiền, chờ khách chọn nơi nhận.`,
+        message:
+          `nhận ${amount} qua ${channelOf(source)} sau khi đơn đã huỷ — đã tạo yêu cầu hoàn tiền, ` +
+          (order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận.'),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền về muộn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));

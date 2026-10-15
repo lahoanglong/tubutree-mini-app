@@ -8,9 +8,8 @@ import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
-import { toLocalPhone } from '../../common/phone';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
-import { createBankRefund, recordWalletRefund } from './refund-queue';
+import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
@@ -602,10 +601,7 @@ export class OrderReversalService {
     amount: number = order.total,
     ref: { kind: 'END_CUSTOMER' | 'RETURN'; refKey: string } = { kind: 'END_CUSTOMER', refKey: '' },
   ): Promise<string | null> {
-    const snapshot = (order.shippingAddress ?? {}) as { phone?: unknown; recipient?: unknown };
-    const phone =
-      order.endCustomerKey ?? (typeof snapshot.phone === 'string' ? toLocalPhone(snapshot.phone) : null);
-    const recipientName = typeof snapshot.recipient === 'string' ? snapshot.recipient : null;
+    const { phone, recipientName } = endCustomerPayee(order);
     const ctvId = order.referrerUserId ?? order.userId;
 
     let customerUserId: string | null = null;

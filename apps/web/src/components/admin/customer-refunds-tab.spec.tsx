@@ -649,6 +649,21 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     });
   });
 
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'] as const)(
+    'MONEY-1: %s của khách cuối đơn CTV lên hộ (userId null) → hiện người nhận + SĐT, không bảo "khách chưa chọn nơi nhận", xác nhận thẳng không cần khoá',
+    async (kind) => {
+      stub({ list: () => [refund({ kind, userId: null, reason: 'CANCELLED' })] });
+      const { container } = mount(<CustomerRefundsTab />);
+      await flush();
+      const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+      expect(card.textContent).toContain('Trần Thị B');
+      expect(card.textContent).toContain('0912345678');
+      expect(card.textContent).not.toContain('chưa chọn nơi nhận');
+      expect(byText(container, 'button', 'Bắt đầu chuyển khoản')).toBeNull();
+      expect(byText(container, 'button', 'Đã chuyển khoản')).not.toBeNull();
+    },
+  );
+
   it('chống bấm lặp: đang gửi thì nút xác nhận/huỷ/ô nhập bị khoá, bấm thêm vẫn chỉ một POST, Escape/nền không đóng hộp', async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));

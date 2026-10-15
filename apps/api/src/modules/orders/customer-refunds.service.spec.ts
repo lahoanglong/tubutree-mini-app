@@ -401,3 +401,72 @@ describe('CustomerRefundsService.list — bộ lọc "Đang mở"', () => {
     expect(findMany.mock.calls[1][0]).toMatchObject({ where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' } });
   });
 });
+
+// MONEY-1: khoản tiền về muộn / trả dư của đơn CTV lên hộ là của khách cuối (userId null) — cùng đường xử lý với END_CUSTOMER.
+describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên hộ không phải END_CUSTOMER (userId null)', () => {
+  beforeEach(() => (applyWalletDelta as jest.Mock).mockClear());
+
+  const endCustomerLate = (over: Record<string, unknown> = {}) =>
+    pending({
+      kind: 'LATE_PAYMENT',
+      refKey: 'PANCAKE:paid:228000',
+      userId: null,
+      phone: '0912345678',
+      recipientName: 'Khach That',
+      bankName: null,
+      bankAccountNo: null,
+      bankAccountName: null,
+      reason: 'CANCELLED',
+      ...over,
+    });
+
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: admin xác nhận thẳng từ hàng chờ, không bắt gõ tài khoản', async (kind) => {
+    const { service, tx } = setup(endCustomerLate({ kind }));
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
+    );
+  });
+
+  it('không chủ tài khoản: "Bắt đầu chuyển khoản" không đòi tài khoản nhận', async () => {
+    const { service, prisma } = setup(endCustomerLate());
+    await service.claim('a1', 'r1');
+    expect(prisma.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', status: 'PENDING' } }),
+    );
+  });
+
+  it('khoản của khách có tài khoản (userId có giá trị) vẫn bắt buộc tài khoản nhận', async () => {
+    const { service, prisma } = setup(endCustomerLate({ userId: 'u1' }));
+    await expect(service.claim('a1', 'r1')).rejects.toThrow('chưa có tài khoản nhận');
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('chưa có tài khoản nhận');
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('CTV (chủ đơn) không chọn được nơi nhận khoản của khách cuối: 404, không cộng Ví, không ghi', async () => {
+    const { service, prisma, tx } = setup(endCustomerLate());
+    await expect(service.chooseDestination('ctv1', 'r1', { refundMethod: 'WALLET' })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.chooseDestination('ctv1', 'r1', { refundMethod: 'BANK', bankName: 'ACB', accountNumber: '123456', accountName: 'CTV' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận tiền dư một phần: khoản còn lại mang SĐT + tên khách cuối, không báo ai', async () => {
+    const { service, tx, notifications } = setup(unverified({ userId: null, phone: '0912345678', recipientName: 'Khach That' }));
+    await service.verifyOverpayment('a1', 'r1', { amount: 50_000 });
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ refKey: 'PANCAKE:paid:228000:rest', userId: null, phone: '0912345678', recipientName: 'Khach That', status: 'DISMISSED' })],
+      skipDuplicates: true,
+    });
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận xong khoản không chủ tài khoản → không có ai để báo REFUND_BANK_COMPLETED', async () => {
+    const { service, notifications } = setup(endCustomerLate());
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+});
