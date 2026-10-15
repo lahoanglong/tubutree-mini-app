@@ -56,6 +56,14 @@ jobs:
           GOMDON_WEBHOOK_SECRET: ${{ secrets.GOMDON_WEBHOOK_SECRET }}
           # Kênh báo động vận hành ngoài app (Slack/Google Chat/n8n) — docs/GO-LIVE-KEYS.md mục báo động vận hành.
           OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
+          # Email báo động vận hành (SMTP, gửi đúng các lần webhook trên gửi) — cùng mục trong docs/GO-LIVE-KEYS.md.
+          OPS_ALERT_EMAIL_TO: ${{ secrets.OPS_ALERT_EMAIL_TO }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
           # action=crontab: URL dead-man switch (healthchecks.io...) báo khi backup lỗi/không chạy.
           BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
           # Chỉ dùng cho action=grant-admin — SĐT tài khoản cần cấp quyền ADMIN. GitHub tự mask
@@ -66,7 +74,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,BACKUP_HEALTHCHECK_URL
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -134,6 +142,13 @@ jobs:
                 envstate ZALOPAY_KEY2
                 echo "=== ENV (báo động vận hành) ==="
                 envstate OPS_ALERT_WEBHOOK_URL
+                envstate OPS_ALERT_EMAIL_TO
+                envstate SMTP_HOST
+                envstate SMTP_PORT
+                envstate SMTP_SECURE
+                envstate SMTP_USER
+                envstate SMTP_PASS
+                envstate SMTP_FROM
                 echo "=== API health (db + redis) ==="
                 $COMPOSE exec -T api node -e 'fetch("http://localhost:3001/api/health").then(async r=>console.log(r.status, await r.text())).catch(e=>console.log("ERR", e.message))' || true
                 echo "=== Redis: policy + bộ nhớ ==="
@@ -229,6 +244,37 @@ jobs:
                   http://*|https://*) set_if OPS_ALERT_WEBHOOK_URL "$OPS_ALERT_WEBHOOK_URL";;
                   *) echo "  OPS_ALERT_WEBHOOK_URL: secret không bắt đầu bằng https:// (hoặc http://) — KHÔNG ghi, sửa secret rồi chạy lại"; exit 1;;
                 esac
+                echo "=== Báo động vận hành qua email (SMTP) ==="
+                # API từ chối khởi động khi cấu hình email dở dang. Gộp secret mới với giá trị đã có trong .env; còn thiếu thì
+                # KHÔNG ghi khoá nào (không để lại cấu hình nửa vời làm deploy sau bị chặn).
+                effective() { if [ -n "${2:-}" ]; then printf '%s' "$2"; else grep -E "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true; fi; }
+                E_TO=$(effective OPS_ALERT_EMAIL_TO "${OPS_ALERT_EMAIL_TO:-}")
+                E_HOST=$(effective SMTP_HOST "${SMTP_HOST:-}")
+                E_USER=$(effective SMTP_USER "${SMTP_USER:-}")
+                E_PASS=$(effective SMTP_PASS "${SMTP_PASS:-}")
+                E_FROM=$(effective SMTP_FROM "${SMTP_FROM:-}")
+                E_OTHER="$(effective SMTP_PORT "${SMTP_PORT:-}")$(effective SMTP_SECURE "${SMTP_SECURE:-}")"
+                if [ -z "$E_TO$E_HOST$E_USER$E_PASS$E_FROM$E_OTHER" ]; then
+                  echo "  (chưa đặt secret email nào — giữ nguyên, báo động chỉ in-app + webhook)"
+                else
+                  E_MISSING=""
+                  [ -n "$E_TO" ] || E_MISSING="$E_MISSING OPS_ALERT_EMAIL_TO"
+                  [ -n "$E_HOST" ] || E_MISSING="$E_MISSING SMTP_HOST"
+                  { [ -z "$E_USER" ] || [ -n "$E_PASS" ]; } || E_MISSING="$E_MISSING SMTP_PASS"
+                  { [ -z "$E_PASS" ] || [ -n "$E_USER" ]; } || E_MISSING="$E_MISSING SMTP_USER"
+                  if [ -z "$E_FROM" ]; then case "$E_USER" in *@*) ;; *) E_MISSING="$E_MISSING SMTP_FROM";; esac; fi
+                  if [ -n "$E_MISSING" ]; then
+                    echo "  Cấu hình email chưa đủ, còn thiếu:$E_MISSING — KHÔNG ghi khoá nào, đặt thêm secret rồi chạy lại set-env"
+                    exit 1
+                  fi
+                  set_if OPS_ALERT_EMAIL_TO "${OPS_ALERT_EMAIL_TO:-}"
+                  set_if SMTP_HOST "${SMTP_HOST:-}"
+                  set_if SMTP_PORT "${SMTP_PORT:-}"
+                  set_if SMTP_SECURE "${SMTP_SECURE:-}"
+                  set_if SMTP_USER "${SMTP_USER:-}"
+                  set_if SMTP_PASS "${SMTP_PASS:-}"
+                  set_if SMTP_FROM "${SMTP_FROM:-}"
+                fi
 
                 echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
                 envstate CORS_ORIGINS
@@ -240,6 +286,11 @@ jobs:
                 envstate GOMDON_PASSWORD
                 envstate GOMDON_WEBHOOK_SECRET
                 envstate OPS_ALERT_WEBHOOK_URL
+                envstate OPS_ALERT_EMAIL_TO
+                envstate SMTP_HOST
+                envstate SMTP_USER
+                envstate SMTP_PASS
+                envstate SMTP_FROM
                 envstate DEEPSEEK_API_KEY
                 envstate GEMINI_API_KEY
                 envstate GEMINI_BASE_URL
