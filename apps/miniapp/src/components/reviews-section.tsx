@@ -80,9 +80,19 @@ const targetKey = (t: FormTarget) => (t.kind === 'new' ? 'new' : `edit:${t.revie
 
 /**
  * `openForOrderId`: đơn khách bấm "Viết đánh giá"/"Sửa đánh giá" ở chi tiết đơn — mở sẵn form cho đúng lần mua đó khi
- * can-review về (đơn còn viết được thì viết mới, đơn đã có đánh giá thì sửa đánh giá đó).
+ * can-review về (đơn còn viết được thì viết mới, đơn đã có đánh giá thì sửa đánh giá đó). `onOrderLinkUsed` được gọi một
+ * lần ngay khi đã dùng đơn đó, để trang gỡ nó khỏi trạng thái điều hướng: quay lại hay tải lại trang không tự mở lại form
+ * (lúc đó đã thành form sửa của đánh giá vừa gửi).
  */
-export function ReviewsSection({ slug, openForOrderId }: { slug: string; openForOrderId?: string }) {
+export function ReviewsSection({
+  slug,
+  openForOrderId,
+  onOrderLinkUsed,
+}: {
+  slug: string;
+  openForOrderId?: string;
+  onOrderLinkUsed?: () => void;
+}) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
   const [target, setTarget] = useState<FormTarget | null>(null);
@@ -129,6 +139,7 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
     const mine = elig.myReviews?.find((r) => r.orderId === openForOrderId);
     if (order) openNew(order);
     else if (mine) openEdit(mine);
+    onOrderLinkUsed?.();
   }, [openForOrderId, elig]);
 
   const key = target ? targetKey(target) : '';

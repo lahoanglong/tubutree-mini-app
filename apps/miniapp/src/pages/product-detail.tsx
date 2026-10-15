@@ -91,7 +91,8 @@ export default function ProductDetailPage() {
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
   // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
   // đầu tiên còn hàng.
-  const navState = useLocation().state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
+  const location = useLocation();
+  const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
@@ -735,7 +736,18 @@ export default function ProductDetailPage() {
       {p.description && <CollapsibleDescription text={p.description} />}
 
       {/* ── Đánh giá ── */}
-      {slug && <ReviewsSection slug={slug} openForOrderId={navState?.reviewOrderId} />}
+      {slug && (
+        <ReviewsSection
+          slug={slug}
+          openForOrderId={navState?.reviewOrderId}
+          onOrderLinkUsed={() => {
+            // Thay đúng mục lịch sử hiện tại, giữ mọi trạng thái điều hướng khác (from, variationId, listSource).
+            const rest: Record<string, unknown> = { ...navState };
+            delete rest.reviewOrderId;
+            navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
+          }}
+        />
+      )}
 
       {selected && (
         <SubscribeSheet

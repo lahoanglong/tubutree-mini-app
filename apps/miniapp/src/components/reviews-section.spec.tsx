@@ -84,7 +84,7 @@ const DATA = {
   items: [review('a', 5, { verifiedPurchase: true }), review('b', 5, { videoUrl: 'https://v/x.mp4' }), review('c', 3, { images: ['https://i/1.jpg'] })],
 };
 
-function renderSection(props: { openForOrderId?: string } = {}) {
+function renderSection(props: { openForOrderId?: string; onOrderLinkUsed?: () => void } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -471,6 +471,31 @@ describe('ReviewsSection: mỗi lần mua một đánh giá (R8)', () => {
       renderSection({ openForOrderId: 'o9' });
       await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' });
       expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+    });
+
+    // Trang giữ đơn trong trạng thái điều hướng; còn giữ thì quay lại/tải lại trang mở lại form (lúc đó thành form sửa).
+    it('đã mở form từ đơn → báo trang gỡ đơn khỏi trạng thái điều hướng đúng một lần, kể cả khi can-review làm mới sau khi gửi', async () => {
+      const onOrderLinkUsed = vi.fn();
+      renderSection({ openForOrderId: 'o2', onOrderLinkUsed });
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(onOrderLinkUsed).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+      await waitFor(() => expect(mocks.canReview.mock.calls.length).toBeGreaterThanOrEqual(2));
+      await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+      expect(onOrderLinkUsed).toHaveBeenCalledTimes(1);
+    });
+
+    it('đơn không có trong can-review → không mở gì nhưng vẫn báo đã dùng đơn; chưa đăng nhập (chưa có can-review) thì chưa báo', async () => {
+      const used = vi.fn();
+      renderSection({ openForOrderId: 'o9', onOrderLinkUsed: used });
+      await waitFor(() => expect(used).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+
+      mocks.auth = { status: 'guest' };
+      const guest = vi.fn();
+      renderSection({ openForOrderId: 'o2', onOrderLinkUsed: guest });
+      await screen.findAllByText('Nhận xét a');
+      expect(guest).not.toHaveBeenCalled();
     });
 
     it('chỉ tự mở một lần: đóng form rồi can-review làm mới không tự mở lại', async () => {
