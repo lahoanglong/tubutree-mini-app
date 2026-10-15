@@ -836,6 +836,11 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       ['Đang giao', { status: 'SHIPPING' }, false],
       ['Đơn đại lý đang đóng gói', { status: 'PACKED', type: 'DEALER' }, false],
       ['CTV xem đơn lên hộ khách đã trả', { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'u1' }, false],
+      [
+        'Chờ chuyển khoản, hệ thống đã thôi tự huỷ vì Pancake đã gửi hàng (R5-SYNC-1)',
+        { status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', autoCancelBlockedAt: new Date() },
+        false,
+      ],
     ])('%s → canCancel=%s (list + chi tiết)', async (_label, over, expected) => {
       const { svc } = makeMediaService([{ ...baseOrder, ...over, items: [] }], []);
       expect((await svc.detailView('u1', 'TUBU1')).canCancel).toBe(expected);
@@ -849,6 +854,43 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       const { svc: cancelSvc, updateMany } = makeService(shipped);
       await expect(cancelSvc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển');
       expect(updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('đơn chờ chuyển khoản mà hàng đã bàn giao vận chuyển — hệ thống thôi tự huỷ (R5-SYNC-1)', () => {
+    const created = new Date('2026-10-14T01:20:56.000Z');
+    const waiting = { ...baseOrder, type: 'RETAIL', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', createdAt: created, items: [] };
+
+    it('không còn hạn thanh toán / "quá hạn đơn sẽ tự huỷ", không có nút huỷ, báo app/web hiện câu trung tính (manualHandling)', async () => {
+      const { svc } = makeMediaService([{ ...waiting, autoCancelBlockedAt: new Date('2026-10-15T02:30:00Z') }], []);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view).toMatchObject({ paymentDeadline: null, canCancel: false, manualHandling: true });
+      expect(view).not.toHaveProperty('autoCancelBlockedAt');
+      expect((await svc.list('u1', {}, 1, 20)).data[0]).toMatchObject({ canCancel: false, manualHandling: true });
+    });
+
+    it('đơn chờ chuyển khoản bình thường vẫn có hạn và nút huỷ, manualHandling=false', async () => {
+      const { svc } = makeMediaService([{ ...waiting, autoCancelBlockedAt: null }], []);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view).toMatchObject({ paymentDeadline: '2026-10-15T01:20:56.000Z', canCancel: true, manualHandling: false });
+    });
+
+    it('đã nhận tiền sau đó (CONFIRMED) → không còn câu trung tính, vẫn không tự huỷ được (hàng đã ở hãng)', async () => {
+      const { svc } = makeMediaService([{ ...waiting, status: 'CONFIRMED', paymentStatus: 'PAID', autoCancelBlockedAt: new Date() }], []);
+      expect(await svc.detailView('u1', 'TUBU1')).toMatchObject({ canCancel: false, manualHandling: false, paymentDeadline: null });
+    });
+
+    it('POST huỷ bị từ chối với lời rõ ràng, KHÔNG hỏi Pancake (không đồng bộ lại → không quay về "Cần xử lý Pancake"), không lật trạng thái', async () => {
+      const orderStatus = { precheckPancakeCancel: jest.fn(), afterPancakeCancel: jest.fn() };
+      const { svc, $transaction, row } = makeService({ ...waiting, pancakeOrderId: 'pk-1', autoCancelBlockedAt: new Date() }, { orderStatus });
+      const err = await svc.cancel('u1', 'TUBU1').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(
+        'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Vui lòng liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ.',
+      );
+      expect(orderStatus.precheckPancakeCancel).not.toHaveBeenCalled();
+      expect($transaction).not.toHaveBeenCalled();
+      expect(row.status).toBe('PENDING_PAYMENT');
     });
   });
 

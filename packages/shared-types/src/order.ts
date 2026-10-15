@@ -99,6 +99,11 @@ export interface OrderDTO {
    * có mã vận đơn hãng, bưu tá đã lấy hàng). API cũ chưa trả.
    */
   canCancel?: boolean;
+  /**
+   * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (hệ thống thôi tự huỷ): Tubu xử lý với khách. App/web không ghi hạn thanh
+   * toán, không bày nút trả tiền/huỷ, chỉ một câu "Tubu đang xử lý đơn này". API cũ chưa trả.
+   */
+  manualHandling?: boolean;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;

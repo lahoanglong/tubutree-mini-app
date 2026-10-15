@@ -15,8 +15,8 @@ import { OrderStatusService } from './order-status.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
-import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
-import { cancelHandover, PREPAID_METHODS } from './order-transition';
+import { pendingPaymentDeadline } from './pending-payment-ttl';
+import { cancelHandover } from './order-transition';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { QUEUE_GOMDON_PUSH } from '../../jobs/queues';
 import { enqueueGomdonCancel } from '../integrations/gomdon/gomdon-queue';
@@ -73,6 +73,11 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   paymentDeadline?: string | null;
   /** Người xem tự huỷ được đơn này không (customerCancelBlock) — app/web chỉ bày nút "Hủy đơn" khi true (R3-CANCEL-2). */
   canCancel: boolean;
+  /**
+   * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (Pancake đã gửi hàng, hệ thống thôi tự huỷ): Tubu xử lý tay với khách.
+   * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
+   */
+  manualHandling: boolean;
 };
 
 const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
@@ -112,7 +117,13 @@ type CustomerCancelFacts = {
   shippingCode?: string | null;
   shippingPartner?: string | null;
   shippedAt?: Date | null;
+  autoCancelBlockedAt?: Date | null;
 };
+
+/** Hàng đã ở hãng vận chuyển (mốc thôi tự huỷ) nhưng đơn vẫn chờ tiền: khách chỉ thấy câu trung tính, CSKH xử lý. */
+function isManualHandling(order: { status: string; autoCancelBlockedAt?: Date | null }): boolean {
+  return order.status === 'PENDING_PAYMENT' && !!order.autoCancelBlockedAt;
+}
 
 /**
  * Lý do khách KHÔNG tự huỷ được (null = huỷ được) — cùng một luật cho nút "Hủy đơn" (OrderView.canCancel) và cho lần huỷ
@@ -129,6 +140,11 @@ export function customerCancelBlock(order: CustomerCancelFacts, actorId: string 
   // dòng tiền của người khác (C-001/Q-01). Chỉ admin huỷ, hoàn về khách qua OrderReversalService.
   if (order.placedForCustomer && order.paymentStatus === 'PAID' && !!actorId && order.referrerUserId === actorId) {
     return 'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Vui lòng liên hệ Tubu để admin huỷ và hoàn tiền cho khách.';
+  }
+  // Pancake đã báo gửi hàng (mốc ghi khi hệ thống hoặc người bấm huỷ hỏi Pancake): từ chối ngay, không hỏi lại Pancake — mỗi lần
+  // hỏi lại là đồng bộ lại trạng thái và đưa đơn về "Cần xử lý Pancake" dù admin đã xử lý (R5-SYNC-1).
+  if (order.autoCancelBlockedAt) {
+    return 'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Vui lòng liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ.';
   }
   // D1 cùng một luật với admin/nhà bán (cancelHandover): đã có mã vận đơn hãng, bưu tá Gomdon đã lấy hàng (webhook
   // chuyển SHIPPING có thể tới trễ)... thì khách không tự huỷ được nữa.
@@ -226,14 +242,11 @@ export class OrdersService {
     return { ...view!, items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })), ...fulfilment, paymentDeadline };
   }
 
-  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL với cron tự huỷ (đơn đại lý hạn riêng). Null với đơn khác. */
-  async paymentDeadline(order: Pick<OrderWithItems, 'type' | 'status' | 'paymentStatus' | 'paymentMethod' | 'createdAt'>): Promise<string | null> {
-    if (order.status !== 'PENDING_PAYMENT' || order.paymentStatus !== 'UNPAID') return null;
-    if (order.type !== 'RETAIL' && order.type !== 'DEALER') return null;
-    if (!(PREPAID_METHODS as readonly string[]).includes(order.paymentMethod)) return null;
-    const hours =
-      order.type === 'DEALER' ? await readDealerPendingPaymentTtlHours(this.config) : await readPendingPaymentTtlHours(this.config);
-    return new Date(new Date(order.createdAt).getTime() + hours * 3_600_000).toISOString();
+  /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL và điều kiện với cron tự huỷ. Null với đơn cron không huỷ. */
+  paymentDeadline(
+    order: Pick<OrderWithItems, 'type' | 'status' | 'paymentStatus' | 'paymentMethod' | 'createdAt' | 'autoCancelBlockedAt'>,
+  ): Promise<string | null> {
+    return pendingPaymentDeadline(order, this.config);
   }
 
   private async fulfilmentOf(order: {
@@ -310,12 +323,13 @@ export class OrdersService {
       ...forBuyer(o),
       items: o.items.map((it) => ({ ...it, ...media(it.variationId) })),
       canCancel: customerCancelBlock(o, viewerId) === null,
+      manualHandling: isManualHandling(o),
     }));
   }
 
   async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {
     const order = await this.cancelOrder(userId, code, refundInput);
-    return { ...forBuyer(order), canCancel: customerCancelBlock(order, userId) === null };
+    return { ...forBuyer(order), canCancel: customerCancelBlock(order, userId) === null, manualHandling: isManualHandling(order) };
   }
 
   private async cancelOrder(userId: string, code: string, refundInput: RefundDestinationInput) {
