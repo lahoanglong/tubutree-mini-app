@@ -666,6 +666,29 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     }
   });
 
+  it('R5-CHECKOUT-1: lần gửi lại cùng key chồng lên lần đầu, báo hết hàng vì lần đầu vừa giữ kho → trả lại đơn lần đầu đã tạo', async () => {
+    const { svc, prisma, orderCreate } = build({ stockCount: 0 });
+    (prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null) // kiểm key đầu hàm: lần đầu chưa commit
+      .mockResolvedValueOnce(null) // generateUniqueOrderCode
+      .mockResolvedValueOnce({ id: 'o-first', userId: 'ctv' }); // sau lỗi: lần đầu đã commit
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-first', code: 'TUBU1', items: [] });
+    const r = (await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-race')) as { id: string };
+    expect(r.id).toBe('o-first');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('lỗi khi tạo đơn mà key chưa có đơn nào (hoặc là đơn của người khác) → giữ nguyên lỗi', async () => {
+    const none = build({ stockCount: 0 });
+    await expect(none.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-x')).rejects.toThrow('không đủ tồn kho');
+    const other = build({ stockCount: 0 });
+    (other.prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'o-other', userId: 'ctv-khac' });
+    await expect(other.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-y')).rejects.toThrow('không đủ tồn kho');
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');

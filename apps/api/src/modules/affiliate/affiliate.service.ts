@@ -715,11 +715,12 @@ export class AffiliateService {
         return created;
       });
     } catch (err) {
-      // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
-      // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
-      if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
+      // Race idempotency: lần gửi lại cùng key chạy chồng lên lần đầu (CTV bấm lại sau khi quá thời gian) chờ khoá dòng kho của
+      // lần đầu, rồi ăn unique-violation (P2002) trên idempotencyKey, hoặc báo hết hàng / hết suất giờ vàng vì chính lần đầu vừa
+      // giữ. Đơn của key đó đã có thì trả lại đơn đó thay vì báo lỗi cho một đơn đã tạo.
+      if (key) {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.orderForCtv(existing.id);
+        if (existing && existing.userId === ctvId) return this.orderForCtv(existing.id);
       }
       throw err;
     }
