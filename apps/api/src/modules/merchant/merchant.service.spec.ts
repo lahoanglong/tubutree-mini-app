@@ -749,7 +749,7 @@ describe('MerchantService', () => {
     function setup(store: Record<string, unknown>) {
       const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...store, ...data }));
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
       });
       return { svc: new MerchantService(prisma, orderStatus), update };
@@ -778,7 +778,7 @@ describe('MerchantService', () => {
       const storefrontUpdate = jest.fn().mockResolvedValue({ ...store });
       const productUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update: storefrontUpdate },
         product: { updateMany: productUpdateMany },
         $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),

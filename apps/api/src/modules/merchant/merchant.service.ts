@@ -295,7 +295,13 @@ export class MerchantService {
       where: { ownerUserId: userId },
       include: STORE_INCLUDE,
     });
-    if (store) return store;
+    if (store) {
+      if (user.role === 'DEALER' && store.type === 'CTV') {
+        await this.prisma.storefront.updateMany({ where: { id: store.id, type: 'CTV' }, data: { type: 'MERCHANT' } });
+        return { ...store, type: 'MERCHANT' as const };
+      }
+      return store;
+    }
 
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;

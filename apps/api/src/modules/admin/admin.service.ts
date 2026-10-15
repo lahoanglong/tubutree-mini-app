@@ -268,6 +268,8 @@ export class AdminService {
           where: { id: app.userId },
           data: { role: 'DEALER', metadata: mergedMeta },
         });
+        // CTV đã mở gian hàng rồi lên đại lý/đối tác: nâng loại để đăng được sản phẩm riêng (giữ slug và bộ sưu tập).
+        await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: 'CTV' }, data: { type: 'MERCHANT' } });
       });
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
