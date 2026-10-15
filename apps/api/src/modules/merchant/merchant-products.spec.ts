@@ -585,6 +585,47 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       expect(variationUpdate).toHaveBeenCalledWith({ where: { id: 'v-a' }, data: { retailPrice: 90_000, salePrice: null, stock: 5 } });
     });
 
+    describe('WEB-1: giá khuyến mãi Pancake mang theo không còn sống sót khi đối tác tự đặt giá', () => {
+      const CARRIED = { ...UNLINKED, basePrice: 150_000, salePrice: 129_000 };
+
+      it('bỏ mã kèm giá mới: giá khuyến mãi cũ bị xoá, giá khách trả (biến thể và sản phẩm) bằng giá đối tác nhập', async () => {
+        const { svc, productUpdate, variationUpdate } = buildEdit(CARRIED);
+        await svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 140_000 });
+        expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 140_000, salePrice: null });
+        expect(variationUpdate).toHaveBeenCalledWith({ where: { id: 'v-a' }, data: { retailPrice: 140_000, salePrice: null } });
+      });
+
+      it('bỏ mã kèm giá thấp hơn giá khuyến mãi cũ: không còn 400, giá mới là giá bán', async () => {
+        const { svc, productUpdate, variationUpdate } = buildEdit(CARRIED);
+        await svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 100_000 });
+        expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 100_000, salePrice: null });
+        expect(variationUpdate.mock.calls[0]![0].data).toMatchObject({ retailPrice: 100_000, salePrice: null });
+      });
+
+      it('bỏ mã không gửi giá: giữ nguyên cả hai giá như lúc gỡ liên kết (giá khách trả vẫn khớp danh sách)', async () => {
+        const { svc, productUpdate, variationUpdate } = buildEdit(CARRIED);
+        await svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+        expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 150_000, salePrice: 129_000 });
+        expect(variationUpdate.mock.calls[0]![0].data).toMatchObject({ retailPrice: 150_000, salePrice: 129_000 });
+      });
+
+      it('bỏ mã và gửi cả giá khuyến mãi: dùng đúng giá đối tác gửi, vẫn kiểm sale <= base', async () => {
+        const ok = buildEdit(CARRIED);
+        await ok.svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 140_000, salePrice: 120_000 });
+        expect(ok.productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 140_000, salePrice: 120_000 });
+        const bad = buildEdit(CARRIED);
+        await expect(bad.svc.updateProduct('u1', 'prod-a', { pancakeCode: null, basePrice: 100_000, salePrice: 120_000 })).rejects.toThrow(
+          'Giá khuyến mãi không được cao hơn giá gốc',
+        );
+      });
+
+      it('sản phẩm còn liên kết/chờ liên kết vẫn không sửa được giá (400 "Tubu giao hộ" giữ nguyên)', async () => {
+        const { svc, productUpdate } = buildEdit(CARRIED);
+        await expect(svc.updateProduct('u1', 'prod-a', { basePrice: 100_000 })).rejects.toThrow('theo kho Tubu');
+        expect(productUpdate).not.toHaveBeenCalled();
+      });
+    });
+
     it('chưa bỏ mã thì vẫn không sửa được giá/tồn kho (400 như trước)', async () => {
       const { svc, productUpdate } = buildEdit(UNLINKED);
       await expect(svc.updateProduct('u1', 'prod-a', { stock: 5 })).rejects.toThrow('theo kho Tubu');
