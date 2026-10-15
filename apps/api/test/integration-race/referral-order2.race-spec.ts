@@ -500,8 +500,8 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
 
 /**
  * Gộp phiên khách (mergeGuestInto) chuyển đơn của khách sang tài khoản đích nhưng dòng thưởng
- * REFERRAL_ORDER2:<guestId> vẫn mang id khách. Thu hồi và chặn thưởng trùng phải theo ĐƠN, không
- * theo chủ đơn hiện tại.
+ * REFERRAL_ORDER2:<guestId> vẫn mang id khách. Chặn thưởng trùng theo ĐƠN; còn thu hồi thì tách khỏi đơn đã chuyển
+ * (G6): trả đơn cũ của khách sau gộp không thu hồi thưởng của người mời khách.
  */
 describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -585,7 +585,7 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
     return { referrer, guest, target, o1, o2 };
   }
 
-  it('(g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại cặp O1:O2; trả O1+O2 thu hồi đủ', async () => {
+  it('(g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại cặp O1:O2; trả O1+O2 sau gộp không thu hồi', async () => {
     const { referrer, guest, target, o1, o2 } = await rewardedGuestMergedInto('SAME');
     await deliver(target.id, 1);
     expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
@@ -593,17 +593,17 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
 
     await orderStatus.setStatus(o1.id, 'RETURNED');
     await orderStatus.setStatus(o2.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
-    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`]);
   });
 
-  it('(g2) T không có người mời: trả O1 sau gộp vẫn thu hồi thưởng của G; trả O2 không trừ thêm', async () => {
+  it('(g2) T không có người mời: trả O1 rồi O2 sau gộp không thu hồi thưởng của G', async () => {
     const { referrer, guest, o1, o2 } = await rewardedGuestMergedInto(null);
     await orderStatus.setStatus(o1.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
     await orderStatus.setStatus(o2.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
-    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`]);
   });
 
   it('(g3) T có người mời khác R2: R2 chỉ được thưởng từ 2 đơn chưa dùng của T, không từ O1:O2', async () => {
@@ -620,9 +620,9 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
     expect(grant.refId?.split(':')).toContain(o4.id);
     expect(grant.refId?.split(':')).not.toContain(o1.id);
 
-    // Trả O1 chỉ đụng thưởng của G (người mời R), không đụng thưởng của T.
+    // Trả O1 sau gộp không đụng thưởng của G (người mời R) lẫn thưởng của T.
     await orderStatus.setStatus(o1.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
     expect(await pointsOf(r2.id)).toEqual({ balance: REWARD, ledger: REWARD });
   });
 

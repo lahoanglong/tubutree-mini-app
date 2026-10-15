@@ -12,8 +12,15 @@ import { partialReturnTotals } from '../orders/return-ledger';
  * Dòng thưởng: refType REFERRAL, reason REFERRAL_ORDER2:<refereeId> (partial unique index theo reason ở
  * cả points_transactions_referral_unique lẫn coin_transactions_referral_unique cũ ⇒ mỗi người được mời
  * thưởng đúng 1 lần, và vì mỗi người được mời chỉ có 1 người mời nên cũng là 1 lần cho mỗi cặp), refId
- * "<đơn đầu>:<đơn thứ 2>". Gộp phiên khách đổi chủ đơn nhưng không đổi reason, nên thu hồi và chặn dùng
- * lại đơn đều tra theo id đơn trong refId.
+ * "<đơn đầu>:<đơn thứ 2>".
+ *
+ * Gộp phiên khách (chốt G6): gộp khách G vào tài khoản T chuyển orders.userId của G sang T nhưng dòng thưởng
+ * REFERRAL_ORDER2:<G> của người mời R ở lại nguyên. Từ đó thưởng TÁCH khỏi các đơn đã chuyển: trả/huỷ (cả đơn lẫn một phần)
+ * đơn cũ của G không thu hồi thưởng của R (findOrderGrants bỏ lần thưởng có người được mời khác chủ đơn hiện tại) và không
+ * khoá dòng users của R. Thu hồi theo chủ đơn sẽ khoá T (người được mời theo chủ đơn) rồi R, ngược thứ tự tx trả đơn của R
+ * (khoá R rồi người mời của R) ⇒ deadlock khi T mời R, R mời G. Chấp nhận lỗ nhỏ: khách tạo 2 đơn, người mời nhận thưởng,
+ * gộp rồi trả thì người mời vẫn giữ thưởng. Chặn dùng lại đơn đã thưởng làm cặp thưởng MỚI cho tài khoản đích vẫn tra theo id
+ * đơn trong refId (findReferralRewardedOrders).
  *
  * PD-3: thưởng trước gộp nằm ở coin_transactions (xu), sau gộp ở points_transactions (Điểm Xanh). Mọi
  * kiểm "đã thưởng / đã thu hồi / số lượt / mốc" ở đây đọc HỢP hai sổ; chỉ đọc sổ mới thì người được
@@ -267,13 +274,14 @@ async function revokeLostMilestones(
 }
 
 /**
- * Các lần thưởng REFERRAL_ORDER2 (delta > 0, sổ xu cũ hoặc sổ điểm) đã dùng đơn này. Tra theo id đơn, không theo chủ đơn
- * hiện tại: gộp phiên khách chuyển đơn sang tài khoản đích nhưng dòng thưởng vẫn mang id khách (REFERRAL_ORDER2:<guestId>).
- * Không cần khoá thêm dòng khách: mọi lần xét thưởng cho khách đọc đơn theo userId = khách và khoá khách, còn lần gộp cũng
- * khoá khách trước khi chuyển đơn, nên khi đơn đã thuộc người khác thì dòng thưởng của khách (nếu có) đã commit và thấy được
- * ở đây. Caller khoá người được mời (lockReferee) trước khi gọi.
+ * Các lần thưởng REFERRAL_ORDER2 (delta > 0, sổ xu cũ hoặc sổ điểm) đã dùng đơn này VÀ có người được mời đúng là chủ đơn
+ * hiện tại. Đơn đã gộp sang tài khoản khác (dòng thưởng mang id khách cũ REFERRAL_ORDER2:<guestId>) bị bỏ: thưởng đó tách
+ * khỏi đơn (xem đầu file), caller không thu hồi và không khoá người mời của khách. Caller khoá chủ đơn (lockReferee) trước
+ * khi gọi. Chủ đơn lấy từ ảnh chụp đơn của caller: nếu lần gộp commit xen giữa thì ảnh chụp còn là khách, và lần thưởng của
+ * khách bị thu như trước gộp (khoá khách rồi người mời, cùng chiều đường thường) — không đảo thứ tự khoá.
  */
-async function findOrderGrants(tx: Db, orderId: string) {
+async function findOrderGrants(tx: Db, order: { id: string; userId: string }) {
+  const orderId = order.id;
   const where = {
     refType: 'REFERRAL',
     reason: { startsWith: REFERRAL_ORDER2_PREFIX },
@@ -293,7 +301,8 @@ async function findOrderGrants(tx: Db, orderId: string) {
       referrerId: g.userId,
       refereeId: g.reason.slice(REFERRAL_ORDER2_PREFIX.length),
       grant: { amount: g.delta, ledger: g.ledger } satisfies ReferralGrant,
-    }));
+    }))
+    .filter((g) => g.refereeId === order.userId);
 }
 
 /**
@@ -332,7 +341,7 @@ async function readPartialRevocations(
  * trong tx duyệt yêu cầu trả, sau khi caller đã lật yêu cầu sang APPROVED. `returnedGoods` = tiền hàng đã trả luỹ kế của đơn
  * qua mọi yêu cầu trả một phần đã duyệt, GỒM yêu cầu này; `orderGoods` = tiền hàng của đơn. Khoá theo đúng thứ tự đường trả cả
  * đơn (người được mời rồi người mời). Không để số dư âm; phần thiếu ghi REFERRAL_DEBT. Không đụng mốc thưởng thêm.
- * `revoked`/`shortfall` tính bằng Điểm Xanh; null nếu không thu gì.
+ * `revoked`/`shortfall` tính bằng Điểm Xanh; null nếu không thu gì. Đơn đã gộp sang tài khoản khác: không thu (đầu file).
  */
 export async function revokeReferralRewardPartially(
   tx: Db,
@@ -340,7 +349,7 @@ export async function revokeReferralRewardPartially(
   input: { requestId: string; returnedGoods: number; orderGoods: number },
 ): Promise<{ revoked: number; shortfall: number } | null> {
   await lockReferee(tx, order.userId);
-  const grants = await findOrderGrants(tx, order.id);
+  const grants = await findOrderGrants(tx, order);
   const total = { revoked: 0, shortfall: 0 };
   let anyRevoked = false;
   for (const { referrerId, refereeId, grant } of grants) {
@@ -456,14 +465,14 @@ export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: stri
  * Thu hồi thưởng giới thiệu khi một trong hai đơn đã dùng để thưởng bị trả CẢ ĐƠN, kèm các mốc thưởng thêm
  * không còn đủ số lượt. BẮT BUỘC chạy trong tx của lần lật trạng thái. Không để số dư âm; phần thiếu
  * ghi REFERRAL_DEBT. Idempotent: dòng thu hồi dùng reason duy nhất (cùng partial unique index).
- * `revoked`/`shortfall` tính bằng Điểm Xanh.
+ * `revoked`/`shortfall` tính bằng Điểm Xanh. Đơn đã gộp sang tài khoản khác: không thu, không khoá người mời (đầu file).
  */
 export async function revokeReferralRewardForOrder(
   tx: Db,
   order: { id: string; userId: string },
 ): Promise<{ revoked: number; shortfall: number } | null> {
   await lockReferee(tx, order.userId);
-  const grants = await findOrderGrants(tx, order.id);
+  const grants = await findOrderGrants(tx, order);
 
   const total = { revoked: 0, shortfall: 0 };
   let anyRevoked = false;
@@ -494,7 +503,8 @@ export async function revokeReferralRewardForOrder(
  * Các đơn hiện thuộc `refereeId` đã nằm trong một lần thưởng REFERRAL_ORDER2 (kể cả đã thu hồi, ở sổ
  * xu cũ hay sổ điểm), kèm người mời đã nhận lần thưởng đó. Sau gộp phiên khách, đơn của khách đã dùng
  * để thưởng sang tài khoản đích nhưng dòng thưởng vẫn mang id khách — chặn theo reason
- * REFERRAL_ORDER2:<refereeId> không thấy chúng.
+ * REFERRAL_ORDER2:<refereeId> không thấy chúng. Tra theo id đơn (không theo người được mời trong reason), kể cả khi lần
+ * thưởng đó không còn bị thu hồi qua đơn đã chuyển: tài khoản đích không được dùng lại các đơn này để thưởng lần nữa.
  */
 export async function findReferralRewardedOrders(
   tx: Db,
