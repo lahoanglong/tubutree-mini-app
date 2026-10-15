@@ -561,6 +561,25 @@ describe('công nợ đại lý khi huỷ đơn CREDIT', () => {
     expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
   });
 
+  it('SYNC-3: đơn ghi công nợ lỡ bị lật PAID → chỉ đảo công nợ, KHÔNG hoàn Ví/ngân hàng (không trả đại lý hai lần)', async () => {
+    const order = makeOrder({ type: 'DEALER', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+    const tx = makeTx(order);
+    tx.dealerCreditLedger.findFirst.mockImplementation(({ where }: { where: { refType: string } }) =>
+      where.refType === 'ORDER' ? Promise.resolve({ id: 'l1', delta: 150000 }) : Promise.resolve(null),
+    );
+
+    const res = await service.reverseFinancials(tx as never, order);
+
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.create).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ moneyRefunded: false, refund: null });
+    expect(tx.row.paymentStatus).toBe('REFUNDED');
+    expect(tx.dealerCreditLedger.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', delta: -150000, refType: 'ORDER_CANCEL', refId: 'o1', note: 'Huỷ đơn TUBU1' },
+    });
+  });
+
   it('đơn khách lẻ KHÔNG đụng tới sổ công nợ', async () => {
     const order = makeOrder({ type: 'B2C' });
     const tx = makeTx(order);

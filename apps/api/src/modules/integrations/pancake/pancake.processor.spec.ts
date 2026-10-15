@@ -568,6 +568,44 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     await proc.onPaymentReconcile(paidPayload);
     expect(orderUpdateMany).not.toHaveBeenCalled();
   });
+
+  describe('đơn đại lý ghi công nợ (SYNC-3)', () => {
+    // Tubu đẩy đơn công nợ lên Pancake với transfer_money = tổng đơn (pancake-order-body CREDIT); Pancake có thể phản ánh lại thành prepaid.
+    const credit = (over: Record<string, unknown> = {}) => ({
+      id: 'o1', code: 'TUBU1', userId: 'd1', type: 'DEALER', status: 'CONFIRMED',
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 700000, ...over,
+    });
+    const mirrored = { id: 'p1', prepaid: 700000, cod: 0 };
+
+    it('Pancake báo prepaid = tổng đơn (phản ánh transfer_money) → KHÔNG lật PAID, không báo khách', async () => {
+      const { proc, orderUpdateMany, notifications, prisma } = setup(credit());
+      (prisma.dealerCreditLedger.findFirst as jest.Mock).mockResolvedValue({ id: 'ledger1' });
+      await expect(proc.onPaymentReconcile(mirrored)).resolves.toBeNull();
+      expect(prisma.dealerCreditLedger.findFirst).toHaveBeenCalledWith({ where: { refType: 'ORDER', refId: 'o1' }, select: { id: true } });
+      expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('đơn công nợ đã huỷ mà Pancake vẫn báo prepaid = tổng → KHÔNG ghi khoản "tiền về muộn" (đại lý không nhận hoàn hai lần)', async () => {
+      const { proc, prisma, refundAggregate } = setup(credit({ status: 'CANCELLED' }));
+      (prisma.dealerCreditLedger.findFirst as jest.Mock).mockResolvedValue({ id: 'ledger1' });
+      await proc.onPaymentReconcile({ ...mirrored, status: 6 });
+      expect(refundAggregate).not.toHaveBeenCalled();
+      expect(prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+    });
+
+    it('đơn đại lý trả trước (không có dòng công nợ) vẫn được đối soát như thường', async () => {
+      const { proc, orderUpdateMany } = setup(credit({ status: 'PENDING_PAYMENT' }));
+      await proc.onPaymentReconcile({ id: 'p1', prepaid: 700000 });
+      expect(statusFlips(orderUpdateMany)).toHaveLength(1);
+    });
+
+    it('đơn lẻ không tra sổ công nợ', async () => {
+      const { proc, prisma } = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', type: 'RETAIL', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000 });
+      await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+      expect(prisma.dealerCreditLedger.findFirst).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('PancakeProcessor.onShippingUpdated', () => {
@@ -1092,6 +1130,28 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     expect(statusFlips(txUpdateMany)).toHaveLength(0);
     expect(attentionFlags(txUpdateMany)).toEqual([expect.stringContaining('ĐANG HOÀN')]);
     expect(alerts.alert).toHaveBeenCalledWith('TUBU1', expect.stringContaining('ĐANG HOÀN'), 'OPS_PANCAKE_ALERT');
+  });
+
+  it.each([
+    ['CANCELLED', 4, 'ĐANG HOÀN'],
+    ['RETURNED', 4, 'ĐANG HOÀN'],
+    ['CANCELLED', 7, 'XOÁ'],
+    ['RETURNED', 7, 'XOÁ'],
+  ])('SYNC-7: đơn đã %s mà "%s" tới trễ → không ghim banner "Cần xử lý" cũ, không báo admin', async (orderStatus, pancakeStatus) => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, orderUpdateMany, txUpdateMany } = setup({ ...base, status: orderStatus }, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: pancakeStatus });
+    expect(attentionFlags(orderUpdateMany)).toEqual([]);
+    expect(statusFlips(txUpdateMany)).toHaveLength(0);
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('SYNC-7: đơn còn sống nhận "Đã xoá" (7) → vẫn vào "Cần xử lý Pancake"', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, orderUpdateMany } = setup({ ...base, status: 'CONFIRMED' }, undefined, alerts);
+    await proc.onStatusUpdated({ id: 'p1', status: 7 });
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('XOÁ')]);
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
   });
 
   it('cùng lý do đã chờ xử lý (Pancake gửi lại webhook) → không báo admin lần nữa', async () => {

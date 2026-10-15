@@ -142,10 +142,10 @@ describe('OrderStatusService', () => {
       .mockResolvedValue({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
     mockTx();
 
-    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', note: 'Khách đổi ý' });
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', note: 'Admin: Khách đổi ý' });
     expect(notifications.notify).toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', {
       order_code: 'TUBU1',
-      reason: 'Khách đổi ý',
+      reason: 'Tubu Tree huỷ đơn',
     });
 
     notifications.notify.mockClear();
@@ -153,6 +153,27 @@ describe('OrderStatusService', () => {
     mockTx();
     await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'MERCHANT', note: 'Hết hàng' });
     expect(notifications.notify).not.toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+  });
+
+  it.each([
+    ['CUSTOMER', 'Khách huỷ đơn'],
+    ['ADMIN', 'Tubu Tree huỷ đơn'],
+    ['PANCAKE', 'Kho Pancake báo huỷ đơn'],
+    ['SYSTEM', 'Hệ thống tự huỷ đơn quá hạn thanh toán'],
+    [undefined, 'Hệ thống tự huỷ đơn quá hạn thanh toán'],
+  ])('SYNC-9: huỷ bởi %s → chủ gian hàng đọc "%s", không bao giờ thấy ghi chú nội bộ', async (actorType, label) => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest
+      .fn()
+      .mockResolvedValue({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
+    mockTx();
+    const internal = 'Tự huỷ: quá 24 giờ chưa thanh toán — đã mở lệnh ZALOPAY: đối chiếu ZALOPAY, đã trừ tiền thì hoàn thủ công';
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: actorType as never, note: internal });
+    const call = notifications.notify.mock.calls.find((c) => c[1] === 'MERCHANT_ORDER_CANCELLED');
+    expect(call?.[2]).toEqual({ order_code: 'TUBU1', reason: label });
+    expect(JSON.stringify(call)).not.toContain('hoàn thủ công');
   });
 
   // R2-LIFECYCLE-5: đơn đã trả bị admin/hệ thống/Pancake huỷ hoặc trả — khách được báo số tiền hoàn và nơi tiền về.

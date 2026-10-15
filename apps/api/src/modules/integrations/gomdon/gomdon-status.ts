@@ -162,3 +162,21 @@ export function isGomdonPayable(order: { paymentMethod: string; paymentStatus: s
 export function gomdonStatusText(status: number): string {
   return GOMDON_STATUS_TEXT[status] ?? `Trạng thái ${status}`;
 }
+
+/**
+ * Đơn có vận đơn Gomdon ĐANG SỐNG (thu gom tái chế): Gomdon là nguồn DUY NHẤT của thông tin vận chuyển và của
+ * mốc đang giao/đã giao. Vận đơn Gomdon đã huỷ ('2' / huỷ xong) hoặc admin đã "Đã xử lý tay" → Gomdon hết sở hữu.
+ */
+export function gomdonOwnsShipping(order: {
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+  gomdonStatus?: string | null;
+  gomdonCancelStatus?: string | null;
+}): boolean {
+  return (
+    Boolean(order.gomdonOrderId || order.gomdonPartnerCode) &&
+    order.gomdonStatus !== '2' &&
+    order.gomdonStatus !== GOMDON_STATE.MANUAL_HANDLED &&
+    order.gomdonCancelStatus !== GOMDON_CANCEL.CANCELLED
+  );
+}

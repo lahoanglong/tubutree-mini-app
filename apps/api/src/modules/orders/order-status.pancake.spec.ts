@@ -5,6 +5,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import { PancakeHandedOverError, PancakeUnreachableError } from '../integrations/pancake/pancake-sync-hooks';
+import { CancelAfterHandoverError } from './order-transition';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -238,6 +239,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
         id: 'o1',
         OR: [
           { pancakeAttention: { startsWith: 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển' } },
+          { pancakeAttention: { startsWith: 'Pancake đã huỷ nhưng đơn Tubu còn hiệu lực' } },
           { pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } },
         ],
       },
@@ -268,5 +270,122 @@ describe('OrderStatusService.markPaid → Pancake (PANCAKE-1, MONEY-1)', () => {
     const r = await svc.markPaid('o1', { actorType: 'ADMIN', actorId: 'a1' });
     expect(r.outcome).not.toBe('ALREADY_PAID');
     expect(pancakeHooks.afterPaid).toHaveBeenCalledWith('o1');
+  });
+});
+
+describe('OrderStatusService — Pancake đã huỷ nhưng lần huỷ ở Tubu trượt/lỗi (SYNC-1)', () => {
+  const decision = { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' };
+  const expiring = () => makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+  const cron = { actorType: 'SYSTEM', pancakeGate: true, onlyIfUnpaid: true, expectedStatus: 'PENDING_PAYMENT' } as const;
+  const attention = (m: jest.Mock) =>
+    m.mock.calls.map((c) => c[0].data?.pancakeAttention).filter((a): a is string => typeof a === 'string');
+
+  function lose(current: Record<string, unknown>, overrides: Record<string, jest.Mock> = {}) {
+    const ctx = make(expiring(), { precheckCancel: jest.fn().mockResolvedValue(decision), ...overrides });
+    ctx.tx.order.updateMany.mockResolvedValue({ count: 0 });
+    ctx.prisma.order.findUniqueOrThrow.mockResolvedValue(current);
+    (ctx.prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(current);
+    return ctx;
+  }
+
+  it('cron hết hạn: tiền về chen giữa lúc Pancake huỷ và lúc lật → đơn còn CONFIRMED+PAID, ghi pancakeCancelStatus + "Cần xử lý Pancake" + báo admin', async () => {
+    const paid = { ...expiring(), status: 'CONFIRMED', paymentStatus: 'PAID' };
+    const { svc, prisma, notifications, pancakeHooks } = lose(paid);
+    const after = await svc.setStatus('o1', 'CANCELLED' as never, cron);
+    expect(after).toMatchObject({ status: 'CONFIRMED', paymentStatus: 'PAID' });
+    expect(pancakeHooks.afterLocalCancel).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', OR: [{ pancakeOrderId: null }, { pancakeOrderId: 'pk-1' }] },
+      data: { pancakeCancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' },
+    });
+    const [reason] = attention(prisma.order.updateMany);
+    expect(reason).toContain('Pancake đã huỷ nhưng đơn Tubu còn hiệu lực');
+    expect(reason).toContain('#pk-1');
+    expect(reason).toContain('nay CONFIRMED + PAID');
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_PANCAKE_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('mã vận đơn hãng được gán chen giữa → lỗi bàn giao giữ nguyên cho người bấm, và vẫn ghi dấu lệch', async () => {
+    const shipped = { ...makeOrder({ status: 'PACKED' }), shippingCode: 'GHN1', shippingPartner: 'GHN' };
+    const ctx = make(makeOrder({ status: 'PACKED' }), { precheckCancel: jest.fn().mockResolvedValue(decision) });
+    ctx.tx.order.updateMany.mockResolvedValue({ count: 0 });
+    ctx.prisma.order.findUniqueOrThrow.mockResolvedValue(shipped);
+    (ctx.prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(shipped);
+    await expect(ctx.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', actorId: 'a1' })).rejects.toBeInstanceOf(CancelAfterHandoverError);
+    expect(attention(ctx.prisma.order.updateMany)[0]).toContain('Pancake đã huỷ nhưng đơn Tubu còn hiệu lực');
+  });
+
+  it('lần lật + hoàn tiền ném lỗi (DB) → lỗi ném tiếp nguyên vẹn, đơn còn sống được ghi dấu lệch', async () => {
+    const live = expiring();
+    const ctx = make(live, { precheckCancel: jest.fn().mockResolvedValue(decision) });
+    (ctx.prisma.$transaction as jest.Mock).mockRejectedValue(new Error('deadlock detected'));
+    (ctx.prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(live);
+    await expect(ctx.svc.setStatus('o1', 'CANCELLED' as never, cron)).rejects.toThrow('deadlock detected');
+    const [reason] = attention(ctx.prisma.order.updateMany);
+    expect(reason).toContain('lần huỷ ở Tubu lỗi: deadlock detected');
+  });
+
+  it('request khác (hay webhook Pancake "Đã huỷ") đã huỷ đơn xong → không còn lệch, không ghi dấu', async () => {
+    const { svc, prisma } = lose({ ...expiring(), status: 'CANCELLED' });
+    await svc.setStatus('o1', 'CANCELLED' as never, cron);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Pancake chưa nhận lệnh huỷ (DEFERRED)', { kind: 'DEFERRED', reason: 'timeout' }],
+    ['không có gì bên Pancake (NONE)', { kind: 'NONE' }],
+    ['Pancake không có đơn (NOT_FOUND)', { kind: 'CONFIRMED', cancelStatus: 'NOT_FOUND', pancakeOrderId: null }],
+  ])('%s → Pancake còn đơn sống hoặc chưa từng có, không phải lệch', async (_label, d) => {
+    const paid = { ...expiring(), status: 'CONFIRMED', paymentStatus: 'PAID' };
+    const { svc, prisma } = lose(paid, { precheckCancel: jest.fn().mockResolvedValue(d) });
+    await svc.setStatus('o1', 'CANCELLED' as never, cron);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('lần huỷ thắng → không ghi dấu lệch (đường bình thường không đổi)', async () => {
+    const { svc, prisma, pancakeHooks } = make(expiring(), { precheckCancel: jest.fn().mockResolvedValue(decision) });
+    await svc.setStatus('o1', 'CANCELLED' as never, cron);
+    expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', decision);
+    expect(attention(prisma.order.updateMany)).toEqual([]);
+  });
+});
+
+describe('OrderStatusService — huỷ gặp "Đã bàn giao" của Pancake trên đơn có vận đơn Gomdon sống (SYNC-2)', () => {
+  const recycling = (over: Record<string, unknown> = {}) =>
+    makeOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonOrderId: 'GM1', gomdonStatus: '1', gomdonCancelStatus: null, ...over });
+  const handedOver = (code: number) => ({ precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(code)) });
+  const attention = (m: jest.Mock) =>
+    m.mock.calls.map((c) => c[0].data?.pancakeAttention).filter((a): a is string => typeof a === 'string');
+
+  it.each([
+    ['Đã nhận (3) → DELIVERED', 3],
+    ['Đã gửi hàng (2) → SHIPPING', 2],
+  ])('Pancake báo %s: KHÔNG đổi trạng thái đơn (không cộng điểm, không khoá hoa hồng), vào "Cần xử lý" kèm lý do Gomdon', async (_label, code) => {
+    const { svc, tx, prisma } = make(recycling(), handedOver(code));
+    const err = (await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', actorId: 'a1' }).catch((e: Error) => e)) as Error;
+    expect(err.message).toContain('không huỷ được nữa');
+    expect(err.message).toContain('vận đơn Gomdon đang chạy');
+    expect(err.message).not.toContain('đã đồng bộ');
+    expect(tx.order.updateMany).not.toHaveBeenCalled();
+    expect(tx.orderStatusHistory.create).not.toHaveBeenCalled();
+    expect(attention(prisma.order.updateMany)[0]).toContain('trạng thái đang giao/đã giao chỉ theo Gomdon');
+  });
+
+  it('khách bấm huỷ → vẫn nhận câu "liên hệ CSKH", đơn không bị chốt DELIVERED', async () => {
+    const { svc, tx } = make(recycling(), handedOver(3));
+    await expect(svc.precheckPancakeCancel(recycling() as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+    expect(tx.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('vận đơn Gomdon đã huỷ (Gomdon hết sở hữu) → Pancake vẫn được đồng bộ về DELIVERED như trước', async () => {
+    const { svc, tx } = make(recycling({ gomdonStatus: '2' }), handedOver(3));
+    await expect(svc.precheckPancakeCancel(recycling({ gomdonStatus: '2' }) as never, 'CUSTOMER')).rejects.toThrow();
+    expect(tx.order.updateMany.mock.calls.map((c) => c[0].data.status)).toEqual(['DELIVERED']);
+  });
+
+  it('đơn không thu gom (không có vận đơn Gomdon) → đồng bộ như trước', async () => {
+    const { svc, tx } = make(makeOrder({ status: 'PACKED' }), handedOver(3));
+    await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow();
+    expect(tx.order.updateMany.mock.calls.map((c) => c[0].data.status)).toEqual(['DELIVERED']);
   });
 });
