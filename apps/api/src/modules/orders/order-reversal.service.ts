@@ -5,13 +5,13 @@ import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
-import { revokeReferralRewardForOrder } from '../wallet/referral-reward';
+import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
 import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
-import { distributeByWeight, remainingPointsBack, shareOf, type ReturnShares } from './refund-allocation';
+import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
@@ -294,7 +294,7 @@ export class OrderReversalService {
   /**
    * Trả MỘT PHẦN đơn đã giao (D3): hoàn tiền phần của các dòng trả (sau phân bổ giảm giá/điểm, cộng phí ship nếu lỗi do
    * shop) về nơi khách chọn, trả lại Điểm Xanh đã dùng theo phần, thu hồi Điểm Xanh tích và giảm hoa hồng CTV cùng tỉ
-   * lệ, hoàn quota flash sale của số đơn vị trả. KHÔNG cộng kho (chỉ khi admin bấm "Đã nhận hàng về") và KHÔNG đổi
+   * lệ, hoàn quota flash sale của số đơn vị trả, thu hồi thưởng giới thiệu theo tỷ lệ nếu đơn đã dùng để thưởng. KHÔNG cộng kho (chỉ khi admin bấm "Đã nhận hàng về") và KHÔNG đổi
    * trạng thái đơn (vẫn DELIVERED).
    *
    * Gọi trong tx, SAU KHI caller đã lật yêu cầu REQUESTED → APPROVED bằng guard atomic và khoá dòng đơn — guard đó là
@@ -440,6 +440,24 @@ export class OrderReversalService {
       const item = byId.get(line.orderItemId);
       if (item?.flashSaleItemId && line.quantity > 0) {
         await this.flashSale.restore(tx, item.flashSaleItemId, order.userId, line.quantity);
+      }
+    }
+
+    // Thưởng giới thiệu thu hồi theo tỷ lệ tiền hàng đã trả luỹ kế của đơn (gồm yêu cầu này), cùng điều kiện với nhánh trả cả
+    // đơn ở reverseFinancials.
+    if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
+      const returnedQty = new Map(input.prior.approvedQty);
+      for (const line of shares.lines) returnedQty.set(line.orderItemId, (returnedQty.get(line.orderItemId) ?? 0) + line.quantity);
+      const goods = returnedGoods(order, returnedQty);
+      const revoked = await revokeReferralRewardPartially(tx, order, {
+        requestId,
+        returnedGoods: goods.returned,
+        orderGoods: goods.goods,
+      });
+      if (revoked?.shortfall) {
+        this.logger.warn(
+          `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
+        );
       }
     }
     return result;

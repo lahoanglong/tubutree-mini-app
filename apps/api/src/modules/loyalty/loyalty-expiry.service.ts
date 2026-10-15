@@ -9,6 +9,7 @@ import { formatVnDate, vnDateKey } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
+  REFERRAL_ORDER2_PARTIAL_REVOKE_PREFIX,
   REFERRAL_ORDER2_PREFIX,
   REFERRAL_ORDER2_REVOKE_PREFIX,
 } from '../wallet/referral-reward';
@@ -90,14 +91,22 @@ const REVIEW_RULE: ReversalRule = {
 /**
  * Thu hồi thưởng đơn thứ hai của người được mời (revokeReferralRewardForOrder): dòng thưởng mang refId "<đơn đầu>:<đơn
  * hai>" còn dòng thu hồi mang refId của đơn bị trả, nên không ghép theo refId được. Hai dòng chung hậu tố reason
- * `<id người được mời>`: REFERRAL_ORDER2:<id> và REFERRAL_ORDER2_REVOKE:<id>.
+ * `<id người được mời>`: REFERRAL_ORDER2:<id> và REFERRAL_ORDER2_REVOKE:<id>. Thu hồi theo tỷ lệ khi trả một phần
+ * (REFERRAL_ORDER2_PARTIAL_REVOKE:<id>:<yêu cầu trả>) cũng ăn đúng lô đó.
  */
 const REFERRAL_ORDER2_RULE: ReversalRule = {
   lotKey: (t) => (t.refType === 'REFERRAL' && startsWith(t.reason, REFERRAL_ORDER2_PREFIX) ? `REFERRAL_ORDER2:${t.reason.slice(REFERRAL_ORDER2_PREFIX.length)}` : null),
-  reversedLotKey: (t) =>
-    t.refType === 'REFERRAL' && startsWith(t.reason, REFERRAL_ORDER2_REVOKE_PREFIX)
-      ? `REFERRAL_ORDER2:${t.reason.slice(REFERRAL_ORDER2_REVOKE_PREFIX.length)}`
-      : null,
+  reversedLotKey: (t) => {
+    const reason = t.reason ?? '';
+    if (t.refType !== 'REFERRAL') return null;
+    if (reason.startsWith(REFERRAL_ORDER2_REVOKE_PREFIX)) return `REFERRAL_ORDER2:${reason.slice(REFERRAL_ORDER2_REVOKE_PREFIX.length)}`;
+    if (reason.startsWith(REFERRAL_ORDER2_PARTIAL_REVOKE_PREFIX)) {
+      const rest = reason.slice(REFERRAL_ORDER2_PARTIAL_REVOKE_PREFIX.length);
+      const sep = rest.indexOf(':');
+      return sep > 0 ? `REFERRAL_ORDER2:${rest.slice(0, sep)}` : null;
+    }
+    return null;
+  },
 };
 
 /** Đời 0 không có hậu tố `#<đời>` ở dòng thưởng nhưng dòng thu hồi luôn có, nên cả hai quy về `<mốc>#<đời>`. */
