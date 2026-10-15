@@ -229,7 +229,8 @@ describe('q6 báo động vận hành (real Postgres)', () => {
         const t0 = new Date();
         await expect(health.checkAndAlert(t0)).resolves.toMatchObject({ sent: 'ALERT' });
         expect((await prisma.opsHealthState.findUniqueOrThrow({ where: { key: 'alert' } })).detail).not.toHaveProperty('webhookPending');
-        for (const m of [5, 10, 15]) await expect(health.checkAndAlert(new Date(t0.getTime() + m * 60_000))).resolves.toMatchObject({ sent: null });
+        // Dừng ở 10 phút: đơn dở dang của spec khác chạm ngưỡng gomdon.backlog (15 phút) ở lượt 15 sẽ là sự cố mới thật.
+        for (const m of [5, 10]) await expect(health.checkAndAlert(new Date(t0.getTime() + m * 60_000))).resolves.toMatchObject({ sent: null });
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const lines = webhookWarnings(warn);
         expect(lines).toHaveLength(1);
