@@ -16,7 +16,7 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { partialReturnTotals } from '../../src/modules/orders/return-ledger';
 import { WALLET_DESTINATION } from '../../src/modules/orders/refund-destination';
 import { countReferralSuccesses, milestoneGrantReason } from '../../src/modules/wallet/referral-reward';
-import { createOrder, createUser, randCode, summarize, warmPool, setConfig } from './helpers';
+import { createOrder, createUser, randCode, sleep, summarize, warmPool, setConfig } from './helpers';
 
 /** Thưởng 100 điểm để thấy rõ phần làm tròn; sổ xu cũ: 5.000 xu = 5 điểm lô quy đổi. */
 const REWARD = 100;
@@ -460,8 +460,8 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
   });
 
   /** Người được mời có hai đơn đã giao (A 10 ngày trước, B 5 ngày trước), CHƯA nhận thưởng. */
-  async function unrewarded() {
-    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+  async function unrewarded(existingReferrer?: { id: string }) {
+    const referrer = existingReferrer ?? (await createUser(prisma, { role: 'CUSTOMER' }));
     const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
     const a = await deliveredOrder(referee.id, 3, new Date(Date.now() - 10 * 864e5));
     const b = await deliveredOrder(referee.id, 3, new Date(Date.now() - 5 * 864e5));
@@ -523,6 +523,45 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
       expect(r.partial.map((p) => p.delta)).toEqual([-66]);
       expect(r.total).toBe(66);
       expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+    }
+  });
+
+  it('(o) cấp thưởng song song cho hai người được mời của cùng người mời, một người đã trả một phần trước → không deadlock, cả hai được cấp', async () => {
+    for (let round = 0; round < 3; round++) {
+      const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+      const r1 = await unrewarded(referrer);
+      const r2 = await unrewarded(referrer);
+      await returnUnits(r1.referee.id, r1.a, 2);
+
+      // Ép xen kẽ: tx cấp R1 ghi xong dòng thưởng (đang giữ khoá cập nhật dòng users người mời) rồi chờ tx cấp R2 vào tới
+      // grant() và chèn dòng sổ của người mời (KEY SHARE qua khoá ngoại); sau đó R1 mới thu hồi theo tỷ lệ (cần khoá người mời).
+      let r2Entered!: () => void;
+      const r2In = new Promise<void>((resolve) => (r2Entered = resolve));
+      const original = rewards.grant.bind(rewards);
+      const spy = jest.spyOn(rewards, 'grant').mockImplementation(async (...args: Parameters<RewardPointsService['grant']>) => {
+        if (args[2] === `REFERRAL_ORDER2:${r2.referee.id}`) {
+          r2Entered();
+          return original(...args);
+        }
+        const res = await original(...args);
+        await Promise.race([r2In.then(() => sleep(300)), sleep(1500)]);
+        return res;
+      });
+      try {
+        const results = await Promise.allSettled([
+          rewards.grantReferralOrderReward(r1.referee.id),
+          sleep(50).then(() => rewards.grantReferralOrderReward(r2.referee.id)),
+        ]);
+        const s = summarize(results);
+        expect(s.errors).toEqual([]);
+        expect(s.fulfilled.map((f) => f.value)).toEqual([true, true]);
+      } finally {
+        spy.mockRestore();
+      }
+      const r = await revocations(referrer.id);
+      expect(r.partial.map((p) => [p.refId, p.delta])).toEqual([[r1.a.id, -66]]);
+      expect(await balanceOf(referrer.id)).toBe(2 * REWARD - 66);
+      expect(await successes(referrer.id)).toBe(2);
     }
   });
 

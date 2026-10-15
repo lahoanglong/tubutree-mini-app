@@ -224,6 +224,10 @@ export class RewardPointsService {
       if (!first || !second) return false;
       if (second.createdAt.getTime() - first.createdAt.getTime() > windowDays * 864e5) return false;
 
+      // Khoá người mời (FOR UPDATE) TRƯỚC khi ghi dòng thưởng, cùng thứ tự người được mời → người mời như mọi đường thu hồi.
+      // Ghi trước rồi mới khoá (lúc thu hồi theo tỷ lệ ngay dưới) là nâng khoá: dòng sổ của lần cấp song song cho người được
+      // mời khác giữ KEY SHARE trên người mời và chờ UPDATE của tx này ⇒ deadlock.
+      await lockReferrer(tx, referrerId);
       const ok = await this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx);
       // Phần đơn đã duyệt trả một phần trước lúc cấp: thu theo tỷ lệ ngay trong tx này (revokeReferralRewardForPriorReturns).
       if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
