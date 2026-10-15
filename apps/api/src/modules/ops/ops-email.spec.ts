@@ -105,6 +105,69 @@ describe('redactSensitive / scrubSecrets', () => {
     expect(redactSensitive(t)).toBe(t);
   });
 
+  describe('che số điện thoại', () => {
+    const MASK = '[số điện thoại đã ẩn]';
+
+    it.each([
+      ['SĐT0912345678', `SĐT${MASK}`],
+      ['SĐT:0912345678', `SĐT:${MASK}`],
+      ['sdt0912345678 gọi lại', `sdt${MASK} gọi lại`],
+      ['Khách0912345678giao', `Khách${MASK}giao`],
+      ['KH+84912345678', `KH${MASK}`],
+      ['ĐT84912345678.', `ĐT${MASK}.`],
+      ['gọi_0912345678', `gọi_${MASK}`],
+      ['SĐT0912 345 678', `SĐT${MASK}`],
+      ['SĐT0912.345.678', `SĐT${MASK}`],
+      ['liên hệ 0912345678', `liên hệ ${MASK}`],
+      ['0912345678', MASK],
+      ['(0912345678)', `(${MASK})`],
+      ['+84 912-345-678', MASK],
+      ['bàn 0243 8123 456', `bàn ${MASK}`],
+    ])('che %j', (input, expected) => {
+      expect(redactSensitive(input)).toBe(expected);
+    });
+
+    it('che mọi số trong một câu, kể cả số dính chữ và số tách rời', () => {
+      const out = redactSensitive('Pancake lỗi: SĐT0912345678 và 0987654321, người nhận KH0388888888.');
+      expect(out).toBe(`Pancake lỗi: SĐT${MASK} và ${MASK}, người nhận KH${MASK}.`);
+    });
+
+    it.each([
+      'TUBU2026101500001',
+      'TUBU2026101500001,TUBU2026101500002',
+      'TUBUSUB1234567890',
+      'TUBUSUB0000123007',
+      'TUBUSUB0912345007',
+      'TUBUSUB0387654321',
+      'tubusub0912345007',
+      'TUBU0912345678',
+      '#987654321',
+      'ref0000123007',
+      'sku0112345678',
+      'abc20261015000010912345678',
+      '0912345678901234',
+      '84912345678901234',
+      'job 1234567890123',
+      'Đã quá 30 phút, 12 đơn, lỗi 500',
+      'Lúc 2026-10-15T07:05:00.000Z và 14:05 15/10/2026',
+      'Hàng đợi pancake-push: 7 job lỗi trong 1 giờ qua',
+    ])('giữ nguyên %j (mã đơn, id, mốc giờ, dãy số khác)', (input) => {
+      expect(redactSensitive(input)).toBe(input);
+    });
+
+    it('mã đơn nằm cạnh số điện thoại: che số, giữ mã', () => {
+      expect(redactSensitive('Đơn TUBUSUB0000123007 của SĐT0912345678')).toBe(`Đơn TUBUSUB0000123007 của SĐT${MASK}`);
+      expect(redactSensitive('TUBU2026101500001 SĐT:0912345678')).toBe(`TUBU2026101500001 SĐT:${MASK}`);
+    });
+
+    it('chuỗi giống khoá dài (UUID, hex) được che hẳn, không bị chẻ đôi quanh dãy số giống số điện thoại', () => {
+      const token = 'ab-0912-3456-7890-abcdef0123456789ab';
+      const out = redactSensitive(`token lạ ${token}`);
+      expect(out).toBe('token lạ ***');
+      expect(redactSensitive(`id ${'f'.repeat(8)}-0912345678-${'e'.repeat(20)}`)).toBe('id ***');
+    });
+  });
+
   it('scrubSecrets thay mọi giá trị bí mật đã biết, bỏ qua giá trị quá ngắn để không phá chữ thường', () => {
     expect(scrubSecrets('Invalid login for mailer: password hunter2 rejected', ['mailer', 'hunter2', 'a'])).toBe(
       'Invalid login for ***: password *** rejected',
