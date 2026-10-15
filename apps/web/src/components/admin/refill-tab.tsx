@@ -5,13 +5,34 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { approveRefill, listPendingRefills, rejectRefill, type PendingRefill } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, FIELD_XS, Notice } from './ui';
+import { RefillLocationsPanel } from './refill-locations-panel';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, chipClass, FIELD_XS, Notice } from './ui';
 
 /**
- * Đổi vỏ chai chờ duyệt trên web admin (trước đây chỉ duyệt được trong mini app). Cùng route với nhân viên quầy:
- * nhập số vỏ thực nhận nếu ít hơn khách khai, bỏ trống = nhận đủ.
+ * Đổi vỏ chai trên web admin. Nhân viên chỉ thấy danh sách chờ duyệt; ADMIN có thêm mục "Điểm nhận vỏ" để quản lý nơi
+ * khách mang vỏ tới (route /admin/refill-locations chỉ mở cho ADMIN).
  */
-export function RefillTab() {
+export function RefillTab({ isAdmin = false }: { isAdmin?: boolean }) {
+  const [view, setView] = useState<'pending' | 'locations'>('pending');
+  return (
+    <div className="space-y-3">
+      {isAdmin && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Mục đổi vỏ chai">
+          <button type="button" className={chipClass(view === 'pending')} aria-pressed={view === 'pending'} onClick={() => setView('pending')}>
+            Chờ duyệt
+          </button>
+          <button type="button" className={chipClass(view === 'locations')} aria-pressed={view === 'locations'} onClick={() => setView('locations')}>
+            Điểm nhận vỏ
+          </button>
+        </div>
+      )}
+      {isAdmin && view === 'locations' ? <RefillLocationsPanel /> : <PendingRefills />}
+    </div>
+  );
+}
+
+/** Đổi vỏ chai chờ duyệt (trước đây chỉ duyệt được trong mini app). Cùng route với nhân viên quầy: nhập số vỏ thực nhận nếu ít hơn khai, bỏ trống = nhận đủ. */
+function PendingRefills() {
   const q = useQuery({ queryKey: ['admin-refill-pending'], queryFn: listPendingRefills });
   return (
     <div className="space-y-3">
@@ -74,6 +95,11 @@ function RefillRow({ item: r }: { item: PendingRefill }) {
           <div className="text-xs text-stone-600">
             Khai <b>{r.quantity}</b> vỏ · thưởng {r.seedsAwarded} giọt nước · gửi {formatDateTime(r.createdAt)}
           </div>
+          {r.pickupLocation && (
+            <div className="mt-0.5 break-words text-xs text-stone-700">
+              Mang tới: <b>{r.pickupLocation.name}</b> · {r.pickupLocation.address}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
