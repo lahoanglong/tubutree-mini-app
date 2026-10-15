@@ -13,16 +13,44 @@ import {
   type UpdateMerchantProductInput,
 } from '@/lib/merchant-client';
 import { formatVnd } from '@/lib/shop-client';
+import { useModalA11y } from '@/lib/use-modal-a11y';
 import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/admin/ui';
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 const MAX_PRICE = 100_000_000;
 const MAX_STOCK = 100_000;
 
+/**
+ * Giá khách thực trả của sản phẩm trong danh sách đối tác: giá khuyến mãi nếu có, không thì giá gốc (cùng quy tắc với trang bán).
+ * Có khuyến mãi thấp hơn giá gốc thì ghi thêm giá gốc gạch ngang.
+ */
+export function MerchantProductPrice({ product }: { product: Pick<MerchantProduct, 'basePrice' | 'salePrice'> }) {
+  const onSale = product.salePrice != null && product.salePrice < product.basePrice;
+  return (
+    <>
+      {formatVnd(product.salePrice ?? product.basePrice)}
+      {onSale && (
+        <span className="block text-[11px] font-normal text-stone-500">
+          <span className="sr-only">Giá gốc </span>
+          <del>{formatVnd(product.basePrice)}</del>
+        </span>
+      )}
+    </>
+  );
+}
+
 function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const panelRef = useModalA11y<HTMLDivElement>(onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
-      <div role="dialog" aria-modal="true" aria-label={title} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised sm:p-6">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised outline-none sm:p-6"
+      >
         <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
           <h2 className="font-display font-semibold text-stone-900">{title}</h2>
           <button
@@ -295,9 +323,15 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     if (description.trim() !== base.description) dto.description = description.trim();
     if (imageUrl.trim() !== (base.images[0] ?? '')) dto.images = imageUrl.trim() ? [imageUrl.trim()] : [];
     if (codeMode === 'change') dto.pancakeCode = linked!.pancakeId;
-    if (codeMode === 'selfShip') dto.pancakeCode = null;
+    if (codeMode === 'selfShip') {
+      // Giá và khuyến mãi của mã Pancake cũ còn nằm trên sản phẩm: gửi giá đối tác đang thấy kèm salePrice null để khách trả
+      // đúng số đó, không phụ thuộc việc server có tự bỏ giá khuyến mãi cũ hay không.
+      dto.pancakeCode = null;
+      dto.basePrice = Number(basePrice);
+      dto.salePrice = null;
+    }
     if (!priceStockHidden) {
-      if (Number(basePrice) !== product.basePrice) dto.basePrice = Number(basePrice);
+      if (codeMode !== 'selfShip' && Number(basePrice) !== product.basePrice) dto.basePrice = Number(basePrice);
       if (Number(stock) !== (product.variations?.[0]?.stock ?? 0)) dto.stock = Number(stock);
     }
     if (Object.keys(dto).length === 0) {
@@ -399,7 +433,18 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label htmlFor="merchant-edit-price" className="block text-xs font-medium text-stone-700">Giá bán (đồng)</label>
-              <input id="merchant-edit-price" type="number" inputMode="numeric" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} required min={1000} max={MAX_PRICE} className={INPUT} />
+              <input
+                id="merchant-edit-price"
+                type="number"
+                inputMode="numeric"
+                value={basePrice}
+                onChange={(e) => setBasePrice(e.target.value)}
+                required
+                min={1000}
+                max={MAX_PRICE}
+                aria-describedby={codeMode === 'selfShip' ? 'merchant-edit-price-hint' : undefined}
+                className={INPUT}
+              />
             </div>
             <div>
               <label htmlFor="merchant-edit-stock" className="block text-xs font-medium text-stone-700">
@@ -408,6 +453,12 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
               </label>
               <input id="merchant-edit-stock" type="number" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} required min={0} max={MAX_STOCK} className={INPUT} />
             </div>
+            {codeMode === 'selfShip' && (
+              <p id="merchant-edit-price-hint" className="col-span-2 text-xs text-stone-600">
+                Sau khi chuyển sang tự giao, khách trả đúng giá này.
+                {product.salePrice != null && ` Giá khuyến mãi lấy từ Pancake (${formatVnd(product.salePrice)}) sẽ được bỏ.`}
+              </p>
+            )}
           </div>
         )}
         <div>
