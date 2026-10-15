@@ -79,6 +79,31 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     expect(r.container.textContent).not.toContain('nơi giao nên sẽ thành');
   });
 
+  it('R5-CHECKOUT-6: giỏ đổi ở tab khác sang hàng gian hàng tự giao, máy chủ từ chối cách thanh toán (PAYMENT_METHOD_NOT_ALLOWED) → tải lại cả giỏ, kiện mới có đủ món', async () => {
+    const { ApiError } = await import('@/lib/client-api');
+    let changed = false;
+    m.cart.mockImplementation(async () => (changed ? { ...CART, items: [SHOP_LINE], subtotal: 200000, itemCount: 1 } : { ...CART, items: [TUBU_LINE], subtotal: 100000, itemCount: 1 }));
+    m.quote.mockImplementation(async () =>
+      changed
+        ? { ...QUOTE, subtotal: 200000, shippingFee: 25000, total: 225000, shipments: [QUOTE.shipments[1]] }
+        : { ...QUOTE, subtotal: 100000, shippingFee: 30000, total: 130000, shipments: [QUOTE.shipments[0]], blockedPaymentMethods: {} },
+    );
+    m.placeOrder.mockRejectedValueOnce(new ApiError(BLOCK_REASON, 400, 'PAYMENT_METHOD_NOT_ALLOWED'));
+    const r = await mount();
+    click(radio(r, 'Chuyển khoản ngân hàng'));
+    await flush(2);
+    expect(radio(r, 'Chuyển khoản ngân hàng').checked).toBe(true);
+
+    changed = true;
+    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    await flush(10);
+    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+    const region = r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')!;
+    expect(region.textContent).toContain('Mật ong Linh giao');
+    expect(region.textContent).toContain('Mật ong rừng');
+    expect(region.textContent).not.toContain('Dầu gội');
+  });
+
   it('R2-MERCHANT-8: giỏ tách kiện không bị khung cuộn cao cố định giấu kiện thứ ba', async () => {
     const r = await mount();
     const region = r.container.querySelector<HTMLElement>('[aria-label="Sản phẩm trong đơn"]')!;

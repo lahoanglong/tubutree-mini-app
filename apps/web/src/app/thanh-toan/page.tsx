@@ -210,8 +210,10 @@ export default function CheckoutPage() {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
         // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự
-        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
+        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở tab khác: kiện của
+        // báo giá mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
         void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
       } else if (e instanceof Error && isCartFixableError(e.message)) {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       }

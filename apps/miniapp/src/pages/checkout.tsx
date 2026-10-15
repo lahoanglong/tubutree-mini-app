@@ -272,8 +272,12 @@ export default function CheckoutPage() {
         return;
       }
       // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự chọn
-      // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi.
-      if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') void queryClient.invalidateQueries({ queryKey: ['quote'] });
+      // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở nơi khác: kiện của báo giá
+      // mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
+      if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') {
+        void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+      }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
