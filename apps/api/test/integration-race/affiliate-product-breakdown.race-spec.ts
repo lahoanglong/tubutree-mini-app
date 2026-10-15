@@ -48,7 +48,7 @@ describe('AffiliateService.productCommissionBreakdown partial returns (real Post
     });
   }
 
-  async function setup(status: CommissionStatus) {
+  async function setup(status: CommissionStatus, amount = 98_000) {
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
     const buyer = await createUser(prisma);
     const honey = await variation(10);
@@ -62,13 +62,15 @@ describe('AffiliateService.productCommissionBreakdown partial returns (real Post
     });
     await prisma.commission.create({
       data: {
-        affiliateUserId: ctv.id, orderId: order.id, orderTotal: 980_000, commissionableTotal: 980_000, rate: 10, amount: 98_000, status,
+        affiliateUserId: ctv.id, orderId: order.id, orderTotal: 980_000, commissionableTotal: 980_000, rate: 10, amount, status,
         lineAmounts: { [honeyLine.id]: 78_000, [pepperLine.id]: 20_000 },
       },
     });
+    let clock = Date.parse('2026-01-01T00:00:00Z');
     const ret = async (line: { id: string }, quantity: number, fullReturn = false, approved = true) => {
+      clock += 60_000;
       const r = await prisma.returnRequest.create({
-        data: { orderId: order.id, userId: buyer.id, reason: 'IT', status: approved ? 'APPROVED' : 'REQUESTED', refundAmount: 1, fullReturn },
+        data: { orderId: order.id, userId: buyer.id, reason: 'IT', status: approved ? 'APPROVED' : 'REQUESTED', refundAmount: 1, fullReturn, reviewedAt: new Date(clock) },
       });
       await prisma.returnRequestItem.create({ data: { returnRequestId: r.id, orderItemId: line.id, quantity, refundAmount: 1 } });
     };
@@ -76,28 +78,66 @@ describe('AffiliateService.productCommissionBreakdown partial returns (real Post
       const rows = await affiliate.productCommissionBreakdown(ctv.id);
       return Object.fromEntries(rows.map((r) => [r.productName.startsWith('Mật') ? 'honey' : 'pepper', r.commission]));
     };
-    return { ret, read, honeyLine, pepperLine };
+    const total = async () => {
+      const rows = await affiliate.productCommissionBreakdown(ctv.id);
+      return rows.reduce((a, r) => a + r.commission, 0);
+    };
+    const setStatus = (to: CommissionStatus) => prisma.commission.updateMany({ where: { orderId: order.id }, data: { status: to } });
+    return { ret, read, total, setStatus, amount, honeyLine, pepperLine };
   }
 
   it('hoa hồng chờ duyệt: trừ phần trả một phần theo dòng, dòng trả hết bị bỏ', async () => {
-    const { ret, read, honeyLine, pepperLine } = await setup('PENDING');
+    const { ret, read, total, amount, honeyLine, pepperLine } = await setup('PENDING', 52_000);
     await ret(honeyLine, 1);
     await ret(pepperLine, 2);
-    const r = await read();
-    expect(r).toEqual({ honey: 52_000 });
+    expect(await read()).toEqual({ honey: 52_000 });
+    expect(await total()).toBe(amount);
   });
 
   it('yêu cầu chưa duyệt / fullReturn không tính', async () => {
     const { ret, read, honeyLine } = await setup('LOCKED');
     await ret(honeyLine, 1, false, false);
     await ret(honeyLine, 3, true);
-    const r = await read();
-    expect(r.honey).toBe(78_000);
+    expect((await read()).honey).toBe(78_000);
   });
 
-  it('hoa hồng đã duyệt không bị cắt (giống reversePartialReturn)', async () => {
-    const { ret, read, honeyLine } = await setup('APPROVED');
+  it('trả khi LOCKED đã cắt, cron chuyển APPROVED: vẫn hiện số đã cắt, tổng = commission.amount', async () => {
+    const { ret, read, total, setStatus, honeyLine } = await setup('LOCKED', 72_000);
     await ret(honeyLine, 1);
-    expect((await read()).honey).toBe(78_000);
+    await setStatus('APPROVED');
+    expect(await read()).toEqual({ honey: 52_000, pepper: 20_000 });
+    expect(await total()).toBe(72_000);
+  });
+
+  it('như trên sau khi đã PAID', async () => {
+    const { ret, read, total, setStatus, honeyLine } = await setup('LOCKED', 72_000);
+    await ret(honeyLine, 1);
+    await setStatus('PAID');
+    expect(await read()).toEqual({ honey: 52_000, pepper: 20_000 });
+    expect(await total()).toBe(72_000);
+  });
+
+  it.each(['APPROVED', 'PAID'] as const)('trả duyệt SAU khi %s (không cắt): giữ số gốc, tổng = commission.amount', async (status) => {
+    const { ret, read, total, amount, honeyLine } = await setup(status);
+    await ret(honeyLine, 1);
+    expect(await read()).toEqual({ honey: 78_000, pepper: 20_000 });
+    expect(await total()).toBe(amount);
+  });
+
+  it('hỗn hợp: một lần trả lúc LOCKED (đã cắt), lần hai sau APPROVED (không cắt): tổng = commission.amount', async () => {
+    const { ret, read, total, setStatus, honeyLine } = await setup('LOCKED', 72_000);
+    await ret(honeyLine, 1);
+    await setStatus('APPROVED');
+    await ret(honeyLine, 1);
+    expect(await read()).toEqual({ honey: 52_000, pepper: 20_000 });
+    expect(await total()).toBe(72_000);
+  });
+
+  it('dòng trả hết bị bỏ dù hoa hồng đã APPROVED (đã cắt lúc LOCKED)', async () => {
+    const { ret, read, total, setStatus, pepperLine } = await setup('LOCKED', 78_000);
+    await ret(pepperLine, 2);
+    await setStatus('APPROVED');
+    expect(await read()).toEqual({ honey: 78_000 });
+    expect(await total()).toBe(78_000);
   });
 });
