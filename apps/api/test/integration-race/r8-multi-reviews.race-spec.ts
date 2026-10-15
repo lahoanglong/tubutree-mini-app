@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
+import type { Prisma } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -37,6 +38,45 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
+  /** Số kết nối đang chờ một khoá (khoá dòng hay khoá advisory). */
+  const lockWaiters = async () =>
+    (await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`)[0]!.n;
+
+  async function waitUntil(done: () => Promise<boolean> | boolean) {
+    for (let i = 0; i < 120 && !(await done()); i++) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  /**
+   * Prisma mà transaction đầu tiên chạy hết thân rồi DỪNG ngay trước commit cho tới khi test mở cổng: giữ nguyên mọi khoá nó
+   * đã lấy, và mọi dòng nó ghi chưa ai khác thấy. Dừng ngắn hơn hạn 5s của transaction tương tác.
+   */
+  function holdBeforeCommit(real: PrismaService) {
+    let reached!: () => void;
+    const atCommit = new Promise<void>((resolve) => (reached = resolve));
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    let armed = true;
+    const held = new Proxy(real, {
+      get(target, prop) {
+        if (prop === '$transaction') {
+          return (fn: (tx: Prisma.TransactionClient) => Promise<unknown>, ...rest: unknown[]) =>
+            (target.$transaction as (...a: unknown[]) => Promise<unknown>)(async (tx: Prisma.TransactionClient) => {
+              const out = await fn(tx);
+              if (armed) {
+                armed = false;
+                reached();
+                await gate;
+              }
+              return out;
+            }, ...rest);
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as PrismaService;
+    return { prisma: held, atCommit, open: () => open() };
+  }
 
   async function product() {
     const tag = randCode(8);
@@ -236,26 +276,59 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(await stats(p.id)).toEqual({ ratingAvg: 4, reviewCount: 2 });
   });
 
-  it('viết đánh giá cho đơn sau song song với xoá đánh giá có điểm → sổ của cặp không bao giờ giữ quá một phần thưởng', async () => {
-    for (let round = 0; round < 3; round++) {
-      const { p, v } = await product();
-      const { u, orders } = await buyerWithOrders(v.id, 2);
-      const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
+  it('xoá đánh giá đã thưởng (thu hồi đủ) rồi viết đánh giá mới cho cùng sản phẩm → đánh giá mới được thưởng đúng một lần, cặp vẫn chỉ giữ một phần thưởng', async () => {
+    const { p, v } = await product();
+    const { u, orders } = await buyerWithOrders(v.id, 3);
+    const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
+    expect(first.pointsEarned).toBe(5);
 
-      const res = summarize(
-        await Promise.allSettled([
-          reviews.remove(u.id, 'USER', first.id),
-          reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4 }),
-        ]),
-      );
-      expect(res.errors).toEqual([]);
-      const { balance, txs, rows } = await ledger(u.id);
-      const kept = txs.reduce((s, t) => s + t.delta, 0);
-      expect(kept).toBeLessThanOrEqual(5);
-      expect(balance).toBe(kept);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.pointsEarned).toBe(kept);
-    }
+    await reviews.remove(u.id, 'USER', first.id);
+    let book = await ledger(u.id);
+    expect(book.txs.map((t) => t.delta)).toEqual([5, -5]);
+    expect(book.balance).toBe(0);
+
+    const second = await reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4 });
+    expect(second).toMatchObject({ updated: false, pointsEarned: 5 });
+    // Đã được thưởng lại một lần: đánh giá tiếp theo (kể cả viết lại cho đơn vừa xoá) không còn điểm.
+    const third = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 3 });
+    expect(third).toMatchObject({ updated: false, pointsEarned: 0 });
+
+    book = await ledger(u.id);
+    expect(book.txs.map((t) => t.delta)).toEqual([5, -5, 5]);
+    expect(book.txs.reduce((s, t) => s + t.delta, 0)).toBe(5);
+    expect(book.balance).toBe(5);
+    expect(book.rows.map((r) => [r.orderId, r.pointsEarned])).toEqual([
+      [orders[1]!.id, 5],
+      [orders[0]!.id, 0],
+    ]);
+  });
+
+  // Thứ tự dựng sẵn: lần xoá đã khoá cặp và ghi thu hồi nhưng chưa commit thì đánh giá mới cho đơn khác tới. Không có khoá cặp
+  // trong remove, đánh giá mới đọc sổ lúc thu hồi chưa commit, thấy phần thưởng còn giữ nên không được thưởng, và sau khi thu
+  // hồi commit thì khách mất luôn lần được thưởng lại.
+  it('xoá đánh giá đã thưởng đang chờ commit thì đánh giá mới cho đơn khác phải chờ khoá cặp → được thưởng đúng một lần', async () => {
+    const { p, v } = await product();
+    const { u, orders } = await buyerWithOrders(v.id, 2);
+    const first = await reviews.create(u.id, p.slug, { orderId: orders[0]!.id, rating: 5 });
+    expect(first.pointsEarned).toBe(5);
+
+    const held = holdBeforeCommit(prisma);
+    const heldReviews = new ReviewsService(held.prisma, moduleRef.get(AnalyticsEventsService), moduleRef.get(LoyaltyService));
+    const removing = heldReviews.remove(u.id, 'USER', first.id);
+    await held.atCommit;
+
+    let created = false;
+    const creating = reviews.create(u.id, p.slug, { orderId: orders[1]!.id, rating: 4 }).finally(() => (created = true));
+    await waitUntil(async () => created || (await lockWaiters()) > 0);
+    expect(created).toBe(false);
+    held.open();
+    const [, second] = await Promise.all([removing, creating]);
+
+    expect(second).toMatchObject({ updated: false, pointsEarned: 5 });
+    const { balance, txs, rows } = await ledger(u.id);
+    expect(txs.map((t) => t.delta)).toEqual([5, -5, 5]);
+    expect(balance).toBe(5);
+    expect(rows.map((r) => [r.id, r.pointsEarned])).toEqual([[second.id, 5]]);
   });
 
   it('sửa theo từng dòng: gửi cho đơn đã có đánh giá chỉ sửa đúng đánh giá của đơn đó, không đụng đánh giá đơn kia', async () => {
