@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -11,6 +11,8 @@ import { startOfVnMonth } from '../../common/vn-time';
  * Quản lý (Admin/Staff) xem & duyệt đơn trên trang Quản trị → tự động thưởng 💧 vào Vườn Xanh.
  */
 const LIST_PENDING_TAKE = 100;
+/** Duyệt vỏ cộng 💧 ngay cho người gửi, nên nhân viên không được duyệt/từ chối yêu cầu của chính mình. */
+const OWN_RETURN_MESSAGE = 'Bạn không thể tự xử lý yêu cầu đổi vỏ của chính mình. Vui lòng nhờ nhân viên khác duyệt.';
 // Lần chạy tối đa của giao dịch Serializable khi đụng độ song song (P2034/P2002) trước khi báo bận.
 const REFILL_TX_ATTEMPTS = 3;
 
@@ -189,6 +191,7 @@ export class RefillService {
   async approveReturn(id: string, reviewerId: string, receivedQuantity?: number) {
     const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
+    if (item.userId === reviewerId) throw new ForbiddenException(OWN_RETURN_MESSAGE);
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
     if (receivedQuantity !== undefined && (!Number.isInteger(receivedQuantity) || receivedQuantity < 1)) {
       throw new BadRequestException('Số vỏ thực nhận phải là số nguyên từ 1. Không nhận được vỏ nào thì hãy từ chối yêu cầu.');
@@ -232,6 +235,7 @@ export class RefillService {
   async rejectReturn(id: string, reviewerId: string, reason?: string) {
     const item = await this.prisma.bottleReturn.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Không tìm thấy yêu cầu đổi vỏ.');
+    if (item.userId === reviewerId) throw new ForbiddenException(OWN_RETURN_MESSAGE);
     if (item.status !== 'PENDING') throw new BadRequestException('Yêu cầu này đã được xử lý.');
     const why = reason?.trim() || null;
 

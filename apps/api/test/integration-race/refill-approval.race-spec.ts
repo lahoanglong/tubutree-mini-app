@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -114,6 +115,21 @@ describe('Duyệt đổi vỏ chai: số vỏ thực nhận và duyệt song son
     } else {
       expect(await seeds(user.id)).toBe(150);
     }
+  });
+
+  it('AUTHZ-2: nhân viên không tự duyệt hay từ chối yêu cầu đổi vỏ của chính mình; 💧 không cộng, yêu cầu vẫn PENDING', async () => {
+    const staff = await createUser(prisma, { role: 'STAFF' });
+    const br = await prisma.bottleReturn.create({ data: { userId: staff.id, quantity: 3, seedsAwarded: 150, status: 'PENDING' } });
+
+    await expect(refill.approveReturn(br.id, staff.id)).rejects.toThrow(ForbiddenException);
+    await expect(refill.rejectReturn(br.id, staff.id, 'tự từ chối')).rejects.toThrow(ForbiddenException);
+
+    expect((await prisma.bottleReturn.findUniqueOrThrow({ where: { id: br.id } })).status).toBe('PENDING');
+    expect(await seeds(staff.id)).toBe(0);
+
+    const other = await createUser(prisma, { role: 'STAFF' });
+    await refill.approveReturn(br.id, other.id);
+    expect(await seeds(staff.id)).toBe(150);
   });
 
   it('danh sách chờ duyệt: cũ nhất trước và phân trang theo cursor không bỏ sót dòng nào', async () => {
