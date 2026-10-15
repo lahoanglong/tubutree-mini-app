@@ -204,3 +204,15 @@ export function computeReturnShares(
     lines: lineIds.map((id, idx) => ({ orderItemId: id, quantity: request.get(id) ?? 0, refundAmount: perLine[idx] ?? 0 })),
   };
 }
+
+/**
+ * Tiền hàng đã trả luỹ kế của các đơn vị trong `qty` (số đã duyệt trả theo dòng, gồm cả lần đang duyệt) và tiền hàng thực trả
+ * của đơn (`total − shippingFee`). Cùng cơ sở với `goods` của computeReturnShares: mỗi lần trả là luỹ kế sau trừ luỹ kế trước,
+ * nên tổng `goods` các lần trả đúng bằng `returned` ở đây, không phụ thuộc đơn có được hoàn tiền thật hay không.
+ */
+export function returnedGoods(order: AllocOrder, qty: ReadonlyMap<string, number>): { returned: number; goods: number } {
+  return {
+    returned: computeReturnShares(order, new Map(), qty, { shopFault: false, priorShipping: 0 }).goods,
+    goods: Math.max(0, order.total - Math.max(0, order.shippingFee)),
+  };
+}

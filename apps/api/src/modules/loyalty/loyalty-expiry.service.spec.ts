@@ -551,6 +551,36 @@ describe('computePointExpiry (pure FIFO helper)', () => {
         expect(r.expiredNow).toBe(5);
       });
 
+      it('thu hồi theo tỷ lệ khi trả một phần (PARTIAL_REVOKE:<người được mời>:<yêu cầu>) ăn lô thưởng, không ăn lô cũ hơn', () => {
+        const partial = (id: string, delta: number, createdAt: string, refereeId: string, requestId: string) =>
+          tx(id, delta, createdAt, null, `REFERRAL_ORDER2_PARTIAL_REVOKE:${refereeId}:${requestId}`, { ...REFERRAL, refId: 'o2' });
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g', 100, '2025-05-01', PAST, 'u1'),
+            partial('p1', -33, '2025-05-02', 'u1', 'rr1'),
+            partial('p2', -17, '2025-05-03', 'u1', 'rr2'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(50); // chỉ phần chưa thu hồi của lô thưởng hết hạn; lô 30 không hạn còn nguyên
+      });
+
+      it('thu hồi một phần của người được mời khác không ăn lô thưởng này', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g1', 10, '2025-05-01', PAST, 'u1'),
+            grant('g2', 10, '2025-05-02', FUTURE, 'u2'),
+            tx('p', -4, '2025-05-03', null, 'REFERRAL_ORDER2_PARTIAL_REVOKE:u2:rr1', { ...REFERRAL, refId: 'o9' }),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(10);
+      });
+
       describe('mốc thưởng thêm: thu hồi đời n chỉ ăn lô đời n', () => {
         const milestoneGrant = (id: string, delta: number, createdAt: string, count: number, gen: number, expiresAt = PAST) =>
           tx(id, delta, createdAt, expiresAt, milestoneGrantReason('R1', count, gen), { ...REFERRAL, refId: 'R1' });
