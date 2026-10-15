@@ -162,6 +162,45 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(native).not.toHaveBeenCalled();
   });
 
+  describe('"Hủy đơn" nêu đúng nơi tiền/điểm hoàn về', () => {
+    const cancelText = async (o: AdminOrder) => {
+      const { container } = mount(<OrderStatusActions order={o} />);
+      click(byText(container, 'button', 'Hủy đơn'));
+      await flush();
+      const text = confirmDialog()?.textContent ?? '';
+      answerConfirm(false);
+      await flush();
+      return text;
+    };
+    const paid = (over: Partial<AdminOrder> = {}) =>
+      order({ paymentStatus: 'PAID', status: 'CONFIRMED', canConfirmPayment: false, allowedTransitions: ['CANCELLED'], ...over });
+
+    it('đơn thường đã trả trước: hoàn vào Ví Tubu của khách', async () => {
+      const text = await cancelText(paid());
+      expect(text).toMatch(/Hoàn 450\.000.*vào Ví Tubu của khách ngay khi huỷ/);
+    });
+
+    it('đơn CTV lên hộ: hoàn cho khách cuối (ví nếu có tài khoản, không thì hàng đợi Hoàn tiền khách), không hứa vào Ví của CTV', async () => {
+      const text = await cancelText(paid({ placedForCustomer: true }));
+      expect(text).toMatch(/Hoàn 450\.000.*khách cuối/);
+      expect(text).toMatch(/hàng đợi "Hoàn tiền khách"/);
+      expect(text).not.toMatch(/vào Ví Tubu của khách ngay khi huỷ/);
+    });
+
+    it('đơn trả bằng xu cũ: không hoàn tiền, trả lại Điểm Xanh', async () => {
+      const text = await cancelText(paid({ paymentMethod: 'XU' }));
+      expect(text).toMatch(/xu cũ — không hoàn tiền/);
+      expect(text).toMatch(/Điểm Xanh/);
+      expect(text).not.toMatch(/Ví Tubu/);
+      expect(text).not.toMatch(/450\.000/);
+    });
+
+    it('đơn chưa trả tiền: không có khoản hoàn', async () => {
+      const text = await cancelText(order({ placedForCustomer: true }));
+      expect(text).toMatch(/Khách chưa trả tiền — không có khoản hoàn tiền/);
+    });
+  });
+
   it('đơn chuyển khoản đã huỷ mà tiền về muộn: nút "Ghi nhận tiền về muộn" → hỏi xác nhận rồi POST confirm-payment, hiện câu của API (R2-ADMINOPS-3)', async () => {
     const api = mockFetch({
       '/confirm-payment': { body: { ok: true, alreadyPaid: false, latePayment: true, message: 'Đã ghi khoản hoàn 450.000đ tiền về muộn, xem mục Hoàn tiền khách.' } },

@@ -48,12 +48,26 @@ export function orderStatusActions(order: Pick<AdminOrder, 'allowedTransitions'>
 
 const PREPAID_METHODS = new Set(['WALLET', 'ZALOPAY', 'BANK_TRANSFER', 'VNPAY', 'XU']);
 
-/** Hệ quả tiền/điểm của lần huỷ do admin bấm — admin/hệ thống huỷ luôn hoàn vào Ví Tubu (D2). */
+/**
+ * Hệ quả tiền/điểm của lần huỷ do admin bấm (khớp OrderReversalService.reverseFinancials): đơn thường hoàn vào Ví Tubu
+ * của khách (D2); đơn CTV lên hộ hoàn cho khách cuối (vào ví nếu SĐT đã có tài khoản, không thì hàng đợi chuyển khoản
+ * tay); đơn trả bằng xu cũ không ra tiền mà trả lại Điểm Xanh.
+ */
 function cancelConsequences(order: AdminOrder): string[] {
-  const lines =
-    order.paymentStatus === 'PAID' && PREPAID_METHODS.has(order.paymentMethod)
-      ? [`Hoàn ${formatVnd(order.total)} vào Ví Tubu của khách ngay khi huỷ.`]
-      : ['Khách chưa trả tiền — không có khoản hoàn tiền.'];
+  const paidPrepaid = order.paymentStatus === 'PAID' && PREPAID_METHODS.has(order.paymentMethod);
+  const lines: string[] = [];
+  if (!paidPrepaid) {
+    lines.push('Khách chưa trả tiền — không có khoản hoàn tiền.');
+  } else if (order.paymentMethod === 'XU') {
+    lines.push('Đơn trả bằng xu cũ — không hoàn tiền, hệ thống trả lại Điểm Xanh tương ứng cho tài khoản đặt đơn.');
+  } else if (order.placedForCustomer) {
+    lines.push(
+      `Hoàn ${formatVnd(order.total)} cho khách cuối (không hoàn vào ví CTV): vào Ví Tubu của khách nếu số điện thoại người nhận ` +
+        'đã có tài khoản, chưa có thì ghi vào hàng đợi "Hoàn tiền khách" để admin chuyển khoản tay.',
+    );
+  } else {
+    lines.push(`Hoàn ${formatVnd(order.total)} vào Ví Tubu của khách ngay khi huỷ.`);
+  }
   if ((order.pointsUsed ?? 0) > 0) lines.push(`Trả lại ${order.pointsUsed} Điểm Xanh khách đã dùng.`);
   if (order.pancakeOrderId) lines.push('Hệ thống sẽ huỷ cả đơn trên kho Pancake.');
   return lines;

@@ -79,6 +79,8 @@ export interface AdminOrder {
   discountTotal?: number;
   /** Điểm Xanh khách đã dùng cho đơn — trả lại khi huỷ. */
   pointsUsed?: number;
+  /** true = CTV lên đơn hộ khách cuối: tiền huỷ/trả hoàn cho khách cuối, không hoàn cho CTV (OrderReversalService.refundEndCustomer). */
+  placedForCustomer?: boolean;
   note?: string | null;
   createdAt: string;
   updatedAt?: string;
