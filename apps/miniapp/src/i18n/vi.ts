@@ -31,6 +31,14 @@ export const vi = {
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
   },
 
+  reviews: {
+    eligibilityFailed: 'Chưa kiểm tra được quyền đánh giá.',
+    hiddenNotice: (orderCode: string | null) =>
+      `Đánh giá${orderCode ? ` cho đơn ${orderCode}` : ''} của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.`,
+    editHiddenNote: 'Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.',
+    savedHidden: 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.',
+  },
+
   refill: {
     locationPaused: 'Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.',
     pausedSuffix: ' (đã tạm ngưng)',

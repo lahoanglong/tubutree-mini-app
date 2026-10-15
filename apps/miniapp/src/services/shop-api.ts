@@ -541,6 +541,8 @@ export const fetchMyReview = (id: string) => api.get<MyReview>(`/reviews/${id}`)
 export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'images' | 'videoUrl' | 'createdAt'> & {
   pointsEarned?: number;
   updated?: boolean;
+  /** false khi admin đang ẩn đánh giá này: lưu/sửa không làm nó hiện lại. Thiếu (API cũ) coi là đang hiện. */
+  isVisible?: boolean;
 };
 /**
  * `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn

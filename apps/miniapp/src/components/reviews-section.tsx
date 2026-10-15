@@ -16,6 +16,7 @@ import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { vi } from '../i18n/vi';
 import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -146,6 +147,9 @@ export function ReviewsSection({
   const base = editingId && myReviewQ.data ? draftFromReview(myReviewQ.data) : EMPTY_DRAFT;
   const draft = edited && edited.key === key ? edited.draft : base;
   const latestMine = myReviews[0];
+  // Đánh giá bị admin ẩn không nằm trong danh sách công khai: khách chỉ biết qua đây. isVisible thiếu (API cũ) coi là đang hiện.
+  const hiddenMine = myReviews.filter((r) => r.isVisible === false);
+  const hiddenIds = new Set(hiddenMine.map((r) => r.id));
   // Đã đăng nhập thì chỉ có nút khi can-review đã về (như web): chưa biết còn đơn nào để viết thì chưa mở được form.
   const headerAction =
     status !== 'authenticated'
@@ -203,6 +207,25 @@ export function ReviewsSection({
           </Text>
         )}
       </div>
+
+      {status === 'authenticated' && eligQ.isError && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Text variant="caption" tone="danger">
+            {vi.reviews.eligibilityFailed}
+          </Text>
+          <Button variant="ghost" loading={eligQ.isFetching} onPress={() => void eligQ.refetch()}>
+            {vi.common.retry}
+          </Button>
+        </div>
+      )}
+      {status === 'authenticated' &&
+        hiddenMine.map((r) => (
+          <div key={r.id} role="status" style={{ marginTop: 4 }}>
+            <Text variant="caption" tone="warning" as="p">
+              {vi.reviews.hiddenNotice(r.orderCode)}
+            </Text>
+          </div>
+        ))}
 
       {reviewsQ.isLoading ? (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -373,6 +396,7 @@ export function ReviewsSection({
             orderCode={target.orderCode ?? undefined}
             purchaseCount={elig?.purchaseCount ?? 0}
             showReward={elig?.rewardAvailable !== false}
+            hidden={target.kind === 'edit' && hiddenIds.has(target.reviewId)}
             onDraftChange={(patch) => setEdited((d) => ({ key, draft: { ...(d && d.key === key ? d.draft : base), ...patch } }))}
             onDone={() => {
               setEdited(null);
@@ -401,6 +425,7 @@ function WriteReview({
   orderCode,
   purchaseCount,
   showReward,
+  hidden,
   onDraftChange,
   onDone,
 }: {
@@ -414,6 +439,8 @@ function WriteReview({
   purchaseCount: number;
   /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
   showReward: boolean;
+  /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
+  hidden: boolean;
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
   onDone: () => void;
 }) {
@@ -435,14 +462,18 @@ function WriteReview({
       // Theo BE chứ không theo chế độ form: đánh giá của đơn này có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho
       // mỗi (khách, sản phẩm) nên đánh giá lần mua sau ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.
       const earned = res.updated ? 0 : (res.pointsEarned ?? 0);
-      openSnackbar({
-        text: res.updated
-          ? 'Đã cập nhật đánh giá của bạn'
-          : earned > 0
-            ? `Cảm ơn đánh giá của bạn! Đã cộng ${formatNumber(earned)} Điểm Xanh`
-            : 'Đã gửi đánh giá của bạn',
-        type: 'success',
-      });
+      if (hidden || res.isVisible === false) {
+        openSnackbar({ text: vi.reviews.savedHidden, type: 'info' });
+      } else {
+        openSnackbar({
+          text: res.updated
+            ? 'Đã cập nhật đánh giá của bạn'
+            : earned > 0
+              ? `Cảm ơn đánh giá của bạn! Đã cộng ${formatNumber(earned)} Điểm Xanh`
+              : 'Đã gửi đánh giá của bạn',
+          type: 'success',
+        });
+      }
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
       void qc.invalidateQueries({ queryKey: ['my-review', res.id] });
@@ -497,6 +528,11 @@ function WriteReview({
           {isEdit
             ? `Bạn đang sửa đánh giá cho đơn ${orderCode}.`
             : `Bạn đã mua sản phẩm này ${purchaseCount} lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn ${orderCode}.`}
+        </Text>
+      )}
+      {isEdit && hidden && (
+        <Text variant="caption" tone="warning" as="p" style={{ marginTop: 8 }}>
+          {vi.reviews.editHiddenNote}
         </Text>
       )}
       {(isEdit || showReward) && (

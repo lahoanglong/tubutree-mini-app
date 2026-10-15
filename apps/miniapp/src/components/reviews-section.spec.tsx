@@ -655,6 +655,88 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
   });
 });
 
+// R5-BUYER-2: admin ẩn đánh giá của khách (isVisible=false). Đánh giá ẩn không nằm trong danh sách công khai nên khách phải
+// được nói thẳng là nó đang chờ Tubu xem xét, và lưu lại không được báo "Đã cập nhật" như thể đã đổi được gì.
+describe('ReviewsSection: đánh giá bị Tubu ẩn (R5-BUYER-2)', () => {
+  const HIDDEN_REF = { ...REF_A, isVisible: false };
+  const ELIG_HIDDEN = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 1, reviewableOrders: [], myReviews: [HIDDEN_REF] };
+  const HIDDEN_NOTICE = 'Đánh giá cho đơn TB0001 của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.';
+  const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue({ ...DATA, items: DATA.items.filter((i) => i.id !== 'a') });
+    mocks.canReview.mockResolvedValue(ELIG_HIDDEN);
+    mocks.fetchMyReview.mockImplementation(async (id: string) => ({ ...MYREVIEWS[id] as object, isVisible: false }));
+    mocks.createReview.mockResolvedValue({ updated: true, pointsEarned: 0 });
+  });
+
+  it('có đánh giá đang ẩn: nói rõ đang chờ Tubu xem xét, kèm đơn; nút sửa vẫn còn', async () => {
+    renderSection();
+    expect(await screen.findByText(HIDDEN_NOTICE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeInTheDocument();
+  });
+
+  it('đánh giá đang hiện: không có câu nào về việc bị ẩn', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_ALL);
+    renderSection();
+    await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' });
+    expect(screen.queryByText(/chưa hiện công khai/)).toBeNull();
+  });
+
+  it('form sửa đánh giá ẩn nhắc lại rằng lưu không làm nó hiện; lưu xong báo "đang chờ Tubu xem xét", không báo "Đã cập nhật"', async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    expect(screen.getByText('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SAVED_HIDDEN, type: 'info' }));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã cập nhật đánh giá của bạn' }));
+  });
+
+  it('máy chủ báo isVisible=false trong phản hồi lưu (can-review cũ chưa có cờ) cũng báo đang chờ xem xét', async () => {
+    mocks.canReview.mockResolvedValue({ ...ELIG_ALL, myReviews: [REF_A] });
+    mocks.createReview.mockResolvedValue({ updated: true, pointsEarned: 0, isVisible: false });
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SAVED_HIDDEN, type: 'info' }));
+  });
+});
+
+// R5-BUYER-3: can-review lỗi thì khách không biết vì sao không có nút viết/sửa — phải nói và cho thử lại.
+describe('ReviewsSection: can-review lỗi (R5-BUYER-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.fetchMyReview.mockImplementation(async (id: string) => MYREVIEWS[id]);
+  });
+
+  it('báo "Chưa kiểm tra được quyền đánh giá" kèm Thử lại; thử lại được thì có nút viết đánh giá', async () => {
+    mocks.canReview.mockRejectedValueOnce(new Error('500')).mockResolvedValue(ELIG_NEW);
+    renderSection();
+    expect(await screen.findByText('Chưa kiểm tra được quyền đánh giá.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByRole('button', { name: 'Viết đánh giá' })).toBeInTheDocument();
+    expect(screen.queryByText('Chưa kiểm tra được quyền đánh giá.')).toBeNull();
+    expect(mocks.canReview).toHaveBeenCalledTimes(2);
+  });
+
+  it('chưa đăng nhập không hỏi can-review nên không có dòng lỗi; can-review đang tải cũng không', async () => {
+    mocks.auth = { status: 'idle' };
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    expect(screen.queryByText('Chưa kiểm tra được quyền đánh giá.')).toBeNull();
+    expect(mocks.canReview).not.toHaveBeenCalled();
+  });
+});
+
 describe('Stars', () => {
   it('có tên truy cập "n trên 5 sao" và vẽ 5 ngôi sao', () => {
     const { container } = render(<Stars value={3.6} size={12} />);
