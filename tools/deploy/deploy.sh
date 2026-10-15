@@ -48,16 +48,40 @@ rollback_hint() {
   local svc="$1" prev="$2" id name
   read -r id name <<<"$prev"
   if [ -n "${id:-}" ] && [ -n "${name:-}" ]; then
-    log "Quay lại image $svc trước đó (migration mới phải tương thích ngược — xem runbook):"
-    log "  docker tag $id $name && docker compose -f $COMPOSE_FILE up -d --no-build $svc"
+    log "Quay lại image $svc trước đó (chỉ an toàn khi schema DB sau migrate vẫn tương thích với nó — xem runbook mục 7):"
+    log "  docker tag $id $name && docker compose -f $COMPOSE_FILE up -d --no-build --no-deps $svc"
   else
-    log "Không ghi nhận được image $svc trước đó — checkout commit cũ rồi chạy lại deploy.sh."
+    log "Không ghi nhận được image $svc trước đó — làm theo docs/launch/deploy-rollback-runbook.md mục 7 (không checkout commit cũ rồi chạy lại deploy.sh: script này không có ở commit cũ)."
   fi
+}
+
+# Migration đổi chỉ mục duy nhất của bảng reviews: API cũ vẫn ghi đánh giá theo khoá cũ, nên không được áp khi API cũ còn
+# phục vụ (runbook mục 0.1). Bản không chứa migration này, hoặc DB đã áp xong nó, không bị chặn.
+GUARDED_MIGRATION="20261015150000_r8_multi_reviews_unique_per_order"
+
+api_running() {
+  local id
+  id="$(dc ps -q api 2>/dev/null || true)"
+  [ -n "$id" ] && [ "$(docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null || echo false)" = true ]
+}
+
+# Đọc DB bằng biến môi trường của chính container postgres, nên không cần đọc .env. Không đọc được thì coi như CHƯA áp.
+guarded_migration_pending() {
+  [ -d "apps/api/prisma/migrations/$GUARDED_MIGRATION" ] || return 1
+  local applied
+  applied="$(printf '%s\n' "SELECT count(*) FROM _prisma_migrations WHERE migration_name = '$GUARDED_MIGRATION' AND finished_at IS NOT NULL AND rolled_back_at IS NULL" \
+    | dc exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null || true)"
+  [ "$(printf '%s' "$applied" | tr -d '[:space:]')" != 1 ]
 }
 
 log "=== Deploy $(git rev-parse --short HEAD 2>/dev/null || echo '?') với $COMPOSE_FILE ==="
 PREV_API="$(running_image api)"
 PREV_WEB="$(running_image web)"
+
+if api_running && guarded_migration_pending; then
+  log "ERROR: bản này có migration $GUARDED_MIGRATION (đổi chỉ mục duy nhất của bảng reviews) chưa áp, mà API cũ đang chạy và vẫn ghi đánh giá theo khoá cũ — DỪNG, chưa build hay migrate gì. Làm tay theo docs/launch/deploy-rollback-runbook.md: dừng API cũ, backup, migrate, bật web rồi API mới."
+  exit 2
+fi
 
 log "1/5 Build image api + web (container cũ vẫn chạy)"
 dc build api web
