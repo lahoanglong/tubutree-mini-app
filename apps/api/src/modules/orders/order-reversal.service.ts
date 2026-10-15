@@ -15,6 +15,7 @@ import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } fro
 import { distributeByWeight, remainingPointsBack, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
 import { paidLineTotals } from '../affiliate/commission-base';
+import { hasDealerCreditDebit } from './dealer-credit-debit';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -154,6 +155,9 @@ export class OrderReversalService {
     // Phần STANDARD hoàn ở LoyaltyService.reverseOrderPoints (ngoài tx) nên không tính ở đây.
     let pointsRefunded = 0;
     if (isRefundableChannel) {
+      // Đơn đại lý ghi công nợ: khách không trả đồng nào qua Ví/chuyển khoản — "hoàn" chính là dòng đảo công nợ ở
+      // reverseDealerCredit. Cộng thêm Ví (đơn lỡ bị lật PAID) là trả đại lý hai lần.
+      const onDealerCredit = await hasDealerCreditDebit(tx, order);
       const refunded = await tx.order.updateMany({
         where: isCodCollected
           ? // COD không có "PAID" thật để guard theo — dùng chính paymentStatus='UNPAID' (trạng
@@ -171,6 +175,10 @@ export class OrderReversalService {
           this.logger.error(`Đơn lên hộ ${order.code} trả bằng XU (không được phép): hoàn Điểm Xanh cho chủ đơn, kiểm tra tay.`);
         }
         pointsRefunded += await this.refundLegacyXuAsPoints(tx, order);
+      } else if (refunded.count === 1 && onDealerCredit) {
+        this.logger.warn(
+          `Đơn đại lý ghi công nợ ${order.code} đang ${order.paymentStatus}: không hoàn Ví, chỉ đảo công nợ. Nếu đại lý đã chuyển khoản thật cho đơn này, đối soát tay.`,
+        );
       } else if (refunded.count === 1 && order.placedForCustomer) {
         // Đơn CTV lên hộ: người trả tiền là khách cuối, không phải CTV (C-001). Caller báo "đã hoàn
         // vào Ví" cho order.userId, nên chỉ để true khi chính người đó là ví vừa được cộng.

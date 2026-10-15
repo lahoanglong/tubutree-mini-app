@@ -7,7 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
-import { GOMDON_CANCEL, GOMDON_STATE } from '../gomdon/gomdon-status';
+import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
@@ -28,6 +28,7 @@ import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
+import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 
@@ -64,19 +65,6 @@ const isClosedOrder = (status: string): boolean => (CLOSED_ORDER_STATUSES as rea
 function isTerminalPancakeStatus(data: Record<string, unknown>): boolean {
   const action = resolvePancakeStatus(data['status'] ?? data['status_name']);
   return action?.kind === 'returned' || (action?.kind === 'status' && action.status === 'CANCELLED');
-}
-
-/**
- * Đơn có vận đơn Gomdon ĐANG SỐNG (thu gom tái chế): Gomdon là nguồn DUY NHẤT của thông tin vận chuyển và của
- * mốc đang giao/đã giao. Vận đơn Gomdon đã huỷ ('2' / huỷ xong) hoặc admin đã "Đã xử lý tay" → Gomdon hết sở hữu.
- */
-function gomdonOwnsShipping(order: Pick<Order, 'gomdonOrderId' | 'gomdonPartnerCode' | 'gomdonStatus' | 'gomdonCancelStatus'>): boolean {
-  return (
-    Boolean(order.gomdonOrderId || order.gomdonPartnerCode) &&
-    order.gomdonStatus !== '2' &&
-    order.gomdonStatus !== GOMDON_STATE.MANUAL_HANDLED &&
-    order.gomdonCancelStatus !== GOMDON_CANCEL.CANCELLED
-  );
 }
 
 /**
@@ -333,7 +321,8 @@ export class PancakeProcessor extends WorkerHost {
     const action = resolvePancakeStatus(data['status'] ?? data['status_name']);
     if (!action) return;
     if (action.kind === 'attention') {
-      await this.flagAttention(order, action.reason);
+      // Sự kiện tới trễ sau khi đơn đã huỷ/trả: việc "đang hoàn"/"bị xoá" đã có kết cục, ghim thêm là banner cũ vĩnh viễn.
+      if (!isClosedOrder(order.status)) await this.flagAttention(order, action.reason);
       return;
     }
     if (action.kind === 'partialReturned') {
@@ -490,6 +479,10 @@ export class PancakeProcessor extends WorkerHost {
       return null;
     }
     if (order.paymentStatus !== 'UNPAID') return null;
+    // Đơn đại lý ghi công nợ: tiền đi qua sổ công nợ. Tubu tự ghi transfer_money = tổng đơn lên Pancake (có thể phản ánh lại
+    // thành `prepaid`), nên "Pancake báo đã trả đủ" không phải khách vừa chuyển tiền — lật PAID/ghi tiền về muộn ở đây là
+    // trả đại lý hai lần (công nợ + Ví) khi đơn bị huỷ.
+    if (await hasDealerCreditDebit(this.prisma, order)) return null;
     const flaggedPaid = isPancakeOrderPaid(data, order.total);
     const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {

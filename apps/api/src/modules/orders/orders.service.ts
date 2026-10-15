@@ -385,8 +385,15 @@ export class OrdersService {
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
       reversed = await this.reversal.reverseFinancials(tx, current, { destination });
       return true;
+    }).catch(async (err: unknown) => {
+      // Pancake đã huỷ đơn ở bước trên mà tx này không huỷ được (vừa PAID/giao vận, hay lỗi DB): để lại dấu cho CSKH; lỗi trả khách giữ nguyên.
+      await this.orderStatus?.flagPancakeCancelDivergence(order.id, pancakeDecision, `khách bấm huỷ nhưng lần huỷ ở Tubu lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     });
-    if (!won) return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+    if (!won) {
+      await this.orderStatus?.flagPancakeCancelDivergence(order.id, pancakeDecision, 'đơn đổi trạng thái trong lúc khách bấm huỷ');
+      return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+    }
     await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
     // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
     // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy
