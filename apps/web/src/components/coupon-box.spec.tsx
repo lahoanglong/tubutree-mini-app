@@ -50,6 +50,18 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     expect(t).toContain('HSD 01/01/2030');
   });
 
+  it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; bấm vẫn áp đúng mã (R6-BUYER-3)', async () => {
+    const raw = 'MILESTONE1000000-2026-10-CMV9MLSLB009KFKRUMVZQLRA7';
+    state.coupons = [c(raw, { type: 'AMOUNT', value: 30000, maxDiscount: null })];
+    const box = await mount();
+    const li = card(box, 'Quà mốc chi tiêu 1 triệu');
+    expect(li.textContent).toContain('Quà mốc chi tiêu 1 triệu');
+    expect(li.textContent).not.toContain('CMV9MLSLB009');
+    click(li.querySelector('button'));
+    await flush();
+    expect(state.applied).toEqual([raw]);
+  });
+
   it('freeship và giảm tiền cố định có nhãn riêng; mã không hạn dùng nói không thời hạn', async () => {
     state.coupons = [
       c('SHIP0', { type: 'FREESHIP', value: 0, maxDiscount: null }),

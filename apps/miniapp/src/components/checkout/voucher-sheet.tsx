@@ -13,6 +13,7 @@ import { Button } from '../ui/button';
 import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
+import { autoCouponName } from '../../utils/coupon-name';
 
 export interface VoucherSheetProps {
   visible: boolean;
@@ -197,7 +198,7 @@ export function VoucherSheet({
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                          {coupon.code}
+                          {autoCouponName(coupon.code) ?? coupon.code}
                         </Text>
                         {isApplied && (
                           <Badge size="sm" style={{ background: 'var(--color-promo-solid-bg)', color: 'var(--color-promo-solid-fg)' }}>

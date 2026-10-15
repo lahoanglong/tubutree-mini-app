@@ -60,7 +60,7 @@ export function checkoutPointsOffer(
   return {
     usable: standardUsable + converted,
     converted,
-    lockNote: held > 0 ? `${held} điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được` : null,
+    lockNote: held > 0 ? `${group(held)} điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả` : null,
     convertedNote: converted > 0 ? `${convertedPointsNote(converted)}${CONVERTED_FULL_VALUE}` : null,
   };
 }

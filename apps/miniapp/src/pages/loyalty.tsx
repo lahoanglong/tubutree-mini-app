@@ -30,6 +30,7 @@ import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/form
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
+import { autoCouponName } from '../utils/coupon-name';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -369,7 +370,7 @@ export default function LoyaltyPage() {
                         {couponLabel(c)}
                       </Text>
                       <Text variant="caption" tone="secondary" as="div">
-                        Mã {c.code}
+                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
                         {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
                       </Text>
                     </div>
@@ -625,6 +626,7 @@ export default function LoyaltyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
                         gap: 8,
                         paddingTop: 8,
                         borderTop: '1px dashed var(--color-border-subtle)',
@@ -634,6 +636,7 @@ export default function LoyaltyPage() {
                         HSD 30 ngày sau đổi
                       </Text>
                       <Button
+                        style={{ flexShrink: 0, marginLeft: 'auto' }}
                         disabled={!r.canRedeem || redeemMut.isPending}
                         onPress={() => {
                           haptic('light');

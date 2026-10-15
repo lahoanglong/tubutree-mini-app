@@ -25,7 +25,7 @@ describe('pointsReasonLabel', () => {
     ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy mã giảm giá'],
     ['ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
     ['ORDER_REDEEM:TB123', 'Dùng điểm khi thanh toán'],
-    ['ORDER_REVERSED:TB123', 'Hoàn ngược điểm (hủy/trả)'],
+    ['ORDER_REVERSED:TB123', 'Thu hồi điểm của đơn trả hàng'],
     ['ORDER_REFUND_POINTS:TB123', 'Hoàn lại điểm đã dùng'],
     ['POINTS_EXPIRED', 'Điểm hết hạn'],
     ['GAME_SPIN_WIN:p1', 'Phần thưởng Vườn Xanh'],

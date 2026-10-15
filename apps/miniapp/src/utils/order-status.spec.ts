@@ -4,6 +4,7 @@ import {
   canCustomerCancel,
   isCarrierBooked,
   isReorderable,
+  isHandedToCarrier,
   orderPointsNote,
   orderStamp,
   orderUnitCount,
@@ -26,6 +27,17 @@ describe('order-status helpers', () => {
 });
 
 // BUYERMINI-14: đơn đã giao/đã hoàn vẫn hiện "Nhận +N Điểm Xanh khi giao thành công".
+describe('isHandedToCarrier (R6-BUYER-10)', () => {
+  it('đang giao hoặc kho đã đặt hãng → đã bàn giao; các trạng thái khác thì chưa', () => {
+    expect(isHandedToCarrier({ status: 'SHIPPING' })).toBe(true);
+    expect(isHandedToCarrier({ status: 'PACKED', shippingCode: 'GHN123' })).toBe(true);
+    expect(isHandedToCarrier({ status: 'PACKED' })).toBe(false);
+    expect(isHandedToCarrier({ status: 'CONFIRMED' })).toBe(false);
+    expect(isHandedToCarrier({ status: 'DELIVERED' })).toBe(false);
+    expect(isHandedToCarrier({ status: 'CANCELLED' })).toBe(false);
+  });
+});
+
 describe('orderPointsNote', () => {
   it('đơn chưa giao → "sẽ nhận" kèm điều kiện giao thành công', () => {
     for (const status of ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING']) {
@@ -34,6 +46,9 @@ describe('orderPointsNote', () => {
   });
   it('đơn đã giao → "Đã cộng", không còn hứa tương lai', () => {
     expect(orderPointsNote('DELIVERED', 35)).toEqual({ text: 'Đã cộng +35 Điểm Xanh vào tài khoản', tone: 'success' });
+  });
+  it('đơn đã giao nhưng đã trả một phần thu lại điểm → ghi số đã thu lại (R6-CHECKOUT-3)', () => {
+    expect(orderPointsNote('DELIVERED', 26, 17)).toEqual({ text: 'Đã cộng +26, đã thu lại 17 do trả hàng', tone: 'muted' });
   });
   it('đơn đã hoàn → điểm đã thu hồi', () => {
     expect(orderPointsNote('RETURNED', 35)).toEqual({ text: 'Điểm Xanh của đơn này đã được thu hồi', tone: 'muted' });

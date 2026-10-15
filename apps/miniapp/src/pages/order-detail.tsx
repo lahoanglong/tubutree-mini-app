@@ -3,7 +3,7 @@ import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isNotFoundError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -23,6 +23,7 @@ import {
   buyerStatusLabel,
   canCustomerCancel,
   isReorderable,
+  isHandedToCarrier,
   orderPointsNote,
   orderStamp,
   returnWindowState,
@@ -238,7 +239,11 @@ export default function OrderDetailPage() {
   if (!order.data) {
     return (
       <Shell>
-        <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+        {isNotFoundError(order.error) ? (
+          <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
+        ) : (
+          <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+        )}
       </Shell>
     );
   }
@@ -261,12 +266,13 @@ export default function OrderDetailPage() {
   const stamp = orderStamp(o);
   const timelineSteps = timelineStepsFor(o.paymentMethod);
   const discounts = discountRows(o);
-  const pointsNote = orderPointsNote(o.status, o.pointsEarned);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const returnWindow = returnWindowState(o, returnDays);
   const refundMode = cancelRefundMode(o);
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
   const orderReturns = (myReturns.data ?? []).filter((r) => r.orderId === o.id);
+  const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
+  const pointsNote = orderPointsNote(o.status, o.pointsEarned, pointsReversed);
   const remaining = remainingByLine(o.items, orderReturns);
   const canRequestMore =
     o.status === 'DELIVERED' && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
@@ -745,6 +751,14 @@ export default function OrderDetailPage() {
           >
             {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
           </Button>
+        </Box>
+      )}
+
+      {!canCancel && isHandedToCarrier(o) && (
+        <Box px={4} pt={4}>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+            {vi.orders.cancelClosedAfterHandover}
+          </Text>
         </Box>
       )}
 

@@ -173,6 +173,49 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
   });
 });
 
+describe('LoyaltyPage — nút đổi quà không bị cắt chữ ở màn 360-390px (R6-CHECKOUT-4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getPointsTransactions.mockResolvedValue([]);
+    mocks.getLoyaltyRewards.mockResolvedValue({
+      pointsBalance: 1_250,
+      redeemablePoints: 0,
+      rewards: [{ ...REWARDS.rewards[0], pointsCost: 1_000 }],
+    });
+    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+    mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
+  });
+
+  it('hàng chân thẻ cho xuống dòng và nút giữ nguyên bề rộng nhãn "Chờ mở khoá điểm"', async () => {
+    renderPage();
+    const label = await screen.findByText('Chờ mở khoá điểm');
+    const button = label.closest('button') as HTMLElement;
+    expect(button.style.flexShrink).toBe('0');
+    expect((button.parentElement as HTMLElement).style.flexWrap).toBe('wrap');
+  });
+});
+
+describe('LoyaltyPage — mã tự cấp hiện tên thân thiện (R6-BUYER-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'MILESTONE1000000-2026-10-CMV9MLSLB009KFKRUMVZQLRA7' }]);
+    mocks.getPointsTransactions.mockResolvedValue([]);
+    mocks.getLoyaltyRewards.mockResolvedValue(REWARDS);
+    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+    mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
+  });
+
+  it('thẻ ghi "Quà mốc chi tiêu 1 triệu", không hiện mã thô hay id khách', async () => {
+    const { container } = renderPage();
+    await screen.findByText(/Quà mốc chi tiêu 1 triệu/);
+    expect(container.textContent).not.toContain('CMV9MLSLB009');
+    expect(container.textContent).not.toContain('MILESTONE');
+  });
+});
+
 describe('LoyaltyPage — một <h1> mỗi trang (C-114)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
