@@ -118,11 +118,22 @@ export const LEGACY_LINK_MESSAGE =
  * Những gì admin thấy trên dòng chờ duyệt lúc bấm Duyệt. Trường nào được gửi thì sản phẩm phải còn đúng như vậy, lệch là 409. Trường
  * bỏ trống (undefined/null) thì duyệt theo mã/sản phẩm đang có và service ghi cảnh báo.
  */
+/** Trường "đã xem" admin gửi lên mà trống (null, rỗng, khoảng trắng) nghĩa là không gửi: một quy ước cho mọi trường trừ mã Pancake. */
+export function seenValue(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export interface MerchantReviewSeen {
   /** Mã Pancake đang hiện trên dòng; chuỗi rỗng: dòng không có mã. */
   pancakeCode?: string | null;
-  /** Sản phẩm đang bán mà admin đã xác nhận chuyển sang gian hàng. */
+  /** Sản phẩm đang bán mà admin đã xác nhận chuyển sang gian hàng. Chuỗi rỗng coi như không gửi. */
   takeoverProductId?: string | null;
+  /**
+   * `updatedAt` của dòng chờ duyệt lần đầu lúc admin tải danh sách (ISO). Gửi thì chỉ duyệt/từ chối khi sản phẩm chưa được sửa
+   * thêm; lệch là 409. Chuỗi rỗng coi như không gửi.
+   */
+  updatedAt?: string | null;
 }
 
 export interface LinkOptions {
@@ -175,7 +186,8 @@ export async function linkTubuFulfilledVariation(
   }
   // Admin đã gửi sản phẩm mình xem thì xác nhận chỉ có hiệu lực cho đúng sản phẩm đó; lệnh chuyển bên dưới có điều kiện
   // `productId = target.productId` nên biến thể rời sản phẩm này sau lần đọc thì cũng trượt.
-  if (target.requiresAdminConfirm && opts.takeoverProductId != null && opts.takeoverProductId !== target.productId) {
+  const seenOrigin = seenValue(opts.takeoverProductId);
+  if (target.requiresAdminConfirm && seenOrigin !== undefined && seenOrigin !== target.productId) {
     throw new ConflictException({
       statusCode: 409,
       error: 'Conflict',

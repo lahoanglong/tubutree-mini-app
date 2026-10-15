@@ -44,14 +44,56 @@ import {
   type MerchantReviewSeen,
   describePancakeLink,
   linkTubuFulfilledVariation,
+  seenValue,
   unlinkTubuFulfilledVariation,
 } from '../merchant/merchant-pancake-link';
-import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
+import {
+  MERCHANT_PRODUCT_ALREADY_REVIEWED,
+  MERCHANT_PRODUCT_CONTENT_CHANGED,
+  MERCHANT_PRODUCT_EDIT_STALE,
+  PENDING_MERCHANT_PRODUCT_WHERE,
+} from '../merchant/merchant-product-review';
 import { maskPhone } from '../../common/mask-pii';
 
 /** Mã % từ mức này trở lên bắt buộc có Giảm tối đa: 100% không trần là gõ nhầm hoặc mã lộ ra là mất cả đơn. */
-const STALE_EDIT_REVIEW_MESSAGE = 'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.';
 const COUPON_PERCENT_NEEDS_CAP = 50;
+
+function reviewConflict(code: string, message: string) {
+  return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
+}
+
+function staleEditReview() {
+  return reviewConflict(
+    MERCHANT_PRODUCT_EDIT_STALE,
+    'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.',
+  );
+}
+
+function productContentChanged() {
+  return reviewConflict(
+    MERCHANT_PRODUCT_CONTENT_CHANGED,
+    'Đối tác vừa sửa sản phẩm này (tên, mô tả, ảnh hoặc giá) sau lần bạn mở danh sách. Hãy xem lại nội dung mới rồi mới duyệt.',
+  );
+}
+
+function productAlreadyReviewed(status: string | null | undefined) {
+  const what =
+    status === 'APPROVED'
+      ? 'Sản phẩm này đã được admin khác duyệt xuất bản.'
+      : status === 'REJECTED'
+        ? 'Sản phẩm này đã được admin khác từ chối. Chỉ duyệt lại được khi đối tác sửa và gửi lại.'
+        : 'Sản phẩm này vừa được xử lý ở nơi khác nên không còn ở hàng chờ duyệt.';
+  return reviewConflict(MERCHANT_PRODUCT_ALREADY_REVIEWED, what);
+}
+
+/** `expectedUpdatedAt` admin gửi lên thành mốc thời gian; trống = không gửi, ngày giờ sai = 400. */
+function seenVersionTime(value: string | null | undefined): number | undefined {
+  const raw = seenValue(value);
+  if (raw === undefined) return undefined;
+  const time = new Date(raw).getTime();
+  if (Number.isNaN(time)) throw new BadRequestException('expectedUpdatedAt phải là ngày giờ hợp lệ (ISO 8601).');
+  return time;
+}
 
 function pancakeCodeChanged(current: string | null) {
   return new ConflictException({
@@ -1518,38 +1560,54 @@ export class AdminService {
     if (editVersion !== undefined) {
       const seenAt = new Date(editVersion).getTime();
       if (product.approvalStatus !== 'APPROVED' || !product.editDraft || product.editDraft.updatedAt.getTime() !== seenAt) {
-        throw new BadRequestException(STALE_EDIT_REVIEW_MESSAGE);
+        throw staleEditReview();
       }
       return this.reviewProductEdit(adminId, product, product.editDraft, approve, reason);
     }
 
     // Admin đã gửi mã thấy trên màn duyệt thì chỉ duyệt đúng mã đó: đối tác đổi mã sau khi admin mở danh sách có thể là mã của một
     // sản phẩm Tubu đang bán khác mà admin chưa hề xem. Không gửi (client khác màn duyệt) thì duyệt theo mã đang có, ghi cảnh báo.
+    // Cùng quy ước cho phiên bản nội dung (`updatedAt` của dòng lúc tải danh sách): đối tác sửa tên, mô tả, ảnh, giá sau đó thì
+    // nội dung lên sàn là nội dung admin chưa từng xem, nên gửi mà lệch là 409 (R5-PARTNER-1).
     const sentCode = seen.pancakeCode ?? undefined;
     const codeSent = sentCode !== undefined;
     const seenCode = sentCode?.trim() || null;
     const readCode = product.pancakeLinkCode ?? null;
-    if (product.approvalStatus === 'PENDING_REVIEW' && codeSent && seenCode !== readCode) throw pancakeCodeChanged(readCode);
+    const seenVersion = seenVersionTime(seen.updatedAt);
+    const seenTakeover = seenValue(seen.takeoverProductId);
+    if (product.approvalStatus === 'PENDING_REVIEW') {
+      if (codeSent && seenCode !== readCode) throw pancakeCodeChanged(readCode);
+      if (seenVersion !== undefined && product.updatedAt.getTime() !== seenVersion) throw productContentChanged();
+    }
 
     // CAS cố định theo PENDING_REVIEW (không theo trạng thái vừa đọc): hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn
-    // B bấm Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người thứ hai nhận lỗi rõ ràng
+    // B bấm Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người thứ hai nhận 409 rõ ràng
     // thay vì lặng lẽ lật ngược quyết định, kể cả khi sản phẩm đã APPROVED và đang bán.
     // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
     // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
     const linked = await this.prisma.$transaction(async (tx) => {
-      // Cả mã Pancake đang xin liên kết: đối tác đổi mã giữa lúc admin xem và bấm thì không duyệt nhầm mã admin chưa xem.
+      // Cả mã Pancake đang xin liên kết và phiên bản nội dung: đối tác đổi mã hay sửa giữa lúc admin xem và bấm thì không duyệt
+      // nhầm mã hay nội dung admin chưa xem.
       const moved = await tx.product.updateMany({
-        where: { id: productId, approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode },
+        where: {
+          id: productId,
+          approvalStatus: 'PENDING_REVIEW',
+          pancakeLinkCode: product.pancakeLinkCode,
+          ...(seenVersion !== undefined ? { updatedAt: new Date(seenVersion) } : {}),
+        },
         data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
       });
       if (moved.count === 0) {
-        const now = await tx.product.findUnique({ where: { id: productId }, select: { approvalStatus: true, pancakeLinkCode: true } });
-        if (now?.approvalStatus === 'PENDING_REVIEW' && (now.pancakeLinkCode ?? null) !== readCode) {
-          throw pancakeCodeChanged(now.pancakeLinkCode);
-        }
-        throw new BadRequestException('Sản phẩm vừa được xử lý hoặc đối tác vừa đổi mã Pancake — tải lại danh sách để xem trạng thái mới.');
+        const now = await tx.product.findUnique({
+          where: { id: productId },
+          select: { approvalStatus: true, pancakeLinkCode: true, updatedAt: true },
+        });
+        if (!now || now.approvalStatus !== 'PENDING_REVIEW') throw productAlreadyReviewed(now?.approvalStatus);
+        if ((now.pancakeLinkCode ?? null) !== readCode) throw pancakeCodeChanged(now.pancakeLinkCode);
+        if (seenVersion !== undefined && now.updatedAt?.getTime() !== seenVersion) throw productContentChanged();
+        throw productAlreadyReviewed(now.approvalStatus);
       }
-      if (approve) return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seen.takeoverProductId });
+      if (approve) return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
@@ -1559,13 +1617,18 @@ export class AdminService {
     if (approve && readCode) {
       const notSent = [
         codeSent ? null : 'mã Pancake đã xem',
-        linked?.takeover && seen.takeoverProductId == null ? `sản phẩm đang bán bị chuyển (${linked.originProductId})` : null,
+        linked?.takeover && seenTakeover === undefined ? `sản phẩm đang bán bị chuyển (${linked.originProductId})` : null,
       ].filter((x): x is string => !!x);
       if (notSent.length > 0) {
         this.logger.warn(
           `Admin ${adminId} duyệt mã Pancake ${readCode} (liên kết ${linked?.linkId ?? 'không tạo mới'}, sản phẩm đối tác ${productId}) mà không gửi ${notSent.join(' và ')}.`,
         );
       }
+    }
+    if (approve && seenVersion === undefined) {
+      this.logger.warn(
+        `Admin ${adminId} duyệt sản phẩm đối tác ${productId} (${product.name}) mà request thiếu expectedUpdatedAt nên không biết admin đã xem nội dung nào.`,
+      );
     }
 
     this.logger.warn(
@@ -1598,9 +1661,7 @@ export class AdminService {
   ) {
     await this.prisma.$transaction(async (tx) => {
       const taken = await tx.productEditDraft.deleteMany({ where: { id: draft.id, updatedAt: draft.updatedAt } });
-      if (taken.count === 0) {
-        throw new BadRequestException(STALE_EDIT_REVIEW_MESSAGE);
-      }
+      if (taken.count === 0) throw staleEditReview();
       await tx.product.update({
         where: { id: product.id },
         data: approve

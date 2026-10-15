@@ -152,8 +152,8 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(editRow).toMatchObject({ isEdit: true, pancakeLinkCode: tubu.code });
     await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm', false, editRow.editVersion!);
     for (const approve of [false, true]) {
-      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(BadRequestException);
-      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(ConflictException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(ConflictException);
     }
     const rejectedEdit = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
     expect(rejectedEdit).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, rejectReason: 'Nhầm' });

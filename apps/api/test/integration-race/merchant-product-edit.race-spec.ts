@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
@@ -144,7 +144,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
       const after = await prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { editDraft: true } });
       console.log('[c] round=%d fulfilled=%d errors=%j name=%s', round, s.fulfilled.length, s.errors, after.name);
       expect(s.fulfilled).toHaveLength(1);
-      expect(s.rejected[0]!.reason).toBeInstanceOf(BadRequestException);
+      expect(s.rejected[0]!.reason).toBeInstanceOf(ConflictException);
       expect(after.editDraft).toBeNull();
       expect(after.approvalStatus).toBe('APPROVED');
       expect(after.isActive).toBe(true);
@@ -166,7 +166,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
       const after = await prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { editDraft: true } });
       const s = summarize(results);
       console.log('[d] round=%d fulfilled=%d errors=%j live=%s/%s draft=%s/%s', round, s.fulfilled.length, s.errors, after.name, after.description, after.editDraft?.name, after.editDraft?.description);
-      for (const r of s.rejected) expect(r.reason).toBeInstanceOf(BadRequestException);
+      for (const r of s.rejected) expect([BadRequestException, ConflictException].some((E) => r.reason instanceof E)).toBe(true);
       expect(after.approvalStatus).toBe('APPROVED');
       expect(after.isActive).toBe(true);
       const second = `Mô tả bản hai ${round}`;
@@ -175,35 +175,35 @@ describe('Merchant product edit draft (real Postgres)', () => {
     }
   });
 
-  it('(f) admin bấm lại trên dòng đã cũ: từ chối hai lần, duyệt rồi từ chối, từ chối rồi duyệt đều 400 và sản phẩm vẫn APPROVED + isActive, không gỡ liên kết', async () => {
+  it('(f) admin bấm lại trên dòng đã cũ: từ chối hai lần, duyệt rồi từ chối, từ chối rồi duyệt đều 409 và sản phẩm vẫn APPROVED + isActive, không gỡ liên kết', async () => {
     const { owner, product } = await liveProduct();
     notify.mockClear();
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên chờ 1' });
     const v1 = await viewedVersion(product.id);
     await admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, v1);
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, v1)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v1)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, v1)).rejects.toBeInstanceOf(ConflictException);
+    await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v1)).rejects.toBeInstanceOf(ConflictException);
     await expectUntouched(product.id, product.name, 'Không đạt');
     expect(reviewNotices()).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED']);
 
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên chờ 2' });
     const v2 = await viewedVersion(product.id);
     await admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, v2);
-    await expect(admin.reviewMerchantProduct('admin-b', product.id, false, 'Không đạt', false, v2)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v2)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-b', product.id, false, 'Không đạt', false, v2)).rejects.toBeInstanceOf(ConflictException);
+    await expect(admin.reviewMerchantProduct('admin-b', product.id, true, undefined, false, v2)).rejects.toBeInstanceOf(ConflictException);
     await expectUntouched(product.id, 'Tên chờ 2');
     expect(reviewNotices()).toEqual(['MERCHANT_PRODUCT_EDIT_REJECTED', 'MERCHANT_PRODUCT_EDIT_APPROVED']);
   });
 
-  it('(g) đối tác sửa rồi sửa lại đúng nội dung đang bán (bản chờ bị xoá), admin bấm trên dòng cũ: 400, sản phẩm vẫn bán', async () => {
+  it('(g) đối tác sửa rồi sửa lại đúng nội dung đang bán (bản chờ bị xoá), admin bấm trên dòng cũ: 409, sản phẩm vẫn bán', async () => {
     const { owner, product } = await liveProduct();
     notify.mockClear();
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên tạm' });
     const version = await viewedVersion(product.id);
     await merchant.updateProduct(owner.id, product.id, { name: product.name });
     expect(await prisma.productEditDraft.count({ where: { productId: product.id } })).toBe(0);
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, version)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, version)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt', false, version)).rejects.toBeInstanceOf(ConflictException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, version)).rejects.toBeInstanceOf(ConflictException);
     await expectUntouched(product.id, product.name);
     expect(reviewNotices()).toEqual([]);
   });
@@ -211,10 +211,10 @@ describe('Merchant product edit draft (real Postgres)', () => {
   it('(h) dòng cũ không mang phiên bản (client cũ, hoặc dòng chờ duyệt lần đầu đã được xử lý) không bao giờ đổi sản phẩm APPROVED', async () => {
     const { owner, product } = await liveProduct();
     notify.mockClear();
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt')).rejects.toBeInstanceOf(ConflictException);
     await merchant.updateProduct(owner.id, product.id, { name: 'Tên chờ' });
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, true)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, false, 'Không đạt')).rejects.toBeInstanceOf(ConflictException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, true)).rejects.toBeInstanceOf(ConflictException);
     await expectUntouched(product.id, product.name);
     expect(await prisma.productEditDraft.count({ where: { productId: product.id } })).toBe(1);
     expect(reviewNotices()).toEqual([]);
@@ -226,7 +226,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     const seen = await viewedVersion(product.id);
     await new Promise((r) => setTimeout(r, 5));
     await merchant.updateProduct(owner.id, product.id, { name: 'Bản hai' });
-    await expect(admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, seen)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, seen)).rejects.toBeInstanceOf(ConflictException);
     await expectUntouched(product.id, product.name);
     await admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, await viewedVersion(product.id));
     await expectUntouched(product.id, 'Bản hai');

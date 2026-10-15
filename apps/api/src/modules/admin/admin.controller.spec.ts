@@ -453,6 +453,19 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
     for (const name of ['expectedPancakeCode', 'expectedTakeoverProductId']) {
       expect(field(name)).toMatchObject({ required: false, nullable: true, maxLength: 100, description: expect.stringContaining('Bỏ trống') });
     }
+    expect(field('expectedUpdatedAt')).toMatchObject({ required: false, nullable: true, description: expect.stringContaining('Bỏ trống') });
+  });
+
+  it('R5-PARTNER-1: expectedUpdatedAt là ngày giờ ISO tuỳ chọn; rỗng hoặc toàn khoảng trắng coi như không gửi; sai định dạng bị chặn', async () => {
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '2026-10-14T03:00:00.000Z' })).resolves.toMatchObject({
+      expectedUpdatedAt: '2026-10-14T03:00:00.000Z',
+    });
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true })).expectedUpdatedAt).toBeUndefined();
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '' })).expectedUpdatedAt).toBeUndefined();
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '  ' })).expectedUpdatedAt).toBeUndefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: null })).resolves.toMatchObject({ expectedUpdatedAt: null });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: 'hôm qua' })).rejects.toBeDefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: 20261014 })).rejects.toBeDefined();
   });
 
   it('controller chuyển mã và sản phẩm đã xem xuống service', async () => {
@@ -462,11 +475,13 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
       confirmTakeover: true,
       expectedPancakeCode: 'PK-1',
       expectedTakeoverProductId: 'p-x',
+      expectedUpdatedAt: '2026-10-14T03:00:00.000Z',
     });
     await new AdminController(admin as never, {} as never).reviewMerchantProduct('admin-1', 'p1', dto);
     expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
       pancakeCode: 'PK-1',
       takeoverProductId: 'p-x',
+      updatedAt: '2026-10-14T03:00:00.000Z',
     });
   });
 
@@ -477,6 +492,7 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
     expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
       pancakeCode: undefined,
       takeoverProductId: undefined,
+      updatedAt: undefined,
     });
   });
 });

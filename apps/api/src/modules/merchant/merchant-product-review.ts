@@ -7,3 +7,10 @@ import type { Prisma } from '@prisma/client';
 export const PENDING_MERCHANT_PRODUCT_WHERE: Prisma.ProductWhereInput = {
   OR: [{ approvalStatus: 'PENDING_REVIEW' }, { editDraft: { isNot: null } }],
 };
+
+/** Đối tác sửa sản phẩm chờ duyệt lần đầu sau khi admin tải danh sách (409). */
+export const MERCHANT_PRODUCT_CONTENT_CHANGED = 'MERCHANT_PRODUCT_CONTENT_CHANGED';
+/** Sản phẩm đã được admin khác duyệt/từ chối (409). */
+export const MERCHANT_PRODUCT_ALREADY_REVIEWED = 'MERCHANT_PRODUCT_ALREADY_REVIEWED';
+/** Bản sửa của sản phẩm đang bán đã được xử lý hoặc đối tác sửa tiếp (409). */
+export const MERCHANT_PRODUCT_EDIT_STALE = 'MERCHANT_PRODUCT_EDIT_STALE';

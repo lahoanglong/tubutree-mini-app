@@ -569,7 +569,7 @@ export class MerchantService {
     });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm của gian hàng bạn.');
     const tubuFulfilled = product.fulfilment === 'TUBU';
-    const { codeChange, codeChanged } = await this.resolvePancakeCodeChange(product, dto.pancakeCode);
+    const { codeChange, codeChanged, codeLink } = await this.resolvePancakeCodeChange(product, dto.pancakeCode);
     // Sản phẩm xin "Tubu giao hộ" chưa (hoặc không còn) liên kết: chờ admin duyệt để nhận biến thể Pancake. Bỏ mã (chuyển sang
     // tự giao) trong cùng lần sửa thì không còn chờ liên kết nên giá và tồn kho sửa được ngay.
     const effectiveCode = codeChange === undefined ? product.pancakeLinkCode : codeChange;
@@ -577,9 +577,12 @@ export class MerchantService {
     if ((tubuFulfilled || awaitingLink) && (dto.basePrice !== undefined || dto.salePrice !== undefined || dto.stock !== undefined)) {
       throw new BadRequestException('Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu (Pancake), không sửa tại đây.');
     }
-    const basePrice = dto.basePrice ?? product.basePrice;
-    const salePrice = dto.salePrice === undefined ? product.salePrice : dto.salePrice;
-    if (salePrice != null && salePrice > basePrice) {
+    // Xin mã Pancake mới thì giá theo biến thể Pancake của mã đó, như lúc đăng (R5-PARTNER-2): thẻ duyệt của admin và danh sách
+    // của đối tác không còn hiện giá của mã cũ cho tới khi duyệt.
+    const pancakePrice = codeChanged && codeLink ? { base: codeLink.retailPrice, sale: codeLink.salePrice } : null;
+    const basePrice = pancakePrice ? pancakePrice.base : (dto.basePrice ?? product.basePrice);
+    const salePrice = pancakePrice ? pancakePrice.sale : dto.salePrice === undefined ? product.salePrice : dto.salePrice;
+    if (!pancakePrice && salePrice != null && salePrice > basePrice) {
       throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
     }
     // Nội dung so sánh là bản sửa đang chờ (nếu có): sửa tiếp thì gộp vào bản chờ chứ không bắt đầu lại từ nội dung đang bán.
@@ -631,16 +634,25 @@ export class MerchantService {
       } else if (!liveEdit && draft) {
         await tx.productEditDraft.deleteMany({ where: { productId: product.id } });
       }
-      await tx.product.update({
-        where: { id: product.id },
-        data: {
-          isActive: requestsLink ? true : dto.isActive,
-          ...(tubuFulfilled ? {} : { basePrice, salePrice }),
-          // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
-          ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
-          ...(reReview ? { approvalStatus: 'PENDING_REVIEW' as const, rejectReason: null } : {}),
-        },
-      });
+      // Ghi có điều kiện theo trạng thái duyệt đã đọc: admin duyệt giữa lúc đối tác đọc và ghi thì nội dung mới không được ghi thẳng
+      // lên sản phẩm đã lên sàn mà chưa ai xem (R5-PARTNER-1) — đối tác tải lại rồi sửa, bản sửa khi đó vào bản chờ duyệt.
+      try {
+        await tx.product.update({
+          where: { id: product.id, approvalStatus: product.approvalStatus },
+          data: {
+            isActive: requestsLink ? true : dto.isActive,
+            ...(tubuFulfilled ? {} : { basePrice, salePrice }),
+            // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
+            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
+            ...(reReview ? { approvalStatus: 'PENDING_REVIEW' as const, rejectReason: null } : {}),
+          },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+          throw new ConflictException('Sản phẩm vừa được duyệt hoặc đổi trạng thái ở nơi khác. Tải lại rồi sửa lại.');
+        }
+        throw err;
+      }
       const first = product.variations[0];
       if (!tubuFulfilled && first) {
         await tx.variation.update({
@@ -682,14 +694,14 @@ export class MerchantService {
   private async resolvePancakeCodeChange(
     product: { id: string; fulfilment: string; pancakeLinkCode: string | null },
     requested: string | null | undefined,
-  ): Promise<{ codeChange: string | null | undefined; codeChanged: boolean }> {
-    if (requested === undefined) return { codeChange: undefined, codeChanged: false };
+  ): Promise<{ codeChange: string | null | undefined; codeChanged: boolean; codeLink: LinkablePancakeVariation | null }> {
+    if (requested === undefined) return { codeChange: undefined, codeChanged: false, codeLink: null };
     const wanted = requested?.trim() || null;
-    if (wanted === (product.pancakeLinkCode ?? null)) return { codeChange: undefined, codeChanged: false };
+    if (wanted === (product.pancakeLinkCode ?? null)) return { codeChange: undefined, codeChanged: false, codeLink: null };
     if (product.fulfilment === 'TUBU') {
       throw new BadRequestException('Sản phẩm đang được Tubu giao hộ. Ngừng bán sản phẩm để gỡ liên kết trước khi đổi hoặc bỏ mã Pancake.');
     }
-    if (wanted === null) return { codeChange: null, codeChanged: true };
+    if (wanted === null) return { codeChange: null, codeChanged: true, codeLink: null };
     if (!product.pancakeLinkCode) {
       throw new BadRequestException('Sản phẩm tự giao không đổi sang Tubu giao hộ được. Đăng sản phẩm mới và chọn "Tubu giao hộ" kèm mã Pancake.');
     }
@@ -699,7 +711,7 @@ export class MerchantService {
         'Mã biến thể Pancake không có trong danh mục của Tubu Tree hoặc đã được gian hàng khác liên kết. Bỏ mã để chuyển sang tự giao hàng.',
       );
     }
-    return { codeChange: link.pancakeId, codeChanged: link.pancakeId !== product.pancakeLinkCode };
+    return { codeChange: link.pancakeId, codeChanged: link.pancakeId !== product.pancakeLinkCode, codeLink: link };
   }
 
   /** Ngừng bán (không xoá: đơn cũ, đánh giá, đối soát vẫn trỏ tới sản phẩm). */
