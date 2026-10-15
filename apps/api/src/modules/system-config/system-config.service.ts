@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PICKUP_PHONE_PATTERN } from '../../common/phone';
 import { spinPrizeProblem } from './spin-prizes';
 import { bannedKeywordsProblem } from '../feed/content-filter';
 import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
@@ -215,7 +216,7 @@ export class SystemConfigService {
     'payment.bank_account_no': (value) =>
       typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
     'refill.pickup_phone': (value) =>
-      value === '' || (typeof value === 'string' && /^(0|\+84)\d{9}$/.test(value))
+      value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
         ? null
         : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
     'payment.bank_bin': (value) =>

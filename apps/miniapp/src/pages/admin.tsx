@@ -1019,7 +1019,7 @@ function RefillAdminSection() {
       openSnackbar({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
       return;
     }
-    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước', 'Thời gian'];
+    const headers = ['ID', 'Khách hàng', 'SĐT', 'Số vỏ chai', 'Số nước', 'Thời gian', 'Điểm nhận'];
     const rows = filteredItems.map((r: PendingRefillItem) => [
       r.id,
       csvField(r.user.fullName ?? ''),
@@ -1027,6 +1027,7 @@ function RefillAdminSection() {
       r.quantity,
       r.seedsAwarded,
       csvField(formatDateTime(r.createdAt)),
+      csvField(r.pickupLocation?.name ?? ''),
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -1087,6 +1088,11 @@ function RefillAdminSection() {
                 <Text variant="caption" tone="secondary" as="div">
                   {r.user.phone ?? '—'} · Đổi <strong>{r.quantity} vỏ</strong> (+{r.seedsAwarded})
                 </Text>
+                {r.pickupLocation && (
+                  <Text variant="caption" tone="secondary" as="div">
+                    Mang tới: {r.pickupLocation.name} · {r.pickupLocation.address}
+                  </Text>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <Button

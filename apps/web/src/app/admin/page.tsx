@@ -467,7 +467,7 @@ export default function AdminPage() {
           {active === 'users' && isAdmin && <AccountDeletionPanel />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
-          {active === 'refill' && <RefillTab />}
+          {active === 'refill' && <RefillTab isAdmin={isAdmin} />}
           {active === 'config' && <ConfigTab />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} />}
           {active === 'attendance' && <AttendanceTab />}

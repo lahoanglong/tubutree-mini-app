@@ -7,6 +7,8 @@ import { RefillService } from './refill.service';
 
 class ReturnBottlesDto {
   @IsInt() @Min(1) @Max(100) quantity!: number;
+  /** Điểm nhận khách chọn (id trong /refill/me.pickupLocations); bản app cũ không gửi. */
+  @IsOptional() @IsString() @MaxLength(64) pickupLocationId?: string;
 }
 
 class ApproveReturnDto {
@@ -35,7 +37,7 @@ export class RefillController {
     @Body() dto: ReturnBottlesDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.refill.returnBottles(userId, dto.quantity, idempotencyKey);
+    return this.refill.returnBottles(userId, dto.quantity, idempotencyKey, dto.pickupLocationId);
   }
 
   // Admin/Staff: Lấy danh sách đổi vỏ chờ duyệt

@@ -11,6 +11,8 @@ export interface RefillHistoryItem {
   /** Có khi nhân viên ghi nhận ít vỏ hơn khách khai: số khách khai ban đầu (`quantity` lúc này là số thực nhận). */
   declaredQuantity?: number | null;
   rejectionReason?: string | null;
+  /** Điểm khách đã chọn lúc gửi; null/thiếu ở yêu cầu cũ hoặc API cũ. */
+  pickupLocation?: { id: string; name: string } | null;
 }
 
 /** Điểm nhận vỏ do admin điền ở Cấu hình hệ thống; trường nào trống thì null. */
@@ -20,9 +22,20 @@ export interface RefillPickupPoint {
   phone: string | null;
 }
 
+/** Một điểm nhận vỏ đang mở do admin quản lý (theo thứ tự hiển thị). */
+export interface RefillLocation {
+  id: string;
+  name: string;
+  address: string;
+  hours: string | null;
+  phone: string | null;
+}
+
 export interface RefillSummary {
-  /** Optional: API cũ chưa trả. */
+  /** Optional: API cũ chưa trả. Dạng một điểm (= điểm đầu tiên của `pickupLocations`), giữ cho bản app cũ. */
   pickup?: RefillPickupPoint;
+  /** Optional: API cũ chưa trả. Rỗng = admin chưa cấu hình điểm nào, hiện `pickup` dự phòng. */
+  pickupLocations?: RefillLocation[];
   perBottle: number;
   monthlyCap: number;
   monthlyUsed: number;
@@ -52,14 +65,18 @@ export interface PendingRefillItem {
     phone?: string;
     avatarUrl?: string;
   };
+  /** Nơi khách sẽ mang vỏ tới; null ở yêu cầu cũ. */
+  pickupLocation?: { id: string; name: string; address: string } | null;
 }
 
 export const getRefillSummary = () => api.get<RefillSummary>('/refill/me').then((r) => r.data);
 /** Đổi vỏ chai kèm Idempotency-Key: double-tap/mất mạng-retry không tạo thêm 1 yêu cầu đổi vỏ nữa
  * (double-credit nước tưới Vườn Xanh khi duyệt). */
-export const returnBottles = (quantity: number, idempotencyKey: string) =>
+export const returnBottles = (quantity: number, idempotencyKey: string, pickupLocationId?: string) =>
   api
-    .post<RefillResult>('/refill/return', { quantity }, { headers: { 'Idempotency-Key': idempotencyKey } })
+    .post<RefillResult>('/refill/return', pickupLocationId ? { quantity, pickupLocationId } : { quantity }, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
     .then((r) => r.data);
 
 export const getPendingRefillReturns = () => api.get<PendingRefillItem[]>('/refill/admin/pending').then((r) => r.data);
