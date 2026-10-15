@@ -362,9 +362,28 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
       returnRequest: {
         findUnique: jest.fn().mockResolvedValue(approved),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...approved, receivedAt: new Date() }),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            ...approved,
+            receivedAt: new Date(),
+            createdAt: new Date(),
+            reviewedAt: new Date(),
+            reasonCode: 'DEFECTIVE',
+            reason: 'Hỏng',
+            fullReturn: false,
+            shopFault: true,
+            bankName: 'VCB',
+            bankAccountNo: '0123456789',
+            bankAccountName: 'NGUYEN VAN A',
+          },
+        ]),
       },
-      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      order: {
+        findUnique: jest.fn().mockResolvedValue(order),
+        findMany: jest.fn().mockResolvedValue([{ id: 'o1', code: 'TUBU1', items: [{ id: 'a', productName: 'Bưởi', variationName: '1kg', quantity: 3 }] }]),
+      },
       user: { findUnique: jest.fn().mockResolvedValue(null) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(0),
       $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
     } as unknown as PrismaService;
@@ -399,6 +418,18 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
       expect.objectContaining({ where: { id: 'r1', status: 'APPROVED', receivedAt: null }, data: expect.objectContaining({ receivedBy: 'shop-owner' }) }),
     );
     expect(h.restockReturnedItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('R5-PARTNER-6: phản hồi "đã nhận hàng" của gian hàng là dòng hàng trả về, không mang tài khoản người mua hay tài khoản nhận hoàn', async () => {
+    const h = receiveHarness(merchantOrder);
+    const res = await h.svc.markReceivedByMerchant('shop-owner', 'r1');
+    expect(res).toMatchObject({ id: 'r1', orderCode: 'TUBU1', lines: [{ productName: 'Bưởi', quantity: 1 }] });
+    expect(res.receivedAt).toBeInstanceOf(Date);
+    const json = JSON.stringify(res);
+    for (const leaked of ['0123456789', 'NGUYEN VAN A', 'VCB', 'u1']) expect(json).not.toContain(`"${leaked}"`);
+    expect(res).not.toHaveProperty('userId');
+    expect(res).not.toHaveProperty('user');
+    expect(res).not.toHaveProperty('bankAccountNo');
   });
 
   it('gian hàng khác, hoặc đơn kho Tubu → 404, không lật', async () => {

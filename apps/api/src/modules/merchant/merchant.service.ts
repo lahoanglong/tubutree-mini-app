@@ -924,15 +924,16 @@ export class MerchantService {
     });
 
     // P0 A5-04 = A6-36 (docs/audit-2026-09): chỉ ADMIN mới thấy tên/SĐT/địa chỉ đầy đủ của khách —
-    // xem lý do đầy đủ ở maskShippingAddress(). DEALER/AFFILIATE đều bị che như nhau.
+    // xem lý do đầy đủ ở maskShippingAddress(). DEALER/AFFILIATE đều bị che như nhau. Gian hàng đối tác (MERCHANT) không nhận
+    // tài khoản người mua dưới bất kỳ dạng nào: người nhận cần để giao hàng nằm ở tab Đơn cần giao (R5-PARTNER-6).
     const shaped =
       role === 'ADMIN'
         ? scoped
-        : scoped.map((order) => ({
+        : scoped.map(({ user, ...order }) => ({
             ...order,
-            user: order.user
-              ? { ...order.user, fullName: maskFullName(order.user.fullName), phone: maskPhoneNumber(order.user.phone) }
-              : order.user,
+            ...(scope.storeType === 'MERCHANT'
+              ? {}
+              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneNumber(user.phone) } : user }),
             shippingAddress: maskShippingAddress(order.shippingAddress),
           }));
 

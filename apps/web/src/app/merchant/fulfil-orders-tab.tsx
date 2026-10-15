@@ -190,7 +190,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
         <div>
           <p className="text-xs font-medium text-stone-500">Người nhận</p>
           <p className="font-medium text-stone-900">
-            {[a?.recipient, a?.phone].filter(Boolean).join(' · ') || o.user?.fullName || 'Khách mua'}
+            {[a?.recipient, a?.phone].filter(Boolean).join(' · ') || 'Khách mua'}
           </p>
           {address && <p className="text-xs text-stone-600">{address}</p>}
           {o.note && <p className="mt-1 text-xs text-stone-600">Ghi chú của khách: {o.note}</p>}

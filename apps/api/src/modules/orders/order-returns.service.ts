@@ -441,12 +441,18 @@ export class OrderReturnsService {
    * hàng đối tác tự giao (D4) thì hàng về gian hàng, kho Tubu không nhận — gian hàng tự xác nhận (markReceivedByMerchant).
    */
   async markReceived(adminId: string, id: string) {
-    return this.receive(id, { kind: 'ADMIN', userId: adminId });
+    await this.receive(id, { kind: 'ADMIN', userId: adminId });
+    return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 
-  /** Chủ gian hàng đối tác xác nhận đã nhận hàng trả về: cộng lại tồn kho sản phẩm của gian hàng. */
-  async markReceivedByMerchant(userId: string, id: string) {
-    return this.receive(id, { kind: 'MERCHANT', userId });
+  /**
+   * Chủ gian hàng đối tác xác nhận đã nhận hàng trả về: cộng lại tồn kho sản phẩm của gian hàng. Phản hồi là đúng dạng một dòng của
+   * danh sách hàng trả về — không kèm tài khoản người mua hay tài khoản ngân hàng nhận hoàn (R5-PARTNER-6).
+   */
+  async markReceivedByMerchant(userId: string, id: string): Promise<MerchantReturnView> {
+    await this.receive(id, { kind: 'MERCHANT', userId });
+    const [view] = await this.merchantViews([id]);
+    return view!;
   }
 
   /** Yêu cầu trả hàng của các đơn gian hàng tự giao (đang chờ duyệt / đã duyệt) — mục "Hàng trả về" ở Cổng người bán. */
@@ -460,15 +466,20 @@ export class OrderReturnsService {
          AND rr."status" IN ('REQUESTED', 'APPROVED')
        ORDER BY (rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL) DESC, rr."createdAt" DESC
        LIMIT 50`;
+    return this.merchantViews(ids.map((r) => r.id));
+  }
+
+  /** Dòng "Hàng trả về" của gian hàng theo đúng thứ tự `ids`: chỉ phần cần để nhận hàng, không có người mua hay tài khoản nhận hoàn. */
+  private async merchantViews(ids: string[]): Promise<MerchantReturnView[]> {
     if (ids.length === 0) return [];
-    const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids.map((r) => r.id) } }, select: RETURN_LIST_SELECT });
+    const rows = await this.prisma.returnRequest.findMany({ where: { id: { in: ids } }, select: RETURN_LIST_SELECT });
     const refs = await this.imageRefsFor(rows.map((r) => r.id));
     const orders = await this.prisma.order.findMany({
       where: { id: { in: [...new Set(rows.map((r) => r.orderId))] } },
       select: { id: true, code: true, items: { select: { id: true, productName: true, variationName: true, quantity: true } } },
     });
     const orderMap = new Map(orders.map((o) => [o.id, o]));
-    const rank = new Map(ids.map((r, i) => [r.id, i]));
+    const rank = new Map(ids.map((id, i) => [id, i]));
     return rows
       .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
       .map((r) => {
@@ -498,7 +509,7 @@ export class OrderReturnsService {
       });
   }
 
-  private async receive(id: string, actor: { kind: 'ADMIN' | 'MERCHANT'; userId: string }) {
+  private async receive(id: string, actor: { kind: 'ADMIN' | 'MERCHANT'; userId: string }): Promise<void> {
     const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
     const owner = await this.prisma.order.findUnique({
@@ -541,7 +552,6 @@ export class OrderReturnsService {
       `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
     );
     await this.notifications.notify(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }).catch(() => undefined);
-    return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 
   // ── Nội bộ ──

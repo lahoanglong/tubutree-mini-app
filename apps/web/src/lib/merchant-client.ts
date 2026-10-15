@@ -236,6 +236,7 @@ export interface MerchantOrder {
     district?: string;
     province?: string;
   } | null;
+  /** Khách đã che (CTV/đại lý). Gian hàng đối tác không nhận trường này: người nhận ở `shippingAddress` của tab Đơn cần giao. */
   user?: {
     phone: string | null;
     fullName: string | null;
@@ -300,7 +301,6 @@ export interface FulfilOrder {
   deliveredAt?: string | null;
   createdAt: string;
   items: { id: string; productName: string; variationName: string; unitPrice: number; quantity: number; total: number }[];
-  user?: { fullName: string | null; phone: string | null } | null;
   sla: { state: SlaState; dueAt: string | null };
 }
 
