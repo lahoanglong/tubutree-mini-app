@@ -22,8 +22,8 @@ const c = (code: string, over: Record<string, unknown> = {}) => ({
 });
 
 let mounted: Rendered[] = [];
-const mount = async (subtotal = 300000) => {
-  const r = render(<CouponBox currentCode={null} subtotal={subtotal} />);
+const mount = async (subtotal = 300000, shippingFee: number | null = null) => {
+  const r = render(<CouponBox currentCode={null} subtotal={subtotal} shippingFee={shippingFee} />);
   mounted.push(r);
   await flush(6);
   return r.container;
@@ -81,6 +81,33 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     const btn = t.querySelector('button')!;
     expect(btn.disabled).toBe(true);
     expect(btn.textContent).toBe('Chưa đủ');
+  });
+
+  it('R6-BUYER-12: mã áp dụng được nói giảm bao nhiêu cho đơn này, kẹp mức tối đa của mã %', async () => {
+    state.coupons = [
+      c('XANH10', { value: 10, maxDiscount: 50000 }),
+      c('MAX', { value: 30, maxDiscount: 50000 }),
+      c('TIEN20', { type: 'AMOUNT', value: 20000, maxDiscount: null }),
+    ];
+    const box = await mount(438000);
+    expect(card(box, 'XANH10').textContent).toContain('Giảm 43.800đ cho đơn này');
+    expect(card(box, 'MAX').textContent).toContain('Giảm 50.000đ cho đơn này (mức tối đa)');
+    expect(card(box, 'MAX').textContent).toContain('Giảm 30% (tối đa 50.000đ)');
+    expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ cho đơn này');
+  });
+
+  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì nói tiết kiệm bao nhiêu', async () => {
+    state.coupons = [c('SHIP', { type: 'FREESHIP', value: 0, maxDiscount: null })];
+    const free = card(await mount(438000, 0), 'SHIP');
+    expect(free.querySelector('button')!.disabled).toBe(true);
+    expect(free.querySelector('button')!.textContent).toBe('Không cần');
+    expect(free.textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(free.textContent).not.toContain('cho đơn này');
+    expect(free.className).toContain('opacity-60');
+
+    const paid = card(await mount(438000, 30000), 'SHIP');
+    expect(paid.querySelector('button')!.disabled).toBe(false);
+    expect(paid.textContent).toContain('Giảm 30.000đ cho đơn này');
   });
 
   it('mã dùng được xếp trước mã chưa đủ điều kiện; bấm Dùng mã áp đúng mã', async () => {

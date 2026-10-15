@@ -12,6 +12,36 @@ export function couponValueLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDisco
   return `Giảm ${formatVnd(c.value)}`;
 }
 
+/** FREESHIP khi phí vận chuyển của đơn đã bằng 0: dùng mã không giảm thêm được gì. */
+export const isFreeshipRedundant = (c: Pick<CouponDTO, 'type'>, shippingFee?: number | null): boolean =>
+  c.type === 'FREESHIP' && shippingFee === 0;
+
+/**
+ * Dòng "Giảm X cho đơn này" tính từ số khách đang thấy: % trên tạm tính (kẹp mức tối đa), tiền cố định không quá tạm tính, freeship
+ * khi đã biết phí vận chuyển. Chưa biết số (giỏ hàng chưa có phí ship, mã đã dùng hết) thì không nói gì thay vì đoán.
+ */
+export function couponSavingLabel(
+  c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>,
+  subtotal: number,
+  shippingFee?: number | null,
+): string | null {
+  let saving: number;
+  let capped = false;
+  if (c.type === 'PERCENT') {
+    const raw = Math.floor((subtotal * c.value) / 100);
+    capped = !!c.maxDiscount && raw > c.maxDiscount;
+    saving = capped ? c.maxDiscount! : raw;
+  } else if (c.type === 'AMOUNT') {
+    saving = Math.min(c.value, subtotal);
+  } else if (shippingFee != null && shippingFee > 0) {
+    saving = c.value > 0 ? Math.min(c.value, shippingFee) : shippingFee;
+  } else {
+    return null;
+  }
+  if (saving <= 0) return null;
+  return `Giảm ${formatVnd(saving)} cho đơn này${capped ? ' (mức tối đa)' : ''}`;
+}
+
 export function couponExpiryLabel(endAt: string | null | undefined): string {
   const d = formatDate(endAt);
   return d === '—' ? 'Không thời hạn' : `HSD ${d}`;
