@@ -208,7 +208,7 @@ export function ReviewsSection({
         )}
       </div>
 
-      {status === 'authenticated' && eligQ.isError && (
+      {status === 'authenticated' && eligQ.isError && !eligQ.data && (
         <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="caption" tone="danger">
             {vi.reviews.eligibilityFailed}

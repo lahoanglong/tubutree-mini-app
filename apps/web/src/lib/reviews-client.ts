@@ -81,6 +81,8 @@ export interface SavedReview {
   id: string;
   pointsEarned?: number;
   updated?: boolean;
+  /** false khi admin đang ẩn đánh giá này: lưu/sửa không làm nó hiện lại. Thiếu (API cũ) coi là đang hiện. */
+  isVisible?: boolean;
 }
 
 const productPath = (slug: string) => `/products/${encodeURIComponent(slug)}/reviews`;
@@ -127,8 +129,24 @@ export function purchaseNote(o: { isEdit: boolean; purchaseCount: number; orderC
   return null;
 }
 
-/** Lời báo sau khi gửi: theo máy chủ chứ không theo chế độ form; chỉ nhắc điểm khi lần gửi này thật sự được cộng. */
-export function savedMessage(res: SavedReview): string {
+export const ELIGIBILITY_FAILED = 'Chưa kiểm tra được quyền đánh giá.';
+export const EDIT_HIDDEN_NOTE = 'Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.';
+export const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+
+/**
+ * Đánh giá bị admin ẩn không nằm trong danh sách công khai: khách chỉ biết qua câu này. Không hứa "sửa là hiện lại" vì sửa
+ * không gỡ được lệnh ẩn.
+ */
+export function hiddenNotice(orderCode: string | null): string {
+  return `Đánh giá${orderCode ? ` cho đơn ${orderCode}` : ''} của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.`;
+}
+
+/**
+ * Lời báo sau khi gửi: theo máy chủ chứ không theo chế độ form; chỉ nhắc điểm khi lần gửi này thật sự được cộng. Đánh giá đang
+ * bị ẩn thì không được báo như thể đã đổi được gì: nói thẳng là đã lưu nhưng vẫn chờ xem xét.
+ */
+export function savedMessage(res: SavedReview, wasHidden = false): string {
+  if (wasHidden || res.isVisible === false) return SAVED_HIDDEN;
   if (res.updated) return 'Đã cập nhật đánh giá của bạn';
   const earned = res.pointsEarned ?? 0;
   return earned > 0 ? `Cảm ơn đánh giá của bạn! Đã cộng ${earned} Điểm Xanh` : 'Đã gửi đánh giá của bạn';

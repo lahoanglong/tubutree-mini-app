@@ -12,10 +12,13 @@ import { ui } from '@/lib/guest-ui';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
+  EDIT_HIDDEN_NOTE,
+  ELIGIBILITY_FAILED,
   REVIEW_ORDER_PARAM,
   fetchCanReview,
   fetchMyReview,
   fetchProductReviews,
+  hiddenNotice,
   purchaseNote,
   rewardHint,
   saveReview,
@@ -98,6 +101,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const myReviews = elig?.myReviews ?? [];
   const mineById = new Map(myReviews.map((r) => [r.id, r]));
   const latestMine = myReviews[0];
+  const hiddenMine = myReviews.filter((r) => r.isVisible === false);
   const nextOrder = elig?.canReview ? elig.reviewableOrders?.[0] : undefined;
 
   const openForm = (t: FormTarget) => {
@@ -153,6 +157,21 @@ export function ProductReviews({ slug }: { slug: string }) {
         )}
       </div>
 
+      {phase === 'authenticated' && eligQ.isError && !eligQ.data && (
+        <div role="alert" className="mt-2 flex flex-wrap items-center gap-x-3">
+          <p className={ui.error}>{ELIGIBILITY_FAILED}</p>
+          <button type="button" className={`${ui.btnText} text-forest-700`} onClick={() => void eligQ.refetch()}>
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {hiddenMine.map((r) => (
+        <p key={r.id} role="status" className="mt-2 rounded-control bg-warning-bg px-3 py-2 text-sm text-warning-fg">
+          {hiddenNotice(r.orderCode)}
+        </p>
+      ))}
+
       {notice && (
         <p role="status" className="mt-2 rounded-control bg-success-bg px-3 py-2 text-sm font-medium text-success-fg">
           {notice}
@@ -166,6 +185,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           target={target}
           purchaseCount={elig?.purchaseCount ?? 0}
           rewardAvailable={elig?.rewardAvailable !== false}
+          hidden={target.kind === 'edit' && mineById.get(target.reviewId)?.isVisible === false}
           onCancel={() => setTarget(null)}
           onSaved={(message) => {
             setTarget(null);
@@ -295,6 +315,7 @@ function ReviewEditor({
   target: FormTarget;
   purchaseCount: number;
   rewardAvailable: boolean;
+  hidden: boolean;
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -348,6 +369,7 @@ function ReviewForm({
   orderCode,
   purchaseCount,
   rewardAvailable,
+  hidden,
   onCancel,
   onSaved,
 }: {
@@ -358,6 +380,8 @@ function ReviewForm({
   orderCode: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
+  /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
+  hidden: boolean;
   onCancel: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -382,7 +406,7 @@ function ReviewForm({
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
       void qc.invalidateQueries({ queryKey: ['order'] });
-      onSaved(savedMessage(res));
+      onSaved(savedMessage(res, hidden || initial?.isVisible === false));
     },
   });
 
@@ -401,6 +425,7 @@ function ReviewForm({
     >
       <h3 className="text-base font-semibold text-stone-900">{isEdit ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}</h3>
       {note && <p className="mt-1 text-sm text-stone-600">{note}</p>}
+      {isEdit && (hidden || initial?.isVisible === false) && <p className="mt-1 text-sm text-warning-fg">{EDIT_HIDDEN_NOTE}</p>}
       <div role="radiogroup" aria-label="Số sao" className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((i) => (
           <button
