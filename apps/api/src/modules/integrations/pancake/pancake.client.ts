@@ -34,11 +34,14 @@ function toPancakeError(err: unknown, what: string): Error {
   if (err instanceof PancakeApiError || !isAxiosError(err)) return err as Error;
   const status = err.response?.status;
   const body = err.response?.data as PancakeBody;
-  const reason = (body && typeof body === 'object' && (body.message ?? body.error)) || err.message;
+  const bodyReason = body && typeof body === 'object' ? (body.message ?? body.error) : undefined;
+  // axios tự đặt "Request failed with status code N" (tiếng Anh, lặp lại mã đã có trong câu) — không đưa vào lời báo.
+  const reason = bodyReason || (/^Request failed with status code \d+$/.test(err.message) ? '' : err.message);
+  const detail = reason ? `: ${reason}` : '';
   if (status === undefined) return new PancakeApiError(`Không kết nối được Pancake khi ${what}: ${err.message}`, true);
-  if (status === 404) return new PancakeApiError(`Pancake không tìm thấy (${what}): ${reason}`, false, true);
+  if (status === 404) return new PancakeApiError(`Pancake không tìm thấy (${what})${detail}`, false, true);
   const transient = status >= 500 || status === 408 || status === 429;
-  return new PancakeApiError(`Pancake trả ${status} khi ${what}: ${reason}`, transient);
+  return new PancakeApiError(`Pancake trả ${status} khi ${what}${detail}`, transient);
 }
 
 /**
@@ -82,11 +85,22 @@ export class PancakeClient {
     }
   }
 
+  /** GET danh mục/geo: lỗi HTTP thành câu tiếng Việt có ngữ cảnh (admin và báo động vận hành đọc thẳng câu này). */
+  private async getCatalog<T>(url: string, params: Record<string, unknown>, what: string): Promise<T> {
+    try {
+      const { data } = await this.http.get<T>(url, { params });
+      return data;
+    } catch (err) {
+      throw toPancakeError(err, what);
+    }
+  }
+
   async fetchProducts(page: number, updatedSince?: string): Promise<PancakeProductsResponse> {
     this.assertConfigured();
-    const { data } = await this.http.get<PancakeProductsResponse>(
+    const data = await this.getCatalog<PancakeProductsResponse>(
       `/shops/${this.shopId}/products`,
-      { params: { api_key: this.apiKey, page, updated_since: updatedSince } },
+      { api_key: this.apiKey, page, updated_since: updatedSince },
+      `đọc danh mục trang ${page}`,
     );
     // Như geo: trang lỗi mà đọc thành rỗng thì vòng phân trang tưởng đã hết danh mục.
     if (!data || data.success === false || (!Array.isArray(data.data) && !Array.isArray(data.products))) {
@@ -98,9 +112,11 @@ export class PancakeClient {
   /** Danh sách tỉnh/thành (geo Pancake). Dùng `new_id` ("84_VN*") cho đơn + query communes. */
   async fetchProvinces(): Promise<PancakeProvinceDTO[]> {
     this.assertConfigured();
-    const { data } = await this.http.get<PancakeGeoResponse<PancakeProvinceDTO>>('/geo/provinces', {
-      params: { api_key: this.apiKey },
-    });
+    const data = await this.getCatalog<PancakeGeoResponse<PancakeProvinceDTO>>(
+      '/geo/provinces',
+      { api_key: this.apiKey },
+      'đọc danh sách tỉnh/thành',
+    );
     return geoList(data, 'tỉnh/thành');
   }
 
@@ -110,9 +126,11 @@ export class PancakeClient {
    */
   async fetchCommunes(provinceNewId: string): Promise<PancakeCommuneDTO[]> {
     this.assertConfigured();
-    const { data } = await this.http.get<PancakeGeoResponse<PancakeCommuneDTO>>('/geo/communes', {
-      params: { api_key: this.apiKey, province_id: provinceNewId },
-    });
+    const data = await this.getCatalog<PancakeGeoResponse<PancakeCommuneDTO>>(
+      '/geo/communes',
+      { api_key: this.apiKey, province_id: provinceNewId },
+      'đọc danh sách phường/xã',
+    );
     return geoList(data, 'phường/xã');
   }
 
