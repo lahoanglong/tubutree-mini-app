@@ -1369,16 +1369,9 @@ describe('AffiliateService analytics', () => {
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: {
-        aggregate: orderAggregate,
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'o1', storefrontSlug: 'linh', total: 500000 },
-          { id: 'o2', storefrontSlug: 'linh', total: 400000 },
-        ]),
-      },
-      returnRequest: {
-        groupBy: jest.fn().mockResolvedValue([{ orderId: 'o1', _sum: { refundAmount: 100000, shippingRefund: 20000 } }]),
-      },
+      order: { aggregate: orderAggregate },
+      // Doanh thu gian hàng tính trong DB (500000 + 400000 − 120000); bigint như Postgres SUM trả về.
+      $queryRaw: jest.fn().mockResolvedValue([{ slug: 'linh', revenue: 780000n }]),
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
@@ -1402,7 +1395,8 @@ describe('AffiliateService analytics', () => {
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 } }), findMany: jest.fn().mockResolvedValue([]) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 } }) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).storefrontAnalytics('u1');

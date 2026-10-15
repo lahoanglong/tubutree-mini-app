@@ -50,7 +50,7 @@ describe('AffiliateService.storefrontAnalytics revenue (real Postgres)', () => {
         data: { orderId, userId: buyer.id, reason: 'IT', status: extra.status ?? 'APPROVED', refundAmount, shippingRefund, fullReturn: extra.fullReturn ?? false },
       });
     const read = async () => (await affiliate.storefrontAnalytics(ctv.id)).storefronts.find((s) => s.slug === slug)!;
-    return { mk, ret, read };
+    return { mk, ret, read, ctv, buyer, slug };
   }
 
   it('đơn không trả: như cũ', async () => {
@@ -85,5 +85,28 @@ describe('AffiliateService.storefrontAnalytics revenue (real Postgres)', () => {
     const o = await mk('DELIVERED', 'PAID', 100_000);
     await ret(o.id, 100_000, 5_000);
     expect((await read()).revenue).toBe(0);
+  });
+
+  it('CTV hàng chục nghìn đơn (>32.766 tham số bind nếu gửi IN id): tính trong DB, số đúng, không đọc đơn về Node', async () => {
+    const { mk, ret, read, ctv, buyer, slug } = await setup();
+    const N = 33_000;
+    await prisma.$executeRaw`
+      INSERT INTO "orders" ("id", "code", "userId", "type", "status", "subtotal", "total", "paymentMethod", "paymentStatus",
+                            "shippingAddress", "referrerUserId", "storefrontSlug", "updatedAt")
+      SELECT ${`itbulk-${randCode(6)}-`} || g, ${`ITB${randCode(6)}-`} || g, ${buyer.id}, 'RETAIL', 'DELIVERED', 1000, 1000, 'COD', 'PAID',
+             '{}'::jsonb, ${ctv.id}, ${slug}, now()
+      FROM generate_series(1, ${N}) AS g`;
+    const sample = await prisma.order.findFirstOrThrow({ where: { referrerUserId: ctv.id, storefrontSlug: slug } });
+    await ret(sample.id, 400, 100);
+    await ret(sample.id, 200);
+    await mk('CANCELLED', 'UNPAID', 999_999);
+    const findMany = jest.spyOn(prisma.order, 'findMany');
+    try {
+      const r = await read();
+      expect(r).toMatchObject({ orders: N + 1, revenue: N * 1000 - 700 });
+      expect(findMany).not.toHaveBeenCalled();
+    } finally {
+      findMany.mockRestore();
+    }
   });
 });
