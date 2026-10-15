@@ -59,12 +59,25 @@ describe('fulfillerOf', () => {
     );
   });
 
-  it('hàng tự giao của đại lý còn gian hàng loại CTV vẫn do chủ gian hàng giao', () => {
-    const f = fulfillerOf({
-      pancakeId: null,
-      product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type: 'CTV', ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } } },
-    });
-    expect(f).toMatchObject({ kind: 'MERCHANT', storefrontId: 'sf-c', ownerUserId: 'u-c' });
+  it('hàng tự giao của đại lý còn gian hàng loại CTV (cờ isPartner) vẫn do chủ gian hàng giao, kể cả khi chủ đã đổi vai trò', () => {
+    for (const role of ['DEALER', 'AFFILIATE', 'ADMIN']) {
+      const f = fulfillerOf({
+        pancakeId: null,
+        product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type: 'CTV', isPartner: true, ordersPausedAt: null, owner: { role, isBlocked: false } } },
+      });
+      expect(f).toMatchObject({ kind: 'MERCHANT', storefrontId: 'sf-c', ownerUserId: 'u-c' });
+    }
+  });
+
+  it('gian hàng BRAND của đại lý (không có cờ isPartner) → UNAVAILABLE; CTV chưa có cờ cũng vậy dù chủ là DEALER', () => {
+    for (const type of ['BRAND', 'CTV']) {
+      expect(
+        fulfillerOf({
+          pancakeId: null,
+          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type, isPartner: false, ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } } },
+        }).kind,
+      ).toBe('UNAVAILABLE');
+    }
   });
 
   const merchantLine =(store: Record<string, unknown>) => ({

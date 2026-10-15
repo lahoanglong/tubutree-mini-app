@@ -269,6 +269,7 @@ export class AdminService {
           where: { id: app.userId },
           data: { role: 'DEALER', metadata: mergedMeta },
         });
+        await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
       });
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({

@@ -29,6 +29,7 @@ export interface FulfilmentSource {
       title: string;
       ownerUserId: string | null;
       type: string;
+      isPartner?: boolean;
       ordersPausedAt: Date | null;
       owner: { role: string; isBlocked: boolean } | null;
     } | null;

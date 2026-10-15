@@ -23,6 +23,7 @@ import {
   type MerchantPancakeCheck,
 } from './merchant-pancake-link';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
+import { isPartnerStore } from './partner-store';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -260,7 +261,7 @@ export class MerchantService {
    */
   private async assertCanSellOwnProducts(userId: string) {
     const store = await this.getOrCreateStore(userId);
-    if (!(await this.isPartner(userId, store))) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    if (!isPartnerStore(store)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
     return store;
   }
 
@@ -286,11 +287,6 @@ export class MerchantService {
     return user.role;
   }
 
-  /** Đại lý được duyệt luôn là đối tác, kể cả khi gian hàng còn loại CTV (giữ nguyên để hoa hồng giới thiệu không đổi). */
-  private async isPartner(userId: string, store: { type: string }): Promise<boolean> {
-    return store.type === 'MERCHANT' || (await this.getCallerRole(userId)) === 'DEALER';
-  }
-
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'AFFILIATE' && user.role !== 'DEALER' && user.role !== 'ADMIN') {
@@ -301,7 +297,13 @@ export class MerchantService {
       where: { ownerUserId: userId },
       include: STORE_INCLUDE,
     });
-    if (store) return store;
+    if (store) {
+      if (user.role === 'DEALER' && store.type === 'CTV' && !store.isPartner) {
+        await this.prisma.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
+        return { ...store, isPartner: true };
+      }
+      return store;
+    }
 
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
@@ -325,6 +327,7 @@ export class MerchantService {
         return await this.prisma.storefront.create({
           data: {
             type: user.role === 'DEALER' ? 'MERCHANT' : 'CTV',
+            isPartner: user.role === 'DEALER',
             slug: baseSlug,
             subdomain,
             ownerUserId: userId,
@@ -369,7 +372,7 @@ export class MerchantService {
     const cooldownDays =
       (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
       DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
-    const partner = await this.isPartner(userId, store);
+    const partner = isPartnerStore(store);
     if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && !partner) {
       throw new BadRequestException('Phí giao hàng chỉ áp dụng cho gian hàng đối tác tự giao hàng.');
     }
@@ -873,7 +876,7 @@ export class MerchantService {
     const linked = new Set(links.map((l) => l.variationId));
     return {
       storeId: store.id,
-      isPartner: await this.isPartner(userId, store),
+      isPartner: isPartnerStore(store),
       ownVariationIds: variations.map((v) => v.id).filter((id) => !linked.has(id)),
       links,
     };

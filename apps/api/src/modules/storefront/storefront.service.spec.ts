@@ -648,6 +648,31 @@ describe('StorefrontService.getPublicBySlug', () => {
     });
   });
 
+  it('hợp đồng: trang công khai luôn có isPartner (boolean) và giữ nguyên type; CTV của đại lý có cờ vẫn trả kho và mã giới thiệu', async () => {
+    const base = {
+      id: 's1', slug: 'ctvone', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' }, ownerUserId: 'u9',
+      warehouseAddress: '1 Lê Lợi', warehousePhone: '0955555555',
+    };
+    const read = async (row: Record<string, unknown>) =>
+      new StorefrontService(makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, ...row }) } }), config, affiliate).getPublicBySlug('ctvone');
+    const plain = await read({ type: 'CTV', isPartner: false });
+    expect(plain).toMatchObject({ type: 'CTV', isPartner: false, referralCode: 'ABCD1234' });
+    const dealerCtv = await read({ type: 'CTV', isPartner: true });
+    expect(dealerCtv).toMatchObject({ type: 'CTV', isPartner: true, referralCode: 'ABCD1234', warehousePhone: '0955555555' });
+    expect(await read({ type: 'MERCHANT', isPartner: false })).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    expect(await read({ type: 'BRAND', isPartner: false })).toMatchObject({ type: 'BRAND', isPartner: false });
+    expect(typeof (await read({ type: 'CTV' })).isPartner).toBe('boolean');
+  });
+
+  it('PATCH /storefront/me: gian hàng CTV của đại lý (isPartner) lưu kho/hotline như updateStore của Cổng người bán', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's3', type: 'CTV', isPartner: true, subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u7', { title: 'Mới', warehousePhone: '0955555555' });
+    expect(update.mock.calls[0][0].data).toEqual({ title: 'Mới', warehousePhone: '0955555555' });
+  });
+
   it('Q8 S2: hàng của gian hàng đối tác đã nằm trong combo thì không hiện trong combo (không được giảm); bộ sưu tập thường vẫn hiện', async () => {
     const item = (id: string, storefrontId: string | null) => ({
       id: `i-${id}`, note: null, variationId: null, isHidden: false,
