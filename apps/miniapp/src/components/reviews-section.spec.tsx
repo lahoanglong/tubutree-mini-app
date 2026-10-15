@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchReviews: vi.fn(),
   createReview: vi.fn(),
   canReview: vi.fn(),
+  fetchMyReview: vi.fn(),
   login: vi.fn(),
   auth: { status: 'authenticated' } as { status: string },
   openSnackbar: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../services/shop-api', () => ({
   fetchReviews: mocks.fetchReviews,
   createReview: mocks.createReview,
   canReviewProduct: mocks.canReview,
+  fetchMyReview: mocks.fetchMyReview,
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.auth.status, login: mocks.login }) }));
 vi.mock('./image-upload', () => ({
@@ -57,6 +59,22 @@ const HINT_TEXT_ONLY = `${FIRST_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh 
 const HINT_IMAGES = `${FIRST_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`;
 const HINT_VIDEO = `Tuyệt! ${FIRST_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`;
 const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
+const REWARD_ALREADY_GIVEN =
+  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+
+// R8: mỗi lần mua (đơn) một đánh giá. O1 đã được đánh giá (dòng "a" trong danh sách), O2 là lần mua sau chưa đánh giá.
+const O1 = { orderId: 'o1', code: 'TB0001', deliveredAt: '2026-08-01T00:00:00.000Z' };
+const O2 = { orderId: 'o2', code: 'TB0002', deliveredAt: '2026-09-10T00:00:00.000Z' };
+const REF_A = { id: 'a', orderId: 'o1', orderCode: 'TB0001', rating: 5, createdAt: '2026-08-05T00:00:00.000Z', isVisible: true };
+const REF_B = { id: 'b', orderId: 'o2', orderCode: 'TB0002', rating: 5, createdAt: '2026-09-12T00:00:00.000Z', isVisible: true };
+const MINE_A = { id: 'a', orderId: 'o1', rating: 4, comment: 'Dùng ổn', images: ['https://i/cu.jpg'], videoUrl: null, isVisible: true };
+const MINE_B = { id: 'b', orderId: 'o2', rating: 3, comment: 'Lần này hơi khô', images: [], videoUrl: null, isVisible: true };
+/** Mua một lần, chưa đánh giá. */
+const ELIG_NEW = { canReview: true, reason: null, rewardAvailable: true, purchaseCount: 1, reviewableOrders: [O1], myReviews: [] };
+/** Mua hai lần, đã đánh giá đơn đầu (đã nhận thưởng), đơn sau còn viết được. */
+const ELIG_REPEAT = { canReview: true, reason: null, rewardAvailable: false, purchaseCount: 2, reviewableOrders: [O2], myReviews: [REF_A] };
+/** Mọi lần mua đều đã có đánh giá; mới nhất trước. */
+const ELIG_ALL = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 2, reviewableOrders: [], myReviews: [REF_B, REF_A] };
 
 const DATA = {
   count: 3,
@@ -66,21 +84,23 @@ const DATA = {
   items: [review('a', 5, { verifiedPurchase: true }), review('b', 5, { videoUrl: 'https://v/x.mp4' }), review('c', 3, { images: ['https://i/1.jpg'] })],
 };
 
-function renderSection() {
+function renderSection(props: { openForOrderId?: string } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ReviewsSection slug="nuoc-rua-chen" />
+      <ReviewsSection slug="nuoc-rua-chen" {...props} />
     </QueryClientProvider>,
   );
 }
+
+const MYREVIEWS: Record<string, unknown> = { a: MINE_A, b: MINE_B };
 
 describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth = { status: 'authenticated' };
     mocks.fetchReviews.mockResolvedValue(DATA);
-    mocks.canReview.mockResolvedValue({ canReview: true });
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
     mocks.createReview.mockResolvedValue({});
   });
 
@@ -154,7 +174,9 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(within(group).getByRole('radio', { name: '4 sao' })).toHaveAttribute('aria-checked', 'true');
     fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: '  Dùng êm  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
-    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', { rating: 4, comment: 'Dùng êm', images: undefined, videoUrl: undefined }));
+    await waitFor(() =>
+      expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', { rating: 4, comment: 'Dùng êm', images: undefined, videoUrl: undefined, orderId: 'o1' }),
+    );
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 5 Điểm Xanh', type: 'success' }));
   });
 
@@ -215,50 +237,70 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
   });
 });
 
-// C-110 / Q-30: đã có đánh giá thì nút thành "Sửa đánh giá của bạn", form điền sẵn; thưởng điểm chỉ lần đầu.
-describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
-  const MINE = { id: 'mine', rating: 4, comment: 'Dùng ổn', images: ['https://i/cu.jpg'], videoUrl: null };
-
+// R8: mỗi lần mua một đánh giá. Nút đầu mục viết cho đơn còn viết được; đánh giá đã có sửa ở đúng dòng của nó.
+describe('ReviewsSection: mỗi lần mua một đánh giá (R8)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth = { status: 'authenticated' };
     mocks.fetchReviews.mockResolvedValue(DATA);
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
-    mocks.createReview.mockResolvedValue({ updated: true });
+    mocks.canReview.mockResolvedValue(ELIG_REPEAT);
+    mocks.fetchMyReview.mockImplementation(async (id: string) => MYREVIEWS[id]);
+    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 0 });
   });
 
-  it('đã có đánh giá: nút là "Sửa đánh giá của bạn", không còn "Viết đánh giá"', async () => {
+  it('đã đánh giá đơn cũ, còn đơn mới: nút đầu mục vẫn là "Viết đánh giá"; dòng của mình có nhãn "Của bạn", mã đơn và nút sửa riêng', async () => {
     renderSection();
-    expect(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Viết đánh giá' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeNull();
+    expect(screen.getAllByText('Của bạn')).toHaveLength(1);
+    expect(screen.getByText('Đơn TB0001')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Nhận xét /)).toHaveLength(3);
   });
 
-  it('mở form: điền sẵn sao, nhận xét, ảnh của đánh giá cũ; nút lưu và lời nhắn nói rõ không cộng thêm điểm', async () => {
+  it('viết cho lần mua mới: gửi kèm đơn còn viết được, nói rõ đánh giá cho đơn nào và không hứa điểm khi đã nhận thưởng', async () => {
     renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    expect(
+      screen.getByText('Bạn đã mua sản phẩm này 2 lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn TB0002.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(REWARD_ALREADY_GIVEN)).toBeInTheDocument();
+    expect(screen.queryByText(/\+\d+ Điểm Xanh|Lần đầu đánh giá/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() =>
+      expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', { rating: 5, comment: undefined, images: undefined, videoUrl: undefined, orderId: 'o2' }),
+    );
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi đánh giá của bạn', type: 'success' }));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Điểm Xanh') }));
+  });
+
+  it('nút "Sửa" của dòng mình: chờ nội dung từ GET /reviews/:id rồi điền sẵn; lưu gửi đúng đơn của đánh giá đó', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.fetchMyReview.mockImplementationOnce(() => new Promise((r) => (release = r)));
+    mocks.createReview.mockResolvedValue({ updated: true, pointsEarned: 10 });
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
+    await waitFor(() => expect(mocks.fetchMyReview).toHaveBeenCalledWith('a'));
+    expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+    release(MINE_A);
     const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
     expect(within(group).getByRole('radio', { name: '4 sao' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Dùng ổn');
     expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Lưu đánh giá' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Gửi đánh giá' })).toBeNull();
+    expect(screen.getByText('Bạn đang sửa đánh giá cho đơn TB0001.')).toBeInTheDocument();
     expect(screen.getByText(EDIT_HINT)).toBeInTheDocument();
-    expect(screen.queryByText(/Thêm video \+15/)).toBeNull();
-  });
+    expect(screen.queryByRole('button', { name: 'Gửi đánh giá' })).toBeNull();
 
-  it('sửa rồi lưu → gọi createReview với nội dung mới, báo "đã cập nhật" (không nói cộng Điểm Xanh), đóng form', async () => {
-    renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-    const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
     fireEvent.click(within(group).getByRole('radio', { name: '2 sao' }));
-    fireEvent.change(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Dùng lâu thấy khác' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
     await waitFor(() =>
       expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', {
         rating: 2,
-        comment: 'Dùng lâu thấy khác',
+        comment: 'Dùng ổn',
         images: ['https://i/cu.jpg'],
         videoUrl: undefined,
+        orderId: 'o1',
       }),
     );
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật đánh giá của bạn', type: 'success' }));
@@ -266,48 +308,73 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
   });
 
-  it('đóng form giữa chừng rồi mở lại: giữ phần đang sửa, không bị điền đè lại bằng đánh giá cũ', async () => {
+  it('mọi lần mua đã có đánh giá: nút đầu mục là "Sửa đánh giá của bạn" mở đánh giá mới nhất, không còn "Viết đánh giá"', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_ALL);
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+    expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Lần này hơi khô');
+    expect(mocks.fetchMyReview).toHaveBeenCalledWith('b');
+    expect(screen.getByText('Bạn đang sửa đánh giá cho đơn TB0002.')).toBeInTheDocument();
+    expect(screen.getAllByText('Của bạn')).toHaveLength(2);
+  });
+
+  it('không tải được nội dung để sửa → báo lỗi kèm "Thử lại", không mở form trống', async () => {
+    mocks.fetchMyReview.mockRejectedValueOnce(new Error('mạng chập chờn'));
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Dùng ổn');
+  });
+
+  it('nháp gắn với đúng đánh giá: đang sửa dở đơn cũ mà mở viết mới thì form trống; quay lại sửa vẫn còn phần đang gõ', async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
     fireEvent.change(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Đang gõ dở' } });
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
-    fireEvent.click(screen.getByRole('button', { name: 'Sửa đánh giá của bạn' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Viết đánh giá' }));
+    expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
     expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Đang gõ dở');
   });
 
-  it('lần mở sau khi lưu xong lại điền theo đánh giá mới nhất từ BE (không dùng nháp cũ)', async () => {
+  it('lưu xong, lần mở sau điền theo nội dung mới từ máy chủ (không dùng nháp cũ)', async () => {
+    mocks.createReview.mockResolvedValue({ updated: true });
     renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
     fireEvent.change(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/), { target: { value: 'Bản sửa' } });
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: { ...MINE, comment: 'Bản sửa' } });
+    mocks.fetchMyReview.mockResolvedValue({ ...MINE_A, comment: 'Bản sửa từ máy chủ' });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
     await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
-    await waitFor(() => expect(mocks.canReview.mock.calls.length).toBeGreaterThanOrEqual(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Sửa đánh giá của bạn' }));
-    expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Bản sửa');
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa đánh giá đơn TB0001' }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Bản sửa từ máy chủ'));
   });
 
-  it('chưa có đánh giá, tạo xong thì nút đổi thành "Sửa đánh giá của bạn" (làm mới can-review)', async () => {
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
-    mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 10 });
+  it('tạo xong thì làm mới can-review: hết đơn để viết thì nút đầu mục đổi thành "Sửa đánh giá của bạn"', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
+    mocks.createReview.mockResolvedValue({ id: 'a', updated: false, pointsEarned: 10 });
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
     await screen.findByRole('radiogroup', { name: 'Số sao' });
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
+    mocks.canReview.mockResolvedValue({ ...ELIG_ALL, purchaseCount: 1, myReviews: [REF_A] });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 10 Điểm Xanh', type: 'success' }));
     expect(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeInTheDocument();
   });
 
-  // PF-3: thưởng đánh giá chỉ một lần cho mỗi (khách, sản phẩm); xoá rồi tạo lại khi khách còn giữ phần thưởng cũ
-  // thì BE tạo bản ghi mới với pointsEarned = 0 và updated = false.
+  // PF-3: thưởng đánh giá chỉ một lần cho mỗi (khách, sản phẩm): đánh giá lần mua sau, hoặc tạo lại sau khi xoá mà khách
+  // còn giữ phần thưởng cũ, ra pointsEarned = 0 và updated = false.
   it.each([
     ['pointsEarned = 0 (đã nhận thưởng trước đó)', { updated: false, pointsEarned: 0 }],
     ['không có pointsEarned', { updated: false }],
   ])('tạo mới mà không được cộng điểm (%s) → báo trung tính, không nhắc Điểm Xanh', async (_n, response) => {
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
     mocks.createReview.mockResolvedValue(response);
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
@@ -317,8 +384,8 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Điểm Xanh') }));
   });
 
-  it('BE trả updated=true kèm pointsEarned của lần thưởng cũ → vẫn báo "đã cập nhật", không nhắc điểm', async () => {
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+  it('BE trả updated=true dù form đang viết mới (đơn này vừa được đánh giá từ thiết bị khác) → báo "đã cập nhật", không nhắc điểm', async () => {
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
     mocks.createReview.mockResolvedValue({ updated: true, pointsEarned: 10 });
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
@@ -328,33 +395,61 @@ describe('ReviewsSection: sửa đánh giá của bạn (Q-30)', () => {
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Điểm Xanh') }));
   });
 
-  it('BE trả updated=true dù form đang ở chế độ viết mới (đánh giá được tạo từ thiết bị khác) → báo "đã cập nhật"', async () => {
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
-    mocks.createReview.mockResolvedValue({ updated: true });
-    renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
-    await screen.findByRole('radiogroup', { name: 'Số sao' });
-    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật đánh giá của bạn', type: 'success' }));
+  describe('mở từ chi tiết đơn (openForOrderId)', () => {
+    it('đơn chưa đánh giá → mở sẵn form viết mới cho đúng đơn đó', async () => {
+      renderSection({ openForOrderId: 'o2' });
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      expect(screen.getByText(/Đánh giá này cho đơn TB0002\./)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', expect.objectContaining({ orderId: 'o2' })));
+    });
+
+    it('đơn đã đánh giá → mở sửa đúng đánh giá của đơn đó', async () => {
+      renderSection({ openForOrderId: 'o1' });
+      expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Dùng ổn');
+      expect(mocks.fetchMyReview).toHaveBeenCalledWith('a');
+      expect(screen.getByRole('button', { name: 'Lưu đánh giá' })).toBeInTheDocument();
+    });
+
+    it('đơn không có trong can-review (không phải của khách, chưa giao) → không mở gì', async () => {
+      renderSection({ openForOrderId: 'o9' });
+      await screen.findByRole('button', { name: 'Sửa đánh giá đơn TB0001' });
+      expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+    });
+
+    it('chỉ tự mở một lần: đóng form rồi can-review làm mới không tự mở lại', async () => {
+      mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 0 });
+      renderSection({ openForOrderId: 'o2' });
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+      await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+      await waitFor(() => expect(mocks.canReview.mock.calls.length).toBeGreaterThanOrEqual(2));
+      expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+    });
   });
 });
 
-// PF-6b: câu gợi ý điểm hiện TRƯỚC khi gửi. Không bao giờ hứa điểm vô điều kiện vì khách đã nhận thưởng sản phẩm này
-// trước đó (rồi xoá đánh giá) sẽ được tạo lại với pointsEarned = 0.
+// PF-6b: câu gợi ý điểm hiện TRƯỚC khi gửi. Không bao giờ hứa điểm vô điều kiện: chỉ đánh giá đầu tiên của mỗi sản phẩm
+// được thưởng, đánh giá các lần mua sau (hoặc tạo lại sau khi xoá) ra pointsEarned = 0.
 describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần đầu)', () => {
-  const MINE = { id: 'mine', rating: 4, comment: 'Dùng ổn', images: [], videoUrl: null };
-
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth = { status: 'authenticated' };
     mocks.fetchReviews.mockResolvedValue(DATA);
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
+    mocks.fetchMyReview.mockImplementation(async (id: string) => MYREVIEWS[id]);
     mocks.createReview.mockResolvedValue({ updated: false, pointsEarned: 5 });
   });
 
   async function openNewForm() {
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+  }
+
+  async function openEditForm() {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
     await screen.findByRole('radiogroup', { name: 'Số sao' });
   }
 
@@ -400,10 +495,8 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
   });
 
   it('sửa đánh giá: nêu điều kiện lần đầu, không hứa +5 / +10 / +15 và không lặp câu của form viết mới', async () => {
-    mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
-    renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-    await screen.findByRole('radiogroup', { name: 'Số sao' });
+    mocks.canReview.mockResolvedValue(ELIG_ALL);
+    await openEditForm();
     const hint = screen.getByText(/Điểm Xanh/);
     expect(hint).toHaveTextContent(EDIT_HINT);
     expect(hint.textContent).not.toMatch(/\+\d+/);
@@ -411,14 +504,15 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
     expect(screen.getAllByText(/Điểm Xanh/)).toHaveLength(1);
   });
 
-  // PG-4: API báo hết thưởng (đã nhận, hoặc đang sửa) thì không hứa điểm nữa. Thiếu cờ (API cũ) giữ câu cũ.
+  // PG-4: API báo hết thưởng (đánh giá đầu tiên của sản phẩm đã được thưởng) thì không hứa điểm nữa. Thiếu cờ (API cũ)
+  // giữ câu cũ.
   describe('cờ rewardAvailable từ can-review', () => {
-    it('rewardAvailable === false: form viết mới không hứa +5/+10/+15 mà nói rõ đã nhận thưởng trước đó, ở cả ba trạng thái chữ/ảnh/video', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: false });
+    it('rewardAvailable === false: form viết mới không hứa +5/+10/+15 mà nói rõ đánh giá lần mua này không cộng điểm, ở cả ba trạng thái chữ/ảnh/video', async () => {
+      mocks.canReview.mockResolvedValue({ ...ELIG_NEW, rewardAvailable: false });
       await openNewForm();
       const noPromise = () => expect(screen.queryByText(/\+\d+ Điểm Xanh|Lần đầu đánh giá/)).not.toBeInTheDocument();
       noPromise();
-      expect(screen.getByText('Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.')).toBeInTheDocument();
+      expect(screen.getByText(REWARD_ALREADY_GIVEN)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
       noPromise();
       fireEvent.click(screen.getByRole('button', { name: 'Chọn video thử (0)' }));
@@ -428,56 +522,44 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
     });
 
     it('rewardAvailable === true: giữ câu gợi ý như cũ', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: true });
       await openNewForm();
       expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
     });
 
-    it('thiếu trường (API cũ) → giữ câu gợi ý như cũ', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null });
+    it('API cũ (chỉ có canReview, chưa có cờ, đơn hay số lần mua) → giữ câu gợi ý, gửi không kèm đơn để máy chủ tự chọn', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null });
       await openNewForm();
       expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
+      expect(screen.queryByText(/đã mua sản phẩm này|cho đơn/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', expect.objectContaining({ orderId: undefined })));
     });
 
     it('chế độ sửa vẫn giữ câu giải thích "sửa không cộng thêm" dù cờ là false', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, rewardAvailable: false });
-      renderSection();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      mocks.canReview.mockResolvedValue(ELIG_ALL);
+      await openEditForm();
       expect(screen.getByText(/Điểm Xanh/)).toHaveTextContent(EDIT_HINT);
     });
   });
 
-  describe('mua lại nhiều lần (ENGAGE-23)', () => {
-    const REPEAT_EDIT = 'Bạn đã mua sản phẩm này 3 lần. Mỗi sản phẩm chỉ có một đánh giá, nên lưu lại sẽ cập nhật đánh giá cũ của bạn.';
-    const REPEAT_NEW = 'Bạn đã mua sản phẩm này 2 lần. Mỗi sản phẩm chỉ có một đánh giá, nên đánh giá này tính cho mọi lần mua.';
+  describe('mua lại nhiều lần (ENGAGE-23, R8)', () => {
+    it('mua 3 lần, còn đơn chưa đánh giá: form viết mới nói rõ mỗi lần mua một đánh giá và đánh giá này cho đơn nào', async () => {
+      mocks.canReview.mockResolvedValue({ ...ELIG_REPEAT, purchaseCount: 3 });
+      await openNewForm();
+      expect(
+        screen.getByText('Bạn đã mua sản phẩm này 3 lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn TB0002.'),
+      ).toBeInTheDocument();
+    });
 
-    it('đã có đánh giá và mua từ 2 lần: form sửa nói rõ vì sao chỉ sửa được đánh giá cũ', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, rewardAvailable: false, purchaseCount: 3 });
-      renderSection();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-      await screen.findByRole('radiogroup', { name: 'Số sao' });
-      expect(screen.getByText(REPEAT_EDIT)).toBeInTheDocument();
+    it('sửa: nói rõ đang sửa đánh giá của đơn nào, kèm câu "sửa không cộng thêm"', async () => {
+      mocks.canReview.mockResolvedValue(ELIG_ALL);
+      await openEditForm();
+      expect(screen.getByText('Bạn đang sửa đánh giá cho đơn TB0002.')).toBeInTheDocument();
       expect(screen.getByText(/Điểm Xanh/)).toHaveTextContent(EDIT_HINT);
     });
 
-    it('chưa đánh giá nhưng đã mua 2 lần: form viết mới báo đánh giá tính cho mọi lần mua', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: null, rewardAvailable: true, purchaseCount: 2 });
+    it('mua 1 lần: form viết mới không hiện câu nào về số lần mua', async () => {
       await openNewForm();
-      expect(screen.getByText(REPEAT_NEW)).toBeInTheDocument();
-    });
-
-    it('mua 1 lần hoặc API cũ chưa trả purchaseCount: không hiện câu nào về số lần mua', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE, purchaseCount: 1 });
-      const { unmount } = renderSection();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-      await screen.findByRole('radiogroup', { name: 'Số sao' });
-      expect(screen.queryByText(/đã mua sản phẩm này/)).not.toBeInTheDocument();
-      unmount();
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, myReview: MINE });
-      renderSection();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
-      await screen.findByRole('radiogroup', { name: 'Số sao' });
       expect(screen.queryByText(/đã mua sản phẩm này/)).not.toBeInTheDocument();
     });
   });

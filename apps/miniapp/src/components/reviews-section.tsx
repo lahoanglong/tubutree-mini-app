@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Input, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video, type LucideIcon } from 'lucide-react';
-import { fetchReviews, createReview, canReviewProduct, type MyReview } from '../services/shop-api';
+import {
+  fetchReviews,
+  createReview,
+  canReviewProduct,
+  fetchMyReview,
+  type MyReview,
+  type MyReviewRef,
+} from '../services/shop-api';
 import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
@@ -58,13 +65,28 @@ const draftFromReview = (r: MyReview): ReviewDraft => ({
   video: r.videoUrl ?? '',
 });
 
-export function ReviewsSection({ slug }: { slug: string }) {
+/**
+ * Đánh giá đang soạn. Mỗi lần mua (đơn) một đánh giá: sửa thì gắn đúng dòng đánh giá của đơn đó. Viết mới chỉ ghi đơn khi
+ * khách chọn đơn từ chi tiết đơn; còn lại lấy đơn còn viết được sớm nhất theo can-review lúc gửi (form có thể mở trước khi
+ * can-review về). Không biết đơn nào thì máy chủ tự chọn đơn nhận sớm nhất chưa đánh giá.
+ */
+type FormTarget = { kind: 'new'; orderId?: string } | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
+
+// Nháp viết mới dùng chung cho mọi đơn: nội dung là cảm nhận về sản phẩm, không đổi khi can-review về và chọn được đơn.
+const targetKey = (t: FormTarget) => (t.kind === 'new' ? 'new' : `edit:${t.reviewId}`);
+
+/**
+ * `openForOrderId`: đơn khách bấm "Viết đánh giá"/"Sửa đánh giá" ở chi tiết đơn — mở sẵn form cho đúng lần mua đó khi
+ * can-review về (đơn còn viết được thì viết mới, đơn đã có đánh giá thì sửa đánh giá đó).
+ */
+export function ReviewsSection({ slug, openForOrderId }: { slug: string; openForOrderId?: string }) {
   const { status, login } = useAuthStore();
   const [writing, setWriting] = useState(false);
+  const [target, setTarget] = useState<FormTarget | null>(null);
   // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống
-  // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2).
-  // null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
-  const [edited, setEdited] = useState<ReviewDraft | null>(null);
+  // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2). Nháp gắn với đúng đánh giá đang soạn: mở đánh giá khác
+  // thì form lấy nội dung của đánh giá đó. null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
+  const [edited, setEdited] = useState<{ key: string; draft: ReviewDraft } | null>(null);
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
@@ -75,10 +97,49 @@ export function ReviewsSection({ slug }: { slug: string }) {
     enabled: status === 'authenticated',
     retry: false,
   });
+  const editingId = target?.kind === 'edit' ? target.reviewId : null;
+  // Danh sách công khai trả ảnh base64 dạng đường dẫn; sửa phải gửi lại đúng ảnh cũ nên đọc nguyên đánh giá của mình.
+  const myReviewQ = useQuery({
+    queryKey: ['my-review', editingId],
+    queryFn: () => fetchMyReview(editingId!),
+    enabled: writing && editingId !== null,
+    retry: false,
+  });
 
-  const myReview = eligQ.data?.myReview ?? null;
-  const base = myReview ? draftFromReview(myReview) : EMPTY_DRAFT;
-  const draft = edited ?? base;
+  const elig = eligQ.data;
+  const myReviews = elig?.myReviews ?? [];
+  const mineById = new Map(myReviews.map((r) => [r.id, r]));
+  const nextOrder = elig?.reviewableOrders?.[0];
+
+  const openForm = (t: FormTarget) => {
+    setTarget(t);
+    setWriting(true);
+  };
+  const openEdit = (r: MyReviewRef) => openForm({ kind: 'edit', reviewId: r.id, orderId: r.orderId, orderCode: r.orderCode });
+
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (!openForOrderId || !elig || deepLinked.current) return;
+    deepLinked.current = true;
+    const order = elig.reviewableOrders?.find((o) => o.orderId === openForOrderId);
+    const mine = elig.myReviews?.find((r) => r.orderId === openForOrderId);
+    if (order) openForm({ kind: 'new', orderId: order.orderId });
+    else if (mine) openEdit(mine);
+  }, [openForOrderId, elig]);
+
+  const key = target ? targetKey(target) : '';
+  const base = editingId && myReviewQ.data ? draftFromReview(myReviewQ.data) : EMPTY_DRAFT;
+  const draft = edited && edited.key === key ? edited.draft : base;
+  const latestMine = myReviews[0];
+  const formOrderId = target?.kind === 'edit' ? target.orderId : (target?.orderId ?? nextOrder?.orderId);
+  const formOrderCode =
+    target?.kind === 'edit' ? target.orderCode : elig?.reviewableOrders?.find((o) => o.orderId === formOrderId)?.code;
+  const headerAction =
+    status !== 'authenticated' || !elig || elig.canReview
+      ? { label: 'Viết đánh giá', onPress: () => (status !== 'authenticated' ? void login() : openForm({ kind: 'new' })) }
+      : elig.reason === 'ALL_REVIEWED' && latestMine
+        ? { label: 'Sửa đánh giá của bạn', onPress: () => openEdit(latestMine) }
+        : null;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
   const filtered = (data?.items ?? []).filter((r) =>
@@ -108,20 +169,19 @@ export function ReviewsSection({ slug }: { slug: string }) {
         </Heading>
         {/* Chỉ mở ô soạn khi BE xác nhận đủ điều kiện. Trước đây mở cho mọi user đăng nhập,
             khách chưa mua chọn sao + upload ảnh/video xong mới nhận lỗi "chỉ đánh giá sản phẩm
-            đã mua" — mất trắng công sức (P1-2). */}
-        {(status !== 'authenticated' || eligQ.data?.canReview !== false) && (
+            đã mua" — mất trắng công sức (P1-2). Mọi lần mua đã có đánh giá thì nút là sửa đánh giá mới nhất. */}
+        {headerAction && (
           <Button
             variant="ghost"
             onPress={() => {
               haptic('light');
-              if (status !== 'authenticated') return void login();
-              setWriting(true);
+              headerAction.onPress();
             }}
           >
-            {myReview ? 'Sửa đánh giá của bạn' : 'Viết đánh giá'}
+            {headerAction.label}
           </Button>
         )}
-        {status === 'authenticated' && eligQ.data?.canReview === false && (
+        {status === 'authenticated' && elig?.reason === 'NOT_PURCHASED' && (
           <Text variant="caption" tone="tertiary">
             Mua &amp; nhận hàng để đánh giá
           </Text>
@@ -191,17 +251,24 @@ export function ReviewsSection({ slug }: { slug: string }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-            {filtered.slice(0, visible).map((r) => (
+            {filtered.slice(0, visible).map((r) => {
+              const mine = mineById.get(r.id);
+              return (
               <div key={r.id} style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Avatar size={28} src={r.avatar ?? undefined} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Text variant="label">{r.author}</Text>
                       {r.verifiedPurchase && (
                         <Badge tone="success" size="sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                           <Check size={11} strokeWidth={2.25} aria-hidden />
                           Đã mua
+                        </Badge>
+                      )}
+                      {mine && (
+                        <Badge tone="brand" size="sm">
+                          Của bạn
                         </Badge>
                       )}
                     </div>
@@ -211,6 +278,26 @@ export function ReviewsSection({ slug }: { slug: string }) {
                     {formatDate(r.createdAt)}
                   </Text>
                 </div>
+                {mine && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    {mine.orderCode && (
+                      <Text variant="caption" tone="tertiary">
+                        Đơn {mine.orderCode}
+                      </Text>
+                    )}
+                    <Button
+                      variant="ghost"
+                      aria-label={mine.orderCode ? `Sửa đánh giá đơn ${mine.orderCode}` : 'Sửa đánh giá này'}
+                      onPress={() => {
+                        haptic('light');
+                        openEdit(mine);
+                      }}
+                      style={{ marginLeft: 'auto' }}
+                    >
+                      Sửa
+                    </Button>
+                  </div>
+                )}
                 {r.comment && (
                   <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 6 }}>
                     {r.comment}
@@ -239,7 +326,8 @@ export function ReviewsSection({ slug }: { slug: string }) {
                   />
                 )}
               </div>
-            ))}
+              );
+            })}
             {filtered.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
             {filtered.length > visible && (
               <Button variant="ghost" fullWidth onPress={() => setVisible((v) => v + 5)}>
@@ -252,19 +340,30 @@ export function ReviewsSection({ slug }: { slug: string }) {
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       )}
 
-      <BottomSheet open={writing} onClose={() => setWriting(false)} title={myReview ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>
-        <WriteReview
-          slug={slug}
-          draft={draft}
-          isEdit={!!myReview}
-          purchaseCount={eligQ.data?.purchaseCount ?? 0}
-          showReward={eligQ.data?.rewardAvailable !== false}
-          onDraftChange={(patch) => setEdited((d) => ({ ...(d ?? base), ...patch }))}
-          onDone={() => {
-            setEdited(null);
-            setWriting(false);
-          }}
-        />
+      <BottomSheet open={writing} onClose={() => setWriting(false)} title={editingId ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>
+        {editingId && myReviewQ.isPending ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} aria-busy="true">
+            <Skeleton width="100%" height={44} />
+            <Skeleton width="100%" height={96} />
+          </div>
+        ) : editingId && myReviewQ.isError ? (
+          <ErrorState message={getErrorMessage(myReviewQ.error)} onRetry={() => void myReviewQ.refetch()} />
+        ) : (
+          <WriteReview
+            slug={slug}
+            draft={draft}
+            isEdit={!!editingId}
+            orderId={formOrderId}
+            orderCode={formOrderCode ?? undefined}
+            purchaseCount={elig?.purchaseCount ?? 0}
+            showReward={elig?.rewardAvailable !== false}
+            onDraftChange={(patch) => setEdited((d) => ({ key, draft: { ...(d && d.key === key ? d.draft : base), ...patch } }))}
+            onDone={() => {
+              setEdited(null);
+              setWriting(false);
+            }}
+          />
+        )}
       </BottomSheet>
     </section>
   );
@@ -274,12 +373,16 @@ export function ReviewsSection({ slug }: { slug: string }) {
 // pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
 const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
 // Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy snackbar không kèm điểm.
-const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá sản phẩm này trước đó.';
+const REWARD_ALREADY_GIVEN =
+  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
 function WriteReview({
   slug,
   draft,
   isEdit,
+  orderId,
+  orderCode,
   purchaseCount,
   showReward,
   onDraftChange,
@@ -288,6 +391,9 @@ function WriteReview({
   slug: string;
   draft: ReviewDraft;
   isEdit: boolean;
+  /** Lần mua được đánh giá; thiếu khi can-review chưa về thì máy chủ tự chọn đơn. */
+  orderId?: string;
+  orderCode?: string;
   /** Số đơn đã nhận có sản phẩm này; API cũ chưa trả thì là 0 (không hiện câu nào). */
   purchaseCount: number;
   /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
@@ -306,11 +412,12 @@ function WriteReview({
         comment: comment.trim() || undefined,
         images: images.length > 0 ? images : undefined,
         videoUrl: video.trim() || undefined,
+        orderId,
       }),
     onSuccess: (res) => {
       haptic('medium');
-      // Theo BE chứ không theo chế độ form: đánh giá có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho mỗi
-      // (khách, sản phẩm) nên tạo lại sau khi xoá có thể ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.
+      // Theo BE chứ không theo chế độ form: đánh giá của đơn này có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho
+      // mỗi (khách, sản phẩm) nên đánh giá lần mua sau ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.
       const earned = res.updated ? 0 : (res.pointsEarned ?? 0);
       openSnackbar({
         text: res.updated
@@ -322,6 +429,8 @@ function WriteReview({
       });
       void qc.invalidateQueries({ queryKey: ['reviews', slug] });
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
+      void qc.invalidateQueries({ queryKey: ['my-review', res.id] });
+      void qc.invalidateQueries({ queryKey: ['order'] });
       onDone();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -375,7 +484,7 @@ function WriteReview({
           style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
         >
           {isEdit
-            ? 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.'
+            ? EDIT_HINT
             : video
               ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15 Điểm Xanh!`
               : images.length > 0
@@ -383,11 +492,11 @@ function WriteReview({
                 : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
         </Text>
       )}
-      {purchaseCount > 1 && (
+      {(purchaseCount > 1 || isEdit) && orderCode && (
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
-          {`Bạn đã mua sản phẩm này ${purchaseCount} lần. Mỗi sản phẩm chỉ có một đánh giá, nên ${
-            isEdit ? 'lưu lại sẽ cập nhật đánh giá cũ của bạn.' : 'đánh giá này tính cho mọi lần mua.'
-          }`}
+          {isEdit
+            ? `Bạn đang sửa đánh giá cho đơn ${orderCode}.`
+            : `Bạn đã mua sản phẩm này ${purchaseCount} lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn ${orderCode}.`}
         </Text>
       )}
       {!isEdit && !showReward && (

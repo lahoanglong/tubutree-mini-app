@@ -343,8 +343,10 @@ export default function OrderDetailPage() {
             )}
             {/* Lối vào đánh giá: trước đây nhận hàng xong KHÔNG có đường nào để đánh giá —
                 chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
-                (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được. */}
-            {o.status === 'DELIVERED' && it.productSlug && (
+                (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được.
+                Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó; API cũ chưa trả
+                reviewable/reviewId thì vẫn hiện nút viết như trước. */}
+            {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
               <Text
                 size="xSmall"
                 bold
@@ -352,11 +354,11 @@ export default function OrderDetailPage() {
                 style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');
-                  navigate(`/product/${it.productSlug}`);
+                  navigate(`/product/${it.productSlug}`, { state: { reviewOrderId: o.id } });
                 }}
               >
                 <Icon icon={Star} size="sm" tone="brand" />
-                {vi.orders.reviewItem}
+                {it.reviewId ? vi.orders.editReviewItem : vi.orders.reviewItem}
               </Text>
             )}
           </Box>
