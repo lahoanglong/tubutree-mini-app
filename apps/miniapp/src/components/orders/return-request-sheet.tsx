@@ -63,7 +63,8 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
   const [method, setMethod] = useState<RefundMethodChoice>('WALLET');
   const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [touched, setTouched] = useState(false);
-  const bankAllowed = canRefundToBank(order.paymentMethod) && !(order as { placedForCustomer?: boolean }).placedForCustomer;
+  const placedForCustomer = !!(order as { placedForCustomer?: boolean }).placedForCustomer;
+  const bankAllowed = canRefundToBank(order.paymentMethod) && !placedForCustomer;
   const showsMoney = order.total > 0 && order.paymentMethod !== 'XU';
 
   useEffect(() => {
@@ -249,7 +250,9 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
             />
           ) : (
             <Text variant="caption" tone="secondary" as="div">
-              Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.
+              {placedForCustomer
+                ? 'Tiền hoàn của đơn này trả cho khách của bạn (vào Ví Tubu của khách, hoặc Tubu chuyển khoản nếu khách chưa có tài khoản), không vào ví của bạn.'
+                : 'Tiền hoàn của đơn này về Ví Tubu ngay khi Tubu duyệt.'}
             </Text>
           ))}
         <Text variant="caption" tone="tertiary" as="div">

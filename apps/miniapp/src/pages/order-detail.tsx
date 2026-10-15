@@ -202,6 +202,8 @@ export default function OrderDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['order', code] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
       void queryClient.invalidateQueries({ queryKey: ['my-refunds'] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       setConfirmCancel(false);
       haptic('medium');
       openSnackbar({ text: vi.orders.cancelled, type: 'success' });
@@ -708,7 +710,7 @@ export default function OrderDetailPage() {
             <Box key={ret.id ?? idx} mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
               <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
-                {returnStatusLabel(ret, refundOfReturn(myRefunds.data, ret.id))}
+                {returnStatusLabel(ret, refundOfReturn(myRefunds.data, ret.id), !!assisted.placedForCustomer)}
               </Text>
               {linesText && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>

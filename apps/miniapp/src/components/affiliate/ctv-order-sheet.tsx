@@ -231,6 +231,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
         usedAt: Date.now(),
       });
       setRecents(loadRecentCustomers(userId));
+      void qc.invalidateQueries({ queryKey: ['orders'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-product-breakdown'] });

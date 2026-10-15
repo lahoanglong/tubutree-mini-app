@@ -878,6 +878,9 @@ export default function CheckoutPage() {
             {quote.data.comboDiscount > 0 && (
               <KeyValueRow label="Ưu đãi combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
             )}
+            {(quote.data.tierDiscount ?? 0) > 0 && (
+              <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data.tierDiscount ?? 0)}`} tone="success" />
+            )}
             {quote.data.pointsDiscount > 0 && (
               <KeyValueRow label={vi.checkout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
             )}
@@ -1007,6 +1010,10 @@ export default function CheckoutPage() {
 
           {quote.data && quote.data.comboDiscount > 0 && (
             <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
+          )}
+
+          {quote.data && (quote.data.tierDiscount ?? 0) > 0 && (
+            <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data.tierDiscount ?? 0)}`} tone="success" />
           )}
 
           {quote.data && quote.data.pointsDiscount > 0 && (

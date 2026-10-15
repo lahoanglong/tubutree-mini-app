@@ -478,6 +478,7 @@ function WriteReview({
       void qc.invalidateQueries({ queryKey: ['can-review', slug] });
       void qc.invalidateQueries({ queryKey: ['my-review', res.id] });
       void qc.invalidateQueries({ queryKey: ['order'] });
+      void qc.invalidateQueries({ queryKey: ['loyalty'] });
       onDone();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),

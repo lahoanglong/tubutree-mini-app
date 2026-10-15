@@ -214,9 +214,15 @@ export function refundOfReturn<T extends Pick<MyRefund, 'kind' | 'refKey'>>(
 export function returnStatusLabel(
   r: ReturnLike,
   refund?: Pick<MyRefund, 'method' | 'status' | 'bankName' | 'bankAccountNo'>,
+  placedForCustomer = false,
 ): string {
   if (r.status === 'REJECTED') return `Đổi/trả bị từ chối${r.adminNote ? `: ${r.adminNote}` : ''}`;
   if (r.status !== 'APPROVED') return 'Yêu cầu đổi/trả đang xử lý (trong 24h)';
+  // Đơn CTV lên hộ: tiền hoàn đi về khách của CTV, không vào ví của người đang xem.
+  if (placedForCustomer) {
+    const total = (r.refundAmount ?? 0) + (r.shippingRefund ?? 0);
+    return total > 0 ? `Đổi/trả đã duyệt — Tubu hoàn ${formatVnd(total)} cho khách của bạn` : 'Đổi/trả đã duyệt';
+  }
   // Yêu cầu duyệt trước khi có trả theo dòng không lưu số tiền.
   if (r.refundAmount == null) return 'Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu';
   const money = formatVnd(r.refundAmount + (r.shippingRefund ?? 0));

@@ -92,6 +92,7 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
     onSuccess: () => {
       haptic('medium');
       void queryClient.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] });
+      void queryClient.invalidateQueries({ queryKey: ['wallet'] });
       openSnackbar({
         text: method === 'WALLET' ? `Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.` : 'Đã lưu tài khoản. Tubu sẽ chuyển khoản trong 1-3 ngày làm việc.',
         type: 'success',

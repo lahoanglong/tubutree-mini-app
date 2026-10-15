@@ -207,6 +207,12 @@ describe('returnStatusLabel / returnLinesText', () => {
     expect(returnStatusLabel({ status: 'APPROVED', refundAmount: null })).toBe('Đổi/trả đã duyệt — tiền hoàn vào Ví Tubu');
     expect(returnStatusLabel({ status: 'APPROVED', refundAmount: 0 })).toBe('Đổi/trả đã duyệt');
   });
+  it('đơn CTV lên hộ: tiền hoàn trả cho khách, không nói vào Ví Tubu của người xem', () => {
+    const ret = { status: 'APPROVED', refundAmount: 89_000, shippingRefund: 15_000, refundMethod: 'WALLET' as const };
+    expect(returnStatusLabel(ret, undefined, true)).toBe('Đổi/trả đã duyệt — Tubu hoàn 104.000đ cho khách của bạn');
+    expect(returnStatusLabel({ status: 'APPROVED', refundAmount: null }, undefined, true)).toBe('Đổi/trả đã duyệt');
+    expect(returnStatusLabel({ status: 'REJECTED', adminNote: 'Quá hạn' }, undefined, true)).toBe('Đổi/trả bị từ chối: Quá hạn');
+  });
   // R2-LIFECYCLE-6: nơi nhận theo khoản hoàn thật, không theo lựa chọn lúc gửi yêu cầu.
   it('có khoản hoàn thật: khách đã đổi sang Ví → nói Ví; chờ/đang chuyển → chuyển khoản; đã chuyển → "đã chuyển khoản"', () => {
     const ret = { status: 'APPROVED', refundAmount: 19_500, refundMethod: 'BANK' as const, bankName: 'MB Bank', bankAccountNo: '0123453456' };

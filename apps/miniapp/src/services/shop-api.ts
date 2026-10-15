@@ -151,6 +151,8 @@ export interface CheckoutQuote {
   /** Mã trong giỏ chưa được áp cho đơn này (không giảm, không tiêu lượt) — câu giải thích cho khách. */
   couponNotice?: string | null;
   comboDiscount: number;
+  /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
+  tierDiscount?: number;
   pointsUsed: number;
   /** Phần của `pointsUsed` lấy từ lô quy đổi (không hết hạn). Optional: API cũ chưa trả. */
   pointsUsedConverted?: number;
