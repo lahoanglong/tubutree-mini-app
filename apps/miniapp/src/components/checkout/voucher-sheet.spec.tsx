@@ -225,6 +225,16 @@ describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMI
     expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
     expect(screen.getByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
   });
+
+  it('R6-BUYER-12: giỏ có cả hàng ngoài phạm vi thì không ghi số tiền giảm; giỏ toàn hàng trong phạm vi thì có', async () => {
+    mocks.getCoupons.mockResolvedValue([scoped]);
+    renderWith(['p-chia', 'p-dau-goi']);
+    expect(await screen.findByRole('button', { name: 'Dùng mã' })).toBeEnabled();
+    expect(screen.queryByText(/cho đơn này/)).toBeNull();
+    cleanup();
+    renderWith(['p-chia']);
+    expect(await screen.findByText('Giảm 17.250đ cho đơn này')).toBeInTheDocument();
+  });
 });
 
 describe('VoucherSheet: số tiền giảm cho đơn này và mã freeship (R6-BUYER-12)', () => {

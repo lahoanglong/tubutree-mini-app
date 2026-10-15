@@ -168,7 +168,9 @@ export function VoucherSheet({
                 const belowMin = coupon.minOrder != null && subtotal < coupon.minOrder;
                 const shipAlreadyFree = coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
                 const notEligible = wrongProducts || belowMin || shipAlreadyFree;
-                const saving = notEligible ? 0 : couponDiscountFor(coupon, subtotal);
+                // API tính mã theo sản phẩm trên các dòng thuộc phạm vi; chỉ biết chắc số khi cả giỏ nằm trong phạm vi.
+                const scopeCoversCart = !scope || (!!productIds && productIds.every((id) => scope.some((x) => x.id === id)));
+                const saving = notEligible || !scopeCoversCart ? 0 : couponDiscountFor(coupon, subtotal);
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
                 const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
