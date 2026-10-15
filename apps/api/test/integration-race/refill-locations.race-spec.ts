@@ -9,6 +9,7 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { RefillService } from '../../src/modules/refill/refill.service';
 import { RefillLocationsService } from '../../src/modules/refill/refill-locations.service';
 import { createUser, randCode, summarize, warmPool } from './helpers';
+import { splitSqlStatements } from './sql-script';
 
 /**
  * R8 trên Postgres thật: (1) câu SQL chuyển điểm nhận cũ (SystemConfig refill.pickup_*) sang bảng mới trong migration
@@ -81,12 +82,30 @@ describe('Điểm nhận vỏ chai (real Postgres)', () => {
 
   describe('câu SQL chuyển điểm nhận cũ trong migration', () => {
     const seedSql = readFileSync(MIGRATION, 'utf-8').slice(readFileSync(MIGRATION, 'utf-8').indexOf(SEED_MARKER));
-    const runSeed = () => prisma.$executeRawUnsafe(seedSql);
+    const statements = splitSqlStatements(seedSql);
+    const runSeed = async () => {
+      for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+    };
     const all = () => prisma.refillPickupLocation.findMany();
 
-    it('tìm thấy đúng câu INSERT trong file migration', () => {
-      expect(seedSql).toContain('INSERT INTO "refill_pickup_locations"');
-      expect(seedSql).toContain('ON CONFLICT ("id") DO NOTHING');
+    it('tìm thấy đúng câu INSERT và câu cập nhật mô tả trong file migration', () => {
+      expect(statements).toHaveLength(2);
+      expect(statements[0]).toContain('INSERT INTO "refill_pickup_locations"');
+      expect(statements[0]).toContain('ON CONFLICT ("id") DO NOTHING');
+      expect(statements[1]).toContain('UPDATE "system_configs"');
+    });
+
+    it('đánh dấu ba khoá cũ là dự phòng ở mô tả, chạy lại không đổi thêm và không đụng giá trị', async () => {
+      await setLegacy({ 'refill.pickup_address': 'Kho Tubu', 'refill.pickup_phone': '0901234567' });
+      const before = await prisma.systemConfig.findMany({ where: { key: { in: [...SEED_KEYS] } }, orderBy: { key: 'asc' } });
+
+      await runSeed();
+      await runSeed();
+
+      const after = await prisma.systemConfig.findMany({ where: { key: { in: [...SEED_KEYS] } }, orderBy: { key: 'asc' } });
+      expect(after).toHaveLength(3);
+      for (const row of after) expect(row.description).toMatch(/^CŨ \(dự phòng\)/);
+      expect(after.map((r) => r.value)).toEqual(before.map((r) => r.value));
     });
 
     it('có địa chỉ: tạo đúng một điểm đang bật, cắt khoảng trắng, giữ giờ và SĐT; ba khoá cũ nguyên vẹn', async () => {
@@ -130,7 +149,7 @@ describe('Điểm nhận vỏ chai (real Postgres)', () => {
     it('không có dòng SystemConfig nào: không tạo gì và không lỗi', async () => {
       await prisma.systemConfig.deleteMany({ where: { key: { in: [...SEED_KEYS] } } });
 
-      await expect(runSeed()).resolves.toBeDefined();
+      await expect(runSeed()).resolves.toBeUndefined();
 
       expect(await all()).toHaveLength(0);
     });
