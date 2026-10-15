@@ -57,6 +57,12 @@ Tick từng ô. Chưa tick hết thì chưa chọn giờ deploy. Làm 1.0 TRƯ�
 
 Không suy ra từ trí nhớ hay tài liệu cũ. `docs/2026-10-review/HANDOFF.md` (ghi ngày 2026-10-11) nói PROD chạy `cb92dc8` (115 migration); nhánh `main` hiện là `c7bfbdcd` (132 migration); SHA đã chốt cho lần này có nhiều hơn nữa (đếm lại bằng lệnh dưới; ngày 2026-10-15 là 181). Trong repo không có bằng chứng `main` đã được deploy sau ngày 2026-10-11, nên có thể 48 đến 65 migration sẽ được áp, không phải chỉ năm cái của đợt nêu ở đầu tài liệu. Mọi con số về cửa sổ (mục 3) và về quay lại (mục 7) phải tính từ danh sách thật.
 
+Chủ dự án xác nhận ngày 2026-10-15: bản trên VPS vẫn chỉ là bản thử, không có dữ liệu khách thật (giữ giả định ngày 2026-10-11). Vẫn làm Phần A và B bên dưới để ghi số migration thật cho cửa sổ và đường quay lại; không cần thêm cổng bảo vệ số dư, đơn, điểm của khách thật. Nếu trước ngày deploy có khách thật dùng bản thử, quyết định này hết hiệu lực và phải làm lại mục này.
+
+Đơn ký gửi `MCH_` đã giao trước ngày deploy KHÔNG được đối soát bù (chủ dự án chốt 2026-10-15, OPS-9): chỉ đơn giao sau khi bản này chạy mới sinh khoản đối soát tự động cho đối tác. Không viết script backfill.
+
+Nếu máy chủ đã có dòng điểm `RETURN_REVERSED:%` (điểm tích bị thu khi trả một phần), đếm chúng trước khi deploy: `SELECT count(*) FROM points_transactions WHERE reason LIKE 'RETURN_REVERSED:%';`. Bản này ghép các dòng đó vào lô điểm của đơn thay vì ăn FIFO, nên với dòng cũ cron hết hạn có thể trừ điểm ngay đêm đầu sau deploy. Bằng 0 thì bỏ qua.
+
 Phần A. Ghi lại image đang chạy và DB đang ở đâu:
 
 ```bash
