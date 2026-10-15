@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import type { SmtpFailureKind } from './ops-email-error';
 
 export const CATALOG_STATE_KEY = 'pancake.catalog';
 
@@ -13,4 +14,24 @@ export async function recordCatalogRun(prisma: Pick<PrismaClient, 'opsHealthStat
     ? { lastOkAt: now, detail: { count: run.count, failed: run.failed ?? 0 } }
     : { lastErrorAt: now, lastError: run.error.slice(0, 500) };
   await prisma.opsHealthState.upsert({ where: { key: CATALOG_STATE_KEY }, create: { key: CATALOG_STATE_KEY, ...data }, update: data });
+}
+
+export const EMAIL_STATE_KEY = 'alert.email';
+
+/** Lỗi gửi kèm loại (xem ops-email-error.ts) và dấu vân tay cấu hình lúc lỗi; thiếu `kind` = không phải lỗi SMTP (cấu hình dở dang). */
+export type EmailDeliveryResult =
+  | { ok: true }
+  | { ok: false; error: string; kind?: SmtpFailureKind; fingerprint?: string };
+
+/**
+ * Lần gửi email báo động gần nhất (thành công hoặc lỗi). Tách khỏi hàng `alert` (trí nhớ chống báo lặp, ghi đè cả cụm
+ * mỗi lượt cron) để lỗi SMTP không phụ thuộc việc lượt cron có lưu được hay không; lỗi cũ không bị xoá khi gửi được lại —
+ * màn hình so lastErrorAt với lastOkAt. `detail` của lỗi giữ loại lỗi (màn hình chỉ cách sửa) và dấu vân tay cấu hình để biết
+ * khi nào cấu hình đã đổi so với lúc lỗi vĩnh viễn.
+ */
+export async function recordEmailDelivery(prisma: Pick<PrismaClient, 'opsHealthState'>, run: EmailDeliveryResult, now = new Date()) {
+  const data = run.ok
+    ? { lastOkAt: now }
+    : { lastErrorAt: now, lastError: run.error.slice(0, 500), detail: { kind: run.kind ?? null, fingerprint: run.fingerprint ?? null } };
+  await prisma.opsHealthState.upsert({ where: { key: EMAIL_STATE_KEY }, create: { key: EMAIL_STATE_KEY, ...data }, update: data });
 }

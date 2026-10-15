@@ -93,6 +93,91 @@ describe('OPS_ALERT_WEBHOOK_URL qua quy trình chuẩn (R2-PLATFORM-3)', () => {
   });
 });
 
+describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
+  const EMAIL_KEYS = ['OPS_ALERT_EMAIL_TO', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
+  const wf = read('.github/workflows/ops.yml');
+  const setEnv = wf.slice(wf.indexOf('set-env)'), wf.indexOf('grant-admin)', wf.indexOf('set-env)')));
+  const audit = wf.slice(wf.indexOf('audit)'), wf.indexOf('backup)'));
+
+  it('ops.yml chuyển đủ bảy secret email qua SSH như OPS_ALERT_WEBHOOK_URL, set-env ghi được, audit in SET/EMPTY', () => {
+    const envs = (/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',');
+    for (const k of EMAIL_KEYS) {
+      expect({ k, passed: wf.includes(`${k}: \${{ secrets.${k} }}`) }).toEqual({ k, passed: true });
+      expect({ k, inEnvs: envs.includes(k) }).toEqual({ k, inEnvs: true });
+      expect({ k, setIf: setEnv.includes(`set_if ${k} "\${${k}:-}"`) }).toEqual({ k, setIf: true });
+      expect({ k, audited: audit.includes(`envstate ${k}`) }).toEqual({ k, audited: true });
+    }
+  });
+
+  it('set-env từ chối ghi khi cấu hình email còn thiếu, và kiểm TRƯỚC khi ghi bất kỳ khoá nào', () => {
+    const check = setEnv.indexOf('E_MISSING');
+    expect(check).toBeGreaterThan(-1);
+    expect(setEnv).toContain('KHÔNG ghi khoá nào');
+    expect(setEnv.indexOf('exit 1', check)).toBeLessThan(setEnv.indexOf('set_if OPS_ALERT_EMAIL_TO'));
+  });
+
+  it('OPS_ALERT_ENV_LABEL đi bằng biến repo (vars.*, không phải secret), qua SSH, set-env ghi được, audit in SET/EMPTY', () => {
+    expect(wf).toMatch(/^\s+OPS_ALERT_ENV_LABEL: \$\{\{ vars\.OPS_ALERT_ENV_LABEL \|\| '' \}\}$/m);
+    expect(wf).not.toContain('secrets.OPS_ALERT_ENV_LABEL');
+    expect((/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',')).toContain('OPS_ALERT_ENV_LABEL');
+    expect(setEnv).toContain('set_if OPS_ALERT_ENV_LABEL "$OPS_ALERT_ENV_LABEL"');
+    expect(audit).toContain('envstate OPS_ALERT_ENV_LABEL');
+    expect(setEnv).toContain('envstate OPS_ALERT_ENV_LABEL');
+  });
+
+  it('set-env kiểm nhãn môi trường (≤ 24 ký tự, một dòng, không [ ]) TRƯỚC khi ghi bất kỳ khoá email nào — khớp luật boot của API', () => {
+    const label = setEnv.indexOf('case "${OPS_ALERT_ENV_LABEL:-}" in');
+    expect(label).toBeGreaterThan(-1);
+    expect(label).toBeLessThan(setEnv.indexOf('set_if OPS_ALERT_EMAIL_TO'));
+    expect(setEnv).toContain('-gt 24');
+    const check = setEnv.slice(label, setEnv.indexOf('E_TO=$(effective'));
+    expect(check).toContain('*[][]*');
+    expect(check).toContain("$'\\n'");
+    expect(check).toContain('exit 1');
+  });
+
+  it('nhãn môi trường một mình không phải "đã đặt cấu hình email": không tính vào kiểm cấu hình dở dang', () => {
+    const emailBlock = setEnv.slice(setEnv.indexOf('E_TO=$(effective'), setEnv.indexOf('=== Trạng thái sau khi set'));
+    expect(emailBlock).not.toContain('OPS_ALERT_ENV_LABEL');
+  });
+
+  it('không bao giờ in giá trị SMTP_PASS ra log', () => {
+    const lines = wf.split('\n').filter((l) => !l.trim().startsWith('#'));
+    expect(lines.filter((l) => /\becho\b.*\$\{?SMTP_PASS|\bprintf\b.*\$\{?SMTP_PASS|\bset -x\b/.test(l))).toEqual([]);
+  });
+
+  it('.env.example và .env.production.example liệt kê đủ bảy khoá, để trống', () => {
+    for (const file of ['apps/api/.env.example', '.env.production.example']) {
+      const text = read(file);
+      for (const k of [...EMAIL_KEYS, 'OPS_ALERT_ENV_LABEL']) {
+        expect({ file, k, line: new RegExp(`^${k}=(""|)$`, 'm').test(text) }).toEqual({ file, k, line: true });
+      }
+    }
+  });
+
+  it('GO-LIVE-KEYS.md mô tả email trong mục báo động vận hành: đủ khoá, gửi thử, nơi xem lỗi', () => {
+    const doc = read('docs/GO-LIVE-KEYS.md');
+    const section = doc.slice(doc.search(/^## .*[Bb]áo động vận hành/m), doc.indexOf('## Thứ tự khuyến nghị go-live'));
+    for (const k of [...EMAIL_KEYS, 'OPS_ALERT_ENV_LABEL']) expect({ k, documented: section.includes(k) }).toEqual({ k, documented: true });
+    expect(section).toContain('alert-email/test');
+    expect(section).toContain('Sức khoẻ hệ thống');
+    expect(section).toContain('Gửi email thử');
+  });
+
+  it('GO-LIVE-KEYS.md nói rõ lỗi SMTP vĩnh viễn không tự gửi lại mỗi 5 phút và khi nào mới thử lại', () => {
+    const doc = read('docs/GO-LIVE-KEYS.md');
+    expect(doc).toContain('Lỗi tạm thời và lỗi vĩnh viễn');
+    expect(doc).toContain('EAUTH');
+    expect(doc).toMatch(/không\*\* tự gửi lại mỗi 5 phút/);
+  });
+
+  it('GO-LIVE-KEYS.md dặn đặt nhãn môi trường bằng biến (gh variable set), không phải secret', () => {
+    const doc = read('docs/GO-LIVE-KEYS.md');
+    expect(doc).toContain('gh variable set OPS_ALERT_ENV_LABEL');
+    expect(doc).not.toContain('gh secret set OPS_ALERT_ENV_LABEL');
+  });
+});
+
 describe('ops.yml crontab (R2-PLATFORM-6)', () => {
   const wf = read('.github/workflows/ops.yml');
   const crontab = wf.slice(wf.indexOf('crontab)\n'), wf.indexOf('*) echo "Action không hợp lệ'));

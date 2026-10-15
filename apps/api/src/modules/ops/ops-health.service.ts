@@ -27,6 +27,7 @@ import {
   type OpsProblem,
   type OpsThresholds,
 } from './ops-alerts';
+import { DISABLED_EMAIL_STATE, OpsEmailService, type EmailAlertOutcome } from './ops-email.service';
 import { CATALOG_STATE_KEY, recordCatalogRun, type CatalogRunResult } from './ops-state';
 
 /** Phần của BullMQ Queue mà màn sức khoẻ đọc — khai báo cấu trúc để test dựng hàng đợi giả. */
@@ -113,7 +114,7 @@ export type QueueHealth =
 /**
  * Sức khoẻ vận hành (PLATFORM-5): Pancake (đẩy đơn, webhook, danh mục), Gomdon (webhook, đăng nhập, báo động), các
  * hàng đợi BullMQ và đơn kẹt. Cron 5 phút so với ngưỡng `ops.*` rồi báo admin in-app (thêm webhook ngoài nếu đặt
- * OPS_ALERT_WEBHOOK_URL); @Cron chỉ chạy trên instance giữ khoá leader (CronLeaderService).
+ * OPS_ALERT_WEBHOOK_URL, thêm email nếu đặt OPS_ALERT_EMAIL_TO + SMTP_*); @Cron chỉ chạy trên instance giữ khoá leader (CronLeaderService).
  */
 @Injectable()
 export class OpsHealthService {
@@ -128,6 +129,7 @@ export class OpsHealthService {
     @Optional() private readonly gomdon?: GomdonClient,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() @Inject(OPS_FETCH) private readonly fetchImpl?: FetchLike,
+    @Optional() private readonly email?: OpsEmailService,
   ) {}
 
   async thresholds(): Promise<OpsThresholds> {
@@ -143,7 +145,12 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues] = await Promise.all([this.pancakeHealth(now, t), this.gomdonHealth(now, t), this.queueHealth(now)]);
+    const [pancake, gomdon, queues, emailChannel] = await Promise.all([
+      this.pancakeHealth(now, t),
+      this.gomdonHealth(now, t),
+      this.queueHealth(now),
+      this.email?.state() ?? DISABLED_EMAIL_STATE,
+    ]);
     const problems = opsProblems(
       {
         pancake: {
@@ -162,7 +169,7 @@ export class OpsHealthService {
       },
       t,
     );
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, alertChannels: { email: emailChannel }, problems };
   }
 
   private pancakeConfigured(): boolean {
@@ -397,26 +404,48 @@ export class OpsHealthService {
   }
 
   /**
-   * Báo in-app một lần cho mỗi quyết định ALERT/RECOVERED. Webhook ngoài gửi không được (lỗi mạng, HTTP lỗi) thì nhớ
-   * `webhookPending` và lượt cron sau (5 phút) gửi lại với tình trạng mới nhất, không chờ tới giờ nhắc lại.
+   * Báo in-app một lần cho mỗi quyết định ALERT/RECOVERED; webhook ngoài và email gửi đúng quyết định đó. Mỗi kênh ngoài
+   * gửi không được (lỗi mạng, HTTP/SMTP lỗi) thì nhớ `webhookPending` / `emailPending` và lượt cron sau (5 phút) chỉ kênh
+   * đó gửi lại với tình trạng mới nhất, không chờ tới giờ nhắc lại — kênh đã gửi được không bị gửi lại, nên email không
+   * bao giờ nhiều hơn webhook. Hai kênh chạy song song và không kênh nào ném lỗi ra ngoài.
+   *
+   * Riêng email có lỗi vĩnh viễn (sai tài khoản/mật khẩu SMTP, máy chủ từ chối hẳn): nhớ `emailBlocked` thay vì
+   * `emailPending`, KHÔNG gửi lại mỗi 5 phút (đập vào Gmail/Workspace có thể khoá tài khoản gửi). Chỉ thử lại khi cấu hình đổi,
+   * admin gửi email thử thành công, hoặc có quyết định ALERT/RECOVERED mới.
    */
   async checkAndAlert(now = new Date()): Promise<{ sent: 'ALERT' | 'RECOVERED' | null; problems: OpsProblem[] }> {
     const snap = await this.snapshot(now);
     const row = await this.prisma.opsHealthState.findUnique({ where: { key: ALERT_STATE_KEY } });
-    const detail = (row?.detail ?? null) as { keys?: string[]; tracked?: AlertMemory['tracked']; webhookPending?: boolean } | null;
+    const detail = (row?.detail ?? null) as {
+      keys?: string[];
+      tracked?: AlertMemory['tracked'];
+      webhookPending?: boolean;
+      emailPending?: boolean;
+      emailBlocked?: boolean;
+    } | null;
     const prev: AlertMemory | null = row
       ? { keys: (detail?.keys ?? []).slice(), alertSince: row.alertSince, alertedAt: row.alertedAt, tracked: detail?.tracked }
       : null;
     const { send, next } = decideAlert(prev, snap.problems, now, snap.thresholds.repeatHours);
-    let webhookPending = false;
-    if (send) {
-      await this.notifyInApp(send, snap.problems, prev?.alertSince ?? null, now);
-      webhookPending = !(await this.sendWebhook(send, snap.problems, prev?.alertSince ?? null, now));
-    } else if (detail?.webhookPending) {
-      webhookPending = !(await this.sendWebhook(snap.problems.length > 0 ? 'ALERT' : 'RECOVERED', snap.problems, null, now));
-    }
+    if (send) await this.notifyInApp(send, snap.problems, prev?.alertSince ?? null, now);
+    const retryKind = snap.problems.length > 0 ? 'ALERT' : 'RECOVERED';
+    const since = send ? (prev?.alertSince ?? null) : null;
+    const webhookKind = send ?? (detail?.webhookPending ? retryKind : null);
+    let emailKind = send ?? (detail?.emailPending ? retryKind : null);
+    if (!emailKind && detail?.emailBlocked && (await this.emailBlockLifted())) emailKind = retryKind;
+    const [webhookOk, emailOutcome] = await Promise.all([
+      webhookKind ? this.sendWebhook(webhookKind, snap.problems, since, now) : true,
+      emailKind ? this.sendEmail(emailKind, snap.problems, since, now) : null,
+    ]);
+    const emailBlocked = emailOutcome === 'BLOCKED' || (emailOutcome === null && detail?.emailBlocked === true);
     const data = {
-      detail: { keys: next.keys, ...(next.tracked ? { tracked: next.tracked } : {}), ...(webhookPending ? { webhookPending: true } : {}) },
+      detail: {
+        keys: next.keys,
+        ...(next.tracked ? { tracked: next.tracked } : {}),
+        ...(webhookOk ? {} : { webhookPending: true }),
+        ...(emailOutcome === 'RETRY' ? { emailPending: true } : {}),
+        ...(emailBlocked ? { emailBlocked: true } : {}),
+      },
       alertSince: next.alertSince,
       alertedAt: next.alertedAt,
     };
@@ -459,5 +488,25 @@ export class OpsHealthService {
       this.logger.warn(`Webhook báo động vận hành lỗi: ${e instanceof Error ? e.message : e} — gửi lại ở lượt kiểm sau.`);
     }
     return false;
+  }
+
+  /** DONE = đã gửi được hoặc không cần gửi (chưa cấu hình email). OpsEmailService không ném; bắt thêm để cron không bao giờ đổ vì email. */
+  private async sendEmail(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date): Promise<EmailAlertOutcome> {
+    if (!this.email) return 'DONE';
+    try {
+      return await this.email.sendAlert(this.message(kind, problems, since, now));
+    } catch (e) {
+      this.logger.warn(`Email báo động vận hành lỗi: ${e instanceof Error ? e.message : e} — gửi lại ở lượt kiểm sau.`);
+      return 'RETRY';
+    }
+  }
+
+  private async emailBlockLifted(): Promise<boolean> {
+    if (!this.email) return true;
+    try {
+      return await this.email.blockLifted();
+    } catch {
+      return false;
+    }
   }
 }

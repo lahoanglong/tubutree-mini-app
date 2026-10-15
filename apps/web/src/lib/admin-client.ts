@@ -1572,6 +1572,19 @@ export interface OpsBacklogOrder {
   gomdonStatus: string | null;
   paymentMethod: string;
 }
+/** Email báo động vận hành: trạng thái cấu hình và lần gửi gần nhất (lỗi đã được API che tài khoản/mật khẩu SMTP). */
+export interface OpsEmailChannel {
+  state: 'DISABLED' | 'READY' | 'MISCONFIGURED';
+  recipients: number;
+  issues: string[];
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  /** AUTH/PERMANENT: lỗi không tự khỏi, hệ thống không tự gửi lại liên tục. Tuỳ chọn: API cũ chưa trả trường này. */
+  lastErrorKind?: 'AUTH' | 'PERMANENT' | 'TRANSIENT' | null;
+  /** Cách sửa cho lỗi AUTH/PERMANENT (vd "Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS"); không chứa giá trị cấu hình. */
+  lastErrorHint?: string | null;
+}
 export interface OpsHealth {
   generatedAt: string;
   thresholds: {
@@ -1613,9 +1626,13 @@ export interface OpsHealth {
     backlogOrders: OpsBacklogOrder[];
   };
   queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
+  /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
+  alertChannels?: { email: OpsEmailChannel };
   problems: { key: string; message: string }[];
 }
 export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
+/** Gửi một email thử tới các địa chỉ nhận báo động (ADMIN, tối đa 5 lần/phút). Lỗi trả về câu tiếng Việt đã che bí mật. */
+export const sendOpsTestEmail = () => apiFetch<{ ok: true; message: string }>('/admin/ops/alert-email/test', { method: 'POST' });
 /** Đồng bộ danh mục Pancake ngay (không ghi đè tồn kho trừ khi `withStock`). */
 export const runPancakeSync = (withStock = false) =>
   apiFetch<{ synced: number; stockOverwritten: boolean }>(`/admin/pancake/sync${withStock ? '?withStock=1' : ''}`, { method: 'POST' });

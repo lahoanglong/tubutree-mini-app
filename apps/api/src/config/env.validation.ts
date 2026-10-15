@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveOpsEmailConfig } from './ops-email-config';
 
 /** Validate biến môi trường khi app khởi động (fail-fast). */
 export const envSchema = z.object({
@@ -52,6 +53,23 @@ export const envSchema = z.object({
   // PLATFORM-5: ngoài thông báo in-app cho admin, POST JSON báo động sức khoẻ vận hành (Slack/Google Chat/n8n...)
   // tới URL này. Rỗng = chỉ báo in-app.
   OPS_ALERT_WEBHOOK_URL: z.union([z.literal(''), z.string().url()]).default(''),
+  // Kênh thứ hai: email qua SMTP, gửi đúng các lần webhook ở trên gửi. Bỏ trống cả bảy biến = tắt. Đã đặt một biến
+  // thì phải đủ và đúng (xem config/ops-email-config.ts) — dở dang thì không boot, giống OPS_ALERT_WEBHOOK_URL sai dạng,
+  // để deploy dừng ngay thay vì tưởng đã có kênh email mà không gửi được.
+  OPS_ALERT_EMAIL_TO: z.string().default(''), // nhiều địa chỉ cách nhau bằng dấu phẩy hoặc chấm phẩy
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.string().default(''), // rỗng = 587 (hoặc 465 khi SMTP_SECURE=true)
+  SMTP_SECURE: z.string().default(''), // true/yes/1/on = TLS ngay từ đầu (cổng 465); false/no/0/off = STARTTLS
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default(''), // alerts@tubutree.com hoặc Tubu Tree <alerts@tubutree.com>
+  // Nhãn môi trường ở đầu tiêu đề email ("[Tubu Tree · staging]"); rỗng = dùng NODE_ENV. Staging chạy NODE_ENV=production
+  // thì đặt nhãn này để email staging và prod không lẫn nhau.
+  OPS_ALERT_ENV_LABEL: z
+    .string()
+    .max(24, 'OPS_ALERT_ENV_LABEL tối đa 24 ký tự.')
+    .regex(/^[^\r\n[\]]*$/, 'OPS_ALERT_ENV_LABEL phải nằm trên một dòng, không chứa [ hoặc ].')
+    .default(''),
 
   // Gomdon (vận đơn đổi hàng BestExpress — thu gom vật liệu tái chế). Tính năng optional:
   // - GOMDON_BASE_URL trống → ở production dùng https://admin.gomdon.com.vn, ở dev/test coi như CHƯA
@@ -106,6 +124,10 @@ export const envSchema = z.object({
   GEMINI_BASE_URL: z.string().default(''),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
 }).superRefine((env, ctx) => {
+  const email = resolveOpsEmailConfig(env);
+  if (email.state === 'misconfigured') {
+    for (const issue of email.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.key], message: issue.message });
+  }
   // Fail-closed ở production: bắt buộc khai báo webhook secret để không bị forge.
   if (env.NODE_ENV === 'production') {
     if (!env.PANCAKE_WEBHOOK_SECRET) {

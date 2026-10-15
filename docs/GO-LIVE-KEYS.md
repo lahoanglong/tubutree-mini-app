@@ -15,7 +15,7 @@ Tóm tắt việc cần làm (theo độ ưu tiên):
 | **Accesstrade** | Hoàn tiền (cashback) mua sàn ngoài | ~3–7 ngày duyệt publisher | `ACCESSTRADE_TOKEN`, `ACCESSTRADE_PUBLISHER_ID`, `ACCESSTRADE_WEBHOOK_SECRET` |
 | **Pancake POS** (bắt buộc) | Nguồn chân lý catalog, tồn kho, đơn và vận chuyển | Có ngay (tài khoản shop) | `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID`, `PANCAKE_WEBHOOK_SECRET` — mục 6 |
 | **Gomdon** (nếu bật thu gom tái chế) | Vận đơn đổi hàng BestExpress | Liên hệ quản trị Gomdon | `GOMDON_PHONE`, `GOMDON_PASSWORD`, `GOMDON_WEBHOOK_SECRET` — mục 7 |
-| **Kênh báo động vận hành** (khuyến nghị) | Báo sự cố Pancake/Gomdon/hàng đợi ra Slack/Google Chat/n8n | Tạo ngay (incoming webhook) | `OPS_ALERT_WEBHOOK_URL` — mục 8 |
+| **Kênh báo động vận hành** (khuyến nghị) | Báo sự cố Pancake/Gomdon/hàng đợi ra Slack/Google Chat/n8n và/hoặc email | Tạo ngay (incoming webhook; hộp thư SMTP) | `OPS_ALERT_WEBHOOK_URL`; email: `OPS_ALERT_EMAIL_TO`, `SMTP_HOST`, `SMTP_FROM`… — mục 8 |
 
 > **Pancake khác các dịch vụ còn lại:** production thiếu `PANCAKE_API_KEY`/`PANCAKE_SHOP_ID`/`PANCAKE_WEBHOOK_SECRET`
 > thì **API không khởi động** (không có kho thì không bán được đơn nào). `tools/deploy/deploy.sh` kiểm `.env` bằng
@@ -272,6 +272,68 @@ gh workflow run ops.yml -f action=set-env
 gh workflow run ops.yml -f action=audit   # OPS_ALERT_WEBHOOK_URL phải là SET
 ```
 URL thiếu `https://` thì `set-env` từ chối ghi và API cũng không khởi động với giá trị đó. Bỏ trống = chỉ báo in-app.
+
+### Email (kênh thứ hai, tuỳ chọn)
+
+Email đi qua SMTP (nodemailer) và gửi **đúng những lần webhook gửi** — mở sự cố, có việc mới ở hàng việc cho người, nhắc
+lại sau `ops.alert_repeat_hours`, báo "Vận hành đã ổn trở lại" — dùng chung trí nhớ chống báo lặp với webhook nên không
+bao giờ nhiều hơn webhook. Hai kênh độc lập: SMTP lỗi không chặn webhook, cron hay app (chỉ ghi cảnh báo, lượt kiểm 5 phút
+sau gửi lại riêng email; kênh đã gửi được không bị gửi lại), webhook lỗi cũng không làm email gửi lại.
+
+**Lỗi tạm thời và lỗi vĩnh viễn.** Lỗi tạm thời (quá hạn, mất kết nối, DNS, TLS, mọi mã đáp 4xx) được gửi lại mỗi lượt
+kiểm 5 phút như trên. Lỗi vĩnh viễn — sai tài khoản/mật khẩu (`EAUTH`, đáp 535/534/530/538) hoặc máy chủ từ chối hẳn (đáp 5xx
+khác: người nhận không có thật, cấm relay...) — chỉ ghi lỗi và **không** tự gửi lại mỗi 5 phút: thử mật khẩu sai liên tục
+có thể làm Gmail/Workspace khoá tài khoản gửi. Báo động bị chặn được thử lại đúng một lần khi: (1) cấu hình email đổi so
+với lúc lỗi (sửa `SMTP_PASS` rồi chạy lại API), (2) admin bấm **Gửi email thử** và gửi được, hoặc (3) có quyết định báo
+động mới (sự cố khác xuất hiện, nhắc lại sau `ops.alert_repeat_hours`, báo đã ổn). Webhook và cron không bị ảnh hưởng.
+
+| Biến | Ý nghĩa |
+|---|---|
+| `OPS_ALERT_EMAIL_TO` | Người nhận, cách nhau bằng dấu phẩy hoặc chấm phẩy; mỗi địa chỉ được kiểm tra |
+| `SMTP_HOST` | Máy chủ SMTP (chỉ tên máy chủ/IP, không kèm `smtp://` hay cổng) |
+| `SMTP_PORT` | Để trống = 587 (465 khi `SMTP_SECURE=true`) |
+| `SMTP_SECURE` | Nhận `true`/`false`/`yes`/`no`/`1`/`0`/`on`/`off` (không phân biệt hoa thường), giá trị khác thì API không khởi động. `true` = TLS ngay từ đầu (thường cổng 465); `false`/trống = STARTTLS (cổng 587). Có tài khoản mà không dùng TLS ngay từ đầu thì bắt buộc STARTTLS, không gửi mật khẩu dạng thô |
+| `SMTP_USER`, `SMTP_PASS` | Tài khoản đăng nhập SMTP, đi **cặp** (cả hai hoặc không cái nào). Mật khẩu nên là mật khẩu ứng dụng, không chứa `$` hay dấu nháy |
+| `SMTP_FROM` | Địa chỉ gửi: `alerts@tubutree.com` hoặc `Tubu Tree <alerts@tubutree.com>`. Để trống thì dùng `SMTP_USER` nếu nó là địa chỉ email |
+| `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod. Tối đa 24 ký tự, một dòng, không chứa `[` `]`. **Không bí mật**: đặt bằng biến GitHub (`gh variable set`), không dùng `gh secret set` |
+
+Bỏ trống **cả bảy** biến email = tắt kênh, app chạy như cũ. Đã đặt một biến thì phải đủ (`OPS_ALERT_EMAIL_TO`,
+`SMTP_HOST`, và `SMTP_FROM` hoặc `SMTP_USER` là địa chỉ email) và đúng định dạng — dở dang thì API không khởi động và
+`tools/deploy/deploy.sh` dừng ở bước kiểm `.env`, thông báo nêu rõ khoá còn thiếu (không in mật khẩu); bản đang chạy vẫn
+phục vụ. `set-env` cũng từ chối ghi khi gộp secret mới với `.env` hiện có vẫn thiếu khoá.
+
+**Nội dung email:** tiêu đề `[Tubu Tree · <môi trường>] Sự cố vận hành: N vấn đề cần xử lý` (hoặc `Vận hành đã ổn trở lại`);
+thân văn bản + HTML nêu từng vấn đề, số lượng và mã đơn cũ nhất như lời báo của webhook. Số điện thoại, khoá/token và
+thông tin đăng nhập trong URL nằm trong thông điệp lỗi tự do bị che; email không bao giờ chứa tên, SĐT hay địa chỉ khách.
+**Không có đường link** vì hệ thống chưa có cấu hình địa chỉ trang quản trị — email chỉ dẫn vào trang quản trị → **Sức khoẻ
+hệ thống** để xử lý.
+
+```bash
+gh secret set OPS_ALERT_EMAIL_TO --body "ops@tubutree.com,ceo@tubutree.com"
+gh secret set SMTP_HOST --body "smtp.example.com"
+gh secret set SMTP_USER --body "alerts@tubutree.com"
+gh secret set SMTP_PASS --body "<mat_khau_ung_dung>"      # KHÔNG commit, không nhập vào tab Cấu hình admin
+gh secret set SMTP_FROM --body "Tubu Tree <alerts@tubutree.com>"
+gh variable set OPS_ALERT_ENV_LABEL --body "staging"      # tuỳ chọn, biến (vars) chứ không phải secret; prod để trống
+gh workflow run ops.yml -f action=set-env
+gh workflow run ops.yml -f action=audit   # in SET/EMPTY từng khoá email (SMTP_PORT, SMTP_SECURE, OPS_ALERT_ENV_LABEL trống là bình thường)
+```
+
+**Gửi thử** (không đụng trí nhớ chống báo lặp, không làm mất hay thêm báo động thật): ở màn **Sức khoẻ hệ thống** →
+thẻ "Báo động qua email" bấm **Gửi email thử** (chỉ ADMIN, có bước xác nhận; kết quả hiện ngay trên thẻ), hoặc gọi API bằng
+token đăng nhập của admin (tối đa 5 lần/phút):
+
+```bash
+curl -sS -X POST "https://<api>/api/admin/ops/alert-email/test" -H "Authorization: Bearer <access token admin>"
+# 201 {"ok":true,"message":"Đã gửi email thử tới 2 địa chỉ nhận. ..."}
+# 400: chưa cấu hình hoặc dở dang (nêu khoá) · 502: máy chủ SMTP từ chối (kèm lý do, đã che tài khoản/mật khẩu;
+#      sai xác thực thì nói rõ kiểm SMTP_USER/SMTP_PASS)
+```
+
+**Theo dõi:** màn **Sức khoẻ hệ thống** (web admin) có thẻ "Báo động qua email": trạng thái kênh, số người nhận, lần gửi
+thành công và lỗi gần nhất (cùng dữ liệu ở `GET /admin/ops/health`, trường `alertChannels.email`). Lỗi SMTP không tự
+thành một "sự cố vận hành" mới (tránh báo động về chính kênh báo động); cảnh báo cũng được ghi ở log API, không kèm bí mật.
+Lỗi vĩnh viễn hiện rõ trên thẻ, vd "Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS", kèm việc cần làm.
 
 ---
 

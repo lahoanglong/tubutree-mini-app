@@ -26,6 +26,27 @@ describe('checkEnv', () => {
     expect(r.message).toContain('OPS_ALERT_WEBHOOK_URL');
   });
 
+  it('email báo động đặt dở dang (có người nhận, chưa có máy chủ SMTP) → không ok, nêu đúng khoá để dừng deploy', () => {
+    const r = checkEnv({ ...base, OPS_ALERT_EMAIL_TO: 'ops@tubutree.com', SMTP_FROM: 'alerts@tubutree.com' });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('SMTP_HOST');
+  });
+
+  it('email báo động đủ cấu hình → ok; sai cổng thì nêu khoá và không in mật khẩu SMTP ra log deploy', () => {
+    const smtp = {
+      OPS_ALERT_EMAIL_TO: 'ops@tubutree.com',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_USER: 'mailer',
+      SMTP_PASS: 'secret-pass',
+      SMTP_FROM: 'alerts@tubutree.com',
+    };
+    expect(checkEnv({ ...base, ...smtp }).ok).toBe(true);
+    const bad = checkEnv({ ...base, ...smtp, SMTP_PORT: 'abc' });
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toContain('SMTP_PORT');
+    expect(bad.message).not.toContain('secret-pass');
+  });
+
   it('production thiếu khoá Pancake → không ok', () => {
     const r = checkEnv({ ...base, PANCAKE_API_KEY: '' });
     expect(r.ok).toBe(false);
