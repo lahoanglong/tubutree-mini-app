@@ -32,6 +32,15 @@ describe('notificationMeta', () => {
     expect(notificationMeta(code).title).toBe('Đại lý');
   });
 
+  it.each([
+    ['RETURN_REQUESTED', 'Đã nhận yêu cầu đổi/trả'],
+    ['RETURN_APPROVED_DETAIL', 'Yêu cầu đổi/trả đã duyệt'],
+    ['RETURN_RECEIVED', 'Tubu đã nhận lại hàng'],
+    ['RETURN_REJECTED', 'Yêu cầu đổi/trả bị từ chối'],
+  ])('%s → tiêu đề đọc được, không rơi về "Thông báo" (R6-BUYER-4)', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+
   it('OPS_* → Cảnh báo vận hành', () => {
     expect(notificationMeta('OPS_GOMDON_ALERT').title).toBe('Cảnh báo vận hành');
   });
