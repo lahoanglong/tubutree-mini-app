@@ -280,6 +280,13 @@ lại sau `ops.alert_repeat_hours`, báo "Vận hành đã ổn trở lại" —
 bao giờ nhiều hơn webhook. Hai kênh độc lập: SMTP lỗi không chặn webhook, cron hay app (chỉ ghi cảnh báo, lượt kiểm 5 phút
 sau gửi lại riêng email; kênh đã gửi được không bị gửi lại), webhook lỗi cũng không làm email gửi lại.
 
+**Lỗi tạm thời và lỗi vĩnh viễn.** Lỗi tạm thời (quá hạn, mất kết nối, DNS, TLS, mọi mã đáp 4xx) được gửi lại mỗi lượt
+kiểm 5 phút như trên. Lỗi vĩnh viễn — sai tài khoản/mật khẩu (`EAUTH`, đáp 535/534/530/538) hoặc máy chủ từ chối hẳn (đáp 5xx
+khác: người nhận không có thật, cấm relay...) — chỉ ghi lỗi và **không** tự gửi lại mỗi 5 phút: thử mật khẩu sai liên tục
+có thể làm Gmail/Workspace khoá tài khoản gửi. Báo động bị chặn được thử lại đúng một lần khi: (1) cấu hình email đổi so
+với lúc lỗi (sửa `SMTP_PASS` rồi chạy lại API), (2) admin bấm **Gửi email thử** và gửi được, hoặc (3) có quyết định báo
+động mới (sự cố khác xuất hiện, nhắc lại sau `ops.alert_repeat_hours`, báo đã ổn). Webhook và cron không bị ảnh hưởng.
+
 | Biến | Ý nghĩa |
 |---|---|
 | `OPS_ALERT_EMAIL_TO` | Người nhận, cách nhau bằng dấu phẩy hoặc chấm phẩy; mỗi địa chỉ được kiểm tra |
@@ -312,17 +319,21 @@ gh workflow run ops.yml -f action=set-env
 gh workflow run ops.yml -f action=audit   # in SET/EMPTY từng khoá email (SMTP_PORT, SMTP_SECURE, OPS_ALERT_ENV_LABEL trống là bình thường)
 ```
 
-**Gửi thử** (không đụng trí nhớ chống báo lặp, không làm mất hay thêm báo động thật), bằng token đăng nhập của admin:
+**Gửi thử** (không đụng trí nhớ chống báo lặp, không làm mất hay thêm báo động thật): ở màn **Sức khoẻ hệ thống** →
+thẻ "Báo động qua email" bấm **Gửi email thử** (chỉ ADMIN, có bước xác nhận; kết quả hiện ngay trên thẻ), hoặc gọi API bằng
+token đăng nhập của admin (tối đa 5 lần/phút):
 
 ```bash
 curl -sS -X POST "https://<api>/api/admin/ops/alert-email/test" -H "Authorization: Bearer <access token admin>"
 # 201 {"ok":true,"message":"Đã gửi email thử tới 2 địa chỉ nhận. ..."}
-# 400: chưa cấu hình hoặc dở dang (nêu khoá) · 502: máy chủ SMTP từ chối (kèm lý do, đã che tài khoản/mật khẩu)
+# 400: chưa cấu hình hoặc dở dang (nêu khoá) · 502: máy chủ SMTP từ chối (kèm lý do, đã che tài khoản/mật khẩu;
+#      sai xác thực thì nói rõ kiểm SMTP_USER/SMTP_PASS)
 ```
 
 **Theo dõi:** màn **Sức khoẻ hệ thống** (web admin) có thẻ "Báo động qua email": trạng thái kênh, số người nhận, lần gửi
 thành công và lỗi gần nhất (cùng dữ liệu ở `GET /admin/ops/health`, trường `alertChannels.email`). Lỗi SMTP không tự
 thành một "sự cố vận hành" mới (tránh báo động về chính kênh báo động); cảnh báo cũng được ghi ở log API, không kèm bí mật.
+Lỗi vĩnh viễn hiện rõ trên thẻ, vd "Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS", kèm việc cần làm.
 
 ---
 

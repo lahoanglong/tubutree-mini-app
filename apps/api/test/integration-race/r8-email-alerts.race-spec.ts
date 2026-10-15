@@ -12,6 +12,7 @@ import { createOrder, createUser, setConfig } from './helpers';
 describe('r8 email báo động vận hành (real Postgres)', () => {
   let prisma: PrismaService;
   let health: OpsHealthService;
+  let email: OpsEmailService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const fetchMock = jest.fn();
   const sendMail = jest.fn();
@@ -60,7 +61,7 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     // Pancake/Gomdon chưa cấu hình: dữ liệu đơn còn lại của spec khác trong DB dùng chung không thành sự cố, chỉ hàng đợi giả quyết định.
     const gomdon = { getConfig: async () => null, getHealth: () => null };
     const config = { get: (k: string) => env[k] ?? '' };
-    const email = new OpsEmailService(config as never, prisma, (() => transportFactory()) as never);
+    email = new OpsEmailService(config as never, prisma, (() => transportFactory()) as never);
     health = new OpsHealthService(
       prisma,
       config as never,
@@ -191,12 +192,21 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     expect(sendMail).not.toHaveBeenCalled();
     expect(await alertState()).not.toHaveProperty('emailPending');
     const snap = await snapshotAt(0);
-    expect(snap.alertChannels.email).toEqual({ state: 'DISABLED', recipients: 0, issues: [], lastOkAt: null, lastErrorAt: null, lastError: null });
+    expect(snap.alertChannels.email).toEqual({
+      state: 'DISABLED',
+      recipients: 0,
+      issues: [],
+      lastOkAt: null,
+      lastErrorAt: null,
+      lastError: null,
+      lastErrorKind: null,
+      lastErrorHint: null,
+    });
   });
 
   it('SMTP lỗi: cron không đổ, webhook và in-app vẫn gửi đúng một lần, lượt sau chỉ gửi lại email; lỗi hiện ở ảnh chụp mà không lộ bí mật', async () => {
     queueFailures['notifications'] = 9;
-    sendMail.mockRejectedValueOnce(Object.assign(new Error('Invalid login mailer-user hunter2-pass: 535 5.7.8 rejected'), { code: 'EAUTH' }));
+    sendMail.mockRejectedValueOnce(Object.assign(new Error('Connection timeout to smtp.invalid for mailer-user hunter2-pass'), { code: 'ETIMEDOUT' }));
 
     await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -205,8 +215,8 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     expect(await alertState()).not.toHaveProperty('webhookPending');
 
     const failed = (await snapshotAt(1)).alertChannels.email;
-    expect(failed).toMatchObject({ state: 'READY', recipients: 2, lastOkAt: null, lastErrorAt: expect.any(String) });
-    expect(failed.lastError).toContain('EAUTH');
+    expect(failed).toMatchObject({ state: 'READY', recipients: 2, lastOkAt: null, lastErrorAt: expect.any(String), lastErrorKind: 'TRANSIENT', lastErrorHint: null });
+    expect(failed.lastError).toContain('ETIMEDOUT');
     expect(JSON.stringify(failed)).not.toContain('hunter2-pass');
     expect(JSON.stringify(failed)).not.toContain('mailer-user');
 
@@ -226,7 +236,7 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
 
   it('SMTP vẫn lỗi ở lượt thử lại: tiếp tục chờ, không tạo thêm email, không báo in-app lại', async () => {
     queueFailures['notifications'] = 9;
-    sendMail.mockRejectedValue(new Error('ECONNREFUSED'));
+    sendMail.mockRejectedValue(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
     await check(0);
     const perSend = notify.mock.calls.length;
     await check(5);
@@ -235,6 +245,187 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledTimes(perSend);
     expect(await alertState()).toMatchObject({ emailPending: true });
+  });
+
+  describe('lỗi SMTP vĩnh viễn: không bão gửi lại', () => {
+    const authError = () => Object.assign(new Error('Invalid login mailer-user hunter2-pass: 535 5.7.8 rejected'), { code: 'EAUTH', responseCode: 535, response: '535 5.7.8 rejected' });
+    const blocked = async () => (await alertState()) as { emailBlocked?: boolean; emailPending?: boolean; webhookPending?: boolean };
+
+    it('sai mật khẩu (EAUTH 535): đúng MỘT lần thử qua nhiều lượt kiểm, webhook và in-app vẫn bình thường, màn hình chỉ rõ cách sửa mà không lộ bí mật', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+      for (const m of [5, 10, 15, 20, 25, 30, 60]) await expect(check(m)).resolves.toMatchObject({ sent: null });
+
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+      expect(await blocked()).not.toHaveProperty('emailPending');
+      expect(await blocked()).not.toHaveProperty('webhookPending');
+      expect(JSON.stringify(await alertState())).not.toContain('hunter2-pass');
+
+      const ch = (await snapshotAt(61)).alertChannels.email;
+      expect(ch).toMatchObject({ state: 'READY', lastErrorKind: 'AUTH', lastOkAt: null });
+      expect(ch.lastErrorHint).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
+      expect(JSON.stringify(ch)).not.toContain('hunter2-pass');
+      expect(JSON.stringify(ch)).not.toContain('mailer-user');
+    });
+
+    it('sự cố KHÁC xuất hiện (một quyết định ALERT mới) thì thử lại đúng một lần; vẫn lỗi thì vẫn chặn', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      queueFailures['pancake-push'] = 9;
+      await expect(check(10)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+
+      await check(15);
+      await check(20);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+    });
+
+    it('báo đã ổn (RECOVERED) cũng là một quyết định mới: thử lại, và gửi được thì gỡ chặn', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValueOnce(authError());
+      await check(0);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+      for (const k of Object.keys(queueFailures)) delete queueFailures[k];
+      await expect(check(5)).resolves.toMatchObject({ sent: 'RECOVERED' });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(subjects()[1]).toBe('[Tubu Tree · test] Vận hành đã ổn trở lại');
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+    });
+
+    it('sửa cấu hình (đổi mật khẩu rồi chạy lại API): lượt kiểm kế tiếp thử lại đúng một lần, gửi được thì gỡ chặn và không gửi lại nữa', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      env.SMTP_PASS = 'new-app-password';
+      sendMail.mockReset().mockResolvedValue({});
+      await expect(check(10)).resolves.toMatchObject({ sent: null });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(String((sendMail.mock.calls[0][0] as { text: string }).text)).toContain('notifications');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+
+      await check(15);
+      await check(20);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      const ch = (await snapshotAt(21)).alertChannels.email;
+      expect(new Date(ch.lastOkAt!).getTime()).toBeGreaterThanOrEqual(new Date(ch.lastErrorAt!).getTime());
+    });
+
+    it('sửa cấu hình mà vẫn sai: thử lại một lần rồi lại chặn, không lặp mỗi lượt', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      env.SMTP_PASS = 'still-wrong';
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      await check(10);
+      await check(15);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+    });
+
+    it('admin gửi email thử thành công (không đổi cấu hình) → lượt kiểm kế tiếp gửi lại báo động đã bị chặn đúng một lần', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValueOnce(authError());
+      await check(0);
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      sendMail.mockResolvedValue({});
+      await expect(email.sendTest()).resolves.toMatchObject({ ok: true });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(String((sendMail.mock.calls[1][0] as { subject: string }).subject)).toContain('Email thử');
+
+      await expect(check(10)).resolves.toMatchObject({ sent: null });
+      expect(sendMail).toHaveBeenCalledTimes(3);
+      expect(String((sendMail.mock.calls[2][0] as { subject: string }).subject)).toContain('Sự cố vận hành');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+      await check(15);
+      expect(sendMail).toHaveBeenCalledTimes(3);
+    });
+
+    it('admin gửi email thử mà vẫn lỗi → không mở chặn, cron vẫn không gửi', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      const r = await email.sendTest();
+      expect(r).toMatchObject({ ok: false, reason: 'SEND_FAILED', kind: 'AUTH' });
+      expect(JSON.stringify(r)).not.toContain('hunter2-pass');
+      await check(5);
+      await check(10);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+    });
+
+    it('máy chủ từ chối hẳn (550) cũng chặn như sai mật khẩu; lỗi tạm thời (451) thì vẫn gửi lại mỗi lượt', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(Object.assign(new Error("Can't send mail - all recipients were rejected: 550 5.1.1 User unknown"), { code: 'EENVELOPE', responseCode: 550 }));
+      await check(0);
+      await check(5);
+      await check(10);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect((await snapshotAt(11)).alertChannels.email).toMatchObject({ lastErrorKind: 'PERMANENT' });
+      expect((await snapshotAt(11)).alertChannels.email.lastErrorHint).toContain('OPS_ALERT_EMAIL_TO');
+
+      await prisma.opsHealthState.deleteMany({});
+      sendMail.mockReset().mockRejectedValue(Object.assign(new Error('451 4.3.0 try again'), { code: 'EMESSAGE', responseCode: 451 }));
+      await check(20);
+      await check(25);
+      await check(30);
+      expect(sendMail).toHaveBeenCalledTimes(3);
+      expect(await blocked()).toMatchObject({ emailPending: true });
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+    });
+
+    it('lỗi tạm thời rồi tới lượt thử lại gặp lỗi vĩnh viễn: bỏ chờ gửi lại, chuyển sang chặn', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })).mockRejectedValue(authError());
+      await check(0);
+      expect(await blocked()).toMatchObject({ emailPending: true });
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+      expect(await blocked()).not.toHaveProperty('emailPending');
+      await check(10);
+      await check(15);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+    });
+
+    it('chặn không ảnh hưởng webhook: webhook lỗi vẫn tự gửi lại riêng, email vẫn đứng yên', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+      await check(0);
+      expect(await blocked()).toMatchObject({ emailBlocked: true, webhookPending: true });
+      await check(5);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+      expect(await blocked()).not.toHaveProperty('webhookPending');
+    });
+
+    it('tắt email khi đang bị chặn: lượt kiểm sau nhả chặn, không gửi gì', async () => {
+      queueFailures['notifications'] = 9;
+      sendMail.mockRejectedValue(authError());
+      await check(0);
+      for (const k of Object.keys(EMAIL_ENV)) delete env[k];
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+    });
   });
 
   it('tạo kết nối SMTP ném lỗi ngay (không phải lời hứa bị từ chối) cũng không làm đổ cron', async () => {

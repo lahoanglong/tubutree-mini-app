@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport } from 'nodemailer';
@@ -6,6 +7,7 @@ import type { Env } from '../../config/env.validation';
 import { OPS_EMAIL_KEYS, resolveOpsEmailConfig, type OpsEmailConfig } from '../../config/ops-email-config';
 import type { AlertMessage } from './ops-alerts';
 import { alertEmail, emailEnvLabel, OPS_EMAIL_APP_NAME, scrubSecrets, testEmail, type AlertEmail } from './ops-email';
+import { classifySmtpError, isSmtpFailureKind, smtpFailureHint, type SmtpFailureKind } from './ops-email-error';
 import { EMAIL_STATE_KEY, recordEmailDelivery, type EmailDeliveryResult } from './ops-state';
 
 type Ready = Extract<OpsEmailConfig, { state: 'ready' }>;
@@ -53,11 +55,26 @@ export interface EmailChannelState {
   lastOkAt: string | null;
   lastErrorAt: string | null;
   lastError: string | null;
+  /** Loại lỗi gần nhất (null = chưa có lỗi, hoặc lỗi cấu hình không phải SMTP). AUTH/PERMANENT: không tự gửi lại liên tục. */
+  lastErrorKind: SmtpFailureKind | null;
+  /** Lời chỉ cách sửa cho lỗi AUTH/PERMANENT, không chứa giá trị cấu hình nào. */
+  lastErrorHint: string | null;
 }
 
 export type TestEmailResult =
   | { ok: true; recipients: number }
-  | { ok: false; reason: 'DISABLED' | 'MISCONFIGURED' | 'SEND_FAILED'; error: string };
+  | { ok: false; reason: 'DISABLED' | 'MISCONFIGURED'; error: string }
+  | { ok: false; reason: 'SEND_FAILED'; error: string; kind: SmtpFailureKind };
+
+type DeliveryResult = { ok: true } | { ok: false; error: string; kind: SmtpFailureKind; fingerprint: string };
+
+/**
+ * Kết quả một lượt gửi email báo động cho cron:
+ *  - DONE: đã gửi được, hoặc không có gì để gửi (chưa cấu hình / cấu hình hỏng — gửi lại cũng không khá hơn);
+ *  - RETRY: lỗi tạm thời (mạng, quá hạn, 4xx) — lượt kiểm sau gửi lại;
+ *  - BLOCKED: lỗi vĩnh viễn (sai xác thực, 5xx) — KHÔNG tự gửi lại; xem `blockLifted()`.
+ */
+export type EmailAlertOutcome = 'DONE' | 'RETRY' | 'BLOCKED';
 
 export const DISABLED_EMAIL_STATE: EmailChannelState = {
   state: 'DISABLED',
@@ -66,6 +83,8 @@ export const DISABLED_EMAIL_STATE: EmailChannelState = {
   lastOkAt: null,
   lastErrorAt: null,
   lastError: null,
+  lastErrorKind: null,
+  lastErrorHint: null,
 };
 
 const DISABLED_HINT = 'Chưa cấu hình email báo động: đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM (docs/GO-LIVE-KEYS.md mục 8).';
@@ -114,24 +133,54 @@ export class OpsEmailService {
     };
   }
 
-  /** true = đã gửi được, hoặc không có gì để gửi (chưa cấu hình / cấu hình hỏng — gửi lại cũng không khá hơn). */
-  async sendAlert(m: AlertMessage): Promise<boolean> {
+  /**
+   * Gửi một lần báo động. Lỗi tạm thời → RETRY (cron gửi lại ở lượt kiểm sau). Lỗi vĩnh viễn (sai tài khoản/mật khẩu, máy
+   * chủ từ chối hẳn) → BLOCKED: ghi lỗi nhưng KHÔNG bắt gửi lại, vì thử lại vài phút một lần với mật khẩu sai là đập vào
+   * Gmail/Workspace cho tới khi tài khoản bị khoá.
+   */
+  async sendAlert(m: AlertMessage): Promise<EmailAlertOutcome> {
     try {
       const cfg = this.resolve();
-      if (cfg.state === 'disabled') return true;
+      if (cfg.state === 'disabled') return 'DONE';
       if (cfg.state === 'misconfigured') {
         const error = `Cấu hình email chưa đủ: ${cfg.issues.map((i) => i.message).join(' ')}`;
         this.logger.warn(`Email báo động vận hành không gửi được: ${error}`);
         await this.record({ ok: false, error });
-        return true;
+        return 'DONE';
       }
       const res = await this.deliver(cfg, alertEmail(m, this.context()));
       await this.record(res);
-      if (res.ok) return true;
-      this.logger.warn(`Email báo động vận hành lỗi: ${res.error} — gửi lại ở lượt kiểm sau.`);
-      return false;
+      if (res.ok) return 'DONE';
+      if (res.kind === 'TRANSIENT') {
+        this.logger.warn(`Email báo động vận hành lỗi: ${res.error} — gửi lại ở lượt kiểm sau.`);
+        return 'RETRY';
+      }
+      this.logger.warn(
+        `Email báo động vận hành lỗi vĩnh viễn (${res.kind}): ${res.error} — KHÔNG tự gửi lại cho tới khi đổi cấu hình, admin gửi email thử thành công hoặc có sự cố mới.`,
+      );
+      return 'BLOCKED';
     } catch (e) {
       this.logger.warn(`Email báo động vận hành lỗi không lường trước: ${e instanceof Error ? e.message : String(e)}`);
+      return 'RETRY';
+    }
+  }
+
+  /**
+   * Một lượt gửi đã BLOCKED nay đáng thử lại chưa: cấu hình đã đổi so với lúc lỗi (sửa mật khẩu rồi deploy), hoặc email thử
+   * của admin đã gửi được. Cấu hình không còn sẵn sàng thì cũng trả true để cron gọi sendAlert, nơi ghi nhận và nhả khoá.
+   * Đọc DB lỗi → false (cứ chờ).
+   */
+  async blockLifted(): Promise<boolean> {
+    try {
+      const cfg = this.resolve();
+      if (cfg.state !== 'ready') return true;
+      const row = await this.prisma.opsHealthState.findUnique({ where: { key: EMAIL_STATE_KEY } });
+      if (!row?.lastErrorAt) return true;
+      if (row.lastOkAt && row.lastOkAt >= row.lastErrorAt) return true;
+      const failedWith = (row.detail as { fingerprint?: unknown } | null)?.fingerprint;
+      return failedWith !== this.fingerprint(cfg);
+    } catch (e) {
+      this.logger.warn(`Không đọc được trạng thái gửi email báo động: ${e instanceof Error ? e.message : String(e)}`);
       return false;
     }
   }
@@ -147,11 +196,11 @@ export class OpsEmailService {
       const res = await this.deliver(cfg, testEmail(this.context(), now));
       await this.record(res);
       if (res.ok) return { ok: true, recipients: cfg.recipients.length };
-      this.logger.warn(`Email thử báo động vận hành lỗi: ${res.error}`);
-      return { ok: false, reason: 'SEND_FAILED', error: res.error };
+      this.logger.warn(`Email thử báo động vận hành lỗi (${res.kind}): ${res.error}`);
+      return { ok: false, reason: 'SEND_FAILED', error: res.error, kind: res.kind };
     } catch (e) {
       this.logger.warn(`Email thử báo động vận hành lỗi không lường trước: ${e instanceof Error ? e.message : String(e)}`);
-      return { ok: false, reason: 'SEND_FAILED', error: 'Lỗi không lường trước khi gửi email thử.' };
+      return { ok: false, reason: 'SEND_FAILED', error: 'Lỗi không lường trước khi gửi email thử.', kind: 'TRANSIENT' };
     }
   }
 
@@ -159,6 +208,8 @@ export class OpsEmailService {
     const cfg = this.resolve();
     if (cfg.state === 'disabled') return DISABLED_EMAIL_STATE;
     const row = await this.prisma.opsHealthState.findUnique({ where: { key: EMAIL_STATE_KEY } });
+    const kind = (row?.detail as { kind?: unknown } | null)?.kind;
+    const lastErrorKind = isSmtpFailureKind(kind) ? kind : null;
     return {
       state: cfg.state === 'ready' ? 'READY' : 'MISCONFIGURED',
       recipients: cfg.state === 'ready' ? cfg.recipients.length : 0,
@@ -166,10 +217,12 @@ export class OpsEmailService {
       lastOkAt: row?.lastOkAt?.toISOString() ?? null,
       lastErrorAt: row?.lastErrorAt?.toISOString() ?? null,
       lastError: row?.lastError ?? null,
+      lastErrorKind,
+      lastErrorHint: smtpFailureHint(lastErrorKind),
     };
   }
 
-  private async deliver(cfg: Ready, content: AlertEmail): Promise<EmailDeliveryResult> {
+  private async deliver(cfg: Ready, content: AlertEmail): Promise<DeliveryResult> {
     let transport: MailTransport | undefined;
     try {
       transport = this.factory(cfg.smtp);
@@ -188,7 +241,7 @@ export class OpsEmailService {
       );
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: this.describeError(e, cfg) };
+      return { ok: false, error: this.describeError(e, cfg), kind: classifySmtpError(e), fingerprint: this.fingerprint(cfg) };
     } finally {
       try {
         transport?.close();
@@ -196,6 +249,15 @@ export class OpsEmailService {
         /* đóng kết nối là việc dọn dẹp, lỗi ở đây không đổi kết quả gửi */
       }
     }
+  }
+
+  /**
+   * Dấu vân tay của cấu hình gửi (máy chủ, cổng, tài khoản, mật khẩu, người gửi, người nhận), lưu cùng lỗi vĩnh viễn để
+   * biết cấu hình đã đổi chưa. HMAC khoá bằng JWT_ACCESS_SECRET: mật khẩu không thể dò ngược từ giá trị lưu trong DB.
+   */
+  private fingerprint(cfg: Ready): string {
+    const key = String(this.config.get('JWT_ACCESS_SECRET', { infer: true }) ?? '');
+    return createHmac('sha256', key).update(JSON.stringify([cfg.smtp, cfg.from, cfg.recipients])).digest('hex').slice(0, 32);
   }
 
   /** Một dòng, đã che tài khoản/mật khẩu SMTP — an toàn để log và lưu cho màn admin. */

@@ -31,11 +31,27 @@ describe('OpsController — email thử báo động', () => {
     expect((err as BadRequestException).message).toBe(result.ok ? '' : result.error);
   });
 
-  it('SMTP từ chối → 502 kèm lý do đã che bí mật', async () => {
-    const { ctrl } = controller({ ok: false, reason: 'SEND_FAILED', error: 'EAUTH: 535 5.7.8 rejected' });
+  it('SMTP từ chối tạm thời → 502 kèm lý do đã che bí mật, không có lời chỉ sửa cấu hình', async () => {
+    const { ctrl } = controller({ ok: false, reason: 'SEND_FAILED', error: 'ETIMEDOUT: Connection timeout', kind: 'TRANSIENT' });
     const err = await ctrl.testAlertEmail('admin-1').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadGatewayException);
-    expect((err as BadGatewayException).message).toContain('EAUTH');
+    expect((err as BadGatewayException).message).toBe('Gửi email thử lỗi: ETIMEDOUT: Connection timeout');
+  });
+
+  it('sai xác thực → 502 nói rõ kiểm SMTP_USER/SMTP_PASS kèm lỗi đã che bí mật', async () => {
+    const { ctrl } = controller({ ok: false, reason: 'SEND_FAILED', error: 'EAUTH: Invalid login: 535 5.7.8 rejected', kind: 'AUTH' });
+    const err = await ctrl.testAlertEmail('admin-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadGatewayException);
+    const text = (err as BadGatewayException).message;
+    expect(text).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
+    expect(text).toContain('EAUTH: Invalid login: 535 5.7.8 rejected');
+  });
+
+  it('máy chủ từ chối vĩnh viễn → 502 chỉ tới người nhận/địa chỉ gửi', async () => {
+    const { ctrl } = controller({ ok: false, reason: 'SEND_FAILED', error: 'EENVELOPE: 550 5.1.1 User unknown', kind: 'PERMANENT' });
+    const err = await ctrl.testAlertEmail('admin-1').catch((e: unknown) => e);
+    expect((err as BadGatewayException).message).toContain('OPS_ALERT_EMAIL_TO');
+    expect((err as BadGatewayException).message).toContain('550 5.1.1 User unknown');
   });
 
   it('chỉ ADMIN dùng được: cả controller là @Roles("ADMIN"), hành động không mở cho STAFF', () => {

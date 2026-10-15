@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { OpsEmailService } from './ops-email.service';
+import { smtpFailureHint } from './ops-email-error';
 import { OpsHealthService } from './ops-health.service';
 import { OpsInboxService } from './ops-inbox.service';
 import { OpsWebhookEventsService, type WebhookSource } from './ops-webhook-events.service';
@@ -59,14 +60,18 @@ export class OpsController {
 
   /**
    * Gửi một email thử tới OPS_ALERT_EMAIL_TO để kiểm tra SMTP. Không đụng trí nhớ chống báo lặp (không làm mất hay thêm báo
-   * động thật). Chưa cấu hình/cấu hình dở dang → 400 nêu khoá còn thiếu; SMTP từ chối → 502 kèm lý do đã che bí mật.
+   * động thật). Chưa cấu hình/cấu hình dở dang → 400 nêu khoá còn thiếu; SMTP từ chối → 502 kèm lý do đã che bí mật (lỗi xác
+   * thực/từ chối vĩnh viễn kèm cách sửa). Gửi được thì lượt kiểm sau tự gửi lại báo động đã bị chặn vì lỗi vĩnh viễn.
    */
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('alert-email/test')
   async testAlertEmail(@CurrentUser('sub') adminId: string) {
     const r = await this.email.sendTest();
     if (!r.ok) {
-      if (r.reason === 'SEND_FAILED') throw new BadGatewayException(`Gửi email thử lỗi: ${r.error}`);
+      if (r.reason === 'SEND_FAILED') {
+        const hint = smtpFailureHint(r.kind);
+        throw new BadGatewayException(hint ? `Gửi email thử lỗi — ${hint} Chi tiết: ${r.error}` : `Gửi email thử lỗi: ${r.error}`);
+      }
       throw new BadRequestException(r.error);
     }
     this.logger.warn(`Admin ${adminId} gửi email thử báo động vận hành (${r.recipients} địa chỉ nhận).`);

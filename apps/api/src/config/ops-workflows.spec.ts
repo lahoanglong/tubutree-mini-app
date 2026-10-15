@@ -161,6 +161,14 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
     for (const k of [...EMAIL_KEYS, 'OPS_ALERT_ENV_LABEL']) expect({ k, documented: section.includes(k) }).toEqual({ k, documented: true });
     expect(section).toContain('alert-email/test');
     expect(section).toContain('Sức khoẻ hệ thống');
+    expect(section).toContain('Gửi email thử');
+  });
+
+  it('GO-LIVE-KEYS.md nói rõ lỗi SMTP vĩnh viễn không tự gửi lại mỗi 5 phút và khi nào mới thử lại', () => {
+    const doc = read('docs/GO-LIVE-KEYS.md');
+    expect(doc).toContain('Lỗi tạm thời và lỗi vĩnh viễn');
+    expect(doc).toContain('EAUTH');
+    expect(doc).toMatch(/không\*\* tự gửi lại mỗi 5 phút/);
   });
 
   it('GO-LIVE-KEYS.md dặn đặt nhãn môi trường bằng biến (gh variable set), không phải secret', () => {
