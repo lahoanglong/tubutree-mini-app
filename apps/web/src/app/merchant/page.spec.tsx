@@ -1120,6 +1120,25 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     });
   });
 
+  it('R5-PARTNER-8: sản phẩm đã duyệt nhưng ngừng bán ghi "Đã duyệt (Đang ẩn)", không ghi "Đang hiển thị"; sản phẩm đang bán vẫn ghi "Đang hiển thị"', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('v', 'APPROVED', { isActive: true }), PRODUCT('h', 'APPROVED', { isActive: false })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 2, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const rows = Array.from(root.querySelectorAll('tbody tr'));
+    const visible = rows.find((r) => r.textContent?.includes('SP v'))!;
+    const hidden = rows.find((r) => r.textContent?.includes('SP h'))!;
+    expect(visible.textContent).toContain('Đã duyệt (Đang hiển thị)');
+    expect(visible.textContent).not.toContain('Đã ngừng bán');
+    expect(hidden.textContent).toContain('Đã duyệt (Đang ẩn)');
+    expect(hidden.textContent).not.toContain('Đang hiển thị');
+    expect(hidden.textContent).toContain('Đã ngừng bán');
+    expect(byText(hidden, 'button', 'Mở bán lại')).not.toBeNull();
+  });
+
   it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {
     const pendingEdit = { name: 'SP a (tên mới)', description: 'Mô tả mới', shortDesc: 'Ngắn mới', images: [], thumbnail: null, submittedAt: '2026-10-14T03:00:00.000Z' };
     mocks.getProducts = vi.fn(async () => ({
