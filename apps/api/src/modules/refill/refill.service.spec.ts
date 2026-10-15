@@ -441,16 +441,47 @@ describe('RefillService — nhiều điểm nhận vỏ (R8)', () => {
     it('lịch sử kèm điểm đã chọn (null ở dòng cũ)', async () => {
       const prisma = makePrisma();
       (prisma.bottleReturn.findMany as jest.Mock).mockResolvedValue([
-        { id: 'h1', quantity: 2, seedsAwarded: 100, status: 'PENDING', createdAt: new Date('2026-03-15'), declaredQuantity: null, rejectionReason: null, pickupLocation: { id: 'a', name: 'Quận 1' } },
+        { id: 'h1', quantity: 2, seedsAwarded: 100, status: 'PENDING', createdAt: new Date('2026-03-15'), declaredQuantity: null, rejectionReason: null, pickupLocation: { id: 'a', name: 'Quận 1', address: '1 Lê Lợi', hours: '8h–20h', phone: '0901234567', isActive: true } },
         { id: 'h0', quantity: 1, seedsAwarded: 50, status: 'APPROVED', createdAt: new Date('2026-03-01'), declaredQuantity: null, rejectionReason: null, pickupLocation: null },
       ]);
 
       const r = await newRefill(prisma, makeConfig(), makeNotifications()).getSummary('u1');
 
-      expect(r.history[0]).toMatchObject({ id: 'h1', pickupLocation: { id: 'a', name: 'Quận 1' } });
+      expect(r.history[0]).toMatchObject({ id: 'h1', pickupLocation: { id: 'a', name: 'Quận 1', address: '1 Lê Lợi' } });
       expect(r.history[1]).toMatchObject({ id: 'h0', pickupLocation: null });
+    });
+
+    it('yêu cầu đang chờ gắn với điểm đã tắt vẫn trả đủ tên, địa chỉ, giờ, SĐT và cờ isActive=false (R5-BUYER-4)', async () => {
+      const prisma = makePrisma();
+      locationsMock(prisma).findMany.mockResolvedValue([{ id: 'a', name: 'Quận 1', address: '1 Lê Lợi', hours: null, phone: null }]);
+      (prisma.bottleReturn.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'h1',
+          quantity: 4,
+          seedsAwarded: 200,
+          status: 'PENDING',
+          createdAt: new Date('2026-03-15'),
+          declaredQuantity: null,
+          rejectionReason: null,
+          pickupLocation: { id: 'b', name: 'Thủ Đức', address: '2 Võ Văn Ngân', hours: '9h–17h', phone: '0907654321', isActive: false },
+        },
+      ]);
+
+      const r = await newRefill(prisma, makeConfig(), makeNotifications()).getSummary('u1');
+
+      expect(r.pickupLocations.map((l) => l.id)).toEqual(['a']);
+      expect(r.history[0]!.pickupLocation).toEqual({
+        id: 'b',
+        name: 'Thủ Đức',
+        address: '2 Võ Văn Ngân',
+        hours: '9h–17h',
+        phone: '0907654321',
+        isActive: false,
+      });
       const arg = (prisma.bottleReturn.findMany as jest.Mock).mock.calls[0][0];
-      expect(arg.include).toEqual({ pickupLocation: { select: { id: true, name: true } } });
+      expect(arg.include).toEqual({
+        pickupLocation: { select: { id: true, name: true, address: true, hours: true, phone: true, isActive: true } },
+      });
     });
   });
 
