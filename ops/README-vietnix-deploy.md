@@ -85,6 +85,21 @@ sudo crontab -l  # xem đã có dòng certbot renew chưa (aaPanel thường t�
 
 ## Deploy bản mới
 
+> **Bản phát hành có migration đánh giá nhiều lần (`20261015150000`, kèm `20261014213300` và
+> `20261015070000`): KHÔNG dùng `deploy.sh`.** Script áp migration khi API cũ còn chạy, mà migration
+> này đổi chỉ mục duy nhất của bảng `reviews`. Làm theo
+> [docs/launch/deploy-rollback-runbook.md](../docs/launch/deploy-rollback-runbook.md): dừng API cũ,
+> backup, migrate, bật web mới rồi API mới, kiểm khói, rollback từng trường hợp. Sau khi lên bản mới,
+> chạy [docs/launch/pilot-order-playbook.md](../docs/launch/pilot-order-playbook.md) (đơn thử thật)
+> trước khi mở bán. Kiểm sẵn sàng: `pnpm run go-live:check` trong `apps/api` (chỉ đọc, in bảng
+> PASS/WARN/FAIL, thoát 1 nếu có FAIL).
+>
+> **Máy ảo GCP cũ đã đóng.** Secret GitHub `VM_HOST`, `VM_USER`, `VM_SSH_KEY` vẫn trỏ vào máy đó, nên
+> `deploy.yml` và `ops.yml` lỗi ở bước SSH cho tới khi trỏ lại về VPS Vietnix (xem mục 2 của runbook).
+> Trong lúc chờ, deploy và vận hành làm tay qua SSH như dưới đây.
+
+Các lần phát hành thường (không có migration kiểu trên):
+
 ```bash
 cd /opt/tubutree
 # 1. Backup trước (bản pre-deploy, ngoài bản cron hằng ngày)
@@ -92,6 +107,8 @@ COMPOSE_FILE=docker-compose.vietnix.yml ./tools/backup/backup-db.sh
 # 2. Đưa mã lên (git bundle / git merge --ff-only)
 # 3. Build -> migrate bằng image MỚI -> thay api -> thay web
 bash tools/deploy/deploy.sh
+# 4. Kiểm sau deploy (bằng image mới)
+docker compose -f docker-compose.vietnix.yml run --rm --no-deps api pnpm run go-live:check
 ```
 
 `tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
@@ -108,7 +125,8 @@ P2028 (pool Prisma) với nhiều instance.
 Cài cron theo `tools/backup/README.md` mục "Cài đặt trên VPS Vietnix" và "Cài crontab":
 `COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml`, `RCLONE_REMOTE` trỏ ra ngoài máy
 (R2/S3/Drive), `HEALTHCHECK_URL` để được báo khi backup lỗi hoặc cron không chạy. Diễn tập restore
-trước go-live và mỗi tháng (cùng README).
+trước go-live và mỗi tháng (cùng README). Bước diễn tập, đo thời gian backup và khôi phục khi deploy
+hỏng nằm ở [runbook deploy](../docs/launch/deploy-rollback-runbook.md) mục 1.2 và mục 7.
 
 ## Redis và log container
 
@@ -116,6 +134,8 @@ trước go-live và mỗi tháng (cùng README).
   đây là `allkeys-lru`, có thể xoá âm thầm job đang chờ retry). Lần deploy đầu sau thay đổi này phải
   tạo lại container redis: `docker compose -f docker-compose.vietnix.yml up -d redis`, rồi kiểm
   `docker compose -f docker-compose.vietnix.yml exec redis redis-cli config get maxmemory-policy`.
+- `pnpm run go-live:check` báo FAIL nếu policy không phải `noeviction`; kiểm bằng tay trước deploy theo
+  [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.1.
 - Theo dõi bộ nhớ Redis: `docker compose -f docker-compose.vietnix.yml exec redis redis-cli info memory | grep used_memory_human`.
   Gần 150MB thì lệnh ghi lỗi OOM, enqueue rơi về cron reconcile; tìm queue nào ứ (job failed giữ
   tối đa 1000 mỗi queue) trước khi nâng trần.

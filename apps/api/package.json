@@ -16,7 +16,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "reconcile:points": "tsx scripts/reconcile-points.ts",
-    "reconcile:wallet": "tsx scripts/reconcile-wallet.ts"
+    "reconcile:wallet": "tsx scripts/reconcile-wallet.ts",
+    "go-live:check": "tsx scripts/go-live-check.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
