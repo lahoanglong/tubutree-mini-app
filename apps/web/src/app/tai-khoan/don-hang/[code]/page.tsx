@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
-import { fetchMyRefunds, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
+import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
   buyerOrderStatusLabel,
@@ -32,7 +32,7 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
-import { showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
+import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
 import { OrderTimeline } from './order-timeline';
 
 export default function OrderDetailPage() {
@@ -47,6 +47,14 @@ export default function OrderDetailPage() {
     enabled: phase === 'authenticated' && !!code,
     // 404 là câu trả lời dứt khoát (đơn không tồn tại/của người khác): thử lại chỉ làm khách chờ thêm.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+  });
+  // Cùng khoá với khối thao tác (OrderActions): yêu cầu trả đã duyệt để đánh dấu dòng đã trả và gộp khoản hoàn vào dòng yêu cầu.
+  const orderStatus = orderQ.data?.status;
+  const returnsQ = useQuery({
+    queryKey: ['my-returns'],
+    queryFn: fetchMyReturns,
+    enabled: phase === 'authenticated' && (orderStatus === 'DELIVERED' || orderStatus === 'RETURNED'),
+    retry: 0,
   });
   // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
   const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
@@ -112,6 +120,11 @@ export default function OrderDetailPage() {
   }
 
   const o = orderQ.data;
+  const orderReturns = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
+  const returnedQty = returnedByLine(
+    o.items.filter((it): it is typeof it & { id: string } => !!it.id),
+    orderReturns,
+  );
   return (
     <Shell title={`Đơn hàng #${o.code}`}>
       <div className="flex flex-wrap items-center gap-2">
@@ -173,7 +186,7 @@ export default function OrderDetailPage() {
 
       <OrderTimeline status={o.status} />
       <OrderActions order={o} userId={user?.id} />
-      {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
+      {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
 
       <section className={`mt-4 p-4 ${ui.card}`}>
         <h2 className={ui.sectionTitle}>Sản phẩm</h2>
@@ -194,6 +207,11 @@ export default function OrderDetailPage() {
                 <div className="mt-0.5 text-xs text-stone-600">
                   {formatVnd(it.unitPrice)} × {it.quantity}
                 </div>
+                {it.id && returnedQty.has(it.id) && (
+                  <div className="mt-0.5 text-xs font-medium text-promo-fg">
+                    Đã trả {returnedQty.get(it.id)}/{it.quantity}
+                  </div>
+                )}
                 {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
                 {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
                   <Link

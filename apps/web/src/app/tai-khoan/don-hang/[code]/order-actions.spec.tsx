@@ -564,6 +564,50 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(btn(container, 'Yêu cầu đổi/trả')).toBeUndefined();
   });
 
+  it('R6-BUYER-9: mỗi yêu cầu trả gộp khoản hoàn vào một dòng (không lặp khối Hoàn tiền) và dòng sản phẩm ghi "Đã trả x/y"', async () => {
+    mocks.order = {
+      ...delivered,
+      items: [
+        { id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null },
+        { id: 'i2', productName: 'Xà phòng', variationName: '', unitPrice: 50000, quantity: 1, total: 50000, thumbnail: null },
+      ],
+    };
+    mocks.returns = [{
+      id: 'r1', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 150000, refundMethod: 'WALLET',
+      items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 150000 }], createdAt: '2026-10-06T00:00:00Z',
+    }];
+    mocks.refunds = [{
+      id: 'rf9', orderId: 'o9', orderCode: 'TB-9', kind: 'RETURN', refKey: 'r1', amount: 150000, method: 'WALLET', status: 'COMPLETED',
+      bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: '2026-10-07T03:00:00Z', createdAt: '2026-10-06T00:00:00Z',
+      canChooseDestination: false,
+    }];
+    const { container } = await mount();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Đổi/trả đã duyệt — đã hoàn 150.000đ vào Ví Tubu');
+    expect(text).toContain('Đã cộng vào Ví Tubu lúc');
+    expect(container.querySelector('#refunds-title')).toBeNull();
+    expect(text.match(/150\.000đ vào Ví Tubu/g)).toHaveLength(1);
+    expect(text).toContain('Đã trả 1/2');
+    expect(text).not.toContain('Đã trả 0/');
+    expect(text).not.toContain('Đã trả 1/1');
+  });
+
+  it('R6-BUYER-9: khoản hoàn trả hàng còn chờ chọn nơi nhận vẫn chọn được ngay trên dòng yêu cầu', async () => {
+    mocks.order = delivered;
+    mocks.returns = [{
+      id: 'r1', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 150000, refundMethod: 'BANK',
+      items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 150000 }], createdAt: '2026-10-06T00:00:00Z',
+    }];
+    mocks.refunds = [{
+      id: 'rf9', orderId: 'o9', orderCode: 'TB-9', kind: 'RETURN', refKey: 'r1', amount: 150000, method: 'MANUAL_TRANSFER', status: 'PENDING',
+      bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: null, createdAt: '2026-10-06T00:00:00Z',
+      canChooseDestination: true,
+    }];
+    const { container } = await mount();
+    expect(container.querySelector('#refunds-title')).toBeNull();
+    expect(btn(container, 'Chọn nơi nhận tiền')).toBeDefined();
+  });
+
   it('không tải được danh sách yêu cầu cũ: vẫn cho gửi (BE chặn trùng bằng lời rõ ràng)', async () => {
     mocks.order = delivered;
     mocks.returnsError = true;
