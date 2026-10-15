@@ -1183,17 +1183,47 @@ export class AffiliateService {
     return Math.max(Number(holdDays) || 0, Number(returnWindowDays) || 0);
   }
 
-  /** Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi). */
+  /**
+   * Thống kê theo từng gian hàng của CTV (đơn có storefrontSlug thuộc tôi + referrer là tôi).
+   * `orders` đếm mọi đơn của gian hàng như trước. `revenue` chỉ là doanh thu bán thật, cùng định nghĩa báo cáo doanh thu nhãn
+   * (BrandService.getOwnedSales): loại đơn chờ thanh toán/huỷ/trả (PENDING_PAYMENT, CANCELLED, RETURNED) và đơn đã hoàn tiền/
+   * thanh toán lỗi (REFUNDED, FAILED); tổng `Order.total` của các đơn còn lại trừ tiền hàng + phí ship đã hoàn của các yêu cầu
+   * trả MỘT PHẦN đã duyệt (APPROVED, fullReturn = false — cùng bộ lọc partialReturnTotals), kẹp ≥ 0. Số hoa hồng không đổi.
+   */
   async storefrontAnalytics(userId: string) {
     const myStores = await this.prisma.storefront.findMany({
       where: { ownerUserId: userId }, select: { slug: true, title: true },
     });
     const out = [] as Array<{ slug: string; title?: string; orders: number; revenue: number; commission: number }>;
+    const salesOrders = myStores.length
+      ? await this.prisma.order.findMany({
+          where: {
+            storefrontSlug: { in: myStores.map((s) => s.slug) },
+            referrerUserId: userId,
+            status: { notIn: ['PENDING_PAYMENT', 'CANCELLED', 'RETURNED'] },
+            paymentStatus: { notIn: ['REFUNDED', 'FAILED'] },
+          },
+          select: { id: true, storefrontSlug: true, total: true },
+        })
+      : [];
+    const refundRows = salesOrders.length
+      ? await this.prisma.returnRequest.groupBy({
+          by: ['orderId'],
+          where: { orderId: { in: salesOrders.map((o) => o.id) }, status: 'APPROVED', fullReturn: false },
+          _sum: { refundAmount: true, shippingRefund: true },
+        })
+      : [];
+    const refundOf = new Map(refundRows.map((r) => [r.orderId, (r._sum.refundAmount ?? 0) + (r._sum.shippingRefund ?? 0)]));
+    const revenueOf = new Map<string, number>();
+    for (const o of salesOrders) {
+      if (!o.storefrontSlug) continue;
+      revenueOf.set(o.storefrontSlug, (revenueOf.get(o.storefrontSlug) ?? 0) + o.total - (refundOf.get(o.id) ?? 0));
+    }
     for (const s of myStores) {
       const [orderAgg, commAgg] = await Promise.all([
         this.prisma.order.aggregate({
           where: { storefrontSlug: s.slug, referrerUserId: userId },
-          _count: { _all: true }, _sum: { total: true },
+          _count: { _all: true },
         }),
         // P0 A5-11 (cùng họ lỗi với dashboard()): loại commission đã REJECTED (đơn huỷ/trả) —
         // trước đây cộng cả REJECTED nên hoa hồng theo gian hàng không giảm khi đơn bị huỷ.
@@ -1204,7 +1234,7 @@ export class AffiliateService {
       ]);
       out.push({
         slug: s.slug, title: s.title,
-        orders: orderAgg._count._all, revenue: orderAgg._sum.total ?? 0,
+        orders: orderAgg._count._all, revenue: Math.max(0, revenueOf.get(s.slug) ?? 0),
         commission: commAgg._sum.amount ?? 0,
       });
     }

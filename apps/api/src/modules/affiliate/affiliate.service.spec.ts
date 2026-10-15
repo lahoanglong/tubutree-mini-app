@@ -1365,16 +1365,25 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
 
 describe('AffiliateService analytics', () => {
   it('storefrontAnalytics gom theo gian hàng của tôi', async () => {
-    const orderAggregate = jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } });
+    const orderAggregate = jest.fn().mockResolvedValue({ _count: { _all: 3 } });
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: { aggregate: orderAggregate },
+      order: {
+        aggregate: orderAggregate,
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'o1', storefrontSlug: 'linh', total: 500000 },
+          { id: 'o2', storefrontSlug: 'linh', total: 400000 },
+        ]),
+      },
+      returnRequest: {
+        groupBy: jest.fn().mockResolvedValue([{ orderId: 'o1', _sum: { refundAmount: 100000, shippingRefund: 20000 } }]),
+      },
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
     const r = await svc.storefrontAnalytics('u1');
-    expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 900000, commission: 72000 });
+    expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 780000, commission: 72000 });
     // Hardening: WHERE phải scope đúng theo slug + referrer (chống đếm chéo người dùng).
     expect(orderAggregate).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ storefrontSlug: 'linh', referrerUserId: 'u1' }) }),
@@ -1393,7 +1402,7 @@ describe('AffiliateService analytics', () => {
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } }) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 } }), findMany: jest.fn().mockResolvedValue([]) },
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).storefrontAnalytics('u1');
