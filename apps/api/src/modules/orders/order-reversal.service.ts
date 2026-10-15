@@ -8,6 +8,7 @@ import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loyalty-expiry.service';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
 import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund-queue';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
@@ -375,7 +376,11 @@ export class OrderReversalService {
       if (credited) {
         const [u] = await tx.$queryRaw<{ pointsBalance: number }[]>`
           SELECT "pointsBalance" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`;
-        const take = Math.min(shares.pointsEarnedBack, Math.max(0, u?.pointsBalance ?? 0));
+        // Như reverseOrderPoints: không quá phần lô điểm của đơn còn thu hồi được (trừ phần cron đã trừ vì hết hạn và phần các
+        // lần trả trước đã lấy), nếu không lô đơn đã hết hạn thì phần trả ăn sang điểm của lô khác. Đọc sổ sau khoá user ở trên.
+        // Cột pointsReversed của yêu cầu vẫn ghi phần chia chưa kẹp (caller), chỉ số thực trừ bị kẹp.
+        const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, order.userId), orderLotKey(order.id));
+        const take = Math.min(shares.pointsEarnedBack, recoverable ?? shares.pointsEarnedBack, Math.max(0, u?.pointsBalance ?? 0));
         if (take > 0) {
           const res = await applyPointsDelta(tx, {
             userId: order.userId,
