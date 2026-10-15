@@ -37,6 +37,7 @@ import { paidLineTotals } from './commission-base';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from '../checkout/total-changed';
 
+import { shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -1234,6 +1235,17 @@ export class AffiliateService {
       where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true },
     });
     const rate = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
+    // Hoa hồng còn chờ (PENDING/LOCKED) bị cắt theo dòng khi trả một phần (OrderReversalService.reversePartialReturn); đã duyệt/đã
+    // chi thì không đụng. Phần cắt tính lại đúng công thức đó: hoa hồng gốc của dòng (lineAmounts lúc đặt) − shareOf(gốc, đã trả/số lượng).
+    const pendingOrderIds = [...new Set(commissions.filter((c) => c.status === 'PENDING' || c.status === 'LOCKED').map((c) => c.orderId))];
+    const returnedRows = pendingOrderIds.length
+      ? await this.prisma.returnRequestItem.findMany({
+          where: { returnRequest: { orderId: { in: pendingOrderIds }, status: 'APPROVED', fullReturn: false } },
+          select: { orderItemId: true, quantity: true },
+        })
+      : [];
+    const returnedQty = new Map<string, number>();
+    for (const r of returnedRows) returnedQty.set(r.orderItemId, (returnedQty.get(r.orderItemId) ?? 0) + r.quantity);
     // Đếm đơn theo orderId riêng biệt (Set) — 1 đơn có 2 item cùng SP vẫn tính 1 đơn.
     const acc = new Map<string, { productName: string; commission: number; orderIds: Set<string> }>();
     for (const c of commissions) {
@@ -1242,7 +1254,11 @@ export class AffiliateService {
       for (const [idx, it] of items.entries()) {
         const r = rate.get(it.variationId) ?? 0;
         if (r <= 0) continue;
-        const amount = Math.floor(((paid[idx] ?? 0) * r) / 100);
+        const stored = c.lineAmounts && typeof c.lineAmounts === 'object' && !Array.isArray(c.lineAmounts) ? (c.lineAmounts as Record<string, unknown>)[it.id] : undefined;
+        const original = Number.isFinite(Number(stored)) && stored != null ? Math.floor(Number(stored)) : Math.floor(((paid[idx] ?? 0) * r) / 100);
+        const returned = c.status === 'PENDING' || c.status === 'LOCKED' ? Math.min(it.quantity, returnedQty.get(it.id) ?? 0) : 0;
+        const amount = returned > 0 ? Math.max(0, original - shareOf(original, returned / it.quantity)) : original;
+        if (returned >= it.quantity) continue;
         const cur =
           acc.get(it.productName) ?? { productName: it.productName, commission: 0, orderIds: new Set<string>() };
         cur.commission += amount;
