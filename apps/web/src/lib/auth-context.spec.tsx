@@ -87,6 +87,42 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(text()).toBe('init|idle|-');
     expect(mocks.restoreSession).not.toHaveBeenCalled();
   });
+
+  it('đăng xuất xoá thông tin hoá đơn VAT đã lưu (máy dùng chung không lộ MST/công ty/email cho người sau)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    setSessionMarker();
+    mocks.restoreSession.mockResolvedValue({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    localStorage.setItem('tubu_invoice', '{"taxCode":"0100000001"}');
+    localStorage.setItem('tubu_invoice:u1', '{"taxCode":"0312345678"}');
+    localStorage.setItem('tubu_other', 'giữ');
+    function LogoutProbe() {
+      const { logout } = useAuth();
+      return (
+        <button id="logout" type="button" onClick={() => void logout()}>
+          out
+        </button>
+      );
+    }
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AuthProvider>
+            <Probe />
+            <LogoutProbe />
+          </AuthProvider>
+        </QueryClientProvider>,
+      );
+    });
+    expect(text()).toBe('init|authenticated|u1');
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('#logout')!.click();
+    });
+    expect(text()).toBe('init|idle|-');
+    expect(localStorage.getItem('tubu_invoice')).toBeNull();
+    expect(localStorage.getItem('tubu_invoice:u1')).toBeNull();
+    expect(localStorage.getItem('tubu_other')).toBe('giữ');
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('AuthProvider — mất kết nối lúc mở trang (R2-BUYERWEB-5)', () => {

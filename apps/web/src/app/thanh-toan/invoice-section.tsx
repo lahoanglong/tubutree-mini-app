@@ -4,36 +4,6 @@ import { useId } from 'react';
 import { ui } from '@/lib/guest-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
 
-export const EMPTY_INVOICE: InvoiceInfo = { taxCode: '', companyName: '', address: '', email: '' };
-const STORAGE_KEY = 'tubu_invoice';
-
-/** Thông tin hoá đơn khách đã dùng lần trước (đỡ nhập lại); không có hoặc hỏng thì để trống. */
-export function loadSavedInvoice(): InvoiceInfo {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as Partial<InvoiceInfo>;
-      return {
-        taxCode: typeof p.taxCode === 'string' ? p.taxCode : '',
-        companyName: typeof p.companyName === 'string' ? p.companyName : '',
-        address: typeof p.address === 'string' ? p.address : '',
-        email: typeof p.email === 'string' ? p.email : '',
-      };
-    }
-  } catch {
-    /* chế độ riêng tư/dữ liệu hỏng: nhập lại */
-  }
-  return EMPTY_INVOICE;
-}
-
-export function saveInvoice(invoice: InvoiceInfo): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(invoice));
-  } catch {
-    /* hết dung lượng/chế độ riêng tư: lần sau nhập lại, không được làm hỏng đơn vừa đặt */
-  }
-}
-
 /** Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail. */
 export function InvoiceSection({
   want,

@@ -46,7 +46,8 @@ import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
-import { EMPTY_INVOICE, InvoiceSection, loadSavedInvoice, saveInvoice } from './invoice-section';
+import { InvoiceSection } from './invoice-section';
+import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
@@ -85,9 +86,10 @@ export default function CheckoutPage() {
   // Giỏ đã tải và không còn món nào (đặt xong rồi Back, mở lại tab cũ): không dựng form 0đ, không gọi báo giá (BE trả 400).
   const cartEmpty = cartLoaded && checkoutItems.length === 0;
 
+  const userId = user?.id;
   useEffect(() => {
-    setInvoice(loadSavedInvoice());
-  }, []);
+    setInvoice(loadSavedInvoice(userId));
+  }, [userId]);
 
   useEffect(() => {
     if (addrQ.data && addressId === null) {
@@ -198,7 +200,7 @@ export default function CheckoutPage() {
       ),
     onSuccess: (order) => {
       setPlaced(order);
-      if (wantInvoice) saveInvoice(invoice);
+      if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
@@ -513,6 +515,10 @@ export default function CheckoutPage() {
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+          )}
+          {(quote?.comboDiscount ?? 0) > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
+          {(quote?.tierDiscount ?? 0) > 0 && (
+            <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />

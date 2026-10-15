@@ -70,6 +70,9 @@ export interface CheckoutQuote {
   discount: number;
   /** Mã trong giỏ chưa áp cho đơn này (không giảm, không tiêu lượt). */
   couponNotice?: string | null;
+  /** Ưu đãi combo và ưu đãi hạng thành viên: hai khoản riêng ngoài `discount` (mã) và `pointsDiscount`. API cũ chưa trả. */
+  comboDiscount?: number;
+  tierDiscount?: number;
   pointsUsed: number;
   pointsDiscount: number;
   shippingFee: number;

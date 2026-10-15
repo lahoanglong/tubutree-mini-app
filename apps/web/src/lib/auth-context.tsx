@@ -10,6 +10,7 @@ import {
   clearSessionMarker,
   restoreSession,
 } from './client-api';
+import { clearSavedInvoices } from './saved-invoice';
 
 export interface WebUser {
   id: string;
@@ -198,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus('idle');
     setSessionUnavailable(false);
     qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
+    clearSavedInvoices();
   }, [qc]);
 
   return (

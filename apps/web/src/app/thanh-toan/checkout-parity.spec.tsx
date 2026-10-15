@@ -214,7 +214,18 @@ describe('/thanh-toan — hoá đơn VAT (R2-BUYERWEB-6)', () => {
     typeInto(field(r, 'Email nhận hoá đơn'), 'ketoan@a.vn');
     click(placeButton(r));
     await flush(6);
-    expect(JSON.parse(localStorage.getItem('tubu_invoice')!)).toMatchObject({ taxCode: '0312345678' });
+    expect(JSON.parse(localStorage.getItem('tubu_invoice:u')!)).toMatchObject({ taxCode: '0312345678' });
+    expect(localStorage.getItem('tubu_invoice')).toBeNull();
+  });
+
+  it('thông tin hoá đơn của tài khoản khác trên cùng trình duyệt không được điền sẵn', async () => {
+    localStorage.setItem('tubu_invoice', JSON.stringify({ taxCode: '0100000001', companyName: 'Cũ', address: 'x', email: 'cu@a.vn' }));
+    localStorage.setItem('tubu_invoice:other', JSON.stringify({ taxCode: '0100000002', companyName: 'Người khác', address: 'y', email: 'k@a.vn' }));
+    localStorage.setItem('tubu_invoice:u', JSON.stringify({ taxCode: '0312345678', companyName: 'Công ty A', address: '1 Phố Huế', email: 'ketoan@a.vn' }));
+    const r = await mount();
+    click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
+    expect(field(r, 'Mã số thuế').value).toBe('0312345678');
+    expect(field(r, 'Tên công ty').value).toBe('Công ty A');
   });
 });
 
