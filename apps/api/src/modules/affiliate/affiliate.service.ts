@@ -19,7 +19,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CTV_NOTIFICATION } from './ctv-notification-codes';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { paginated, skipTake } from '../../common/pagination';
-import { toLocalPhone } from '../../common/phone';
+import { normalizeZaloPhone, parseTypedVnPhone, TYPED_VN_PHONE_MESSAGE } from '../../common/phone';
 import {
   CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
@@ -583,11 +583,14 @@ export class AffiliateService {
       throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
     }
     const ctv = await this.customerOrderPlacer(ctvId);
+    // Kiểm lại ở đây chứ không chỉ ở DTO: so với SĐT của CTV và khoá gộp khách đều cần đúng một dạng 0xxxxxxxxx.
+    const customerPhone = parseTypedVnPhone(dto.customer.phone);
+    if (!customerPhone) throw new BadRequestException(TYPED_VN_PHONE_MESSAGE);
     // Đơn hộ được phép tự-giới-thiệu (referrer == userId) vì người nhận là khách khác; nếu người
     // nhận chính là CTV thì đó là mua cho mình mà vẫn ăn hoa hồng, và tiền hoàn (theo SĐT người
     // nhận) cũng chảy về CTV.
-    const ctvPhone = ctv.phone ? toLocalPhone(ctv.phone) : null;
-    if (ctvPhone && ctvPhone === toLocalPhone(dto.customer.phone)) {
+    const ctvPhone = ctv.phone ? normalizeZaloPhone(ctv.phone) : null;
+    if (ctvPhone && ctvPhone === customerPhone) {
       throw new BadRequestException(
         'Không thể lên đơn hộ với SĐT của chính bạn. Hãy đặt hàng như khách thường cho đơn của mình.',
       );
@@ -614,7 +617,7 @@ export class AffiliateService {
 
     const status = dto.paymentMethod === 'COD' ? 'CONFIRMED' : 'PENDING_PAYMENT';
     const code = await generateUniqueOrderCode(this.prisma, 'RETAIL');
-    const shippingAddress = this.customerSnapshot(dto.customer);
+    const shippingAddress = this.customerSnapshot({ ...dto.customer, phone: customerPhone });
 
     let order: { id: string };
     try {
@@ -650,13 +653,13 @@ export class AffiliateService {
             source: 'ctv_assisted',
             platform: 'miniapp',
             // KHÔNG PHẢI hash mật mã — SĐT người nhận chuẩn hoá về DẠNG NỘI ĐỊA 0xxxxxxxxx (xem
-            // toLocalPhone ở common/phone.ts), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
+            // parseTypedVnPhone ở common/phone.ts), CÙNG dạng User.phone luôn lưu, để 2 giá trị so khớp
             // trực tiếp được nếu người nhận sau này cũng là 1 tài khoản thật. Đơn CTV lên hộ tạo
             // Order qua nhánh RIÊNG này (không qua checkout.service.ts) nên đây là nơi DUY NHẤT
             // set 3 cột này cho loại đơn "lên đơn hộ" — thiếu bước này (hoặc chuẩn hoá sai dạng)
             // thì quyết định "tính doanh số cho khách nhận hàng qua endCustomerKey" lặng lẽ không
             // có hiệu lực / gộp sai người.
-            endCustomerKey: toLocalPhone(dto.customer.phone),
+            endCustomerKey: customerPhone,
             note: dto.note,
             idempotencyKey: key ?? null,
             items: {
@@ -724,7 +727,7 @@ export class AffiliateService {
   /** Snapshot địa chỉ người nhận (khách của CTV) → lưu Order.shippingAddress. */
   private customerSnapshot(c: PlaceOrderForCustomerDto['customer']): Prisma.InputJsonValue {
     return {
-      recipient: c.recipient,
+      recipient: c.recipient.trim(),
       phone: c.phone,
       province: c.province,
       district: c.district ?? '',

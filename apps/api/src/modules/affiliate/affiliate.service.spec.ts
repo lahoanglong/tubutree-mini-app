@@ -547,6 +547,9 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
     ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
     ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+    ['CTV gõ 84 không có dấu +', '0922222221', '84922222221'],
+    ['CTV gõ có dấu gạch', '0922222221', '092-222-2221'],
+    ['CTV gõ (+84) có ngoặc', '0922222221', '(+84) 922 222 221'],
   ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
     const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
     await expect(
@@ -672,10 +675,27 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     );
   });
 
-  it('endCustomerKey: SĐT không còn chữ số nào sau chuẩn hoá → null (KHÔNG lưu chuỗi rỗng)', async () => {
+  // R5-CHECKOUT-2: SĐT rỗng/rác từng tạo đơn kẹt đẩy Pancake; '922222221' (SĐT của CTV bỏ số 0 đầu) từng lọt chặn SĐT của chính
+  // CTV. Bước tạo đơn tự kiểm lại, không chỉ dựa vào DTO.
+  it.each(['', '---', 'abc', '922222221', '09111111'])(
+    'SĐT người nhận %j không phải SĐT di động VN → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng',
+    async (phone) => {
+      const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone: '0922222221' });
+      await expect(svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone } }) as never)).rejects.toThrow(
+        'Số điện thoại người nhận không hợp lệ',
+      );
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(commissionCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('SĐT người nhận lưu vào đơn (gửi Pancake, khoá gộp khách) ở dạng 0xxxxxxxxx dù CTV gõ +84 có dấu cách', async () => {
     const { svc, orderCreate } = build();
-    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '---' } }) as never);
-    expect(orderCreate.mock.calls[0][0].data.endCustomerKey).toBeNull();
+    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, recipient: '  Khách A ', phone: '+84 90 123 4567' } }) as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.shippingAddress).toMatchObject({ recipient: 'Khách A', phone: '0901234567' });
+    expect(data.endCustomerKey).toBe('0901234567');
   });
 
   // P0 (review Task 10): ctv-order-sheet.tsx (FE) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx cho SĐT
