@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -268,6 +269,8 @@ export class AdminService {
           where: { id: app.userId },
           data: { role: 'DEALER', metadata: mergedMeta },
         });
+        // CTV đã mở gian hàng rồi lên đại lý/đối tác: nâng loại để đăng được sản phẩm riêng (giữ slug và bộ sưu tập).
+        await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: 'CTV' }, data: { type: 'MERCHANT' } });
       });
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
@@ -337,7 +340,7 @@ export class AdminService {
         thumbnail: true,
         isActive: true,
         variations: {
-          orderBy: { retailPrice: 'asc' },
+          orderBy: VARIATION_ORDER_BY,
           select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true },
         },
       },
@@ -1449,7 +1452,7 @@ export class AdminService {
           storefront: {
             select: { id: true, title: true, subdomain: true, ownerUserId: true },
           },
-          variations: true,
+          variations: { orderBy: VARIATION_ORDER_BY },
           editDraft: true,
         },
         // Bản sửa mới của sản phẩm cũ phải nổi lên đầu như sản phẩm mới đăng.

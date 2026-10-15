@@ -362,10 +362,18 @@ describe('MerchantService', () => {
   // tự chuyển trạng thái qua /merchant cho DEALER lẫn AFFILIATE, chỉ ADMIN mới được (đã có toàn
   // quyền qua /admin sẵn).
   describe('updateMerchantOrderStatus — chặn tự chuyển trạng thái (P0 A5-03=A6-02)', () => {
+    const ownOrderMocks = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', type: 'MERCHANT', ownerUserId: 'u1', collections: [] }) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
+      order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
+    };
+
     it('chặn AFFILIATE (CTV) tự chuyển trạng thái đơn — 403, không được tự "giao ảo"', async () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv-1', role: 'AFFILIATE' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('ctv-1', 'ord-1', 'DELIVERED')).rejects.toThrow(ForbiddenException);
@@ -376,6 +384,7 @@ describe('MerchantService', () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'dealer-1', role: 'DEALER' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('dealer-1', 'ord-1', 'PACKED')).rejects.toThrow(ForbiddenException);
@@ -386,9 +395,24 @@ describe('MerchantService', () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv-1', role: 'AFFILIATE' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('ctv-1', 'ord-1', 'NOT_A_STATUS')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('đơn không thuộc gian hàng của người gọi → 404 "Không tìm thấy đơn của gian hàng bạn.", không lộ đơn có tồn tại', async () => {
+      const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'dealer-2', role: 'DEALER' }) },
+        ...ownOrderMocks,
+        order: { findFirst: jest.fn().mockResolvedValue(null) },
+      });
+      const svc = new MerchantService(prisma, freshOrderStatus);
+      await expect(svc.updateMerchantOrderStatus('dealer-2', 'ord-1', 'DELIVERED')).rejects.toThrow(
+        new NotFoundException('Không tìm thấy đơn của gian hàng bạn.'),
+      );
+      expect(freshOrderStatus.setStatus).not.toHaveBeenCalled();
     });
   });
 
@@ -749,7 +773,7 @@ describe('MerchantService', () => {
     function setup(store: Record<string, unknown>) {
       const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...store, ...data }));
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
       });
       return { svc: new MerchantService(prisma, orderStatus), update };
@@ -778,7 +802,7 @@ describe('MerchantService', () => {
       const storefrontUpdate = jest.fn().mockResolvedValue({ ...store });
       const productUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update: storefrontUpdate },
         product: { updateMany: productUpdateMany },
         $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),

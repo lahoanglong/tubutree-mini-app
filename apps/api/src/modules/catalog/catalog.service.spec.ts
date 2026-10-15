@@ -3,6 +3,7 @@ import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
+import { VARIATION_ORDER_BY } from './variation-order';
 
 const card = (id: string) => ({
   id,
@@ -59,6 +60,7 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
     approvalStatus,
     soldExternal: 0,
     soldApp: 0,
+    variations: [],
   });
 
   it('PENDING_REVIEW (chưa duyệt) → NotFound dù isActive=true', async () => {
@@ -86,7 +88,7 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
 
 describe('CatalogService.getBySlug — cờ hàng của gian hàng đối tác (Q8 S2)', () => {
   it('partnerOwned = sản phẩm thuộc gian hàng (tự giao hoặc Tubu giao hộ) — PDP ẩn đặt định kỳ/mua chung', async () => {
-    const row = (storefrontId: string | null) => ({ id: 'p1', slug: 'mat-ong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, fulfilment: 'TUBU', storefrontId });
+    const row = (storefrontId: string | null) => ({ id: 'p1', slug: 'mat-ong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, fulfilment: 'TUBU', storefrontId, variations: [] });
     const partner = { product: { findUnique: jest.fn().mockResolvedValue(row('sf-doi-tac')) } } as unknown as PrismaService;
     expect((await new CatalogService(partner).getBySlug('mat-ong')).partnerOwned).toBe(true);
     const tubu = { product: { findUnique: jest.fn().mockResolvedValue(row(null)) } } as unknown as PrismaService;
@@ -747,7 +749,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
   });
 

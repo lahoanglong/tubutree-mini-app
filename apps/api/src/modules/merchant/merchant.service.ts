@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName } from '../../common/mask-name';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -295,7 +296,13 @@ export class MerchantService {
       where: { ownerUserId: userId },
       include: STORE_INCLUDE,
     });
-    if (store) return store;
+    if (store) {
+      if (user.role === 'DEALER' && store.type === 'CTV') {
+        await this.prisma.storefront.updateMany({ where: { id: store.id, type: 'CTV' }, data: { type: 'MERCHANT' } });
+        return { ...store, type: 'MERCHANT' as const };
+      }
+      return store;
+    }
 
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
@@ -684,7 +691,7 @@ export class MerchantService {
       ).catch((e) => this.logger.warn(`Báo admin sản phẩm đối tác ${product.id} lỗi: ${(e as Error).message}`));
     }
     return withPendingEdit(
-      await this.prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: true, editDraft: true } }),
+      await this.prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true } }),
     );
   }
 
@@ -742,7 +749,7 @@ export class MerchantService {
       this.prisma.product.findMany({
         where: ownWhere,
         orderBy: { createdAt: 'desc' },
-        include: { variations: true, editDraft: true },
+        include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true },
         skip,
         take,
       }),
@@ -751,7 +758,7 @@ export class MerchantService {
         where: resellWhere,
         include: {
           product: {
-            include: { variations: true },
+            include: { variations: { orderBy: VARIATION_ORDER_BY } },
           },
         },
         skip,
@@ -971,6 +978,12 @@ export class MerchantService {
     // Storefront hoặc Brand) rồi thay điều kiện dưới đây bằng kiểm tra cờ đó.
     const role = await this.getCallerRole(userId);
     if (role !== 'ADMIN') {
+      // Đơn không thuộc gian hàng của người gọi (kể cả đơn tự giao của gian hàng khác) thì không được biết nó có tồn tại.
+      const own = await this.prisma.order.findFirst({
+        where: { id: orderId, ...(await this.resolveMerchantOrderFilter(userId)) },
+        select: { id: true },
+      });
+      if (!own) throw new NotFoundException('Không tìm thấy đơn của gian hàng bạn.');
       throw new ForbiddenException(
         'Đơn hàng do kho Tubu Tree xử lý giao nhận; đối tác không thể tự chuyển trạng thái tại đây.',
       );

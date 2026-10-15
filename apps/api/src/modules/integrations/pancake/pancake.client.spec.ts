@@ -116,3 +116,35 @@ describe('PancakeClient đơn hàng (PANCAKE-2, PANCAKE-4, PANCAKE-14)', () => {
     await expect(broken.searchOrders('TUBU1')).rejects.toMatchObject({ transient: true });
   });
 });
+
+describe('PancakeClient đọc danh mục/geo: lỗi HTTP thành câu tiếng Việt, không lộ "Request failed with status code"', () => {
+  const calls: [string, (c: PancakeClient) => Promise<unknown>][] = [
+    ['đọc danh mục trang 3', (c) => c.fetchProducts(3)],
+    ['đọc danh sách tỉnh/thành', (c) => c.fetchProvinces()],
+    ['đọc danh sách phường/xã', (c) => c.fetchCommunes('84_VN01')],
+  ];
+
+  it.each(calls)('5xx → lỗi TẠM "Pancake trả 500 khi %s"', async (what, run) => {
+    const client = makeClient(jest.fn().mockRejectedValue(axiosErr(500)));
+    const err = await run(client).catch((e: Error) => e);
+    expect(err).toMatchObject({ name: 'PancakeApiError', transient: true });
+    expect((err as Error).message).toContain(`Pancake trả 500 khi ${what}`);
+    expect((err as Error).message).not.toContain('Request failed with status code');
+  });
+
+  it('không kết nối được → "Không kết nối được Pancake khi đọc danh mục trang 1"', async () => {
+    const client = makeClient(jest.fn().mockRejectedValue(axiosErr()));
+    await expect(client.fetchProducts(1)).rejects.toMatchObject({
+      transient: true,
+      message: expect.stringContaining('Không kết nối được Pancake khi đọc danh mục trang 1'),
+    });
+  });
+
+  it('4xx → từ chối dứt khoát kèm lời Pancake', async () => {
+    const client = makeClient(jest.fn().mockRejectedValue(axiosErr(401, { message: 'api_key sai' })));
+    await expect(client.fetchProducts(1)).rejects.toMatchObject({
+      transient: false,
+      message: expect.stringContaining('Pancake trả 401 khi đọc danh mục trang 1: api_key sai'),
+    });
+  });
+});

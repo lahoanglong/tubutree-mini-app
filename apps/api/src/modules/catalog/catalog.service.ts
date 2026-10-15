@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
+import { VARIATION_ORDER_BY, sortVariationsByPrice } from './variation-order';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
@@ -136,7 +137,7 @@ export class CatalogService {
         // tự giữa hai lần query → cuộn vô hạn ở Browse hiện trùng hoặc sót SP giữa các trang.
         orderBy: [this.orderBy(sort), { id: 'asc' }],
         ...skipTake(page, limit),
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -164,7 +165,7 @@ export class CatalogService {
     if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: pageIds } }] },
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
     const items = pageIds
@@ -232,7 +233,7 @@ export class CatalogService {
     const product = await this.prisma.product.findUnique({
       where: { slug },
       include: {
-        variations: { where: { isActive: true }, select: this.publicVariationSelect },
+        variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: this.publicVariationSelect },
         // Chỉ slug + cờ công khai của nhãn (không kéo cả bản ghi Brand: có ownerUserId): để tên nhãn ở PDP dẫn sang /brand/:slug.
         brandRef: { select: { slug: true, isPublished: true } },
         // take:20 — trang chi tiết không phân trang review; sản phẩm nhiều review sẽ load hết
@@ -269,6 +270,7 @@ export class CatalogService {
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
       ...publicProduct,
+      variations: sortVariationsByPrice(publicProduct.variations),
       brandSlug,
       sold: product.soldExternal + product.soldApp,
       fulfiller: await this.fulfillerOf(product.fulfilment, storefront),
@@ -298,7 +300,7 @@ export class CatalogService {
     const items = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } },
       take: 8,
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
     return items.map((p) => this.toCard(p));
@@ -329,7 +331,7 @@ export class CatalogService {
     const ids = rows.map((r) => r.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
     return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
@@ -388,7 +390,7 @@ export class CatalogService {
         // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
         // trong JS; catalog càng lớn càng nặng. 200 ứng viên là đủ dư để sort lấy top 10.
         take: 200,
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       });
     }
 
@@ -396,7 +398,7 @@ export class CatalogService {
       items = await this.prisma.product.findMany({
         where: { ...PUBLIC_PRODUCT_WHERE, isFeatured: true },
         take: 200,
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       });
     }
 
