@@ -41,6 +41,7 @@ export class CommunityRewardService {
     cap: number,
   ): Promise<void> {
     const since = startOfVnDay();
+    const expiresAt = await this.rewards.expiresAt();
     try {
       await this.prisma.$transaction(
         async (tx) => {
@@ -50,7 +51,7 @@ export class CommunityRewardService {
             tx.pointsTransaction.count({ where }),
           ]);
           if (coinToday + pointsToday >= cap) return;
-          await this.rewards.grant(userId, points, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx);
+          await this.rewards.grant(userId, points, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx, expiresAt);
         },
         { isolationLevel: 'Serializable' },
       );

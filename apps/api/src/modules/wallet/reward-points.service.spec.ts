@@ -122,9 +122,17 @@ describe('RewardPointsService.grant (PD-3: mọi thưởng mới là Điểm Xan
   it('truyền tx → chạy trong tx của caller, không mở $transaction mới', async () => {
     const { prisma, raw } = makePrisma();
     const tx = makePrisma().raw;
-    await new RewardPointsService(prisma, cfg()).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never);
+    await new RewardPointsService(prisma, cfg()).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never, new Date('2027-01-01'));
     expect(raw.$transaction).not.toHaveBeenCalled();
     expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalled();
+  });
+
+  it('truyền tx mà thiếu expiresAtOverride → lỗi lập trình, không đọc config và không ghi gì', async () => {
+    const { prisma } = makePrisma();
+    const tx = makePrisma().raw;
+    const config = cfg();
+    await expect(new RewardPointsService(prisma, config).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never)).rejects.toThrow('expiresAtOverride');
+    expect(tx.pointsTransaction.createManyAndReturn).not.toHaveBeenCalled();
   });
 });
 
