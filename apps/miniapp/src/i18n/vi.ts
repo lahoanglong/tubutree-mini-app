@@ -551,7 +551,15 @@ export const vi = {
     submit: 'Tạo đơn hộ khách',
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
+    recipientTooShort: 'Tên người nhận cần ít nhất 2 ký tự',
     requiredField: 'Vui lòng nhập',
+    checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
+    unconfirmed:
+      'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',
+    unconfirmedChanged:
+      'Đơn gửi lúc nãy có thể đã được tạo. Bạn đã sửa đơn nên lần gửi này là đơn mới: xem danh sách đơn trước để khách không nhận hai đơn.',
+    resend: 'Gửi lại đơn',
+    viewOrders: 'Xem danh sách đơn',
     successTitle: 'Đã tạo đơn hộ khách 🎉',
     orderCode: 'Mã đơn',
     orderTotal: 'Tổng tiền',

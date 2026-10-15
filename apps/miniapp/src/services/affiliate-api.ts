@@ -222,14 +222,19 @@ export interface CtvOrderResult {
   status: string;
   items: CtvOrderItemResult[];
 }
-export const createCtvOrder = (dto: {
+export interface CtvOrderInput {
   items: CtvOrderItemInput[];
   customer: CtvOrderCustomerInput;
   paymentMethod: 'COD' | 'BANK_TRANSFER';
   note?: string;
   /** Tổng CTV đang thấy ở báo giá: tổng lúc tạo đơn cao hơn thì máy chủ trả TOTAL_CHANGED thay vì ghi đơn đắt hơn. */
   expectedTotal?: number;
-}) => api.post<CtvOrderResult>('/affiliate/orders', dto).then((r) => r.data);
+}
+/** Gửi lại cùng Idempotency-Key (bấm lại sau quá thời gian/mất mạng) thì máy chủ trả lại đơn đã tạo, không tạo đơn thứ hai. */
+export const createCtvOrder = (dto: CtvOrderInput, idempotencyKey: string) =>
+  api
+    .post<CtvOrderResult>('/affiliate/orders', dto, { headers: { 'Idempotency-Key': idempotencyKey } })
+    .then((r) => r.data);
 
 export interface CtvOrderQuoteItem {
   variationId: string;
@@ -245,6 +250,8 @@ export interface CtvOrderQuote {
   goods: number;
   shippingFee: number;
   total: number;
+  /** Cách thanh toán máy chủ sẽ từ chối cho đơn này kèm lý do (vd COD vượt trần mỗi đơn); API cũ không trả. */
+  blockedPaymentMethods?: Partial<Record<'COD' | 'BANK_TRANSFER', string>>;
 }
 /** Báo giá đơn hộ: đúng số tiền máy chủ sẽ ghi khi tạo đơn (giờ vàng như khách tự đặt, phí giao). Không giữ kho hay suất. */
 export const quoteCtvOrder = (items: CtvOrderItemInput[]) =>

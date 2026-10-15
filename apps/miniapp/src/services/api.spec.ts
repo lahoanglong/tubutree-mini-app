@@ -1,5 +1,5 @@
 import { describe, it, expect, vi as vitestVi, afterEach } from 'vitest';
-import { apiMediaUrl, getErrorMessage } from './api';
+import { apiMediaUrl, getErrorMessage, isOutcomeUnknown } from './api';
 import { vi as viCopy } from '../i18n/vi';
 
 function axiosError(overrides: Record<string, unknown>): unknown {
@@ -61,5 +61,25 @@ describe('apiMediaUrl', () => {
     '',
   ])('giữ nguyên %j', (src) => {
     expect(apiMediaUrl(src)).toBe(src);
+  });
+});
+
+// R5-CHECKOUT-1: lỗi mà máy chủ có thể đã ghi đơn trước khi trả lời — gửi lại phải cùng Idempotency-Key.
+describe('isOutcomeUnknown', () => {
+  it.each([
+    ['quá thời gian (ECONNABORTED)', axiosError({ code: 'ECONNABORTED', response: undefined })],
+    ['mất kết nối giữa chừng (ERR_NETWORK)', axiosError({ code: 'ERR_NETWORK', response: undefined })],
+    ['502 từ proxy', axiosError({ response: { status: 502, data: {} } })],
+    ['500', axiosError({ response: { status: 500, data: {} } })],
+  ])('%s → chưa biết kết quả', (_label, err) => {
+    expect(isOutcomeUnknown(err)).toBe(true);
+  });
+
+  it.each([
+    ['400 nghiệp vụ', axiosError({ response: { status: 400, data: { message: 'Hết hàng' } } })],
+    ['409', axiosError({ response: { status: 409, data: {} } })],
+    ['lỗi không phải axios', new Error('x')],
+  ])('%s → đã biết kết quả (máy chủ từ chối)', (_label, err) => {
+    expect(isOutcomeUnknown(err)).toBe(false);
   });
 });
