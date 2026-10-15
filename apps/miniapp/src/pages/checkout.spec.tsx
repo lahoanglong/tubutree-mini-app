@@ -709,6 +709,16 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
     expect(body.paymentMethod).toBe('COD');
   });
 
+  it('R5-CHECKOUT-4: giỏ chỉ hàng gian hàng tự giao (một kiện) → nói gian hàng nào giao, không nói "1 nơi giao… 1 đơn riêng"', async () => {
+    mocks.getCart.mockResolvedValue({ ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...SPLIT_QUOTE, subtotal: 200_000, shippingFee: 25_000, total: 225_000, shipments: [SPLIT_QUOTE.shipments[1]!] });
+    renderPage();
+    const shop = await screen.findByRole('region', { name: 'Mật ong Linh giao' });
+    expect(shop.textContent).toContain('Mật ong rừng');
+    expect(screen.getByText('Đơn này do Mật ong Linh giao, phí giao theo gian hàng.')).toBeInTheDocument();
+    expect(screen.queryByText(/nơi giao nên sẽ thành/)).toBeNull();
+  });
+
   it('giỏ toàn hàng Tubu: không chia nhóm, không báo tách đơn', async () => {
     mocks.getCart.mockResolvedValue(CART);
     mocks.checkoutQuote.mockResolvedValue({

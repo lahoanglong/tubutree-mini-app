@@ -18,18 +18,14 @@ const QUOTE = {
   blockedPaymentMethods: { BANK_TRANSFER: BLOCK_REASON },
 };
 
-const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn() }));
+const TUBU_LINE = { id: 't1', variationId: 'v1', productName: 'Dầu gội', variationName: null, slug: 'dau-goi', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000, fulfiller: TUBU };
+const SHOP_LINE = { id: 'm1', variationId: 'v2', productName: 'Mật ong rừng', variationName: null, slug: 'mat-ong', thumbnail: null, unitPrice: 200000, quantity: 1, stock: 5, total: 200000, fulfiller: SHOP };
+const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), cart: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getCart: async () => ({
-    items: [
-      { id: 't1', variationId: 'v1', productName: 'Dầu gội', variationName: null, slug: 'dau-goi', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000, fulfiller: TUBU },
-      { id: 'm1', variationId: 'v2', productName: 'Mật ong rừng', variationName: null, slug: 'mat-ong', thumbnail: null, unitPrice: 200000, quantity: 1, stock: 5, total: 200000, fulfiller: SHOP },
-    ],
-    couponCode: null, subtotal: 300000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 2,
-  }),
+  getCart: (...args: unknown[]) => m.cart(...args),
   getMyCoupons: async () => [],
   getAddresses: async () => [ADDR],
   checkoutQuote: (...args: unknown[]) => m.quote(...args),
@@ -49,9 +45,12 @@ const mount = async () => {
 const radio = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input')!;
 
+const CART = { items: [TUBU_LINE, SHOP_LINE], couponCode: null, subtotal: 300000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 2 };
+
 beforeEach(() => {
   m.quote.mockReset().mockResolvedValue(QUOTE);
   m.placeOrder.mockReset();
+  m.cart.mockReset().mockResolvedValue(CART);
 });
 afterEach(() => {
   mounted.forEach((x) => x.unmount());
@@ -67,6 +66,17 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     expect(region.textContent).toMatch(/Phí giao\s*30\.000/);
     expect(region.textContent).toMatch(/Phí giao\s*25\.000/);
     expect(r.container.textContent).toContain('sẽ thành 2 đơn riêng');
+  });
+
+  it('R5-CHECKOUT-4: giỏ chỉ hàng gian hàng tự giao (một kiện) → nói gian hàng nào giao, không nói "1 nơi giao… 1 đơn riêng"', async () => {
+    m.cart.mockResolvedValue({ ...CART, items: [SHOP_LINE], subtotal: 200000, itemCount: 1 });
+    m.quote.mockResolvedValue({ ...QUOTE, subtotal: 200000, shippingFee: 25000, total: 225000, shipments: [QUOTE.shipments[1]] });
+    const r = await mount();
+    const region = r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')!;
+    expect(region.textContent).toContain('Mật ong Linh giao');
+    expect(region.textContent).toContain('Mật ong rừng');
+    expect(r.container.textContent).toContain('Đơn này do Mật ong Linh giao, phí giao theo gian hàng.');
+    expect(r.container.textContent).not.toContain('nơi giao nên sẽ thành');
   });
 
   it('R2-MERCHANT-8: giỏ tách kiện không bị khung cuộn cao cố định giấu kiện thứ ba', async () => {

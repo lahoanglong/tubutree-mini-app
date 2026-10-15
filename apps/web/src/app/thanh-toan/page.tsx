@@ -47,7 +47,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { EMPTY_INVOICE, InvoiceSection, loadSavedInvoice, saveInvoice } from './invoice-section';
-import { fulfillerLabel } from '@/lib/shipments';
+import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
@@ -149,6 +149,7 @@ export default function CheckoutPage() {
   const zeroNote = quote ? zeroTotalNote(quote) : null;
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
+  const splitNote = shipmentsNote(shipments);
   // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
   // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
   const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
@@ -503,11 +504,7 @@ export default function CheckoutPage() {
               </Link>
             </p>
           )}
-          {split && (
-            <p className="mt-2 text-xs text-stone-600">
-              Hàng do {shipments.length} nơi giao nên sẽ thành {shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.
-            </p>
-          )}
+          {splitNote && <p className="mt-2 text-xs text-stone-600">{splitNote}</p>}
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />

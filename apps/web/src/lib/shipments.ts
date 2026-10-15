@@ -40,6 +40,18 @@ export function fulfillerLabel(f: LineFulfiller): string {
   return 'Không giao được';
 }
 
+/**
+ * Câu dưới danh sách món ở màn thanh toán theo các kiện báo giá trả về (D4): nhiều nơi giao thì nói lần đặt thành mấy đơn riêng;
+ * một kiện của gian hàng đối tác thì nói gian hàng nào giao; một kiện Tubu (hoặc chưa có báo giá) thì không cần câu nào.
+ */
+export function shipmentsNote(shipments: readonly { fulfiller: LineFulfiller }[]): string | null {
+  if (shipments.length > 1) {
+    return `Hàng do ${shipments.length} nơi giao nên sẽ thành ${shipments.length} đơn riêng, mỗi đơn có phí giao và mã đơn riêng.`;
+  }
+  const only = shipments[0]?.fulfiller;
+  return only?.kind === 'MERCHANT' ? `Đơn này do ${only.name} giao, phí giao theo gian hàng.` : null;
+}
+
 /** Tiền hàng phần kho Tubu giao — ngưỡng miễn phí vận chuyển chỉ tính trên phần này (hàng gian hàng tự giao có phí riêng). */
 export function tubuSubtotal<T extends { fulfiller?: LineFulfiller; total: number }>(items: T[]): number {
   return items.reduce((s, it) => s + ((it.fulfiller?.kind ?? 'TUBU') === 'TUBU' ? it.total : 0), 0);
