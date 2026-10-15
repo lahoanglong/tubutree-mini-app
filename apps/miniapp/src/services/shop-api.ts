@@ -542,10 +542,13 @@ export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'imag
   pointsEarned?: number;
   updated?: boolean;
 };
-/** `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. */
+/**
+ * `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn
+ * (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
+ */
 export const createReview = (
   slug: string,
-  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId?: string },
+  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
 ) => api.post<CreatedReview>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders

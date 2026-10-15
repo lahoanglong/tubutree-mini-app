@@ -9,6 +9,7 @@ import {
   fetchMyReview,
   type MyReview,
   type MyReviewRef,
+  type ReviewableOrder,
 } from '../services/shop-api';
 import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -66,13 +67,15 @@ const draftFromReview = (r: MyReview): ReviewDraft => ({
 });
 
 /**
- * Đánh giá đang soạn. Mỗi lần mua (đơn) một đánh giá: sửa thì gắn đúng dòng đánh giá của đơn đó. Viết mới chỉ ghi đơn khi
- * khách chọn đơn từ chi tiết đơn; còn lại lấy đơn còn viết được sớm nhất theo can-review lúc gửi (form có thể mở trước khi
- * can-review về). Không biết đơn nào thì máy chủ tự chọn đơn nhận sớm nhất chưa đánh giá.
+ * Đánh giá đang soạn, luôn gắn một lần mua (đơn): viết mới cho đơn còn viết được chốt lúc mở form, sửa gắn đúng dòng đánh
+ * giá của đơn đó. Form chỉ mở sau khi can-review về nên không bao giờ gửi đánh giá mới thiếu đơn: máy chủ hiểu lần gửi
+ * không kèm đơn (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
  */
-type FormTarget = { kind: 'new'; orderId?: string } | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
+type FormTarget =
+  | { kind: 'new'; orderId: string; orderCode: string | null }
+  | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
-// Nháp viết mới dùng chung cho mọi đơn: nội dung là cảm nhận về sản phẩm, không đổi khi can-review về và chọn được đơn.
+// Nháp viết mới dùng chung cho mọi đơn: nội dung là cảm nhận về sản phẩm.
 const targetKey = (t: FormTarget) => (t.kind === 'new' ? 'new' : `edit:${t.reviewId}`);
 
 /**
@@ -109,12 +112,13 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
   const elig = eligQ.data;
   const myReviews = elig?.myReviews ?? [];
   const mineById = new Map(myReviews.map((r) => [r.id, r]));
-  const nextOrder = elig?.reviewableOrders?.[0];
+  const nextOrder = elig?.canReview ? elig.reviewableOrders?.[0] : undefined;
 
   const openForm = (t: FormTarget) => {
     setTarget(t);
     setWriting(true);
   };
+  const openNew = (o: ReviewableOrder) => openForm({ kind: 'new', orderId: o.orderId, orderCode: o.code });
   const openEdit = (r: MyReviewRef) => openForm({ kind: 'edit', reviewId: r.id, orderId: r.orderId, orderCode: r.orderCode });
 
   const deepLinked = useRef(false);
@@ -123,7 +127,7 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
     deepLinked.current = true;
     const order = elig.reviewableOrders?.find((o) => o.orderId === openForOrderId);
     const mine = elig.myReviews?.find((r) => r.orderId === openForOrderId);
-    if (order) openForm({ kind: 'new', orderId: order.orderId });
+    if (order) openNew(order);
     else if (mine) openEdit(mine);
   }, [openForOrderId, elig]);
 
@@ -131,15 +135,15 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
   const base = editingId && myReviewQ.data ? draftFromReview(myReviewQ.data) : EMPTY_DRAFT;
   const draft = edited && edited.key === key ? edited.draft : base;
   const latestMine = myReviews[0];
-  const formOrderId = target?.kind === 'edit' ? target.orderId : (target?.orderId ?? nextOrder?.orderId);
-  const formOrderCode =
-    target?.kind === 'edit' ? target.orderCode : elig?.reviewableOrders?.find((o) => o.orderId === formOrderId)?.code;
+  // Đã đăng nhập thì chỉ có nút khi can-review đã về (như web): chưa biết còn đơn nào để viết thì chưa mở được form.
   const headerAction =
-    status !== 'authenticated' || !elig || elig.canReview
-      ? { label: 'Viết đánh giá', onPress: () => (status !== 'authenticated' ? void login() : openForm({ kind: 'new' })) }
-      : elig.reason === 'ALL_REVIEWED' && latestMine
-        ? { label: 'Sửa đánh giá của bạn', onPress: () => openEdit(latestMine) }
-        : null;
+    status !== 'authenticated'
+      ? { label: 'Viết đánh giá', onPress: () => void login() }
+      : nextOrder
+        ? { label: 'Viết đánh giá', onPress: () => openNew(nextOrder) }
+        : elig?.reason === 'ALL_REVIEWED' && latestMine
+          ? { label: 'Sửa đánh giá của bạn', onPress: () => openEdit(latestMine) }
+          : null;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
   const filtered = (data?.items ?? []).filter((r) =>
@@ -348,13 +352,13 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
           </div>
         ) : editingId && myReviewQ.isError ? (
           <ErrorState message={getErrorMessage(myReviewQ.error)} onRetry={() => void myReviewQ.refetch()} />
-        ) : (
+        ) : target ? (
           <WriteReview
             slug={slug}
             draft={draft}
             isEdit={!!editingId}
-            orderId={formOrderId}
-            orderCode={formOrderCode ?? undefined}
+            orderId={target.orderId}
+            orderCode={target.orderCode ?? undefined}
             purchaseCount={elig?.purchaseCount ?? 0}
             showReward={elig?.rewardAvailable !== false}
             onDraftChange={(patch) => setEdited((d) => ({ key, draft: { ...(d && d.key === key ? d.draft : base), ...patch } }))}
@@ -363,7 +367,7 @@ export function ReviewsSection({ slug, openForOrderId }: { slug: string; openFor
               setWriting(false);
             }}
           />
-        )}
+        ) : null}
       </BottomSheet>
     </section>
   );
@@ -391,8 +395,8 @@ function WriteReview({
   slug: string;
   draft: ReviewDraft;
   isEdit: boolean;
-  /** Lần mua được đánh giá; thiếu khi can-review chưa về thì máy chủ tự chọn đơn. */
-  orderId?: string;
+  /** Lần mua được đánh giá: đơn còn viết được (viết mới) hoặc đơn của đánh giá đang sửa. */
+  orderId: string;
   orderCode?: string;
   /** Số đơn đã nhận có sản phẩm này; API cũ chưa trả thì là 0 (không hiện câu nào). */
   purchaseCount: number;

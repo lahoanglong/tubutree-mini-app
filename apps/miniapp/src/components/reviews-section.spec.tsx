@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
@@ -308,6 +308,62 @@ describe('ReviewsSection: mỗi lần mua một đánh giá (R8)', () => {
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
   });
 
+  // Form viết mới mở trước khi can-review về mà gửi không kèm đơn thì máy chủ (giữ đường cho bản app cũ) SỬA đè đánh giá
+  // mới nhất khi mọi lần mua đã có đánh giá, trong khi form vẫn ghi "Đánh giá sản phẩm".
+  describe('form chỉ mở khi đã biết đơn, không bao giờ gửi đánh giá thiếu đơn', () => {
+    afterEach(() => focusManager.setFocused(undefined));
+
+    it('can-review chưa về: không có nút viết hay sửa; về ALL_REVIEWED thì chỉ có "Sửa đánh giá của bạn", lưu gửi kèm đơn của đánh giá đó', async () => {
+      let answer: (v: unknown) => void = () => undefined;
+      mocks.canReview.mockImplementation(() => new Promise((r) => (answer = r)));
+      mocks.createReview.mockResolvedValue({ id: 'b', updated: true });
+      renderSection();
+      await screen.findByText('Nhận xét a');
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Sửa/ })).toBeNull();
+      expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+
+      answer(ELIG_ALL);
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
+      expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+      expect(await screen.findByPlaceholderText(/Chia sẻ cảm nhận/)).toHaveValue('Lần này hơi khô');
+      expect(screen.getByRole('heading', { name: 'Sửa đánh giá' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
+      await waitFor(() =>
+        expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', expect.objectContaining({ comment: 'Lần này hơi khô', orderId: 'o2' })),
+      );
+      expect(mocks.createReview).toHaveBeenCalledTimes(1);
+    });
+
+    it('can-review chưa về hoặc lỗi: không có nút để mở form', async () => {
+      mocks.canReview.mockRejectedValue(new Error('mất mạng'));
+      renderSection();
+      await screen.findByText('Nhận xét a');
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Sửa/ })).toBeNull();
+    });
+
+    it('form viết mới đang mở mà can-review làm mới thành ALL_REVIEWED (vừa đánh giá ở thiết bị khác) → vẫn gửi kèm đúng đơn chốt lúc mở', async () => {
+      renderSection();
+      fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+      await screen.findByRole('radiogroup', { name: 'Số sao' });
+      mocks.canReview.mockResolvedValue(ELIG_ALL);
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(2));
+      expect(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Đánh giá sản phẩm' })).toBeInTheDocument();
+      expect(screen.getByText(/Đánh giá này cho đơn TB0002\./)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+      expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ orderId: 'o2' });
+    });
+  });
+
   it('mọi lần mua đã có đánh giá: nút đầu mục là "Sửa đánh giá của bạn" mở đánh giá mới nhất, không còn "Viết đánh giá"', async () => {
     mocks.canReview.mockResolvedValue(ELIG_ALL);
     renderSection();
@@ -526,13 +582,22 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
       expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
     });
 
-    it('API cũ (chỉ có canReview, chưa có cờ, đơn hay số lần mua) → giữ câu gợi ý, gửi không kèm đơn để máy chủ tự chọn', async () => {
-      mocks.canReview.mockResolvedValue({ canReview: true, reason: null });
+    it('chưa có cờ (API chỉ trả đơn còn viết được) → giữ câu gợi ý', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null, reviewableOrders: [O1] });
       await openNewForm();
       expect(hintOf(HINT_TEXT_ONLY)).toBeInTheDocument();
-      expect(screen.queryByText(/đã mua sản phẩm này|cho đơn/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/đã mua sản phẩm này/)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
-      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', expect.objectContaining({ orderId: undefined })));
+      await waitFor(() => expect(mocks.createReview).toHaveBeenCalledWith('nuoc-rua-chen', expect.objectContaining({ orderId: 'o1' })));
+    });
+
+    it('API chưa trả đơn còn viết được → không có nút viết, không bao giờ gửi đánh giá thiếu đơn', async () => {
+      mocks.canReview.mockResolvedValue({ canReview: true, reason: null });
+      renderSection();
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalledTimes(1));
+      await screen.findByText('Nhận xét a');
+      expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+      expect(mocks.createReview).not.toHaveBeenCalled();
     });
 
     it('chế độ sửa vẫn giữ câu giải thích "sửa không cộng thêm" dù cờ là false', async () => {

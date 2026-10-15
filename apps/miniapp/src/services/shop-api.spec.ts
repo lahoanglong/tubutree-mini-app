@@ -134,11 +134,15 @@ describe('shop-api — createReview', () => {
     expectTypeOf<Created['updated']>().toEqualTypeOf<boolean | undefined>();
   });
 
+  it('đánh giá luôn gửi kèm đơn: thiếu orderId là lỗi kiểu (máy chủ hiểu lần gửi không kèm đơn là sửa đánh giá mới nhất)', () => {
+    expectTypeOf<Parameters<typeof createReview>[1]['orderId']>().toEqualTypeOf<string>();
+  });
+
   it('gửi POST tới /products/:slug/reviews và trả nguyên dữ liệu, pointsEarned = 0 không bị đổi thành thiếu', async () => {
     const data = { id: 'r1', rating: 4, comment: null, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', pointsEarned: 0, updated: false };
     post.mockResolvedValue({ data });
-    const r = await createReview('nuoc-rua-chen', { rating: 4 });
-    expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4 });
+    const r = await createReview('nuoc-rua-chen', { rating: 4, orderId: 'o1' });
+    expect(post).toHaveBeenCalledWith('/products/nuoc-rua-chen/reviews', { rating: 4, orderId: 'o1' });
     expect(r.pointsEarned).toBe(0);
     expect(r.updated).toBe(false);
   });
