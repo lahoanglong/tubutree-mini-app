@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useNavigate as useRouterNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -129,5 +130,13 @@ describe('ProductDetailPage ghi "Đã xem gần đây" (spec 5b.4)', () => {
     expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
     await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
     expect(localStorage.getItem(RECENTLY_VIEWED_KEY)).toBeNull();
+  });
+
+  it('404 → "Không tìm thấy sản phẩm" kèm "Về trang chủ", không có "Thử lại" (R6-BUYER-6)', async () => {
+    mocks.fetchProduct.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    renderPdp('zzz');
+    expect(await screen.findByText('Không tìm thấy sản phẩm này.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Về trang chủ' })).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -98,6 +99,29 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
     expect(link.className).toContain('tubu-hit-44');
     fireEvent.click(link);
     expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+  });
+});
+
+describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('404 → "Không tìm thấy" kèm "Về trang chủ", không có "Thử lại"', async () => {
+    mocks.fetchOrder.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    renderPage();
+    expect(await screen.findByText('Không tìm thấy đơn hàng này.')).toBeInTheDocument();
+    expect(screen.queryByText('Thử lại')).toBeNull();
+    fireEvent.click(screen.getByText('Về trang chủ'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('lỗi máy chủ 5xx → vẫn "Thử lại"', async () => {
+    mocks.fetchOrder.mockRejectedValue(new AxiosError('boom', '500', undefined, undefined, { status: 500, data: {} } as AxiosResponse));
+    renderPage();
+    expect(await screen.findByText('Thử lại')).toBeInTheDocument();
+    expect(screen.queryByText('Về trang chủ')).toBeNull();
   });
 });
 

@@ -168,6 +168,11 @@ export function getErrorMessage(error: unknown): string {
   return vi.errors.generic;
 }
 
+/** Máy chủ trả 404: trang đang xem không còn (sản phẩm/đơn không có), thử lại cũng không ra khác. */
+export function isNotFoundError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
+}
+
 /**
  * Lỗi mà máy chủ có thể đã làm xong việc trước khi trả lời: quá thời gian, mất kết nối giữa chừng, 5xx (kể cả proxy phía trước).
  * Lệnh tạo đơn/tiền gặp lỗi này phải gửi lại đúng Idempotency-Key cũ; 4xx là máy chủ đã từ chối, không có gì được ghi.

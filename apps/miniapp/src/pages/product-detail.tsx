@@ -13,7 +13,7 @@ import {
   type ProductCard as ProductCardData,
   type FlashSaleActiveItem,
 } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isNotFoundError } from '../services/api';
 import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
@@ -251,7 +251,11 @@ export default function ProductDetailPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
-        <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+        {isNotFoundError(product.error) ? (
+          <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+        ) : (
+          <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+        )}
       </Page>
     );
   }

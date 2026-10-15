@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { EmptyState, ErrorState } from './empty-state';
 
 describe('EmptyState', () => {
@@ -19,6 +19,16 @@ describe('EmptyState', () => {
 });
 
 describe('ErrorState', () => {
+  it('có onHome (lỗi 404) thì hiện "Về trang chủ", không có "Thử lại" (R6-BUYER-6)', () => {
+    const onHome = vi.fn();
+    const onRetry = vi.fn();
+    render(<ErrorState message="Không tìm thấy" onRetry={onRetry} onHome={onHome} />);
+    expect(screen.queryByText('Thử lại')).toBeNull();
+    fireEvent.click(screen.getByText('Về trang chủ'));
+    expect(onHome).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
   it('retry button text-on-secondary-bg is the new forest tone, not the old orange', () => {
     render(<ErrorState message="Lỗi mạng" onRetry={() => {}} />);
     // style is applied to the outer .zaui-btn root, not the inner text node — same convention

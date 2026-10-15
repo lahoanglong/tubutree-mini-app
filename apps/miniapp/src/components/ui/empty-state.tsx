@@ -108,10 +108,13 @@ export function EmptyState({ art, heading, body, ctaLabel, onCta, ctaLoading, va
 export function ErrorState({
   message,
   onRetry,
+  onHome,
   variant = 'page',
 }: {
   message: string;
   onRetry: () => void;
+  /** Có thì thay "Thử lại" bằng "Về trang chủ" — cho lỗi 404, nơi bấm lại cũng không khác đi. */
+  onHome?: () => void;
   /** 'page' (mặc định, padding rộng) hay 'inline' (padding hẹp khi nhúng trong 1 section). */
   variant?: 'page' | 'inline';
 }) {
@@ -132,14 +135,14 @@ export function ErrorState({
       </Text>
       <ZmpButton
         variant="secondary"
-        onClick={onRetry}
+        onClick={onHome ?? onRetry}
         style={{
           minHeight: 44,
           color: 'var(--color-action-secondary-fg)',
           borderColor: 'var(--color-action-secondary-border)',
         }}
       >
-        Thử lại
+        {onHome ? 'Về trang chủ' : 'Thử lại'}
       </ZmpButton>
     </div>
   );
