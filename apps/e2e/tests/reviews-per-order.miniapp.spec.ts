@@ -12,6 +12,8 @@ import { PILOT_SLUG, mockPilotProduct } from './support/pilot-mocks';
  * 2. Chi tiết đơn đầu: dòng hiện "Sửa đánh giá" → form điền sẵn đánh giá của đơn đó (GET /reviews/:id) → lưu gửi orderId
  *    của đơn đầu.
  * 3. Trang sản phẩm: đánh giá của mình có nhãn "Của bạn", mã đơn và nút sửa riêng.
+ * 4. Form mở từ chi tiết đơn chỉ mở một lần: tải lại, quay lại rồi tiến lại trang sản phẩm không tự mở lại.
+ * 5. can-review chưa về thì chưa có nút viết/sửa; về ALL_REVIEWED thì chỉ có sửa (không form viết mới thiếu đơn).
  */
 test.describe('Zalo Mini App E2E - Đánh giá theo từng lần mua (R8)', () => {
   const DELIVERED_AT = '2026-09-10T08:00:00.000Z';
@@ -108,6 +110,73 @@ test.describe('Zalo Mini App E2E - Đánh giá theo từng lần mua (R8)', () =
     expect((await posted).body).toMatchObject({ rating: 4, comment: MY_REVIEW.comment, orderId: FIRST.id });
     await expect(page.getByText('Đã cập nhật đánh giá của bạn')).toBeVisible({ timeout: 5_000 });
     expect(api.callsTo('GET', '/reviews/:id').map((c) => c.path)).toContain('/reviews/rv-1');
+  });
+
+  test('form mở từ chi tiết đơn chỉ mở một lần: gửi xong, tải lại hay quay lại rồi tiến lại trang sản phẩm không tự mở lại', async ({ page, api }) => {
+    api.post('/products/:slug/reviews', { ...MY_REVIEW, id: 'rv-2', orderId: SECOND.id, pointsEarned: 0, updated: false });
+    const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
+    const form = page.getByRole('radiogroup', { name: 'Số sao' });
+    // can-review (mock) vẫn trả đơn sau là còn viết được: còn giữ đơn trong lịch sử thì form tự mở lại ngay khi nó về.
+    const formStaysClosed = async () => {
+      await expect(reviews.getByRole('button', { name: 'Viết đánh giá' })).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(500);
+      await expect(form).toHaveCount(0);
+    };
+
+    await page.goto(`/order/${SECOND.code}`);
+    await page.getByText('Viết đánh giá', { exact: true }).click();
+    await expect(page.getByText(`Đánh giá này cho đơn ${SECOND.code}.`, { exact: false })).toBeVisible({ timeout: 10_000 });
+    const historyState = () => page.evaluate(() => (window.history.state as { usr?: Record<string, unknown> } | null)?.usr ?? null);
+    expect(await historyState()).not.toHaveProperty('reviewOrderId');
+
+    await page.getByRole('button', { name: 'Gửi đánh giá' }).click();
+    await expect(page.getByText('Đã gửi đánh giá của bạn')).toBeVisible({ timeout: 5_000 });
+
+    await page.reload();
+    await formStaysClosed();
+
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/order/${SECOND.code}$`), { timeout: 10_000 });
+    await page.goForward();
+    await expect(page).toHaveURL(new RegExp(`/product/${PILOT_SLUG}$`), { timeout: 10_000 });
+    await formStaysClosed();
+    expect(api.callsTo('POST', '/products/:slug/reviews')).toHaveLength(1);
+  });
+
+  test('can-review chưa về thì chưa có nút viết/sửa; về ALL_REVIEWED thì chỉ có "Sửa đánh giá của bạn", lưu gửi kèm đơn', async ({ page, api }) => {
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    api.get('/products/:slug/reviews/can-review', async () => {
+      await answered;
+      return {
+        canReview: false,
+        reason: 'ALL_REVIEWED',
+        rewardAvailable: false,
+        purchaseCount: 1,
+        reviewableOrders: [],
+        myReviews: [
+          { id: 'rv-1', orderId: FIRST.id, orderCode: FIRST.code, rating: 5, createdAt: '2026-09-02T08:00:00.000Z', isVisible: true },
+        ],
+      };
+    });
+    api.post('/products/:slug/reviews', { ...MY_REVIEW, updated: true, pointsEarned: 10 });
+
+    const asked = api.waitForCall('GET', '/products/:slug/reviews/can-review', 15_000);
+    await page.goto(`/product/${PILOT_SLUG}`);
+    const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
+    await expect(reviews.getByText(MY_REVIEW.comment)).toBeVisible({ timeout: 15_000 });
+    await expect(reviews.getByRole('button', { name: /Viết đánh giá|Sửa/ })).toHaveCount(0);
+
+    answer();
+    await asked;
+    await expect(reviews.getByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeVisible({ timeout: 10_000 });
+    await expect(reviews.getByRole('button', { name: 'Viết đánh giá' })).toHaveCount(0);
+
+    await reviews.getByRole('button', { name: 'Sửa đánh giá của bạn' }).click();
+    await expect(page.getByPlaceholder(/Chia sẻ cảm nhận/)).toHaveValue(MY_REVIEW.comment, { timeout: 10_000 });
+    const posted = api.waitForCall('POST', '/products/:slug/reviews');
+    await page.getByRole('button', { name: 'Lưu đánh giá' }).click();
+    expect((await posted).body).toMatchObject({ orderId: FIRST.id });
   });
 
   test('trang sản phẩm: đánh giá của mình có nhãn "Của bạn", mã đơn và nút sửa riêng; đầu mục vẫn viết được cho đơn mới', async ({ page }) => {
