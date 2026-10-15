@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import {
   AdminController,
   ConfirmOrderPaymentDto,
@@ -12,10 +13,22 @@ import {
   GomdonMarkHandledDto,
   GomdonRetryDto,
   ListOrdersQuery,
-  ReturnRequestsQuery,
+  ResolvePancakeAttentionDto,
+  ReviewMerchantProductDto,
   SetUserRoleDto,
+  UnlinkMerchantProductDto,
 } from './admin.controller';
+import { ReturnRequestsQuery, ReturnsAdminController } from '../orders/returns-admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
+
+const VIEWER = { sub: 'admin-1', role: 'ADMIN' as const };
+
+const asBodyDto = (metatype: new () => object, value: Record<string, unknown>) =>
+  new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }).transform(value, {
+    type: 'body',
+    metatype,
+    data: undefined,
+  });
 
 // Kiểm chứng 2 finding tồn đọng từ Phase 1 (đã sửa ở admin.controller.ts):
 // 1) perUserLimit: @Min(0) — 0 vẫn hợp lệ (= không giới hạn, nhất quán coupons.service.ts).
@@ -119,6 +132,40 @@ describe('CreateCouponDto — code/startAt/endAt validation (Bug 2)', () => {
   });
 });
 
+describe('CreateCouponDto — chuẩn hoá mã + chặn số vô lý (ADMINOPS-7/8)', () => {
+  const base = {
+    code: 'SALE10',
+    type: 'AMOUNT',
+    value: 10000,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2026-12-31T00:00:00.000Z',
+    scope: 'PUBLIC',
+  };
+  const run = (over: Record<string, unknown>) => asBodyDto(CreateCouponDto, { ...base, ...over });
+
+  it('mã chữ thường + khoảng trắng hai đầu → tự chuẩn hoá HOA, bỏ khoảng trắng', async () => {
+    const dto = (await run({ code: '  summer10 ' })) as CreateCouponDto;
+    expect(dto.code).toBe('SUMMER10');
+  });
+
+  it('mã có khoảng trắng ở giữa / ký tự lạ → 400 tiếng Việt', async () => {
+    await expect(run({ code: 'sale 50' })).rejects.toMatchObject({ response: { message: expect.arrayContaining([expect.stringContaining('Mã chỉ gồm')]) } });
+    await expect(run({ code: 'GIẢM50' })).rejects.toBeDefined();
+  });
+
+  it('minOrder/maxDiscount âm, usageLimit âm hoặc 0 → 400', async () => {
+    await expect(run({ minOrder: -5 })).rejects.toBeDefined();
+    await expect(run({ maxDiscount: -100 })).rejects.toBeDefined();
+    await expect(run({ usageLimit: -1 })).rejects.toBeDefined();
+    await expect(run({ usageLimit: 0 })).rejects.toBeDefined();
+  });
+
+  it('AMOUNT 999.999.999đ → 400 (vượt trần 5.000.000đ)', async () => {
+    await expect(run({ value: 999_999_999 })).rejects.toBeDefined();
+    await expect(run({ value: 5_000_000 })).resolves.toBeDefined();
+  });
+});
+
 // Việc 9 (audit round 2): CreateCouponDto thiếu scopeMeta cho scope TIER/USER_GROUP → coupon tạo
 // ra fail-closed ở MỌI user trong isCouponEligible (coupon-scope.ts), không lỗi khi tạo — bug
 // chức năng im lặng. RequiredScopeMeta() bắt buộc đúng field theo scope.
@@ -212,6 +259,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(d).toEqual(expect.objectContaining({ status: 'PENDING', limit: 100 }));
     const r = (await asQuery(ReturnRequestsQuery, { status: 'REQUESTED' })) as ReturnRequestsQuery;
     expect(r.status).toBe('REQUESTED');
+    expect(((await asQuery(ReturnRequestsQuery, { status: 'TO_RECEIVE' })) as ReturnRequestsQuery).status).toBe('TO_RECEIVE');
     await expect(asQuery(DealerAppsQuery, { status: 'pending' })).rejects.toThrow();
     await expect(asQuery(ReturnRequestsQuery, { status: 'PENDING' })).rejects.toThrow();
   });
@@ -231,13 +279,13 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
   it('controller chuyển order xuống AdminService (thiếu → undefined, service mặc định desc)', async () => {
     const admin = {
       listDealerApplications: jest.fn().mockResolvedValue({ data: [], meta: {} }),
-      listReturnRequests: jest.fn().mockResolvedValue({ data: [], meta: {} }),
     };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.dealerApps(Object.assign(new DealerAppsQuery(), { page: 1, limit: 20, status: 'PENDING' as const, order: 'asc' as const }));
     expect(admin.listDealerApplications).toHaveBeenCalledWith('PENDING', 1, 20, 'asc');
-    await ctrl.returns(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
-    expect(admin.listReturnRequests).toHaveBeenCalledWith(undefined, 2, 10, undefined);
+    const returns = { listForAdmin: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+    await new ReturnsAdminController(returns as never).list(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
+    expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
   });
 
   it('DealerPriceHistoryQuery nhận variationId', async () => {
@@ -281,8 +329,8 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     expect(admin.retryGomdonPush).toHaveBeenCalledWith('admin-1', 'o1', true);
     await ctrl.cancelGomdonWaybill('admin-1', 'o1');
     expect(admin.cancelGomdonWaybill).toHaveBeenCalledWith('admin-1', 'o1');
-    await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }));
-    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined);
+    await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, recycling: 'attention' as const }), VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, 'attention', undefined, undefined, undefined, undefined, VIEWER);
   });
 
   it('POST orders/:id/gomdon/mark-handled chuyển adminId + id + note xuống AdminService', async () => {
@@ -292,6 +340,32 @@ describe('AdminController — quyền + passthrough endpoint thu gom', () => {
     expect(admin.markGomdonHandled).toHaveBeenCalledWith('admin-1', 'o1', 'đã hẹn lại');
     expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.markGomdonHandled)).toBe('orders/:id/gomdon/mark-handled');
     expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.markGomdonHandled)).toBe(RequestMethod.POST);
+  });
+});
+
+describe('AdminController — hàng đợi "Cần xử lý Pancake"', () => {
+  it('GET /admin/orders nhận ?pancake=attention (giá trị lạ bị chặn) và chuyển xuống listOrders', async () => {
+    await expect(asQuery(ListOrdersQuery, { pancake: 'attention' })).resolves.toMatchObject({ pancake: 'attention' });
+    await expect(asQuery(ListOrdersQuery, { pancake: 'all' })).rejects.toThrow();
+    const admin = { listOrders: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 1, pancake: 'attention' as const }), VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 1, undefined, undefined, undefined, undefined, 'attention', undefined, undefined, VIEWER);
+  });
+
+  it('POST orders/:id/pancake-attention/resolve: chỉ ADMIN, chuyển adminId + id + note; note ≤ 500, chặn field lạ', async () => {
+    const admin = { resolvePancakeAttention: jest.fn().mockResolvedValue({ ok: true, message: 'ok' }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.resolvePancakeAttention('admin-1', 'o1', { note: 'đã gọi khách' });
+    expect(admin.resolvePancakeAttention).toHaveBeenCalledWith('admin-1', 'o1', 'đã gọi khách');
+    expect(Reflect.getMetadata(PATH_METADATA, AdminController.prototype.resolvePancakeAttention)).toBe(
+      'orders/:id/pancake-attention/resolve',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, AdminController.prototype.resolvePancakeAttention)).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminController.prototype.resolvePancakeAttention)).toBeUndefined();
+    await expect(asBody(ResolvePancakeAttentionDto, {})).resolves.toEqual({});
+    await expect(asBody(ResolvePancakeAttentionDto, { note: 'x'.repeat(501) })).rejects.toThrow();
+    await expect(asBody(ResolvePancakeAttentionDto, { pancakeAttention: null })).rejects.toThrow();
   });
 });
 
@@ -328,5 +402,97 @@ describe('POST /admin/users/role — tierId cho DEALER (C-008)', () => {
   it('tierId sai kiểu / quá dài → 400', async () => {
     await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 5 })).rejects.toThrow();
     await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'x'.repeat(101) })).rejects.toThrow();
+  });
+});
+
+describe('UnlinkMerchantProductDto (R3-MERCHANT-6)', () => {
+  it('lý do chỉ có khoảng trắng bị chặn như để trống: đối tác phải nhận được lý do thật', async () => {
+    await expect(asBodyDto(UnlinkMerchantProductDto, { reason: '   ' })).rejects.toMatchObject({
+      response: { message: expect.arrayContaining(['Nhập lý do gỡ liên kết để báo đối tác.']) },
+    });
+    await expect(asBodyDto(UnlinkMerchantProductDto, {})).rejects.toBeDefined();
+  });
+
+  it('lý do hợp lệ được cắt khoảng trắng hai đầu', async () => {
+    await expect(asBodyDto(UnlinkMerchantProductDto, { reason: '  Sai thương hiệu  ' })).resolves.toMatchObject({
+      reason: 'Sai thương hiệu',
+    });
+  });
+});
+
+describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
+  it('dòng "Bản sửa chờ duyệt" gửi editVersion dạng ISO, dòng thường không gửi', async () => {
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: false, rejectReason: 'x', editVersion: '2026-10-14T03:00:00.000Z' }),
+    ).resolves.toMatchObject({ editVersion: '2026-10-14T03:00:00.000Z' });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true })).resolves.toMatchObject({ approve: true });
+  });
+
+  it('editVersion không phải thời điểm hợp lệ bị chặn', async () => {
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, editVersion: 'hôm qua' })).rejects.toBeDefined();
+  });
+
+  it('mã Pancake và sản phẩm đang bán admin đã xem là tuỳ chọn: gửi (chuỗi rỗng: dòng không có mã), bỏ trống hoặc null đều hợp lệ', async () => {
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: true, confirmTakeover: true, expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' }),
+    ).resolves.toMatchObject({ expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: '' })).resolves.toMatchObject({ expectedPancakeCode: '' });
+    const bare = await asBodyDto(ReviewMerchantProductDto, { approve: true, confirmTakeover: true });
+    expect(bare.expectedPancakeCode).toBeUndefined();
+    expect(bare.expectedTakeoverProductId).toBeUndefined();
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: null, expectedTakeoverProductId: null }),
+    ).resolves.toMatchObject({ expectedPancakeCode: null, expectedTakeoverProductId: null });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: 123 })).rejects.toBeDefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedTakeoverProductId: 'x'.repeat(101) })).rejects.toBeDefined();
+  });
+
+  it('swagger khai báo hai trường đã xem là tuỳ chọn, có thể null, kèm mô tả cách xử lý khi bỏ trống', () => {
+    const field = (name: string) => Reflect.getMetadata(DECORATORS.API_MODEL_PROPERTIES, ReviewMerchantProductDto.prototype, name);
+    expect(field('approve')).not.toMatchObject({ required: false });
+    for (const name of ['expectedPancakeCode', 'expectedTakeoverProductId']) {
+      expect(field(name)).toMatchObject({ required: false, nullable: true, maxLength: 100, description: expect.stringContaining('Bỏ trống') });
+    }
+    expect(field('expectedUpdatedAt')).toMatchObject({ required: false, nullable: true, description: expect.stringContaining('Bỏ trống') });
+  });
+
+  it('R5-PARTNER-1: expectedUpdatedAt là ngày giờ ISO tuỳ chọn; rỗng hoặc toàn khoảng trắng coi như không gửi; sai định dạng bị chặn', async () => {
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '2026-10-14T03:00:00.000Z' })).resolves.toMatchObject({
+      expectedUpdatedAt: '2026-10-14T03:00:00.000Z',
+    });
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true })).expectedUpdatedAt).toBeUndefined();
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '' })).expectedUpdatedAt).toBeUndefined();
+    expect((await asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: '  ' })).expectedUpdatedAt).toBeUndefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: null })).resolves.toMatchObject({ expectedUpdatedAt: null });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: 'hôm qua' })).rejects.toBeDefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedUpdatedAt: 20261014 })).rejects.toBeDefined();
+  });
+
+  it('controller chuyển mã và sản phẩm đã xem xuống service', async () => {
+    const admin = { reviewMerchantProduct: jest.fn().mockResolvedValue({}) };
+    const dto = Object.assign(new ReviewMerchantProductDto(), {
+      approve: true,
+      confirmTakeover: true,
+      expectedPancakeCode: 'PK-1',
+      expectedTakeoverProductId: 'p-x',
+      expectedUpdatedAt: '2026-10-14T03:00:00.000Z',
+    });
+    await new AdminController(admin as never, {} as never).reviewMerchantProduct('admin-1', 'p1', dto);
+    expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
+      pancakeCode: 'PK-1',
+      takeoverProductId: 'p-x',
+      updatedAt: '2026-10-14T03:00:00.000Z',
+    });
+  });
+
+  it('controller không bịa mã đã xem khi client không gửi: service nhận undefined', async () => {
+    const admin = { reviewMerchantProduct: jest.fn().mockResolvedValue({}) };
+    const dto = Object.assign(new ReviewMerchantProductDto(), { approve: true, confirmTakeover: true });
+    await new AdminController(admin as never, {} as never).reviewMerchantProduct('admin-1', 'p1', dto);
+    expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
+      pancakeCode: undefined,
+      takeoverProductId: undefined,
+      updatedAt: undefined,
+    });
   });
 });

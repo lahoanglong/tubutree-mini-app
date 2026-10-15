@@ -45,7 +45,14 @@ export class PlaceOrderDto {
    */
   @IsOptional() @IsBoolean() quotedZeroTotal?: boolean;
 
-  @IsOptional() @IsString() note?: string;
+  /**
+   * Tổng tiền khách đang thấy trên màn thanh toán (từ báo giá). Lúc đặt mà tổng tính lại CAO HƠN số này
+   * (giá đồng bộ Pancake/phí giao vừa đổi) thì BE trả TOTAL_CHANGED thay vì âm thầm thu số mới. Client cũ
+   * không gửi thì giữ hành vi cũ.
+   */
+  @IsOptional() @IsInt() @Min(0) expectedTotal?: number;
+
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */
   @IsOptional() @IsString() referralCode?: string;

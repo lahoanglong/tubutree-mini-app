@@ -3,11 +3,10 @@ import type {
   AddressDTO,
   CartSummary,
   CheckoutQuote,
-  PublicConfig,
 } from '../../../miniapp/src/services/shop-api';
 import type { LoyaltyOverview, WalletSummary } from '../../../miniapp/src/services/account-api';
 import type { BankQr } from '../../../miniapp/src/services/payment-api';
-import { makeOrder, makeUser, mockSession, type MockApi } from './mock-api';
+import { makeOrder, makeUser, mockSession, publicConfig, type MockApi } from './mock-api';
 import { PILOT_PRODUCT } from './pilot-mocks';
 
 /**
@@ -27,12 +26,12 @@ export const CHECKOUT_ADDRESS: AddressDTO = {
   recipient: 'Nguyễn Văn A',
   phone: '0901234567',
   province: 'TP. Hồ Chí Minh',
-  district: 'Quận 1',
-  ward: 'Phường Bến Nghé',
+  district: '',
+  ward: 'Phường Sài Gòn',
   street: '123 Lê Lợi',
-  provinceCode: '79',
-  districtCode: '760',
-  wardCode: '26734',
+  provinceCode: '84_VN79',
+  districtCode: '',
+  wardCode: '84_VN79_26734',
   isDefault: true,
 };
 
@@ -102,17 +101,8 @@ export const CHECKOUT_LOYALTY: LoyaltyOverview = {
   ],
 };
 
-export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
-  return {
-    freeshipThreshold: 200000,
-    subscribeDiscountPct: 0.12,
-    affiliateWalletMultiplier: 1.5,
-    affiliateMinWithdrawBank: 50000,
-    cashbackHoldDays: 30,
-    recyclingEnabled: false,
-    ...over,
-  };
-}
+// Định nghĩa ở mock-api.ts (mockSession dùng làm mặc định); giữ export này cho các spec đã import từ đây.
+export { publicConfig };
 
 export const ORDER_CODE_COD = 'TUBU-COD-12345';
 export const ORDER_CODE_BANK = 'TUBU-BANK-67890';

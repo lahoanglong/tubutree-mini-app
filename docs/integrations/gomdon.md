@@ -77,11 +77,11 @@ Ghi chú trạng thái:
 | `type` | 1 giao hàng, 2 thu hồi, 3 đổi hàng. Bắt buộc | `3` (đổi hàng) | đã khớp |
 | `pickup_type` | 1 là shop tự mang ra bưu cục, 2 là nhân viên tới lấy tại địa chỉ gửi. Bắt buộc | `2`: bưu tá tới kho | đã khớp |
 | `service_id` | 12491 giao tiết kiệm, 12490 giao nhanh (số sau chỉ ghi trong mô tả mẫu). Bắt buộc | `12491` | đã khớp |
-| `order_customer_id` | Có trong request mẫu, với ghi chú "dùng để check unique". Không có trong bảng trường | `order.code`, ví dụ `TUBU…` | đã khớp. Ý nghĩa "duy nhất" được xử lý ở dòng "Trùng mã đơn" của bảng 2.4 |
+| `order_customer_id` | Có trong request mẫu, với ghi chú "dùng để check unique". Không có trong bảng trường | `order.code`, ví dụ `TUBU…`. Admin "Tạo lại vận đơn" sau khi Gomdon huỷ vận đơn cũ (mã 2) thì gửi `TUBU…-R1`, `-R2`… (`Order.gomdonAttempt`), vì mã cũ đã bị dùng. Đường tạo lại từ `NEEDS_MANUAL_CHECK` vẫn gửi mã cũ để Gomdon chặn trùng giúp | đã khớp. Ý nghĩa "duy nhất" được xử lý ở dòng "Trùng mã đơn" của bảng 2.4. Gomdon có nhận hậu tố `-R{n}` không: chưa kiểm chứng (mục 5) |
 | `product_name` | Chuỗi, bắt buộc | Danh sách sản phẩm, cắt 250 ký tự | đã khớp |
 | `product_price` | Giá trị gói hàng, VND | `order.total` | đã khớp |
 | `product_number` | Số kiện | `1` | đã khớp |
-| `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout đã chặn COD trên 5 triệu | đã khớp |
+| `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout chặn COD khi một đơn (một kiện) trên 5 triệu, xét từng đơn sau khi tách theo nơi giao | đã khớp |
 | `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng. Thiếu thì lấy 500 g | đã khớp |
 | `width` / `height` / `length` | **Milimét** | `0`, không khai kích thước, giống mẫu | đã khớp |
 | `note` | Ghi chú trên bưu kiện | "Đơn đổi hàng thu gom tái chế (Tối đa X kg) …" | đã khớp |
@@ -96,7 +96,9 @@ Ghi chú trạng thái:
 | Mã số đơn Gomdon | `data.id`, là số. Đây cũng là id trong đường huỷ, và là `order_id` của webhook | Lưu `gomdonOrderId = String(id)` | đã khớp |
 | Mã vận đơn | `data.partner_code`, chuỗi số khoảng 14 chữ số. Cùng dạng với `order_code` trong webhook | Lưu `gomdonPartnerCode` và `shippingCode` | đã khớp |
 | `data.code` | Mã **nội bộ** Gomdon, dạng `<id>-<mã user>-<tên>`. **Không phải** vận đơn | Trước: thiếu `partner_code` thì lưu `code` làm mã vận đơn, nên webhook không bao giờ khớp và khách thấy sai mã. Nay: không dùng `code`. Thiếu `partner_code` mà có `id` thì tạm lưu `id`, để ghi chú Pancake vẫn báo "ĐÃ CÓ VẬN ĐƠN"; webhook mang `order_code` tới sẽ thay mã tạm này. Không có cả `id` lẫn `partner_code` thì chuyển `NEEDS_MANUAL_CHECK` | **đã sửa** |
-| Lỗi validate | HTTP 200 + `result:false`, ví dụ "The source province field is required." | `GomdonRejectedError`: chắc chắn chưa tạo, BullMQ retry, hết lượt thì `FAILED` và kho tạo tay | đã khớp |
+| Lỗi validate | HTTP 200 + `result:false`, ví dụ "The source province field is required." | `GomdonRejectedError`: chắc chắn chưa tạo. Lỗi dữ liệu cố định: thử 3 lần rồi `FAILED`, kho tạo tay | đã khớp |
+| Lỗi tạm trước khi tạo | Tài liệu không nói | Đăng nhập lỗi (kể cả sai tài khoản), HTTP 429/503, lỗi mạng trước khi gửi: `GomdonRejectedError` có cờ `transient`. Job thử 8 lần, backoff 5 giây tăng dần (khoảng 10 phút). Hết lượt mà đơn còn trong 60 phút đầu (tính từ lúc thanh toán được) thì **không** chốt `FAILED`: cron 10 phút xếp lại. Quá 60 phút mới `FAILED` và báo tạo tay | **đã sửa** (UAT GOMDON-1) |
+| Gomdon từ chối tài khoản | Tài liệu không nói | Đăng nhập trả 4xx (trừ 429) hoặc `result:false` thì ghi nhận "từ chối tài khoản" (bộ nhớ của process API). Lựa chọn thu gom ở checkout tự ẩn, không đăng nhập lại trong 60 giây, cron thử lại mỗi 30 phút. Web admin hiện tình trạng kết nối và có nút "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn) | **đã sửa** (UAT GOMDON-1) |
 | Trùng mã đơn | `order_customer_id` dùng để kiểm tra trùng. Tài liệu không in thông điệp lỗi khi trùng | Trước: coi là "chắc chắn chưa tạo". Sau 5 lần retry, đơn thành `FAILED` và báo kho **tạo vận đơn tay**, trong khi Gomdon đã có đơn: giao trùng. Nay: thông điệp dạng "already been taken", "đã tồn tại", "bị trùng"… ra `GomdonDuplicateOrderError`. Đơn chuyển `NEEDS_MANUAL_CHECK`, không retry, báo "ĐÃ CÓ đơn… KHÔNG tạo vận đơn tay" | **đã sửa** (mẫu thông điệp: tài liệu không nói) |
 | Timeout, 5xx, rớt kết nối | Tài liệu không nói | `GomdonAmbiguousError`, chuyển `NEEDS_MANUAL_CHECK`, không retry | tài liệu không nói |
 
@@ -106,7 +108,7 @@ Ghi chú trạng thái:
 |---|---|---|---|
 | Đường dẫn, phương thức | `POST /api/v2/order/cancel/{id}`, `id` là mã số đơn Gomdon (`data.id`), body form rỗng | `/api/v2/order/cancel/${gomdonOrderId}` với `FormData` rỗng | đã khớp |
 | Điều kiện | Chỉ huỷ được đơn **chưa lấy hàng** | Không gọi API khi Gomdon đã báo lấy hàng (mã khác 1/2/10): chuyển `TOO_LATE` và báo CSKH | đã khớp |
-| Kết quả | Luôn HTTP 200: `{result:true, message:"Hủy đơn hàng thành công"}` hoặc `{result:false, message:"Không tìm thấy đơn hàng"}` | Chỉ coi là huỷ xong khi `result:true`. Còn lại thì retry, hết lượt thì `FAILED` và báo huỷ tay | đã khớp |
+| Kết quả | Luôn HTTP 200: `{result:true, message:"Hủy đơn hàng thành công"}` hoặc `{result:false, message:"Không tìm thấy đơn hàng"}` | Chỉ coi là huỷ xong khi `result:true`. "Không tìm thấy" thì `FAILED` ngay, không thử lại, báo kiểm tra trên cổng Gomdon. Lỗi khác thì job thử 8 lần (khoảng 10 phút), hết lượt thì `FAILED` và báo huỷ tay; cron thử huỷ lại mỗi 30 phút trong 6 giờ nếu vận đơn còn mã 1/10. CSKH huỷ tay xong thì bấm "Đã xử lý tay" (`gomdonCancelStatus = MANUAL_HANDLED`), đơn rời hàng đợi | đã khớp. **Đã sửa** phần thử lại và xử lý tay (UAT GOMDON-1, GOMDON-9) |
 
 ### 2.6. Tra cứu đơn
 
@@ -120,10 +122,11 @@ Ghi chú trạng thái:
 |---|---|---|---|
 | Đăng ký | Liên hệ quản trị Gomdon | Mục 3 | tài liệu không nói (quy trình) |
 | Header, secret, chữ ký | Không nhắc tới | Nhận header `x-webhook-token`, hoặc token trong đường dẫn `/<secret>`, hoặc `?token=`. So bằng `timingSafeEqual`. Production chưa đặt secret thì chặn hết | tài liệu không nói |
-| Kiểu body | Mẫu là JSON | Nhận JSON. Dạng urlencoded cũng đọc được vì mọi trường đều ép kiểu từ chuỗi | tài liệu không nói (Content-Type) |
+| Kiểu body | Mẫu là JSON | Nhận JSON, urlencoded và `multipart/form-data` (kiểu Gomdon dùng cho mọi API của họ; không nhận file, tối đa 60 trường × 4 KB). Mọi trường đều ép kiểu từ chuỗi. Token đúng mà body không đọc được (thiếu `status`) thì trả **400** để Gomdon gửi lại, ghi lỗi kết nối và báo động (tối đa 1 lần/10 phút mỗi Content-Type, chỉ ghi tên trường, không ghi giá trị) | tài liệu không nói (Content-Type). **Đã sửa** multipart (UAT GOMDON-6) |
+| Giới hạn tần suất | Không nhắc tới | Hai route webhook **không** bị throttle (`@SkipThrottle`): đã có token chia sẻ, và Gomdon chỉ gửi lại 3 lần nên một lần 429 là mất event | **đã sửa** (UAT GOMDON-5) |
 | `order_id` | Mã số đơn Gomdon | Khớp `gomdonOrderId` | đã khớp |
 | `order_code` | "Mã vận đơn". JSON mẫu để dạng **số** | Ép thành chuỗi rồi khớp `gomdonPartnerCode`. Có test với số 14 chữ số | đã khớp |
-| `order_customer_id` | Mã đơn của khách hàng Gomdon, tức mã đơn của ta. JSON mẫu để dạng số | Ép chuỗi, dùng để **đối chiếu chéo** và tự lành, không bao giờ là khoá khớp duy nhất | đã khớp |
+| `order_customer_id` | Mã đơn của khách hàng Gomdon, tức mã đơn của ta. JSON mẫu để dạng số | Ép chuỗi, bỏ hậu tố `-R{n}` khi so với mã đơn, dùng để **đối chiếu chéo** và tự lành, không bao giờ là khoá khớp duy nhất. Tự lành chỉ khớp đơn có đúng `gomdonAttempt = n` | đã khớp |
 | `status` | Mã 1–12 | Mục 2.8 | đã khớp |
 | `created_time` | "Thời gian thay đổi", kiểu int. Mẫu `1657245696` là unix **giây**. Ở response tạo đơn, `created_time` trùng đúng `created_at` | Đọc unix giây. Vẫn nhận mili-giây và chuỗi ngày cho an toàn. Dùng cho khoá chống trùng và chống lùi trạng thái | đã khớp |
 | Cân nặng, kích thước | `weight` tính gram. `height`, `width`, `length` tính mm | Chỉ khai báo kiểu, không dùng | đã khớp |
@@ -174,7 +177,8 @@ Ghi chú trạng thái:
    `SELECT "status","gomdonStatus","receivedAt","error" FROM "gomdon_webhook_events" ORDER BY "receivedAt" DESC LIMIT 5;`.
    Event của vận đơn không thuộc đơn nào của ta sẽ có trạng thái `IGNORED`. Như vậy là bình thường.
 5. **Rủi ro mất event:** Gomdon chỉ gửi lại 3 lần, mỗi lần cách 30 giây. Webhook bị 401 vì sai hoặc thiếu
-   secret, bị 429 vì vượt 120 request/phút/IP, hoặc API sập quá khoảng 2 phút, thì event **mất hẳn**. Không
+   secret, bị 400 vì body không đọc được, hoặc API sập quá khoảng 2 phút, thì event **mất hẳn** (route webhook
+   không còn giới hạn tần suất nên không còn mất vì 429). Không
    có API tra cứu để kéo lại. Khi nghi có event bị mất (ví dụ sau sự cố, hoặc thấy đơn thu gom đứng yên lâu),
    đối chiếu tay trên cổng Gomdon theo mã đơn. Sau đó cập nhật đơn bằng các nút trong web admin, hoặc nhờ
    Gomdon bắn lại webhook.
@@ -201,13 +205,25 @@ Ghi chú trạng thái:
   người bấm nhầm ("Tạo lại vận đơn" từ `NEEDS_MANUAL_CHECK`) sẽ bị từ chối. Code coi lỗi đó là "đã có vận
   đơn" (mục 2.4), không phải "tạo tay".
 
+**Hàng đã rời kho trước khi có vận đơn Gomdon.** Đơn đang giao/đã giao, hoặc kho đã đặt hãng khác qua Pancake
+(`shippingCode` khác null mà `shippingPartner` khác BestExpress), thì không tạo vận đơn Gomdon nữa: chốt
+`FAILED` và báo hẹn thu gom riêng. Điều kiện này nằm cả trong câu `updateMany` claim, nên kho đổi hãng giữa
+lúc đọc đơn và lúc claim cũng không lọt (race spec `(h)`).
+
+**Báo động.** Mọi báo động (tạo lỗi, không rõ đã tạo chưa, giao trùng vận đơn, huỷ không được, hàng
+hoàn…) được lưu vào bảng `gomdon_alerts` gắn đơn, ngoài log và thông báo in-app cho tài khoản ADMIN. Báo động
+cùng nội dung đang mở thì không lưu/gửi lặp (khoá advisory theo đơn, race spec `(i)`). Đơn có báo động chưa
+xử lý luôn nằm trong hàng đợi "Cần xử lý thu gom" của web admin, kể cả khi trạng thái vận đơn trông bình
+thường. Chi tiết đơn liệt kê từng báo động với nút "Đã xử lý"; "Đã xử lý tay" đóng mọi báo động của đơn.
+
 ## 5. Chưa kiểm chứng: cần hỏi Gomdon hoặc thử thật
 
-1. **Thông điệp khi trùng `order_customer_id`**, và việc kiểm trùng có tính cả đơn **đã huỷ** không. Nếu
-   có, thì "Tạo lại vận đơn" sau khi vận đơn cũ bị huỷ (mã 2) sẽ luôn bị từ chối. Đơn sẽ chuyển
-   `NEEDS_MANUAL_CHECK` kèm báo động, và kho phải tạo vận đơn tay trên cổng Gomdon.
+1. **Thông điệp khi trùng `order_customer_id`**, và việc kiểm trùng có tính cả đơn **đã huỷ** không. Code
+   đã tránh trường hợp này bằng hậu tố `-R{n}` khi tạo lại sau mã 2, nhưng **chưa xác nhận Gomdon nhận
+   `order_customer_id` có hậu tố** (độ dài, ký tự cho phép).
 2. `order_customer_id` có **bắt buộc** không. Trường này không nằm trong bảng trường của tài liệu.
-3. Gomdon **có cho đặt header** webhook không. Webhook gửi từ IP nào, và Content-Type là gì (mẫu là JSON).
+3. Gomdon **có cho đặt header** webhook không. Webhook gửi từ IP nào, và Content-Type là gì (mẫu là JSON;
+   code nhận cả JSON, urlencoded và multipart).
 4. **Chuỗi trạng thái của đơn đổi hàng (type 3).** Chiều mang vật liệu tái chế về kho được báo trên cùng
    vận đơn (6/8 sau 7?) hay trên vận đơn riêng? Code đang coi 7 là mốc cuối, nên mọi mã tới sau 7 đều bị bỏ
    qua. Nếu Gomdon báo 6/8 **thay cho** 7, CSKH sẽ nhận báo động "chuyển hoàn" nhầm, và đơn không tự
@@ -215,6 +231,8 @@ Ghi chú trạng thái:
 5. **Mốc cuối và thứ tự chuyển mã.** Bảng bậc chống lùi là suy luận của ta (mục 2.8).
 6. **Tên địa chỉ.** Gomdon nhận tỉnh/quận/phường dạng chữ. Chưa biết có chấp nhận tiền tố "Thành phố" hay
    "Phường", và có chấp nhận địa chỉ hai cấp sau sáp nhập (ta gửi tên phường vào ô quận) không.
+   **Trước khi bật công tắc thu gom**: tạo một đơn thật bằng địa chỉ hai cấp rồi huỷ ngay, và cập nhật địa
+   chỉ kho mặc định (đang là "Thành phố Thủ Đức", địa giới cũ) theo địa giới mới (UAT GOMDON-7).
 7. **Khung thời gian của giới hạn 600 request**: mỗi phút hay mỗi giờ.
 8. `expires_at` có luôn là `null` không. Token có bị thu hồi khi đăng nhập lại hoặc đổi mật khẩu không.
    Code đã tự đăng nhập lại khi gặp 401, nên chỉ ảnh hưởng số lần đăng nhập.
@@ -226,6 +244,10 @@ Ghi chú trạng thái:
 12. `order_code` trong webhook là **số JSON**. Mã hiện dài 14 chữ số nên an toàn. Nếu Gomdon đổi sang mã
     dài quá 15–16 chữ số, giá trị sẽ mất chính xác lúc parse JSON.
 13. Phí trong webhook (`customer_*_fee`) chưa được lưu hay đối soát với phí dự kiến.
+14. **Đăng nhập sai tài khoản** trả HTTP gì. Code coi mọi 4xx (trừ 429) và `result:false` là "từ chối tài
+    khoản" và ẩn lựa chọn thu gom tới khi đăng nhập lại được.
+15. **"Không tìm thấy đơn hàng" khi huỷ** có luôn là kết quả cuối không (vận đơn đã bị huỷ/xoá phía Gomdon).
+    Code không thử lại mà báo CSKH kiểm tra.
 
 ## 6. Test giữ hợp đồng
 
@@ -238,5 +260,9 @@ Tất cả dùng mock, không gọi Gomdon thật:
   `data.code` làm mã vận đơn, xử lý khi thiếu `partner_code`, trùng mã ra `NEEDS_MANUAL_CHECK` và giữ claim.
 - `gomdon-webhook.service.spec.ts`: payload đúng mẫu (`order_code` dạng số, `created_time` tính giây), không
   lưu `tracking_link`, thay mã vận đơn tạm.
-- `gomdon-webhook.controller.spec.ts`: cả hai route trả HTTP 200.
+- `gomdon-webhook.controller.spec.ts`: cả hai route trả HTTP 200, không bị throttle, nhận multipart thật qua
+  HTTP và từ chối upload file.
+- `gomdon-push.processor.spec.ts`, `gomdon-queue.spec.ts`: lỗi tạm và lỗi cố định, số lần thử của job.
+- `gomdon-alert.service.spec.ts`, `test/integration-race/gomdon.race-spec.ts`: báo động lưu DB, không trùng
+  khi báo đồng thời; không tạo vận đơn khi hàng vừa rời kho.
 - `gomdon-config.spec.ts`: bảng 12 mã trạng thái.

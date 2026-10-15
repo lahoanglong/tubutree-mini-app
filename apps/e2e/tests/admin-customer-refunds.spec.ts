@@ -47,6 +47,11 @@ function refund(over: Partial<AdminCustomerRefund> & Pick<AdminCustomerRefund, '
     phone: '0912345678',
     recipientName: 'Trần Thị B',
     customerUserId: null,
+    kind: 'END_CUSTOMER',
+    userId: null,
+    bankName: null,
+    bankAccountNo: null,
+    bankAccountName: null,
     method: 'MANUAL_TRANSFER',
     status: 'PENDING',
     reason: 'CANCELLED',
@@ -69,7 +74,9 @@ function mockList(api: MockApi, state: { rows: AdminCustomerRefund[] }) {
     const status = call.query.get('status');
     const limit = Number(call.query.get('limit') ?? 20);
     const pg = Number(call.query.get('page') ?? 1);
-    const rows = state.rows.filter((r) => !status || r.status === status);
+    // OPEN = mọi khoản còn việc, như CustomerRefundsService.list (OPEN_CUSTOMER_REFUND_STATUSES).
+    const open = ['UNVERIFIED', 'PENDING', 'PROCESSING'];
+    const rows = state.rows.filter((r) => !status || (status === 'OPEN' ? open.includes(r.status) : r.status === status));
     return page(rows.slice((pg - 1) * limit, pg * limit), pg, limit, rows.length);
   });
 }
@@ -105,13 +112,14 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await expect(p.locator('[data-refund-id="r2"]')).toContainText('Đơn trả hàng');
     await expect(r1.getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toBeVisible();
 
-    // Mặc định lọc PENDING; dòng WALLET (COMPLETED) không nằm trong hàng chờ.
+    // Mặc định lọc "Đang mở" (chờ đối soát + chờ chuyển khoản + đang chuyển khoản, R4-ADMIN-3); dòng WALLET (COMPLETED) không
+    // nằm trong hàng chờ.
     await expect(p.locator('[data-refund-id="r3"]')).toHaveCount(0);
     const list = api.callsTo('GET', '/admin/customer-refunds');
-    expect(list.some((c) => c.query.get('status') === 'PENDING' && c.query.get('limit') === '20')).toBe(true);
+    expect(list.some((c) => c.query.get('status') === 'OPEN' && c.query.get('limit') === '20')).toBe(true);
 
-    // Huy hiệu: một lần gọi limit=1 lấy meta.total (2 khoản PENDING).
-    expect(list.some((c) => c.query.get('status') === 'PENDING' && c.query.get('limit') === '1')).toBe(true);
+    // Huy hiệu: một lần gọi limit=1 lấy meta.total (2 khoản đang mở) — cùng tập với thẻ trang chủ.
+    expect(list.some((c) => c.query.get('status') === 'OPEN' && c.query.get('limit') === '1')).toBe(true);
     await expect(p.getByRole('button', { name: /^Hoàn tiền khách/ })).toContainText('2');
 
     // Dòng ví chỉ là dòng vết (tiền đã vào ví khách lúc huỷ/trả): hiện "Đã hoàn vào ví", không có nút hành động.
@@ -149,7 +157,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     // Mở hộp chưa gửi gì.
     expect(api.callsTo('POST', MARK_PAID)).toHaveLength(0);
 
-    await dialog.getByLabel('Mã giao dịch ngân hàng (tuỳ chọn)').fill('FT26275123456');
+    await dialog.getByLabel('Mã giao dịch ngân hàng', { exact: true }).fill('FT26275123456');
     await dialog.getByLabel('Ghi chú (tuỳ chọn)').fill('Chuyển VCB 15h');
     const paid = api.waitForCall('POST', MARK_PAID);
     await dialog.getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
@@ -159,7 +167,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
 
     await expect(dialog).toHaveCount(0);
     await expect(p.getByText(/Đã ghi nhận chuyển khoản 1\.250\.000đ/)).toBeVisible();
-    await expect(p.getByText('Không có khoản hoàn nào đang chờ chuyển khoản.')).toBeVisible();
+    await expect(p.getByText('Không còn khoản hoàn nào cần xử lý.')).toBeVisible();
     await expect(p.locator('[data-refund-id="r1"]')).toHaveCount(0);
     await expect(p.getByRole('button', { name: /^Hoàn tiền khách/ })).not.toContainText('1');
     expect(api.callsTo('POST', MARK_PAID)).toHaveLength(1);
@@ -171,6 +179,19 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await expect(done).toContainText('Chuyển VCB 15h');
     await expect(done.getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toHaveCount(0);
     expect(api.callsTo('GET', '/admin/customer-refunds').some((c) => c.query.get('status') === 'COMPLETED')).toBe(true);
+  });
+
+  test('Thiếu mã giao dịch ngân hàng: hộp báo nhập mã, không gọi mark-paid, hộp vẫn mở', async ({ page: p, api }) => {
+    mockList(api, { rows: [refund({ id: 'r1' })] });
+
+    await p.goto('/admin?tab=customerRefunds');
+    await p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
+    const dialog = p.getByRole('alertdialog');
+    await dialog.getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
+
+    await expect(dialog.getByRole('alert')).toContainText('Nhập mã giao dịch ngân hàng');
+    await expect(dialog).toBeVisible();
+    expect(api.callsTo('POST', MARK_PAID)).toHaveLength(0);
   });
 
   test('Huỷ hộp xác nhận: đóng hộp, không gọi mark-paid, khoản vẫn chờ chuyển khoản', async ({ page: p, api }) => {
@@ -200,6 +221,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await p.goto('/admin?tab=customerRefunds');
     await p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
     const dialog = p.getByRole('alertdialog');
+    await dialog.getByLabel('Mã giao dịch ngân hàng', { exact: true }).fill('FT1');
     await dialog.getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
 
     await expect(dialog).toHaveCount(0);
@@ -221,7 +243,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await p.goto('/admin?tab=customerRefunds');
     await p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
     const dialog = p.getByRole('alertdialog');
-    await dialog.getByLabel('Mã giao dịch ngân hàng (tuỳ chọn)').fill('FT1');
+    await dialog.getByLabel('Mã giao dịch ngân hàng', { exact: true }).fill('FT1');
     const accept = dialog.getByRole('button', { name: 'Đã chuyển khoản', exact: true });
     await accept.click();
 
@@ -229,7 +251,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await expect(dialog.getByRole('alert')).not.toContainText('Internal server error');
     await expect(dialog).toBeVisible();
     await expect(accept).toBeEnabled();
-    await expect(dialog.getByLabel('Mã giao dịch ngân hàng (tuỳ chọn)')).toHaveValue('FT1');
+    await expect(dialog.getByLabel('Mã giao dịch ngân hàng', { exact: true })).toHaveValue('FT1');
 
     fail = false;
     await accept.click();

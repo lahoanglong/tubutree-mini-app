@@ -12,6 +12,7 @@ import type { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { createOrder, createUser, warmPool } from './helpers';
 
 const MARKER = 'đẩy tay sau khi nhận tiền';
+const order6 = () => Math.random().toString(36).slice(2, 8);
 
 /**
  * Nhân viên Pancake ghi nhận chuyển khoản VÀ đổi trạng thái trong cùng một lần lưu → một webhook mang
@@ -21,6 +22,7 @@ const MARKER = 'đẩy tay sau khi nhận tiền';
 describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (real Postgres)', () => {
   let prisma: PrismaService;
   let processor: PancakeProcessor;
+  let orderStatus: OrderStatusService;
   const notify = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
@@ -42,8 +44,8 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
     );
     const analytics = new AnalyticsEventsService(prisma);
-    const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
-    processor = new PancakeProcessor(prisma, notifications, orderStatus, undefined, undefined, analytics);
+    orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, analytics);
+    processor = new PancakeProcessor(prisma, notifications, orderStatus);
   });
 
   afterAll(async () => {
@@ -70,9 +72,10 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     return prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } });
   }
 
-  it('status=3 + bank_payment=total → SHIPPING + PAID, không có dấu "đẩy tay"; sự kiện lặp lại không đổi gì', async () => {
+  // Mã Pancake POS (api-docs.pancake.vn): 2 Đã gửi hàng, 3 Đã nhận, 8 Đang đóng hàng, 5 Đã hoàn, 6 Đã hủy.
+  it('status=2 (Đã gửi hàng) + bank_payment=total → SHIPPING + PAID, lịch sử ghi bước nhận tiền; sự kiện lặp lại không đổi gì', async () => {
     const order = await bankTransferOrder();
-    const payload = { id: `pc-${order.code}`, extension: { external_order_id: order.code }, status: 3, bank_payment: order.total };
+    const payload = { id: `pc-${order.code}`, extension: { external_order_id: order.code }, status: 2, bank_payment: order.total };
 
     const ev = await deliver(payload);
     expect(ev.status).toBe('PROCESSED');
@@ -81,39 +84,150 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
     expect(after.status).toBe('SHIPPING');
     expect(after.note ?? '').not.toContain(MARKER);
     const history = await prisma.orderStatusHistory.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'asc' } });
-    expect(history.map((h) => h.toStatus)).toEqual(['SHIPPING']);
+    expect(history.map((h) => [h.fromStatus, h.toStatus, h.actorType])).toEqual([
+      ['PENDING_PAYMENT', 'CONFIRMED', 'PANCAKE'],
+      ['CONFIRMED', 'SHIPPING', 'PANCAKE'],
+    ]);
+    expect(history[0]!.note).toContain('Đã nhận tiền');
 
     await deliver(payload);
     const again = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(again).toMatchObject({ status: 'SHIPPING', paymentStatus: 'PAID', note: after.note });
-    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id } })).toBe(1);
+    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id } })).toBe(2);
     const paidEvents = await prisma.analyticsEvent.count({
       where: { eventName: 'order_paid', props: { path: ['orderId'], equals: order.id } },
     });
     expect(paidEvents).toBe(1);
   });
 
-  it('status=2 + bank_payment=total → PACKED + PAID (không kẹt ở CONFIRMED)', async () => {
+  it('status=3 (Đã nhận) + bank_payment=total → DELIVERED + PAID (đơn trả trước thường dừng ở 3)', async () => {
     const order = await bankTransferOrder();
-    await deliver({ extension: { external_order_id: order.code }, status: 2, bank_payment: order.total });
+    await deliver({ extension: { external_order_id: order.code }, status: 3, bank_payment: order.total });
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after).toMatchObject({ status: 'DELIVERED', paymentStatus: 'PAID' });
+    expect(after.deliveredAt).not.toBeNull();
+  });
+
+  it('status=8 (Đang đóng hàng) + bank_payment=total → PACKED + PAID (không kẹt ở CONFIRMED)', async () => {
+    const order = await bankTransferOrder();
+    await deliver({ extension: { external_order_id: order.code }, status: 8, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'PACKED', paymentStatus: 'PAID' });
     expect(after.note ?? '').not.toContain(MARKER);
   });
 
-  it('status=3 không có tiền → vẫn bị chặn ở PENDING_PAYMENT + UNPAID, có dấu "đẩy tay", event không FAILED', async () => {
+  it('status=2 không có tiền → vẫn bị chặn ở PENDING_PAYMENT + UNPAID, có dấu "đẩy tay", vào hàng đợi Pancake, event không FAILED', async () => {
     const order = await bankTransferOrder();
-    const ev = await deliver({ extension: { external_order_id: order.code }, status: 3 });
+    const ev = await deliver({ extension: { external_order_id: order.code }, status: 2 });
     expect(ev.status).toBe('PROCESSED');
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
-    expect(after.note).toContain(`vận chuyển đã báo SHIPPING — ${MARKER}`);
+    expect(after.note ?? '').not.toContain(MARKER);
+    expect(after.pancakeAttention).toContain('chưa ghi nhận thanh toán');
+    expect(after.pancakeAttentionAt).not.toBeNull();
   });
 
-  it('status=6 (huỷ) + bank_payment=total → CANCELLED, KHÔNG tự lật PAID (giữ đường hoàn tiền thủ công)', async () => {
+  it('webhook vận chuyển (Gomdon/hệ thống) bị chặn vì chưa trả tiền → dấu "đẩy tay" vào hàng đợi admin, KHÔNG vào ghi chú khách (R2-PANCAKE-5)', async () => {
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { note: 'Gọi trước khi giao' } });
+    for (let i = 0; i < 2; i++) {
+      await expect(orderStatus.setStatus(order.id, 'SHIPPING', { actorType: 'SYSTEM' })).rejects.toThrow();
+    }
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.note).toBe('Gọi trước khi giao');
+    expect(after.pancakeAttention).toBe(`[Chờ thanh toán: vận chuyển đã báo SHIPPING — ${MARKER}]`);
+    expect(after.pancakeAttentionAt).not.toBeNull();
+  });
+
+  it('status=6 (huỷ) + bank_payment=total → CANCELLED, KHÔNG tự lật PAID; tạo đúng 1 yêu cầu hoàn tiền về muộn (D2)', async () => {
     const order = await bankTransferOrder();
     await deliver({ extension: { external_order_id: order.code }, status: 6, bank_payment: order.total });
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'UNPAID' });
+    const late = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(late).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: order.total, status: 'PENDING', userId: order.userId })]);
+  });
+
+  it('status=5 (Đã hoàn) khi đơn COD đang giao → CANCELLED (không kẹt "Đang giao"), lịch sử actor PANCAKE', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER' });
+    const order = await createOrder(prisma, { userId: user.id, status: 'SHIPPING' });
+    const ev = await deliver({ extension: { external_order_id: order.code }, status: 5 });
+    expect(ev.status).toBe('PROCESSED');
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('CANCELLED');
+    const h = await prisma.orderStatusHistory.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(h).toMatchObject({ fromStatus: 'SHIPPING', toStatus: 'CANCELLED', actorType: 'PANCAKE' });
+  });
+
+  it('đơn Pancake KHÁC mang mã của đơn đã gắn đơn Pancake → đơn thật không bị huỷ; vào hàng đợi', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER' });
+    const linked = `pk-${order6()}`;
+    const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', pancakeOrderId: linked });
+    const ev = await deliver({ id: `dup-${linked}`, extension: { external_order_id: order.code }, status: 6 });
+    expect(ev.status).toBe('PROCESSED');
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('CONFIRMED');
+    expect(after.pancakeAttention).toContain(`#dup-${linked}`);
+    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id } })).toBe(0);
+  });
+
+  it('webhook tới trước khi lưu pancakeOrderId (không kèm mã đơn) → UNMATCHED; xử lý lại sau khi có id thì ghi được mã vận đơn', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER' });
+    const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED' });
+    const pid = `pk-${order6()}`;
+    const ev = await deliver({ id: pid, status: 1, partner: { partner_name: 'GHN', extend_code: 'GHN123' } });
+    expect(ev).toMatchObject({ status: 'UNMATCHED', processedAt: null });
+
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeOrderId: pid } });
+    await processor.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
+    expect((await prisma.pancakeWebhookEvent.findUniqueOrThrow({ where: { id: ev.id } })).status).toBe('PROCESSED');
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).shippingCode).toBe('GHN123');
+  });
+
+  it('GOMDON-3: đơn thu gom, Pancake ghi nhận tiền + "Đã gửi hàng" kèm vận đơn GHN cùng lúc → job Gomdon chỉ xếp SAU khi đơn đã SHIPPING + có mã GHN (không đặt bưu tá thứ hai)', async () => {
+    const seenAtEnqueue: { status: string; shippingCode: string | null }[] = [];
+    const gomdonQueue = {
+      getJob: jest.fn().mockResolvedValue(undefined),
+      add: jest.fn(async (_name: string, data: { orderId: string }) => {
+        const o = await prisma.order.findUniqueOrThrow({ where: { id: data.orderId }, select: { status: true, shippingCode: true } });
+        seenAtEnqueue.push(o);
+        return {};
+      }),
+    };
+    const loyalty = { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn() } as unknown as LoyaltyService;
+    const affiliate = { lockCommissionsForOrder: jest.fn(), grantReferralReward: jest.fn(), reverseCommissionsForOrder: jest.fn() } as unknown as AffiliateService;
+    const reversal = new OrderReversalService(
+      { restore: jest.fn() } as unknown as FlashSaleService,
+      { release: jest.fn() } as unknown as CouponsService,
+    );
+    const statusWithGomdon = new OrderStatusService(
+      prisma,
+      loyalty,
+      affiliate,
+      { notify } as unknown as NotificationsService,
+      reversal,
+      gomdonQueue as never,
+    );
+    const proc = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, statusWithGomdon);
+    const order = await bankTransferOrder();
+    await prisma.order.update({ where: { id: order.id }, data: { hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT' } });
+    const ev = await prisma.pancakeWebhookEvent.create({
+      data: {
+        eventType: 'orders',
+        rawPayload: {
+          id: `pc-${order.code}`,
+          extension: { external_order_id: order.code },
+          status: 2,
+          bank_payment: order.total,
+          partner: { partner_name: 'GHN', extend_code: 'GHN777888' },
+        } as object,
+        status: 'PENDING',
+      },
+    });
+    await proc.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after).toMatchObject({ status: 'SHIPPING', paymentStatus: 'PAID', shippingCode: 'GHN777888' });
+    expect(seenAtEnqueue).toEqual([{ status: 'SHIPPING', shippingCode: 'GHN777888' }]);
   });
 });

@@ -1,23 +1,22 @@
 name: Deploy API to VM
 
-# Push lên main đụng tới API/packages/compose → tự SSH vào VM build lại.
+# Push lên main đụng tới API/packages/compose → tự SSH vào máy chủ build lại.
 # Cần 3 secret (Settings → Secrets and variables → Actions):
-#   VM_HOST     = IP tĩnh VM (vd 34.142.194.160)
-#   VM_USER     = user SSH trên VM (vd lahoanglong_hcmus)
-#   VM_SSH_KEY  = private key (toàn bộ nội dung file id_ed25519) có public key đã thêm vào ~/.ssh/authorized_keys của VM
+#   VM_HOST     = IP máy chủ đang chạy (VPS Vietnix: 14.225.207.177)
+#   VM_USER     = user SSH trên máy đó
+#   VM_SSH_KEY  = private key (toàn bộ nội dung file id_ed25519) có public key đã thêm vào ~/.ssh/authorized_keys
+# và 2 biến repo (Settings → Variables), có mặc định cho VPS Vietnix:
+#   DEPLOY_DIR   = thư mục repo trên máy chủ (mặc định /opt/tubutree)
+#   COMPOSE_FILE = compose đang dùng (mặc định docker-compose.vietnix.yml)
 #
 # Gate bằng workflow_run: chỉ deploy SAU KHI workflow "CI" trên main pass.
 # Lý do chọn workflow_run thay vì `needs: ci`: ci.yml và deploy.yml là 2 workflow
 # riêng (path filter của deploy khác CI), không thể `needs:` cross-workflow.
 #
-# Trigger tự động (workflow_run) VẪN CỐ Ý TẮT — 2026-09-18: khác với CI, workflow này
-# KHÔNG nên tự bật lại theo baseline xanh, vì secret VM_HOST/VM_USER/VM_SSH_KEY hiện trỏ vào
-# VM GCP cũ đã đóng (xem docs/2026-09-12-deploy-runbook.md mục 4.3) — hạ tầng thật bây giờ là
-# VPS Vietnix, deploy bằng tay theo ops/README-vietnix-deploy.md + docker-compose.vietnix.yml
-# (compose khác, không phải docker-compose.prod.yml mà workflow này dùng). Bật workflow_run
-# lúc này sẽ SSH nhầm/fail vào máy sai mỗi lần merge main. Trước khi bật lại: (1) trỏ DNS +
-# hạ tầng ổn định trên 1 host duy nhất, (2) cập nhật 3 secret trỏ đúng host đó, (3) đổi
-# `docker-compose.prod.yml` → compose file đang dùng thật nếu vẫn còn ở Vietnix lúc đó.
+# Trigger tự động (workflow_run) VẪN CỐ Ý TẮT: deploy hiện làm bằng tay theo
+# ops/README-vietnix-deploy.md (git bundle lên VPS). Trước khi bật lại: (1) trỏ DNS + hạ tầng ổn
+# định trên 1 host duy nhất, (2) cập nhật 3 secret VM_* trỏ đúng host đó (đến 2026-10 chúng vẫn
+# trỏ VM GCP đã đóng), (3) máy chủ pull được từ origin.
 on:
   workflow_dispatch: {}
   # workflow_run:
@@ -45,34 +44,29 @@ jobs:
     steps:
       - name: Backup DB trước migrate
         # Dump postgres ra /var/backups/tubutree trước khi build/deploy mới.
-        # Nếu deploy hỏng → restore bằng: gunzip < <file>.sql.gz | docker compose exec -T postgres psql -U <user> <db>
+        # Nếu deploy hỏng → bash tools/backup/restore-db.sh <file>.sql.gz (xem tools/backup/README.md).
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # pipefail BẮT BUỘC: pg_dump | gzip — nếu chỉ `set -e`, exit của pipeline = gzip,
-            # pg_dump fail vẫn tạo .gz rỗng ~20 byte → backup "thành công" nhưng vô dụng.
             set -euo pipefail
-            cd ~/tubutree
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
             sudo mkdir -p /var/backups/tubutree
             sudo chown $(id -u):$(id -g) /var/backups/tubutree
-            TS=$(date +%Y%m%d_%H%M%S)
-            # Lấy user/db từ .env nếu có, fallback giá trị mặc định.
             POSTGRES_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true)
             POSTGRES_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true)
-            docker compose -f docker-compose.prod.yml exec -T postgres \
-              pg_dump -U "${POSTGRES_USER:-tubu}" "${POSTGRES_DB:-tubutree}" \
-              | gzip > "/var/backups/tubutree/pre-deploy-${TS}.sql.gz"
-            # Giữ tối đa 14 backup gần nhất cho khỏi đầy đĩa.
-            ls -1t /var/backups/tubutree/pre-deploy-*.sql.gz | tail -n +15 | xargs -r rm -f
+            COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" POSTGRES_USER="${POSTGRES_USER:-tubu}" POSTGRES_DB="${POSTGRES_DB:-tubutree}" \
+              bash tools/backup/backup-db.sh
 
-      - name: Tag previous git SHA để rollback
-        # Compose build local image (không push registry) → không có image tag `previous`.
-        # Thay vào đó lưu SHA hiện tại trước khi pull để rollback bằng:
-        #   ssh VM → cd ~/tubutree && git checkout $(cat .last-deployed-sha) \
-        #            && docker compose -f docker-compose.prod.yml up -d --build api web
+      - name: Ghi image đang chạy để quay lại
+        # Compose build image local (không push registry), nên điểm quay lại là IMAGE đang chạy chứ không phải commit.
+        # Làm đúng như bước 2 của docs/launch/deploy-rollback-runbook.md: ghi `.rollback-images` và gắn thẻ `:rollback`
+        # (giữ cho `docker image prune` không xoá mất image cũ). Quay lại theo mục 7 của runbook: 7.2 chỉ quay image, chỉ
+        # đúng khi schema sau migrate vẫn tương thích với image cũ; không thì 7.3 khôi phục bản backup.
+        # KHÔNG checkout commit cũ (`.last-deployed-sha`) rồi chạy lại deploy.sh: script này không có ở commit cũ, và HEAD
+        # tách rời làm `git pull --ff-only` của ops.yml lỗi. `.last-deployed-sha` chỉ để tham khảo.
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
@@ -80,9 +74,19 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            cd ~/tubutree
-            # Ghi SHA đang chạy (trước khi pull) làm điểm rollback.
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
             git rev-parse HEAD > .last-deployed-sha || true
+            DC="docker compose -f ${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}"
+            if [ -z "$($DC ps -q api)" ] || [ -z "$($DC ps -q web)" ]; then
+              echo "api hoặc web chưa chạy: không có image để ghi làm điểm quay lại"
+              exit 0
+            fi
+            API_ID=$(docker inspect -f '{{.Image}}' "$($DC ps -q api)"); API_NAME=$(docker inspect -f '{{.Config.Image}}' "$($DC ps -q api)")
+            WEB_ID=$(docker inspect -f '{{.Image}}' "$($DC ps -q web)"); WEB_NAME=$(docker inspect -f '{{.Config.Image}}' "$($DC ps -q web)")
+            printf 'API_ID=%s\nAPI_NAME=%s\nWEB_ID=%s\nWEB_NAME=%s\n' "$API_ID" "$API_NAME" "$WEB_ID" "$WEB_NAME" > .rollback-images
+            docker tag "$API_ID" "${API_NAME%%:*}:rollback"
+            docker tag "$WEB_ID" "${WEB_NAME%%:*}:rollback"
+            cat .rollback-images
 
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -94,7 +98,8 @@ jobs:
             # set -e: nếu `cd` hoặc `git pull` fail → DỪNG, KHÔNG build với tree CŨ
             # (trước đây không set -e → fail-silently rebuild bản cũ, deploy "thành công" mà không có code mới).
             set -euo pipefail
-            cd ~/tubutree
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
             git pull --ff-only
-            docker compose -f docker-compose.prod.yml up -d --build api web
-            docker image prune -f
+            # build → kiểm .env + migrate bằng image mới → thay api → thay web (xem script vì sao thứ tự này).
+            # deploy.sh thoát 2 (chưa build gì) khi bản có migration 20261015150000 mà API cũ còn chạy: làm tay theo runbook.
+            COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" bash tools/deploy/deploy.sh

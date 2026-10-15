@@ -100,8 +100,8 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
     await moduleRef?.close();
   });
 
-  /** Người mua có hai lô khớp sổ, địa chỉ, và 1 sản phẩm 100.000đ trong giỏ (tồn kho dư). */
-  async function buyer(standard: number, converted: number) {
+  /** Người mua có hai lô khớp sổ, địa chỉ, và `lines` sản phẩm 100.000đ (mỗi sản phẩm một dòng) trong giỏ (tồn kho dư). */
+  async function buyer(standard: number, converted: number, lines = 1) {
     const u = await createUser(prisma, { pointsBalance: standard, pointsConvertedBalance: converted });
     touched.push(u.id);
     const seed = [
@@ -110,13 +110,6 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
     ].filter((r) => r.delta !== 0);
     await prisma.pointsTransaction.createMany({
       data: seed.map((r) => ({ userId: u.id, delta: r.delta, lot: r.lot, reason: `IT_SEED_${r.lot}`, refType: 'IT' })),
-    });
-    const tag = randCode(8);
-    const product = await prisma.product.create({
-      data: { pancakeId: `itp-p-${tag}`, brand: 'IT', slug: `itp-sp-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: 100_000 },
-    });
-    const v = await prisma.variation.create({
-      data: { pancakeId: `itp-v-${tag}`, productId: product.id, sku: `ITP-${tag}`, name: 'Mặc định', attributes: {}, retailPrice: 100_000, stock: 50 },
     });
     const addr = await prisma.address.create({
       data: {
@@ -127,18 +120,30 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
     });
-    await cart.addItem(u.id, { variationId: v.id, quantity: 1 });
-    return { u, addr };
+    for (let i = 0; i < lines; i++) {
+      const tag = randCode(8);
+      const product = await prisma.product.create({
+        data: { pancakeId: `itp-p-${tag}`, brand: 'IT', slug: `itp-sp-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: 100_000 },
+      });
+      const v = await prisma.variation.create({
+        data: { pancakeId: `itp-v-${tag}`, productId: product.id, sku: `ITP-${tag}`, name: 'Mặc định', attributes: {}, retailPrice: 100_000, stock: 50 },
+      });
+      await cart.addItem(u.id, { variationId: v.id, quantity: 1 });
+    }
+    const lineIds = (await prisma.cartItem.findMany({ where: { cart: { userId: u.id } }, select: { id: true } })).map((l) => l.id);
+    return { u, addr, lineIds };
   }
 
   /**
    * Rào: mọi lời gọi placeOrder đọc giỏ (compute) xong rồi mới cùng đi tiếp vào tx. Không có rào thì
    * lời gọi tới sau lúc đơn đầu đã dọn giỏ sẽ thua vì "giỏ trống", không kiểm được guard trừ điểm.
+   * Mỗi lời gọi đặt một dòng riêng (itemIds): cùng một giỏ thì khoá giỏ biến lần sau thành nhận lại đơn vừa đặt,
+   * không chạm tới guard trừ điểm.
    */
   function barrierOnGetCart(n: number) {
     const original = cart.getCart.bind(cart);
@@ -161,12 +166,14 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
   }
 
   it('T6: 5 đơn song song, mỗi đơn cần 100 điểm lô CONVERTED, số dư chỉ đủ 2 → đúng 2 đơn, lô không âm', async () => {
-    const { u, addr } = await buyer(0, 250);
+    const { u, addr, lineIds } = await buyer(0, 250, 5);
     const spy = barrierOnGetCart(5);
     let results: PromiseSettledResult<unknown>[];
     try {
       results = await Promise.allSettled(
-        Array.from({ length: 5 }, () => checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100 } as never)),
+        lineIds.map((id) =>
+          checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD', pointsToUse: 100, itemIds: [id] } as never),
+        ),
       );
     } finally {
       spy.mockRestore();

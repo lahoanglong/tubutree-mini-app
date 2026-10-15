@@ -84,7 +84,7 @@ export default function BrandViewPage() {
       </Page>
     );
   }
-  if (q.isError || !b) {
+  if (!b) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />

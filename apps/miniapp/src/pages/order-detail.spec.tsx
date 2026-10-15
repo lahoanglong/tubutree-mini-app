@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   fetchOrder: vi.fn(),
   fetchMyReturns: vi.fn(),
+  getPublicConfig: vi.fn(),
+  cancelOrder: vi.fn(),
+  fetchMyRefunds: vi.fn(),
+  fetchRefundBank: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -22,8 +27,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchOrder: mocks.fetchOrder,
   fetchOrders: vi.fn(),
+  getPublicConfig: mocks.getPublicConfig,
   fetchMyReturns: mocks.fetchMyReturns,
-  cancelOrder: vi.fn(),
+  cancelOrder: mocks.cancelOrder,
+  fetchMyRefunds: mocks.fetchMyRefunds,
+  fetchRefundBank: mocks.fetchRefundBank,
+  chooseRefundDestination: vi.fn(),
   requestReturn: vi.fn(),
   addToCart: vi.fn(),
   repurchaseOrder: vi.fn(),
@@ -84,12 +93,96 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
     mocks.fetchMyReturns.mockResolvedValue([]);
   });
 
-  it('đơn đã giao: lối vào "Đánh giá" có vùng chạm 44px và mở trang sản phẩm', async () => {
+  it('đơn đã giao: lối vào "Viết đánh giá" có vùng chạm 44px và mở trang sản phẩm kèm đúng đơn để viết cho lần mua này', async () => {
     renderPage();
-    const link = await screen.findByText(/Đánh giá/);
+    const link = await screen.findByText(/Viết đánh giá/);
     expect(link.className).toContain('tubu-hit-44');
     fireEvent.click(link);
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+  });
+});
+
+describe('OrderDetailPage — giải thích vì sao không còn nút huỷ (R6-BUYER-10)', () => {
+  const NOTE = 'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('đơn đang giao: có câu giải thích và không có nút huỷ', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
+
+  it('đơn đã xác nhận còn huỷ được: không có câu giải thích', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CONFIRMED' });
+    renderPage();
+    await screen.findByText(/Chi tiết đơn hàng/);
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+
+  it('đơn đã giao xong: không có câu giải thích', async () => {
+    mocks.fetchOrder.mockResolvedValue(ORDER);
+    renderPage();
+    await screen.findByText(/Chi tiết đơn hàng/);
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+});
+
+describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('404 → "Không tìm thấy" kèm "Về trang chủ", không có "Thử lại"', async () => {
+    mocks.fetchOrder.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    renderPage();
+    expect(await screen.findByText('Không tìm thấy đơn hàng này.')).toBeInTheDocument();
+    expect(screen.queryByText('Thử lại')).toBeNull();
+    fireEvent.click(screen.getByText('Về trang chủ'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/');
+  });
+
+  it('lỗi máy chủ 5xx → vẫn "Thử lại"', async () => {
+    mocks.fetchOrder.mockRejectedValue(new AxiosError('boom', '500', undefined, undefined, { status: 500, data: {} } as AxiosResponse));
+    renderPage();
+    expect(await screen.findByText('Thử lại')).toBeInTheDocument();
+    expect(screen.queryByText('Về trang chủ')).toBeNull();
+  });
+});
+
+// R8: mỗi lần mua một đánh giá; API trả trạng thái đánh giá của từng dòng ở chính đơn này.
+describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  const withItem = (extra: Record<string, unknown>) => ({ ...ORDER, items: [{ ...ORDER.items[0], ...extra }] });
+
+  it('dòng đã đánh giá ở đơn này → "Sửa đánh giá", mở trang sản phẩm kèm đơn để sửa đúng đánh giá đó', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: 'r1', reviewable: false }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Sửa đánh giá'));
+    expect(screen.queryByText('Viết đánh giá')).toBeNull();
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+  });
+
+  it('dòng còn viết được → "Viết đánh giá"', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: true }));
+    renderPage();
+    expect(await screen.findByText('Viết đánh giá')).toBeInTheDocument();
+    expect(screen.queryByText('Sửa đánh giá')).toBeNull();
+  });
+
+  it('đơn không tính để đánh giá (vd. CTV đặt hộ) → không có lối vào đánh giá', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: false }));
+    renderPage();
+    expect((await screen.findAllByText(/Xà bông thảo mộc/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Viết đánh giá|Sửa đánh giá/)).toBeNull();
   });
 });
 
@@ -145,6 +238,23 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     expect(screen.getByText('08:05 02/10/2026')).toBeInTheDocument();
   });
 
+  it('R2-BUYERMINI-8: tóm tắt tiền tách mã giảm giá và Điểm Xanh bằng số tiền thật, không còn dòng "N điểm" trơ', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      discount: 98_000,
+      couponCode: 'XANH10',
+      couponDiscount: 38_000,
+      pointsDiscount: 60_000,
+      pointsUsed: 60,
+    });
+    renderPage();
+    expect(await screen.findByText('Mã giảm giá (XANH10)')).toBeInTheDocument();
+    expect(screen.getByText('-38.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Điểm Xanh (60 điểm)')).toBeInTheDocument();
+    expect(screen.getByText('-60.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('Điểm Xanh đã dùng')).toBeNull();
+  });
+
   it('điểm đã dùng có dấu nghìn: "12.000 điểm"', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, pointsUsed: 12_000, discount: 12_000 });
     renderPage();
@@ -152,8 +262,134 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
   });
 });
 
+describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, hỗ trợ (BUYERMINI-14/15/16/19)', () => {
+  const NOW = Date.now();
+  const daysAgo = (d: number) => new Date(NOW - d * 864e5).toISOString();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn đang giao: "Nhận +N khi giao thành công"; đơn đã hoàn: điểm đã thu hồi', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', pointsEarned: 35 });
+    const first = renderPage();
+    expect(await screen.findByText('Nhận +35 Điểm Xanh khi giao thành công')).toBeInTheDocument();
+    first.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'RETURNED', pointsEarned: 35 });
+    renderPage();
+    expect(await screen.findByText('Điểm Xanh của đơn này đã được thu hồi')).toBeInTheDocument();
+    expect(screen.queryByText(/khi giao thành công/)).toBeNull();
+  });
+
+  it('đơn đã giao ghi "Giao lúc" theo mốc giao; đơn khác ghi "Đặt lúc" theo giờ tạo đơn', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: new Date(2026, 9, 5, 9, 30).toISOString() });
+    const first = renderPage();
+    expect(await screen.findByText('09:30 05/10/2026')).toBeInTheDocument();
+    expect(screen.getByText(/Giao lúc/)).toBeInTheDocument();
+    first.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByText(/Đặt lúc/)).toBeInTheDocument();
+  });
+
+  it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'COD' });
+    const cod = renderPage();
+    await screen.findByText('Hành trình đơn hàng');
+    expect(screen.queryByText('Chờ thanh toán')).toBeNull();
+    expect(screen.getByText('Đã xác nhận')).toBeInTheDocument();
+    cod.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'BANK_TRANSFER' });
+    renderPage();
+    expect(await screen.findByText('Chờ thanh toán')).toBeInTheDocument();
+  });
+
+  it('trong hạn đổi/trả: có nút, icon nằm cùng hàng chữ và câu hướng dẫn theo số ngày cấu hình', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 14 });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: /Yêu cầu đổi\/trả/ });
+    expect(btn.querySelector('svg')).not.toBeNull();
+    fireEvent.click(btn);
+    expect(await screen.findByText(/Trong 14 ngày từ khi nhận hàng/)).toBeInTheDocument();
+  });
+
+  it('quá hạn đổi/trả: ẩn nút, nói rõ đã quá hạn theo số ngày cấu hình', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', deliveredAt: daysAgo(10) });
+    renderPage();
+    expect(await screen.findByText(/Đã quá hạn đổi\/trả \(7 ngày/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Yêu cầu đổi\/trả/ })).toBeNull();
+  });
+
+  it('chưa gắn OA vẫn có đường liên hệ thật: gọi hotline', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, support: { hotline: '0899 149 229', email: null, zaloOaName: null } });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
+  });
+});
+
 // Cùng dải với scripts/uiux/static-scan.mjs, thêm ⌛ ⏳ ⭐.
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿\u231A\u231B\u23E9-\u23FF\u2B50]/u;
+
+describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuyển (D1, BUYERMINI-1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn lẻ đang đóng gói vẫn có nút "Hủy đơn"; đơn đại lý đang đóng gói / đơn đang giao thì không', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID' });
+    const packed = renderPage();
+    expect(await screen.findByRole('button', { name: 'Hủy đơn' })).toBeInTheDocument();
+    packed.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'DEALER', status: 'PACKED', paymentStatus: 'UNPAID' });
+    const dealer = renderPage();
+    expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    dealer.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'SHIPPING', paymentStatus: 'UNPAID' });
+    renderPage();
+    expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
+
+  it('R3-CANCEL-2: đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút "Hủy đơn"', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false,
+    });
+    renderPage();
+    expect(await screen.findByText('Đã đặt đơn vị vận chuyển')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
+
+  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không hạn "tự huỷ", không nút huỷ hay trả tiền', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      type: 'RETAIL',
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: '2026-10-02T03:00:00.000Z',
+      canCancel: false,
+      manualHandling: true,
+    });
+    renderPage();
+    expect(await screen.findByText('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.')).toBeInTheDocument();
+    expect(screen.queryByText(/quá hạn đơn sẽ tự huỷ/)).toBeNull();
+    expect(screen.queryByText(/Thanh toán trước/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Xem tất cả đơn' })).toBeInTheDocument();
+  });
+});
 
 describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
   beforeEach(() => {
@@ -162,12 +398,12 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
     mocks.fetchMyReturns.mockResolvedValue([]);
   });
 
-  it('lối vào đánh giá và dòng điểm Xanh có icon SVG, không có emoji; chữ giữ nguyên', async () => {
+  it('lối vào đánh giá và dòng điểm Xanh (đơn đã giao) có icon SVG, không có emoji; chữ giữ nguyên', async () => {
     const { container } = renderPage();
-    const review = await screen.findByText(/Đánh giá sản phẩm này/);
+    const review = await screen.findByText(/Viết đánh giá/);
     expect(review.querySelector('svg')).not.toBeNull();
     expect(review.className).toContain('tubu-hit-44');
-    const points = screen.getByText(/Nhận \+120 Điểm Xanh khi giao thành công/);
+    const points = screen.getByText(/Đã cộng \+120 Điểm Xanh vào tài khoản/);
     expect(points.querySelector('svg')).not.toBeNull();
     expect(EMOJI.test(container.textContent ?? '')).toBe(false);
   });
@@ -225,5 +461,131 @@ describe('OrderDetailPage — tương phản chữ ngày giờ ở khung trạng
 
   it.each(Object.entries(STATUS_COLOR))('%s: cặp màu token đầy đủ (không opacity) đạt 4,5:1', (_status, { bg, fg }) => {
     expect(contrast(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn thanh toán (D2, BUYERMINI-8/9, MONEY-6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.fetchMyRefunds.mockResolvedValue([]);
+    mocks.fetchRefundBank.mockResolvedValue({ bankName: 'VCB', accountNumber: '0071000123456', accountName: 'TRAN THI B' });
+    mocks.cancelOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+  });
+
+  const paidTransfer = { ...ORDER, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114_000 };
+
+  it('đơn chuyển khoản đã trả: chọn tài khoản ngân hàng → gửi nơi nhận kèm tài khoản điền sẵn', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
+    expect(screen.getByText('Nhận lại 114.000đ về')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+    await waitFor(() => expect(screen.getByLabelText('Số tài khoản')).toHaveValue('0071000123456'));
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() =>
+      expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', {
+        refundMethod: 'BANK',
+        bankName: 'VCB',
+        accountNumber: '0071000123456',
+        accountName: 'TRAN THI B',
+      }),
+    );
+  });
+
+  it('đơn chuyển khoản đã trả: giữ mặc định Ví Tubu → gửi refundMethod WALLET', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }));
+  });
+
+  it('R3-MONEY-1: đơn đang xử lý đã nhận tiền mà khách trả dư → khối Hoàn tiền hiện khoản trả dư', async () => {
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    mocks.fetchMyRefunds.mockResolvedValue([
+      {
+        id: 'r9', orderId: 'o1', orderCode: 'TT001', kind: 'OVERPAYMENT', amount: 114_000, method: 'MANUAL_TRANSFER', status: 'PENDING',
+        bankName: null, bankAccountNo: null, bankAccountName: null, bankRef: null, completedAt: null,
+        createdAt: '2026-10-14T00:00:00Z', canChooseDestination: true,
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Tiền bạn trả dư: chờ bạn chọn nơi nhận · 114.000đ')).toBeInTheDocument();
+    expect(mocks.fetchMyRefunds).toHaveBeenCalledWith('o1');
+  });
+
+  it('đơn chuyển khoản chưa ghi nhận tiền: hiện hạn thanh toán và cảnh báo trước khi huỷ', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: '2026-10-02T03:00:00.000Z',
+    });
+    renderPage();
+    expect(await screen.findByText(/quá hạn đơn sẽ tự huỷ/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy đơn' }));
+    expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản');
+    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
+  });
+
+  it('đã duyệt trả một phần: hiện số tiền, dòng trả, trạng thái nhận hàng và cho trả thêm', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, deliveredAt: new Date().toISOString() });
+    mocks.fetchMyReturns.mockResolvedValue([
+      {
+        id: 'r1',
+        orderId: 'o1',
+        status: 'APPROVED',
+        refundMethod: 'WALLET',
+        refundAmount: 50_000,
+        shippingRefund: 0,
+        receivedAt: null,
+        items: [{ orderItemId: 'oi1', quantity: 1, refundAmount: 50_000 }],
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Đổi/trả đã duyệt — đã hoàn 50.000đ vào Ví Tubu')).toBeInTheDocument();
+    expect(screen.getByText('Trả: Xà bông thảo mộc ×1')).toBeInTheDocument();
+    expect(screen.getByText('Tubu sẽ liên hệ để nhận lại hàng.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trả thêm sản phẩm' })).toBeInTheDocument();
+  });
+});
+
+describe('OrderDetailPage — đơn gian hàng tự giao và đơn cùng lần đặt (D4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+  });
+
+  it('đơn gian hàng tự giao: nói rõ ai giao và hotline gian hàng; đơn cùng lần đặt chạm được để mở', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      code: 'TB2',
+      status: 'CONFIRMED',
+      fulfilment: { kind: 'MERCHANT', name: 'Mật ong Linh', phone: '0912000111' },
+      siblings: [{ code: 'TB1', status: 'SHIPPING', total: 130_000, fulfillerName: 'Tubu Tree' }],
+    });
+    renderPage();
+    expect(await screen.findByText('Giao bởi Mật ong Linh')).toBeInTheDocument();
+    expect(screen.getByText(/Liên hệ gian hàng: 0912000111/)).toBeInTheDocument();
+    const region = screen.getByRole('region', { name: 'Đơn cùng lần đặt' });
+    expect(region.textContent).toContain('Tubu Tree giao · Đang giao');
+    expect(region.textContent).toContain('130.000đ');
+    fireEvent.click(screen.getByRole('link', { name: 'Xem đơn TB1, Tubu Tree giao' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TB1');
+  });
+
+  it('đơn Tubu giao không tách: không có khối nơi giao', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, fulfilment: { kind: 'TUBU', name: 'Tubu Tree', phone: null }, siblings: [] });
+    renderPage();
+    await screen.findByText(/Xà bông thảo mộc/);
+    expect(screen.queryByText(/Giao bởi/)).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
   });
 });

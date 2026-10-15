@@ -22,7 +22,7 @@ import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { PRODUCT_DISCONTINUED } from '../../src/modules/cart/sellable';
 import * as orderCode from '../../src/common/order-code';
-import { createUser, randCode, summarize, warmPool } from './helpers';
+import { createDealer, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * C-007 / A5N-04 (Q-14, docs/2026-10-review): SP ngừng bán (variation/Product isActive=false) hoặc SP
@@ -154,7 +154,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
@@ -167,7 +167,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
     province: 'Ha Noi',
     ward: 'Phuong IT',
     street: '1 Duong IT',
-    provinceCode: '01',
+    provinceCode: '84_VN01',
     wardCode: '00001',
   });
 
@@ -353,7 +353,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
   });
 
   it('đại lý: SP bị gỡ giữa lúc tính giá và lúc ghi đơn → kiểm lại trong tx chặn', async () => {
-    const d = await createUser(prisma, { role: 'DEALER' });
+    const d = await createDealer(prisma);
     const v = await variation();
     // Sinh mã đơn chạy sau khi dựng dòng/giá, trước transaction ghi đơn.
     const original = orderCode.generateUniqueOrderCode;

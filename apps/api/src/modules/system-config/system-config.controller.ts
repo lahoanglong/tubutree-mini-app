@@ -4,6 +4,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
+import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
 
 /** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
 function displayText(v: unknown): string | null {
@@ -39,6 +40,11 @@ export class SystemConfigController {
       hotline,
       supportEmail,
       zaloOaName,
+      groupBuyDiscountPct,
+      groupBuyTargetSize,
+      returnWindowDays,
+      pitPct,
+      pitThreshold,
     ] = await Promise.all([
       this.config.get<number>('shipping.free_threshold', 200000),
       this.config.get<number>('subscribe.discount_pct', 0.12),
@@ -52,6 +58,12 @@ export class SystemConfigController {
       this.config.get<unknown>('support.hotline', '0899 149 229'),
       this.config.get<unknown>('support.email', 'tubutree@gmail.com'),
       this.config.get<unknown>('support.zalo_oa_name', ''),
+      // Mặc định phải khớp GroupBuyService.create và OrdersService.requestReturn (cùng khoá, cùng fallback).
+      this.config.get<number>('groupbuy.discount_pct', 15),
+      this.config.get<number>('groupbuy.target_size', 3),
+      this.config.get<number>('returns.window_days', 7),
+      this.config.get<number>('affiliate.pit_withhold_pct', DEFAULT_PIT_WITHHOLD_PCT),
+      this.config.get<number>('affiliate.pit_withhold_threshold', DEFAULT_PIT_WITHHOLD_THRESHOLD),
     ]);
     return {
       freeshipThreshold,
@@ -60,9 +72,12 @@ export class SystemConfigController {
       // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.
       affiliateWalletMultiplier: 1,
       affiliateMinWithdrawBank,
+      affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
       cashbackHoldDays,
       recyclingEnabled,
       shippingEta: toShippingEta(etaMinDays, etaMaxDays),
+      groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
+      returnWindowDays,
       support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName) },
     };
   }

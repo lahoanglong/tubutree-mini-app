@@ -9,7 +9,7 @@ vi.mock('@/components/site-footer', () => ({ default: () => <footer data-testid=
 vi.mock('@/components/hide-on-portals', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('@/components/storefront-tracker', () => ({ ReferralCapture: () => null }));
 
-import RootLayout from './layout';
+import RootLayout, { metadata } from './layout';
 
 // PC-7: ô tìm kiếm không được nháy trên host gian hàng CTV — xem tenantHostBootScript ở lib/site.ts.
 describe('RootLayout — đánh dấu host gian hàng trước khi vẽ', () => {
@@ -34,5 +34,27 @@ describe('RootLayout — đánh dấu host gian hàng trước khi vẽ', () => 
   it('<html> cho phép thuộc tính do script thêm trước hydrate (suppressHydrationWarning)', () => {
     const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
     expect(src).toMatch(/<html[^>]*suppressHydrationWarning/);
+  });
+});
+
+// BUYERWEB-16: không có thư mục public nên /favicon.ico trả 404 và link chia sẻ không có ảnh mặc định.
+describe('biểu tượng site và ảnh chia sẻ mặc định (BUYERWEB-16)', () => {
+  const file = (name: string) => readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)));
+
+  it('có đủ icon.svg, apple-icon.png, favicon.ico theo quy ước thư mục app', () => {
+    expect(file('icon.svg').toString()).toMatch(/^<svg[^>]+viewBox="0 0 32 32"/);
+    expect(file('apple-icon.png').subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    const ico = file('favicon.ico');
+    expect([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)]).toEqual([0, 1, 1]);
+    expect(ico.subarray(22, 30).toString('hex')).toBe('89504e470d0a1a0a');
+  });
+
+  it('opengraph-image.png đúng cỡ chuẩn 1200x630', () => {
+    const png = file('opengraph-image.png');
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+  });
+
+  it('metadata gốc khai tên site và ngôn ngữ cho og', () => {
+    expect(metadata.openGraph).toMatchObject({ siteName: 'Tubu Tree', locale: 'vi_VN' });
   });
 });

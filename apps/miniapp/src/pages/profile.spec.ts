@@ -59,3 +59,11 @@ describe('Lối vào Cộng đồng nói về hàng đang bán (C-073)', () => {
     expect(entry?.hint).not.toMatch(/chăm cây|khoe vườn|cây cảnh/i);
   });
 });
+
+describe('Gợi ý mua chung không hứa sai mức giảm (ENGAGE-20)', () => {
+  it('mục Mua chung nhóm không chép cứng con số phần trăm (mức thật do groupbuy.discount_pct quyết định)', () => {
+    const item = MENU.flatMap((s) => s.items).find((i) => i.to === '/group-buy');
+    expect(item?.hint).toBeTruthy();
+    expect(item?.hint).not.toMatch(/\d/);
+  });
+});

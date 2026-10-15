@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { DEFAULT_TREE_TYPE } from './game.constants';
+import { ensureGameProfile } from './game-profile';
 import { vnDateKey } from '../../common/vn-time';
 
 @Injectable()
@@ -20,13 +21,8 @@ export class GameQuizService {
 
   // User mới đăng nhập nhưng chưa vào Vườn Xanh → chưa có gameProfile.
   // Bảo đảm tồn tại để các thao tác quiz không P2025 → 500.
-  private async ensure(userId: string) {
-    const target = await this.config.get<number>('game.tree_default_target', 600);
-    const existing = await this.prisma.gameProfile.findUnique({ where: { userId } });
-    if (existing) return existing;
-    return this.prisma.gameProfile.create({
-      data: { userId, ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object },
-    });
+  private ensure(userId: string) {
+    return ensureGameProfile(this.prisma, this.config, userId);
   }
 
   async getTodayQuiz(userId: string) {

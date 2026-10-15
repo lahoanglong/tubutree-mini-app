@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
+import { formatDateTime } from '@/lib/format-date';
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
@@ -117,6 +118,11 @@ export function BankTransferPanel({ order, onPaid }: { order: OrderDTO; onPaid?:
       <p className="mt-2 text-center text-xs text-danger-fg">
         Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
       </p>
+      {data.paymentDeadline && (
+        <p role="note" className="mt-1 text-center text-xs font-medium text-warning-fg">
+          Chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+        </p>
+      )}
 
       <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-stone-600">
         <Clock className="h-3.5 w-3.5" aria-hidden="true" />

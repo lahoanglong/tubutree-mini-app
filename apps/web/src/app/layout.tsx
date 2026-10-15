@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: 'Tubu Tree — Sống xanh An Lành',
   description: 'Mỹ phẩm & đồ tiêu dùng thiên nhiên Tubu Tree.',
+  openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

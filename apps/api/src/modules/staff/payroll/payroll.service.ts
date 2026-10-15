@@ -1,9 +1,14 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from '../../integrations/payment/vietqr';
 import { computeDayPay, sumWorkedMinutes, type ShiftWindow } from './payroll.calc';
+import { formatVnDateTime } from '../../../common/vn-time';
+import { formatVnd } from '../../orders/refund-destination';
+
+/** Khoản điều chỉnh tay giống hệt khoản vừa ghi trong 5 phút: chưa ghi, admin xác nhận (allowDuplicate) thì ghi thêm. */
+export const PAYROLL_ADJUST_DUPLICATE = 'PAYROLL_ADJUST_DUPLICATE';
 
 export interface BankInput {
   bankBin?: string;
@@ -219,8 +224,24 @@ export class PayrollService {
 
   // ─────────────── Admin ───────────────
 
+  /**
+   * Lương chỉ áp cho nhân viên (STAFF/ADMIN). `allowFormer`: người đã hạ quyền nhưng còn hồ sơ lương đang dùng vẫn được
+   * điều chỉnh kỳ cũ. Trước đây đặt đơn giá cho khách là tạo luôn hồ sơ lương, bảng lương có dòng của người không làm.
+   */
+  private async assertStaffMember(userId: string, allowFormer: boolean): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, staffProfile: { select: { active: true } } },
+    });
+    if (!user) throw new BadRequestException('Không tìm thấy nhân viên.');
+    if (user.role === 'STAFF' || user.role === 'ADMIN') return;
+    if (allowFormer && user.staffProfile?.active) return;
+    throw new BadRequestException('Tài khoản này không phải nhân viên — cấp quyền nhân viên trước khi tính lương.');
+  }
+
   async setRate(userId: string, hourlyRate: number) {
     if (hourlyRate < 0) throw new BadRequestException('Đơn giá không hợp lệ.');
+    await this.assertStaffMember(userId, false);
     return this.prisma.staffProfile.upsert({
       where: { userId },
       update: { hourlyRate },
@@ -355,7 +376,15 @@ export class PayrollService {
     return this.recomputeStaffMonth(staffId, year, month);
   }
 
-  async adjust(staffId: string, workDate: Date, amount: number, reason: string, adminId: string) {
+  async adjust(
+    staffId: string,
+    workDate: Date,
+    amount: number,
+    reason: string,
+    adminId: string,
+    opts: { allowDuplicate?: boolean } = {},
+  ) {
+    await this.assertStaffMember(staffId, true);
     if (await this.isMonthLocked(staffId, workDate)) {
       throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.');
     }
@@ -368,29 +397,46 @@ export class PayrollService {
     // Khoá advisory theo (staffId, workDate, type) TRONG transaction — mirror pattern
     // pg_advisory_xact_lock ở coupons.service.ts (redeemInTx, khoá theo couponId+userId): request
     // thứ 2 phải đợi tới khi request 1 COMMIT xong mới được chạy tiếp bên trong lock, lúc đó
-    // findFirst đọc được bản ghi vừa tạo và tự dừng (deduped) thay vì tạo thêm.
+    // findFirst đọc được bản ghi vừa tạo và trả 409 thay vì tạo thêm.
+    //
+    // Trùng thì BÁO, không nuốt: hai khoản phạt giống hệt trong cùng ngày có thể đều hợp lệ (đi trễ hai ca), nên
+    // admin cần biết lần gửi thứ hai chưa được ghi và gửi lại kèm allowDuplicate nếu đó thật là khoản thứ hai.
     const lockKey = `${staffId}:${workDate.toISOString()}:MANUAL`;
-    const deduped = await this.prisma.$transaction(async (tx) => {
+    const duplicate = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-      const recent = await tx.payrollAdjustment.findFirst({
-        where: {
-          staffId,
-          workDate,
-          type: 'MANUAL',
-          amount,
-          reason,
-          createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
-        },
-        select: { id: true },
-      });
-      if (recent) return true;
+      if (!opts.allowDuplicate) {
+        const recent = await tx.payrollAdjustment.findFirst({
+          where: {
+            staffId,
+            workDate,
+            type: 'MANUAL',
+            amount,
+            reason,
+            createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+          },
+          select: { id: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (recent) return recent;
+      }
 
       await tx.payrollAdjustment.create({
         data: { staffId, workDate, type: 'MANUAL', amount, reason, createdBy: adminId },
       });
-      return false;
+      return null;
     });
-    if (deduped) return { adjusted: true, deduped: true };
+    if (duplicate) {
+      const kind = amount > 0 ? `trừ ${formatVnd(amount)}` : `thưởng ${formatVnd(-amount)}`;
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        code: PAYROLL_ADJUST_DUPLICATE,
+        message:
+          `Đã có khoản ${kind} giống hệt (cùng ngày, cùng lý do "${reason}") vừa ghi lúc ${formatVnDateTime(duplicate.createdAt)} — ` +
+          'lần gửi này CHƯA được ghi. Nếu đây thật là khoản thứ hai, xác nhận ghi thêm.',
+        adjustmentId: duplicate.id,
+      });
+    }
 
     await this.recomputeDay(staffId, workDate);
     return { adjusted: true };

@@ -18,7 +18,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { addGomdonJob } from '../gomdon/gomdon-queue';
-import { PANCAKE_EVENT_STATUS, PANCAKE_JOB_EVENT, pancakeDedupeKey } from './pancake-webhook-dedupe';
+import { PANCAKE_EVENT_DONE, PANCAKE_EVENT_STATUS, PANCAKE_JOB_EVENT, pancakeDedupeKey } from './pancake-webhook-dedupe';
 
 interface PancakeWebhookBody {
   /** Luồng cũ {event,data}. Pancake POS thực tế gửi nguyên object đơn (type='orders'). */
@@ -78,7 +78,7 @@ export class PancakeWebhookController {
       if ((err as { code?: string })?.code !== 'P2002') throw err;
       const existing = await this.prisma.pancakeWebhookEvent.findUnique({ where: { dedupeKey } });
       if (!existing) throw err;
-      if (existing.status === PANCAKE_EVENT_STATUS.PROCESSED) return { received: true, duplicate: true };
+      if (PANCAKE_EVENT_DONE.includes(existing.status)) return { received: true, duplicate: true };
       eventId = existing.id; // lần trước chưa xong/lỗi → đẩy lại, worker claim nên không chạy chồng
     }
     try {

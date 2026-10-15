@@ -16,7 +16,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "reconcile:points": "tsx scripts/reconcile-points.ts",
-    "reconcile:wallet": "tsx scripts/reconcile-wallet.ts"
+    "reconcile:wallet": "tsx scripts/reconcile-wallet.ts",
+    "go-live:check": "tsx scripts/go-live-check.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -40,6 +41,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "helmet": "^8.0.0",
+    "nodemailer": "^10.0.13",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",

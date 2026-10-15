@@ -3,6 +3,7 @@ import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
+import { VARIATION_ORDER_BY } from './variation-order';
 
 const card = (id: string) => ({
   id,
@@ -59,6 +60,7 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
     approvalStatus,
     soldExternal: 0,
     soldApp: 0,
+    variations: [],
   });
 
   it('PENDING_REVIEW (chưa duyệt) → NotFound dù isActive=true', async () => {
@@ -81,6 +83,29 @@ describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).getBySlug('tinh-dau');
     expect(r.id).toBe('p1');
+  });
+});
+
+describe('CatalogService.getBySlug — cờ hàng của gian hàng đối tác (Q8 S2)', () => {
+  it('partnerOwned = sản phẩm thuộc gian hàng (tự giao hoặc Tubu giao hộ) — PDP ẩn đặt định kỳ/mua chung', async () => {
+    const row = (storefrontId: string | null) => ({ id: 'p1', slug: 'mat-ong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, fulfilment: 'TUBU', storefrontId, variations: [] });
+    const partner = { product: { findUnique: jest.fn().mockResolvedValue(row('sf-doi-tac')) } } as unknown as PrismaService;
+    expect((await new CatalogService(partner).getBySlug('mat-ong')).partnerOwned).toBe(true);
+    const tubu = { product: { findUnique: jest.fn().mockResolvedValue(row(null)) } } as unknown as PrismaService;
+    expect((await new CatalogService(tubu).getBySlug('mat-ong')).partnerOwned).toBe(false);
+  });
+});
+
+// R2-ENGAGE-3: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh; PDP là trang vào nhiều nhất và app đọc đánh giá
+// qua GET /products/:slug/reviews, nên PDP không nhúng ảnh đánh giá.
+describe('CatalogService.getBySlug — PDP không nhúng ảnh đánh giá (R2-ENGAGE-3)', () => {
+  it('select đánh giá nhúng không chứa images', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null);
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
+    const arg = findUnique.mock.calls[0]![0] as { include: { reviews: { select: Record<string, unknown> } } };
+    expect(arg.include.reviews.select).not.toHaveProperty('images');
+    expect(arg.include.reviews.select).toMatchObject({ rating: true, comment: true });
   });
 });
 
@@ -181,18 +206,59 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
   });
 });
 
+describe('CatalogService.getBySlug — liên kết sang trang nhãn hàng (BUYERWEB-18)', () => {
+  const row = (brandRef: unknown) => ({
+    id: 'p1', slug: 'tinh-dau', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0,
+    brand: 'Hector', brandId: 'b1', brandRef, variations: [], reviews: [],
+  });
+
+  it('nhãn đã công khai → trả brandSlug, không lộ cả bản ghi brandRef', async () => {
+    const findUnique = jest.fn().mockResolvedValue(row({ slug: 'hector', isPublished: true }));
+    const r = await new CatalogService({ product: { findUnique } } as unknown as PrismaService).getBySlug('tinh-dau');
+    expect(r.brandSlug).toBe('hector');
+    expect(r).not.toHaveProperty('brandRef');
+    const arg = findUnique.mock.calls[0]![0] as { include: { brandRef: { select: object } } };
+    expect(arg.include.brandRef.select).toEqual({ slug: true, isPublished: true });
+  });
+
+  it('nhãn chưa công khai (trang /brand/:slug sẽ 404) hoặc sản phẩm không gắn nhãn → brandSlug null', async () => {
+    const hidden = jest.fn().mockResolvedValue(row({ slug: 'hector', isPublished: false }));
+    expect((await new CatalogService({ product: { findUnique: hidden } } as unknown as PrismaService).getBySlug('x')).brandSlug).toBeNull();
+    const none = jest.fn().mockResolvedValue(row(null));
+    expect((await new CatalogService({ product: { findUnique: none } } as unknown as PrismaService).getBySlug('x')).brandSlug).toBeNull();
+  });
+});
+
 describe('CatalogService.brands cache 60s', () => {
   it('gọi 2 lần liên tiếp chỉ hit DB 1 lần (TTL chưa hết)', async () => {
     const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
-    const prisma = { product: { groupBy } } as unknown as PrismaService;
+    const prisma = { product: { groupBy }, brand: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
     const svc = new CatalogService(prisma);
 
     const a = await svc.brands();
     const b = await svc.brands();
 
     expect(groupBy).toHaveBeenCalledTimes(1);
-    expect(a).toEqual([{ brand: 'TuBu', count: 3 }]);
+    expect(a).toEqual([{ brand: 'TuBu', count: 3, slug: null }]);
     expect(b).toEqual(a);
+  });
+
+  it('nhãn đã công khai kèm slug để trang chủ dẫn tới /brand/:slug; nhãn chưa công khai thì slug null (BUYERWEB-18)', async () => {
+    const groupBy = jest.fn().mockResolvedValue([
+      { brand: 'Hector', _count: { _all: 2 } },
+      { brand: 'Gốm Bát Tràng', _count: { _all: 1 } },
+    ]);
+    const findMany = jest.fn().mockResolvedValue([{ name: 'Hector', slug: 'hector' }]);
+    const prisma = { product: { groupBy }, brand: { findMany } } as unknown as PrismaService;
+    const out = (await new CatalogService(prisma).brands()) as { brand: string; count: number; slug: string | null }[];
+    expect(out).toEqual([
+      { brand: 'Hector', count: 2, slug: 'hector' },
+      { brand: 'Gốm Bát Tràng', count: 1, slug: null },
+    ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isPublished: true, name: { in: ['Hector', 'Gốm Bát Tràng'] } },
+      select: { name: true, slug: true },
+    });
   });
 
   it('expire sau 60s → hit DB lần 2 (chứng minh TTL thực sự chạy)', async () => {
@@ -201,7 +267,7 @@ describe('CatalogService.brands cache 60s', () => {
     jest.useFakeTimers();
     try {
       const groupBy = jest.fn().mockResolvedValue([{ brand: 'TuBu', _count: { _all: 3 } }]);
-      const prisma = { product: { groupBy } } as unknown as PrismaService;
+      const prisma = { product: { groupBy }, brand: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
       const svc = new CatalogService(prisma);
 
       await svc.brands();
@@ -496,6 +562,21 @@ describe('CatalogService.list — bộ lọc dự án 4b', () => {
     expect(argsOf(findMany).where.ratingAvg).toEqual({ gte: 4 });
   });
 
+  it('slugs → chỉ các sản phẩm công khai có slug đó (dải "Đã xem gần đây" lấy giá hiện hành), tối đa 20 slug, bỏ khoảng trắng và ô rỗng', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, slugs: ' a , b,,c ' });
+    expect(argsOf(findMany).where).toEqual({ isActive: true, approvalStatus: 'APPROVED', slug: { in: ['a', 'b', 'c'] } });
+    const many = setup();
+    await many.svc.list({ page: 1, limit: 20, slugs: Array.from({ length: 30 }, (_, i) => `s${i}`).join(',') });
+    expect(argsOf(many.findMany).where.slug.in).toHaveLength(20);
+  });
+
+  it('slugs rỗng → không trả sản phẩm nào, không rơi về cả catalog', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 20, slugs: ' , ' });
+    expect(argsOf(findMany).where.slug).toEqual({ in: [] });
+  });
+
   it('không truyền tham số mới → where như trước (không AND/variations/ratingAvg)', async () => {
     const { svc, findMany } = setup();
     await svc.list({ page: 1, limit: 20, brand: 'Tubu' });
@@ -545,7 +626,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(sql).toContain('p.tags @> ARRAY[?]::text[]');
     expect(LIKE_ESCAPE).toBe('!');
     expect(sql).toContain("ESCAPE '!'");
-    expect(values).toEqual(expect.arrayContaining(['%nuoc rua%', 'nước rửa']));
+    expect(values).toEqual(expect.arrayContaining(['%nuoc_rua%', 'nước rửa']));
   });
 
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
@@ -554,7 +635,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     await svc.list({ page: 1, limit: 20, q: "x'; DROP TABLE products;--" });
     const { sql, values } = sqlOf(queryRaw);
     expect(sql).not.toContain('DROP');
-    expect(values).toContain('%x\'; drop table products;--%');
+    expect(values).toContain('%x\';_drop_table_products;--%');
   });
 
   it('% và _ trong từ khoá được escape (không thành ký tự đại diện)', async () => {
@@ -580,7 +661,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     const { svc } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
     const { values } = sqlOf(queryRaw);
-    expect(values).toContain('%nuoc rua%');
+    expect(values).toContain('%nuoc_rua%');
   });
 
   it('SQL gấp dấu lỗi → lùi về contains như trước (mất tìm không dấu nhưng không sập trang)', async () => {
@@ -668,7 +749,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
   });
 
@@ -748,5 +829,76 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
     await svc.categories();
     expect(categoryFindMany).toHaveBeenCalledTimes(1);
     expect(productFindMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
+  const base = { id: 'p1', slug: 'xa-phong', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, variations: [], reviews: [] };
+  const config = { get: jest.fn(async <T>(k: string, fb?: T) => (k === 'merchant.default_shipping_fee' ? (27_000 as T) : (fb as T))) };
+  const OPEN_STORE = {
+    title: 'Shop',
+    type: 'MERCHANT',
+    shippingFee: null as number | null,
+    freeShipFrom: null as number | null,
+    ordersPausedAt: null as Date | null,
+    owner: { role: 'DEALER', isBlocked: false } as { role: string; isBlocked: boolean } | null,
+  };
+
+  it('hàng Tubu giao → fulfiller TUBU, không lộ đối tượng storefront', async () => {
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null });
+    expect(r).not.toHaveProperty('storefront');
+  });
+
+  it('hàng gian hàng tự giao → tên gian hàng, phí giao và ngưỡng miễn phí của gian hàng', async () => {
+    const storefront = { ...OPEN_STORE, title: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Xà phòng Cô Lan', shippingFee: 22_000, freeShipFrom: 300_000 });
+  });
+
+  it('gian hàng chưa đặt phí giao → phí mặc định merchant.default_shipping_fee', async () => {
+    const storefront = { ...OPEN_STORE, title: 'Shop A', shippingFee: null, freeShipFrom: null };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'MERCHANT', name: 'Shop A', shippingFee: 27_000, freeShipFrom: null });
+  });
+
+  // R3-MERCHANT-3: trang sản phẩm nói thẳng khi gian hàng không nhận đơn, thay vì để khách thêm vào giỏ rồi mới bị chặn.
+  it('R3-MERCHANT-3: gian hàng tạm nghỉ → fulfiller UNAVAILABLE lý do STORE_PAUSED, kèm tên gian hàng', async () => {
+    const storefront = { ...OPEN_STORE, title: 'Shop A', ordersPausedAt: new Date() };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Shop A', shippingFee: null, freeShipFrom: null });
+    expect(JSON.stringify(r)).not.toContain('isBlocked');
+  });
+
+  it.each([
+    ['chủ gian hàng bị khoá', { role: 'DEALER', isBlocked: true }],
+    ['chủ gian hàng bị hạ quyền', { role: 'CUSTOMER', isBlocked: false }],
+    ['gian hàng mất chủ', null],
+  ])('R3-MERCHANT-3: %s → UNAVAILABLE lý do STORE_CLOSED', async (_label, owner) => {
+    const storefront = { ...OPEN_STORE, title: 'Shop B', owner };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'MERCHANT', storefront }) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r.fulfiller).toEqual({ kind: 'UNAVAILABLE', reason: 'STORE_CLOSED', name: 'Shop B', shippingFee: null, freeShipFrom: null });
+  });
+
+  it('R3-MERCHANT-4: lý do từ chối bản sửa là lời nhắn riêng cho đối tác, không lộ ra PDP công khai', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null, rejectReason: 'Ảnh vi phạm' }) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect(r).not.toHaveProperty('rejectReason');
+  });
+
+  it('R3-MERCHANT-3: PDP lấy thêm trạng thái tạm nghỉ và chủ gian hàng từ DB', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
+    await new CatalogService({ product: { findUnique } } as unknown as PrismaService, config as never).getBySlug('xa-phong');
+    expect(findUnique.mock.calls[0][0].include.storefront.select).toMatchObject({
+      ordersPausedAt: true,
+      owner: { select: { role: true, isBlocked: true } },
+    });
   });
 });

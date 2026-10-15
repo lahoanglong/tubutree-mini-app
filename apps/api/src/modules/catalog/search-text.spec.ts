@@ -1,4 +1,13 @@
-import { LIKE_ESCAPE, VN_FOLD_FROM, VN_FOLD_TO, escapeLike, foldVietnamese, likeContainsPattern, SQL_WHITESPACE_RE } from './search-text';
+import {
+  LIKE_ESCAPE,
+  VN_FOLD_FROM,
+  VN_FOLD_TO,
+  escapeLike,
+  escapePrismaLike,
+  foldVietnamese,
+  likeContainsPattern,
+  SQL_WHITESPACE_RE,
+} from './search-text';
 
 /** Đúng ngữ nghĩa translate() của Postgres: ký tự của `from` không có cặp ở `to` thì bị XOÁ. */
 function pgTranslate(s: string, from: string, to: string): string {
@@ -96,8 +105,17 @@ describe('LIKE', () => {
     expect(escapeLike('50%_off!')).toBe('50!%!_off!!');
   });
 
-  it('likeContainsPattern = %<gấp dấu + escape>%', () => {
-    expect(likeContainsPattern('  Nước 50% ')).toBe('%nuoc 50!%%');
+  it('escapePrismaLike: escape \\ % _ bằng \\ (Prisma contains không có ESCAPE, Postgres mặc định \\)', () => {
+    expect(escapePrismaLike(String.raw`50%_off\x`)).toBe(String.raw`50\%\_off\\x`);
+    expect(escapePrismaLike('TUBU-2026!')).toBe('TUBU-2026!');
+  });
+
+  it('likeContainsPattern = %<gấp dấu + escape>%; khoảng trắng giữa các từ khớp đúng một ký tự bất kỳ để "bh nong" thấy "BH.Nong" (R5-BUYER-5)', () => {
+    expect(likeContainsPattern('  Nước 50% ')).toBe('%nuoc_50!%%');
+    expect(likeContainsPattern('bh nong')).toBe('%bh_nong%');
+    expect(likeContainsPattern('BH.Nong')).toBe('%bh.nong%');
+    expect(likeContainsPattern('mật  ong   rừng')).toBe('%mat_ong_rung%');
+    expect(likeContainsPattern('mật')).toBe('%mat%');
   });
 });
 

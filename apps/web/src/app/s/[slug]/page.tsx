@@ -12,8 +12,10 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { getStorefront, formatVnd, formatSold } from '@/lib/api';
+import { getStorefront, formatSold } from '@/lib/api';
 import { StorefrontTracker } from '@/components/storefront-tracker';
+import { isPartnerStore } from '@/lib/partner-store';
+import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 
 export const revalidate = 300;
 
@@ -59,18 +61,22 @@ export default async function StorefrontPage({
   // Màu chủ đề do chủ gian hàng chọn (dữ liệu, không phải token) — CHỈ dùng làm điểm nhấn không mang chữ
   // (ảnh bìa, avatar, thanh tiêu đề bộ sưu tập). Mọi chữ dùng token để luôn đủ tương phản bất kể màu họ chọn.
   const themeColor = sf.themeColor || 'var(--color-action-primary-bg)';
+  // Chỉ gian hàng tự giao mới gửi hàng từ kho riêng; gian hàng CTV/nhãn hàng bán hàng kho Tubu, địa chỉ cũ còn lưu không được
+  // hiện như "kho xuất hàng" (SELLER-8).
+  const selfFulfils = isPartnerStore(sf);
   const warehouseParts = [
     sf.warehouseAddress,
     sf.warehouseWard,
     sf.warehouseDistrict,
     sf.warehouseCity,
   ].filter(Boolean);
-  const fullWarehouseAddress = warehouseParts.length > 0 ? warehouseParts.join(', ') : null;
+  const fullWarehouseAddress = selfFulfils && warehouseParts.length > 0 ? warehouseParts.join(', ') : null;
+  const contactPhone = selfFulfils ? sf.warehousePhone : null;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
-      <StorefrontTracker slug={slug} type={sf.type ?? undefined} />
+      <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 
       {/* ── Storefront Banner Cover ── */}
       <div className="relative mb-6 overflow-hidden rounded-sheet shadow-card">
@@ -156,7 +162,7 @@ export default async function StorefrontPage({
         )}
 
         {/* Warehouse & Dispatch Origin */}
-        {(fullWarehouseAddress || sf.warehousePhone) && (
+        {(fullWarehouseAddress || contactPhone) && (
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 rounded-card border border-stone-200 bg-stone-50 p-3.5 text-xs text-stone-700">
             {fullWarehouseAddress && (
               <div className="flex items-center gap-1.5">
@@ -167,16 +173,16 @@ export default async function StorefrontPage({
                 </span>
               </div>
             )}
-            {sf.warehousePhone && (
+            {contactPhone && (
               <div className="flex items-center gap-1.5">
                 <Phone className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
                 <span>
                   <strong className="font-semibold text-stone-900">Hotline:</strong>{' '}
                   <a
-                    href={`tel:${sf.warehousePhone}`}
+                    href={`tel:${contactPhone}`}
                     className="inline-flex min-h-11 items-center font-semibold text-stone-900 underline hover:text-forest-700"
                   >
-                    {sf.warehousePhone}
+                    {contactPhone}
                   </a>
                 </span>
               </div>
@@ -233,12 +239,6 @@ export default async function StorefrontPage({
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
             {c.items.map((it) => {
-              const price = it.product.salePrice ?? it.product.basePrice;
-              const hasSale = it.product.salePrice != null && it.product.salePrice < it.product.basePrice;
-              const discountPct = hasSale
-                ? Math.round(((it.product.basePrice - price) / it.product.basePrice) * 100)
-                : 0;
-
               return (
                 <Link
                   key={it.id}
@@ -263,11 +263,10 @@ export default async function StorefrontPage({
                       </div>
                     )}
 
-                    {hasSale && discountPct > 0 && (
-                      <div className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card">
-                        -{discountPct}%
-                      </div>
-                    )}
+                    <CardSaleBadge
+                      product={it.product}
+                      className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-0 shadow-card"
+                    />
                   </div>
 
                   <div className="flex flex-1 flex-col p-3.5">
@@ -276,14 +275,12 @@ export default async function StorefrontPage({
                       {it.product.name}
                     </h3>
 
-                    <div className="mt-2 flex items-baseline gap-1.5">
-                      <p className="text-sm font-bold text-stone-900 sm:text-base">{formatVnd(price)}</p>
-                      {hasSale && (
-                        <p className="text-xs text-stone-500 line-through">
-                          {formatVnd(it.product.basePrice)}
-                        </p>
-                      )}
-                    </div>
+                    <ProductPriceRow
+                      product={it.product}
+                      className="mt-2 flex items-baseline gap-1.5"
+                      priceClassName="text-sm font-bold text-stone-900 sm:text-base"
+                      originalClassName="text-xs text-stone-500 line-through"
+                    />
 
                     {formatSold(it.product.sold) && (
                       <p className="mt-1 text-xs text-stone-600">{formatSold(it.product.sold)}</p>

@@ -9,7 +9,9 @@ import { getCoupons, getLoyalty, getNotifications, getWallet } from '../services
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { EmptyState } from '../components/ui/empty-state';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
@@ -23,6 +25,7 @@ import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
+import { GROUP_BUY_MENU_HINT } from '../utils/group-buy-copy';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -37,7 +40,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
   {
     group: 'Mua sắm',
     items: [
-      { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: 'Tiết kiệm đến 30%' },
+      { Icon: Users, label: 'Mua chung nhóm', to: '/group-buy', hint: GROUP_BUY_MENU_HINT },
       { Icon: Recycle, label: 'Trạm Refill & Đổi vỏ', to: '/refill', hint: 'Tích giọt nước xanh' },
       { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
       { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
@@ -76,7 +79,8 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const { user, status, error, logout, restore } = useAuthStore();
+  const { user, status, logout } = useAuthStore();
+  const phase = useAuthPhase();
   const loyaltyQ = useQuery({
     queryKey: ['loyalty'],
     queryFn: getLoyalty,
@@ -138,27 +142,28 @@ export default function ProfilePage() {
   }
   const menu = workItems.length > 0 ? [...baseMenu, { group: 'Công việc', items: workItems }] : baseMenu;
 
-  // Đang đăng nhập ngầm → khung chờ. Nếu login fail (idle/error) → nút thử lại,
-  // KHÔNG để khung chờ quay vô hạn ("tài khoản load mãi").
-  if (status !== 'authenticated' || !user) {
+  // Đang đăng nhập ngầm → khung chờ. Mất kết nối lúc khôi phục phiên (status error) → nói đúng vậy + Thử lại, không in message
+  // thô của axios và không mời đăng nhập lại; khách thật sự (idle) → mời đăng nhập. KHÔNG để khung chờ quay vô hạn.
+  if (phase !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
-        {status === 'loading' ? (
+        {phase === 'loading' ? (
           <ProfileSkeleton />
         ) : (
           <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            {status === 'idle' ? (
-              <EmptyState
-                art="sprout"
-                heading="Đã đăng xuất"
-                body="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn."
-                ctaLabel="Đăng nhập ngay"
-                onCta={() => void useAuthStore.getState().login()}
-              />
-            ) : (
-              <ErrorState message={error ?? 'Chưa kết nối được, vui lòng thử lại.'} onRetry={() => void restore()} />
-            )}
+            <AuthPhaseView
+              phase={phase === 'authenticated' ? 'loading' : phase}
+              guest={
+                <EmptyState
+                  art="sprout"
+                  heading="Đã đăng xuất"
+                  body="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn."
+                  ctaLabel="Đăng nhập ngay"
+                  onCta={() => void useAuthStore.getState().login()}
+                />
+              }
+            />
           </div>
         )}
       </Page>
@@ -259,7 +264,7 @@ export default function ProfilePage() {
             </Text>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}>
               <Icon icon={Copy} size="sm" tone="brand" />
-              <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)' }}>
+              <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)', whiteSpace: 'nowrap' }}>
                 Sao chép
               </Text>
             </span>

@@ -41,6 +41,8 @@ function makePrisma(opts: {
   const prisma = {
     user: { findUnique, update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'ABC123' }) },
     order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
+    // Không có yêu cầu trả một phần đã duyệt: cấp thưởng không thu hồi gì thêm (đường đó kiểm ở race referral-partial-return).
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     coinTransaction: {
       findFirst: jest.fn().mockResolvedValue(opts.coinFindFirst ?? null),
       count: opts.coinCount ?? jest.fn().mockResolvedValue(0),
@@ -120,9 +122,17 @@ describe('RewardPointsService.grant (PD-3: mọi thưởng mới là Điểm Xan
   it('truyền tx → chạy trong tx của caller, không mở $transaction mới', async () => {
     const { prisma, raw } = makePrisma();
     const tx = makePrisma().raw;
-    await new RewardPointsService(prisma, cfg()).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never);
+    await new RewardPointsService(prisma, cfg()).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never, new Date('2027-01-01'));
     expect(raw.$transaction).not.toHaveBeenCalled();
     expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalled();
+  });
+
+  it('truyền tx mà thiếu expiresAtOverride → lỗi lập trình, không đọc config và không ghi gì', async () => {
+    const { prisma } = makePrisma();
+    const tx = makePrisma().raw;
+    const config = cfg();
+    await expect(new RewardPointsService(prisma, config).grant('u1', 1, 'X', 'COMMUNITY', 'p', tx as never)).rejects.toThrow('expiresAtOverride');
+    expect(tx.pointsTransaction.createManyAndReturn).not.toHaveBeenCalled();
   });
 });
 
@@ -203,6 +213,44 @@ describe('RewardPointsService.grantReferralOrderReward (Q-05 + PD-3: thưởng n
       new RewardPointsService(prisma, cfg({ 'referral.referrer_reward_points': 5000 })).grantReferralOrderReward('referee1'),
     ).rejects.toThrow(InternalServerErrorException);
     expect(createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('cấu hình (cả loyalty.point_expire_months) đọc NGOÀI $transaction; expiresAt truyền xuống grant', async () => {
+    const { prisma, raw, createManyAndReturn } = makePrisma({ referredById: 'referrer1', orders: twoOrders(10) });
+    let inTx = false;
+    raw.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => {
+      inTx = true;
+      try {
+        return await cb(raw);
+      } finally {
+        inTx = false;
+      }
+    });
+    const readsInTx: string[] = [];
+    const base = cfg({
+      'loyalty.point_expire_months': 12,
+      'referral.milestones_points': [{ count: 1, bonusPoints: 20 }],
+    });
+    const baseGet = base.get as jest.Mock;
+    const config = {
+      get: jest.fn().mockImplementation(async (key: string, fb?: unknown) => {
+        if (inTx) readsInTx.push(key);
+        return baseGet(key, fb);
+      }),
+    } as unknown as SystemConfigService;
+    raw.pointsTransaction.count = countByPrefix({ 'REFERRAL_ORDER2:': 1 });
+    const svc = new RewardPointsService(prisma, config);
+    const grantSpy = jest.spyOn(svc, 'grant');
+
+    expect(await svc.grantReferralOrderReward('referee1')).toBe(true);
+    expect(readsInTx).toEqual([]);
+    expect((config.get as jest.Mock).mock.calls.map((c) => c[0])).toContain('loyalty.point_expire_months');
+    // Lần cấp thưởng đơn thứ hai và lần cấp mốc đều nhận expiresAt đã đọc trước.
+    expect(grantSpy).toHaveBeenCalledTimes(2);
+    for (const [i, call] of grantSpy.mock.calls.entries()) {
+      expect(call[6]).toBeInstanceOf(Date);
+      expect(createManyAndReturn.mock.calls[i][0].data[0].expiresAt).toBe(call[6]);
+    }
   });
 
   it('thua race (ON CONFLICT không ghi) → false, không cộng số dư', async () => {

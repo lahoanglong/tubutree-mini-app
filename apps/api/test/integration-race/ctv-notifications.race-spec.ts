@@ -39,7 +39,7 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
         AnalyticsEventsService,
         AffiliateService,
         NotificationsService,
-        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue(true) } },
+        { provide: ZnsClient, useValue: { sendTemplate: jest.fn().mockResolvedValue({ ok: true }) } },
         { provide: getQueueToken(QUEUE_NOTIFICATIONS), useValue: { add: jest.fn() } },
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },

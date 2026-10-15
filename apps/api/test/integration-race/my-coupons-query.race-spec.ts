@@ -1,10 +1,13 @@
+import { randomInt } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Coupon, Prisma } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
-import { isCouponEligible } from '../../src/modules/coupons/coupon-scope';
+import { isCouponEligible, requiresRealUser } from '../../src/modules/coupons/coupon-scope';
+import { couponProductIds } from '../../src/modules/coupons/coupons.service';
+import { isRealUser } from '../../src/common/real-user';
 import { createUser, randCode, warmPool } from './helpers';
 
 /**
@@ -51,7 +54,9 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const now = new Date();
     const all: Coupon[] = await prisma.coupon.findMany({ where: { startAt: { lte: now }, endAt: { gte: now } } });
-    const filtered = all.filter((c) => isCouponEligible(c, user));
+    const filtered = all.filter(
+      (c) => isCouponEligible(c, user) && c.isActive !== false && (isRealUser(user) || !requiresRealUser(c)),
+    );
     const grouped = await prisma.couponRedemption.groupBy({
       by: ['couponId'],
       where: { userId, couponId: { in: filtered.map((c) => c.id) } },
@@ -60,8 +65,20 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
     return filtered
       .filter((c) => !(c.perUserLimit > 0 && (used.get(c.id) ?? 0) >= c.perUserLimit))
-      .map((c) => ({ code: c.code, type: c.type, value: c.value, minOrder: c.minOrder, maxDiscount: c.maxDiscount, endAt: c.endAt }));
+      .map((c) => ({
+        code: c.code,
+        type: c.type,
+        value: c.value,
+        minOrder: c.minOrder,
+        maxDiscount: c.maxDiscount,
+        endAt: c.endAt,
+        productIds: couponProductIds(c.applyTo),
+      }));
   }
+
+  /** Bản mới kèm tên sản phẩm áp dụng; so với thuật toán cũ theo id sản phẩm. */
+  const withProductIds = (xs: Awaited<ReturnType<LoyaltyService['getAvailableCoupons']>>) =>
+    xs.map(({ products, ...rest }) => ({ ...rest, productIds: products?.map((p) => p.id) ?? null }));
 
   const byCode = <T extends { code: string }>(xs: T[]) => [...xs].sort((a, b) => a.code.localeCompare(b.code));
 
@@ -71,9 +88,10 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     for (const id of [tierId, tier2]) {
       await prisma.membershipTier.create({ data: { id, name: id, minPoints: 0, perks: {}, sortOrder: 99 } });
     }
-    const a = await createUser(prisma, { tierId });
-    const b = await createUser(prisma);
-    const c = await createUser(prisma, { tierId: tier2 });
+    const a = await createUser(prisma, { tierId, phone: `09${String(randomInt(0, 100_000_000)).padStart(8, '0')}` });
+    const b = await createUser(prisma, { zaloId: `zl_${randCode(12)}` });
+    // Tài khoản khách: mã công khai giới hạn lượt/khách bị ẩn (MONEY-1), mã không giới hạn lượt vẫn thấy.
+    const c = await createUser(prisma, { tierId: tier2, zaloId: `guest_${randCode(12)}` });
 
     await mk('PUB', {});
     await mk('PUB_PUL0', { perUserLimit: 0 });
@@ -99,7 +117,7 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     const ours = (xs: { code: string }[]) => xs.filter((x) => x.code.startsWith(`T${tag}-`)).map((x) => x.code);
     for (const u of [a, b, c]) {
       const [fresh, old] = await Promise.all([loyalty.getAvailableCoupons(u.id), legacy(u.id)]);
-      expect(byCode(fresh)).toEqual(byCode(old));
+      expect(byCode(withProductIds(fresh))).toEqual(byCode(old));
       console.log('[compare] user=%s mới=%j', u.id.slice(-4), ours(byCode(fresh)));
     }
 
@@ -109,6 +127,7 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
     expect(ours(await loyalty.getAvailableCoupons(b.id)).sort()).toEqual(
       [`T${tag}-PUB`, `T${tag}-PUB_PUL0`, `T${tag}-B_MINE`].sort(),
     );
+    expect(ours(await loyalty.getAvailableCoupons(c.id)).sort()).toEqual([`T${tag}-PUB_PUL0`, `T${tag}-TIER2`].sort());
   });
 
   it('kết quả có thứ tự ổn định theo id', async () => {

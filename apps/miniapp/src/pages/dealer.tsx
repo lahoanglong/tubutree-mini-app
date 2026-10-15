@@ -91,7 +91,7 @@ export default function DealerPage() {
       </DealerShell>
     );
   }
-  if (meQ.isError) {
+  if (meQ.isError && !meQ.data) {
     return (
       <DealerShell title={TITLE_HUB}>
         <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
@@ -102,11 +102,11 @@ export default function DealerPage() {
   const me = meQ.data!;
   if (me.isDealer || me.status === 'APPROVED') return <DealerHub />;
   if (me.status === 'PENDING') return <DealerPending />;
-  return <DealerApply rejected={me.status === 'REJECTED'} />;
+  return <DealerApply rejected={me.status === 'REJECTED'} rejectionReason={me.rejectionReason ?? null} />;
 }
 
 /* ─────────────── Đăng ký đại lý ─────────────── */
-function DealerApply({ rejected }: { rejected: boolean }) {
+function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejectionReason: string | null }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const [form, setForm] = useState<DealerApplyInput>({
@@ -159,6 +159,11 @@ function DealerApply({ rejected }: { rejected: boolean }) {
             <Text variant="body-sm" tone="danger" as="p">
               Hồ sơ trước bị từ chối. Vui lòng kiểm tra lại thông tin và nộp lại.
             </Text>
+            {rejectionReason && (
+              <Text variant="body-sm" tone="danger" as="p" style={{ marginTop: 4, fontWeight: 600 }}>
+                Lý do: {rejectionReason}
+              </Text>
+            )}
           </div>
         )}
 
@@ -792,7 +797,7 @@ function DealerCredit() {
       </div>
     );
   }
-  if (ledgerQ.isError) {
+  if (ledgerQ.isError && !ledgerQ.data) {
     return (
       <div style={{ margin: '0 16px', paddingBottom: 24 }}>
         <ErrorState message={getErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
@@ -889,7 +894,7 @@ function DealerReport() {
       </div>
     );
   }
-  if (q.isError || !q.data) {
+  if (!q.data) {
     return (
       <div style={{ margin: '0 16px' }}>
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />

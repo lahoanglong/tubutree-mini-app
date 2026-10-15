@@ -12,6 +12,7 @@ import { haptic } from '../utils/haptic';
 import {
   hasAskedZaloPrefill,
   markZaloPrefillAsked,
+  isLegacyGeo,
   pickLastGeo,
   recallLastGeo,
   rememberLastGeo,
@@ -73,16 +74,16 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
       : // Địa chỉ mới: điền sẵn tên + SĐT lấy từ tài khoản Zalo (spec §6.1) để bớt thao tác.
         { ...EMPTY_FORM, recipient: usableProfileName(user?.fullName), phone: user?.phone ?? '' },
   );
-  // Prefill địa giới chỉ khi mã hợp lệ (địa chỉ cũ '00' → buộc chọn lại để có mã Pancake thật).
+  // Prefill địa giới chỉ khi mã hợp lệ (địa chỉ cũ '00' / mã tỉnh trước 2025 → buộc chọn lại để có mã Pancake thật).
   // Địa chỉ mới: điền sẵn tỉnh/phường của lần lưu trước (Q-27), dự phòng từ sổ địa chỉ đã tải.
   const [geo, setGeo] = useState<GeoValue>(() =>
     initial
-      ? initial.provinceCode && initial.provinceCode !== '00'
+      ? !isLegacyGeo(initial)
         ? {
             province: initial.province,
             provinceCode: initial.provinceCode,
             ward: initial.ward,
-            wardCode: initial.wardCode && initial.wardCode !== '00' ? initial.wardCode : '',
+            wardCode: initial.wardCode,
           }
         : EMPTY_GEO
       : (recallLastGeo(undefined, user?.id) ?? pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? EMPTY_GEO),

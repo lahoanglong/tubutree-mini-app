@@ -1,52 +1,95 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { AddressForm } from '@/components/address-form';
+import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import {
   getCart,
   getAddresses,
   createAddress,
+  updateAddress,
   checkoutQuote,
   placeOrder,
   getPublicConfig,
+  getMe,
   formatVnd,
   type AddressDTO,
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer, zeroTotalNote } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import {
+  ORDER_NOTE_MAX,
+  effectiveReferralCode,
+  isCartFixableError,
+  isInvoiceValid,
+  outOfStockLine,
+  overStockMessage,
+  paymentMissingNote,
+  paymentUnavailableReason,
+  pickPaymentMethod,
+} from '@/lib/checkout-rules';
+import { clearCheckoutSelection, recallCheckoutSelection, reconcileSelection } from '@/lib/checkout-selection';
 import { orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { invalidateBalances } from '@/lib/balances';
+import { ApiError, NetworkError } from '@/lib/client-api';
 import { RecyclingCheckoutSection } from '@/components/recycling-checkout';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { CouponBox, COUPON_MUTATION_KEY } from '@/components/coupon-box';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { ReferralCodeBox } from '@/components/referral-code-box';
 import { BankTransferPanel } from './bank-transfer-panel';
-
-const VN_PHONE = /^(0|\+84)\d{9}$/;
-// Tỉnh/phường chọn qua GeoPicker (mã Pancake thật, hệ 2 cấp — không còn quận/huyện);
-// chỉ 3 field text còn lại (mirror miniapp address-section.tsx).
-const EMPTY = { recipient: '', phone: '', street: '' };
-type Form = typeof EMPTY;
+import { InvoiceSection } from './invoice-section';
+import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
+import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
 
 export default function CheckoutPage() {
-  const { status } = useAuth();
+  const phase = useAuthPhase();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
+  const [note, setNote] = useState('');
+  const [wantInvoice, setWantInvoice] = useState(false);
+  const [invoice, setInvoice] = useState(EMPTY_INVOICE);
+  // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
+  const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
   const [idemKey] = useState(() => (typeof crypto !== 'undefined' ? crypto.randomUUID() : String(Math.random())));
 
-  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: status === 'authenticated' });
-  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: status === 'authenticated' });
+  const cartQ = useQuery({ queryKey: ['cart'], queryFn: getCart, enabled: phase === 'authenticated' });
+  const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
+  // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
+  // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
+  const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
+
+  // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
+  // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
+  const [selection] = useState(() => recallCheckoutSelection());
+  const cartLoaded = !!cartQ.data;
+  const itemIds = cartLoaded ? reconcileSelection(selection, cartQ.data!.items.map((it) => it.id)) : undefined;
+  const itemIdsKey = itemIds ? itemIds.join(',') : '';
+  const cartReady = selection == null || cartLoaded;
+  const checkoutItems = itemIds ? (cartQ.data?.items ?? []).filter((it) => itemIds.includes(it.id)) : (cartQ.data?.items ?? []);
+  // Giỏ đã tải và không còn món nào (đặt xong rồi Back, mở lại tab cũ): không dựng form 0đ, không gọi báo giá (BE trả 400).
+  const cartEmpty = cartLoaded && checkoutItems.length === 0;
+
+  const userId = user?.id;
+  useEffect(() => {
+    setInvoice(loadSavedInvoice(userId));
+  }, [userId]);
 
   useEffect(() => {
     if (addrQ.data && addressId === null) {
@@ -68,8 +111,9 @@ export default function CheckoutPage() {
   // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
-  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null; convertedNote: string | null }>({
+  const [pointsOffer, setPointsOffer] = useState<CheckoutPointsOffer>({
     usable: 0,
+    converted: 0,
     lockNote: null,
     convertedNote: null,
   });
@@ -85,10 +129,10 @@ export default function CheckoutPage() {
   // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
   const couponChanging = useIsMutating({ mutationKey: COUPON_MUTATION_KEY }) > 0;
   const quoteQ = useQuery({
-    queryKey: ['quote', addressId, ctvSlug, usePoints],
-    queryFn: () =>
-      checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug),
-    enabled: !!addressId && status === 'authenticated',
+    queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey],
+    queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
+    // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
+    enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
@@ -100,8 +144,28 @@ export default function CheckoutPage() {
   // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
   // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
   const quote = quoteQ.isError ? undefined : quoteQ.data;
+  // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
+  const partnerPoints = pointsCapState(quote, usablePoints);
+  const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
+  useEffect(() => {
+    if (partnerPoints.disabled && usePoints) setUsePoints(false);
+  }, [partnerPoints.disabled, usePoints]);
   // Đơn 0đ: BE ép COD + xác nhận luôn (không thu tiền) nên ẩn lựa chọn phương thức và gửi COD cho khớp.
   const zeroNote = quote ? zeroTotalNote(quote) : null;
+  const shipments = quote?.shipments ?? [];
+  const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
+  const splitNote = shipmentsNote(shipments);
+  // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
+  // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
+  const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
+  useEffect(() => {
+    if (pickedPayment !== payment) setPayment(pickedPayment);
+  }, [pickedPayment, payment]);
+
+  const invoiceValid = isInvoiceValid(wantInvoice, invoice);
+  // Hết hàng/vượt tồn chỉ sửa được ở giỏ: chặn ngay ở đây (khách đi thẳng vào /thanh-toan hay lưu đường dẫn không phải
+  // chờ tới lúc bấm đặt mới biết). Chỉ xét các dòng đang thanh toán.
+  const overStock = outOfStockLine(checkoutItems);
 
   const place = useMutation({
     mutationFn: () =>
@@ -109,12 +173,26 @@ export default function CheckoutPage() {
         {
           addressId: addressId!,
           paymentMethod: zeroNote ? 'COD' : payment,
+          ...(note.trim() ? { note: note.trim() } : {}),
+          ...(itemIds ? { itemIds } : {}),
+          ...(wantInvoice
+            ? {
+                invoiceRequest: {
+                  taxCode: invoice.taxCode.trim(),
+                  companyName: invoice.companyName.trim(),
+                  address: invoice.address.trim(),
+                  email: invoice.email.trim(),
+                },
+              }
+            : {}),
           // Báo BE khách đã thấy đơn 0đ: nếu lúc đặt tổng > 0 (điểm vừa bị tiêu bớt) thì BE từ chối thay vì
           // tạo đơn COD có tiền phải trả mà khách không chọn.
           ...(zeroNote ? { quotedZeroTotal: true } : {}),
+          // Giá/phí đổi giữa lúc báo giá và lúc bấm đặt → BE trả TOTAL_CHANGED thay vì thu số khách chưa thấy.
+          ...(quote ? { expectedTotal: quote.total } : {}),
           pointsToUse: usePoints ? usablePoints : 0,
           storefrontSlug: ctvSlug,
-          referralCode: sfCtx.referralCode ?? undefined,
+          referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
           // Chỉ có khoá khi bật + chọn (API forbidNonWhitelisted; tắt thì body y hệt bản cũ).
           ...recyclingCheckoutFields(recyclingEnabled, hasRecyclingPickup, recyclingNote),
         },
@@ -122,29 +200,49 @@ export default function CheckoutPage() {
       ),
     onSuccess: (order) => {
       setPlaced(order);
+      if (wantInvoice) saveInvoice(userId, invoice);
+      clearCheckoutSelection();
       void qc.invalidateQueries({ queryKey: ['cart'] });
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
+      invalidateBalances(qc);
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+      } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
+        // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự
+        // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở tab khác: kiện của
+        // báo giá mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
+        void qc.invalidateQueries({ queryKey: ['quote'] });
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+      } else if (e instanceof Error && isCartFixableError(e.message)) {
+        void qc.invalidateQueries({ queryKey: ['cart'] });
+      }
     },
   });
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-600">Đang tải…</p>
-        </div>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'unavailable') {
     return (
       <Shell>
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để thanh toán.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <SessionUnavailable />
+      </Shell>
+    );
+  }
+
+  if (phase === 'guest') {
+    return (
+      <Shell>
+        <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo="/thanh-toan" />
       </Shell>
     );
   }
@@ -157,9 +255,28 @@ export default function CheckoutPage() {
             <CheckCircle2 className="h-9 w-9" aria-hidden="true" />
           </div>
           <h2 className="mt-5 font-display text-2xl font-semibold text-stone-900">Đặt hàng thành công!</h2>
-          <p className="mt-2 text-stone-700">
-            Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
-          </p>
+          {placed.splitOrders && placed.splitOrders.length > 1 ? (
+            <div className="mx-auto mt-3 max-w-md text-left">
+              <p className="text-center text-stone-700">Hàng do nhiều nơi giao nên được tách thành {placed.splitOrders.length} đơn:</p>
+              <ul className="mt-2 space-y-2">
+                {placed.splitOrders.map((o) => (
+                  <li key={o.code} className={`flex flex-wrap items-center justify-between gap-2 p-3 text-sm ${ui.card}`}>
+                    <span>
+                      <Link href={orderDetailHref(o.code)} className="font-semibold text-forest-700 underline">
+                        {o.code}
+                      </Link>{' '}
+                      · {o.fulfillerName} giao
+                    </span>
+                    <span className="font-semibold text-stone-900">{formatVnd(o.total)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="mt-2 text-stone-700">
+              Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
+            </p>
+          )}
           {placed.hasRecyclingPickup && (
             <div className="mx-auto mt-3 max-w-md text-left">
               <RecyclingStatus order={placed} />
@@ -186,10 +303,57 @@ export default function CheckoutPage() {
     );
   }
 
+  if (cartEmpty) {
+    return (
+      <Shell>
+        <div className="py-16 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
+            <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
+          </div>
+          <h2 className="mt-4 font-display text-lg font-semibold text-stone-900">Giỏ hàng đang trống</h2>
+          <p className="mt-1 text-sm text-stone-600">Chưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <Link href="/" className={ui.btnPrimary}>
+              Khám phá sản phẩm
+            </Link>
+            <Link href="/tai-khoan" className={ui.btnSecondary}>
+              Đơn của tôi
+            </Link>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
   const cart = cartQ.data;
+  const placeErrorMessage = place.error instanceof Error ? place.error.message : null;
+  const cartIssue = overStock
+    ? overStockMessage(overStock.productName, overStock.stock)
+    : placeErrorMessage && isCartFixableError(placeErrorMessage)
+      ? placeErrorMessage
+      : null;
+  const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
+  const paymentMethods = [
+    { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
+    { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
+    { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
+  ].map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
+  const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
 
   return (
     <Shell>
+      {cartIssue && (
+        <div
+          role="alert"
+          data-testid="checkout-cart-issue"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
+        >
+          <p className="min-w-0 flex-1 break-words">{cartIssue}</p>
+          <Link href="/gio-hang" className={ui.btnSecondary}>
+            Về giỏ hàng để sửa
+          </Link>
+        </div>
+      )}
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-4 md:col-span-2">
           <section className={`p-4 ${ui.card}`}>
@@ -210,6 +374,10 @@ export default function CheckoutPage() {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 setAddressId(a.id);
               }}
+              onUpdated={() => {
+                void qc.invalidateQueries({ queryKey: ['addresses'] });
+                void qc.invalidateQueries({ queryKey: ['quote'] });
+              }}
             />
           </section>
 
@@ -219,23 +387,57 @@ export default function CheckoutPage() {
               <p className="mt-2 text-sm text-forest-800">{zeroNote}</p>
             ) : (
               <div className="mt-2 space-y-2">
-                {[
-                  { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
-                  { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
-                ].map((p) => (
-                  <label key={p.k} className={optionClass(payment === p.k)}>
-                    <input
-                      type="radio"
-                      name="pay"
-                      checked={payment === p.k}
-                      onChange={() => setPayment(p.k)}
-                      className="h-4 w-4 accent-forest-600"
-                    />
-                    {p.label}
-                  </label>
-                ))}
+                {paymentMethods.map((p) => {
+                  const reason = p.hint;
+                  return (
+                    <div key={p.k}>
+                      <label className={`${optionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
+                        <input
+                          type="radio"
+                          name="pay"
+                          checked={payment === p.k}
+                          onChange={() => setPayment(p.k)}
+                          disabled={!!reason}
+                          aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
+                          className="h-4 w-4 accent-forest-600"
+                        />
+                        {p.label}
+                      </label>
+                      {reason && (
+                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-xs text-stone-600">
+                          {reason}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {paymentNote && (
+                  <p role="status" className="text-sm text-warning-fg">
+                    {paymentNote}
+                  </p>
+                )}
               </div>
             )}
+          </section>
+
+          <section className={`p-4 ${ui.card}`}>
+            <h2 className={ui.sectionTitle}>Ghi chú cho đơn hàng</h2>
+            <label className="mt-2 block">
+              <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                maxLength={ORDER_NOTE_MAX}
+                rows={3}
+                placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
+                disabled={place.isPending}
+                aria-describedby="order-note-count"
+                className={`${ui.field} mt-1 py-2`}
+              />
+            </label>
+            <p id="order-note-count" className="mt-1 text-xs text-stone-600">
+              {note.length}/{ORDER_NOTE_MAX} ký tự
+            </p>
           </section>
 
           {recyclingEnabled && (
@@ -248,38 +450,101 @@ export default function CheckoutPage() {
               disabled={place.isPending}
             />
           )}
+
+          <ReferralCodeBox
+            linkedCode={sfCtx.referralCode}
+            appliedCode={referralApplied}
+            onApplied={setReferralApplied}
+            disabled={place.isPending}
+          />
+
+          <InvoiceSection
+            want={wantInvoice}
+            onWant={setWantInvoice}
+            invoice={invoice}
+            onInvoice={setInvoice}
+            valid={invoiceValid}
+            disabled={place.isPending}
+          />
         </div>
 
         <div className={`h-fit p-4 ${ui.card}`}>
           <h2 className={ui.sectionTitle}>Đơn hàng</h2>
-          {/* Vùng cuộn phải focus được bằng bàn phím (axe scrollable-region-focusable). */}
+          {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
+              hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
           <div
             role="region"
             aria-label="Sản phẩm trong đơn"
-            tabIndex={0}
-            className="mt-2 max-h-40 space-y-1 overflow-auto text-sm"
+            tabIndex={split ? undefined : 0}
+            className={`mt-2 space-y-1 text-sm ${split ? '' : 'max-h-40 overflow-auto'}`}
           >
-            {cart?.items.map((it) => (
-              <div key={it.id} className="flex justify-between gap-2">
-                <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                <span className="text-stone-900">{formatVnd(it.total)}</span>
-              </div>
-            ))}
+            {split
+              ? shipments.map((sh) => (
+                  <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
+                    <p className="text-xs font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
+                    {checkoutItems
+                      .filter((it) => sh.itemIds.includes(it.id))
+                      .map((it) => (
+                        <div key={it.id} className="flex justify-between gap-2">
+                          <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
+                          <span className="text-stone-900">{formatVnd(it.total)}</span>
+                        </div>
+                      ))}
+                    <div className="flex justify-between gap-2 text-xs text-stone-600">
+                      <span>Phí giao</span>
+                      <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+                    </div>
+                  </div>
+                ))
+              : checkoutItems.map((it) => (
+                  <div key={it.id} className="flex justify-between gap-2">
+                    <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
+                    <span className="text-stone-900">{formatVnd(it.total)}</span>
+                  </div>
+                ))}
           </div>
-          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? cart?.subtotal ?? 0)} />
+          {itemIds && cart && (
+            <p className="mt-2 text-xs text-stone-600">
+              Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
+              <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+                Đổi lựa chọn
+              </Link>
+            </p>
+          )}
+          {splitNote && <p className="mt-2 text-xs text-stone-600">{splitNote}</p>}
+          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+          )}
+          {(quote?.comboDiscount ?? 0) > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
+          {(quote?.tierDiscount ?? 0) > 0 && (
+            <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${quote!.pointsUsed})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
-          <Row label="Phí vận chuyển" value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : '…'} />
-          {cart && <CouponBox currentCode={cart.couponCode} subtotal={cart.subtotal} disabled={place.isPending} />}
+          <Row
+            label="Phí vận chuyển"
+            value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+          />
+          {cart && (
+            <CouponBox
+              currentCode={cart.couponCode}
+              subtotal={previewSubtotal}
+              notice={quote?.couponNotice ?? cart.couponNotice}
+              disabled={place.isPending}
+            />
+          )}
           {usablePoints > 0 && (
-            <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm">
+            <label
+              className={`mt-3 flex min-h-11 items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm ${
+                partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+              }`}
+            >
               <input
                 type="checkbox"
-                checked={usePoints}
+                checked={usePoints && !partnerPoints.disabled}
+                disabled={partnerPoints.disabled}
                 onChange={(e) => setUsePoints(e.target.checked)}
                 className="h-4 w-4 accent-forest-600"
               />
@@ -291,20 +556,24 @@ export default function CheckoutPage() {
               </span>
             </label>
           )}
-          {pointsOffer.convertedNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.convertedNote}</p>}
+          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.capNote}</p>}
+          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
+          {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span>{quote ? formatVnd(quote.total) : '…'}</span>
+            <span>{quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính'}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
           )}
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
-              Không tính được phí ship/tổng tiền.{' '}
+              {quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'
+                ? `${quoteQ.error.message} Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.`
+                : 'Không tính được phí ship/tổng tiền.'}{' '}
               <button type="button" onClick={() => void quoteQ.refetch()} className={ui.btnText}>
                 Thử lại
               </button>
@@ -322,15 +591,24 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => place.mutate()}
-            disabled={!addressId || !quote || quoteStale || place.isPending}
+            disabled={!addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '')}
             className={`${ui.btnPrimary} mt-4 w-full`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
-          {place.isError && (
-            <p role="alert" className={`mt-2 ${ui.error}`}>
-              {place.error instanceof Error ? place.error.message : 'Đặt hàng thất bại.'}
-            </p>
+          {place.isError && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
+            <div role="alert" className={`mt-2 ${ui.error}`}>
+              <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
+              {place.error instanceof NetworkError && (
+                <p className="mt-1 text-stone-700">
+                  Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
+                  <Link href="/tai-khoan" className="font-semibold text-forest-700 underline">
+                    Đơn của tôi
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -352,153 +630,105 @@ function AddressPicker({
   selectedId,
   onSelect,
   onCreated,
+  onUpdated,
 }: {
   addresses: AddressDTO[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
+  onUpdated: (a: AddressDTO) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<Form>(EMPTY);
-  const [geo, setGeo] = useState<GeoValue>(EMPTY_GEO);
-  const [err, setErr] = useState<string | null>(null);
-
-  const create = useMutation({
-    mutationFn: () =>
-      createAddress({
-        recipient: form.recipient.trim(),
-        phone: form.phone.replace(/\s/g, ''),
-        street: form.street.trim(),
-        province: geo.province,
-        ward: geo.ward,
-        district: '', // hệ 2 cấp (Pancake) — không còn quận/huyện
-        provinceCode: geo.provinceCode,
-        wardCode: geo.wardCode,
-        districtCode: '',
-      }),
-    onSuccess: (a) => {
-      setAdding(false);
-      setForm(EMPTY);
-      setGeo(EMPTY_GEO);
-      onCreated(a);
-    },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
-  });
-
-  const valid = useMemo(
-    () =>
-      Object.values(form).every((v) => v.trim()) &&
-      VN_PHONE.test(form.phone.replace(/\s/g, '')) &&
-      !!geo.provinceCode &&
-      !!geo.wardCode,
-    [form, geo],
-  );
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="mt-2 space-y-2">
-      {addresses.map((a) => (
-        <label key={a.id} className={`${optionClass(selectedId === a.id)} items-start`}>
-          <input
-            type="radio"
-            name="addr"
-            checked={selectedId === a.id}
-            onChange={() => onSelect(a.id)}
-            className="mt-1 h-4 w-4 accent-forest-600"
+      {addresses.map((a) =>
+        editingId === a.id ? (
+          <AddressForm
+            key={a.id}
+            title="Sửa địa chỉ"
+            submitLabel="Lưu thay đổi"
+            initial={addressToForm(a)}
+            onSubmit={async (payload) => {
+              const saved = await updateAddress(a.id, payload);
+              setEditingId(null);
+              onUpdated(saved);
+            }}
+            onCancel={() => setEditingId(null)}
           />
-          <span>
-            <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
-            <br />
-            <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
-          </span>
-        </label>
-      ))}
-
-      {adding ? (
-        <div className="space-y-2 rounded-control border border-stone-300 p-3">
-          <TextField
-            label={LABEL.recipient}
-            autoComplete="name"
-            value={form.recipient}
-            onChange={(v) => setForm((f) => ({ ...f, recipient: v }))}
-          />
-          <TextField
-            label={LABEL.phone}
-            autoComplete="tel"
-            inputMode="tel"
-            value={form.phone}
-            onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
-          />
-          <GeoPicker value={geo} onChange={setGeo} />
-          <TextField
-            label={LABEL.street}
-            autoComplete="street-address"
-            value={form.street}
-            onChange={(v) => setForm((f) => ({ ...f, street: v }))}
-          />
-          {err && (
-            <p role="alert" className="text-xs text-danger-fg">
-              {err}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setAdding(false)} className={ui.btnSecondary}>
-              Hủy
-            </button>
+        ) : (
+          <div key={a.id} className="flex items-start gap-1">
+            <label className={`${optionClass(selectedId === a.id)} min-w-0 flex-1 items-start`}>
+              <input
+                type="radio"
+                name="addr"
+                checked={selectedId === a.id}
+                onChange={() => onSelect(a.id)}
+                className="mt-1 h-4 w-4 accent-forest-600"
+              />
+              <span className="min-w-0 break-words">
+                <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
+                <br />
+                <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+                {isLegacyGeo(a) && (
+                  <>
+                    <br />
+                    <span className="text-xs font-medium text-warning-fg">
+                      Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, bấm Sửa để chọn lại tỉnh/phường.
+                    </span>
+                  </>
+                )}
+              </span>
+            </label>
             <button
               type="button"
-              onClick={() => create.mutate()}
-              disabled={!valid || create.isPending}
-              className={`${ui.btnPrimary} flex-1`}
+              onClick={() => {
+                setAdding(false);
+                setEditingId(a.id);
+              }}
+              aria-label={`Sửa địa chỉ của ${a.recipient}`}
+              className={ui.btnText}
             >
-              Lưu địa chỉ
+              Sửa
             </button>
           </div>
-        </div>
+        ),
+      )}
+
+      {adding ? (
+        <AddressForm
+          title="Thêm địa chỉ mới"
+          submitLabel="Lưu địa chỉ"
+          onSubmit={async (payload) => {
+            const created = await createAddress(payload);
+            setAdding(false);
+            onCreated(created);
+          }}
+          onCancel={() => setAdding(false)}
+        />
       ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
-        >
-          + Thêm địa chỉ mới
-        </button>
+        <div className="flex flex-wrap items-center gap-x-4">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingId(null);
+              setAdding(true);
+            }}
+            className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
+          >
+            + Thêm địa chỉ mới
+          </button>
+          {addresses.length > 0 && (
+            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-stone-700 hover:underline">
+              Quản lý sổ địa chỉ
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );
 }
-
-function TextField({
-  label,
-  value,
-  onChange,
-  autoComplete,
-  inputMode,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  autoComplete?: string;
-  inputMode?: 'tel';
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-stone-700">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        className={`${ui.field} mt-1`}
-      />
-    </label>
-  );
-}
-
-const LABEL: Record<keyof Form, string> = {
-  recipient: 'Người nhận',
-  phone: 'Số điện thoại',
-  street: 'Số nhà, đường',
-};
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (

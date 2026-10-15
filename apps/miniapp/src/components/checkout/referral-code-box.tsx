@@ -137,9 +137,9 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
           cursor: 'pointer',
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Tile />
-          <span style={{ display: 'block' }}>
+          <span style={{ display: 'block', minWidth: 0 }}>
             <Text variant="label" as="span" style={{ display: 'block' }}>
               Mã giới thiệu
             </Text>
@@ -148,8 +148,8 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
             </Text>
           </span>
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Text variant="caption" tone="brand" style={{ fontWeight: 700 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+          <Text variant="caption" tone="brand" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
             Nhập mã
           </Text>
           <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />

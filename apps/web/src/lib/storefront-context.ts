@@ -57,13 +57,17 @@ export function getStorefrontContext(): StorefrontContext {
   return read();
 }
 
-/** Gian hàng CTV có slug = referralCode viết thường, nên suy ngược ra được mã giới thiệu. */
-export function rememberStorefront(slug: string, type?: string): void {
+/**
+ * `slug` phải là slug gốc API trả về (không phải tham số URL: khách vào qua subdomain thì URL mang subdomain), và mã giới
+ * thiệu lấy từ chủ gian hàng do API trả. CTV đổi subdomain thì subdomain không còn trùng mã giới thiệu (SELLER-4).
+ */
+export function rememberStorefront(slug: string, type?: string, ownerReferralCode?: string | null): void {
   const current = read();
+  const code = type === 'CTV' && ownerReferralCode ? ownerReferralCode.trim().toUpperCase() : null;
   write({
     slug,
     kind: type ?? null,
-    referralCode: type === 'CTV' ? slug.toUpperCase() : current.referralCode,
+    referralCode: code || current.referralCode,
   });
 }
 

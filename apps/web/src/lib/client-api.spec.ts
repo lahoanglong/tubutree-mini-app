@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { apiFetch, hasSessionMarker, setSessionMarker, clearSessionMarker, setAccessToken } from './client-api';
+import {
+  apiFetch,
+  ApiError,
+  NetworkError,
+  REQUEST_TIMEOUT_MS,
+  hasSessionMarker,
+  setSessionMarker,
+  clearSessionMarker,
+  setAccessToken,
+  refreshSession,
+  restoreSession,
+} from './client-api';
 
 function jsonRes(status: number, body: unknown = {}): Response {
   return {
@@ -64,6 +75,17 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
     expect(lastCall(fetchMock).headers['x-client']).toBe('web');
   });
 
+  it('lỗi 4xx giữ cả message lẫn mã nghiệp vụ (code) để trang phân nhánh mà không so chuỗi', async () => {
+    fetchMock.mockResolvedValue(jsonRes(400, { message: 'Tổng tiền đơn vừa thay đổi…', code: 'TOTAL_CHANGED' }));
+    await expect(apiFetch('/checkout/place-order')).rejects.toMatchObject({
+      status: 400,
+      message: 'Tổng tiền đơn vừa thay đổi…',
+      code: 'TOTAL_CHANGED',
+    });
+    fetchMock.mockResolvedValue(jsonRes(400, { message: ['phone must match'] }));
+    await expect(apiFetch('/me/addresses')).rejects.toMatchObject({ message: 'phone must match', code: null });
+  });
+
   it('401 mà chưa từng đăng nhập (không có cờ) → không gọi refresh, ném lỗi luôn', async () => {
     fetchMock.mockResolvedValue(jsonRes(401, { message: 'Unauthorized' }));
     await expect(apiFetch('/me')).rejects.toThrow();
@@ -96,5 +118,162 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
       .mockResolvedValueOnce(jsonRes(401, { message: 'token chết' }));
     await expect(apiFetch('/me')).rejects.toThrow();
     expect(hasSessionMarker()).toBe(false);
+  });
+
+  // BUYERWEB-2: trước đây MỌI lỗi refresh (mất mạng, 502/503 khi API khởi động lại, 429) đều xoá cờ
+  // phiên — cookie refresh vẫn sống nhưng web không bao giờ thử lại, khách phải đăng nhập Zalo lần nữa.
+  it.each([
+    ['mất mạng', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['API đang khởi động lại (503)', () => Promise.resolve(jsonRes(503, { message: 'unavailable' }))],
+    ['bị giới hạn tốc độ (429)', () => Promise.resolve(jsonRes(429, { message: 'too many' }))],
+  ])('refresh lỗi tạm thời (%s) → GIỮ cờ phiên', async (_label, refreshRes) => {
+    setSessionMarker();
+    fetchMock.mockResolvedValueOnce(jsonRes(401, { message: 'hết hạn' })).mockImplementationOnce(refreshRes);
+    await expect(apiFetch('/me')).rejects.toThrow();
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it.each([400, 401, 403])('refresh trả %i (phiên chết thật) → xoá cờ phiên', async (status) => {
+    setSessionMarker();
+    fetchMock.mockResolvedValueOnce(jsonRes(status, { message: 'chết' }));
+    await expect(refreshSession()).resolves.toEqual({ kind: 'dead' });
+    expect(hasSessionMarker()).toBe(false);
+  });
+
+  // BUYERWEB-3: hai tab cùng refresh một cookie từng bị BE coi là token bị đánh cắp. Khoá Web Locks
+  // xếp hàng các tab: tab sau gửi cookie tab trước vừa xoay, không còn hai request cùng một token.
+  it('refresh chạy trong khoá Web Locks dùng chung giữa các tab', async () => {
+    setSessionMarker();
+    const request = vi.fn((_name: string, cb: () => Promise<unknown>) => cb());
+    vi.stubGlobal('navigator', { locks: { request } });
+    fetchMock.mockResolvedValueOnce(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    await expect(refreshSession()).resolves.toMatchObject({ kind: 'ok' });
+    expect(request).toHaveBeenCalledWith('tubu_web_refresh', expect.any(Function));
+  });
+
+  it('nhiều lời gọi refresh trong cùng một tab → chỉ một request', async () => {
+    setSessionMarker();
+    let resolve!: (r: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolve = r)));
+    const all = Promise.all([refreshSession(), refreshSession(), refreshSession()]);
+    resolve(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    const out = await all;
+    expect(out.every((o) => o.kind === 'ok')).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('khôi phục phiên lúc mở trang: lỗi tạm thời thì thử lại có giãn cách rồi vào được', async () => {
+    setSessionMarker();
+    const sleep = vi.fn(async () => undefined);
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(503))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonRes(200, { accessToken: 'at', user: { id: 'u1' } }));
+    await expect(restoreSession([1000, 3000], sleep)).resolves.toMatchObject({ kind: 'ok', data: { user: { id: 'u1' } } });
+    expect(sleep.mock.calls).toEqual([[1000], [3000]]);
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('khôi phục phiên: hết lượt thử vẫn lỗi tạm thời → trả transient, GIỮ cờ để lần sau thử tiếp', async () => {
+    setSessionMarker();
+    fetchMock.mockResolvedValue(jsonRes(502));
+    await expect(restoreSession([1, 1], async () => undefined)).resolves.toEqual({ kind: 'transient' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('khôi phục phiên: 401 → dừng ngay, không thử lại', async () => {
+    setSessionMarker();
+    fetchMock.mockResolvedValue(jsonRes(401));
+    await expect(restoreSession([1, 1], async () => undefined)).resolves.toEqual({ kind: 'dead' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    setAccessToken(null);
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('mất mạng: ném NetworkError với câu tiếng Việt, không lộ "Failed to fetch"', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const err = await apiFetch('/cart').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NetworkError);
+    expect(err).not.toBeInstanceOf(ApiError);
+    expect((err as Error).message).toBe('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
+    expect((err as NetworkError).timedOut).toBe(false);
+  });
+
+  it('máy chủ treo: ngắt sau REQUEST_TIMEOUT_MS và báo hết thời gian chờ', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        }),
+    );
+    const pending = apiFetch('/checkout/place-order', { method: 'POST', body: {} }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+    const err = await pending;
+    expect(err).toBeInstanceOf(NetworkError);
+    expect((err as NetworkError).timedOut).toBe(true);
+    expect((err as Error).message).toBe('Máy chủ phản hồi quá lâu. Vui lòng thử lại.');
+  });
+
+  it('thân phản hồi treo sau khi đã có header cũng bị ngắt (không kẹt ở "Đang đặt hàng…")', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        } as unknown as Response),
+    );
+    const pending = apiFetch('/cart').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+    expect(await pending).toBeInstanceOf(NetworkError);
+  });
+
+  it('lỗi HTTP vẫn là ApiError mang status, kể cả khi thân không phải JSON', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <');
+      },
+    } as unknown as Response);
+    const err = await apiFetch('/cart').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(502);
+    expect((err as Error).message).toBe('Có lỗi xảy ra. Vui lòng thử lại.');
+  });
+
+  it('refresh gặp lỗi mạng KHÔNG xoá cờ phiên (cookie vẫn sống)', async () => {
+    setSessionMarker();
+    fetchMock
+      .mockResolvedValueOnce(jsonRes(401, { message: 'hết hạn' }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(apiFetch('/me')).rejects.toThrow();
+    expect(hasSessionMarker()).toBe(true);
+  });
+
+  it('timer timeout được gỡ khi gọi xong (không để timer treo)', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(jsonRes(200, { ok: 1 }));
+    await apiFetch('/cart');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

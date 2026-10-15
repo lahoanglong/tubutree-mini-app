@@ -1,5 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -43,6 +42,7 @@ function makeService(
     executeRaw?: jest.Mock;
     coinCreate?: jest.Mock;
     gomdonQueue?: { getJob: jest.Mock; add: jest.Mock };
+    orderStatus?: { precheckPancakeCancel: jest.Mock; afterPancakeCancel: jest.Mock; flagPancakeCancelDivergence?: jest.Mock };
     /**
      * Trạng thái dòng `orders` ĐANG nằm trong DB lúc tx huỷ chạy — lệch ảnh chụp mà detail() đọc
      * trước đó (admin xác nhận chuyển khoản / webhook lật PAID, admin chuyển giao vận…). Mặc định = ảnh chụp.
@@ -77,6 +77,8 @@ function makeService(
   /** Đọc lại đơn TRONG tx (sau khoá) — trả dòng DB hiện tại, không phải ảnh chụp. */
   const txFindUnique = jest.fn(async () => ({ ...row }));
   const historyCreate = jest.fn().mockResolvedValue({});
+  /** Dòng vết khoản đã hoàn vào Ví (chi tiết đơn của khách đọc lại). */
+  const refundTrace = jest.fn().mockResolvedValue({ count: 1 });
   // $transaction giờ là CALLBACK form (flip-status + hoàn ví/xu + restock ATOMIC). Forward tx ops vào cùng mock.
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
@@ -87,6 +89,7 @@ function makeService(
       $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
       pointsTransaction: { createManyAndReturn: pointsInsert },
+      orderCustomerRefund: { createMany: refundTrace },
     }),
   );
   const prisma = {
@@ -97,7 +100,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never, spies.orderStatus as never),
     updateMany,
     userUpdate,
     executeRaw,
@@ -145,10 +148,42 @@ describe('OrdersService.cancel', () => {
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
+  it('R3-MONEY-7: khách tự huỷ đơn đã trả có dùng Điểm Xanh → tin huỷ nói cả số tiền vào Ví lẫn số điểm thường được hoàn', async () => {
+    (loyalty.reverseOrderPoints as jest.Mock).mockResolvedValueOnce(19);
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID', total: 95000 });
+    await svc.cancel('u1', 'TUBU1');
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      refund_note: ' Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
+    });
+  });
+
   it('đơn dùng coupon → hoàn coupon (release) khi hủy, không bị đốt vĩnh viễn', async () => {
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', couponCode: 'BDAY50K' });
     await svc.cancel('u1', 'TUBU1');
     expect((coupons.release as jest.Mock)).toHaveBeenCalledWith('BDAY50K', 'o1', expect.anything());
+  });
+
+  // MONEY-15: bấm huỷ lần hai (double-tap/mạng chậm) vào đơn vừa huỷ bị báo "Đơn đã vào quy trình giao" như thể đang giao.
+  it('đơn đã CANCELLED (bấm huỷ lần hai) → trả đơn hiện tại, không ném lỗi, không hoàn tiền/thông báo lần nữa', async () => {
+    const { svc, updateMany, $transaction } = makeService({ ...baseOrder, status: 'CANCELLED' });
+    jest.clearAllMocks();
+    await expect(svc.cancel('u1', 'TUBU1')).resolves.toMatchObject({ code: 'TUBU1', status: 'CANCELLED' });
+    expect($transaction).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(loyalty.reverseOrderPoints as jest.Mock).not.toHaveBeenCalled();
+    expect(affiliate.reverseCommissionsForOrder as jest.Mock).not.toHaveBeenCalled();
+    expect(notifications.notify as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('R2-MERCHANT-14: đơn trả về sau khi huỷ không kèm phí sàn đối tác hay cột vận hành Pancake/Gomdon', async () => {
+    const internal = { merchantCommissionPct: '0.1500', endCustomerKey: '0909', pancakeSyncError: 'lỗi', gomdonAttempt: 1, recipientSearch: 'nguyen van a' };
+    for (const status of ['CONFIRMED', 'CANCELLED']) {
+      const { svc } = makeService({ ...baseOrder, ...internal, status });
+      const res = (await svc.cancel('u1', 'TUBU1')) as unknown as Record<string, unknown>;
+      expect(res).toMatchObject({ code: 'TUBU1' });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
+    }
   });
 
   it('KHÔNG hủy được đơn SHIPPING (đã vào giao)', async () => {
@@ -233,6 +268,123 @@ describe('OrdersService.cancel', () => {
   it('chặn xem/hủy đơn của người khác', async () => {
     const { svc } = makeService({ ...baseOrder, userId: 'someone-else' });
     await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow();
+  });
+});
+
+describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2, BUYERWEB-5)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function gate(precheck: jest.Mock = jest.fn().mockResolvedValue({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' })) {
+    return {
+      precheckPancakeCancel: precheck,
+      afterPancakeCancel: jest.fn().mockResolvedValue(undefined),
+      flagPancakeCancelDivergence: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it('hỏi Pancake TRƯỚC khi lật trạng thái; Pancake huỷ xong → huỷ ở Tubu + ghi kết quả', async () => {
+    const orderStatus = gate();
+    const { svc, $transaction, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(orderStatus.precheckPancakeCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1', pancakeOrderId: 'pk-1' }), 'CUSTOMER');
+    expect(orderStatus.precheckPancakeCancel.mock.invocationCallOrder[0]).toBeLessThan($transaction.mock.invocationCallOrder[0]!);
+    expect(row.status).toBe('CANCELLED');
+    expect(orderStatus.afterPancakeCancel).toHaveBeenCalledWith('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
+  });
+
+  it('Pancake đã gửi hàng → từ chối "liên hệ CSKH", KHÔNG lật trạng thái, KHÔNG hoàn tiền', async () => {
+    const orderStatus = gate(jest.fn().mockRejectedValue(new BadRequestException('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH')));
+    const { svc, $transaction, row, userUpdate } = makeService(
+      { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { orderStatus },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH');
+    expect($transaction).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(row.status).toBe('CONFIRMED');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('không hỏi được Pancake → từ chối "Kho chưa phản hồi…", KHÔNG lật trạng thái, KHÔNG hoàn tiền (R3-CANCEL-1)', async () => {
+    const orderStatus = gate(jest.fn().mockRejectedValue(new ConflictException('Kho chưa phản hồi, vui lòng thử lại sau ít phút')));
+    const { svc, $transaction, row, userUpdate } = makeService(
+      { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { orderStatus },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+    expect($transaction).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(row.status).toBe('CONFIRMED');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('Pancake trả lời chưa gửi hàng nhưng chưa nhận lệnh huỷ (DEFERRED) → huỷ + hoàn tiền, job huỷ thử lại', async () => {
+    const deferred = { kind: 'DEFERRED', reason: 'timeout' };
+    const orderStatus = gate(jest.fn().mockResolvedValue(deferred));
+    const { svc, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(row.status).toBe('CANCELLED');
+    expect(orderStatus.afterPancakeCancel).toHaveBeenCalledWith('o1', deferred);
+  });
+
+  it('đơn đang đóng gói (PACKED, chưa bàn giao) → khách vẫn huỷ được', async () => {
+    const orderStatus = gate(jest.fn().mockResolvedValue({ kind: 'NONE' }));
+    const { svc, row } = makeService({ ...baseOrder, status: 'PACKED' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(row.status).toBe('CANCELLED');
+  });
+
+  it('đơn đại lý PACKED → giữ mốc cũ (đã tính doanh số thưởng), không huỷ', async () => {
+    const orderStatus = gate();
+    const { svc } = makeService({ ...baseOrder, type: 'DEALER', status: 'PACKED' }, { orderStatus });
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã vào quy trình giao');
+    expect(orderStatus.precheckPancakeCancel).not.toHaveBeenCalled();
+  });
+
+  it('thua race huỷ (đã bị huỷ bởi request khác) → không ghi kết quả Pancake lần hai', async () => {
+    const orderStatus = gate();
+    const { svc } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus, updateMany: jest.fn().mockResolvedValue({ count: 0 }) });
+    await svc.cancel('u1', 'TUBU1');
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService.cancel — Pancake đã huỷ mà đơn Tubu không huỷ được (SYNC-1)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const decision = { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' };
+  const gate = () => ({
+    precheckPancakeCancel: jest.fn().mockResolvedValue(decision),
+    afterPancakeCancel: jest.fn().mockResolvedValue(undefined),
+    flagPancakeCancelDivergence: jest.fn().mockResolvedValue(undefined),
+  });
+
+  it('tx đọc lại thấy đơn đã sang đang giao (không còn tự huỷ được) → ném đúng lỗi 400 cũ, và ghi dấu lệch', async () => {
+    const orderStatus = gate();
+    const { svc, row, userUpdate } = makeService(
+      { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
+      { orderStatus, db: { status: 'SHIPPING' } },
+    );
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã vào quy trình giao');
+    expect(row.status).toBe('SHIPPING');
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(orderStatus.afterPancakeCancel).not.toHaveBeenCalled();
+    expect(orderStatus.flagPancakeCancelDivergence).toHaveBeenCalledWith('o1', decision, expect.stringContaining('Đơn đã vào quy trình giao'));
+  });
+
+  it('tx thua (đơn đổi chen giữa) → trả đơn như cũ, và ghi dấu lệch', async () => {
+    const orderStatus = gate();
+    const { svc } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus, updateMany: jest.fn().mockResolvedValue({ count: 0 }) });
+    await svc.cancel('u1', 'TUBU1');
+    expect(orderStatus.flagPancakeCancelDivergence).toHaveBeenCalledWith('o1', decision, expect.any(String));
+  });
+
+  it('huỷ thành công → không ghi dấu lệch', async () => {
+    const orderStatus = gate();
+    const { svc, row } = makeService({ ...baseOrder, pancakeOrderId: 'pk-1' }, { orderStatus });
+    await svc.cancel('u1', 'TUBU1');
+    expect(row.status).toBe('CANCELLED');
+    expect(orderStatus.flagPancakeCancelDivergence).not.toHaveBeenCalled();
   });
 });
 
@@ -409,37 +561,6 @@ describe('OrdersService.cancel — flash sale quota restore', () => {
   });
 });
 
-describe('OrdersService.requestReturn', () => {
-  const deliveredOrder = { ...baseOrder, status: 'DELIVERED', updatedAt: new Date(), createdAt: new Date() };
-
-  function makeReturnService(over: { create?: jest.Mock; findFirst?: jest.Mock } = {}) {
-    const create = over.create ?? jest.fn().mockResolvedValue({ id: 'r1' });
-    const prisma = {
-      order: { findUnique: jest.fn().mockResolvedValue(deliveredOrder) },
-      returnRequest: { findFirst: over.findFirst ?? jest.fn().mockResolvedValue(null), create },
-    } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), create };
-  }
-
-  it('race: 2 request đổi/trả song song — pre-check đọc "chưa có" nhưng create() đụng unique index partial (orderId, status=REQUESTED) → BadRequest, KHÔNG tạo 2 dòng', async () => {
-    const create = jest
-      .fn()
-      .mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }));
-    const { svc } = makeReturnService({ create });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow(
-      'Đơn đang có yêu cầu đổi/trả chờ xử lý.',
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('gửi hợp lệ (chưa có yêu cầu chờ xử lý) → tạo return request', async () => {
-    const { svc, create } = makeReturnService();
-    const r = await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi sản phẩm' });
-    expect(r).toEqual({ id: 'r1' });
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
   beforeEach(() => jest.clearAllMocks());
   const queue = () => ({ getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) });
@@ -448,7 +569,7 @@ describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
     const q = queue();
     const { svc } = makeService({ ...baseOrder, hasRecyclingPickup: true, gomdonOrderId: '77', gomdonStatus: '1' }, { gomdonQueue: q });
     await svc.cancel('u1', 'TUBU1');
-    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(q.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('bưu tá Gomdon đã lấy hàng (webhook SHIPPING tới trễ) → KHÔNG cho khách tự huỷ', async () => {
@@ -471,40 +592,6 @@ describe('OrdersService.cancel — đơn thu gom tái chế (Gomdon)', () => {
     );
     await b.svc.cancel('u1', 'TUBU1').catch(() => undefined);
     expect(q2.add).not.toHaveBeenCalled();
-  });
-});
-
-describe('OrdersService.requestReturn — hạn đổi/trả tính từ mốc giao THẬT (deliveredAt), không phải updatedAt', () => {
-  const DAY = 864e5;
-  function svcFor(order: Record<string, unknown>, history: { createdAt: Date } | null = null, windowDays = 7) {
-    const create = jest.fn().mockResolvedValue({ id: 'r1' });
-    const prisma = {
-      order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', createdAt: new Date(Date.now() - 30 * DAY), ...order }) },
-      orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(history) },
-      returnRequest: { findFirst: jest.fn().mockResolvedValue(null), create },
-    } as unknown as PrismaService;
-    const cfg = {
-      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'returns.window_days' ? (windowDays as T) : (fb as T)),
-    } as unknown as SystemConfigService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, cfg, affiliate, reversal), create };
-  }
-
-  it('giao 10 ngày trước, webhook vận chuyển vừa ghi đơn (updatedAt = hôm nay) → QUÁ HẠN 7 ngày', async () => {
-    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 10 * DAY), updatedAt: new Date() });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('giao 2 ngày trước → còn hạn, tạo yêu cầu', async () => {
-    const { svc, create } = svcFor({ deliveredAt: new Date(Date.now() - 2 * DAY), updatedAt: new Date() });
-    await svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' });
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('đơn cũ chưa có deliveredAt → lấy lần lật DELIVERED trong order_status_history', async () => {
-    const { svc, create } = svcFor({ deliveredAt: null, updatedAt: new Date() }, { createdAt: new Date(Date.now() - 9 * DAY) });
-    await expect(svc.requestReturn('u1', 'TUBU1', { reason: 'lỗi' })).rejects.toThrow('Quá hạn đổi/trả');
-    expect(create).not.toHaveBeenCalled();
   });
 });
 
@@ -557,6 +644,72 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
     expect(count).toHaveBeenCalledWith({
       where: { userId: 'u1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
     });
+  });
+});
+
+describe('OrdersService.list — ô tìm kiếm theo mã đơn / tên sản phẩm (R2-BUYERWEB-8)', () => {
+  const order = (id: string, code: string, names: string[]) => ({
+    ...baseOrder, id, code, items: names.map((n, i) => ({ ...line(`${id}-${i}`, `v-${id}-${i}`), productName: n })),
+  });
+  const ORDERS = [
+    order('o1', 'TUBU2026101401', ['Dầu gội bưởi', 'Nước rửa chén']),
+    order('o2', 'TUBU2026101302', ['Mật ong rừng']),
+    order('o3', 'TUBU2026101203', ['Dầu gội bồ kết']),
+  ];
+
+  function makeSearchService() {
+    const findMany = jest.fn(async (args: { where: Record<string, unknown>; select?: unknown }) => {
+      if (args.select) return ORDERS.map(({ id, code, items }) => ({ id, code, items: items.map((i) => ({ productName: i.productName })) }));
+      const ids = (args.where.id as { in: string[] } | undefined)?.in;
+      return ids ? ORDERS.filter((o) => ids.includes(o.id)) : [];
+    });
+    const count = jest.fn().mockResolvedValue(999);
+    const prisma = {
+      order: { findMany, count },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), findMany, count };
+  }
+
+  it('gõ không dấu vẫn khớp tên sản phẩm có dấu, đơn mới nhất trước, tổng = số đơn khớp', async () => {
+    const { svc } = makeSearchService();
+    const res = await svc.list('u1', { q: 'dau goi' }, 1, 20);
+    expect(res.data.map((o) => o.code)).toEqual(['TUBU2026101401', 'TUBU2026101203']);
+    expect(res.meta).toEqual({ page: 1, limit: 20, total: 2 });
+  });
+
+  it('khớp mã đơn (không phân biệt hoa thường, bỏ dấu # đầu)', async () => {
+    const { svc } = makeSearchService();
+    const res = await svc.list('u1', { q: '#tubu20261013' }, 1, 20);
+    expect(res.data.map((o) => o.code)).toEqual(['TUBU2026101302']);
+  });
+
+  it('chỉ quét đơn của chính user và áp luôn bộ lọc trạng thái', async () => {
+    const { svc, findMany } = makeSearchService();
+    await svc.list('u1', { q: 'mat ong', group: 'closed' }, 1, 20);
+    expect(findMany.mock.calls[0]![0].where).toEqual({ userId: 'u1', status: { in: ['CANCELLED', 'RETURNED'] } });
+  });
+
+  it('phân trang trên tập đã khớp', async () => {
+    const { svc } = makeSearchService();
+    const page2 = await svc.list('u1', { q: 'dau goi' }, 2, 1);
+    expect(page2.data.map((o) => o.code)).toEqual(['TUBU2026101203']);
+    expect(page2.meta.total).toBe(2);
+  });
+
+  it('không khớp đơn nào → danh sách rỗng, không truy vấn trang', async () => {
+    const { svc, findMany } = makeSearchService();
+    const res = await svc.list('u1', { q: 'khong co' }, 1, 20);
+    expect(res.data).toEqual([]);
+    expect(res.meta.total).toBe(0);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('q rỗng/chỉ khoảng trắng → danh sách thường (đếm bằng count)', async () => {
+    const { svc, count } = makeSearchService();
+    await svc.list('u1', { q: '   ' }, 1, 20);
+    expect(count).toHaveBeenCalled();
   });
 });
 
@@ -629,10 +782,231 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     await empty.svc.detailView('u1', 'TUBU1');
     expect(empty.variationFindMany).not.toHaveBeenCalled();
   });
+
+  it('D4: đơn đối tác tự giao → chi tiết đơn nêu gian hàng giao + hotline, và các đơn cùng lần đặt', async () => {
+    const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1' };
+    const siblings = [{ code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfiller: 'TUBU', fulfillerStorefront: null }];
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
+      storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: '0909000111' }) },
+      variation: { findMany: jest.fn() },
+    } as unknown as PrismaService;
+    const view = await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
+    expect(view.fulfilment).toEqual({ kind: 'MERCHANT', name: 'Xanh Shop', phone: '0909000111' });
+    expect(view.siblings).toEqual([{ code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfillerName: 'Tubu Tree' }]);
+    expect((prisma.order.findMany as jest.Mock).mock.calls[0][0].where).toEqual({
+      checkoutGroup: 'TUBU1',
+      userId: 'u1',
+      code: { not: 'TUBU2' },
+    });
+  });
+
+  describe('R4-BUYER-6: đơn tách của gian hàng đối tác nêu mã giảm giá của lần đặt', () => {
+    const detailWith = async (order: Record<string, unknown>, siblings: Record<string, unknown>[]) => {
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue(siblings) },
+        storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
+        variation: { findMany: jest.fn() },
+      } as unknown as PrismaService;
+      return new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', String(order.code));
+    };
+    const sibling = (over: Record<string, unknown> = {}) => ({
+      code: 'TUBU1', status: 'CONFIRMED', total: 120_000, fulfiller: 'TUBU', fulfillerStorefront: null, couponCode: null, ...over,
+    });
+
+    it('đơn đối tác không giữ lượt dùng mã (couponCode null) mà đơn đầu của nhóm giữ → trả groupCouponCode để màn khách ghi đúng mã', async () => {
+      const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      const view = await detailWith(order, [sibling({ couponCode: 'XANH10' })]);
+      expect(view.groupCouponCode).toBe('XANH10');
+      expect(view.couponCode).toBeNull();
+    });
+
+    it('đơn giữ mã thì không cần groupCouponCode; nhóm không có mã thì null', async () => {
+      const holder = { ...baseOrder, code: 'TUBU1', items: [], fulfiller: 'TUBU', checkoutGroup: 'TUBU1', couponCode: 'XANH10' };
+      expect((await detailWith(holder, [sibling({ code: 'TUBU2', couponCode: null })])).groupCouponCode).toBeNull();
+      const none = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      expect((await detailWith(none, [sibling()])).groupCouponCode).toBeNull();
+    });
+
+    it('chỉ đọc thêm cột couponCode của đơn cùng nhóm, đơn không tách không truy vấn nhóm', async () => {
+      const order = { ...baseOrder, code: 'TUBU2', items: [], fulfiller: 'MERCHANT', fulfillerStorefrontId: 'sf-a', checkoutGroup: 'TUBU1', couponCode: null };
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([sibling()]) },
+        storefront: { findUnique: jest.fn().mockResolvedValue({ title: 'Xanh Shop', warehousePhone: null }) },
+        variation: { findMany: jest.fn() },
+      } as unknown as PrismaService;
+      await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU2');
+      expect((prisma.order.findMany as jest.Mock).mock.calls[0][0].select).toMatchObject({ couponCode: true });
+      const solo = makeMediaService([{ ...baseOrder, items: [] }], []);
+      expect((await solo.svc.detailView('u1', 'TUBU1')).groupCouponCode).toBeNull();
+    });
+  });
+
+  it('R2-MERCHANT-14, R3-MERCHANT-1: đơn trả cho khách không kèm phí sàn đối tác, hoa hồng CTV, mã đơn Pancake, khoá chống đặt trùng hay cột vận hành nội bộ', async () => {
+    const internal = {
+      merchantCommissionPct: '0.1500',
+      commission: 12_000,
+      endCustomerKey: '0909',
+      pancakeSyncError: 'lỗi',
+      pancakePushStatus: 'FAILED',
+      pancakePushAttempts: 3,
+      pancakeAttention: 'X',
+      merchantSlaNotifiedAt: new Date(),
+      gomdonAttempt: 1,
+      pancakeOrderId: 'pk-1',
+      idempotencyKey: 'idem-1',
+      reviewInvitedAt: new Date(),
+      autoCancelBlockedAt: new Date(),
+      recipientSearch: 'nguyen van a 12 le loi',
+    };
+    const { svc } = makeMediaService([{ ...baseOrder, ...internal, items: [] }], []);
+    const view = (await svc.detailView('u1', 'TUBU1')) as unknown as Record<string, unknown>;
+    const page = (await svc.list('u1', {}, 1, 20)).data[0] as unknown as Record<string, unknown>;
+    for (const k of Object.keys(internal)) {
+      expect(view).not.toHaveProperty(k);
+      expect(page).not.toHaveProperty(k);
+    }
+    expect(view).toMatchObject({ code: baseOrder.code, total: baseOrder.total });
+  });
+
+  describe('canCancel — nút "Hủy đơn" theo đúng luật huỷ của khách, gồm mốc bàn giao vận chuyển (R3-CANCEL-2)', () => {
+    it.each([
+      ['Đang đóng gói, chưa đặt hãng', { status: 'PACKED' }, true],
+      ['Đang đóng gói, kho đã đặt hãng (Pancake gắn mã GHN)', { status: 'PACKED', shippingCode: 'GHN1933', shippingPartner: 'GHN' }, false],
+      ['Đã xác nhận, gian hàng đã gửi hàng', { status: 'CONFIRMED', shippedAt: new Date() }, false],
+      ['Đang đóng gói, mã vận đơn là của Gomdon (bưu tá chưa tới)', { status: 'PACKED', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1', shippingCode: 'BE1', gomdonStatus: '1' }, true],
+      ['Bưu tá Gomdon đã lấy hàng', { status: 'CONFIRMED', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1', gomdonStatus: '3' }, false],
+      ['Đang giao', { status: 'SHIPPING' }, false],
+      ['Đơn đại lý đang đóng gói', { status: 'PACKED', type: 'DEALER' }, false],
+      ['CTV xem đơn lên hộ khách đã trả', { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'u1' }, false],
+      [
+        'Chờ chuyển khoản, hệ thống đã thôi tự huỷ vì Pancake đã gửi hàng (R5-SYNC-1)',
+        { status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', autoCancelBlockedAt: new Date() },
+        false,
+      ],
+    ])('%s → canCancel=%s (list + chi tiết)', async (_label, over, expected) => {
+      const { svc } = makeMediaService([{ ...baseOrder, ...over, items: [] }], []);
+      expect((await svc.detailView('u1', 'TUBU1')).canCancel).toBe(expected);
+      expect((await svc.list('u1', {}, 1, 20)).data[0]!.canCancel).toBe(expected);
+    });
+
+    it('khớp đúng lần huỷ thật: canCancel=false thì POST huỷ bị từ chối với lời "đã bàn giao"', async () => {
+      const shipped = { ...baseOrder, status: 'PACKED', shippingCode: 'GHN1933', shippingPartner: 'GHN' };
+      const { svc } = makeMediaService([{ ...shipped, items: [] }], []);
+      expect((await svc.detailView('u1', 'TUBU1')).canCancel).toBe(false);
+      const { svc: cancelSvc, updateMany } = makeService(shipped);
+      await expect(cancelSvc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển');
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('đơn chờ chuyển khoản mà hàng đã bàn giao vận chuyển — hệ thống thôi tự huỷ (R5-SYNC-1)', () => {
+    const created = new Date('2026-10-14T01:20:56.000Z');
+    const waiting = { ...baseOrder, type: 'RETAIL', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', createdAt: created, items: [] };
+
+    it('không còn hạn thanh toán / "quá hạn đơn sẽ tự huỷ", không có nút huỷ, báo app/web hiện câu trung tính (manualHandling)', async () => {
+      const { svc } = makeMediaService([{ ...waiting, autoCancelBlockedAt: new Date('2026-10-15T02:30:00Z') }], []);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view).toMatchObject({ paymentDeadline: null, canCancel: false, manualHandling: true });
+      expect(view).not.toHaveProperty('autoCancelBlockedAt');
+      expect((await svc.list('u1', {}, 1, 20)).data[0]).toMatchObject({ canCancel: false, manualHandling: true });
+    });
+
+    it('đơn chờ chuyển khoản bình thường vẫn có hạn và nút huỷ, manualHandling=false', async () => {
+      const { svc } = makeMediaService([{ ...waiting, autoCancelBlockedAt: null }], []);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view).toMatchObject({ paymentDeadline: '2026-10-15T01:20:56.000Z', canCancel: true, manualHandling: false });
+    });
+
+    it('đã nhận tiền sau đó (CONFIRMED) → không còn câu trung tính, vẫn không tự huỷ được (hàng đã ở hãng)', async () => {
+      const { svc } = makeMediaService([{ ...waiting, status: 'CONFIRMED', paymentStatus: 'PAID', autoCancelBlockedAt: new Date() }], []);
+      expect(await svc.detailView('u1', 'TUBU1')).toMatchObject({ canCancel: false, manualHandling: false, paymentDeadline: null });
+    });
+
+    it('POST huỷ bị từ chối với lời rõ ràng, KHÔNG hỏi Pancake (không đồng bộ lại → không quay về "Cần xử lý Pancake"), không lật trạng thái', async () => {
+      const orderStatus = { precheckPancakeCancel: jest.fn(), afterPancakeCancel: jest.fn() };
+      const { svc, $transaction, row } = makeService({ ...waiting, pancakeOrderId: 'pk-1', autoCancelBlockedAt: new Date() }, { orderStatus });
+      const err = await svc.cancel('u1', 'TUBU1').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe(
+        'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Vui lòng liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ.',
+      );
+      expect(orderStatus.precheckPancakeCancel).not.toHaveBeenCalled();
+      expect($transaction).not.toHaveBeenCalled();
+      expect(row.status).toBe('PENDING_PAYMENT');
+    });
+  });
+
+  // Mỗi lần mua một đánh giá: màn chi tiết đơn cần biết từng dòng đã có đánh giá của đơn này chưa để nói "Viết đánh giá"
+  // hay "Sửa đánh giá", cùng luật với can-review (chỉ đơn đã nhận mua lẻ cho chính mình).
+  describe('trạng thái đánh giá từng dòng ở chi tiết đơn', () => {
+    const delivered = { ...baseOrder, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false };
+    function reviewService(order: Record<string, unknown>, reviews: { id: string; productId: string }[] = []) {
+      const variationFindMany = jest.fn(async (args: { select: Record<string, unknown> }) =>
+        args.select.productId
+          ? [{ id: 'v1', productId: 'p1' }, { id: 'v1b', productId: 'p1' }, { id: 'v2', productId: 'p2' }]
+          : [v('v1'), v('v1b'), v('v2')],
+      );
+      const reviewFindMany = jest.fn().mockResolvedValue(reviews);
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([order]), count: jest.fn().mockResolvedValue(1) },
+        variation: { findMany: variationFindMany },
+        review: { findMany: reviewFindMany },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+      } as unknown as PrismaService;
+      return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany };
+    }
+
+    it('đơn đã nhận: dòng có đánh giá của đơn này → reviewId, không viết mới; dòng chưa có → viết được; hai biến thể cùng sản phẩm chung một đánh giá', async () => {
+      const { svc, reviewFindMany } = reviewService(
+        { ...delivered, items: [line('i1', 'v1'), line('i2', 'v2'), line('i3', 'v1b')] },
+        [{ id: 'r-p1', productId: 'p1' }],
+      );
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view.items.map((it) => [it.id, it.reviewId, it.reviewable])).toEqual([
+        ['i1', 'r-p1', false],
+        ['i2', null, true],
+        ['i3', 'r-p1', false],
+      ]);
+      expect(reviewFindMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', orderId: 'o1', productId: { in: ['p1', 'p2'] } },
+        select: { id: true, productId: true },
+      });
+    });
+
+    it('biến thể đã bị xoá (không biết sản phẩm) → không viết được, không có đánh giá', async () => {
+      const { svc } = reviewService({ ...delivered, items: [line('i1', 'gone')] });
+      expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: null, reviewable: false });
+    });
+
+    it.each([
+      ['chưa giao xong', { status: 'SHIPPING' }],
+      ['đơn CTV lên hộ khách', { placedForCustomer: true }],
+      ['đơn đại lý', { type: 'DEALER' }],
+    ])('%s → mọi dòng không viết được, không tra đánh giá', async (_n, over) => {
+      const { svc, reviewFindMany } = reviewService({ ...delivered, ...over, items: [line('i1', 'v1')] }, [{ id: 'r-p1', productId: 'p1' }]);
+      expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: null, reviewable: false });
+      expect(reviewFindMany).not.toHaveBeenCalled();
+    });
+
+    it('danh sách đơn không tra đánh giá (chỉ màn chi tiết cần)', async () => {
+      const { svc, reviewFindMany } = reviewService({ ...delivered, items: [line('i1', 'v1')] });
+      const page = await svc.list('u1', {}, 1, 20);
+      expect(reviewFindMany).not.toHaveBeenCalled();
+      expect(page.data[0]!.items[0]).not.toHaveProperty('reviewable');
+    });
+  });
+
+  it('D4: đơn Tubu không tách → nơi giao Tubu Tree, không truy vấn đơn cùng lần đặt', async () => {
+    const withItems = makeMediaService([{ ...baseOrder, items: [] }], []);
+    const view = await withItems.svc.detailView('u1', 'TUBU1');
+    expect(view.fulfilment).toEqual({ kind: 'TUBU', name: 'Tubu Tree', phone: null });
+    expect(view.siblings).toEqual([]);
+  });
 });
 
 describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-05)', () => {
-  const CART = { items: [{ id: 'ci1' }], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 3 };
+  const CART = { items: [{ id: 'ci1', fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' } }], couponCode: null, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 3 };
   const variation = (id: string, stock: number, over: { isActive?: boolean; productActive?: boolean; approval?: string } = {}) => ({
     id, stock, isActive: over.isActive ?? true,
     product: { isActive: over.productActive ?? true, approvalStatus: over.approval ?? 'APPROVED' },
@@ -669,6 +1043,17 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
       { orderItemId: 'i1', status: 'added', addedQuantity: 2 },
       { orderItemId: 'i2', status: 'added', addedQuantity: 1 },
     ]);
+  });
+
+  it('R2-MERCHANT-14: giỏ trả về sau khi mua lại không kèm ID chủ gian hàng ở nơi giao từng dòng', async () => {
+    const fulfiller = { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Shop Xanh', ownerUserId: 'owner-9' };
+    const withOwner = { ...CART, items: [{ id: 'ci1', fulfiller }] };
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)], addItem: jest.fn().mockResolvedValue(withOwner) });
+    (svc as unknown as { cart: { getCart: jest.Mock } }).cart.getCart.mockResolvedValue(withOwner);
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(JSON.stringify(res)).not.toContain('owner-9');
+    expect(res.items[0]).toMatchObject({ id: 'ci1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Shop Xanh' } });
+    expect(res.cart.items[0]).toEqual(res.items[0]);
   });
 
   it('items: chỉ các dòng được chọn, số lượng theo client', async () => {

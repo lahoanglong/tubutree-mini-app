@@ -28,9 +28,24 @@ export const vi = {
     server: 'Máy chủ đang bận, thử lại nhé.',
     generic: 'Có chút trục trặc, thử lại nhé',
     loadFailed: 'Chưa tải được nội dung',
+    sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+  },
+
+  reviews: {
+    eligibilityFailed: 'Chưa kiểm tra được quyền đánh giá.',
+    hiddenNotice: (orderCode: string | null) =>
+      `Đánh giá${orderCode ? ` cho đơn ${orderCode}` : ''} của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.`,
+    editHiddenNote: 'Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.',
+    savedHidden: 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.',
+  },
+
+  refill: {
+    locationPaused: 'Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.',
+    pausedSuffix: ' (đã tạm ngưng)',
   },
 
   auth: {
+    guestHeading: 'Bạn chưa đăng nhập',
     loginCta: 'Tiếp tục với Zalo',
     loginHint: 'Đăng nhập để tích Điểm Xanh & đặt hàng',
     greetingFallback: 'bạn',
@@ -112,6 +127,7 @@ export const vi = {
     skipOk: 'Đã bỏ qua kỳ này, hẹn kỳ sau nhé 🌿',
     intro: (pct: number) => `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${pct}% mỗi đơn, hủy bất kỳ lúc nào.`,
     perCycle: (weeks: number, price: string) => `Mỗi ${weeks} tuần · ${price}`,
+    savePill: (pct: number) => `Tiết kiệm ${pct}%`,
     nextRun: (date: string) => `Lần kế: ${date}`,
     scheduling: 'Đang lên lịch',
     pausedLine: 'Đang tạm dừng',
@@ -180,6 +196,8 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí ship 🌿',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí ship`,
     stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
+    outOfStock: 'Sản phẩm đã hết hàng',
+    overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
     discontinuedHeading: (n: number) => `${n} sản phẩm đã ngừng bán`,
     discontinuedBody: 'Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.',
     discontinuedRemove: 'Xoá',
@@ -190,10 +208,19 @@ export const vi = {
 
   checkout: {
     title: 'Thanh toán',
+    overStock: (name: string, stock: number) =>
+      stock > 0
+        ? `Sản phẩm "${name}" chỉ còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
+        : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
+    backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
     addressEmpty: 'Bạn chưa thêm địa chỉ',
     addAddress: 'Thêm địa chỉ mới',
     addressDefault: 'Mặc định',
+    addressLegacy: 'Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.',
+    addressLegacyCta: 'Cập nhật địa chỉ',
+    totalChangedTitle: 'Tổng tiền đơn vừa thay đổi',
+    totalChangedCta: 'Xem lại đơn',
     recipient: 'Người nhận',
     phone: 'Số điện thoại',
     province: 'Tỉnh/Thành',
@@ -250,6 +277,8 @@ export const vi = {
 
   orders: {
     title: 'Đơn hàng của tôi',
+    /** Đơn chưa "Đang giao" nhưng kho đã đặt hãng (có mã vận đơn) — không tự huỷ được nữa. */
+    carrierBooked: 'Đã đặt đơn vị vận chuyển',
     emptyHeading: 'Bạn chưa có đơn nào',
     emptyBody: 'Đơn đầu từ 199.000đ dùng được mã giảm giá chào mừng 30.000đ',
     emptyCta: 'Bắt đầu mua',
@@ -274,10 +303,17 @@ export const vi = {
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',
     payNow: 'Thanh toán ngay',
+    /** Đơn chờ tiền mà hàng đã bàn giao vận chuyển (API manualHandling): thay hạn thanh toán, nút trả tiền và nút huỷ. */
+    manualHandling: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',
     viewAllOrders: 'Xem tất cả đơn',
+    cancelClosedAfterHandover: 'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.',
     pointsUsed: 'Điểm Xanh đã dùng',
-    reviewItem: 'Đánh giá sản phẩm này',
-    support: 'Cần hỗ trợ? Nhắn Tubu qua Zalo OA',
+    reviewItem: 'Viết đánh giá',
+    editReviewItem: 'Sửa đánh giá',
+    support: 'Cần hỗ trợ?',
+    pointsCredited: (n: string) => `Đã cộng +${n} Điểm Xanh vào tài khoản`,
+    pointsReversed: 'Điểm Xanh của đơn này đã được thu hồi',
+    pointsCreditedPartlyReversed: (earned: string, reversed: string) => `Đã cộng +${earned}, đã thu lại ${reversed} do trả hàng`,
   },
 
   nav: {
@@ -526,10 +562,23 @@ export const vi = {
     notePlaceholder: 'Ghi chú cho đơn (không bắt buộc)…',
     goodsSubtotal: 'Tạm tính hàng',
     shipNote: 'Phí ship tính khi tạo đơn',
+    shippingFee: 'Phí giao',
+    customerTotal: 'Tổng khách trả',
+    calculating: 'Đang tính…',
+    flashPrice: 'Giá giờ vàng',
+    totalChangedHint: 'Báo lại khách tổng tiền mới bên dưới rồi bấm tạo đơn lần nữa.',
     submit: 'Tạo đơn hộ khách',
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
+    recipientTooShort: 'Tên người nhận cần ít nhất 2 ký tự',
     requiredField: 'Vui lòng nhập',
+    checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
+    unconfirmed:
+      'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',
+    unconfirmedChanged:
+      'Đơn gửi lúc nãy có thể đã được tạo. Bạn đã sửa đơn nên lần gửi này là đơn mới: xem danh sách đơn trước để khách không nhận hai đơn.',
+    resend: 'Gửi lại đơn',
+    viewOrders: 'Xem danh sách đơn',
     successTitle: 'Đã tạo đơn hộ khách 🎉',
     orderCode: 'Mã đơn',
     orderTotal: 'Tổng tiền',
@@ -683,7 +732,15 @@ export const vi = {
     eventClosed: 'Đã đóng sự kiện',
     pickWinner: 'Chọn người thắng',
     winnerPicked: 'Đã chọn người thắng',
-    winnerUserIdPlaceholder: 'Nhập userId người thắng',
+    eventsOpen: 'Đang mở',
+    eventsClosed: 'Đã đóng',
+    noClosedEvents: 'Chưa có sự kiện nào đã đóng',
+    chooseWinner: 'Chọn người thắng',
+    noParticipants: 'Chưa có bài dự thi nào được đăng. Khi có bài, bạn chọn người thắng từ danh sách này.',
+    participantPosts: (n: number) => `${n} bài dự thi`,
+    confirmWinner: (name: string) => `Chốt ${name} là người thắng`,
+    winnerIs: 'Người thắng',
+    noWinner: 'Đóng không chọn người thắng',
     noEvents: 'Chưa có sự kiện nào',
     entryFor: 'Dự thi',
     eventEnded: 'Đã kết thúc',

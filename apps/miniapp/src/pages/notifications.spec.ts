@@ -32,6 +32,15 @@ describe('notificationMeta', () => {
     expect(notificationMeta(code).title).toBe('Đại lý');
   });
 
+  it.each([
+    ['RETURN_REQUESTED', 'Đã nhận yêu cầu đổi/trả'],
+    ['RETURN_APPROVED_DETAIL', 'Yêu cầu đổi/trả đã duyệt'],
+    ['RETURN_RECEIVED', 'Tubu đã nhận lại hàng'],
+    ['RETURN_REJECTED', 'Yêu cầu đổi/trả bị từ chối'],
+  ])('%s → tiêu đề đọc được, không rơi về "Thông báo" (R6-BUYER-4)', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+
   it('OPS_* → Cảnh báo vận hành', () => {
     expect(notificationMeta('OPS_GOMDON_ALERT').title).toBe('Cảnh báo vận hành');
   });
@@ -125,6 +134,16 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     ['FLASH_STARTING', '/'],
   ])('%s → %s', (code, path) => {
     expect(to(code)).toBe(path);
+  });
+
+  it('nhóm mua chung hết hạn → trang sản phẩm (mua giá thường hoặc mở nhóm mới); thành công/thiếu slug → trang Mua chung', () => {
+    expect(to('GROUP_BUY_FAILED', { product: 'Nước rửa chén', product_slug: 'nuoc-rua-chen' })).toBe('/product/nuoc-rua-chen');
+    expect(to('GROUP_BUY_FAILED', { product: 'X' })).toBe('/group-buy');
+    expect(to('GROUP_BUY_SUCCESS', { discount: '15.000' })).toBe('/group-buy');
+  });
+
+  it('người thắng sự kiện cộng đồng → Cộng đồng', () => {
+    expect(to('COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' })).toBe('/feed');
   });
 
   it('FLASH có slug → sản phẩm; REORDER_REMINDER → luồng mua lại', () => {

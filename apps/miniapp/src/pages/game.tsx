@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
+import { SessionUnavailable } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
@@ -35,10 +37,10 @@ import { useGameActions, type HarvestReward } from '../components/game/use-game-
 import { SEASON_PASS_ENABLED } from '../utils/features';
 
 export default function GamePage() {
-  const status = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
-  const authed = status === 'authenticated';
+  const authed = phase === 'authenticated';
 
   const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
     useGameData(authed);
@@ -78,7 +80,10 @@ export default function GamePage() {
       {children}
     </Page>
   );
-  if (status === 'loading' || (authed && isLoading)) return shell(<GameSkeleton />);
+  if (phase === 'loading' || (authed && isLoading)) return shell(<GameSkeleton />);
+
+  // Mất kết nối lúc khôi phục phiên: không phải khách — nói đúng vậy + Thử lại, không mời đăng nhập lại.
+  if (phase === 'unavailable') return shell(<SessionUnavailable />);
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
@@ -86,7 +91,7 @@ export default function GamePage() {
 
   // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
-  if (isError) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
+  if (isError && !profile) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
   const eco = profile?.ecoImpact;
 
@@ -225,7 +230,7 @@ export default function GamePage() {
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
-      <WheelPrizeSheet {...wheelPrize.sheet} />
+      <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => navigate('/browse')} />
 
       {/* Harvest celebration */}
       <HarvestCelebration

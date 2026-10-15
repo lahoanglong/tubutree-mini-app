@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   addressLine,
+  buyerOrderStatusLabel,
+  canCancelOrder,
   canPayAgain,
+  discountRows,
+  isRefundInProgress,
+  isReorderable,
+  ORDER_TABS,
+  timelineIndex,
   orderDetailHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
+  orderPaymentStatusLabel,
+  orderPaymentStatusShort,
   paymentStatusLabel,
   safeHttpUrl,
+  shippingStatusLabel,
 } from './order-view';
 
 describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
@@ -50,6 +60,11 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(canPayAgain({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
   });
 
+  it('R5-SYNC-1: hàng đã bàn giao vận chuyển mà chưa nhận tiền (manualHandling) → không mời trả lại bằng QR', () => {
+    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
+    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: false })).toBe(true);
+  });
+
   it('addressLine bỏ phần rỗng, không để dấu phẩy thừa', () => {
     expect(addressLine({ street: '1 Xuân Thuỷ', ward: 'Cầu Giấy', district: '', province: 'Hà Nội' })).toBe('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
     expect(addressLine({})).toBe('');
@@ -64,5 +79,209 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(safeHttpUrl('not a url')).toBeNull();
     expect(safeHttpUrl(null)).toBeNull();
     expect(safeHttpUrl('')).toBeNull();
+  });
+});
+
+describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"', () => {
+  it('khách: COD + Đã giao + UNPAID → "Đã thu tiền khi giao"; các trường hợp khác giữ nhãn cũ', () => {
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu tiền khi giao');
+    expect(orderPaymentStatusLabel({ status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
+    // BUYERWEB-4: còn khoản chuyển khoản chưa chuyển xong thì chưa được nói "Đã hoàn tiền".
+    const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }])).toBe('Đang hoàn tiền');
+    // R2-LIFECYCLE-5: đã xong thì nói tiền về đâu.
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền về tài khoản ngân hàng');
+    expect(orderPaymentStatusLabel(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe('Đã hoàn tiền vào Ví Tubu');
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'WALLET', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'COMPLETED' },
+      ]),
+    ).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, [])).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID' })).toBe('Đã thanh toán');
+    expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
+  });
+
+  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã TT", trạng thái khác ghi tiếng Việt', () => {
+    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu COD');
+    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa TT');
+    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã TT');
+    expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusShort({ status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'FAILED' })).toBe('TT lỗi');
+  });
+});
+
+// R4-ADMIN-1: danh sách đơn admin và CSV từng ghi "Đã hoàn tiền" khi khoản chuyển khoản trả khách còn Chờ/Đang chuyển, trong
+// khi khách thấy "Đang hoàn tiền". Một hàm quyết định cho cả hai phía.
+describe('isRefundInProgress — một luật "Đang hoàn tiền" cho khách và admin', () => {
+  const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
+
+  it('REFUNDED + khoản chuyển khoản Chờ/Đang chuyển → đang hoàn; đã chuyển, Ví, chờ đối soát, bỏ qua → không', () => {
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe(true);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }])).toBe(true);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'WALLET', status: 'COMPLETED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'DISMISSED' }])).toBe(false);
+    expect(isRefundInProgress(cancelled, undefined)).toBe(false);
+    expect(isRefundInProgress({ ...cancelled, paymentStatus: 'PAID' }, [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe(false);
+  });
+
+  it('admin (ô gọn): "Đang hoàn tiền" khi khoản chuyển khoản còn Chờ/Đang chuyển, khớp nhãn của khách', () => {
+    const pending = [{ method: 'MANUAL_TRANSFER', status: 'PENDING' }];
+    const processing = [{ method: 'MANUAL_TRANSFER', status: 'PROCESSING' }];
+    expect(orderPaymentStatusShort(cancelled, pending)).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled, processing)).toBe('Đang hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled, [{ method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusShort(cancelled)).toBe('Đã hoàn tiền');
+    expect(orderPaymentStatusLabel(cancelled, pending)).toBe(orderPaymentStatusShort(cancelled, pending));
+  });
+
+  it('nhãn chi tiết bỏ qua khoản chờ đối soát / đã bỏ qua khi nói tiền về đâu', () => {
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'WALLET', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'DISMISSED' },
+      ]),
+    ).toBe('Đã hoàn tiền vào Ví Tubu');
+    expect(
+      orderPaymentStatusLabel(cancelled, [
+        { method: 'MANUAL_TRANSFER', status: 'COMPLETED' },
+        { method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' },
+      ]),
+    ).toBe('Đã hoàn tiền về tài khoản ngân hàng');
+  });
+});
+
+describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', () => {
+  it('hủy được tới trước khi bàn giao vận chuyển (D1, BUYERWEB-5): Chờ thanh toán / Đã xác nhận / Đang đóng gói', () => {
+    expect(canCancelOrder({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
+    expect(canCancelOrder({ status: 'CONFIRMED' }, 'u1')).toBe(true);
+    expect(canCancelOrder({ status: 'PACKED' }, 'u1')).toBe(true);
+    for (const status of ['SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED']) {
+      expect(canCancelOrder({ status }, 'u1')).toBe(false);
+    }
+  });
+
+  it('đơn đại lý giữ mốc cũ: Đang đóng gói thì không tự hủy', () => {
+    expect(canCancelOrder({ status: 'PACKED', type: 'DEALER' }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'CONFIRMED', type: 'DEALER' }, 'u1')).toBe(true);
+  });
+
+  it('đơn CTV lên hộ khách đã trả tiền: CTV không tự hủy; khách cuối hoặc đơn chưa trả thì vẫn hủy', () => {
+    const o = { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'ctv1' };
+    expect(canCancelOrder(o, 'ctv1')).toBe(false);
+    expect(canCancelOrder(o, 'khach')).toBe(true);
+    expect(canCancelOrder({ ...o, paymentStatus: 'UNPAID' }, 'ctv1')).toBe(true);
+  });
+
+  it('kho đã đặt hãng (mã vận đơn không phải của Gomdon): không bày nút hủy — BE từ chối "đã bàn giao" (R3-CANCEL-2)', () => {
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'GHN1933' }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'BE1', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1' }, 'u1')).toBe(true);
+  });
+
+  it('API trả canCancel thì theo API (cùng luật lần huỷ thật); trạng thái đã đóng thì vẫn ẩn dù cờ cũ còn true', () => {
+    expect(canCancelOrder({ status: 'PACKED', canCancel: false }, 'u1')).toBe(false);
+    expect(canCancelOrder({ status: 'PACKED', shippingCode: 'GHN1', canCancel: true }, 'u1')).toBe(true);
+    expect(canCancelOrder({ status: 'CANCELLED', canCancel: true }, 'u1')).toBe(false);
+  });
+
+  it('thu gom tái chế mà bưu tá đã lấy hàng: không hủy được nữa; chưa lấy (mã 1/2/10) thì vẫn hủy được', () => {
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '3' }, 'u')).toBe(false);
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '1' }, 'u')).toBe(true);
+    expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: false, gomdonStatus: '3' }, 'u')).toBe(true);
+  });
+});
+
+describe('buyerOrderStatusLabel — đơn đã có mã vận đơn hãng (R3-CANCEL-2)', () => {
+  it('Đã xác nhận/Đang đóng gói mà kho đã đặt hãng → "Đã đặt đơn vị vận chuyển"', () => {
+    expect(buyerOrderStatusLabel({ status: 'PACKED', shippingCode: 'GHN1933' })).toBe('Đã đặt đơn vị vận chuyển');
+    expect(buyerOrderStatusLabel({ status: 'CONFIRMED', shippingCode: 'GHN1933' })).toBe('Đã đặt đơn vị vận chuyển');
+  });
+
+  it('mã vận đơn Gomdon (thu gom) hay trạng thái khác giữ nhãn gốc', () => {
+    expect(buyerOrderStatusLabel({ status: 'PACKED' })).toBe('Đang đóng gói');
+    expect(buyerOrderStatusLabel({ status: 'PACKED', shippingCode: 'BE1', gomdonOrderId: 'BE1' })).toBe('Đang đóng gói');
+    expect(buyerOrderStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1933' })).toBe('Đang giao');
+    expect(buyerOrderStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1933' })).toBe('Đã hủy');
+  });
+});
+
+describe('hành trình đơn và mua lại', () => {
+  it('timelineIndex: 5 bước chuẩn, Đã hủy/Đã hoàn nằm ngoài (-1)', () => {
+    expect(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'].map(timelineIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(timelineIndex('CANCELLED')).toBe(-1);
+    expect(timelineIndex('RETURNED')).toBe(-1);
+  });
+
+  it('chỉ đơn đã kết thúc mới mua lại được', () => {
+    expect(['DELIVERED', 'CANCELLED', 'RETURNED'].every(isReorderable)).toBe(true);
+    expect(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'].some(isReorderable)).toBe(false);
+  });
+
+  it('tab lọc đơn: tab Tất cả không có bộ lọc, các tab còn lại khớp status/group của API', () => {
+    expect(ORDER_TABS[0]).toMatchObject({ key: 'all', filter: {} });
+    expect(ORDER_TABS.map((t) => t.filter)).toEqual([
+      {},
+      { status: 'PENDING_PAYMENT' },
+      { group: 'processing' },
+      { status: 'SHIPPING' },
+      { status: 'DELIVERED' },
+      { group: 'closed' },
+    ]);
+  });
+});
+
+describe('shippingStatusLabel — trạng thái vận chuyển hãng gửi bằng mã tiếng Anh (R2-ADMINOPS-8)', () => {
+  it('mã thường gặp ra tiếng Việt, chữ đã là tiếng Việt giữ nguyên, rỗng ra rỗng', () => {
+    expect(shippingStatusLabel('delivering')).toBe('Đang giao');
+    expect(shippingStatusLabel('DELIVERED')).toBe('Đã giao');
+    expect(shippingStatusLabel('returning')).toBe('Đang hoàn');
+    expect(shippingStatusLabel('Đã lấy hàng')).toBe('Đã lấy hàng');
+    expect(shippingStatusLabel(null)).toBe('');
+  });
+});
+
+// R4-BUYER-7: Order.discount gộp mã + combo + giảm hạng + Điểm Xanh; khách phải thấy từng khoản (cùng cách tách với Mini App).
+describe('discountRows — tách từng khoản giảm giá của đơn', () => {
+  it('đơn có chi tiết từng khoản: mỗi khoản một dòng, mã kèm tên mã, Điểm Xanh kèm số điểm', () => {
+    expect(
+      discountRows({ discount: 98_000, couponCode: 'XANH10', couponDiscount: 38_000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 60_000, pointsUsed: 60 }),
+    ).toEqual([
+      { label: 'Mã giảm giá (XANH10)', amount: 38_000 },
+      { label: 'Điểm Xanh (60 điểm)', amount: 60_000 },
+    ]);
+  });
+
+  it('combo, hạng thành viên và phần giảm không rõ nguồn đều có dòng riêng; tổng các dòng = discount', () => {
+    const rows = discountRows({ discount: 100_000, couponDiscount: 0, comboDiscount: 30_000, tierDiscount: 20_000, pointsDiscount: 0, pointsUsed: 0 });
+    expect(rows).toEqual([
+      { label: 'Ưu đãi combo', amount: 30_000 },
+      { label: 'Ưu đãi hạng thành viên', amount: 20_000 },
+      { label: 'Giảm giá khác', amount: 50_000 },
+    ]);
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(100_000);
+  });
+
+  it('số điểm có dấu nghìn: "Điểm Xanh (1.250 điểm)"', () => {
+    expect(discountRows({ discount: 12_500, couponDiscount: 0, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 12_500, pointsUsed: 1250 })).toEqual([
+      { label: 'Điểm Xanh (1.250 điểm)', amount: 12_500 },
+    ]);
+  });
+
+  it('đơn tách của gian hàng đối tác không giữ lượt dùng mã: lấy tên mã của lần đặt (groupCouponCode)', () => {
+    expect(
+      discountRows({ discount: 15_000, couponCode: null, groupCouponCode: 'XANH10', couponDiscount: 15_000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0 }),
+    ).toEqual([{ label: 'Mã giảm giá (XANH10)', amount: 15_000 }]);
+  });
+
+  it('đơn cũ chưa lưu từng khoản: một dòng Giảm giá, ghi rõ đã gồm Điểm Xanh nếu có dùng điểm; không giảm thì không có dòng', () => {
+    expect(discountRows({ discount: 98_000, pointsUsed: 60 })).toEqual([{ label: 'Giảm giá (gồm Điểm Xanh)', amount: 98_000 }]);
+    expect(discountRows({ discount: 38_000, pointsUsed: 0 })).toEqual([{ label: 'Giảm giá', amount: 38_000 }]);
+    expect(discountRows({ discount: 0, pointsUsed: 0 })).toEqual([]);
   });
 });

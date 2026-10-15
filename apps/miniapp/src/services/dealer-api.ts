@@ -9,6 +9,8 @@ export interface DealerMe {
   status: DealerStatus;
   tier: { id: string; name: string; creditLimit: number } | null;
   currentDebt: number;
+  /** Lý do admin từ chối hồ sơ gần nhất (chỉ có khi status REJECTED). */
+  rejectionReason?: string | null;
 }
 
 export interface DealerApplyInput {

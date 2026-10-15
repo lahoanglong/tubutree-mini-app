@@ -24,10 +24,13 @@ import {
   type RewardItem,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
-import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
+import { autoCouponName } from '../utils/coupon-name';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -40,7 +43,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
-import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
+import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
  * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
@@ -76,7 +79,8 @@ export default function LoyaltyPage() {
   const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
-  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
@@ -171,6 +175,7 @@ export default function LoyaltyPage() {
   // Progress lên hạng kế: tính TỪ SÀN ĐIỂM hạng hiện tại → ngưỡng hạng kế (không phải từ 0), theo
   // điểm XÉT HẠNG (điểm danh / tích tại quầy không tính) — xem tierProgressPercent.
   const next = data?.nextTier;
+  const rates = data?.rates;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
@@ -179,6 +184,8 @@ export default function LoyaltyPage() {
   // Con số khách thấy là tổng hai lô; đổi mã giảm giá chỉ dùng được lô thường (pointsBalance).
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
+  const expiringNote = expiringPointsNote(data?.expiringPoints);
+  const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
   const rewardCatalog = rewardsQ.data;
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
@@ -205,16 +212,22 @@ export default function LoyaltyPage() {
   const sheetReward = useLastNonNull(confirmReward);
   const sheetCelebrate = useLastNonNull(celebrate);
 
+  const pageSkeleton = (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Skeleton height={180} radius="var(--radius-card)" />
+      <Skeleton height={80} radius="var(--radius-card)" />
+    </div>
+  );
+
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(16px + var(--safe-bottom))' }}>
       <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
-      {!authed || loyaltyQ.isLoading ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton height={180} radius="var(--radius-card)" />
-          <Skeleton height={80} radius="var(--radius-card)" />
-        </div>
-      ) : loyaltyQ.isError ? (
+      {phase !== 'authenticated' ? (
+        <AuthPhaseView phase={phase} loading={pageSkeleton} />
+      ) : loyaltyQ.isLoading ? (
+        pageSkeleton
+      ) : loyaltyQ.isError && !loyaltyQ.data ? (
         <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
@@ -241,6 +254,21 @@ export default function LoyaltyPage() {
               {convertedNote && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                   {convertedNote}
+                </Text>
+              )}
+              {expiringNote && (
+                <Text
+                  variant="caption"
+                  tone={expiringNote.urgent ? 'warning' : 'secondary'}
+                  as="div"
+                  style={{ marginTop: 6, fontWeight: expiringNote.urgent ? 600 : undefined }}
+                >
+                  {expiringNote.text}
+                </Text>
+              )}
+              {expiryPolicy && (
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                  {expiryPolicy}
                 </Text>
               )}
 
@@ -270,13 +298,26 @@ export default function LoyaltyPage() {
                     />
                   </div>
                   <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng để lên hạng {next.name}
+                    Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
+                    {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
+                    lên hạng {next.name}
                   </Text>
                 </div>
               ) : (
                 <Text variant="caption" as="div" style={{ color: tierStyle.color, marginTop: 8 }}>
                   Bạn đang ở hạng cao nhất 🎉
                 </Text>
+              )}
+
+              {rates && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Text variant="caption" tone="secondary" as="div">
+                    {earnRuleLine(rates, data.tier?.multiplier ?? 1)}
+                  </Text>
+                  <Text variant="caption" tone="secondary" as="div">
+                    {redeemRuleLine(rates)}
+                  </Text>
+                </div>
               )}
 
               {/* Nút mở thẻ thành viên số (mã QR) */}
@@ -329,7 +370,7 @@ export default function LoyaltyPage() {
                         {couponLabel(c)}
                       </Text>
                       <Text variant="caption" tone="secondary" as="div">
-                        Mã {c.code}
+                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
                         {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
                       </Text>
                     </div>
@@ -498,8 +539,8 @@ export default function LoyaltyPage() {
                         {t.name}
                       </Text>
                     </div>
-                    <Text variant="caption" tone="secondary">
-                      từ {formatNumber(t.minPoints)} điểm tích luỹ · ×{t.multiplier}
+                    <Text variant="caption" tone="secondary" style={{ textAlign: 'right' }}>
+                      {tierThresholdLabel(t, rates)} · ×{t.multiplier}
                     </Text>
                   </div>
                 );
@@ -585,6 +626,7 @@ export default function LoyaltyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
                         gap: 8,
                         paddingTop: 8,
                         borderTop: '1px dashed var(--color-border-subtle)',
@@ -594,6 +636,7 @@ export default function LoyaltyPage() {
                         HSD 30 ngày sau đổi
                       </Text>
                       <Button
+                        style={{ flexShrink: 0, marginLeft: 'auto' }}
                         disabled={!r.canRedeem || redeemMut.isPending}
                         onPress={() => {
                           haptic('light');

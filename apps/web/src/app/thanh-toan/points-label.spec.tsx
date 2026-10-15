@@ -6,7 +6,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 // số dư: khách 500 điểm thường, hàng 100.000đ, trần 20% → trừ 20 điểm chứ không phải 500.
 
 const SUBTOTAL = 100000;
-const calls = vi.hoisted(() => ({ pointsToUse: [] as number[] }));
+const calls = vi.hoisted(() => ({ pointsToUse: [] as number[], extra: {} as Record<string, unknown>, used: 20 }));
 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
@@ -24,10 +24,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ],
   checkoutQuote: async (_addr: string, pointsToUse: number) => {
     calls.pointsToUse.push(pointsToUse);
-    const used = pointsToUse > 0 ? 20 : 0;
+    const used = pointsToUse > 0 ? calls.used : 0;
     return {
       subtotal: SUBTOTAL, discount: 0, pointsUsed: used, pointsDiscount: used * 1000, shippingFee: 30000,
       total: SUBTOTAL - used * 1000 + 30000, pointsEarned: 0, pointsBalance: 500, redeemablePoints: 500,
+      ...calls.extra,
     };
   },
   getPublicConfig: async () => ({ recyclingEnabled: false }),
@@ -40,20 +41,107 @@ afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
   calls.pointsToUse = [];
+  calls.extra = {};
+  calls.used = 20;
 });
+
+const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
 
 describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
   it('chưa tick: "Bạn có 500 Điểm Xanh"; tick xong: đúng 20 điểm thật trừ, không còn ghi 500', async () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
-    const label = () => r.container.querySelector('label:has(input[type="checkbox"])')!.textContent ?? '';
+    const pointsLabel = () =>
+      [...r.container.querySelectorAll('label')].find((l) => l.querySelector('input[type="checkbox"]') && /Điểm Xanh/.test(l.textContent ?? ''))!;
+    const label = () => pointsLabel().textContent ?? '';
     expect(label()).toContain('Bạn có 500 Điểm Xanh');
 
-    click(r.container.querySelector<HTMLInputElement>('label input[type="checkbox"]')!);
+    click(pointsLabel().querySelector<HTMLInputElement>('input')!);
     await flush(8);
     expect(calls.pointsToUse).toContain(500);
     expect(label()).toContain('Dùng 20 Điểm Xanh — giảm 20.000đ');
     expect(label()).not.toContain('500');
+  });
+
+  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư → nêu trần ngay khi chưa tick', async () => {
+    calls.extra = { pointsMax: 20, pointsPartnerNote: null };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).toContain('Đơn này dùng tối đa 20 Điểm Xanh, tính theo giá trị hàng của đơn');
+  });
+
+  it('R4-BUYER-2: trần của đơn không thấp hơn số dư dùng được → không thêm dòng trần', async () => {
+    calls.extra = { pointsMax: 500, pointsPartnerNote: null };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).not.toContain('Đơn này dùng tối đa');
+  });
+
+  it('Q8 S7: giỏ có hàng của gian hàng đối tác → ô Điểm Xanh nêu trần của đơn và câu giải thích', async () => {
+    calls.extra = { pointsMax: 12, pointsPartnerNote: NOTE };
+    calls.used = 12;
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Đơn này dùng tối đa 12 Điểm Xanh');
+    expect(r.container.textContent).toContain(NOTE);
+    const box = [...r.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((i) => /Điểm Xanh/.test(i.closest('label')?.textContent ?? ''))!;
+    expect(box.disabled).toBe(false);
+    click(box);
+    await flush(8);
+    expect(box.closest('label')!.textContent).toContain('Dùng 12 Điểm Xanh — giảm 12.000đ');
+  });
+
+  it('Q8 S7: giỏ chỉ hàng của gian hàng đối tác → ô Điểm Xanh bị tắt, kèm câu giải thích', async () => {
+    calls.extra = { pointsMax: 0, pointsPartnerNote: NOTE };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    const box = [...r.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((i) => /Điểm Xanh/.test(i.closest('label')?.textContent ?? ''))!;
+    expect(box.disabled).toBe(true);
+    expect(r.container.textContent).toContain(NOTE);
+    expect(r.container.textContent).not.toContain('Đơn này dùng tối đa');
+    click(box);
+    await flush(8);
+    expect(calls.pointsToUse.every((p) => p === 0)).toBe(true);
+  });
+
+  // R5-CHECKOUT-5: bản sửa R4-BUYER-2 ở Mini App (8aea1a0d) chưa sang web — web vẫn hứa lô quy đổi "trả tới 100% giá trị hàng"
+  // ngay dưới câu Điểm Xanh không dùng cho hàng của gian hàng đối tác.
+  describe('dòng điểm quy đổi (R5-CHECKOUT-5)', () => {
+    const CONVERTED = { pointsBalance: 93, redeemablePoints: 93, pointsConvertedBalance: 300, redeemableConvertedPoints: 300 };
+
+    it('giỏ có hàng của gian hàng đối tác: nói phần không hết hạn, không hứa "trả tới 100% giá trị hàng"', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 393, pointsPartnerNote: NOTE };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain(NOTE);
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn');
+      expect(r.container.textContent).not.toContain('trả tới 100% giá trị hàng');
+    });
+
+    it('giỏ chỉ hàng Tubu bị trần theo giá trị hàng: cũng không hứa 100%', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 50, pointsPartnerNote: null };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('Đơn này dùng tối đa 50 Điểm Xanh');
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn');
+      expect(r.container.textContent).not.toContain('trả tới 100% giá trị hàng');
+    });
+
+    it('đơn không bị trần: giữ câu "trả tới 100% giá trị hàng" như trước', async () => {
+      calls.extra = { ...CONVERTED, pointsMax: 393, pointsPartnerNote: null };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('trong đó 300 điểm không hết hạn, trả tới 100% giá trị hàng');
+    });
   });
 });

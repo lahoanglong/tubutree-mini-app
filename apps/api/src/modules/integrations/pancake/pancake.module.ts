@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { PancakeClient } from './pancake.client';
 import { PancakeSyncService } from './pancake-sync.service';
 import { PancakeOrderService } from './pancake-order.service';
 import { PancakeProcessor } from './pancake.processor';
@@ -15,6 +14,8 @@ import { QUEUE_PANCAKE_EVENTS, QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 import { OrdersModule } from '../../orders/orders.module';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
+import { PancakeSyncHooksModule } from './pancake-sync-hooks.module';
+import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module';
 
 /**
  * GomdonAlertService (báo ADMIN in-app, template OPS_GOMDON_ALERT) được provide LẠI ở đây thay vì import
@@ -26,10 +27,11 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
     BullModule.registerQueue({ name: QUEUE_PANCAKE_EVENTS }, { name: QUEUE_PANCAKE_PUSH }),
     LifecycleModule,
     OrdersModule,
+    PancakeSyncHooksModule,
+    CronLeaderModule,
   ],
   controllers: [PancakeWebhookController, PancakeController, GeoController],
   providers: [
-    PancakeClient,
     PancakeSyncService,
     PancakeOrderService,
     PancakeProcessor,
@@ -39,6 +41,6 @@ import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
     GeoService,
     GomdonAlertService,
   ],
-  exports: [PancakeClient, PancakeSyncService, PancakeOrderService],
+  exports: [PancakeSyncHooksModule, PancakeSyncService, PancakeOrderService, GeoService],
 })
 export class PancakeModule {}

@@ -7,6 +7,8 @@ const PROD_BASE = {
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   JWT_REFRESH_SECRET: 'b'.repeat(32),
   PANCAKE_WEBHOOK_SECRET: 'pancake-secret',
+  PANCAKE_API_KEY: 'pancake-key',
+  PANCAKE_SHOP_ID: '12345',
   ACCESSTRADE_WEBHOOK_SECRET: 'at-secret',
   CORS_ORIGINS: 'https://tubutree.com',
 };
@@ -58,5 +60,18 @@ describe('envSchema — THROTTLE_BYPASS_TOKEN', () => {
   it('token đủ 32 ký tự → boot', () => {
     const r = envSchema.safeParse({ ...PROD_BASE, THROTTLE_BYPASS_TOKEN: 't'.repeat(32) });
     expect(r.success && r.data.THROTTLE_BYPASS_TOKEN).toBe('t'.repeat(32));
+  });
+});
+
+describe('envSchema — Pancake (PLATFORM-1)', () => {
+  it.each(['PANCAKE_API_KEY', 'PANCAKE_SHOP_ID'])('production thiếu %s → không boot (đơn không bao giờ tới kho)', (key) => {
+    const r = envSchema.safeParse({ ...PROD_BASE, [key]: '' });
+    expect(r.success).toBe(false);
+    expect(!r.success && r.error.issues.map((i) => i.path[0])).toContain(key);
+  });
+
+  it('development không có khoá Pancake → vẫn boot (dev dùng seed)', () => {
+    const r = envSchema.safeParse({ ...PROD_BASE, NODE_ENV: 'development', PANCAKE_API_KEY: '', PANCAKE_SHOP_ID: '' });
+    expect(r.success).toBe(true);
   });
 });

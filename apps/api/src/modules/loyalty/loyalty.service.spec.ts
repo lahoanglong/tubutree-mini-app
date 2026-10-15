@@ -37,7 +37,7 @@ describe('LoyaltyService.getAvailableCoupons', () => {
       coupon('INVITE', 'INVITE', null),
     ];
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: 't1' }) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: 't1', zaloId: 'z-me', phone: null }) },
       // SQL đã thu hẹp ứng viên; mock trả sẵn tập đó, isCouponEligible vẫn là chốt chặn cuối.
       $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
       coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
@@ -49,6 +49,45 @@ describe('LoyaltyService.getAvailableCoupons', () => {
     const codes = result.map((c) => c.code).sort();
 
     expect(codes).toEqual(['MINE', 'PUB', 'TIER_OK']);
+  });
+
+  it('UAT p6: ẩn mã đã tắt; tài khoản khách không thấy mã công khai giới hạn theo người (validate cũng từ chối)', async () => {
+    const coupons = [
+      coupon('PUB', 'PUBLIC', null),
+      { ...coupon('PUB_OFF', 'PUBLIC', null), isActive: false },
+      { ...coupon('PUB_UNLIM', 'PUBLIC', null), perUserLimit: 0 },
+      coupon('MINE', 'USER_GROUP', { userId: 'me' }),
+    ];
+    const prismaFor = (user: unknown) =>
+      ({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue(user) },
+        $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
+        coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
+        couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+      }) as unknown as PrismaService;
+    const real = await new LoyaltyService(prismaFor({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }), makeConfig()).getAvailableCoupons('me');
+    expect(real.map((c) => c.code).sort()).toEqual(['MINE', 'PUB', 'PUB_UNLIM']);
+    const guest = await new LoyaltyService(prismaFor({ id: 'me', tierId: null, zaloId: 'guest_d1', phone: null }), makeConfig()).getAvailableCoupons('me');
+    expect(guest.map((c) => c.code).sort()).toEqual(['MINE', 'PUB_UNLIM']);
+  });
+
+  it('R2-BUYERMINI-3: mã chỉ áp cho sản phẩm cụ thể (mua chung) trả kèm danh sách sản phẩm áp dụng; mã chung trả null', async () => {
+    const coupons = [
+      coupon('PUB', 'PUBLIC', null),
+      { ...coupon('GBUY-1', 'USER_GROUP', { userId: 'me', groupBuyId: 'g1' }), applyTo: { productIds: ['p-chia'] } },
+    ];
+    const productFindMany = jest.fn().mockResolvedValue([{ id: 'p-chia', name: 'Hạt chia Úc' }]);
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },
+      $queryRaw: jest.fn().mockResolvedValue(coupons.map((c) => ({ id: c.id }))),
+      coupon: { findMany: jest.fn().mockResolvedValue(coupons) },
+      couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+      product: { findMany: productFindMany },
+    } as unknown as PrismaService;
+    const result = await new LoyaltyService(prisma, makeConfig()).getAvailableCoupons('me');
+    expect(result.find((c) => c.code === 'PUB')!.products).toBeNull();
+    expect(result.find((c) => c.code === 'GBUY-1')!.products).toEqual([{ id: 'p-chia', name: 'Hạt chia Úc' }]);
+    expect(productFindMany).toHaveBeenCalledWith({ where: { id: { in: ['p-chia'] } }, select: { id: true, name: true } });
   });
 
   it('không có ứng viên nào từ SQL thì không nạp coupon nào', async () => {
@@ -67,7 +106,7 @@ describe('LoyaltyService.getAvailableCoupons', () => {
 
   it('ẩn coupon đã dùng hết lượt cá nhân (perUserLimit)', async () => {
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null }) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'me', tierId: null, zaloId: 'z-me', phone: null }) },
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'PUB' }]),
       coupon: { findMany: jest.fn().mockResolvedValue([coupon('PUB', 'PUBLIC', null)]) },
       // groupBy trả về số redemption của user cho từng coupon (đã dùng 1 = perUserLimit).
@@ -90,6 +129,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue(order),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: { findFirst: jest.fn().mockResolvedValue(existed), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null }),
@@ -134,6 +174,7 @@ describe('LoyaltyService.creditOrderPoints', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }), // recalcTier
       },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       pointsTransaction: { findFirst, create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
       user: { findUniqueOrThrow: userFind, update: jest.fn() },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
@@ -307,6 +348,26 @@ describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DE
     // $transaction vẫn được gọi (callback chạy + re-check) nhưng bail trước create.
     expect(txn).toHaveBeenCalledTimes(1);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đơn RETURNED mà các lần trả một phần đã thu hồi hết điểm tích → vẫn ghi dấu ORDER_REVERSED delta 0, không trừ thêm', async () => {
+    const h = reverseHarness({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0, pointsUsedConverted: 0 });
+    const prisma = h.prisma as unknown as {
+      order: { findUniqueOrThrow: jest.Mock };
+      returnRequest: { findMany: jest.Mock };
+    };
+    prisma.order.findUniqueOrThrow = jest.fn().mockResolvedValue({
+      id: 'o1', code: 'C1', userId: 'u1', status: 'RETURNED', pointsEarned: 50, pointsUsed: 0, pointsUsedConverted: 0,
+    });
+    prisma.returnRequest = {
+      findMany: jest.fn().mockResolvedValue([
+        { refundAmount: 100_000, shippingRefund: 0, pointsRefunded: 0, convertedPointsRefunded: 0, pointsReversed: 50, commissionReversed: 0, items: [], receivedAt: null },
+      ]),
+    };
+    await new LoyaltyService(h.prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.create.mock.calls[0][0].data).toMatchObject({ reason: 'ORDER_REVERSED:C1', delta: 0 });
+    expect(h.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -557,7 +618,7 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
  * Sổ PointsTransaction giả lọc ĐÚNG theo where (userId/reason.startsWith/delta.gt/createdAt.gte/
  * refId.in) — test hành vi "điểm xét hạng" theo dữ liệu, không phụ thuộc hình dạng câu truy vấn.
  */
-type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date };
+type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date; expiresAt?: Date | null };
 function fakeLedger(rows: LedgerRow[]) {
   const all = rows.map((r) => ({ userId: 'u1', refId: null as string | null, createdAt: new Date(), ...r }));
   type W = {
@@ -582,6 +643,9 @@ function fakeLedger(rows: LedgerRow[]) {
   };
 }
 
+/** Dòng ReturnRequest đã duyệt trả MỘT PHẦN mà LoyaltyService đọc để trừ khỏi hạng. */
+type PartialRow = { orderId: string; refundAmount: number | null; shippingRefund: number; pointsReversed: number };
+
 describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)', () => {
   const TIERS = [
     { id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null },
@@ -593,9 +657,12 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     spent12m: number,
     earned12m?: number,
     ledgerRows?: LedgerRow[],
+    partial?: { requests?: PartialRow[]; orders?: { id: string; total: number }[] },
   ) {
     const update = jest.fn().mockResolvedValue({});
     const aggregate = jest.fn().mockResolvedValue({ _sum: { total: spent12m } });
+    const orderFindMany = jest.fn().mockResolvedValue(partial?.orders ?? []);
+    const returnFindMany = jest.fn().mockResolvedValue(partial?.requests ?? []);
     // Hạng xét theo điểm ĐÃ TÍCH từ đơn đã giao trong 12 tháng (sổ PointsTransaction), không phải
     // số dư còn lại — mặc định 1 dòng ORDER_DELIVERED bằng số dư để các test cũ giữ nguyên ý nghĩa.
     const pts = earned12m ?? user.pointsBalance;
@@ -605,10 +672,11 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...user }), update },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
-      order: { aggregate },
+      order: { aggregate, findMany: orderFindMany },
+      returnRequest: { findMany: returnFindMany },
       pointsTransaction: ledger,
     } as unknown as PrismaService;
-    return { prisma, update, aggregate, ledger };
+    return { prisma, update, aggregate, ledger, orderFindMany, returnFindMany };
   }
 
   it('đạt hạng theo ĐIỂM → nâng lên hạng cao nhất đạt', async () => {
@@ -710,12 +778,82 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       pointsTransaction: ledger,
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
     expect(ov.tierPoints).toBe(300);
     expect(ov.nextTier).toMatchObject({ id: 'loc', pointsToGo: 700 });
     expect((ledger.findMany.mock.calls[0]![0].where as { reason: unknown }).reason).toEqual({ startsWith: 'ORDER_DELIVERED:' });
+  });
+
+  // ENGAGE-21: trang Điểm Xanh phải giải thích được cách tích/đổi điểm từ chính SystemConfig, không hardcode ở FE.
+  it('getOverview: trả tỷ lệ tích/đổi điểm từ SystemConfig và mốc chi tiêu của từng hạng', async () => {
+    const values: Record<string, number> = {
+      'loyalty.vnd_per_point': 12_000,
+      'loyalty.vnd_per_point_redeem': 1000,
+      'loyalty.max_redeem_pct': 0.3,
+    };
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (values[k] ?? fb) as T } as unknown as SystemConfigService;
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1 },
+          { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 500, minSpending: 5_000_000, pointMultiplier: 1.2 },
+        ]),
+      },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.rates).toEqual({ vndPerPoint: 12_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.3 });
+    expect(ov.tiers.map((t) => t.minSpending)).toEqual([null, 5_000_000]);
+    expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 5_000_000 });
+  });
+
+  it('getOverview: SystemConfig sai kiểu → tỷ lệ rơi về mặc định (10.000đ/điểm, 1.000đ/điểm, 20%)', async () => {
+    const config = { get: async <T>(_k: string, _fb?: T): Promise<T> => 'oops' as unknown as T } as unknown as SystemConfigService;
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.rates).toEqual({ vndPerPoint: 10_000, vndPerPointRedeem: 1000, maxRedeemPct: 0.2 });
+  });
+
+  // R2-ENGAGE-8
+  it('getOverview: trả điểm sắp hết hạn gần nhất của lô thường và số tháng hết hạn theo cấu hình', async () => {
+    const soon = new Date(Date.now() + 20 * 864e5);
+    const later = new Date(Date.now() + 200 * 864e5);
+    const ledger = fakeLedger([
+      { reason: 'DAILY_CHECKIN:DAY_1', delta: 70, createdAt: new Date(Date.now() - 300 * 864e5), expiresAt: soon },
+      { reason: 'GAME_SPIN_WIN:p1', delta: 30, createdAt: new Date(Date.now() - 10 * 864e5), expiresAt: later },
+    ]);
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 100, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: ledger,
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.point_expire_months' ? 6 : fb) as T } as unknown as SystemConfigService;
+    const ov = await new LoyaltyService(prisma, config).getOverview('u1');
+    expect(ov.expiringPoints).toEqual({ amount: 70, expiresAt: soon.toISOString() });
+    expect(ov.pointExpireMonths).toBe(6);
+  });
+
+  it('getOverview: không có lô nào có hạn → expiringPoints null, pointExpireMonths mặc định 12', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
+    expect(ov.expiringPoints).toBeNull();
+    expect(ov.pointExpireMonths).toBe(12);
   });
 
   it('PD-3 getOverview: trả pointsConvertedBalance, pointsTotal, redeemableTotal; redeemablePoints giữ nghĩa lô STANDARD dùng được', async () => {
@@ -786,6 +924,168 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     await new LoyaltyService(prisma, makeConfig()).recalcTier('u1', TIERS as unknown as MembershipTier[]);
     expect(findMany).not.toHaveBeenCalled();
     expect(update.mock.calls[0][0].data.tierId).toBe('dai');
+  });
+});
+
+describe('LoyaltyService.recalcTier / getOverview sau trả MỘT PHẦN (MONEY-4)', () => {
+  const TIERS = [
+    { id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null },
+    { id: 'loc', sortOrder: 1, minPoints: 1000, minSpending: 5_000_000 },
+    { id: 'dai', sortOrder: 2, minPoints: 5000, minSpending: 20_000_000 },
+  ];
+  const req = (orderId: string, refundAmount: number | null, pointsReversed = 0, shippingRefund = 0): PartialRow => ({
+    orderId,
+    refundAmount,
+    shippingRefund,
+    pointsReversed,
+  });
+
+  function setup(opts: {
+    tierId: string;
+    spent12m?: number;
+    ledger?: LedgerRow[];
+    requests?: PartialRow[];
+    orders?: { id: string; total: number }[];
+  }) {
+    const update = jest.fn().mockResolvedValue({});
+    const aggregate = jest.fn().mockResolvedValue({ _sum: { total: opts.spent12m ?? 0 } });
+    const orderFindMany = jest.fn().mockResolvedValue(opts.orders ?? []);
+    const returnFindMany = jest.fn().mockResolvedValue(opts.requests ?? []);
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: opts.tierId, tierGraceUntil: null }), update },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      order: { aggregate, findMany: orderFindMany },
+      returnRequest: { findMany: returnFindMany },
+      pointsTransaction: fakeLedger(opts.ledger ?? []),
+    } as unknown as PrismaService;
+    // Đã hết ân hạn: rớt hạng áp ngay.
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: opts.tierId, tierGraceUntil: new Date(Date.now() - 1000) });
+    return { prisma, update, aggregate, orderFindMany, returnFindMany };
+  }
+
+  describe('chi tiêu 12 tháng', () => {
+    it('đơn 30 triệu còn DELIVERED đã hoàn 26 triệu → chi tiêu 4 triệu → rớt từ hạng 20 triệu về hạng nền', async () => {
+      const { prisma, update, orderFindMany } = setup({
+        tierId: 'dai',
+        spent12m: 30_000_000,
+        requests: [req('o1', 20_000_000), req('o1', 6_000_000)],
+        orders: [{ id: 'o1', total: 30_000_000 }],
+      });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(update.mock.calls[0][0].data.tierId).toBe('mam');
+      // Chỉ đơn còn DELIVERED (đúng bộ lọc của tổng chi tiêu) mới bị trừ.
+      expect(orderFindMany.mock.calls[0][0].where).toMatchObject({
+        userId: 'u1',
+        status: 'DELIVERED',
+        id: { in: ['o1'] },
+        paymentMethod: { not: 'XU' },
+      });
+    });
+
+    it('cộng cả phí ship đã hoàn (lỗi do shop) vào phần trừ', async () => {
+      const { prisma, update } = setup({
+        tierId: 'dai',
+        spent12m: 21_000_000,
+        requests: [req('o1', 1_200_000, 0, 30_000)],
+        orders: [{ id: 'o1', total: 21_000_000 }],
+      });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(update.mock.calls[0][0].data.tierId).toBe('loc'); // 21.000.000 − 1.230.000 = 19.770.000 → rớt khỏi 20 triệu
+    });
+
+    it('phần trừ của một đơn không vượt tổng tiền đơn và chi tiêu không âm', async () => {
+      const { prisma, update } = setup({
+        tierId: 'loc',
+        spent12m: 6_000_000,
+        requests: [req('o1', 9_000_000)],
+        orders: [{ id: 'o1', total: 6_000_000 }],
+      });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(update.mock.calls[0][0].data.tierId).toBe('mam');
+    });
+
+    it('lần trả của đơn không còn trong tập DELIVERED (đã RETURNED / ngoài 12 tháng / XU) không bị trừ khỏi đơn khác', async () => {
+      // spent12m 6 triệu là của đơn khác còn nguyên; đơn o1 đã RETURNED nên findMany(DELIVERED) không trả nó.
+      const { prisma, update } = setup({
+        tierId: 'loc',
+        spent12m: 6_000_000,
+        requests: [req('o1', 21_000_000)],
+        orders: [],
+      });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(update.mock.calls[0][0].data).toEqual({ tierId: 'loc', tierGraceUntil: null }); // vẫn hạng 'loc' (5 triệu), chỉ xoá ân hạn
+    });
+
+    it('không có lần trả một phần nào → không truy vấn lại đơn (chỉ một lần đọc yêu cầu trả hàng đã duyệt)', async () => {
+      const { prisma, orderFindMany, returnFindMany } = setup({ tierId: 'mam', spent12m: 1_000_000 });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(orderFindMany).not.toHaveBeenCalled();
+      expect(returnFindMany).toHaveBeenCalledTimes(1);
+      expect(returnFindMany.mock.calls[0][0].where).toMatchObject({ userId: 'u1', status: 'APPROVED', fullReturn: false });
+    });
+  });
+
+  describe('điểm xét hạng', () => {
+    it('đơn giao 6.000 điểm đã trả một phần thu hồi 4.500 điểm → chỉ còn 1.500 điểm xét hạng (hạng 1.000)', async () => {
+      const { prisma, update } = setup({
+        tierId: 'dai',
+        ledger: [{ reason: 'ORDER_DELIVERED:TUBU1', delta: 6000, refId: 'o1' }],
+        requests: [req('o1', 4_500_000, 3_000), req('o1', 1_500_000, 1_500)],
+      });
+      await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
+      expect(update.mock.calls[0][0].data.tierId).toBe('loc');
+    });
+
+    it('đơn có ORDER_REVERSED (trả nốt) bị bỏ NGUYÊN: các lần trả một phần trước đó không bị trừ thêm lần hai (không âm, không trừ đơn khác)', async () => {
+      const { prisma } = setup({
+        tierId: 'dai',
+        ledger: [
+          { reason: 'ORDER_DELIVERED:TUBU1', delta: 6000, refId: 'o1' },
+          { reason: 'RETURN_REVERSED:TUBU1', delta: -4000, refId: 'rr1' },
+          { reason: 'ORDER_REVERSED:TUBU1', delta: -2000, refId: 'o1' },
+          { reason: 'ORDER_DELIVERED:TUBU2', delta: 1200, refId: 'o2' },
+        ],
+        requests: [req('o1', 4_000_000, 4_000)],
+      });
+      expect(await (new LoyaltyService(prisma, makeConfig()) as unknown as { tierPoints(u: string, s: Date): Promise<number> }).tierPoints('u1', new Date(0))).toBe(1_200);
+    });
+
+    it('phần thu hồi lớn hơn điểm giao (dữ liệu lệch) → đơn đó về 0, không trừ vào điểm đơn khác', async () => {
+      const { prisma } = setup({
+        tierId: 'mam',
+        ledger: [
+          { reason: 'ORDER_DELIVERED:TUBU1', delta: 1000, refId: 'o1' },
+          { reason: 'ORDER_DELIVERED:TUBU2', delta: 1200, refId: 'o2' },
+        ],
+        requests: [req('o1', 2_000_000, 1_800)],
+      });
+      const svc = new LoyaltyService(prisma, makeConfig()) as unknown as { tierPoints(u: string, s: Date): Promise<number> };
+      expect(await svc.tierPoints('u1', new Date(0))).toBe(1_200);
+    });
+
+    it('khách đã tiêu hết điểm nên không có dòng RETURN_REVERSED nào → vẫn trừ theo phần điểm tích đã tính cho lần trả', async () => {
+      const { prisma } = setup({
+        tierId: 'mam',
+        ledger: [{ reason: 'ORDER_DELIVERED:TUBU1', delta: 3000, refId: 'o1' }],
+        requests: [req('o1', 27_000_000, 2_700)],
+      });
+      const svc = new LoyaltyService(prisma, makeConfig()) as unknown as { tierPoints(u: string, s: Date): Promise<number> };
+      expect(await svc.tierPoints('u1', new Date(0))).toBe(300);
+    });
+
+    it('getOverview và recalcTier dùng CÙNG phép tính: tierPoints trừ phần đã trả', async () => {
+      const { prisma } = setup({
+        tierId: 'mam',
+        ledger: [{ reason: 'ORDER_DELIVERED:TUBU1', delta: 3000, refId: 'o1' }],
+        requests: [req('o1', 9_000_000, 900)],
+      });
+      (prisma as unknown as { user: { findUniqueOrThrow: jest.Mock } }).user.findUniqueOrThrow.mockResolvedValue({
+        id: 'u1', pointsBalance: 2100, pointsConvertedBalance: 0, tierId: null, tier: null,
+      });
+      (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw = jest.fn().mockResolvedValue([]);
+      const ov = await new LoyaltyService(prisma, makeConfig()).getOverview('u1');
+      expect(ov.tierPoints).toBe(2_100);
+    });
   });
 });
 

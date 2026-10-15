@@ -3,7 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -15,7 +15,8 @@ import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
-import { useAuthStore } from '../store/auth';
+import { AuthGate } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { fetchPurchasedItems } from '../services/shop-api';
 import { trackReorderReminderCta } from '../services/buy-flow-events';
@@ -36,6 +37,10 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('ORDER_CONFIRMED')) return { Icon: CheckCircle2, title: 'Đơn đã xác nhận' };
   if (code.startsWith('ORDER_SHIPPING')) return { Icon: Truck, title: 'Đang giao hàng' };
   if (code.startsWith('ORDER_DELIVERED')) return { Icon: PackageCheck, title: 'Đã giao thành công' };
+  if (code === 'RETURN_REQUESTED') return { Icon: Undo2, title: 'Đã nhận yêu cầu đổi/trả' };
+  if (code.startsWith('RETURN_APPROVED')) return { Icon: CheckCircle2, title: 'Yêu cầu đổi/trả đã duyệt' };
+  if (code === 'RETURN_RECEIVED') return { Icon: PackageOpen, title: 'Tubu đã nhận lại hàng' };
+  if (code === 'RETURN_REJECTED') return { Icon: XCircle, title: 'Yêu cầu đổi/trả bị từ chối' };
   if (code.startsWith('ORDER')) return { Icon: Receipt, title: 'Cập nhật đơn hàng' };
   if (code.startsWith('INVOICE')) return { Icon: FileText, title: 'Hóa đơn điện tử' };
   if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
@@ -119,6 +124,10 @@ export function notificationAction(templateCode: string, data: Record<string, st
   if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
   if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
   if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
+  // Nhóm hết hạn không đủ người: về trang sản phẩm, nơi vừa mua được với giá thường vừa mở được nhóm mới.
+  if (templateCode === 'GROUP_BUY_FAILED' && productSlug) {
+    return { kind: 'link', label: 'Xem sản phẩm', to: `/product/${enc(productSlug)}` };
+  }
   if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
   if (templateCode.startsWith('REFILL')) return { kind: 'link', label: 'Xem đổi vỏ chai', to: '/refill' };
   return null;
@@ -156,8 +165,8 @@ export default function NotificationsPage() {
   // Trang này là CỬA VÀO từ push của Zalo: mở app từ thông báo thì restore() chưa kịp xong,
   // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
   // Mọi trang /me/* khác đều đã gate như vậy; riêng đây bị sót.
-  const authed = useAuthStore((s) => s.status === 'authenticated');
-  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed });
+  const phase = useAuthPhase();
+  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: phase === 'authenticated' });
   selectedIdRef.current = selectedNotif?.id ?? null;
 
   const readMut = useMutation({
@@ -229,72 +238,81 @@ export default function NotificationsPage() {
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Thông báo" />
 
-      {notifQ.isLoading ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-        </div>
-      ) : notifQ.isError ? (
-        <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
-      ) : notifQ.data && notifQ.data.length > 0 ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {notifQ.data.map((n) => {
-            const m = notificationMeta(n.templateCode);
-            const unread = n.status !== 'READ';
-            return (
-              <div
-                key={n.id}
-                role="button"
-                {...rowKeyboardProps()}
-                className="tubu-press"
-                onClick={() => onTap(n)}
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  padding: 12,
-                  background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-                  borderRadius: 'var(--radius-card)',
-                  border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
-                  boxShadow: 'var(--elevation-1)',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                  <Icon icon={m.Icon} tone="brand" />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                      {m.title}
-                    </Text>
-                    {unread && (
-                      <span
-                        role="img"
-                        aria-label="chưa đọc"
-                        style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
-                      />
-                    )}
+      <AuthGate
+        loading={
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        }
+      >
+        {notifQ.isLoading ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        ) : notifQ.isError && !notifQ.data ? (
+          <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+        ) : notifQ.data && notifQ.data.length > 0 ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {notifQ.data.map((n) => {
+              const m = notificationMeta(n.templateCode);
+              const unread = n.status !== 'READ';
+              return (
+                <div
+                  key={n.id}
+                  role="button"
+                  {...rowKeyboardProps()}
+                  className="tubu-press"
+                  onClick={() => onTap(n)}
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    padding: 12,
+                    background: unread ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
+                    borderRadius: 'var(--radius-card)',
+                    border: `1px solid ${unread ? 'var(--color-action-secondary-border)' : 'var(--color-border-subtle)'}`,
+                    boxShadow: 'var(--elevation-1)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                    <Icon icon={m.Icon} tone="brand" />
                   </div>
-                  {n.payload.body && (
-                    <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                      {n.payload.body}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text variant="body-sm" style={{ fontWeight: 600 }}>
+                        {m.title}
+                      </Text>
+                      {unread && (
+                        <span
+                          role="img"
+                          aria-label="chưa đọc"
+                          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-action-primary-bg)' }}
+                        />
+                      )}
+                    </div>
+                    {n.payload.body && (
+                      <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                        {n.payload.body}
+                      </Text>
+                    )}
+                    <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
+                      {relativeTime(n.sentAt)}
                     </Text>
-                  )}
-                  <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
-                    {relativeTime(n.sentAt)}
-                  </Text>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <EmptyState
-          art="leaf"
-          heading="Chưa có thông báo nào"
-          body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây."
-        />
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            art="leaf"
+            heading="Chưa có thông báo nào"
+            body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây."
+          />
+        )}
+      </AuthGate>
 
       {/* ── Detail View Overlay ── */}
       {selectedNotif && (

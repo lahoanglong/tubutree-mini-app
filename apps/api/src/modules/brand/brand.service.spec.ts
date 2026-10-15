@@ -211,6 +211,36 @@ describe('BrandService admin', () => {
     expect(out.startAt).toBeInstanceOf(Date);
   });
 
+  it('SELLER-16: createPromotion ngày kết thúc không sau ngày bắt đầu → 400 tiếng Việt, không lưu', async () => {
+    const prisma = makePrisma();
+    const svc = new BrandService(prisma);
+    for (const [startAt, endAt] of [
+      ['2026-10-14T00:00:00Z', '2026-10-10T00:00:00Z'],
+      ['2026-10-14T00:00:00Z', '2026-10-14T00:00:00Z'],
+      ['abc', '2026-10-14T00:00:00Z'],
+    ]) {
+      await expect(svc.createPromotion('b1', { title: 'KM', startAt: startAt!, endAt: endAt! })).rejects.toThrow(
+        new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.'),
+      );
+    }
+    expect(prisma.brandPromotion.create).not.toHaveBeenCalled();
+  });
+
+  it('SELLER-16: updatePromotion so với ngày đang lưu khi chỉ gửi một đầu', async () => {
+    const prisma = makePrisma();
+    prisma.brandPromotion.findUnique.mockResolvedValue({
+      startAt: new Date('2026-10-14T00:00:00Z'),
+      endAt: new Date('2026-10-20T00:00:00Z'),
+      couponCode: null,
+    });
+    const svc = new BrandService(prisma);
+    await expect(svc.updatePromotion('p1', { endAt: '2026-10-10T00:00:00Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
+    await expect(svc.updatePromotion('p1', { startAt: '2026-10-21T00:00:00Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
+    expect(prisma.brandPromotion.update).not.toHaveBeenCalled();
+    await svc.updatePromotion('p1', { endAt: '2026-10-25T00:00:00Z' });
+    expect(prisma.brandPromotion.update).toHaveBeenCalledTimes(1);
+  });
+
   it('createDealerReward giữ type', async () => {
     const prisma = makePrisma();
     prisma.dealerReward.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'd1', ...data }));

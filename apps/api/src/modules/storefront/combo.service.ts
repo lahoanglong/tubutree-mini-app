@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { isPartnerOwnedProduct } from '../cart/partner-goods';
 
 export interface ComboLine {
   variationId: string;
@@ -14,11 +15,14 @@ export interface ComboResult {
   perLine: Record<string, number>;
 }
 
+/** Combo phải gồm ít nhất từng này sản phẩm KHÁC NHAU — "combo" 1 sản phẩm chỉ là mã giảm % trá hình (MONEY-5). */
+export const MIN_COMBO_PRODUCTS = 2;
+
 /**
  * Phân bổ giảm giá combo vào từng dòng giỏ (THUẦN — dễ test, không I/O).
  * - `combos`: mỗi combo gồm `pct` + danh sách `productIds`. Combo CHỈ áp khi MỌI productId của nó có trong giỏ.
  * - Dòng khớp nhiều combo → lấy `pct` cao nhất (deterministic).
- * - Giảm mỗi dòng = floor(total × min(pct,100) / 100). Bỏ combo pct<=0 / productIds rỗng.
+ * - Giảm mỗi dòng = floor(total × min(pct,100) / 100). Bỏ combo pct<=0 / dưới MIN_COMBO_PRODUCTS sản phẩm khác nhau.
  */
 export function allocateComboDiscounts(
   combos: { pct: number; productIds: string[] }[],
@@ -27,7 +31,7 @@ export function allocateComboDiscounts(
   const cartProductIds = new Set(lines.map((l) => l.productId));
   const pctByProduct = new Map<string, number>();
   for (const combo of combos) {
-    if (!combo.pct || combo.pct <= 0 || combo.productIds.length === 0) continue;
+    if (!combo.pct || combo.pct <= 0 || new Set(combo.productIds).size < MIN_COMBO_PRODUCTS) continue;
     const allPresent = combo.productIds.every((pid) => cartProductIds.has(pid));
     if (!allPresent) continue;
     for (const pid of combo.productIds) {
@@ -56,21 +60,27 @@ export class ComboService {
     private readonly config: SystemConfigService,
   ) {}
 
-  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[]): Promise<ComboResult> {
+  /**
+   * `buyerId`: chủ gian hàng mua qua chính gian hàng của mình thì không có giảm combo — combo là ưu đãi
+   * gian hàng dành cho khách, không phải cách CTV tự giảm giá cho bản thân (MONEY-5).
+   */
+  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
     if (!slug || lines.length === 0) return { total: 0, perLine: {} };
     const sf = await this.prisma.storefront.findFirst({
       where: { slug, isPublished: true },
       select: {
+        ownerUserId: true,
         collections: {
           where: { kind: 'COMBO' },
           select: {
             comboDiscountPct: true,
-            items: { select: { productId: true, isHidden: true } },
+            items: { select: { productId: true, isHidden: true, product: { select: { storefrontId: true } } } },
           },
         },
       },
     });
     if (!sf) return { total: 0, perLine: {} };
+    if (buyerId && sf.ownerUserId === buyerId) return { total: 0, perLine: {} };
     // Clamp LẦN 2 tại nơi đọc — phòng dữ liệu ghi từ trước khi StorefrontService có trần
     // (hoặc ghi thẳng DB) vẫn không cho phép combo vượt trần hiện hành (P0,
     // docs/2026-09-08-review-progress.md). StorefrontService.clampComboPct là lớp chính (chặn
@@ -79,8 +89,9 @@ export class ComboService {
     const combos = sf.collections
       .map((c) => ({
         pct: Math.min(c.comboDiscountPct ?? 0, maxPct),
-        // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại).
-        productIds: c.items.filter((i) => !i.isHidden).map((i) => i.productId),
+        // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại). Hàng của gian hàng đối tác
+        // cũng vậy: chỉ bán giá lẻ, không được giảm combo (partner-goods.ts).
+        productIds: c.items.filter((i) => !i.isHidden && !isPartnerOwnedProduct(i.product)).map((i) => i.productId),
       }))
       .filter((c) => c.productIds.length > 0);
     return allocateComboDiscounts(combos, lines);

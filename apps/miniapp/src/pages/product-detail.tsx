@@ -13,9 +13,10 @@ import {
   type ProductCard as ProductCardData,
   type FlashSaleActiveItem,
 } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isNotFoundError } from '../services/api';
 import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
+import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { shareLink } from '../services/zmp-bridge';
 import { ReviewsSection, Stars } from '../components/reviews-section';
@@ -31,6 +32,7 @@ import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands'
 import { formatVnd, formatSold } from '../utils/format';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -55,6 +57,13 @@ const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
 const PDP_TITLE = 'Chi tiết sản phẩm';
 
+/** Phí giao của gian hàng tự giao, như lúc thanh toán tính cho kiện của gian hàng. */
+function merchantShippingLine(fee: number, freeShipFrom: number | null): string {
+  if (fee <= 0) return 'Gian hàng miễn phí giao';
+  const base = `Phí giao ${formatVnd(fee)}`;
+  return freeShipFrom != null ? `${base}, miễn phí cho đơn của gian hàng từ ${formatVnd(freeShipFrom)}` : base;
+}
+
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
@@ -68,8 +77,8 @@ export default function ProductDetailPage() {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const { status, login } = useAuthStore();
-  // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt).
-  // Hiển thị để user KHÁM PHÁ ưu đãi ngay ở PDP (trước đây phải tự biết mã mới gõ ở giỏ).
+  // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
+  // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
   const couponsQ = useQuery({
     // Cùng queryKey với VoucherSheet ở giỏ/thanh toán → một cache, không gọi 2 lần và
     // không có cảnh "PDP thấy mã, sheet chưa thấy" sau khi nhận mã mới.
@@ -83,7 +92,8 @@ export default function ProductDetailPage() {
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
   // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
   // đầu tiên còn hàng.
-  const navState = useLocation().state as { variationId?: string; listSource?: string } | null;
+  const location = useLocation();
+  const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
@@ -229,24 +239,29 @@ export default function ProductDetailPage() {
 
   const groupBuyMutation = useMutation({
     mutationFn: (productId: string) => createGroupBuy(productId),
-    onSuccess: () => {
+    onSuccess: (group) => {
       openSnackbar({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
-      navigate('/group-buy');
+      navigate(`/group-buy/${group.id}`);
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   if (product.isLoading) return <PdpSkeleton />;
-  if (product.isError || !product.data) {
+  if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
-        <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+        {isNotFoundError(product.error) ? (
+          <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+        ) : (
+          <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+        )}
       </Page>
     );
   }
 
   const p = product.data;
+  const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
   // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
   const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
@@ -256,6 +271,17 @@ export default function ProductDetailPage() {
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
+  // Ngưỡng freeship theo hạng của khách (cùng nguồn với giỏ hàng); khách chưa đăng nhập mới dùng ngưỡng chung. Đang đăng nhập
+  // hoặc giỏ chưa về thì chưa hứa số nào để khỏi hiện ngưỡng chung rồi đổi.
+  const freeshipFrom =
+    status === 'authenticated' ? cart.data?.freeshipThreshold : status === 'loading' || !config.isLoaded ? undefined : config.freeshipThreshold;
+  // Hàng gian hàng tự giao (D4): kiện riêng theo phí của gian hàng, không đi định kỳ/mua chung (kho Tubu không giao).
+  const merchant = p.fulfiller?.kind === 'MERCHANT' ? p.fulfiller : null;
+  // Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): xem được trang nhưng chưa mua được; không phải hàng Tubu nên cũng không có
+  // freeship, đặt định kỳ hay mua chung.
+  const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
+  const fromStore = merchant ?? unavailable;
+  const retailOnly = isRetailOnly(p);
 
   const handleAdd = async () => {
     if (status !== 'authenticated') {
@@ -387,12 +413,60 @@ export default function ProductDetailPage() {
           </Text>
         )}
 
+        {p.fulfiller?.kind === 'TUBU' && (
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
+            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+              Tubu Tree giao hàng
+            </Text>
+          </Box>
+        )}
+
+        {merchant && (
+          <Box flex style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+            <Box>
+              <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+                {merchant.name} tự giao
+              </Text>
+              {merchant.shippingFee != null && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}
+                </Text>
+              )}
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
+              </Text>
+            </Box>
+          </Box>
+        )}
+
+        {unavailable && (
+          <Box flex role="status" style={{ gap: 6, marginTop: 10 }}>
+            <Truck size={15} color="var(--color-status-warning-fg)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text size="xSmall" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
+              {unavailable.reason === 'STORE_PAUSED'
+                ? `${unavailable.name} đang tạm nghỉ, chưa nhận đơn.`
+                : `${unavailable.name} đã ngừng bán trên Tubu Tree.`}
+            </Text>
+          </Box>
+        )}
+
+        {!fromStore && p.partnerOwned && (
+          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 10 }}>
+            Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
+          </Text>
+        )}
+
         {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {config.isLoaded && (
+        {!fromStore && freeshipFrom != null && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-              Miễn phí vận chuyển cho đơn từ {formatVnd(config.freeshipThreshold)}
+              {freeshipFrom > 0 ? `Miễn phí vận chuyển cho đơn từ ${formatVnd(freeshipFrom)}` : 'Miễn phí vận chuyển cho mọi đơn hàng'}
             </Text>
           </Box>
         )}
@@ -422,9 +496,9 @@ export default function ProductDetailPage() {
         )}
 
         {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
-        {(couponsQ.data?.length ?? 0) > 0 && (
+        {pdpCoupons.length > 0 && (
           <ScrollRow label="Mã giảm giá có thể dùng" style={{ gap: 8, marginTop: 12 }}>
-            {couponsQ.data!.slice(0, 6).map((c) => (
+            {pdpCoupons.slice(0, 6).map((c) => (
               <Box
                 key={c.code}
                 role="button"
@@ -470,7 +544,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && (
+        {selected && inStock && !retailOnly && (
           <Box
             role="button"
             className="tubu-press"
@@ -487,6 +561,8 @@ export default function ProductDetailPage() {
             style={{
               gap: 8,
               marginTop: 12,
+              minHeight: 44,
+              boxSizing: 'border-box',
               padding: '10px 12px',
               borderRadius: 'var(--radius-control)',
               border: '1px dashed var(--color-border-selected)',
@@ -540,43 +616,45 @@ export default function ProductDetailPage() {
       </Box>
 
       {/* ── Mua chung (§6.14.8) ── */}
-      <Box
-        className="tubu-press"
-        p={4}
-        mt={2}
-        // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
-        // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
-        // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
-        onClick={async () => {
-          if (groupBuyMutation.isPending) return;
-          haptic('light');
-          if (status !== 'authenticated') {
-            await login();
-            return;
-          }
-          groupBuyMutation.mutate(p.id);
-        }}
-        style={{
-          background: 'var(--color-bg-surface)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          opacity: groupBuyMutation.isPending ? 0.6 : 1,
-        }}
-      >
-        <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
-          <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
+      {!retailOnly && (
+        <Box
+          className="tubu-press"
+          p={4}
+          mt={2}
+          // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
+          // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
+          // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
+          onClick={async () => {
+            if (groupBuyMutation.isPending) return;
+            haptic('light');
+            if (status !== 'authenticated') {
+              await login();
+              return;
+            }
+            groupBuyMutation.mutate(p.id);
+          }}
+          style={{
+            background: 'var(--color-bg-surface)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            opacity: groupBuyMutation.isPending ? 0.6 : 1,
+          }}
+        >
+          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
+            <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
+            </Text>
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              {groupBuyPitch(config.groupBuy)}
+            </Text>
+          </Box>
+          <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
         </Box>
-        <Box style={{ flex: 1 }}>
-          <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-            {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — giá tốt hơn'}
-          </Text>
-          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-            Rủ bạn bè cho đủ nhóm, cả nhóm cùng được giảm giá
-          </Text>
-        </Box>
-        <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
-      </Box>
+      )}
 
       {isAffiliate && (
         <Box
@@ -662,7 +740,18 @@ export default function ProductDetailPage() {
       {p.description && <CollapsibleDescription text={p.description} />}
 
       {/* ── Đánh giá ── */}
-      {slug && <ReviewsSection slug={slug} />}
+      {slug && (
+        <ReviewsSection
+          slug={slug}
+          openForOrderId={navState?.reviewOrderId}
+          onOrderLinkUsed={() => {
+            // Thay đúng mục lịch sử hiện tại, giữ mọi trạng thái điều hướng khác (from, variationId, listSource).
+            const rest: Record<string, unknown> = { ...navState };
+            delete rest.reviewOrderId;
+            navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
+          }}
+        />
+      )}
 
       {selected && (
         <SubscribeSheet
@@ -750,7 +839,11 @@ export default function ProductDetailPage() {
           </Box>
         }
         primary={
-          inStock ? (
+          unavailable ? (
+            <Button variant="primary" size="lg" fullWidth disabled>
+              Tạm thời chưa mua được
+            </Button>
+          ) : inStock ? (
             // CTA đôi kiểu Shopee: Thêm giỏ (viền) + Mua ngay (đặc, tới thẳng checkout).
             <Box flex style={{ gap: 10 }}>
               <Button

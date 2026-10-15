@@ -1,6 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
 import { MAX_TTL_HOURS, MIN_TTL_HOURS, PENDING_PAYMENT_TTL_KEY } from '../orders/pending-payment-expiry.cron';
 import { deadConfigKeyReason } from '../system-config/dead-config-keys';
+import {
+  CART_ABANDON_DEFAULT_MAX_HOURS,
+  CART_ABANDON_DEFAULT_MIN_HOURS,
+  CART_ABANDON_MAX_HOURS_KEY,
+  CART_ABANDON_MIN_HOURS_KEY,
+} from '../lifecycle/remarketing.service';
+import { FLASH_MAX_DISCOUNT_DEFAULT, FLASH_MAX_DISCOUNT_KEY } from '../flash-sale/flash-sale.service';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -94,26 +101,85 @@ function assertMilestones(key: string, v: unknown) {
 }
 
 /**
- * ETA giao hàng: toShippingEta ẩn dòng "Giao dự kiến" khi max < min, nên admin thấy "đã lưu" mà app không hiện gì.
- * Khoá đối ứng chưa đặt (null) thì chưa có gì để so.
+ * Cặp khoá min/max mà phía đọc lặng lẽ bỏ qua khi khoảng rỗng, nên admin thấy "đã lưu" mà hệ thống không chạy:
+ * - ETA giao hàng: toShippingEta ẩn dòng "Giao dự kiến" khi max < min. Khoá đối ứng chưa đặt (null) thì chưa có gì để so.
+ * - Nhắc giỏ bỏ quên: cron mỗi giờ lấy giỏ có updatedAt trong [now − max, now − min]; min ≥ max là khoảng rỗng, không giỏ
+ *   nào được nhắc. Khoá đối ứng chưa có dòng thì cron đang chạy theo mặc định của nó, nên so với mặc định đó.
  */
 const ETA_MIN_KEY = 'shipping.eta_min_days';
 const ETA_MAX_KEY = 'shipping.eta_max_days';
-const CROSS_CHECK_PARTNER: Record<string, string> = { [ETA_MIN_KEY]: ETA_MAX_KEY, [ETA_MAX_KEY]: ETA_MIN_KEY };
+
+type RangePair = {
+  min: string;
+  max: string;
+  /** Đơn vị trong thông báo lỗi. */
+  unit: string;
+  /** Phân số (0–1): không bắt số nguyên, khoảng do SystemConfigService.RANGES giữ. */
+  fraction?: boolean;
+  /** max phải lớn hơn hẳn min (khoảng [min, max] không được chỉ là một điểm). */
+  strict: boolean;
+  /** null = "chưa đặt" là giá trị hợp lệ của khoá. */
+  nullable: boolean;
+  /** Giá trị phía đọc dùng khi khoá đối ứng chưa có dòng; không có = khi đó không so. */
+  defaults?: { min: number; max: number };
+};
+
+const RANGE_PAIRS: RangePair[] = [
+  { min: ETA_MIN_KEY, max: ETA_MAX_KEY, unit: 'số ngày', strict: false, nullable: true },
+  {
+    min: CART_ABANDON_MIN_HOURS_KEY,
+    max: CART_ABANDON_MAX_HOURS_KEY,
+    unit: 'số giờ',
+    strict: true,
+    nullable: false,
+    defaults: { min: CART_ABANDON_DEFAULT_MIN_HOURS, max: CART_ABANDON_DEFAULT_MAX_HOURS },
+  },
+  // Giá flash phải giảm ít nhất min và không quá max so với giá đang bán: min > max thì không thêm được món nào.
+  {
+    min: 'flashsale.min_discount_pct',
+    max: FLASH_MAX_DISCOUNT_KEY,
+    unit: 'mức giảm',
+    fraction: true,
+    strict: false,
+    nullable: false,
+    defaults: { min: 0, max: FLASH_MAX_DISCOUNT_DEFAULT },
+  },
+];
+
+const PAIR_OF: Record<string, RangePair> = Object.fromEntries(RANGE_PAIRS.flatMap((p) => [[p.min, p], [p.max, p]]));
 
 /** Khoá mà luật ghi cần đọc thêm giá trị hiện có của một khoá khác (xem validateAdminConfigValue). */
 export function configPartnerKey(key: string): string | undefined {
-  return CROSS_CHECK_PARTNER[key];
+  const pair = PAIR_OF[key];
+  if (!pair) return undefined;
+  return key === pair.min ? pair.max : pair.min;
 }
 
-function assertEtaAgainstPartner(key: string, v: unknown, partner: unknown) {
-  assertInteger(key, v);
-  if (typeof partner !== 'number') return;
-  if (key === ETA_MAX_KEY && (v as number) < partner) {
-    throw fail(key, `không được nhỏ hơn "${ETA_MIN_KEY}" hiện tại (${partner}). Hạ "${ETA_MIN_KEY}" trước nếu muốn giảm số ngày tối đa.`);
+function assertAgainstPartner(pair: RangePair, key: string, v: unknown, stored: unknown) {
+  if (v === null && pair.nullable) return; // đặt lại "chưa đặt" = ẩn dòng giao dự kiến
+  if (pair.fraction) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw fail(key, 'phải là số (phân số 0–1).');
+  } else {
+    assertInteger(key, v);
   }
-  if (key === ETA_MIN_KEY && (v as number) > partner) {
-    throw fail(key, `không được lớn hơn "${ETA_MAX_KEY}" hiện tại (${partner}). Tăng "${ETA_MAX_KEY}" trước nếu muốn tăng số ngày tối thiểu.`);
+  const isMax = key === pair.max;
+  const partner = typeof stored === 'number' ? stored : isMax ? pair.defaults?.min : pair.defaults?.max;
+  if (typeof partner !== 'number') return;
+  const value = v as number;
+  const now = typeof stored === 'number' ? 'hiện tại' : 'mặc định';
+  if (isMax && (pair.strict ? value <= partner : value < partner)) {
+    throw fail(
+      key,
+      `${pair.strict ? 'phải lớn hơn' : 'không được nhỏ hơn'} "${pair.min}" ${now} (${partner}). ` +
+        `Hạ "${pair.min}" trước nếu muốn giảm ${pair.unit} tối đa.`,
+    );
+  }
+  if (!isMax && (pair.strict ? value >= partner : value > partner)) {
+    throw fail(
+      key,
+      `${pair.strict ? 'phải nhỏ hơn' : 'không được lớn hơn'} "${pair.max}" ${now} (${partner}). ` +
+        `Tăng "${pair.max}" trước nếu muốn tăng ${pair.unit} tối thiểu.`,
+    );
   }
 }
 
@@ -134,6 +200,11 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [PENDING_PAYMENT_TTL_KEY]: (k, v) => assertIntInRange(k, v, MIN_TTL_HOURS, MAX_TTL_HOURS, 'giờ'),
 };
 
+/** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */
+export function hasAdminConfigRule(key: string): boolean {
+  return key in RULES || key in PAIR_OF;
+}
+
 /**
  * Ném BadRequest nếu `value` sai luật của khoá; khoá không có luật riêng → bỏ qua. `partnerValue` là giá trị hiện lưu
  * của khoá đối ứng (configPartnerKey) cho luật so chéo; không truyền hoặc null/undefined = chưa có gì để so.
@@ -143,6 +214,7 @@ export function validateAdminConfigValue(key: string, value: unknown, partnerVal
   if (deadReason) {
     throw fail(key, `khoá này không còn được hệ thống đọc nên sửa sẽ không có tác dụng. ${deadReason}`);
   }
-  if (CROSS_CHECK_PARTNER[key]) assertEtaAgainstPartner(key, value, partnerValue);
+  const pair = PAIR_OF[key];
+  if (pair) assertAgainstPartner(pair, key, value, partnerValue);
   else RULES[key]?.(key, value);
 }

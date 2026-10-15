@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { BadRequestException } from '@nestjs/common';
 import { AffiliateService } from './affiliate.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -6,6 +7,7 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
@@ -155,12 +157,86 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 });
 
+describe('AffiliateService.createCommissionForOrder — lineAmounts cho trả một phần (MONEY-2)', () => {
+  it('lineAmounts ghi mọi dòng có mức % > 0 (kể cả hoa hồng làm tròn về 0) và bỏ dòng rate 0 / bị chặn; commissionableTotal cộng đúng các dòng đó', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const order = {
+      id: 'o1',
+      userId: 'buyer',
+      referrerUserId: 'ctv',
+      total: 1_000_100,
+      items: [
+        { id: 'a', variationId: 'va', total: 1_000_000 }, // 5% → 50.000
+        { id: 'b', variationId: 'vb', total: 50 }, // 1% → 0,5 → 0 nhưng nền 50 vẫn thuộc doanh số
+        { id: 'c', variationId: 'vc', total: 50 }, // rate 0
+      ],
+    };
+    const prisma = prismaWith(order, [
+      { id: 'va', affiliateRate: 5, product: { affiliateBlocked: false } },
+      { id: 'vb', affiliateRate: 1, product: { affiliateBlocked: false } },
+      { id: 'vc', affiliateRate: 0, product: { affiliateBlocked: false } },
+    ], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(50_000);
+    expect(data.commissionableTotal).toBe(1_000_050);
+    expect(data.lineAmounts).toEqual({ a: 50_000, b: 0 });
+  });
+});
+
+describe('AffiliateService.createCommissionForOrder — tính trên giá khách thực trả (SELLER-6)', () => {
+  it('mã giảm/điểm/giảm hạng nằm ở Order.discount được phân bổ xuống dòng: 10% của 387.000, không phải của 430.000', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    // subtotal 430.000, mã XANH10 giảm 43.000, ship 0 → khách trả 387.000.
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 430000, discount: 43000, shippingFee: 0, total: 387000,
+      items: [{ variationId: 'v1', total: 430000 }],
+    };
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 10 }], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(38700);
+    expect(data.commissionableTotal).toBe(387000);
+  });
+
+  it('phí ship không tính vào nền; phần giảm chia theo tỉ lệ giá trị dòng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    // Hàng 300.000 (200k + 100k), giảm 60.000, ship 20.000 → hàng thực trả 240.000 (hệ số 0,8).
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 300000, discount: 60000, shippingFee: 20000, total: 260000,
+      items: [
+        { variationId: 'v1', total: 200000 },
+        { variationId: 'v2', total: 100000 },
+      ],
+    };
+    const prisma = prismaWith(order, [
+      { id: 'v1', affiliateRate: 10 },
+      { id: 'v2', affiliateRate: 5 },
+    ], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(16000 + 4000);
+    expect(data.commissionableTotal).toBe(240000);
+  });
+
+  it('đơn 0đ tiền hàng (điểm/mã phủ hết) → không có hoa hồng', async () => {
+    const create = jest.fn();
+    const order = {
+      id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 100000, discount: 100000, shippingFee: 0, total: 0,
+      items: [{ variationId: 'v1', total: 100000 }],
+    };
+    const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 10 }], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
   function makePrisma(order: unknown) {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: { updateMany },
+      commission: { updateMany, findMany: jest.fn().mockResolvedValue([{ affiliateUserId: 'ctv', amount: 12_000 }]) },
     } as unknown as PrismaService;
     return { prisma, updateMany };
   }
@@ -214,10 +290,12 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       ctvPhone?: string | null;
       storefront?: { slug: string } | null;
       shippingFee?: number;
+      flash?: { resolveEffective: jest.Mock; consumeQuota: jest.Mock };
     } = {},
   ) {
     const variations =
       opts.variations ?? [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'Mặc định', product: { name: 'Trà thảo mộc', isActive: true, approvalStatus: 'APPROVED' } }];
+    const flash = opts.flash ?? { resolveEffective: jest.fn().mockResolvedValue(new Map()), consumeQuota: jest.fn() };
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
@@ -260,8 +338,10 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       pancakeOrderLocal,
       coins,
       analyticsLocal as unknown as AnalyticsEventsService,
+      undefined,
+      flash as unknown as FlashSaleService,
     );
-    return { svc, prisma, orderCreate, executeRaw, commissionCreate, pricingLocal, pancakeOrderLocal, analyticsLocal };
+    return { svc, prisma, orderCreate, executeRaw, commissionCreate, pricingLocal, pancakeOrderLocal, analyticsLocal, flash };
   }
 
   const DTO = (over: Record<string, unknown> = {}) => ({
@@ -288,6 +368,53 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(data.items.create[0]).toMatchObject({ variationId: 'v1', unitPrice: 100000, quantity: 2, total: 200000 });
   });
 
+  it('COD quá hạn mức 5.000.000đ/đơn → từ chối, không giữ kho, không tạo đơn; chuyển khoản vẫn đặt được', async () => {
+    const big = { variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 2600000, name: 'Bộ lớn', product: { name: 'Bộ lớn', isActive: true, approvalStatus: 'APPROVED' } }] };
+    const cod = build(big);
+    await expect(cod.svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow(/COD.*5\.000\.000đ.*5\.200\.000đ/);
+    expect(cod.executeRaw).not.toHaveBeenCalled();
+    expect(cod.orderCreate).not.toHaveBeenCalled();
+
+    const bank = build(big);
+    await bank.svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);
+    expect(bank.orderCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // R5-CHECKOUT-3: form lên đơn hộ khoá COD ngay từ báo giá, cùng trần và cùng câu với lúc tạo đơn.
+  describe('trần COD mỗi đơn ở báo giá (R5-CHECKOUT-3)', () => {
+    const priced = (retailPrice: number) => ({
+      variations: [{ id: 'v1', isActive: true, salePrice: null, retailPrice, name: 'Bộ', product: { name: 'Bộ', isActive: true, approvalStatus: 'APPROVED' } }],
+    });
+
+    it('tổng 5.400.000đ: báo giá khoá COD kèm lý do; tạo đơn COD bị từ chối PAYMENT_METHOD_NOT_ALLOWED đúng câu đó, không giữ kho', async () => {
+      const { svc, orderCreate, executeRaw } = build({ ...priced(1_800_000) });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 3 }] });
+      expect(q.total).toBe(5_400_000);
+      expect(q.blockedPaymentMethods).toEqual({
+        COD: 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chọn chuyển khoản.',
+      });
+      const err = await svc
+        .placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 3 }] }) as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'PAYMENT_METHOD_NOT_ALLOWED',
+        message: q.blockedPaymentMethods.COD,
+      });
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('tổng đúng 5.000.000đ (kể cả phí giao): COD dùng được ở báo giá và tạo đơn được', async () => {
+      const { svc, orderCreate } = build({ ...priced(2_490_000), shippingFee: 20_000 });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 2 }] });
+      expect(q.total).toBe(5_000_000);
+      expect(q.blockedPaymentMethods).toEqual({});
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('BANK_TRANSFER → đơn PENDING_PAYMENT', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO({ paymentMethod: 'BANK_TRANSFER' }) as never);
@@ -302,6 +429,114 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.items.create[0].unitPrice).toBe(80000);
     expect(data.subtotal).toBe(160000);
+  });
+
+  describe('R4-CHECKOUT-5: đơn hộ tính giá đúng như khách tự đặt (giờ vàng)', () => {
+    const GRANOLA = [{ id: 'v1', isActive: true, salePrice: null, retailPrice: 140000, name: '500g', product: { name: 'Granola', isActive: true, approvalStatus: 'APPROVED' } }];
+    const offer = (over: Record<string, unknown> = {}) =>
+      new Map([['v1', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, quotaLeft: 9, perUserLeft: 3, allowance: 3, ...over }]]);
+    const flashWith = (map: Map<string, unknown>) => ({ resolveEffective: jest.fn().mockResolvedValue(map), consumeQuota: jest.fn().mockResolvedValue(undefined) });
+
+    it('đang giờ vàng → đơn tính giá giờ vàng, giữ suất trong tx (theo tài khoản CTV), dòng mang flashSaleItemId', async () => {
+      const flash = flashWith(offer());
+      const { svc, orderCreate, prisma } = build({ variations: GRANOLA, flash, shippingFee: 19000 });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(flash.resolveEffective).toHaveBeenCalledWith(['v1'], expect.any(Date), 'ctv');
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data.items.create[0]).toMatchObject({ variationId: 'v1', unitPrice: 120000, quantity: 2, total: 240000, flashSaleItemId: 'fi1' });
+      expect([data.subtotal, data.total]).toEqual([240000, 259000]);
+      expect(flash.consumeQuota).toHaveBeenCalledWith(prisma, 'fi1', 'ctv', 2, expect.any(Date));
+    });
+
+    it('số lượng vượt suất giờ vàng còn mua được → cả dòng giá thường như giỏ, không giữ suất', async () => {
+      const flash = flashWith(offer({ allowance: 1, perUserLeft: 1 }));
+      const { svc, orderCreate } = build({ variations: GRANOLA, flash });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate.mock.calls[0][0].data.items.create[0]).toMatchObject({ unitPrice: 140000, total: 280000, flashSaleItemId: null });
+      expect(flash.consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it('giá đang bán đã hạ dưới giá giờ vàng → lấy giá thấp hơn (min như giỏ)', async () => {
+      const flash = flashWith(offer({ flashPrice: 130000 }));
+      const { svc, orderCreate } = build({ variations: [{ ...GRANOLA[0]!, salePrice: 110000 }], flash });
+      await svc.placeOrderForCustomer('ctv', DTO() as never);
+      expect(orderCreate.mock.calls[0][0].data.items.create[0].unitPrice).toBe(110000);
+    });
+
+    it('hết suất giữa lúc tính giá và lúc ghi đơn → không tạo đơn, báo giá giờ vàng vừa đổi bằng tiếng Việt', async () => {
+      const flash = flashWith(offer());
+      flash.consumeQuota.mockRejectedValue(new BadRequestException('Hết suất ưu đãi.'));
+      const { svc, orderCreate, commissionCreate } = build({ variations: GRANOLA, flash });
+      const err = await svc.placeOrderForCustomer('ctv', DTO() as never).catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'PRICE_CHANGED' });
+      expect((err as BadRequestException).message).toContain('Granola');
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(commissionCreate).not.toHaveBeenCalled();
+    });
+
+    it('cùng biến thể gửi hai dòng → gộp một dòng, xét suất giờ vàng trên tổng số lượng', async () => {
+      const flash = flashWith(offer({ allowance: 3 }));
+      const { svc, orderCreate } = build({ variations: GRANOLA, flash });
+      await svc.placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }] }) as never);
+      const items = orderCreate.mock.calls[0][0].data.items.create;
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ quantity: 4, unitPrice: 140000, flashSaleItemId: null });
+    });
+
+    it('báo giá đơn hộ trả đúng giá sẽ tính khi tạo đơn (kèm lý do khi vượt suất), không tạo gì', async () => {
+      const flash = flashWith(offer({ allowance: 1, perUserLeft: 1 }));
+      const { svc, orderCreate, executeRaw } = build({ variations: GRANOLA, flash, shippingFee: 19000 });
+      const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] });
+      expect(q).toEqual({
+        items: [{ variationId: 'v1', unitPrice: 120000, quantity: 1, total: 120000, isFlash: true, flashLimitNotice: null }],
+        goods: 120000,
+        shippingFee: 19000,
+        total: 139000,
+        blockedPaymentMethods: {},
+      });
+      const over = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 2 }] });
+      expect(over.items[0]).toMatchObject({ unitPrice: 140000, isFlash: false, flashLimitNotice: expect.stringContaining('tối đa 1') });
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('R7 #6a: giờ vàng hết giữa lúc báo giá và lúc tạo đơn (tổng cao hơn tổng CTV đã báo khách) → TOTAL_CHANGED, không giữ kho, không tạo đơn', async () => {
+      const { svc, orderCreate, executeRaw } = build({ variations: GRANOLA, shippingFee: 19000 });
+      const err = await svc
+        .placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 1 }], expectedTotal: 139000 }) as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'TOTAL_CHANGED',
+        message: 'Tổng tiền đơn vừa thay đổi từ 139.000đ thành 159.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+      });
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('R7 #6a: tổng lúc tạo đơn bằng hoặc thấp hơn tổng đã báo → tạo đơn bình thường', async () => {
+      for (const expectedTotal of [159000, 200000]) {
+        const { svc, orderCreate } = build({ variations: GRANOLA, shippingFee: 19000 });
+        await svc.placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 1 }], expectedTotal }) as never);
+        expect(orderCreate.mock.calls[0][0].data.total).toBe(159000);
+      }
+    });
+
+    it('R7 #6b: báo giá có hàng gian hàng đối tác tự giao → NOT_TUBU_FULFILLED như lúc tạo đơn', async () => {
+      const { svc, prisma } = build({ variations: GRANOLA });
+      const findMany = prisma.variation.findMany as jest.Mock;
+      findMany.mockReset();
+      findMany.mockResolvedValueOnce(GRANOLA).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'v1' }]);
+      await expect(svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] })).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NOT_TUBU_FULFILLED', message: expect.stringContaining('do gian hàng đối tác tự giao') }),
+      });
+    });
+
+    it('báo giá đơn hộ: chỉ CTV/ADMIN', async () => {
+      const { svc } = build({ role: 'CUSTOMER' });
+      await expect(svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 1 }] })).rejects.toThrow('Chỉ CTV');
+    });
   });
 
   it('trừ stock ATOMIC từng line (where gte) trước khi tạo đơn', async () => {
@@ -375,6 +610,9 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     ['cùng dạng 0xxxxxxxxx', '0901234567', '0901234567'],
     ['CTV gõ +84 cho SĐT tài khoản lưu 0x', '0901234567', '+84 90 123 4567'],
     ['tài khoản lưu dạng 84x, CTV gõ 0x', '84901234567', '090.123.4567'],
+    ['CTV gõ 84 không có dấu +', '0922222221', '84922222221'],
+    ['CTV gõ có dấu gạch', '0922222221', '092-222-2221'],
+    ['CTV gõ (+84) có ngoặc', '0922222221', '(+84) 922 222 221'],
   ])('SĐT người nhận trùng SĐT tài khoản CTV (%s) → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng', async (_case, ctvPhone, customerPhone) => {
     const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone });
     await expect(
@@ -433,6 +671,51 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
   });
 
+  it('đơn trả cho CTV (đặt mới, đặt lại cùng key) không kèm cột nội bộ: mốc thôi tự huỷ, ghi chú vận hành Pancake, cột tìm kiếm', async () => {
+    const internal = {
+      idempotencyKey: 'idem-9',
+      pancakeOrderId: 'pk-1',
+      pancakeAttention: 'Đơn CHƯA thanh toán — hệ thống thôi tự huỷ vì đã bàn giao vận chuyển.',
+      autoCancelBlockedAt: new Date(),
+      recipientSearch: 'khach a so 1',
+      endCustomerKey: '0900000000',
+    };
+    const { svc, prisma } = build();
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true, total: 100000, items: [], code: 'TUBU1', ...internal,
+    });
+    const created = await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-9');
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o1', userId: 'ctv' });
+    const replayed = await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-9');
+    for (const res of [created, replayed]) {
+      expect(res).toMatchObject({ id: 'o1', code: 'TUBU1', total: 100000 });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
+    }
+  });
+
+  it('R5-CHECKOUT-1: lần gửi lại cùng key chồng lên lần đầu, báo hết hàng vì lần đầu vừa giữ kho → trả lại đơn lần đầu đã tạo', async () => {
+    const { svc, prisma, orderCreate } = build({ stockCount: 0 });
+    (prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null) // kiểm key đầu hàm: lần đầu chưa commit
+      .mockResolvedValueOnce(null) // generateUniqueOrderCode
+      .mockResolvedValueOnce({ id: 'o-first', userId: 'ctv' }); // sau lỗi: lần đầu đã commit
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-first', code: 'TUBU1', items: [] });
+    const r = (await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-race')) as { id: string };
+    expect(r.id).toBe('o-first');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('lỗi khi tạo đơn mà key chưa có đơn nào (hoặc là đơn của người khác) → giữ nguyên lỗi', async () => {
+    const none = build({ stockCount: 0 });
+    await expect(none.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-x')).rejects.toThrow('không đủ tồn kho');
+    const other = build({ stockCount: 0 });
+    (other.prisma.order.findUnique as jest.Mock)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'o-other', userId: 'ctv-khac' });
+    await expect(other.svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-y')).rejects.toThrow('không đủ tồn kho');
+  });
+
   it('idempotency-key mới (chưa có đơn nào) → tạo đơn bình thường + ghi idempotencyKey', async () => {
     const { svc, orderCreate } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never, 'idem-2');
@@ -478,10 +761,27 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     );
   });
 
-  it('endCustomerKey: SĐT không còn chữ số nào sau chuẩn hoá → null (KHÔNG lưu chuỗi rỗng)', async () => {
+  // R5-CHECKOUT-2: SĐT rỗng/rác từng tạo đơn kẹt đẩy Pancake; '922222221' (SĐT của CTV bỏ số 0 đầu) từng lọt chặn SĐT của chính
+  // CTV. Bước tạo đơn tự kiểm lại, không chỉ dựa vào DTO.
+  it.each(['', '---', 'abc', '922222221', '09111111'])(
+    'SĐT người nhận %j không phải SĐT di động VN → BadRequest, KHÔNG giữ kho / tạo đơn / hoa hồng',
+    async (phone) => {
+      const { svc, orderCreate, executeRaw, commissionCreate } = build({ ctvPhone: '0922222221' });
+      await expect(svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone } }) as never)).rejects.toThrow(
+        'Số điện thoại người nhận không hợp lệ',
+      );
+      expect(executeRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(commissionCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('SĐT người nhận lưu vào đơn (gửi Pancake, khoá gộp khách) ở dạng 0xxxxxxxxx dù CTV gõ +84 có dấu cách', async () => {
     const { svc, orderCreate } = build();
-    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, phone: '---' } }) as never);
-    expect(orderCreate.mock.calls[0][0].data.endCustomerKey).toBeNull();
+    await svc.placeOrderForCustomer('ctv', DTO({ customer: { ...CUSTOMER, recipient: '  Khách A ', phone: '+84 90 123 4567' } }) as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.shippingAddress).toMatchObject({ recipient: 'Khách A', phone: '0901234567' });
+    expect(data.endCustomerKey).toBe('0901234567');
   });
 
   // P0 (review Task 10): ctv-order-sheet.tsx (FE) nhận CẢ 0xxxxxxxxx lẫn +84xxxxxxxxx cho SĐT
@@ -757,9 +1057,10 @@ describe('AffiliateService.getMilestones holdDays hiển thị = số ngày gi�
 });
 
 describe('AffiliateService.requestPayout (money safety)', () => {
-  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number }) {
+  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number; taxId?: string | null }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
     const userUpdate = jest.fn().mockResolvedValue({});
+    const userFindUnique = jest.fn().mockResolvedValue({ personalTaxId: opts.taxId ?? null });
     const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
     const updateMany = jest.fn().mockResolvedValue({ count: opts.markCount ?? rows.length });
     const prisma = {
@@ -768,13 +1069,13 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         findMany: jest.fn().mockResolvedValue(rows),
         updateMany,
       },
-      user: { update: userUpdate },
+      user: { update: userUpdate, findUnique: userFindUnique },
       payout: { create: payoutCreate },
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-    return { prisma, userUpdate, payoutCreate, updateMany };
+    return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany };
   }
 
   it('số dư khả dụng = 0 → BadRequest', async () => {
@@ -939,7 +1240,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     );
   });
 
-  it('BANK hợp lệ → payout.amount = TỔNG THỰC + mark PAID + gán batch', async () => {
+  it('BANK hợp lệ → payout.amount = TỔNG THỰC + gán batch, hoa hồng vẫn APPROVED ("Đang rút") tới khi admin chuyển tiền (SELLER-10)', async () => {
     const { prisma, payoutCreate, updateMany } = makePrisma({
       available: 100_000,
       rows: [{ id: 'c1', amount: 100_000 }],
@@ -949,7 +1250,65 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     expect(r.status).toBe('REQUESTED');
     expect(payoutCreate.mock.calls[0][0].data.amount).toBe(100_000);
     expect(updateMany.mock.calls[0][0].data.payoutBatchId).toBe('payout-1');
-    expect(updateMany.mock.calls[0][0].data.status).toBe('PAID');
+    expect(updateMany.mock.calls[0][0].data.status).toBeUndefined();
+    expect(updateMany.mock.calls[0][0].data.paidAt).toBeUndefined();
+  });
+
+  // SELLER-11: trả hoa hồng cho cá nhân từ 2.000.000đ/lần thì tổ chức trả thu nhập khấu trừ 10% thuế TNCN (TT 111/2013).
+  it('SELLER-11: rút từ ngưỡng 2.000.000đ → lưu gross, thuế khấu trừ 10%, amount = thực nhận, MST đã khai', async () => {
+    const { prisma, payoutCreate } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }], taxId: '079201001234' });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 2_500_000, 'BANK', {
+      bankName: 'VCB',
+      accountNumber: '0123456789',
+      accountName: 'NGUYEN A',
+    });
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ grossAmount: 2_500_000, taxWithheld: 250_000, amount: 2_250_000, taxId: '079201001234' }),
+    );
+  });
+
+  it('SELLER-11: lần rút bị khấu trừ mà CTV chưa khai MST/CCCD → 400 PIT_TAX_ID_REQUIRED, không tạo lệnh, không khoá hoa hồng', async () => {
+    for (const method of ['BANK', 'WALLET_BALANCE']) {
+      const { prisma, payoutCreate, updateMany } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }] });
+      const err = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics)
+        .requestPayout('u1', 2_500_000, method, { bankName: 'VCB', accountNumber: '0123456789', accountName: 'NGUYEN A' })
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(expect.objectContaining({ code: 'PIT_TAX_ID_REQUIRED' }));
+      expect(payoutCreate).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it('SELLER-11: CTV khai MST/CCCD ngay trong lần rút → lưu vào hồ sơ và chụp vào lệnh rút', async () => {
+    const { prisma, payoutCreate, userUpdate } = makePrisma({ available: 2_500_000, rows: [{ id: 'c1', amount: 2_500_000 }] });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout(
+      'u1',
+      2_500_000,
+      'WALLET_BALANCE',
+      undefined,
+      undefined,
+      ' 079201001234 ',
+    );
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { personalTaxId: '079201001234' } });
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 250_000, taxId: '079201001234' }));
+  });
+
+  it('SELLER-11: dưới ngưỡng không bắt khai MST', async () => {
+    const { prisma, payoutCreate } = makePrisma({ available: 500_000, rows: [{ id: 'c1', amount: 500_000 }] });
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 500_000, 'WALLET_BALANCE');
+    expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0 }));
+  });
+
+  it('SELLER-11: dưới ngưỡng → không khấu trừ; cấu hình 0% → tắt', async () => {
+    const small = makePrisma({ available: 1_999_000, rows: [{ id: 'c1', amount: 1_999_000 }] });
+    await new AffiliateService(small.prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 1_999_000, 'BANK', {});
+    expect(small.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 1_999_000 }));
+
+    const off = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.pit_withhold_pct' ? 0 : fb) as T } as unknown as SystemConfigService;
+    const big = makePrisma({ available: 5_000_000, rows: [{ id: 'c1', amount: 5_000_000 }] });
+    await new AffiliateService(big.prisma, off, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 5_000_000, 'BANK', {});
+    expect(big.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 5_000_000 }));
   });
 
   it('BANK: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG trả payout REQUESTED (Bug 4 fix)', async () => {
@@ -1006,16 +1365,18 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
 
 describe('AffiliateService analytics', () => {
   it('storefrontAnalytics gom theo gian hàng của tôi', async () => {
-    const orderAggregate = jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } });
+    const orderAggregate = jest.fn().mockResolvedValue({ _count: { _all: 3 } });
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
       order: { aggregate: orderAggregate },
+      // Doanh thu gian hàng tính trong DB (500000 + 400000 − 120000); bigint như Postgres SUM trả về.
+      $queryRaw: jest.fn().mockResolvedValue([{ slug: 'linh', revenue: 780000n }]),
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
     const r = await svc.storefrontAnalytics('u1');
-    expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 900000, commission: 72000 });
+    expect(r.storefronts[0]).toMatchObject({ slug: 'linh', orders: 3, revenue: 780000, commission: 72000 });
     // Hardening: WHERE phải scope đúng theo slug + referrer (chống đếm chéo người dùng).
     expect(orderAggregate).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ storefrontSlug: 'linh', referrerUserId: 'u1' }) }),
@@ -1034,7 +1395,8 @@ describe('AffiliateService analytics', () => {
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 72000 } });
     const prisma = {
       storefront: { findMany: jest.fn().mockResolvedValue([{ slug: 'linh', title: 'Cửa hàng Linh' }]) },
-      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 }, _sum: { total: 900000 } }) },
+      order: { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 3 } }) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       commission: { aggregate: commissionAggregate },
     } as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).storefrontAnalytics('u1');
@@ -1046,11 +1408,12 @@ describe('AffiliateService analytics', () => {
   it('productCommissionBreakdown nhóm theo sản phẩm', async () => {
     const prisma = {
       commission: { findMany: jest.fn().mockResolvedValue([
-        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
-          { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
-          { productName: 'Xà phòng', variationId: 'v2', total: 50000 },
+        { id: 'c1', orderId: 'o1', amount: 14000, order: { id: 'o1', total: 150000, shippingFee: 0, items: [
+          { id: 'i1', productName: 'Dầu gội', variationId: 'v1', total: 100000 },
+          { id: 'i2', productName: 'Xà phòng', variationId: 'v2', total: 50000 },
         ] } },
       ]) },
+      returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
       variation: { findMany: jest.fn().mockResolvedValue([
         { id: 'v1', affiliateRate: '10' }, { id: 'v2', affiliateRate: '8' },
       ]) },
@@ -1066,11 +1429,12 @@ describe('AffiliateService analytics', () => {
   it('productCommissionBreakdown: 1 đơn có 2 item CÙNG sản phẩm → orders=1, hoa hồng cộng dồn', async () => {
     const prisma = {
       commission: { findMany: jest.fn().mockResolvedValue([
-        { id: 'c1', orderId: 'o1', order: { id: 'o1', items: [
-          { productName: 'Dầu gội', variationId: 'v1', total: 100000 },
-          { productName: 'Dầu gội', variationId: 'v1', total: 60000 },
+        { id: 'c1', orderId: 'o1', amount: 16000, order: { id: 'o1', total: 180000, shippingFee: 20000, items: [
+          { id: 'i1', productName: 'Dầu gội', variationId: 'v1', total: 100000 },
+          { id: 'i2', productName: 'Dầu gội', variationId: 'v1', total: 60000 },
         ] } },
       ]) },
+      returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
       variation: { findMany: jest.fn().mockResolvedValue([
         { id: 'v1', affiliateRate: '10' },
       ]) },
@@ -1080,6 +1444,20 @@ describe('AffiliateService analytics', () => {
     const dau = r.find((x) => x.productName === 'Dầu gội');
     expect(dau?.orders).toBe(1); // 2 item cùng đơn → 1 đơn
     expect(dau?.commission).toBe(16000); // floor(100000*10/100) + floor(60000*10/100)
+  });
+
+  it('productCommissionBreakdown khớp số hoa hồng thật: tính trên giá thực trả sau mã/điểm (SELLER-6)', async () => {
+    const prisma = {
+      commission: { findMany: jest.fn().mockResolvedValue([
+        { id: 'c1', orderId: 'o1', amount: 38700, order: { id: 'o1', total: 387000, shippingFee: 0, items: [
+          { id: 'i1', productName: 'Fuwa 5L', variationId: 'v1', total: 430000 },
+        ] } },
+      ]) },
+      returnRequestItem: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', affiliateRate: '10' }]) },
+    } as unknown as PrismaService;
+    const r = await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).productCommissionBreakdown('u1');
+    expect(r[0]?.commission).toBe(38700);
   });
 });
 
@@ -1347,7 +1725,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     );
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
     expect(commissionUpdateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: 'PAID' },
+      where: { id: { in: ['c1', 'c2'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
       data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
     });
     expect(userUpdate).not.toHaveBeenCalled();
@@ -1445,5 +1823,82 @@ describe('AffiliateService.listLinks (giới hạn, C-100)', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 200, cursor: { id: 'l9' }, skip: 1 }),
     );
+  });
+});
+
+describe('AffiliateService — báo cáo khấu trừ thuế TNCN (SELLER-11)', () => {
+  const paid = (o: Record<string, unknown>) => ({
+    id: 'p',
+    userId: 'u1',
+    method: 'BANK',
+    grossAmount: 2_500_000,
+    taxWithheld: 250_000,
+    amount: 2_250_000,
+    taxId: '079201001234',
+    paidAt: new Date('2026-10-10T03:00:00Z'),
+    user: { fullName: 'Nguyễn An', phone: '0901234567', personalTaxId: '079201001234' },
+    ...o,
+  });
+
+  function svcWith(rows: unknown[], user: unknown = { fullName: 'Nguyễn An', personalTaxId: '079201001234' }) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma = {
+      payout: { findMany },
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+    } as unknown as PrismaService;
+    return { svc: new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics), findMany };
+  }
+
+  it('báo cáo tháng (giờ VN): chỉ lệnh rút hoa hồng đã chi trong tháng, gộp theo người nhận, MST theo số đã kê khai', async () => {
+    const { svc, findMany } = svcWith([
+      paid({ id: 'p1' }),
+      paid({ id: 'p2', method: 'WALLET_BALANCE', grossAmount: 3_000_000, taxWithheld: 300_000, amount: 2_700_000 }),
+      paid({
+        id: 'p3',
+        userId: 'u2',
+        grossAmount: 800_000,
+        taxWithheld: 0,
+        amount: 800_000,
+        taxId: null,
+        user: { fullName: 'Trần Bình', phone: null, personalTaxId: null },
+      }),
+    ]);
+    const r = await svc.pitReport('2026-10');
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      status: 'PAID',
+      grossAmount: { not: null },
+      paidAt: { gte: new Date('2026-09-30T17:00:00Z'), lt: new Date('2026-10-31T17:00:00Z') },
+    });
+    expect(r.month).toBe('2026-10');
+    expect(r.rows).toEqual([
+      expect.objectContaining({ userId: 'u1', fullName: 'Nguyễn An', taxId: '079201001234', payoutCount: 2, grossAmount: 5_500_000, taxWithheld: 550_000, netAmount: 4_950_000 }),
+      expect.objectContaining({ userId: 'u2', taxId: null, payoutCount: 1, grossAmount: 800_000, taxWithheld: 0, netAmount: 800_000 }),
+    ]);
+    expect(r.totals).toEqual({ recipients: 2, withheldRecipients: 1, grossAmount: 6_300_000, taxWithheld: 550_000, netAmount: 5_750_000 });
+  });
+
+  it('tháng sai định dạng → 400', async () => {
+    const { svc } = svcWith([]);
+    await expect(svc.pitReport('2026-13')).rejects.toThrow(BadRequestException);
+  });
+
+  it('bảng kê năm của CTV: từng lần chi có khấu trừ, tổng thu nhập/thuế/thực nhận, MST hiện tại', async () => {
+    const { svc, findMany } = svcWith([paid({ id: 'p1' }), paid({ id: 'p2', grossAmount: 900_000, taxWithheld: 0, amount: 900_000, taxId: null })]);
+    const r = await svc.taxStatement('u1', 2026);
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      userId: 'u1',
+      status: 'PAID',
+      grossAmount: { not: null },
+      paidAt: { gte: new Date('2025-12-31T17:00:00Z'), lt: new Date('2026-12-31T17:00:00Z') },
+    });
+    expect(r).toEqual(
+      expect.objectContaining({
+        year: 2026,
+        fullName: 'Nguyễn An',
+        taxId: '079201001234',
+        totals: { grossAmount: 3_400_000, taxWithheld: 250_000, netAmount: 3_150_000 },
+      }),
+    );
+    expect(r.items.map((i) => i.id)).toEqual(['p1', 'p2']);
   });
 });

@@ -103,7 +103,7 @@ describe('Gói định kỳ: đơn đầu, thanh toán, sửa gói (real Postgre
         district: '',
         ward: 'Phuong IT',
         street,
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

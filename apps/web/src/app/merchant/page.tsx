@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,15 +14,16 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
+  EyeOff,
   RefreshCw,
   Sparkles,
   ShieldCheck,
-  Info,
-  X,
   Clock,
   Trash2,
-  Check,
+  Pencil,
   Leaf,
+  MapPin,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
@@ -30,23 +31,28 @@ import {
   getMerchantStore,
   updateMerchantStore,
   getMerchantProducts,
-  createMerchantProduct,
-  addResellProduct,
   removeResellProduct,
+  stopSellingMerchantProduct,
+  updateMerchantProduct,
   listMerchantOrders,
   countMerchantOrders,
+  listFulfilOrders,
   updateMerchantOrderStatus,
+  pauseMerchantOrders,
   type MerchantStore,
   type MerchantProduct,
-  type MerchantOrder,
   type UpdateMerchantStoreInput,
-  type CreateMerchantProductInput,
 } from '@/lib/merchant-client';
 import { pageRange } from '@/lib/admin-client';
-import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
+import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, ScrollRegion, TOUCH_H } from '@/components/admin/ui';
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 import { formatDate } from '@/lib/format-date';
+import { isPartnerStore } from '@/lib/partner-store';
+import { FulfilOrdersTab } from './fulfil-orders-tab';
+import { SettlementTab } from './settlement-tab';
+import { MerchantReturnsSection } from './merchant-returns';
+import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -72,30 +78,114 @@ const subTabClass = (active: boolean) =>
 // Nút chuyển trạng thái đơn (chỉ ADMIN thấy): cùng họ nút hành động của order-status-actions bên admin.
 const ORDER_ACTION = `${TOUCH_H} rounded-control px-2.5 py-1 text-xs font-medium text-stone-0 disabled:opacity-50`;
 
-type MerchantTab = 'store' | 'banking' | 'warehouse' | 'products' | 'orders';
+type MerchantTab = 'store' | 'fulfil' | 'products' | 'settlement' | 'shipping' | 'payoutAccount' | 'orders';
+
+const TAB_DEFS: { k: MerchantTab; label: string; icon: typeof Store; merchantOnly?: boolean }[] = [
+  { k: 'store', label: 'Gian hàng & Subdomain', icon: Store },
+  { k: 'fulfil', label: 'Đơn cần giao', icon: Truck, merchantOnly: true },
+  { k: 'products', label: 'Sản phẩm', icon: Package },
+  { k: 'orders', label: 'Đơn qua gian hàng', icon: ShoppingBag },
+  { k: 'settlement', label: 'Đối soát', icon: Wallet, merchantOnly: true },
+  { k: 'shipping', label: 'Giao hàng & liên hệ', icon: MapPin, merchantOnly: true },
+  { k: 'payoutAccount', label: 'Tài khoản nhận đối soát', icon: CreditCard, merchantOnly: true },
+];
+const TAB_KEYS = new Set<string>(TAB_DEFS.map((t) => t.k));
+
+/**
+ * Tab đang xem nằm trên URL (`/merchant?tab=fulfil`) để F5/Back giữ chỗ và gửi link được. Đọc window.location sau khi mount,
+ * ghi bằng history.replaceState (cùng cách trang /admin làm, không cần Suspense cho useSearchParams).
+ */
+function readTabFromUrl(): MerchantTab | null {
+  if (typeof window === 'undefined') return null;
+  const t = new URLSearchParams(window.location.search).get('tab');
+  return t && TAB_KEYS.has(t) ? (t as MerchantTab) : null;
+}
+
+function writeTabToUrl(tab: MerchantTab) {
+  if (typeof window === 'undefined') return;
+  const sp = new URLSearchParams(window.location.search);
+  if (tab === 'store') sp.delete('tab');
+  else sp.set('tab', tab);
+  const qs = sp.toString();
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+}
+
+function KpiCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  iconClass,
+  textValue = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint: string;
+  icon: typeof Store;
+  iconClass: string;
+  textValue?: boolean;
+}) {
+  return (
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-stone-500">{label}</span>
+        <Icon className={`h-4 w-4 ${iconClass}`} aria-hidden="true" />
+      </div>
+      <p className={`mt-2 font-bold text-stone-900 ${textValue ? 'text-sm' : 'text-2xl'}`}>{value}</p>
+      <span className="text-[11px] text-stone-500">{hint}</span>
+    </div>
+  );
+}
 
 export default function MerchantPage() {
   const { user, status, initialized } = useAuth();
-  const qc = useQueryClient();
-  const [tab, setTab] = useState<MerchantTab>('store');
+  const [tab, setTabState] = useState<MerchantTab>('store');
+  useEffect(() => {
+    const t = readTabFromUrl();
+    if (t) setTabState(t);
+  }, []);
+  const setTab = (t: MerchantTab) => {
+    setTabState(t);
+    writeTabToUrl(t);
+  };
 
   // `enabled` là bắt buộc, không phải tối ưu: hook chạy TRƯỚC guard bên dưới, nên khi tải lại
-  // trang lúc đã đăng nhập, ba request này bay đi trong lúc AuthProvider còn đang refresh phiên.
+  // trang lúc đã đăng nhập, các request này bay đi trong lúc AuthProvider còn đang refresh phiên.
   // Chúng chưa có access token → 401 (guard JWT trả rất nhanh vì không chạm DB) → client-api tự
   // gọi refresh với ĐÚNG refresh token mà AuthProvider đang dùng. Backend xoay token single-use
   // và coi lần dùng lại là reuse → thu hồi TOÀN BỘ phiên của user, văng khỏi cả web lẫn Mini App.
   const authed = status === 'authenticated';
   const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed });
+  const store = storeQ.data;
+  const selfFulfils = isPartnerStore(store);
   // Cùng queryKey/limit với trang 1 của ProductsTab → dùng chung cache. Số trên thẻ KPI đọc meta tổng
   // (ownTotal/resellTotal) — đếm `.length` của trang đầu thì không bao giờ vượt cỡ trang.
   const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed });
-  // Chỉ cần SỐ đơn chờ đóng gói → đọc meta.total (limit=1). Trước đây tải trang đơn đầu rồi `.filter` —
-  // vừa sai khi quá 1 trang, vừa crash vì BE trả `{ data, meta }` chứ không phải mảng.
-  const pendingOrdersQ = useQuery({
+  // Gian hàng CTV: kho Tubu xử lý mọi đơn, thẻ chỉ đếm đơn Tubu đang xử lý (đọc meta.total, limit=1).
+  const tubuProcessingQ = useQuery({
     queryKey: ['merchant-orders', 'count', 'CONFIRMED'],
     queryFn: () => countMerchantOrders('CONFIRMED'),
-    enabled: authed,
+    enabled: authed && !!store && !selfFulfils,
   });
+  // Gian hàng tự giao: đếm đơn đang chờ chính đối tác (CONFIRMED + PACKED) từ `counts` của danh sách đơn cần giao.
+  const fulfilQ = useQuery({
+    queryKey: ['merchant-fulfil-orders', 'kpi'],
+    queryFn: () => listFulfilOrders(undefined, 1, 1),
+    enabled: authed && selfFulfils,
+  });
+  const visibleTabs = TAB_DEFS.filter((t) => !t.merchantOnly || selfFulfils);
+  const activeTab: MerchantTab = store && !visibleTabs.some((t) => t.k === tab) ? 'store' : tab;
+  // Thanh tab cuộn ngang ở màn hẹp: mở bằng ?tab= thì tab đang chọn có thể nằm ngoài khung nhìn. Chỉ cuộn ngang thanh tab,
+  // không dùng scrollIntoView vì nó kéo cả trang xuống.
+  const tablistRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = tablistRef.current;
+    const el = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+    if (!list || !el) return;
+    if (el.offsetLeft < list.scrollLeft || el.offsetLeft + el.offsetWidth > list.scrollLeft + list.clientWidth) {
+      list.scrollLeft = Math.max(0, el.offsetLeft - 16);
+    }
+  }, [activeTab, visibleTabs.length]);
 
   // Chờ lượt khôi phục phiên chạy xong: render đầu tiên luôn là 'idle' (xem AuthState.initialized),
   // không chờ thì màn "Cổng Quản Trị Đối Tác — đăng nhập" chớp lên mỗi lần F5.
@@ -118,7 +208,7 @@ export default function MerchantPage() {
         </div>
         <h1 className="mt-4 font-display text-2xl font-semibold text-stone-900">Cổng Quản Trị Đối Tác</h1>
         <p className="mt-2 text-sm text-stone-600">
-          Vui lòng đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, kho hàng và đơn hàng.
+          Vui lòng đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, sản phẩm và đơn hàng.
         </p>
         <Link
           href="/dang-nhap"
@@ -132,7 +222,7 @@ export default function MerchantPage() {
 
   // BE giới hạn portal này cho DEALER/AFFILIATE/ADMIN (merchant.controller.ts). Không kiểm tra ở
   // đây thì khách lẻ bấm "Kênh Đối Tác" ở header (nút luôn hiện) sẽ thấy nguyên khung portal —
-  // tiêu đề, 4 thẻ số liệu 0, 5 tab — kèm một hộp lỗi 403. Trang /admin đã kiểm; trang này sót.
+  // tiêu đề, thẻ số liệu 0, các tab — kèm một hộp lỗi 403. Trang /admin đã kiểm; trang này sót.
   if (user && !['DEALER', 'AFFILIATE', 'ADMIN'].includes(user.role)) {
     return (
       <main className="mx-auto max-w-md px-4 py-20 text-center">
@@ -148,10 +238,11 @@ export default function MerchantPage() {
     );
   }
 
-  const store = storeQ.data;
   const ownCount = productsQ.data?.meta?.ownTotal ?? 0;
   const resellCount = productsQ.data?.meta?.resellTotal ?? 0;
-  const pendingOrdersCount = pendingOrdersQ.data ?? 0;
+  const fulfilCounts = fulfilQ.data?.counts;
+  const toShip = (fulfilCounts?.CONFIRMED ?? 0) + (fulfilCounts?.PACKED ?? 0);
+  const canCreateProducts = selfFulfils;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
@@ -162,10 +253,12 @@ export default function MerchantPage() {
             <h1 className="break-words font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
               {store?.title ?? 'Cổng Quản Trị Gian Hàng Đối Tác'}
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full bg-forest-100 px-2.5 py-0.5 text-xs font-semibold text-forest-800">
-              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              {store?.type ?? 'MERCHANT'}
-            </span>
+            {store && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-forest-100 px-2.5 py-0.5 text-xs font-semibold text-forest-800">
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                {selfFulfils ? 'Đối tác tự giao' : 'Gian hàng CTV'}
+              </span>
+            )}
             {store && (
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -209,62 +302,49 @@ export default function MerchantPage() {
         )}
       </div>
 
-      {/* ── KPI Overview Metric Cards ── */}
+      {/* ── KPI ── */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-stone-500">Sản phẩm riêng</span>
-            <Package className="h-4 w-4 text-forest-700" aria-hidden="true" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-stone-900">{ownCount}</p>
-          <span className="text-[11px] text-stone-500">Do đối tác tự tải lên</span>
-        </div>
-
-        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-stone-500">Sản phẩm bán lại</span>
-            <Sparkles className="h-4 w-4 text-honey-600" aria-hidden="true" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-stone-900">{resellCount}</p>
-          <span className="text-[11px] text-stone-500">Từ kho Tubu Tree</span>
-        </div>
-
-        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-stone-500">Chờ đóng gói</span>
-            <ShoppingBag className="h-4 w-4 text-info-fg" aria-hidden="true" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-stone-900">{pendingOrdersCount}</p>
-          <span className="text-[11px] text-stone-500">Cần xuất kho ngay</span>
-        </div>
-
-        <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-stone-500">Trạng thái shop</span>
-            <Store className="h-4 w-4 text-success-fg" aria-hidden="true" />
-          </div>
-          <p className="mt-2 text-sm font-bold text-stone-900">
-            {store?.isPublished ? 'Hoạt động công khai' : 'Tạm khóa / Ẩn'}
-          </p>
-          <span className="text-[11px] text-stone-500">Mã: {store?.slug}</span>
-        </div>
+        {canCreateProducts && (
+          <KpiCard label="Sản phẩm riêng" value={ownCount} hint="Do gian hàng tự đăng" icon={Package} iconClass="text-forest-700" />
+        )}
+        <KpiCard label="Sản phẩm bán lại" value={resellCount} hint="Từ kho Tubu Tree" icon={Sparkles} iconClass="text-honey-600" />
+        {selfFulfils ? (
+          <KpiCard label="Đơn cần giao" value={toShip} hint="Bạn tự đóng gói và gửi" icon={Truck} iconClass="text-info-fg" />
+        ) : (
+          <KpiCard
+            label="Đơn đang xử lý"
+            value={tubuProcessingQ.data ?? 0}
+            hint="Kho Tubu đóng gói và giao"
+            icon={ShoppingBag}
+            iconClass="text-info-fg"
+          />
+        )}
+        <KpiCard
+          label="Trạng thái shop"
+          value={store?.isPublished ? 'Hoạt động công khai' : 'Đang ẩn'}
+          textValue
+          hint={`Mã: ${store?.slug ?? '—'}`}
+          icon={Store}
+          iconClass="text-success-fg"
+        />
       </div>
 
       {/* ── Navigation Tabs ── */}
-      <div className="mt-6 flex gap-2 overflow-x-auto border-b border-stone-200 pb-0.5 scrollbar-none">
-        {[
-          { k: 'store', label: 'Gian hàng & Subdomain', icon: Store },
-          { k: 'banking', label: 'Tài khoản VietQR', icon: CreditCard },
-          { k: 'warehouse', label: 'Kho Hàng & Giao Nhận', icon: Truck },
-          { k: 'products', label: 'Quản Lý Sản Phẩm', icon: Package },
-          { k: 'orders', label: 'Đơn Hàng Thuộc Kho', icon: ShoppingBag },
-        ].map((t) => {
+      <div
+        ref={tablistRef}
+        role="tablist"
+        aria-label="Mục quản lý gian hàng"
+        className="relative mt-6 flex gap-2 overflow-x-auto border-b border-stone-200 pb-0.5 scrollbar-none lg:flex-wrap lg:overflow-visible"
+      >
+        {visibleTabs.map((t) => {
           const Icon = t.icon;
-          const isActive = tab === t.k;
+          const isActive = activeTab === t.k;
           return (
             <button
               key={t.k}
-              onClick={() => setTab(t.k as MerchantTab)}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setTab(t.k)}
               className={`flex min-h-[44px] items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-all ${
                 isActive
                   ? 'border-b-2 border-forest-600 text-forest-800'
@@ -273,6 +353,9 @@ export default function MerchantPage() {
             >
               <Icon className={`h-4 w-4 ${isActive ? 'text-forest-600' : 'text-stone-500'}`} aria-hidden="true" />
               <span>{t.label}</span>
+              {t.k === 'fulfil' && toShip > 0 && (
+                <span className="rounded-full bg-danger-fg px-1.5 text-[10px] font-bold text-stone-0">{toShip}</span>
+              )}
             </button>
           );
         })}
@@ -290,11 +373,27 @@ export default function MerchantPage() {
 
         {store && (
           <>
-            {tab === 'store' && <StoreSettingsTab store={store} onUpdated={() => storeQ.refetch()} />}
-            {tab === 'banking' && <BankingTab store={store} onUpdated={() => storeQ.refetch()} />}
-            {tab === 'warehouse' && <WarehouseTab store={store} onUpdated={() => storeQ.refetch()} />}
-            {tab === 'products' && <ProductsTab store={store} />}
-            {tab === 'orders' && <OrdersTab store={store} />}
+            {activeTab === 'store' && (
+              <StoreSettingsTab
+                store={store}
+                previewProducts={[
+                  ...(productsQ.data?.ownProducts ?? []).filter((p) => p.approvalStatus === 'APPROVED' && p.isActive !== false),
+                  ...(productsQ.data?.resellProducts ?? []),
+                ]}
+                onUpdated={() => storeQ.refetch()}
+              />
+            )}
+            {activeTab === 'fulfil' && (
+              <div className="space-y-6">
+                <FulfilOrdersTab />
+                <MerchantReturnsSection />
+              </div>
+            )}
+            {activeTab === 'products' && <ProductsTab canCreate={canCreateProducts} />}
+            {activeTab === 'orders' && <OrdersTab selfFulfils={selfFulfils} onOpenFulfil={() => setTab('fulfil')} />}
+            {activeTab === 'settlement' && <SettlementTab />}
+            {activeTab === 'shipping' && <ShippingTab store={store} onUpdated={() => storeQ.refetch()} />}
+            {activeTab === 'payoutAccount' && <PayoutAccountTab store={store} onUpdated={() => storeQ.refetch()} />}
           </>
         )}
       </div>
@@ -302,9 +401,57 @@ export default function MerchantPage() {
   );
 }
 
-
 // ── Tab 1: Cấu hình Gian hàng & Subdomain ──
-function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
+/** Tạm nghỉ (R2-MERCHANT-13): khách không đặt được hàng gian hàng tự giao; đơn đã đặt vẫn phải giao. */
+function OrdersPauseControl({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
+  const paused = !!store.ordersPausedAt;
+  const [error, setError] = useState<string | null>(null);
+  const mut = useMutation({
+    mutationFn: (next: boolean) => pauseMerchantOrders(next),
+    onSuccess: () => {
+      setError(null);
+      onUpdated();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  return (
+    <div className={`space-y-2 rounded-control border p-3 text-xs ${paused ? 'border-warning-fg bg-warning-bg text-warning-fg' : 'border-stone-200 bg-stone-50 text-stone-700'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <span className="block font-semibold text-stone-900">
+            {paused ? `Đang tạm nghỉ từ ${formatDate(store.ordersPausedAt!)}` : 'Đang nhận đơn hàng tự giao'}
+          </span>
+          {paused
+            ? 'Khách không đặt được hàng bạn tự giao. Đơn đã đặt trước đó vẫn cần giao ở tab Đơn cần giao.'
+            : 'Nghỉ lễ hoặc tạm hết hàng? Tạm nghỉ để khách không đặt được hàng bạn tự giao. Hàng Tubu giao hộ vẫn bán.'}
+        </div>
+        <button
+          type="button"
+          onClick={() => mut.mutate(!paused)}
+          disabled={mut.isPending}
+          className={paused ? `${BTN_PRIMARY} px-4` : BTN_SMALL}
+        >
+          {mut.isPending ? 'Đang lưu…' : paused ? 'Mở nhận đơn lại' : 'Tạm nghỉ nhận đơn'}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-danger-fg">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StoreSettingsTab({
+  store,
+  previewProducts,
+  onUpdated,
+}: {
+  store: MerchantStore;
+  previewProducts: MerchantProduct[];
+  onUpdated: () => void;
+}) {
   const [title, setTitle] = useState(store.title ?? '');
   const [headerNote, setHeaderNote] = useState(store.headerNote ?? '');
   const [subdomain, setSubdomain] = useState(store.subdomain ?? '');
@@ -330,11 +477,12 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
     setMsg(null);
     mut.mutate({
       title: title.trim(),
-      headerNote: headerNote.trim() || undefined,
+      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống là không đổi.
+      headerNote: headerNote.trim(),
       subdomain: subdomain.trim() || undefined,
       themeColor,
-      coverUrl: coverUrl.trim() || undefined,
-      avatarUrl: avatarUrl.trim() || undefined,
+      coverUrl: coverUrl.trim(),
+      avatarUrl: avatarUrl.trim(),
       isPublished,
     });
   };
@@ -437,8 +585,12 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
           <label htmlFor="isPublished" className="cursor-pointer text-xs font-medium text-stone-700">
             <span className="block font-semibold text-stone-900">Xuất bản công khai gian hàng</span>
             Cho phép khách hàng truy cập gian hàng qua subdomain và đường dẫn công khai.
+            {isPartnerStore(store) &&
+              ' Ẩn gian hàng không dừng bán: sản phẩm vẫn hiện ở danh mục chung. Muốn ngừng nhận đơn tự giao, dùng Tạm nghỉ nhận đơn bên dưới.'}
           </label>
         </div>
+
+        {isPartnerStore(store) && <OrdersPauseControl store={store} onUpdated={onUpdated} />}
 
         {msg && (
           <div
@@ -486,8 +638,8 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
             </div>
 
             {/* Profile Avatar & Info inside screen */}
-            <div className="px-3 -mt-6">
-              <div className="flex items-end gap-2">
+            <div className="relative px-3 -mt-6">
+              <div className="flex items-start gap-2">
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border-2 border-stone-0 bg-stone-0 shadow-card">
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -498,7 +650,7 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
                     </div>
                   )}
                 </div>
-                <div className="pb-0.5 min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pt-7">
                   <p className="truncate text-xs font-bold text-stone-900">{title || 'Tên gian hàng'}</p>
                   <p className="truncate text-[10px] text-stone-500">{subdomain ? `${subdomain}.tubutree.com` : 'subdomain.tubutree.com'}</p>
                 </div>
@@ -510,27 +662,32 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
                 </p>
               )}
 
-              {/* Sample Product item in screen */}
-              <div className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
-                <div className="flex gap-2 items-center">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-forest-50 text-base text-forest-700">
-                    <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-semibold text-stone-800">Sản phẩm mẫu của Shop</p>
-                    <p className="text-[11px] font-bold" style={{ color: themeColor }}>150.000đ</p>
-                  </div>
+              {previewProducts.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {previewProducts.slice(0, 2).map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-control bg-forest-50">
+                        {p.thumbnail ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.thumbnail} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-semibold text-stone-800">{p.name}</p>
+                        <p className="text-[11px] font-bold" style={{ color: themeColor }}>
+                          {formatVnd(p.salePrice ?? p.basePrice)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-
-              {/* CTA sample button */}
-              <button
-                type="button"
-                className="mt-3 w-full rounded-control py-2 text-center text-xs font-bold text-stone-0 shadow-card transition-all"
-                style={{ backgroundColor: themeColor }}
-              >
-                Đặt hàng ngay
-              </button>
+              ) : (
+                <p className="mt-3 rounded-card border border-dashed border-stone-300 p-3 text-center text-[11px] text-stone-500">
+                  Gian hàng chưa có sản phẩm nào đang bán.
+                </p>
+              )}
             </div>
 
             {/* Bottom Home Indicator */}
@@ -544,70 +701,61 @@ function StoreSettingsTab({ store, onUpdated }: { store: MerchantStore; onUpdate
   );
 }
 
-// ── Tab 2: Tài khoản Nhận Tiền (VietQR) ──
-function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
-  const [bankName, setBankName] = useState(store.bankName ?? POPULAR_BANKS[0]!.name);
-  const [bankBin, setBankBin] = useState(store.bankBin ?? POPULAR_BANKS[0]!.bin);
+// ── Tài khoản nhận đối soát (chỉ gian hàng tự giao) ──
+function PayoutAccountTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
+  const [bankBin, setBankBin] = useState(store.bankBin ?? '');
   const [bankAccountNo, setBankAccountNo] = useState(store.bankAccountNo ?? '');
   const [bankAccountName, setBankAccountName] = useState(store.bankAccountName ?? '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const handleBankSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selected = POPULAR_BANKS.find((b) => b.name === e.target.value);
-    if (selected) {
-      setBankName(selected.name);
-      setBankBin(selected.bin);
-    }
-  };
+  const hasAccount = !!store.bankAccountNo;
 
   const mut = useMutation({
     mutationFn: (dto: UpdateMerchantStoreInput) => updateMerchantStore(dto),
-    onSuccess: () => {
-      setMsg({ ok: true, text: 'Đã cập nhật thông tin nhận tiền thành công!' });
+    onSuccess: (_d, dto) => {
+      setMsg({ ok: true, text: dto.bankAccountNo ? 'Đã lưu tài khoản nhận đối soát.' : 'Đã gỡ tài khoản nhận đối soát.' });
       onUpdated();
     },
-    onError: (e: Error) => {
-      setMsg({ ok: false, text: e.message });
-    },
+    onError: (e: Error) => setMsg({ ok: false, text: e.message }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
+    const bank = POPULAR_BANKS.find((b) => b.bin === bankBin);
     mut.mutate({
-      bankName,
+      bankName: bank?.name ?? store.bankName ?? '',
       bankBin,
       bankAccountNo: bankAccountNo.trim(),
       bankAccountName: bankAccountName.trim().toUpperCase(),
     });
   };
 
-  // URL VietQR mẫu
-  const sampleQrUrl =
-    bankBin && bankAccountNo
-      ? `https://img.vietqr.io/image/${bankBin}-${bankAccountNo}-compact.png?amount=150000&addInfo=MAU-DON-HANG`
-      : null;
+  const clearAccount = () => {
+    setMsg(null);
+    setBankBin('');
+    setBankAccountNo('');
+    setBankAccountName('');
+    mut.mutate({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' });
+  };
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6 md:col-span-2">
         <div>
-          <h2 className="font-display font-semibold text-stone-900">Tài khoản Ngân Hàng Nhận Tiền Trực Tiếp</h2>
+          <h2 className="font-display font-semibold text-stone-900">Tài khoản nhận đối soát</h2>
           <p className="mt-1 text-xs text-stone-500">
-            Khi khách hàng đặt đơn trên subdomain của bạn và chọn thanh toán chuyển khoản, hệ thống sẽ tự động tạo mã VietQR trỏ thẳng về tài khoản này.
+            Tubu Tree chuyển tiền đối soát các đơn bạn tự giao vào tài khoản này. Khách trả trước qua Ví Tubu thì tiền về Tubu Tree,
+            Tubu chuyển lại cho bạn sau khi trừ phí sàn. Đơn COD do bạn tự giao: bạn thu tiền mặt của khách và nộp phí sàn cho Tubu
+            theo phiếu ở tab Đối soát.
           </p>
         </div>
 
         <div>
-          <label htmlFor="merchant-bank-name" className="block text-xs font-medium text-stone-700">Ngân hàng thụ hưởng</label>
-          <select
-            id="merchant-bank-name"
-            value={bankName}
-            onChange={handleBankSelect}
-            className={MERCHANT_INPUT}
-          >
+          <label htmlFor="merchant-bank-name" className="block text-xs font-medium text-stone-700">Ngân hàng</label>
+          <select id="merchant-bank-name" value={bankBin} onChange={(e) => setBankBin(e.target.value)} required className={MERCHANT_INPUT}>
+            <option value="">Chọn ngân hàng</option>
             {POPULAR_BANKS.map((b) => (
-              <option key={b.bin} value={b.name}>
+              <option key={b.bin} value={b.bin}>
                 {b.name}
               </option>
             ))}
@@ -615,12 +763,14 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
         </div>
 
         <div>
-          <label htmlFor="merchant-bank-account-no" className="block text-xs font-medium text-stone-700">Số tài khoản ngân hàng</label>
+          <label htmlFor="merchant-bank-account-no" className="block text-xs font-medium text-stone-700">Số tài khoản</label>
           <input
             id="merchant-bank-account-no"
             value={bankAccountNo}
-            onChange={(e) => setBankAccountNo(e.target.value.trim())}
+            onChange={(e) => setBankAccountNo(e.target.value.replace(/\s/g, ''))}
             required
+            inputMode="numeric"
+            maxLength={30}
             placeholder="0123456789"
             className={`${MERCHANT_INPUT} font-semibold tracking-wider`}
           />
@@ -633,6 +783,7 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
             value={bankAccountName}
             onChange={(e) => setBankAccountName(e.target.value.toUpperCase())}
             required
+            maxLength={100}
             placeholder="NGUYEN VAN A"
             className={`${MERCHANT_INPUT} font-semibold`}
           />
@@ -647,159 +798,169 @@ function BankingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () 
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={mut.isPending}
-          className={`${BTN_PRIMARY} px-5`}
-        >
-          {mut.isPending ? 'Đang lưu…' : 'Lưu tài khoản ngân hàng'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={mut.isPending} className={`${BTN_PRIMARY} px-5`}>
+            {mut.isPending ? 'Đang lưu…' : 'Lưu tài khoản'}
+          </button>
+          {hasAccount && (
+            <button type="button" onClick={clearAccount} disabled={mut.isPending} className={`${BTN_LINK_DANGER} gap-1 text-xs`}>
+              <Trash2 className="h-3 w-3" aria-hidden="true" />
+              <span>Gỡ tài khoản</span>
+            </button>
+          )}
+        </div>
       </form>
 
-      {/* VietQR Preview */}
-      <div className="rounded-card border border-stone-200 bg-stone-50 p-5 text-center">
-        <h3 className="text-xs font-semibold uppercase text-stone-500">Mô phỏng VietQR khách quét</h3>
-        {sampleQrUrl ? (
-          <div className="mt-3 flex flex-col items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sampleQrUrl} alt="VietQR Mẫu" className="h-60 w-60 max-w-full rounded-control border border-stone-200 bg-stone-0 p-2 shadow-card" />
-            <p className="mt-2 text-xs font-semibold text-stone-900">{bankAccountName || 'TÊN CHỦ TÀI KHOẢN'}</p>
-            <p className="break-words text-xs text-stone-500">{bankName} - {bankAccountNo}</p>
-          </div>
-        ) : (
-          <div className="mt-8 text-xs text-stone-500">Vui lòng nhập số tài khoản để kiểm tra mã VietQR.</div>
-        )}
+      <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-5 text-xs text-stone-600 shadow-card">
+        <h3 className="font-semibold text-stone-900">Tiền về gian hàng thế nào?</h3>
+        <ul className="list-disc space-y-1 pl-4">
+          <li>Khách trả tiền cho Tubu Tree (ví, chuyển khoản) hoặc trả bạn khi nhận hàng (COD).</li>
+          <li>Đơn giao xong và hết hạn đổi trả thì vào bảng kê ở tab Đối soát.</li>
+          <li>Tubu Tree lập phiếu, chuyển khoản phần thực nhận vào tài khoản này và báo mã giao dịch cho bạn.</li>
+        </ul>
       </div>
     </div>
   );
 }
 
-// ── Tab 3: Kho Hàng & Giao Nhận ──
-function WarehouseTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
-  const [warehouseAddress, setWarehouseAddress] = useState(store.warehouseAddress ?? '');
-  const [warehouseCity, setWarehouseCity] = useState(store.warehouseCity ?? '');
-  const [warehouseDistrict, setWarehouseDistrict] = useState(store.warehouseDistrict ?? '');
-  const [warehouseWard, setWarehouseWard] = useState(store.warehouseWard ?? '');
+const parseMoney = (v: string): number | null => (v.trim() === '' ? null : Number(v));
+
+// ── Giao hàng & liên hệ (chỉ gian hàng tự giao) ──
+function ShippingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: () => void }) {
+  const [shippingFee, setShippingFee] = useState(store.shippingFee == null ? '' : String(store.shippingFee));
+  const [freeShipFrom, setFreeShipFrom] = useState(store.freeShipFrom == null ? '' : String(store.freeShipFrom));
   const [warehousePhone, setWarehousePhone] = useState(store.warehousePhone ?? '');
+  const [warehouseAddress, setWarehouseAddress] = useState(store.warehouseAddress ?? '');
+  const [warehouseWard, setWarehouseWard] = useState(store.warehouseWard ?? '');
+  const [warehouseDistrict, setWarehouseDistrict] = useState(store.warehouseDistrict ?? '');
+  const [warehouseCity, setWarehouseCity] = useState(store.warehouseCity ?? '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const mut = useMutation({
     mutationFn: (dto: UpdateMerchantStoreInput) => updateMerchantStore(dto),
     onSuccess: () => {
-      setMsg({ ok: true, text: 'Đã cập nhật địa chỉ kho hàng thành công!' });
+      setMsg({ ok: true, text: 'Đã lưu cài đặt giao hàng.' });
       onUpdated();
     },
-    onError: (e: Error) => {
-      setMsg({ ok: false, text: e.message });
-    },
+    onError: (e: Error) => setMsg({ ok: false, text: e.message }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
     mut.mutate({
-      warehouseAddress: warehouseAddress.trim(),
-      warehouseCity: warehouseCity.trim(),
-      warehouseDistrict: warehouseDistrict.trim(),
-      warehouseWard: warehouseWard.trim(),
+      shippingFee: parseMoney(shippingFee),
+      freeShipFrom: parseMoney(freeShipFrom),
       warehousePhone: warehousePhone.trim(),
+      warehouseAddress: warehouseAddress.trim(),
+      warehouseWard: warehouseWard.trim(),
+      warehouseDistrict: warehouseDistrict.trim(),
+      warehouseCity: warehouseCity.trim(),
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:p-6">
       <div>
-        <h2 className="font-display font-semibold text-stone-900">Địa Chỉ Kho Hàng & Xuất Kiện Riêng</h2>
+        <h2 className="font-display font-semibold text-stone-900">Giao hàng & liên hệ</h2>
         <p className="mt-1 text-xs text-stone-500">
-          Địa chỉ kho này sẽ dùng để tính toán phí ship cho khách hàng và in trên vận đơn gửi hàng của đối tác.
+          Áp dụng cho đơn có sản phẩm gian hàng tự giao: khách thấy phí giao này ở giỏ hàng. Số điện thoại và địa chỉ bên dưới
+          hiện trên trang gian hàng và trang đơn của khách để liên hệ khi nhận hàng.
         </p>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="merchant-shipping-fee" className="block text-xs font-medium text-stone-700">Phí giao mỗi đơn (đồng)</label>
+          <input
+            id="merchant-shipping-fee"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={500000}
+            value={shippingFee}
+            onChange={(e) => setShippingFee(e.target.value)}
+            placeholder="Để trống: phí mặc định của Tubu Tree"
+            className={MERCHANT_INPUT}
+          />
+        </div>
+        <div>
+          <label htmlFor="merchant-free-ship-from" className="block text-xs font-medium text-stone-700">Miễn phí giao cho đơn từ (đồng)</label>
+          <input
+            id="merchant-free-ship-from"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={freeShipFrom}
+            onChange={(e) => setFreeShipFrom(e.target.value)}
+            placeholder="Để trống: không miễn phí"
+            className={MERCHANT_INPUT}
+          />
+        </div>
+      </div>
+
       <div>
-        <label htmlFor="merchant-warehouse-address" className="block text-xs font-medium text-stone-700">Số nhà, tên đường, khu công nghiệp / toà nhà</label>
+        <label htmlFor="merchant-warehouse-phone" className="block text-xs font-medium text-stone-700">Số điện thoại khách liên hệ khi giao</label>
+        <input
+          id="merchant-warehouse-phone"
+          value={warehousePhone}
+          onChange={(e) => setWarehousePhone(e.target.value)}
+          required
+          inputMode="tel"
+          maxLength={20}
+          placeholder="0912345678"
+          className={MERCHANT_INPUT}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="merchant-warehouse-address" className="block text-xs font-medium text-stone-700">Địa chỉ gửi hàng và nhận hàng hoàn</label>
         <input
           id="merchant-warehouse-address"
           value={warehouseAddress}
           onChange={(e) => setWarehouseAddress(e.target.value)}
-          required
-          placeholder="Số 45 Đường số 8, KDC Him Lam..."
+          placeholder="Số nhà, tên đường"
           className={MERCHANT_INPUT}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label htmlFor="merchant-warehouse-city" className="block text-xs font-medium text-stone-700">Tỉnh / Thành phố</label>
-          <input
-            id="merchant-warehouse-city"
-            value={warehouseCity}
-            onChange={(e) => setWarehouseCity(e.target.value)}
-            required
-            placeholder="TP. Hồ Chí Minh"
-            className={MERCHANT_INPUT}
-          />
+          <label htmlFor="merchant-warehouse-ward" className="block text-xs font-medium text-stone-700">Phường / Xã</label>
+          <input id="merchant-warehouse-ward" value={warehouseWard} onChange={(e) => setWarehouseWard(e.target.value)} className={MERCHANT_INPUT} />
         </div>
         <div>
           <label htmlFor="merchant-warehouse-district" className="block text-xs font-medium text-stone-700">Quận / Huyện</label>
-          <input
-            id="merchant-warehouse-district"
-            value={warehouseDistrict}
-            onChange={(e) => setWarehouseDistrict(e.target.value)}
-            required
-            placeholder="Quận 7"
-            className={MERCHANT_INPUT}
-          />
+          <input id="merchant-warehouse-district" value={warehouseDistrict} onChange={(e) => setWarehouseDistrict(e.target.value)} className={MERCHANT_INPUT} />
         </div>
         <div>
-          <label htmlFor="merchant-warehouse-ward" className="block text-xs font-medium text-stone-700">Phường / Xã</label>
-          <input
-            id="merchant-warehouse-ward"
-            value={warehouseWard}
-            onChange={(e) => setWarehouseWard(e.target.value)}
-            required
-            placeholder="Phường Tân Hưng"
-            className={MERCHANT_INPUT}
-          />
+          <label htmlFor="merchant-warehouse-city" className="block text-xs font-medium text-stone-700">Tỉnh / Thành phố</label>
+          <input id="merchant-warehouse-city" value={warehouseCity} onChange={(e) => setWarehouseCity(e.target.value)} className={MERCHANT_INPUT} />
         </div>
-      </div>
-
-      <div>
-        <label htmlFor="merchant-warehouse-phone" className="block text-xs font-medium text-stone-700">Số điện thoại liên hệ kho / điều phối vận chuyển</label>
-        <input
-          id="merchant-warehouse-phone"
-          value={warehousePhone}
-          onChange={(e) => setWarehousePhone(e.target.value)}
-          required
-          placeholder="0912345678"
-          className={MERCHANT_INPUT}
-        />
       </div>
 
       {msg && (
         <div
-            role={msg.ok ? 'status' : 'alert'}
-            className={`rounded-control p-3 text-xs font-medium ${msg.ok ? 'bg-success-bg text-success-fg' : 'bg-danger-bg text-danger-fg'}`}
-          >
+          role={msg.ok ? 'status' : 'alert'}
+          className={`rounded-control p-3 text-xs font-medium ${msg.ok ? 'bg-success-bg text-success-fg' : 'bg-danger-bg text-danger-fg'}`}
+        >
           {msg.text}
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={mut.isPending}
-        className={`${BTN_PRIMARY} px-5`}
-      >
-        {mut.isPending ? 'Đang lưu…' : 'Lưu địa chỉ kho hàng'}
+      <button type="submit" disabled={mut.isPending} className={`${BTN_PRIMARY} px-5`}>
+        {mut.isPending ? 'Đang lưu…' : 'Lưu cài đặt giao hàng'}
       </button>
     </form>
   );
 }
 
 // ── Tab 4: Quản Lý Sản Phẩm ──
-function ProductsTab({ store }: { store: MerchantStore }) {
+function ProductsTab({ canCreate }: { canCreate: boolean }) {
   const qc = useQueryClient();
-  const [subTab, setSubTabState] = useState<'own' | 'resell'>('own');
+  const [subTab, setSubTabState] = useState<'own' | 'resell'>(canCreate ? 'own' : 'resell');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editing, setEditing] = useState<MerchantProduct | null>(null);
   // BE phân trang CẢ 2 danh sách bằng cùng page/limit (merchant.service.listMyProducts) → 1 số trang,
   // về trang 1 khi đổi danh sách.
   const [page, setPage] = useState(1);
@@ -836,10 +997,28 @@ function ProductsTab({ store }: { store: MerchantStore }) {
       setRemoveError(e instanceof Error ? e.message : 'Không gỡ được sản phẩm khỏi gian hàng.'),
   });
 
+  const [ownError, setOwnError] = useState<string | null>(null);
+  const activeMut = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      active ? updateMerchantProduct(id, { isActive: true }) : stopSellingMerchantProduct(id),
+    onSuccess: () => {
+      setOwnError(null);
+      void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+    },
+    onError: (e: unknown) => setOwnError(e instanceof Error ? e.message : 'Không cập nhật được sản phẩm.'),
+  });
+
   return (
     <div className="space-y-4">
+      {!canCreate && (
+        <div className="rounded-control border border-info-fg bg-info-bg px-3 py-2 text-xs text-info-fg">
+          Gian hàng CTV bán lại sản phẩm của Tubu Tree: thêm sản phẩm trong trình tạo gian hàng ở Mini App. Muốn đăng sản phẩm
+          riêng, đăng ký làm đại lý để mở gian hàng đối tác.
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
+          {canCreate && (
           <button
             onClick={() => setSubTab('own')}
             aria-pressed={subTab === 'own'}
@@ -847,6 +1026,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
           >
             Sản phẩm do tôi đăng ({q.data?.meta?.ownTotal ?? 0})
           </button>
+          )}
           <button
             onClick={() => setSubTab('resell')}
             aria-pressed={subTab === 'resell'}
@@ -856,7 +1036,7 @@ function ProductsTab({ store }: { store: MerchantStore }) {
           </button>
         </div>
 
-        {subTab === 'own' && (
+        {subTab === 'own' && canCreate && (
           <button
             onClick={() => setShowCreateModal(true)}
             className={`inline-flex items-center gap-1.5 rounded-control bg-forest-600 px-3.5 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 ${TOUCH_H}`}
@@ -867,6 +1047,11 @@ function ProductsTab({ store }: { store: MerchantStore }) {
         )}
       </div>
 
+      {ownError && (
+        <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+          {ownError}
+        </div>
+      )}
       {removeError && (
         <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
           {removeError}
@@ -878,20 +1063,22 @@ function ProductsTab({ store }: { store: MerchantStore }) {
 
       {subTab === 'own' && q.data && (
         <ScrollRegion label="Sản phẩm do tôi đăng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Sản phẩm</th>
                 <th className="px-3 py-2 font-medium">Giá bán</th>
                 <th className="px-3 py-2 font-medium">Tồn kho</th>
-                <th className="px-3 py-2 font-medium">Trạng thái kiểm duyệt</th>
+                <th className="px-3 py-2 font-medium">Giao hàng</th>
+                <th className="px-3 py-2 font-medium">Trạng thái</th>
                 <th className="px-3 py-2 font-medium">Ngày đăng</th>
+                <th className="px-3 py-2 text-right font-medium">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {q.data.ownProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-xs text-stone-500">
+                  <td colSpan={7} className="py-8 text-center text-xs text-stone-500">
                     Bạn chưa đăng sản phẩm riêng nào. Bấm &quot;Đăng sản phẩm mới&quot; để bắt đầu.
                   </td>
                 </tr>
@@ -899,18 +1086,25 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                 q.data.ownProducts.map((p) => {
                   const badge =
                     p.approvalStatus === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
-                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang hiển thị)
-                      </span>
+                      p.isActive === false ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-700">
+                          <EyeOff className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang ẩn)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
+                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang hiển thị)
+                        </span>
+                      )
                     ) : p.approvalStatus === 'REJECTED' ? (
                       <span className="inline-flex items-center gap-1 rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg" title={p.rejectReason ?? ''}>
                         <AlertCircle className="h-3 w-3" aria-hidden="true" /> Từ chối: {p.rejectReason}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
-                        <Clock className="h-3 w-3" aria-hidden="true" /> Chờ Admin duyệt
+                        <Clock className="h-3 w-3" aria-hidden="true" /> Chờ Tubu Tree duyệt
                       </span>
                     );
+                  const tubuFulfils = p.fulfilment === 'TUBU' || !!p.pancakeLinkCode;
 
                   return (
                     <tr key={p.id} className="hover:bg-stone-50/50">
@@ -918,11 +1112,65 @@ function ProductsTab({ store }: { store: MerchantStore }) {
                         <div className="font-semibold text-stone-900">{p.name}</div>
                         {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
+                      <td className="px-3 py-2.5 font-semibold text-forest-700"><MerchantProductPrice product={p} /></td>
                       <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
-                      <td className="px-3 py-2.5">{badge}</td>
+                      <td className="px-3 py-2.5 text-xs text-stone-600">
+                        {tubuFulfils ? 'Tubu giao hộ' : 'Gian hàng tự giao'}
+                        {p.pancakeLinkCode && p.fulfilment !== 'TUBU' && (
+                          <div className="text-[11px] text-stone-500">
+                            Mã Pancake {p.pancakeLinkCode}, {p.approvalStatus === 'PENDING_REVIEW' ? 'chờ duyệt' : 'đã gỡ liên kết'}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {badge}
+                        {p.approvalStatus === 'APPROVED' && p.pendingEdit && (
+                          <span className="mt-1 flex w-fit items-center gap-1 rounded bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-fg">
+                            <Clock className="h-3 w-3" aria-hidden="true" /> Bản sửa chờ duyệt
+                          </span>
+                        )}
+                        {p.approvalStatus === 'APPROVED' && !p.pendingEdit && p.rejectReason && (
+                          <span className="mt-1 block text-[11px] font-semibold text-danger-fg" title={p.rejectReason}>
+                            Bản sửa bị từ chối: {p.rejectReason}. Sản phẩm vẫn bán nội dung cũ.
+                          </span>
+                        )}
+                        {p.isActive === false && (
+                          <span className="mt-1 block text-[11px] font-semibold text-stone-500">Đã ngừng bán</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-xs text-stone-500">
                         {formatDate(p.createdAt)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex flex-wrap justify-end gap-2">
+                          <button type="button" onClick={() => setEditing(p)} className={`${BTN_SMALL} inline-flex items-center gap-1`}>
+                            <Pencil className="h-3 w-3" aria-hidden="true" />
+                            <span>Sửa</span>
+                          </button>
+                          {p.isActive === false ? (
+                            <button
+                              type="button"
+                              disabled={activeMut.isPending}
+                              onClick={() => activeMut.mutate({ id: p.id, active: true })}
+                              className={BTN_SMALL}
+                            >
+                              Mở bán lại
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={activeMut.isPending}
+                              onClick={() => {
+                                if (window.confirm(`Ngừng bán ${p.name}? Khách sẽ không đặt được sản phẩm này nữa.`)) {
+                                  activeMut.mutate({ id: p.id, active: false });
+                                }
+                              }}
+                              className={`${BTN_LINK_DANGER} text-xs`}
+                            >
+                              Ngừng bán
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -998,175 +1246,22 @@ function ProductsTab({ store }: { store: MerchantStore }) {
           }}
         />
       )}
+      {editing && (
+        <EditProductModal
+          product={editing}
+          onClose={() => setEditing(null)}
+          onSuccess={() => {
+            setEditing(null);
+            void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// ── Modal Đăng sản phẩm mới ──
-function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [shortDesc, setShortDesc] = useState('');
-  const [basePrice, setBasePrice] = useState(100000);
-  const [stock, setStock] = useState(50);
-  const [imageUrl, setImageUrl] = useState('');
-  const [certifications, setCertifications] = useState('Thuần chay, Hữu cơ, Không thử nghiệm trên động vật');
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const mut = useMutation({
-    mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
-    onSuccess: () => onSuccess(),
-    onError: (e: Error) => setMsg(e.message),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
-    mut.mutate({
-      name: name.trim(),
-      description: description.trim(),
-      shortDesc: shortDesc.trim() || undefined,
-      basePrice: Number(basePrice),
-      stock: Number(stock),
-      images: imageUrl ? [imageUrl.trim()] : [],
-      certifications: certifications ? certifications.split(',').map((c) => c.trim()) : [],
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised sm:p-6">
-        <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
-          <h2 className="font-display font-semibold text-stone-900">Đăng sản phẩm mới lên gian hàng</h2>
-          <button
-            onClick={onClose}
-            aria-label="Đóng"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-500 hover:bg-stone-100 hover:text-stone-700"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="mt-3 flex items-start gap-2 rounded-control bg-info-bg p-3 text-xs text-info-fg">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Sản phẩm sẽ được gửi đến Admin Tubu Tree kiểm duyệt tiêu chuẩn xanh trong 24h trước khi hiển thị công khai.</span>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div>
-            <label htmlFor="merchant-product-name" className="block text-xs font-medium text-stone-700">Tên sản phẩm *</label>
-            <input
-              id="merchant-product-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="Nước rửa chén bồ hòn sinh học 500ml..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label htmlFor="merchant-product-price" className="block text-xs font-medium text-stone-700">Giá bán (VNĐ) *</label>
-              <input
-                id="merchant-product-price"
-                type="number"
-                value={basePrice}
-                onChange={(e) => setBasePrice(Number(e.target.value))}
-                required
-                min={1000}
-                className={`${MERCHANT_INPUT} font-semibold`}
-              />
-            </div>
-            <div>
-              <label htmlFor="merchant-product-stock" className="block text-xs font-medium text-stone-700">Số lượng tồn kho ban đầu *</label>
-              <input
-                id="merchant-product-stock"
-                type="number"
-                value={stock}
-                onChange={(e) => setStock(Number(e.target.value))}
-                required
-                min={1}
-                className={MERCHANT_INPUT}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="merchant-product-short-desc" className="block text-xs font-medium text-stone-700">Mô tả ngắn</label>
-            <input
-              id="merchant-product-short-desc"
-              value={shortDesc}
-              onChange={(e) => setShortDesc(e.target.value)}
-              placeholder="Chiết xuất bồ hòn tự nhiên, an toàn cho da nhạy cảm..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="merchant-product-description" className="block text-xs font-medium text-stone-700">Nội dung mô tả chi tiết *</label>
-            <textarea
-              id="merchant-product-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              rows={3}
-              placeholder="Công dụng, thành phần, hướng dẫn sử dụng, hạn sử dụng..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="merchant-product-certifications" className="block text-xs font-medium text-stone-700">Tiêu chuẩn / Chứng nhận xanh (phân cách bằng dấu phẩy)</label>
-            <input
-              id="merchant-product-certifications"
-              value={certifications}
-              onChange={(e) => setCertifications(e.target.value)}
-              className={MERCHANT_INPUT}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="merchant-product-image-url" className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
-            <input
-              id="merchant-product-image-url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://..."
-              className={MERCHANT_INPUT}
-            />
-          </div>
-
-          {msg && (
-            <p role="alert" className="text-xs text-danger-fg">
-              {msg}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-2 border-t border-stone-200 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className={`${TOUCH_H} rounded-control border border-stone-450 bg-stone-0 px-4 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50`}
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              disabled={mut.isPending}
-              className={`${TOUCH_H} rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`}
-            >
-              {mut.isPending ? 'Đang gửi…' : 'Gửi kiểm duyệt'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab 5: Đơn Hàng Xuất Kho ──
-function OrdersTab({ store }: { store: MerchantStore }) {
+// ── Đơn qua gian hàng ──
+function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpenFulfil: () => void }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   // P0 A5-03=A6-02 & A5-04=A6-36 (docs/audit-2026-09): BE giờ chỉ trả tên/SĐT/địa chỉ đầy đủ VÀ
@@ -1217,13 +1312,13 @@ function OrdersTab({ store }: { store: MerchantStore }) {
       )}
       {!isAdmin && (
         <div className="rounded-control border border-info-fg bg-info-bg px-3 py-2 text-xs text-info-fg">
-          Đơn do kho Tubu Tree xử lý giao nhận nên hệ thống ẩn bớt tên/SĐT đầy đủ và địa chỉ chi
-          tiết của khách, chỉ hiện khu vực (Phường/Quận/Tỉnh). Trạng thái đơn cũng do kho Tubu tự
-          cập nhật — bạn chỉ xem, không tự chuyển trạng thái tại đây được.
+          Đơn khách đặt qua gian hàng của bạn. Hàng của kho Tubu Tree do Tubu đóng gói và giao nên hệ thống chỉ hiện khu vực
+          nhận hàng, không hiện tên, số điện thoại đầy đủ của khách, và bạn chỉ xem trạng thái.
+          {selfFulfils && ' Đơn bạn tự giao (có đủ thông tin người nhận) nằm ở tab Đơn cần giao.'}
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display font-semibold text-stone-900">Đơn Hàng Xuất Phát Từ Kho Của Bạn</h2>
+        <h2 className="font-display font-semibold text-stone-900">Đơn qua gian hàng</h2>
         <label htmlFor="merchant-orders-status" className="sr-only">Lọc theo trạng thái đơn</label>
         <select
           id="merchant-orders-status"
@@ -1232,7 +1327,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
           className={`${FIELD_CLASS} ${TOUCH_H} text-xs`}
         >
           <option value="">Tất cả trạng thái</option>
-          <option value="CONFIRMED">Chờ đóng gói (Đã xác nhận)</option>
+          <option value="CONFIRMED">Đã xác nhận</option>
           <option value="PACKED">Đã đóng gói xong</option>
           <option value="SHIPPING">Đang vận chuyển</option>
           <option value="DELIVERED">Đã giao thành công</option>
@@ -1243,13 +1338,13 @@ function OrdersTab({ store }: { store: MerchantStore }) {
       {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách đơn hàng.</p>}
 
       {q.data && (
-        <ScrollRegion label="Đơn hàng xuất phát từ kho" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion label="Đơn qua gian hàng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
                 <th className="px-3 py-2.5 font-medium">Mã đơn</th>
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
-                <th className="px-3 py-2.5 font-medium">Sản phẩm xuất kho</th>
+                <th className="px-3 py-2.5 font-medium">Sản phẩm</th>
                 <th className="px-3 py-2.5 font-medium">Trạng thái</th>
                 <th className="px-3 py-2.5 font-medium text-right">Cập nhật đơn</th>
               </tr>
@@ -1258,7 +1353,7 @@ function OrdersTab({ store }: { store: MerchantStore }) {
               {orders.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-xs text-stone-500">
-                    {status ? 'Không có đơn nào ở trạng thái này.' : 'Chưa có đơn hàng nào phát sinh cho kho của bạn.'}
+                    {status ? 'Không có đơn nào ở trạng thái này.' : 'Chưa có đơn nào đặt qua gian hàng của bạn.'}
                   </td>
                 </tr>
               ) : (
@@ -1306,6 +1401,10 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                             )}
                           </div>
                         ))}
+                        {o.total == null && o.ownTotal != null && (
+                          <div className="pt-1 text-xs font-semibold text-stone-900">Hàng của bạn trong đơn: {formatVnd(o.ownTotal)}</div>
+                        )}
+                        {o.partial && <div className="text-[11px] text-stone-500">Đơn còn hàng của nơi khác, chỉ hiện hàng của bạn.</div>}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -1347,7 +1446,16 @@ function OrdersTab({ store }: { store: MerchantStore }) {
                       ) : (
                         // P0 A5-03=A6-02: BE đã chặn hẳn self-transition cho DEALER/AFFILIATE (403) —
                         // ẩn nút thay vì để đối tác bấm rồi nhận lỗi.
-                        <span className="text-xs italic text-stone-500">Do kho Tubu xử lý</span>
+                        o.selfFulfilled ? (
+                          <div className="inline-flex flex-col items-end gap-1">
+                            <span className="text-xs font-semibold text-stone-900">Bạn tự giao</span>
+                            <button type="button" onClick={onOpenFulfil} className={BTN_SMALL}>
+                              Xem ở tab Đơn cần giao
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs italic text-stone-500">Do kho Tubu xử lý</span>
+                        )
                       )}
                     </td>
                   </tr>

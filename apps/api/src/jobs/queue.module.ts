@@ -20,7 +20,10 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
           attempts: 5,
           backoff: { type: 'exponential', delay: 2000 },
           removeOnComplete: 1000,
-          removeOnFail: 5000,
+          // Redis chạy noeviction với trần bộ nhớ (docker-compose.vietnix.yml): job thất bại kèm
+          // stacktrace × 6 queue không được giữ quá nhiều. Trạng thái thật nằm ở DB (orders.pancakeOrderId,
+          // orders.gomdonStatus/gomdonCancelStatus, *_webhook_events, notification_logs) cho cron/admin.
+          removeOnFail: 1000,
         },
       }),
     }),
@@ -33,7 +36,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
       { name: QUEUE_GOMDON_EVENTS },
     ),
   ],
-  // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (retry gửi ZNS thất bại — xem
+  // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (gửi ZNS + thử lại lỗi tạm thời — xem
   // notifications.service.ts/notify()). Đăng ký ở đây thay vì NotificationsModule vì chỉ phụ
   // thuộc NotificationsService (được NotificationsModule export + @Global()); không cần
   // registerQueue lại vì QueueModule đã @Global() export toàn bộ Queue (cùng cách

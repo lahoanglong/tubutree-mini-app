@@ -57,8 +57,9 @@ describe('P2002 inside interactive transactions (real Postgres)', () => {
       const reason = `COMMUNITY_POST:${randCode(8)}`;
       await rewards.grant(user.id, 2, reason, 'COMMUNITY', 'p1');
 
+      const expiresAt = await rewards.expiresAt();
       await prisma.$transaction(async (tx) => {
-        expect(await rewards.grant(user.id, 2, reason, 'COMMUNITY', 'p1', tx)).toBe(false);
+        expect(await rewards.grant(user.id, 2, reason, 'COMMUNITY', 'p1', tx, expiresAt)).toBe(false);
         await tx.user.update({ where: { id: user.id }, data: { walletBalance: { increment: 1 } } });
       });
 
@@ -71,13 +72,14 @@ describe('P2002 inside interactive transactions (real Postgres)', () => {
     it('10 grant trùng song song trong tx Serializable của caller → không 500, cộng đúng 1 lần', async () => {
       const user = await createUser(prisma);
       const reason = `COMMUNITY_ANSWER:${randCode(8)}`;
+      const expiresAt = await rewards.expiresAt();
 
       const results = await Promise.allSettled(
         Array.from({ length: 10 }, () =>
           prisma
             .$transaction(
               async (tx) => {
-                await rewards.grant(user.id, 1, reason, 'COMMUNITY', 'a1', tx);
+                await rewards.grant(user.id, 1, reason, 'COMMUNITY', 'a1', tx, expiresAt);
                 await tx.user.update({ where: { id: user.id }, data: { walletBalance: { increment: 1 } } });
               },
               { isolationLevel: 'Serializable' },

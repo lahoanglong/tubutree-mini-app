@@ -12,6 +12,7 @@ vi.mock('zmp-sdk/apis', () => ({
   openShareSheet: vi.fn(),
   openWebview: vi.fn(),
   openChat: vi.fn(),
+  openPhone: vi.fn(),
   followOA: vi.fn(),
   requestSendNotification: vi.fn(),
   getStorage: vi.fn(),
@@ -20,11 +21,13 @@ vi.mock('zmp-sdk/apis', () => ({
 
 import {
   followOA as zmpFollowOA,
+  openPhone,
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
   setStorage,
 } from 'zmp-sdk/apis';
 import {
+  callPhone,
   followOA,
   requestNotifyPermission,
   getOaPromptState,
@@ -147,5 +150,29 @@ describe('shouldShowFollowOaPrompt — điều kiện hiện thẻ mời theo d�
 
   it('đúng đơn đầu tiên (ordersTotal=1) + đã cấu hình OA + chưa từng hỏi → hiện', () => {
     expect(shouldShowFollowOaPrompt({ hasOA: true, promptSeen: false, ordersTotal: 1 })).toBe(true);
+  });
+});
+
+// SĐT điểm nhận vỏ có ba loại (di động, số bàn, tổng đài 1800/1900): chuỗi API lưu phải đi nguyên vẹn vào openPhone và tel:.
+describe('callPhone — mọi loại SĐT điểm nhận bấm gọi được', () => {
+  const PHONES = ['0901234567', '+84901234567', '02838221234', '+842838221234', '02543812345', '18001234', '1900123456'];
+  const mockedOpenPhone = vi.mocked(openPhone);
+
+  it.each(PHONES)('%s: openPhone nhận đúng chuỗi đó', async (phone) => {
+    mockedOpenPhone.mockResolvedValue(undefined as never);
+    await callPhone(phone);
+    expect(mockedOpenPhone).toHaveBeenCalledWith({ phoneNumber: phone });
+  });
+
+  it.each(PHONES)('%s: ngoài Zalo (openPhone lỗi) rơi về tel: với đúng chuỗi đó', async (phone) => {
+    mockedOpenPhone.mockRejectedValue(new Error('không có cầu nối'));
+    const fakeWindow = { location: { href: '' } };
+    vi.stubGlobal('window', fakeWindow);
+    try {
+      await callPhone(phone);
+      expect(fakeWindow.location.href).toBe(`tel:${phone}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

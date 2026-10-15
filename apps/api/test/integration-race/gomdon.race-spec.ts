@@ -10,6 +10,7 @@ import { GomdonAlertService } from '../../src/modules/integrations/gomdon/gomdon
 import { DEFAULT_GOMDON_WAREHOUSE } from '../../src/modules/integrations/gomdon/gomdon-config';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
+import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, sleep, summarize, warmPool } from './helpers';
 
 const mockQueue = () => ({
@@ -30,7 +31,7 @@ describe('Gomdon race (real Postgres)', () => {
   const pushQueue = mockQueue();
   const eventsQueue = mockQueue();
   const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) };
-  const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+  const alerts = { alert: jest.fn().mockResolvedValue(undefined), resolveKinds: jest.fn().mockResolvedValue(0) };
   const client = {
     isConfigured: jest.fn().mockResolvedValue(true),
     isRecyclingEnabled: jest.fn().mockResolvedValue(true),
@@ -212,5 +213,92 @@ describe('Gomdon race (real Postgres)', () => {
     // Mọi lần enqueue (nếu có nhiều) đều dùng CÙNG jobId = event id → BullMQ tự dedupe.
     const jobIds = new Set(eventsQueue.add.mock.calls.map((c) => (c[2] as { jobId?: string })?.jobId));
     expect(jobIds).toEqual(new Set([rows[0]!.id]));
+  });
+
+  it('(h) UAT GOMDON-3: kho giao bằng hãng khác GIỮA lúc đọc đơn và lúc claim -> không tạo vận đơn Gomdon; lần sau chốt FAILED + báo', async () => {
+    const order = await recyclingCodOrder();
+    client.createOrder.mockResolvedValue({ data: { id: 'SHOULD-NOT', partner_code: 'BESHOULD-NOT', status: 1 } });
+
+    const original = prisma.order.findUniqueOrThrow.bind(prisma.order);
+    const readSpy = jest.spyOn(prisma.order, 'findUniqueOrThrow').mockImplementationOnce((async (args: unknown) => {
+      const snapshot = await original(args as Parameters<typeof original>[0]);
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'SHIPPING', shippingCode: 'GHN123', shippingPartner: 'GHN' },
+      });
+      return snapshot;
+    }) as never);
+    const first = await gomdonOrder.pushOrder(order.id);
+    readSpy.mockRestore();
+    const afterFirst = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+
+    const second = await gomdonOrder.pushOrder(order.id);
+    const afterSecond = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+
+    // eslint-disable-next-line no-console
+    console.log(
+      '[h] createOrder calls=%d first=%s afterFirst=%s second=%s afterSecond=%s alerts=%j',
+      client.createOrder.mock.calls.length,
+      first,
+      afterFirst.gomdonStatus,
+      second,
+      afterSecond.gomdonStatus,
+      alerts.alert.mock.calls.map((c) => String(c[1]).slice(0, 60)),
+    );
+
+    expect(client.createOrder).not.toHaveBeenCalled();
+    expect(first).toBeNull();
+    expect(afterFirst.gomdonStatus).toBeNull();
+    expect(afterFirst.gomdonOrderId).toBeNull();
+    expect(second).toBeNull();
+    expect(afterSecond.gomdonStatus).toBe('FAILED');
+    expect(afterSecond.shippingCode).toBe('GHN123');
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
+    expect(String(alerts.alert.mock.calls[0]![1])).toContain('KHÔNG tạo vận đơn Gomdon');
+  });
+});
+
+/** Báo động lưu DB: job chạy chồng / webhook gửi lại cùng lúc không được tạo nhiều báo động giống nhau. */
+describe('GomdonAlertService race (real Postgres)', () => {
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+  let alertService: GomdonAlertService;
+  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [PrismaModule],
+      providers: [GomdonAlertService, { provide: NotificationsService, useValue: notifications }],
+    }).compile();
+    await moduleRef.init();
+    prisma = moduleRef.get(PrismaService);
+    await warmPool(prisma);
+    alertService = moduleRef.get(GomdonAlertService);
+  });
+
+  afterAll(async () => {
+    await moduleRef?.close();
+  });
+
+  it('(i) UAT GOMDON-2: cùng báo động 5 lần đồng thời -> 1 dòng gomdon_alerts đang mở; đóng rồi báo lại -> dòng mới', async () => {
+    const buyer = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: buyer.id, hasRecyclingPickup: true });
+    const message = 'Gomdon CÓ vận đơn BE1 — kiểm tra ngay tránh giao trùng 2 vận đơn.';
+
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => alertService.alert(order.code, message)));
+    const s = summarize(results);
+    const open = await prisma.gomdonAlert.findMany({ where: { orderId: order.id, resolvedAt: null } });
+
+    // eslint-disable-next-line no-console
+    console.log('[i] fulfilled=%d rejected=%d openRows=%d', s.fulfilled.length, s.rejected.length, open.length);
+
+    expect(s.rejected).toHaveLength(0);
+    expect(open).toHaveLength(1);
+
+    expect(await alertService.resolveOpenForOrder(order.id)).toBe(1);
+    await alertService.alert(order.code, message);
+    const all = await prisma.gomdonAlert.findMany({ where: { orderId: order.id } });
+    expect(all).toHaveLength(2);
+    expect(all.filter((a) => a.resolvedAt === null)).toHaveLength(1);
   });
 });

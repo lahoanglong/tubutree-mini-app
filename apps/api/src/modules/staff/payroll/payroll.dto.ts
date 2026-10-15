@@ -1,22 +1,25 @@
-import { IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, NotEquals } from 'class-validator';
+import { IsCalendarDate } from '../../../common/calendar-date';
+import { Trim } from '../../../common/decorators/trim.decorator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class UpdateBankDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(20)
   bankBin?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(30)
   bankAccountNo?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(120)
   bankAccountName?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   qrImageUrl?: string;
 }
@@ -51,6 +54,7 @@ export class AdjustDto {
   staffId!: string;
 
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'workDate phải dạng YYYY-MM-DD.' })
+  @IsCalendarDate({ message: 'workDate không phải ngày có thật (vd 31/02).' })
   workDate!: string;
 
   // Trần ±50 triệu: `@IsInt()` không có biên, một cú gõ thừa số 0 là trừ/thưởng sai cả trăm
@@ -58,9 +62,18 @@ export class AdjustDto {
   @IsInt()
   @Min(-50_000_000)
   @Max(50_000_000)
+  @NotEquals(0, { message: 'Số tiền điều chỉnh phải khác 0 (số dương = trừ lương, số âm = thưởng).' })
   amount!: number; // dương=trừ, âm=thưởng
 
+  // Lý do là dấu vết kiểm toán duy nhất của khoản trừ/thưởng tay — nhân viên đọc nó khi hỏi vì sao lương thiếu.
+  @Trim()
   @IsString()
+  @MinLength(3, { message: 'Lý do điều chỉnh cần ít nhất 3 ký tự.' })
   @MaxLength(500)
   reason!: string;
+
+  /** Admin xác nhận đây là khoản thứ hai thật (cùng ngày, số tiền, lý do với khoản vừa ghi trong 5 phút). */
+  @IsOptional()
+  @IsBoolean()
+  allowDuplicate?: boolean;
 }

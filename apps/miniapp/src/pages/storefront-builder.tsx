@@ -33,11 +33,12 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ImageUpload } from '../components/image-upload';
+import { isPartnerStore } from '../utils/partner-store';
 
 const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
 const TEMPLATE_HINT =
   'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';
-const CONFIG_TITLE = 'Cấu hình Subdomain, Kho & VietQR';
+const CONFIG_TITLE = 'Cấu hình gian hàng';
 
 /** Thẻ cách mép trang 16px, cách thẻ kế 12px — dùng chung cho mọi khối trong trang. */
 const CARD_MARGIN: CSSProperties = { margin: '0 16px 12px' };
@@ -88,7 +89,7 @@ export default function StorefrontBuilderPage() {
       </BuilderShell>
     );
   }
-  if (sfQ.isError) {
+  if (sfQ.isError && !sfQ.data) {
     // Chỉ 404 = chưa có gian hàng → mời tạo. Lỗi network/500/401 → ErrorState có retry
     // (không nuốt lỗi thành "Tạo gian hàng" vì bấm Tạo cũng sẽ fail). retry:false để 404 không retry.
     const status = (sfQ.error as { response?: { status?: number } })?.response?.status;
@@ -361,8 +362,13 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               <div key={it.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="body-sm" as="div" style={{ opacity: it.isHidden ? 0.5 : 1 }}>{name}</Text>
+                    <Text variant="body-sm" as="div" style={{ opacity: it.isHidden || it.hiddenReason ? 0.5 : 1 }}>{name}</Text>
                     <PriceTag value={price} size="sm" />
+                    {it.hiddenReason && (
+                      <Badge tone="warning" size="sm" style={{ marginTop: 2 }}>
+                        Khách không thấy: {it.hiddenReason}
+                      </Badge>
+                    )}
                   </div>
                   <RowIconButton
                     icon={Pin}
@@ -829,34 +835,39 @@ function MerchantConfigSheet({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
     themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
-    bankName: sf.bankName ?? '',
-    bankBin: sf.bankBin ?? '',
-    bankAccountNo: sf.bankAccountNo ?? '',
-    bankAccountName: sf.bankAccountName ?? '',
     warehouseAddress: sf.warehouseAddress ?? '',
     warehouseCity: sf.warehouseCity ?? '',
     warehousePhone: sf.warehousePhone ?? '',
   });
 
+  // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
+  const selfFulfils = isPartnerStore(sf);
   const saveMut = useMutation({
     mutationFn: () =>
       updateStorefront({
         title: form.title.trim() || undefined,
         subdomain: form.subdomain.trim() ? form.subdomain.trim().toLowerCase() : undefined,
         themeColor: form.themeColor,
-        bankName: form.bankName.trim() || undefined,
-        bankBin: form.bankBin.trim() || undefined,
-        bankAccountNo: form.bankAccountNo.trim() || undefined,
-        bankAccountName: form.bankAccountName.trim() || undefined,
-        warehouseAddress: form.warehouseAddress.trim() || undefined,
-        warehouseCity: form.warehouseCity.trim() || undefined,
-        warehousePhone: form.warehousePhone.trim() || undefined,
+        ...(selfFulfils && {
+          warehouseAddress: form.warehouseAddress.trim(),
+          warehouseCity: form.warehouseCity.trim(),
+          warehousePhone: form.warehousePhone.trim(),
+        }),
       }),
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Đã lưu cấu hình gian hàng!', type: 'success' });
       onSaved();
       onClose();
+    },
+    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+  });
+  // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
+  const clearBankMut = useMutation({
+    mutationFn: () => updateStorefront({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
+    onSuccess: () => {
+      openSnackbar({ text: 'Đã gỡ tài khoản ngân hàng khỏi gian hàng', type: 'success' });
+      onSaved();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -897,58 +908,58 @@ function MerchantConfigSheet({
         </div>
 
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
-          <Heading variant="title-sm" as="h3" style={{ marginBottom: 8 }}>Tài khoản nhận tiền (VietQR 0đ phí)</Heading>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Input
-              aria-label="Mã BIN ngân hàng"
-              placeholder="Mã BIN ngân hàng (vd: 970436 - VCB)"
-              value={form.bankBin}
-              onChange={(e) => setForm({ ...form, bankBin: e.target.value })}
-            />
-            <Input
-              aria-label="Tên ngân hàng"
-              placeholder="Tên ngân hàng (vd: Vietcombank)"
-              value={form.bankName}
-              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-            />
-            <Input
-              aria-label="Số tài khoản ngân hàng"
-              placeholder="Số tài khoản ngân hàng"
-              value={form.bankAccountNo}
-              onChange={(e) => setForm({ ...form, bankAccountNo: e.target.value })}
-            />
-            <Input
-              aria-label="Tên chủ tài khoản"
-              placeholder="Tên chủ tài khoản (in hoa)"
-              value={form.bankAccountName}
-              onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })}
-            />
-          </div>
+          <Heading variant="title-sm" as="h3" style={{ marginBottom: 4 }}>Thanh toán</Heading>
+          <Text variant="caption" tone="secondary" as="p" style={{ margin: 0 }}>
+            Khách luôn thanh toán cho Tubu Tree.{' '}
+            {selfFulfils
+              ? 'Tiền hàng của bạn được đối soát và chuyển theo kỳ trên cổng người bán.'
+              : 'Hoa hồng của bạn được trả qua mục Rút tiền trong Cộng tác viên.'}
+          </Text>
+          {sf.bankAccountNo && (
+            <div style={{ marginTop: 8 }}>
+              <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 6px' }}>
+                Gian hàng đang lưu tài khoản {sf.bankName ?? 'ngân hàng'} ****{sf.bankAccountNo.slice(-4)} nhưng tài khoản này
+                không được dùng để thu tiền.
+              </Text>
+              <Button
+                variant="secondary"
+                loading={clearBankMut.isPending}
+                onPress={() => clearBankMut.mutate()}
+              >
+                Gỡ tài khoản đã lưu
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
-          <Heading variant="title-sm" as="h3" style={{ marginBottom: 8 }}>Địa chỉ kho hàng & Hotline</Heading>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Input
-              aria-label="Địa chỉ kho xuất hàng"
-              placeholder="Địa chỉ kho xuất hàng"
-              value={form.warehouseAddress}
-              onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
-            />
-            <Input
-              aria-label="Tỉnh / Thành phố"
-              placeholder="Tỉnh / Thành phố"
-              value={form.warehouseCity}
-              onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
-            />
-            <Input
-              aria-label="Hotline kho liên hệ"
-              placeholder="Hotline kho liên hệ"
-              value={form.warehousePhone}
-              onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
-            />
+        {selfFulfils && (
+          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
+            <Heading variant="title-sm" as="h3" style={{ marginBottom: 4 }}>Kho gửi hàng & hotline</Heading>
+            <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
+              Dùng cho đơn gian hàng tự giao: khách thấy hotline này trong chi tiết đơn để liên hệ.
+            </Text>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Input
+                aria-label="Địa chỉ kho xuất hàng"
+                placeholder="Địa chỉ kho xuất hàng"
+                value={form.warehouseAddress}
+                onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
+              />
+              <Input
+                aria-label="Tỉnh / Thành phố"
+                placeholder="Tỉnh / Thành phố"
+                value={form.warehouseCity}
+                onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
+              />
+              <Input
+                aria-label="Hotline kho liên hệ"
+                placeholder="Hotline kho liên hệ"
+                value={form.warehousePhone}
+                onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <Button fullWidth style={{ marginTop: 12 }} loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
           Lưu cấu hình gian hàng

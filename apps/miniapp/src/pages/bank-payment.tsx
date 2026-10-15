@@ -5,17 +5,18 @@ import { Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
 import { haptic } from '../utils/haptic';
+import { formatDateTime } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
 import { Money } from '../components/ui/price-tag';
+import { PageHeader } from '../components/ui/page-header';
 import { SR_ONLY } from '../components/ui/sr-only';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
-// Trang không dùng PageHeader nên tiêu đề đang hiện chữ là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định của h1,
-// hình dáng vẫn do Text quyết định như trước. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
-const H1_RESET = { margin: 0, font: 'inherit' } as const;
+// Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
+// của h1, hình dáng vẫn do Text quyết định. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
 const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 
 export default function BankPaymentPage() {
@@ -24,7 +25,7 @@ export default function BankPaymentPage() {
   const { openSnackbar } = useSnackbar();
 
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
     enabled: !!code,
@@ -54,7 +55,7 @@ export default function BankPaymentPage() {
     haptic('medium');
     setChecking(true);
     try {
-      const res = await refetch();
+      const res = await refetch({ throwOnError: true });
       const status = res.data?.paymentStatus;
       if (status === 'PAID') {
         openSnackbar({
@@ -115,7 +116,7 @@ export default function BankPaymentPage() {
     );
   }
 
-  if (isError || !data) {
+  if (!data) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
@@ -173,14 +174,7 @@ export default function BankPaymentPage() {
   // ── Chờ thanh toán: hiển thị VietQR ──
   return (
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
-      <Box p={3} style={{ background: 'var(--color-bg-surface)', textAlign: 'center' }}>
-        <h1 style={H1_RESET}>
-          <Text bold size="large">Quét QR để chuyển khoản</Text>
-        </h1>
-        <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-          Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới
-        </Text>
-      </Box>
+      <PageHeader title="Quét QR để chuyển khoản" subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới" />
 
       <Box p={2}>
         <Box p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'center' }}>
@@ -206,6 +200,15 @@ export default function BankPaymentPage() {
             Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
           </Text>
         </Box>
+
+        {data.paymentDeadline && (
+          <Box mt={2} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
+            <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+              Vui lòng chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b>. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó
+              Tubu sẽ hoàn lại cho bạn.
+            </Text>
+          </Box>
+        )}
 
         <Box flex alignItems="center" justifyContent="center" style={{ gap: 6, marginTop: 14, color: 'var(--color-text-tertiary)' }}>
           <Clock size={15} />

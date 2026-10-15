@@ -14,6 +14,7 @@ function makePrisma() {
       aggregate: jest.fn().mockResolvedValue({ _sum: { total: null } }),
     },
     order: { count: jest.fn().mockResolvedValue(0) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   } as any;
 }
 
@@ -85,6 +86,20 @@ describe('BrandService.getOwnedSales (C-034, Q-18): doanh thu nhãn chỉ-đọc
     ]);
   });
 
+  it('trừ đơn vị/doanh thu đã trả một phần (APPROVED, fullReturn=false) bằng MỘT truy vấn gộp trong DB, không N+1', async () => {
+    const { prisma, svc } = setup();
+    prisma.orderItem.groupBy.mockResolvedValue([{ variationId: 'v1', _sum: { quantity: 3, total: 300_000 } }]);
+    prisma.orderItem.aggregate.mockResolvedValue({ _sum: { total: 300_000 } });
+    prisma.$queryRaw.mockResolvedValue([{ variationId: 'v1', quantity: 3, total: 300_000, status: 'DELIVERED', returned: 2n }]);
+    const out = await svc.getOwnedSales('owner1', '30d', NOW);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = prisma.$queryRaw.mock.calls[0][0];
+    expect(sql.values).toContain('b1');
+    expect(sql.sql).toContain(`rr."status" = 'APPROVED' AND rr."fullReturn" = false`);
+    expect(out).toMatchObject({ unitsSold: 1, revenue: 100_000, delivered: { revenue: 100_000 } });
+    expect(out.topProducts[0]).toMatchObject({ quantity: 1, revenue: 100_000 });
+  });
+
   it('chỉ trả tối đa 10 sản phẩm bán chạy', async () => {
     const { prisma, svc } = setup();
     const vars = Array.from({ length: 14 }, (_, i) => ({ id: `v${i}`, product: { id: `p${i}`, name: `SP ${i}`, slug: `sp-${i}` } }));
@@ -105,7 +120,7 @@ describe('BrandService.getOwnedSales (C-034, Q-18): doanh thu nhãn chỉ-đọc
     for (const banned of ['phone', 'fullName', 'recipient', 'shippingAddress', 'street', 'userId', 'email', 'code']) {
       expect(json).not.toContain(banned);
     }
-    // Không có truy vấn nào đọc bản ghi đơn (chỉ đếm / cộng dồn) nên không thể kéo PII về.
+    // Không có truy vấn nào đọc bản ghi đơn (chỉ đếm / cộng dồn; đơn chỉ được đọc khi có trả một phần và chỉ chọn trường số) nên không kéo PII về.
     expect(prisma.order).not.toHaveProperty('findMany');
     for (const call of [...prisma.orderItem.groupBy.mock.calls, ...prisma.orderItem.aggregate.mock.calls]) {
       expect(call[0].select).toBeUndefined();

@@ -92,12 +92,16 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.answer_reward_points', value: 0, category: 'community', description: 'Điểm Xanh thưởng người trả lời bài của người khác (0 = tắt)', createOnly: true },
   { key: 'community.daily_answer_reward_cap', value: 10, category: 'community', description: 'Số câu trả lời được thưởng tối đa mỗi ngày/người', createOnly: true },
   { key: 'community.best_answer_reward_points', value: 1, category: 'community', description: 'Điểm Xanh thưởng câu trả lời được chọn hay nhất (0 = tắt)', createOnly: true },
+  { key: 'community.banned_keywords', value: ['lua dao', 'lua tien', 'casino', 'vay nong', 'vay lai', 'tin dung den', 'da cap', 'rua tien', 'hang nhai', 'khieu dam', 'sex', 'ma tuy', 'vu khi', 'lam bang gia', 'chiem doat tai san', 'ca do bong da', 'ca cuoc bong da', 'cá độ', 'cá cược', 'hàng giả', 'cờ bạc'], category: 'community', description: 'Từ/cụm từ cấm trong bài cộng đồng (khớp → bài chờ duyệt). Cụm không dấu khớp cả có dấu; cụm có dấu chỉ khớp khi gõ đúng dấu', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
   { key: 'game.tree_points_price', value: 50, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
 
   // Subscribe & Save — chiết khấu định kỳ theo thang bậc (kiểu Amazon).
   { key: 'subscribe.discount_pct', value: 0.12, category: 'subscribe', description: 'Chiết khấu cơ bản Subscribe & Save (fallback bậc minActive:1)' },
+  { key: 'wishlist.price_drop_min_pct', value: 0.05, category: 'wishlist', description: 'Giảm dưới mức này (phân số, 0.05 = 5%) thì không báo user đã yêu thích sản phẩm' },
+  { key: 'wishlist.price_drop_cooldown_days', value: 7, category: 'wishlist', description: 'Số ngày tối thiểu giữa hai thông báo giảm giá cùng sản phẩm cho một user (0 = tắt)' },
+  { key: 'subscribe.stock_retry_days', value: 3, category: 'subscribe', description: 'Số đêm cron thử lại kỳ định kỳ khi hết hàng/lỗi tạm thời trước khi bỏ kỳ (0 = không thử lại)' },
   {
     key: 'subscribe.discount_tiers',
     value: [
@@ -112,9 +116,30 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Flash Sale
   { key: 'flashsale.default_per_user_limit', value: 5, category: 'flashsale', description: 'Giới hạn mua mặc định/user/item flash' },
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
+  { key: 'flashsale.max_discount_pct', value: 0.9, category: 'flashsale', description: 'Mức giảm tối đa của giá flash so với giá đang bán (phân số; 0.9 = giá flash ≥ 10% giá bán, 1 = không chặn)', createOnly: true },
+  { key: 'flashsale.max_duration_days', value: 31, category: 'flashsale', description: 'Số ngày tối đa của một đợt flash sale', createOnly: true },
 
   // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
-  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; không áp đơn đại lý', createOnly: true },
+  { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; đơn đại lý dùng orders.dealer_pending_payment_ttl_hours', createOnly: true },
+  // Gói p8-seller (createOnly): đối tác tự giao (D4), cách ly định danh gian hàng (SELLER-5), đơn đại lý trả trước (SELLER-7), thuế TNCN hoa hồng (SELLER-11).
+  { key: 'merchant.default_shipping_fee', value: 30000, category: 'merchant', description: 'Phí giao một kiện của gian hàng đối tác tự giao khi gian hàng chưa đặt phí riêng (đồng)', createOnly: true },
+  { key: 'merchant.commission_pct', value: 0.15, category: 'merchant', description: 'Phí sàn Tubu thu trên tiền hàng đơn đối tác tự giao khi gian hàng chưa có mức riêng (phân số, 0.15 = 15%)', createOnly: true },
+  { key: 'merchant.settlement_hold_days', value: 7, category: 'merchant', description: 'Số ngày sau khi giao đơn đối tác mới đưa vào bảng kê đối soát (nên bằng hạn đổi/trả)', createOnly: true },
+  { key: 'merchant.confirm_sla_hours', value: 24, category: 'merchant', description: 'Đối tác phải xác nhận đơn tự giao trong chừng này giờ, quá hạn thì nhắc và hiện ở trang quản trị', createOnly: true },
+  { key: 'merchant.ship_sla_hours', value: 48, category: 'merchant', description: 'Đối tác phải gửi hàng (nhập mã vận đơn) trong chừng này giờ kể từ khi khách đặt', createOnly: true },
+  { key: 'merchant.deliver_sla_days', value: 7, category: 'merchant', description: 'Đơn đối tác đang giao quá chừng này ngày chưa xác nhận đã giao thì hiện ở danh sách quá hạn', createOnly: true },
+  { key: 'merchant.negative_payout_due_days', value: 7, category: 'merchant', description: 'Số ngày đối tác phải nộp lại Tubu khoản của phiếu đối soát âm (đơn COD đối tác đã tự thu tiền), tính từ ngày lập phiếu', createOnly: true },
+  // Ngưỡng báo động sức khoẻ vận hành (PLATFORM-5, ops-health.service). createOnly: admin chỉnh rồi thì seed không reset.
+  { key: 'ops.alert_unsynced_minutes', value: 30, category: 'ops', description: 'Đơn còn ở kho mà quá số phút này chưa lên Pancake thì tính là đơn kẹt', createOnly: true },
+  { key: 'ops.alert_stuck_orders', value: 1, category: 'ops', description: 'Báo động khi số đơn kẹt chưa lên Pancake từ mức này trở lên', createOnly: true },
+  { key: 'ops.alert_webhook_failed', value: 1, category: 'ops', description: 'Báo động khi số webhook Pancake/Gomdon lỗi chưa ai xử lý từ mức này trở lên', createOnly: true },
+  { key: 'ops.alert_queue_failed_1h', value: 5, category: 'ops', description: 'Báo động khi một hàng đợi có từ chừng này job lỗi trong 1 giờ qua', createOnly: true },
+  { key: 'ops.alert_repeat_hours', value: 6, category: 'ops', description: 'Sự cố chưa hết thì nhắc lại admin sau chừng này giờ', createOnly: true },
+  { key: 'ops.alert_gomdon_backlog_minutes', value: 15, category: 'ops', description: 'Đơn thu gom đã thanh toán được mà quá số phút này chưa có vận đơn Gomdon thì báo động', createOnly: true },
+  { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
+  { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
+  { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },
+  { key: 'affiliate.pit_withhold_threshold', value: 2000000, category: 'affiliate', description: 'Lần rút hoa hồng từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
 
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
@@ -130,6 +155,7 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.tank_capacity', value: 500, category: 'game', description: 'Sức chứa bình nước (💧)' },
   { key: 'game.tree_default_target', value: 600, category: 'game', description: '💧 cần để thu hoạch cây mặc định' },
   { key: 'game.harvest_coupon_daily_cap', value: 3, category: 'game', description: 'Trần số coupon thu hoạch/ngày/user — chống farm nước→coupon (P0-1)' },
+  { key: 'game.spin_voucher_min_order_multiplier', value: 6, category: 'game', description: 'Voucher trúng vòng quay dùng cho đơn từ (giá trị × hệ số này); 6 = như quà đổi điểm 50.000đ/300.000đ', createOnly: true },
   { key: 'game.harvest_coupon_min_order', value: 199000, category: 'game', description: 'Đơn tối thiểu (đ) để dùng coupon thu hoạch (lô nhà + lô phụ); không bao giờ thấp hơn giá trị coupon', createOnly: true },
   { key: 'game.dew_seeds', value: 15, category: 'game', description: '💧 giọt sương sáng/ngày' },
   { key: 'game.streak_freeze_cost', value: 80, category: 'game', description: '💧 mua 1 vé giữ lửa (streak-freeze)' },
@@ -158,6 +184,9 @@ const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.max_open_per_user', value: 3, category: 'groupbuy', description: 'Trần số nhóm mua chung OPEN cùng lúc/user — chống spam mở nhóm (P0-2)' },
   { key: 'refill.seeds_per_bottle', value: 50, category: 'refill', description: '💧 thưởng cho mỗi vỏ chai đổi' },
   { key: 'refill.monthly_cap_bottles', value: 20, category: 'refill', description: 'Trần số vỏ chai đổi được mỗi tháng/user (chống lạm dụng)' },
+  { key: 'refill.pickup_address', value: '', category: 'refill', description: 'CŨ (dự phòng): địa chỉ điểm nhận vỏ. Quản lý điểm nhận ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ; khoá này chỉ được đọc khi bảng đó chưa có điểm nào.' },
+  { key: 'refill.pickup_hours', value: '', category: 'refill', description: 'CŨ (dự phòng): giờ mở cửa điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
+  { key: 'refill.pickup_phone', value: '', category: 'refill', description: 'CŨ (dự phòng): SĐT điểm nhận vỏ. Quản lý ở Quản trị → Đổi vỏ chai → Điểm nhận vỏ.' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '9984606774', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
@@ -668,12 +697,16 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
   // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
-  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.' },
+  // {{refund_note}}: tiền hoàn bao nhiêu, về đâu (Ví Tubu / tài khoản ngân hàng) — rỗng khi đơn chưa thanh toán.
+  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.{{refund_note}}' },
   { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
-  { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.' },
+  // {{refund_note}}: tiền hoàn bao nhiêu, về đâu — rỗng khi đơn không có tiền để hoàn.
+  { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.{{refund_note}}' },
   // Báo động vận hành (chỉ gửi tài khoản ADMIN) — vận đơn thu gom Gomdon cần người xử lý.
   { id: 'nt-ops-gomdon', code: 'OPS_GOMDON_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}' },
+  { id: 'nt-ops-health', code: 'OPS_HEALTH_ALERT', channel: 'INAPP', bodyTemplate: '{{title}}: {{summary}}' },
+  { id: 'nt-ops-pancake', code: 'OPS_PANCAKE_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Đơn {{order_code}} cần xử lý (Pancake): {{message}}' },
   { id: 'nt-return-req', code: 'RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h.' },
   { id: 'nt-return-ok', code: 'RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿' },
   // A6-06 (docs/audit-2026-09/06-web.md, phần thông báo): dùng khi admin.reviewReturn duyệt trả
@@ -685,9 +718,25 @@ const NOTIFICATION_TEMPLATES = [
   // Cùng mã/nội dung với migration 20261012140000_pd3_review_b1_return_templates.
   { id: 'nt-return-ok-points', code: 'RETURN_APPROVED_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Đã hoàn {{points}} Điểm Xanh vào tài khoản của bạn 🌿', createOnly: true },
   { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
+  // P5 (D2/D3): đơn trả trước chờ tiền, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản. Cùng lời với migration
+  // 20261014091000_p5_refunds_returns_notification_templates.
+  { id: 'nt-order-awaiting-payment', code: 'ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đang chờ thanh toán {{amount}}. Vui lòng thanh toán trước {{deadline}}, quá hạn đơn sẽ tự huỷ.', createOnly: true },
+  { id: 'nt-order-payment-expired', code: 'ORDER_PAYMENT_EXPIRED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.', createOnly: true },
+  { id: 'nt-return-ok-detail', code: 'RETURN_APPROVED_DETAIL', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.{{refund_note}}', createOnly: true },
+  { id: 'nt-return-rejected', code: 'RETURN_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} chưa được chấp nhận. Lý do: "{{reason}}". Liên hệ Tubu qua Zalo OA nếu bạn cần hỗ trợ thêm.', createOnly: true },
+  { id: 'nt-return-received', code: 'RETURN_RECEIVED', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận lại hàng trả của đơn {{order_code}}. Cảm ơn bạn 🌿', createOnly: true },
+  { id: 'nt-refund-bank-requested', code: 'REFUND_BANK_REQUESTED', channel: 'INAPP', bodyTemplate: 'Tubu đã ghi nhận hoàn {{amount}} của đơn {{order_code}} về tài khoản {{bank}}. Tiền sẽ được chuyển trong 1-3 ngày làm việc, miễn phí.', createOnly: true },
+  { id: 'nt-refund-bank-completed', code: 'REFUND_BANK_COMPLETED', channel: 'INAPP', bodyTemplate: 'Tubu đã chuyển khoản hoàn {{amount}} của đơn {{order_code}} về tài khoản {{bank}} (mã giao dịch {{bank_ref}}) 🌿', createOnly: true },
+  { id: 'nt-refund-late-payment', code: 'REFUND_LATE_PAYMENT', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{amount}} cho đơn {{order_code}} nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).', createOnly: true },
+  { id: 'nt-refund-overpayment', code: 'REFUND_OVERPAYMENT', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận thêm {{amount}} cho đơn {{order_code}}, nhiều hơn số tiền của đơn. Vào chi tiết đơn để chọn nhận lại khoản này về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).', createOnly: true },
+  { id: 'nt-refund-wallet-credited', code: 'REFUND_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: 'Đã hoàn {{amount}} của đơn {{order_code}} vào Ví Tubu 🌿', createOnly: true },
+  { id: 'nt-ops-refund', code: 'OPS_REFUND_ALERT', channel: 'INAPP', bodyTemplate: '💸 Hoàn tiền đơn {{order_code}}: {{message}}', createOnly: true },
+  // Q1 (R2-MONEY-4, R2-LIFECYCLE-3): tiền khách trả không khớp đơn. Cùng lời với migration 20261014160100_q1_money_refunds_templates.
+  { id: 'nt-ops-payment', code: 'OPS_PAYMENT_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Thanh toán đơn {{order_code}}: {{message}}', createOnly: true },
+  { id: 'nt-order-underpaid', code: 'ORDER_UNDERPAID', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{paid}} cho đơn {{order_code}}, còn thiếu {{missing}} (tổng {{total}}). Vui lòng chuyển thêm phần còn thiếu với nội dung {{order_code}}. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
-  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚' },
+  { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },
   { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
   // Mọi nhánh tạm dừng (SP ngừng bán, địa chỉ hỏng, Ví Tubu không đủ — C-015) đều truyền {{reason}}. Prod nhận lời này
   // và mẫu chuyển khoản dưới qua migration 20261010191000_subscription_second_order_templates_fix.
@@ -696,7 +745,7 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-sub-order-awaiting-payment', code: 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo, vui lòng chuyển khoản {{amount}}đ trong {{hours}} giờ để Tubu giao hàng. Quá hạn đơn kỳ này sẽ tự huỷ, lịch vẫn giữ cho kỳ sau 🌿' },
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
-  { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿' },
+  { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. {{retry}} 🌿' },
   { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
@@ -708,6 +757,8 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
   { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
+  { id: 'nt-groupbuy-failed', code: 'GROUP_BUY_FAILED', channel: 'INAPP', bodyTemplate: 'Nhóm mua chung "{{product}}" chưa đủ người trước hạn nên đã đóng. Bạn vẫn mua được với giá thường hoặc mở nhóm mới để rủ thêm bạn bè nhé 🌿', createOnly: true },
+  { id: 'nt-comm-event-winner', code: 'COMMUNITY_EVENT_WINNER', channel: 'INAPP', bodyTemplate: '🏆 Chúc mừng! Bạn là người thắng sự kiện "{{title}}" của cộng đồng Tubu.{{reward}}', createOnly: true },
   { id: 'nt-dealer-bonus', code: 'DEALER_BONUS_PAID', channel: 'INAPP', bodyTemplate: '🎁 Thưởng doanh số {{quarter}}: bạn được cộng {{amount}}đ vào công nợ đại lý (doanh số {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿' },
   // Yêu cầu nhận thưởng mốc đại lý — cùng mã/nội dung với migration 20260926130000_dealer_reward_claims.
   { id: 'nt-dealer-reward-claim-new', code: 'DEALER_REWARD_CLAIM_NEW', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} yêu cầu nhận thưởng "{{reward}}" ({{period}}, doanh số đã chốt {{volume}}đ). Vào trang quản trị để duyệt.' },
@@ -729,6 +780,9 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-xu-converted', code: 'XU_CONVERTED', channel: 'INAPP', bodyTemplate: '{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.', createOnly: true },
   { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm Điểm Xanh thưởng.' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
+  { id: 'nt-refill-approved', code: 'REFILL_APPROVED', channel: 'INAPP', bodyTemplate: '🌿 Đổi vỏ chai thành công: ghi nhận {{quantity}} vỏ{{note}}, +{{seeds}} 💧 tưới cây.' },
+  { id: 'nt-refill-rejected', code: 'REFILL_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi {{quantity}} vỏ chai chưa được duyệt{{reason}}. Bạn có thể gửi lại yêu cầu mới sau khi mang vỏ đến điểm nhận.' },
+  { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
@@ -739,6 +793,32 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
   { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể rút ngay trong mục CTV.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
+  // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.
+  { id: 'nt-ctv-payout-approved', code: 'COMMISSION_PAYOUT_APPROVED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} của bạn đã được duyệt, Tubu Tree sẽ chuyển khoản trong thời gian sớm nhất.', createOnly: true },
+  { id: 'nt-ctv-payout-rejected', code: 'COMMISSION_PAYOUT_REJECTED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} chưa được duyệt: {{reason}}. Hoa hồng đã trả lại số dư khả dụng, bạn kiểm tra rồi gửi lệnh mới nhé.', createOnly: true },
+  { id: 'nt-ctv-commission-reversed', code: 'COMMISSION_REVERSED', channel: 'INAPP', bodyTemplate: 'Khoản hoa hồng dự kiến {{amount}} đã bị thu hồi vì đơn của khách bị huỷ hoặc trả hàng.', createOnly: true },
+  { id: 'nt-merchant-order-new', code: 'MERCHANT_ORDER_NEW', channel: 'INAPP', bodyTemplate: '🛒 Gian hàng của bạn có đơn mới {{order_code}} ({{total}}đ). Vào Cổng người bán → Đơn cần giao để xác nhận và gửi hàng.', createOnly: true },
+  { id: 'nt-merchant-return-approved', code: 'MERCHANT_RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Khách trả hàng đơn {{order_code}} ({{items}}) đã được duyệt. Khi nhận được hàng, hãy bấm "Đã nhận hàng trả" trong Cổng người bán để cộng lại tồn kho.', createOnly: true },
+  { id: 'nt-merchant-order-cancelled', code: 'MERCHANT_ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị huỷ ({{reason}}). Bạn không cần gửi hàng cho đơn này nữa.', createOnly: true },
+  { id: 'nt-merchant-order-overdue', code: 'MERCHANT_ORDER_OVERDUE', channel: 'INAPP', bodyTemplate: '⏰ Đơn {{order_code}} đã quá hạn {{step}}. Vào Cổng người bán → Đơn cần giao để xử lý ngay, tránh khách phải chờ.', createOnly: true },
+  { id: 'nt-merchant-cancelled-by-seller', code: 'MERCHANT_ORDER_CANCELLED_BY_SELLER', channel: 'INAPP', bodyTemplate: 'Rất tiếc, {{store}} đã huỷ đơn {{order_code}}: {{reason}}. Tiền bạn đã trả trước (nếu có) được hoàn theo chính sách của Tubu Tree.', createOnly: true },
+  { id: 'nt-merchant-payout-created', code: 'MERCHANT_PAYOUT_CREATED', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã lập phiếu đối soát {{amount}}đ cho {{count}} đơn của gian hàng. Xem chi tiết ở Cổng người bán → Đối soát.', createOnly: true },
+  { id: 'nt-merchant-payout-paid', code: 'MERCHANT_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: 'Phiếu đối soát {{amount}}đ của gian hàng đã được tất toán (mã giao dịch {{bank_ref}}).', createOnly: true },
+  { id: 'nt-merchant-payout-created-to-tubu', code: 'MERCHANT_PAYOUT_CREATED_TO_TUBU', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã lập phiếu đối soát cho {{count}} đơn của gian hàng: bạn cần chuyển cho Tubu Tree {{amount}}đ trước {{due_date}}, nội dung chuyển khoản "{{memo}}". Xem tài khoản nhận và các khoản trong phiếu ở Cổng người bán → Đối soát.', createOnly: true },
+  { id: 'nt-merchant-payout-cancelled', code: 'MERCHANT_PAYOUT_CANCELLED', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã huỷ phiếu đối soát {{amount}}đ lập ngày {{created}}: {{reason}}. Các đơn trong phiếu quay lại bảng kê và sẽ vào phiếu mới; xem lại các khoản của phiếu đã huỷ ở Cổng người bán → Đối soát.', createOnly: true },
+  { id: 'nt-merchant-payout-cancelled-to-tubu', code: 'MERCHANT_PAYOUT_CANCELLED_TO_TUBU', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã huỷ phiếu đối soát lập ngày {{created}} (bạn phải nộp {{amount}}đ): {{reason}}. Bạn chưa cần chuyển khoản cho phiếu này; nếu đã chuyển, liên hệ Tubu Tree để đối chiếu. Các đơn trong phiếu quay lại bảng kê và sẽ vào phiếu mới.', createOnly: true },
+  { id: 'nt-merchant-return-requested', code: 'MERCHANT_RETURN_REQUESTED', channel: 'INAPP', bodyTemplate: 'Khách gửi yêu cầu trả hàng đơn {{order_code}} ({{items}}): "{{reason}}". Tubu đang xem xét; xem ảnh khách gửi ở Cổng người bán → Hàng trả về.', createOnly: true },
+  { id: 'nt-order-merchant-delayed', code: 'ORDER_MERCHANT_DELAYED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} do {{store}} giao đang chậm {{step}}. Tubu đã nhắc gian hàng. Nếu không muốn chờ, bạn huỷ được đơn trong mục Đơn hàng khi hàng chưa gửi đi, tiền đã trả được hoàn đủ.', createOnly: true },
+  { id: 'nt-merchant-product-unlinked', code: 'MERCHANT_PRODUCT_UNLINKED', channel: 'INAPP', bodyTemplate: 'Sản phẩm "{{product_name}}" đã gỡ liên kết mã Pancake (Tubu giao hộ) và tạm ngừng bán: {{reason}}. Liên hệ Tubu nếu bạn cần liên kết lại.', createOnly: true },
+  { id: 'nt-merchant-product-approved', code: 'MERCHANT_PRODUCT_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Sản phẩm "{{product_name}}" đã được duyệt và đang bán trên Tubu Tree.', createOnly: true },
+  { id: 'nt-merchant-product-rejected', code: 'MERCHANT_PRODUCT_REJECTED', channel: 'INAPP', bodyTemplate: 'Sản phẩm "{{product_name}}" chưa được duyệt: {{reason}}. Sửa lại trong Cổng người bán để gửi duyệt lại.', createOnly: true },
+  { id: 'nt-ops-merchant-product', code: 'OPS_MERCHANT_PRODUCT_PENDING', channel: 'INAPP', bodyTemplate: '📦 {{store}} gửi sản phẩm "{{product_name}}" ({{mode}}) chờ duyệt. Vào trang quản trị → Duyệt sản phẩm đối tác.', createOnly: true },
+  { id: 'nt-ops-merchant-product-edit', code: 'OPS_MERCHANT_PRODUCT_EDIT_PENDING', channel: 'INAPP', bodyTemplate: '📝 {{store}} sửa nội dung sản phẩm "{{product_name}}" ({{mode}}). Sản phẩm vẫn bán với nội dung cũ. Vào trang quản trị → Duyệt sản phẩm đối tác để duyệt bản sửa.', createOnly: true },
+  { id: 'nt-merchant-product-edit-approved', code: 'MERCHANT_PRODUCT_EDIT_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Bản sửa của sản phẩm "{{product_name}}" đã được duyệt và đang hiển thị trên Tubu Tree.', createOnly: true },
+  { id: 'nt-merchant-product-edit-rejected', code: 'MERCHANT_PRODUCT_EDIT_REJECTED', channel: 'INAPP', bodyTemplate: 'Bản sửa của sản phẩm "{{product_name}}" chưa được duyệt: {{reason}}. Sản phẩm vẫn bán với nội dung cũ; bạn sửa lại trong Cổng người bán để gửi duyệt lại.', createOnly: true },
+  { id: 'nt-ops-dealer-application', code: 'OPS_DEALER_APPLICATION_PENDING', channel: 'INAPP', bodyTemplate: '📝 Hồ sơ đại lý mới: {{business}} ({{owner}}, {{phone}}). Vào trang quản trị → Đại lý để duyệt.', createOnly: true },
+  { id: 'nt-dealer-app-approved', code: 'DEALER_APPLICATION_APPROVED', channel: 'INAPP', bodyTemplate: '🎉 Hồ sơ đại lý của bạn đã được duyệt, bậc {{tier}}. Vào mục Đại lý để xem bảng giá sỉ và đặt hàng.', createOnly: true },
+  { id: 'nt-dealer-app-rejected', code: 'DEALER_APPLICATION_REJECTED', channel: 'INAPP', bodyTemplate: 'Hồ sơ đại lý của bạn chưa được duyệt: {{reason}}. Bạn có thể bổ sung thông tin và nộp lại.', createOnly: true },
   // A1-03 (docs/audit-2026-09/01-ia-navigation.md): báo admin khi khách gửi yêu cầu xoá tài khoản
   // (UsersService.requestAccountDeletion) — mirror nt-dealer-credit-reported (chỉ gửi ADMIN).
   { id: 'nt-account-deletion-requested', code: 'ACCOUNT_DELETION_REQUESTED', channel: 'INAPP', bodyTemplate: '🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý.', createOnly: true },
@@ -754,10 +834,10 @@ const QUIZZES = [
 ];
 
 const MISSIONS = [
-  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Hoàn tất đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
-  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Check-in 7 ngày liên tiếp', rewardPoints: 30, goal: 7, isRepeatable: true },
+  { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20, goal: 1, isRepeatable: false },
+  { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15, goal: 3, isRepeatable: false },
-  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn đăng ký', rewardPoints: 50, goal: 3, isRepeatable: false },
+  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50, goal: 3, isRepeatable: false },
 ];
 
 const CASHBACK_MERCHANTS = [
@@ -878,7 +958,8 @@ async function main() {
     await prisma.gameQuiz.upsert({ where: { id: q.id }, update: q, create: q });
   }
   for (const m of MISSIONS) {
-    await prisma.mission.upsert({ where: { id: m.id }, update: m, create: m });
+    // Không ghi đè: admin sửa tiêu đề/điểm thưởng ở màn Nhiệm vụ & quà đổi điểm.
+    await prisma.mission.upsert({ where: { id: m.id }, update: {}, create: m });
   }
   console.log(`   → ${QUIZZES.length} quizzes, ${MISSIONS.length} missions.`);
 

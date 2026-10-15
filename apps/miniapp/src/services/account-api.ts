@@ -2,6 +2,7 @@ import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
 import { formatNumber } from '../utils/format';
+import type { LoyaltyRates } from '../utils/loyalty-copy';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
@@ -12,6 +13,10 @@ export interface LoyaltyOverview {
    * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
    */
   pointsConvertedBalance?: number;
+  /** Điểm thường sắp hết hạn gần nhất (số điểm + ngày ISO); null khi không có. Optional: API cũ chưa trả. */
+  expiringPoints?: { amount: number; expiresAt: string } | null;
+  /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */
+  pointExpireMonths?: number;
   /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
   /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
@@ -34,8 +39,10 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
-  nextTier: { id: string; name: string; minPoints: number; pointsToGo: number } | null;
-  tiers: { id: string; name: string; minPoints: number; multiplier: number }[];
+  nextTier: { id: string; name: string; minPoints: number; minSpending?: number | null; pointsToGo: number } | null;
+  tiers: { id: string; name: string; minPoints: number; minSpending?: number | null; multiplier: number }[];
+  /** Quy tắc tích/đổi điểm từ cấu hình để giải thích trên màn Điểm Xanh. Optional: API cũ chưa trả. */
+  rates?: LoyaltyRates;
 }
 
 export interface PointsTxn {
@@ -56,6 +63,8 @@ export interface CouponDTO {
   minOrder: number | null;
   maxDiscount: number | null;
   endAt: string;
+  /** Mã chỉ áp cho các sản phẩm này (mã mua chung); null/thiếu = mọi sản phẩm. */
+  products?: { id: string; name: string }[] | null;
 }
 
 export interface WalletSummary {
@@ -221,26 +230,37 @@ export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/memb
 
 // ── View helper thuần cho trang Hạng thành viên (test: account-api.spec.ts) ──
 
-/** Nhãn tiếng Việt cho `reason` của sổ Điểm Xanh — không bao giờ hiện mã kỹ thuật thô. */
-export function pointsReasonLabel(reason: string): string {
+/**
+ * Nhãn tiếng Việt cho `reason` của sổ Điểm Xanh — không bao giờ hiện mã kỹ thuật thô. Cùng bảng với màn quản trị
+ * (apps/web ledger-labels.ts): sửa một bên thì sửa cả bên kia.
+ */
+export function pointsReasonLabel(rawReason: string): string {
+  // Gộp phiên khách vãng lai đổi khoá một số dòng thành `MERGED:<id>:<reason cũ>` (auth.service).
+  const reason = rawReason.replace(/^MERGED:[^:]+:/, '');
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
   if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
-  if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
+  if (reason.startsWith('ORDER_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
   if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
+  if (reason.startsWith('RETURN_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
+  if (reason.startsWith('RETURN_REFUND')) return 'Hoàn lại điểm đã dùng (trả hàng)';
   if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';
   if (reason.startsWith('XU_TO_POINTS')) return 'Chuyển từ xu cũ sang Điểm Xanh';
   if (reason.startsWith('REFERRAL')) {
+    if (reason.includes('DEBT')) return 'Ghi nợ thu hồi thưởng giới thiệu';
     return reason.includes('REVOKE') ? 'Thu hồi thưởng giới thiệu' : 'Thưởng giới thiệu bạn bè';
   }
   if (reason.startsWith('COMMUNITY')) return 'Thưởng cộng đồng';
   if (reason.startsWith('STOREFRONT_QUEST')) return 'Thưởng nhiệm vụ gian hàng';
   if (reason.startsWith('CTV_MILESTONE')) return 'Thưởng mốc doanh số CTV';
   if (reason.startsWith('GAME_BUY_TREE')) return 'Góp quỹ trồng cây';
+  if (reason.startsWith('GAME_SPIN_COST')) return 'Quay vòng quay may mắn';
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';
+  if (reason.startsWith('MISSION')) return 'Thưởng nhiệm vụ Vườn Xanh';
+  if (reason.startsWith('REVIEW_DELETE')) return 'Thu hồi điểm đánh giá đã xoá';
   if (reason.startsWith('REVIEW')) return 'Đánh giá sản phẩm';
   return 'Điều chỉnh Điểm Xanh';
 }

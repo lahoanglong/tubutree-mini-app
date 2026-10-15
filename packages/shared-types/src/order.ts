@@ -19,6 +19,10 @@ export interface OrderItemDTO {
   /** Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ đặt vượt tồn
    * (dealer.service.ts placeOrder cho đặt trước thay vì từ chối). Luôn 0 với đơn khác. */
   backorderedQty: number;
+  /** Chỉ GET /orders/:code: đánh giá khách đã viết cho sản phẩm của dòng này ở chính đơn này (mỗi lần mua một đánh giá). */
+  reviewId?: string | null;
+  /** Chỉ GET /orders/:code: dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
+  reviewable?: boolean;
 }
 
 export interface ShippingAddressSnapshot {
@@ -88,6 +92,18 @@ export interface OrderDTO {
   gomdonCancelStatus?: string | null;
   /** Thời điểm đơn chuyển DELIVERED — mốc tính hạn đổi/trả (ISO). */
   deliveredAt?: string | null;
+  /** Hạn thanh toán của đơn trả trước đang chờ tiền (ISO) — quá hạn đơn tự huỷ. Null với đơn khác. */
+  paymentDeadline?: string | null;
+  /**
+   * Khách đang xem tự huỷ được đơn này không — API tính bằng đúng luật huỷ của khách (gồm cả mốc bàn giao vận chuyển: đã
+   * có mã vận đơn hãng, bưu tá đã lấy hàng). API cũ chưa trả.
+   */
+  canCancel?: boolean;
+  /**
+   * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (hệ thống thôi tự huỷ): Tubu xử lý với khách. App/web không ghi hạn thanh
+   * toán, không bày nút trả tiền/huỷ, chỉ một câu "Tubu đang xử lý đơn này". API cũ chưa trả.
+   */
+  manualHandling?: boolean;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;

@@ -1,0 +1,121 @@
+import { GomdonAlertService, GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, PANCAKE_ALERT_TEMPLATE } from './gomdon-alert.service';
+import type { PrismaService } from '../../../prisma/prisma.service';
+import type { NotificationsService } from '../../notifications/notifications.service';
+
+function build(opts: { order?: { id: string } | null; openSame?: boolean; orderStatus?: string } = {}) {
+  const prisma = {
+    order: { findUnique: jest.fn().mockResolvedValue(opts.order === undefined ? { id: 'o1' } : opts.order) },
+    gomdonAlert: {
+      findFirst: jest.fn().mockResolvedValue(opts.openSame ? { id: 'a0' } : null),
+      create: jest.fn().mockResolvedValue({ id: 'a1' }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }, { id: 'admin2' }]) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $queryRaw: jest.fn().mockResolvedValue([{ status: opts.orderStatus ?? 'SHIPPING' }]),
+    $transaction: jest.fn(),
+  };
+  prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) => fn(prisma));
+  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const svc = new GomdonAlertService(prisma as unknown as PrismaService, notifications as unknown as NotificationsService);
+  return { svc, prisma, notifications };
+}
+
+describe('GomdonAlertService (UAT GOMDON-2: báo động phải xem lại được trên web admin)', () => {
+  it('lưu báo động vào gomdon_alerts gắn đơn rồi mới gửi in-app tới ADMIN', async () => {
+    const { svc, prisma, notifications } = build();
+    await svc.alert('TUBU1', 'Gomdon CÓ vận đơn BE1 — kiểm tra ngay tránh giao trùng 2 vận đơn.');
+    expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code: 'TUBU1' }, select: { id: true } });
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledWith({
+      data: { orderId: 'o1', message: 'Gomdon CÓ vận đơn BE1 — kiểm tra ngay tránh giao trùng 2 vận đơn.' },
+    });
+    expect(notifications.notify).toHaveBeenCalledTimes(2);
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', GOMDON_ALERT_TEMPLATE, expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('việc phía Pancake (R2-ADMINOPS-5) → chỉ gửi in-app, không ghi vào bảng báo động Gomdon', async () => {
+    const { svc, prisma, notifications } = build();
+    await svc.alert('TUBU1', 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', PANCAKE_ALERT_TEMPLATE);
+    expect(prisma.order.findUnique).not.toHaveBeenCalled();
+    expect(prisma.gomdonAlert.create).not.toHaveBeenCalled();
+    expect(notifications.notify).toHaveBeenCalledWith('admin1', PANCAKE_ALERT_TEMPLATE, expect.objectContaining({ order_code: 'TUBU1' }));
+  });
+
+  it('người nhận (GOMDON-2): ADMIN và nhân viên nhóm KHO chưa bị khoá', async () => {
+    const { svc, prisma } = build();
+    await svc.alert('TUBU1', 'x');
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'KHO' } }] },
+      }),
+    );
+  });
+
+  it.each([
+    ['SHIPPING', 1],
+    ['CANCELLED', 0],
+    ['RETURNED', 0],
+  ])('"hàng đã hoàn về kho" (GOODS_RETURNED) khi đơn đang %s → lưu %s báo động (đơn đã huỷ/trả thì việc với khách đã xong) (R3-CANCEL-3)', async (orderStatus, n) => {
+    const { svc, prisma, notifications } = build({ orderStatus });
+    await svc.alert('TUBU1', 'Gomdon báo "Đã hoàn hàng".', GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.GOODS_RETURNED);
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledTimes(n);
+    expect(notifications.notify).toHaveBeenCalledTimes(n * 2);
+  });
+
+  it('cùng nội dung còn đang mở → không lưu/gửi trùng (chống báo lặp sau khi API khởi động lại)', async () => {
+    const { svc, prisma, notifications } = build({ openSame: true });
+    await svc.alert('TUBU1', 'x');
+    expect(prisma.gomdonAlert.create).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('không khớp đơn nào (vd payload webhook không đọc được) → vẫn gửi in-app, không lưu', async () => {
+    const { svc, prisma, notifications } = build({ order: null });
+    await svc.alert('(không rõ đơn)', 'Webhook Gomdon không đọc được');
+    expect(prisma.gomdonAlert.create).not.toHaveBeenCalled();
+    expect(notifications.notify).toHaveBeenCalled();
+  });
+
+  it('lỗi DB khi lưu không làm hỏng luồng gọi (best-effort) và vẫn gửi in-app', async () => {
+    const { svc, prisma, notifications } = build();
+    prisma.gomdonAlert.create.mockRejectedValueOnce(new Error('db down'));
+    await expect(svc.alert('TUBU1', 'x')).resolves.toBeUndefined();
+    expect(notifications.notify).toHaveBeenCalled();
+  });
+
+  it('báo động có nhóm việc (kind) → lưu kind để hệ thống tự đóng khi tự xử lý xong (R2-GOMDON-3)', async () => {
+    const { svc, prisma } = build();
+    await svc.alert('TUBU1', 'Cần TẠO VẬN ĐƠN TAY', GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.WAYBILL_NEEDED);
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledWith({ data: { orderId: 'o1', message: 'Cần TẠO VẬN ĐƠN TAY', kind: 'WAYBILL_NEEDED' } });
+  });
+
+  it('resolveKinds: hệ thống đóng báo động đang mở theo nhóm việc (không ghi người xử lý), không đụng nhóm khác', async () => {
+    const { svc, prisma } = build();
+    prisma.gomdonAlert.updateMany.mockResolvedValueOnce({ count: 2 });
+    expect(await svc.resolveKinds('o1', [GOMDON_ALERT_KIND.WAYBILL_NEEDED, GOMDON_ALERT_KIND.WAYBILL_NOTE])).toBe(2);
+    expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'o1', resolvedAt: null, kind: { in: ['WAYBILL_NEEDED', 'WAYBILL_NOTE'] } },
+      data: { resolvedAt: expect.any(Date), resolvedById: null },
+    });
+  });
+
+  it('resolve: chỉ đóng báo động đang mở, ghi người xử lý', async () => {
+    const { svc, prisma } = build();
+    expect(await svc.resolve('a1', 'admin1')).toBe(true);
+    expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
+      where: { id: 'a1', resolvedAt: null },
+      data: { resolvedAt: expect.any(Date), resolvedById: 'admin1' },
+    });
+    prisma.gomdonAlert.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await svc.resolve('a1', 'admin1')).toBe(false);
+  });
+
+  it('resolveOpenForOrder: đóng mọi báo động đang mở của đơn', async () => {
+    const { svc, prisma } = build();
+    await svc.resolveOpenForOrder('o1', 'admin1');
+    expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'o1', resolvedAt: null },
+      data: { resolvedAt: expect.any(Date), resolvedById: 'admin1' },
+    });
+  });
+});

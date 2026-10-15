@@ -50,8 +50,44 @@ describe('PlaceOrderForCustomerDto', () => {
     expect(await errorKeys({ ...VALID, paymentMethod: 'WALLET' })).toContain('isIn');
   });
 
+  it('expectedTotal (tổng CTV đã báo khách) là số nguyên không âm, không gửi cũng được', async () => {
+    expect(await errorKeys({ ...VALID, expectedTotal: 139000 })).toHaveLength(0);
+    expect(await errorKeys({ ...VALID, expectedTotal: -1 })).toContain('min');
+    expect(await errorKeys({ ...VALID, expectedTotal: 1.5 })).toContain('isInt');
+  });
+
   it('thiếu recipient trong customer → lỗi (nested)', async () => {
     const keys = await errorKeys({ ...VALID, customer: { ...CUSTOMER, recipient: undefined } });
     expect(keys).toContain('isString');
+  });
+
+  // R5-CHECKOUT-2: request tự chế với SĐT/tên rỗng hoặc rác từng tạo đơn kẹt đẩy Pancake (FAILED).
+  it.each([
+    ['SĐT rỗng', { phone: '' }],
+    ['SĐT chữ', { phone: 'abc' }],
+    ['SĐT 9 số không có 0 đầu', { phone: '922222221' }],
+    ['SĐT thiếu số', { phone: '09222222' }],
+    ['tên người nhận rỗng', { recipient: '' }],
+    ['tên người nhận toàn khoảng trắng', { recipient: '    ' }],
+    ['tên người nhận 1 ký tự', { recipient: ' A ' }],
+    ['địa chỉ toàn khoảng trắng', { street: '   ' }],
+    ['chưa chọn tỉnh/thành', { provinceCode: '' }],
+    ['chưa chọn phường/xã', { wardCode: '' }],
+  ])('%s → lỗi', async (_label, over) => {
+    expect(await errorKeys({ ...VALID, customer: { ...CUSTOMER, ...over } })).not.toHaveLength(0);
+  });
+
+  it.each(['+84 92 222 2221', '84922222221', '092.222.2221', '092-222-2221', '0922222221'])(
+    'SĐT %j (0/+84/84, có dấu cách/chấm/gạch) → hợp lệ',
+    async (phone) => {
+      expect(await errorKeys({ ...VALID, customer: { ...CUSTOMER, phone } })).toHaveLength(0);
+    },
+  );
+
+  it('tên người nhận và địa chỉ được cắt khoảng trắng hai đầu', async () => {
+    const dto = plainToInstance(PlaceOrderForCustomerDto, { ...VALID, customer: { ...CUSTOMER, recipient: '  Nguyễn An ', street: ' 12 Lê Lợi  ' } });
+    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+    expect(dto.customer.recipient).toBe('Nguyễn An');
+    expect(dto.customer.street).toBe('12 Lê Lợi');
   });
 });

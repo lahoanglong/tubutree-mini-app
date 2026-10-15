@@ -2,6 +2,9 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { recordUserAdminEvent } from '../../../common/user-admin-events';
+import { maskPhone } from '../../../common/mask-pii';
+import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../../common/admin-roster';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -24,7 +27,7 @@ export class RbacService {
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
    * Trả user đã update (hoặc user gốc nếu không đổi).
    */
-  async applyGrants(user: User, db: Db = this.prisma): Promise<User> {
+  async applyGrants(user: User, db: Db = this.prisma, actorId: string | null = null): Promise<User> {
     if (!user.phone) return user;
     const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
@@ -37,8 +40,17 @@ export class RbacService {
       'CUSTOMER',
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
-    this.logger.warn(`applyGrants: nâng user ${user.id} (${user.phone}) ${user.role} → ${best}`);
-    return db.user.update({ where: { id: user.id }, data: { role: best } });
+    this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
+    const updated = await db.user.update({ where: { id: user.id }, data: { role: best } });
+    await recordUserAdminEvent(db, {
+      userId: user.id,
+      kind: 'ROLE',
+      from: user.role,
+      to: best,
+      reason: 'Áp quyền cấp theo SĐT',
+      actorId,
+    });
+    return updated;
   }
 
   /**
@@ -49,6 +61,12 @@ export class RbacService {
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN') {
     const normalized = phone.trim();
     return this.prisma.$transaction(async (tx) => {
+      // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
+      // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
+      const user = await tx.user.findUnique({ where: { phone: normalized } });
+      if (user && user.id === adminId) {
+        throw new BadRequestException('Không thể tự cấp quyền cho chính mình — nhờ một quản trị viên khác thực hiện.');
+      }
       const existing = await tx.roleGrant.findFirst({
         where: { phone: normalized, role, revokedAt: null },
         select: { id: true },
@@ -56,7 +74,7 @@ export class RbacService {
       if (!existing) {
         try {
           await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
-          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${normalized}`);
+          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
         } catch (err) {
           // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
           // 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
@@ -67,10 +85,9 @@ export class RbacService {
         }
       }
       // Áp ngay nếu user đã tồn tại
-      const user = await tx.user.findUnique({ where: { phone: normalized } });
       let applied = false;
       if (user) {
-        const updated = await this.applyGrants(user, tx);
+        const updated = await this.applyGrants(user, tx, adminId);
         applied = updated.role !== user.role;
       }
       return { granted: role, applied };
@@ -87,6 +104,7 @@ export class RbacService {
   async revokeGrant(adminId: string, phone: string) {
     const normalized = phone.trim();
     return this.prisma.$transaction(async (tx) => {
+      await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
         where: { phone: normalized, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -97,18 +115,26 @@ export class RbacService {
       if (user && user.id === adminId) {
         throw new BadRequestException('Không thể tự thu hồi quyền của chính mình — nhờ một quản trị viên khác thực hiện.');
       }
-      if (user?.role === 'ADMIN') {
-        const admins = await tx.user.count({ where: { role: 'ADMIN' } });
-        if (admins <= 1) {
-          throw new BadRequestException('Đây là quản trị viên cuối cùng — cấp quyền cho người khác trước khi thu hồi.');
-        }
-      }
+      if (user?.role === 'ADMIN') await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.revoke);
       let downgraded = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
         const base = await this.resolveBaseRole(user.id, tx);
-        await tx.user.update({ where: { id: user.id }, data: { role: base } });
+        await tx.user.update({
+          where: { id: user.id },
+          data: { role: base, ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
+        });
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: 'Thu hồi quyền nhân viên', actorId: adminId });
+        if (user.staffPermissions?.length) {
+          await recordUserAdminEvent(tx, {
+            userId: user.id,
+            kind: 'STAFF_PERMISSIONS',
+            from: user.staffPermissions.join(','),
+            to: '',
+            actorId: adminId,
+          });
+        }
         downgraded = true;
-        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${normalized}: ${user.role} → ${base}`);
+        this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
       }
       return { revoked: count, downgraded };
     });

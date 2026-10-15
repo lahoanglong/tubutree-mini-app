@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CronLeaderModule } from './common/cron-leader/cron-leader.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
@@ -14,6 +15,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DataRetentionModule } from './modules/data-retention/data-retention.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { SessionStateModule } from './modules/auth/session-state.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -47,6 +49,7 @@ import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
 import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { AcademyModule } from './modules/academy/academy.module';
 import { CskhModule } from './modules/cskh/cskh.module';
+import { OpsModule } from './modules/ops/ops.module';
 import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -57,8 +60,10 @@ import { throttlerOptions } from './common/throttle/throttle.config';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
+    CronLeaderModule,
     ThrottlerModule.forRoot(throttlerOptions),
     PrismaModule,
+    SessionStateModule,
     QueueModule,
     // Global cross-cutting
     SystemConfigModule,
@@ -103,6 +108,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     ContentKitModule,
     AcademyModule,
     CskhModule,
+    OpsModule,
     ZaloOaModule,
   ],
   providers: [

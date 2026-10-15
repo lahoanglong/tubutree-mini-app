@@ -22,7 +22,7 @@ function setup(user: Record<string, unknown> | null) {
     },
     notificationLog: { create },
   } as unknown as PrismaService;
-  const sendTemplate = jest.fn().mockResolvedValue(true);
+  const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
   const svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, analytics);
   return { svc, create, sendTemplate, update };

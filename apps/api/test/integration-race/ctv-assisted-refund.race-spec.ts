@@ -16,7 +16,7 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { CartService } from '../../src/modules/cart/cart.service';
 import { CustomerRefundsService } from '../../src/modules/orders/customer-refunds.service';
-import { AdminService } from '../../src/modules/admin/admin.service';
+import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../../src/modules/integrations/gomdon/gomdon.client';
@@ -33,7 +33,7 @@ import { createOrder, createUser, summarize, warmPool } from './helpers';
 describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
-  let admin: AdminService;
+  let returns: OrderReturnsService;
   let orders: OrdersService;
   let orderStatus: OrderStatusService;
 
@@ -49,7 +49,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
         OrderReversalService,
         OrderStatusService,
         OrdersService,
-        AdminService,
+        OrderReturnsService,
         CustomerRefundsService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
@@ -65,7 +65,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
-    admin = moduleRef.get(AdminService);
+    returns = moduleRef.get(OrderReturnsService);
     orders = moduleRef.get(OrdersService);
     orderStatus = moduleRef.get(OrderStatusService);
   });
@@ -114,7 +114,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
         ward: 'Phuong IT',
         district: '',
         province: 'Ha Noi',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
@@ -150,7 +150,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     expect(after.paymentStatus).toBe('REFUNDED');
     expect(await walletOf(ctv.id)).toBe(0);
     expect(await walletOf(customer.id)).toBe(200_000);
-    const refund = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const refund = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(refund).toMatchObject({
       method: 'WALLET',
       status: 'COMPLETED',
@@ -174,7 +174,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
 
     expect(await walletOf(ctv.id)).toBe(0);
-    const refund = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const refund = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(refund).toMatchObject({
       method: 'MANUAL_TRANSFER',
       status: 'PENDING',
@@ -199,7 +199,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
 
     expect(await walletOf(ctv.id)).toBe(0);
-    const refund = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const refund = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(refund.method).toBe('MANUAL_TRANSFER');
     expect(refund.customerUserId).toBeNull();
   });
@@ -213,7 +213,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     expect(after.status).toBe('CONFIRMED');
     expect(after.paymentStatus).toBe('PAID');
     expect(await walletOf(ctv.id)).toBe(0);
-    expect(await prisma.orderCustomerRefund.findUnique({ where: { orderId: order.id } })).toBeNull();
+    expect(await prisma.orderCustomerRefund.findFirst({ where: { orderId: order.id } })).toBeNull();
   });
 
   it('CTV tự huỷ đơn hộ CHƯA thanh toán → huỷ được, không có khoản hoàn nào, hoa hồng REJECTED', async () => {
@@ -229,7 +229,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     expect(after.status).toBe('CANCELLED');
     expect(after.paymentStatus).toBe('UNPAID');
     expect(await walletOf(ctv.id)).toBe(0);
-    expect(await prisma.orderCustomerRefund.findUnique({ where: { orderId: order.id } })).toBeNull();
+    expect(await prisma.orderCustomerRefund.findFirst({ where: { orderId: order.id } })).toBeNull();
     const c = await prisma.commission.findUniqueOrThrow({ where: { id: commission.id } });
     expect(c.status).toBe('REJECTED');
   });
@@ -248,14 +248,14 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
       data: { orderId: order.id, userId: ctv.id, reason: 'Hàng lỗi', status: 'REQUESTED' },
     });
 
-    await admin.reviewReturn(adminUser.id, req.id, true, 'Đồng ý');
+    await returns.review(adminUser.id, req.id, { approve: true, note: 'Đồng ý' });
 
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after.status).toBe('RETURNED');
     expect(after.paymentStatus).toBe('REFUNDED');
     expect(await walletOf(ctv.id)).toBe(0);
     expect(await walletOf(customer.id)).toBe(455_000);
-    const refund = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const refund = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(refund).toMatchObject({ method: 'WALLET', status: 'COMPLETED', reason: 'RETURNED', amount: 450_000 });
     const c = await prisma.commission.findUniqueOrThrow({ where: { id: commission.id } });
     expect(c.status).toBe('REJECTED');
@@ -272,7 +272,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'ADMIN' });
 
     expect(await walletOf(ctv.id)).toBe(0);
-    const refund = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const refund = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(refund).toMatchObject({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 180_000, reason: 'RETURNED' });
   });
 
@@ -304,7 +304,7 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     const adminUser = await createUser(prisma, { role: 'ADMIN' });
     const { order } = await assistedOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
-    const pending = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { orderId: order.id } });
+    const pending = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
 
     const listed = await refunds.list('PENDING', 1, 100);
     expect(listed.data.map((r) => r.id)).toContain(pending.id);
@@ -336,6 +336,10 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
 
     expect(await walletOf(buyer.id)).toBe(120_000);
-    expect(await prisma.orderCustomerRefund.findUnique({ where: { orderId: order.id } })).toBeNull();
+    expect(await prisma.orderCustomerRefund.findFirst({ where: { orderId: order.id, kind: 'END_CUSTOMER' } })).toBeNull();
+    const rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: 'CANCEL', method: 'WALLET', status: 'COMPLETED', amount: 120_000, userId: buyer.id }),
+    ]);
   });
 });

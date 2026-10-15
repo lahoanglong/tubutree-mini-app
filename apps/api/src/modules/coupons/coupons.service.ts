@@ -1,12 +1,61 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isCouponEligible } from './coupon-scope';
+import { isCouponEligible, requiresRealUser } from './coupon-scope';
+import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 
 export interface CouponResult {
   code: string;
   discount: number;
   freeship: boolean;
+  /** Sản phẩm mã gắn vào (null = mọi sản phẩm) — checkout chia phần giảm chỉ vào các dòng đó. */
+  productIds: string[] | null;
+}
+
+/** Một dòng hàng (đã loại flash) dùng để xét mã gắn sản phẩm (`Coupon.applyTo.productIds`). */
+export interface CouponLine {
+  productId: string;
+  total: number;
+}
+
+/**
+ * Mã luôn lưu và tra ở dạng HOA, không khoảng trắng: miniapp/web gửi `code.trim().toUpperCase()`, nên
+ * mã lưu chữ thường hay có khoảng trắng thì không khách nào áp được (ADMINOPS-7).
+ */
+export function normalizeCouponCode(code: string): string {
+  return code.replace(/\s+/g, '').toUpperCase();
+}
+
+/**
+ * Mã bị từ chối vì chưa đạt đơn tối thiểu. `base` = phần hàng đã dùng để xét (đã loại flash; mã gắn sản phẩm thì chỉ
+ * các dòng sản phẩm đó), để caller giải thích đúng phần được tính thay vì đoán từ thông điệp lỗi.
+ */
+export class CouponMinOrderError extends BadRequestException {
+  constructor(
+    readonly minOrder: number,
+    readonly base: number,
+  ) {
+    super(`Đơn tối thiểu ${minOrder.toLocaleString('vi-VN')}đ để dùng mã này.`);
+  }
+}
+
+/**
+ * Mã gắn sản phẩm mà các dòng được xét (đã loại flash) không có sản phẩm đó. `productIds` để caller nhận ra trường hợp sản phẩm
+ * vẫn nằm trong giỏ nhưng ở giá giờ vàng và nói đúng lý do (coupon-notice.ts couponRejectReason).
+ */
+export class CouponProductScopeError extends BadRequestException {
+  constructor(readonly productIds: string[]) {
+    super('Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.');
+  }
+}
+
+/** Sản phẩm mà mã bị giới hạn (null = áp cho mọi sản phẩm). */
+export function couponProductIds(applyTo: unknown): string[] | null {
+  if (!applyTo || typeof applyTo !== 'object') return null;
+  const ids = (applyTo as { productIds?: unknown }).productIds;
+  if (!Array.isArray(ids)) return null;
+  const clean = ids.filter((x): x is string => typeof x === 'string' && x.length > 0);
+  return clean.length > 0 ? clean : null;
 }
 
 /**
@@ -17,21 +66,34 @@ export interface CouponResult {
 export class CouponsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async validateAndCompute(code: string, userId: string, subtotal: number): Promise<CouponResult> {
-    const coupon = await this.prisma.coupon.findUnique({ where: { code } });
+  /**
+   * `subtotal` = giá trị hàng được tính cho mã (caller đã loại flash/trừ combo). `lines` = các dòng tạo
+   * nên `subtotal`; bắt buộc để áp mã gắn sản phẩm (mã mua chung) — thiếu thì mã đó bị từ chối, không
+   * bao giờ rơi về tính trên cả giỏ.
+   */
+  async validateAndCompute(code: string, userId: string, subtotal: number, lines?: CouponLine[]): Promise<CouponResult> {
+    const coupon = await this.prisma.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
     if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại.');
+    if (coupon.isActive === false) throw new BadRequestException('Mã giảm giá đã ngừng áp dụng.');
 
     await this.assertScopeOwnership(coupon, userId, this.prisma);
+    if (requiresRealUser(coupon)) {
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+      if (!isRealUser(u)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+    }
 
     const now = new Date();
     if (now < coupon.startAt || now > coupon.endAt) {
       throw new BadRequestException('Mã giảm giá đã hết hạn hoặc chưa hiệu lực.');
     }
-    if (coupon.minOrder && subtotal < coupon.minOrder) {
-      throw new BadRequestException(
-        `Đơn tối thiểu ${coupon.minOrder.toLocaleString('vi-VN')}đ để dùng mã này.`,
-      );
+
+    const productIds = couponProductIds(coupon.applyTo);
+    if (productIds) {
+      const matched = (lines ?? []).filter((l) => productIds.includes(l.productId));
+      if (matched.length === 0) throw new CouponProductScopeError(productIds);
+      subtotal = Math.min(subtotal, matched.reduce((s, l) => s + l.total, 0));
     }
+    if (coupon.minOrder && subtotal < coupon.minOrder) throw new CouponMinOrderError(coupon.minOrder, subtotal);
 
     const usedByUser = await this.prisma.couponRedemption.count({
       where: { couponId: coupon.id, userId },
@@ -67,7 +129,7 @@ export class CouponsService {
         freeship = true;
         break;
     }
-    return { code: coupon.code, discount, freeship };
+    return { code: coupon.code, discount, freeship, productIds };
   }
 
   /**
@@ -108,7 +170,7 @@ export class CouponsService {
     userId: string,
     orderId: string,
   ): Promise<void> {
-    const coupon = await db.coupon.findUnique({ where: { code } });
+    const coupon = await db.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
     if (!coupon) return;
     await this.assertScopeOwnership(coupon, userId, db);
 
@@ -180,7 +242,7 @@ export class CouponsService {
   ): Promise<void> {
     if (!code) return;
     const db = tx ?? this.prisma;
-    const coupon = await db.coupon.findUnique({ where: { code } });
+    const coupon = await db.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
     if (!coupon) return;
     const released = await db.couponRedemption.deleteMany({ where: { couponId: coupon.id, orderId } });
     if (released.count > 0 && coupon.usageLimit != null) {

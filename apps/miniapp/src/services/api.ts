@@ -11,6 +11,14 @@ const TIMEOUT_MS = 15_000;
  */
 export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
 
+/**
+ * Ảnh do chính API phục vụ (vd ảnh đánh giá base64 → "/reviews/:id/images/0?v=…") được trả dạng đường dẫn tương đối API
+ * để JSON nhẹ; ghép với gốc API cho thẻ img. URL tuyệt đối (Cloudinary), data URL và đường dẫn "//host" giữ nguyên.
+ */
+export function apiMediaUrl(src: string): string {
+  return src.startsWith('/') && !src.startsWith('//') ? `${BASE_URL.replace(/\/+$/, '')}${src}` : src;
+}
+
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
 /**
@@ -158,6 +166,28 @@ export function getErrorMessage(error: unknown): string {
     return vi.errors.server;
   }
   return vi.errors.generic;
+}
+
+/** Máy chủ trả 404: trang đang xem không còn (sản phẩm/đơn không có), thử lại cũng không ra khác. */
+export function isNotFoundError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
+}
+
+/**
+ * Lỗi mà máy chủ có thể đã làm xong việc trước khi trả lời: quá thời gian, mất kết nối giữa chừng, 5xx (kể cả proxy phía trước).
+ * Lệnh tạo đơn/tiền gặp lỗi này phải gửi lại đúng Idempotency-Key cũ; 4xx là máy chủ đã từ chối, không có gì được ghi.
+ */
+export function isOutcomeUnknown(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return status === undefined || status >= 500;
+}
+
+/** Mã lỗi nghiệp vụ ổn định của API (`code` trong body 4xx, vd TOTAL_CHANGED, ADDRESS_OUTDATED). */
+export function getErrorCode(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) return null;
+  const code = (error.response?.data as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' ? code : null;
 }
 
 // ── Auth endpoints ────────────────────────────────────

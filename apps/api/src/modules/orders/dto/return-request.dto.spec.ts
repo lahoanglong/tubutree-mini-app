@@ -47,9 +47,25 @@ describe('ReturnRequestDto.images (C-050)', () => {
     expect(dto.images).toHaveLength(3);
   });
 
-  it('không gửi ảnh vẫn hợp lệ; lý do vẫn bắt buộc 5–500 ký tự; tối đa 6 ảnh', async () => {
+  it('không gửi ảnh vẫn hợp lệ; lý do tối đa 500 ký tự (tối thiểu 5 kiểm ở service khi không chọn lý do sẵn); tối đa 6 ảnh', async () => {
     await expect(asBody({ reason })).resolves.toBeDefined();
-    await expect(asBody({ reason: 'ngắn' })).rejects.toThrow();
+    await expect(asBody({ reason: 'x'.repeat(501) })).rejects.toThrow();
     await expect(asBody({ reason, images: Array(7).fill(JPEG_DATA_URL) })).rejects.toThrow();
+  });
+
+  it('D3: dòng + số lượng, lý do chọn sẵn và nơi nhận tiền hoàn hợp lệ; giá trị lạ bị chặn', async () => {
+    const ok = (await asBody({
+      reasonCode: 'DEFECTIVE',
+      items: [{ orderItemId: 'oi1', quantity: 2 }],
+      refundMethod: 'BANK',
+      bankName: 'Techcombank',
+      accountNumber: '190312345678',
+      accountName: 'NGUYEN VAN A',
+    })) as ReturnRequestDto;
+    expect(ok.items?.[0]).toMatchObject({ orderItemId: 'oi1', quantity: 2 });
+    await expect(asBody({ reasonCode: 'BORED' })).rejects.toThrow();
+    await expect(asBody({ items: [{ orderItemId: 'oi1', quantity: 0 }] })).rejects.toThrow();
+    await expect(asBody({ items: [] })).rejects.toThrow();
+    await expect(asBody({ reason, refundMethod: 'CASH' })).rejects.toThrow();
   });
 });

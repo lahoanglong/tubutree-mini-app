@@ -142,6 +142,35 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(mocks.fetchProduct.mock.calls.map((c) => c[0])).toEqual(['a', 'b', 'c']);
   });
 
+  describe('hàng gian hàng đối tác không có đặt định kỳ (R5-CHECKOUT-8, D4)', () => {
+    const HONEY = { id: 'i2', variationId: 'var-honey', productName: 'Mật ong ký gửi', productSlug: 'mat-ong-ky-gui', variationName: null, unitPrice: 180000, quantity: 1, total: 180000, backorderedQty: 0 };
+    const byslug = (extra: Record<string, Record<string, unknown>>) => async (slug: string) =>
+      slug === 'nrc' ? PRODUCT(10) : { slug, variations: [{ id: 'var-honey', stock: 10 }], ...extra[slug] };
+
+    it.each([
+      ['hàng ký gửi (Tubu giao hộ)', { partnerOwned: true }],
+      ['gian hàng tự giao', { partnerOwned: true, fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }],
+      ['gian hàng tạm nghỉ', { fulfiller: { kind: 'UNAVAILABLE', storefrontId: 'sf1', name: 'Mật ong Linh' } }],
+    ])('đơn chỉ có %s → không gợi ý định kỳ', async (_label, extra) => {
+      mocks.fetchProduct.mockImplementation(byslug({ 'mat-ong-ky-gui': extra }));
+      const order = { ...ORDER, items: [HONEY] } as unknown as OrderDTO;
+      const { qc } = renderSuccess({ order });
+      await waitFor(() => expect(qc.getQueryState(['product', 'mat-ong-ky-gui'])?.status).toBe('success'));
+      expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+      expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
+    });
+
+    it('đơn trộn hàng ký gửi (dòng đầu) với hàng Tubu → gợi ý đúng món Tubu, mở SubscribeSheet đúng variation Tubu', async () => {
+      mocks.fetchProduct.mockImplementation(byslug({ 'mat-ong-ky-gui': { partnerOwned: true } }));
+      const order = { ...ORDER, items: [HONEY, ORDER.items[0]] } as unknown as OrderDTO;
+      renderSuccess({ order });
+      fireEvent.click(await screen.findByRole('button', { name: 'Đặt định kỳ' }));
+      expect(screen.getByText('subscribe-open:var-1')).toBeInTheDocument();
+      expect(screen.getByText(/Nước rửa chén/)).toBeInTheDocument();
+      expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
+    });
+  });
+
   it('gợi ý định kỳ nằm SAU hai CTA để không đẩy nút "Theo dõi đơn" khi sản phẩm tải xong', async () => {
     renderSuccess();
     const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
@@ -160,5 +189,64 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục mua sắm' }));
     expect(onTrack).toHaveBeenCalledTimes(1);
     expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it('lần đặt bị tách theo nơi giao: tổng của mọi đơn, liệt kê từng đơn kèm nơi giao, chạm để xem chi tiết (D4)', () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 130000,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    expect(screen.getByText('Tổng 2 đơn')).toBeInTheDocument();
+    expect(screen.getByText('355.000đ')).toBeInTheDocument();
+    const list = screen.getByRole('region', { name: 'Đơn cùng lần đặt' });
+    expect(list.textContent).toContain('Mật ong Linh giao');
+    fireEvent.click(screen.getByRole('button', { name: /Xem đơn TB2, Mật ong Linh giao/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TB2', { replace: true });
+  });
+
+  it('lần đặt bị tách: Điểm Xanh sẽ nhận là tổng điểm mọi đơn, khớp số màn Thanh toán đã hứa (R2-BUYERMINI-2)', () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 134000,
+      pointsEarned: 11,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 134000, pointsEarned: 11, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 172000, pointsEarned: 15, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Cô Lan' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    expect(screen.getByText('+26 điểm')).toBeInTheDocument();
+    expect(screen.getByText('26 Điểm Xanh sẽ về tay khi đơn giao thành công')).toBeInTheDocument();
+  });
+
+  it('lần đặt bị tách: khối Mã đơn hàng ở đầu liệt kê đủ mọi mã, nút sao chép chép cả danh sách, không chỉ mã đơn đầu (R5-BUYER-5)', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 130000,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+        { id: 'o3', code: 'TB3', total: 90000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Cô Lan' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    const block = screen.getByText('Mã đơn hàng').parentElement as HTMLElement;
+    for (const code of ['TB1', 'TB2', 'TB3']) expect(block).toHaveTextContent(code);
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TB1, TB2, TB3'));
+  });
+
+  it('đơn không tách: không có danh sách đơn cùng lần đặt', () => {
+    renderSuccess();
+    expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
   });
 });

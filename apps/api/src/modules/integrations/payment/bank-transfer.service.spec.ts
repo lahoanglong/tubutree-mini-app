@@ -19,7 +19,7 @@ function makePrisma(order: unknown) {
   return { order: { findUnique: jest.fn().mockResolvedValue(order) } } as unknown as PrismaService;
 }
 
-const ORDER = { id: 'o1', code: 'TUBU250625001', userId: 'u1', total: 250000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
+const ORDER = { id: 'o1', code: 'TUBU250625001', userId: 'u1', type: 'RETAIL', total: 250000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
 
 describe('BankTransferService.getBankQr', () => {
   it('đơn không tồn tại / không thuộc user → NotFound', async () => {
@@ -173,3 +173,41 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.bank).toMatchObject({ bin: '970407', accountNo: '9984606774' });
   });
 });
+
+describe('BankTransferService.getBankQr — hạn thanh toán (BUYERMINI-8)', () => {
+  const created = new Date('2026-10-13T03:00:00Z');
+
+  it('đơn chờ chuyển khoản → paymentDeadline = lúc đặt + orders.pending_payment_ttl_hours', async () => {
+    const r = await new BankTransferService(
+      makePrisma({ ...ORDER, status: 'PENDING_PAYMENT', createdAt: created }),
+      makeConfig({ 'orders.pending_payment_ttl_hours': 12 }),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(r.paymentDeadline).toBe('2026-10-13T15:00:00.000Z');
+  });
+
+  it('hệ thống đã thôi tự huỷ vì hàng đã bàn giao vận chuyển → vẫn có QR nhưng không còn hạn "quá hạn đơn sẽ tự huỷ" (R5-SYNC-1)', async () => {
+    const r = await new BankTransferService(
+      makePrisma({ ...ORDER, status: 'PENDING_PAYMENT', createdAt: created, autoCancelBlockedAt: new Date('2026-10-14T03:30:00Z') }),
+      makeConfig(),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(r.paymentDeadline).toBeNull();
+    expect(r.qrString).toContain('TUBU250625001');
+  });
+
+  it('đơn đại lý trả trước → hạn theo TTL đơn đại lý, đúng mốc cron tự huỷ', async () => {
+    const r = await new BankTransferService(
+      makePrisma({ ...ORDER, type: 'DEALER', status: 'PENDING_PAYMENT', createdAt: created }),
+      makeConfig({ 'orders.pending_payment_ttl_hours': 12, 'orders.dealer_pending_payment_ttl_hours': 48 }),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(r.paymentDeadline).toBe('2026-10-15T03:00:00.000Z');
+  });
+
+  it('đơn đã trả hoặc đã xác nhận → không có hạn', async () => {
+    const paid = await new BankTransferService(
+      makePrisma({ ...ORDER, status: 'CONFIRMED', paymentStatus: 'PAID', createdAt: created }),
+      makeConfig(),
+    ).getBankQr('TUBU250625001', 'u1');
+    expect(paid.paymentDeadline).toBeNull();
+  });
+});
+

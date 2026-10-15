@@ -3,35 +3,48 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Leaf, ExternalLink } from 'lucide-react';
+import { Leaf, ExternalLink, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
-import { fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
+import { fetchMyRefunds, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
+  buyerOrderStatusLabel,
   canPayAgain,
+  discountRows,
+  orderPaymentStatusLabel,
+  orderDetailHref,
   orderStatusLabel,
   orderStatusTone,
   paymentMethodLabel,
-  paymentStatusLabel,
   safeHttpUrl,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { reviewHref } from '@/lib/reviews-client';
 import { RecyclingStatus } from '@/components/recycling-status';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
+import { formatPhoneDisplay } from '@/lib/phone-display';
+import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
+import { OrderActions } from './order-actions';
+import { OrderRefunds } from './order-refunds';
+import { showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
+import { OrderTimeline } from './order-timeline';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
-  const { status } = useAuth();
+  const phase = useAuthPhase();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const orderQ = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code),
-    enabled: status === 'authenticated' && !!code,
+    enabled: phase === 'authenticated' && !!code,
     // 404 là câu trả lời dứt khoát (đơn không tồn tại/của người khác): thử lại chỉ làm khách chờ thêm.
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   });
@@ -47,23 +60,26 @@ export default function OrderDetailPage() {
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <p className="py-16 text-center text-stone-600">Đang tải…</p>
+        <AuthLoading />
       </Shell>
     );
   }
 
-  if (status !== 'authenticated') {
+  if (phase === 'unavailable') {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <div className="py-16 text-center">
-          <p className="text-stone-700">Vui lòng đăng nhập để xem đơn hàng.</p>
-          <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-            Đăng nhập với Zalo
-          </Link>
-        </div>
+        <SessionUnavailable />
+      </Shell>
+    );
+  }
+
+  if (phase === 'guest') {
+    return (
+      <Shell title="Chi tiết đơn hàng">
+        <LoginRequired message="Đăng nhập để xem đơn hàng của bạn." returnTo={orderDetailHref(code)} />
       </Shell>
     );
   }
@@ -100,10 +116,49 @@ export default function OrderDetailPage() {
     <Shell title={`Đơn hàng #${o.code}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-          {orderStatusLabel(o.status)}
+          {buyerOrderStatusLabel(o)}
         </span>
         <span className="text-sm text-stone-600">Đặt lúc {formatDateTime(o.createdAt)}</span>
       </div>
+      {o.manualHandling ? (
+        <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
+      ) : (
+        !canPayAgain(o) &&
+        showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
+          <p className="mt-2 text-sm font-medium text-warning-fg">
+            Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
+          </p>
+        )
+      )}
+
+      {o.fulfilment?.kind === 'MERCHANT' && (
+        <p className="mt-2 text-sm text-stone-700">
+          Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
+          {o.fulfilment.phone && (
+            <>
+              {' '}· Liên hệ gian hàng: <span className="font-semibold text-stone-900">{o.fulfilment.phone}</span>
+            </>
+          )}
+        </p>
+      )}
+      {(o.siblings?.length ?? 0) > 0 && (
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm ${ui.card}`}>
+          <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
+          <ul className="mt-1 space-y-1">
+            {o.siblings!.map((sb) => (
+              <li key={sb.code} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <Link href={orderDetailHref(sb.code)} className="inline-flex min-h-11 items-center font-semibold text-forest-700 underline">
+                    {sb.code}
+                  </Link>{' '}
+                  · {sb.fulfillerName} giao · {orderStatusLabel(sb.status)}
+                </span>
+                <span className="font-semibold text-stone-900">{formatVnd(sb.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {(canPayAgain(o) || paidNotice) && (
         <div className="mt-2">
@@ -115,6 +170,10 @@ export default function OrderDetailPage() {
           <BankTransferPanel order={o} onPaid={refreshOrder} />
         </div>
       )}
+
+      <OrderTimeline status={o.status} />
+      <OrderActions order={o} userId={user?.id} />
+      {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
 
       <section className={`mt-4 p-4 ${ui.card}`}>
         <h2 className={ui.sectionTitle}>Sản phẩm</h2>
@@ -135,6 +194,16 @@ export default function OrderDetailPage() {
                 <div className="mt-0.5 text-xs text-stone-600">
                   {formatVnd(it.unitPrice)} × {it.quantity}
                 </div>
+                {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
+                {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
+                  <Link
+                    href={reviewHref(it.productSlug, o.id)}
+                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline"
+                  >
+                    <Star className="h-4 w-4" aria-hidden="true" />
+                    {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
+                  </Link>
+                )}
               </div>
               <div className="flex-none text-sm font-semibold text-stone-900">{formatVnd(it.total)}</div>
             </li>
@@ -146,19 +215,17 @@ export default function OrderDetailPage() {
         <h2 className={ui.sectionTitle}>Thanh toán</h2>
         <div className="mt-2 space-y-1 text-sm">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
-          {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh, nên nhãn trung tính; mã ghi ở dòng riêng. */}
-          {o.discount > 0 && <Row label="Giảm giá" value={`-${formatVnd(o.discount)}`} positive />}
+          {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh: mỗi khoản một dòng, cùng cách tách với Mini App. */}
+          {discountRows(o).map((r) => (
+            <Row key={r.label} label={r.label} value={`-${formatVnd(r.amount)}`} positive />
+          ))}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">
             <span>Tổng cộng</span>
             <span>{formatVnd(o.total)}</span>
           </div>
-          {o.couponCode && <p className="text-xs text-stone-600">Mã giảm giá đã áp dụng: {o.couponCode}</p>}
-          {(o.pointsUsed ?? 0) > 0 && (
-            <p className="text-xs text-stone-600">Đã dùng {o.pointsUsed} Điểm Xanh (đã tính trong giảm giá).</p>
-          )}
           <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
-          {o.paymentStatus && <Row label="Tình trạng" value={paymentStatusLabel(o.paymentStatus)} />}
+          {o.paymentStatus && <PaymentStatusRow order={o} />}
         </div>
       </section>
 
@@ -173,7 +240,7 @@ export default function OrderDetailPage() {
       )}
 
       <p className="mt-6 text-sm text-stone-600">
-        Cần hủy hoặc đổi đơn? Gọi hotline {support.hotline} hoặc email {support.email}
+        Cần hủy hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
         {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
       </p>
     </Shell>
@@ -185,7 +252,8 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
   const line = addressLine(addr);
   const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
   const tracking = safeHttpUrl(o.trackingLink);
-  const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking);
+  const journey = journeyEvents(o.shippingHistory);
+  const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking || journey.length > 0);
   // Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không dựng khối rỗng.
   if (!contact && !line && !addr?.note && !hasShipping) return null;
 
@@ -210,6 +278,27 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
           </a>
         )}
       </div>
+      {journey.length > 0 && (
+        <>
+          <h3 className="mt-3 text-sm font-semibold text-stone-900">Hành trình vận chuyển</h3>
+          <ol className="mt-2 text-sm">
+            {journey.map((ev, i) => (
+              <li key={`${ev.at ?? ''}-${i}`} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span aria-hidden="true" className={`mt-1.5 h-2 w-2 flex-none rounded-full ${i === 0 ? 'bg-forest-600' : 'bg-stone-300'}`} />
+                  {i < journey.length - 1 && <span aria-hidden="true" className="my-0.5 w-0.5 flex-1 bg-stone-200" />}
+                </div>
+                <div className={`min-w-0 ${i < journey.length - 1 ? 'pb-3' : ''}`}>
+                  <p className={i === 0 ? 'font-semibold text-stone-900' : 'text-stone-700'}>
+                    {shippingEventLabel(ev.status) ?? (ev.code ? `Đã gán mã vận đơn ${ev.code}` : '—')}
+                  </p>
+                  {ev.at && <p className="text-xs text-stone-600">{formatDateTime(ev.at)}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </section>
   );
 }
@@ -233,4 +322,15 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
       <div className="mt-3">{children}</div>
     </main>
   );
+}
+
+/** Cùng khoá với khối Hoàn tiền: đơn REFUNDED còn khoản chuyển khoản chưa xong thì "Đang hoàn tiền". */
+function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
+  const refunds = useQuery({
+    queryKey: ['my-refunds', o.id],
+    queryFn: () => fetchMyRefunds(o.id!),
+    enabled: !!o.id && o.paymentStatus === 'REFUNDED',
+    retry: 0,
+  });
+  return <Row label="Tình trạng" value={orderPaymentStatusLabel(o, refunds.data)} />;
 }

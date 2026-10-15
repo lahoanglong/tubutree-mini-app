@@ -4,6 +4,8 @@ export interface AffiliateMe {
   isAffiliate: boolean;
   referralCode: string;
   walletBalance: number;
+  /** MST cá nhân/CCCD đã khai để kê khai khấu trừ thuế TNCN (null: chưa khai). */
+  personalTaxId?: string | null;
   monthRevenue?: number;
   tier?: AffiliateTier;
 }
@@ -24,6 +26,8 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
+  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
+  withdrawingCommission?: number;
   totalClicks: number;
   totalConversions: number;
   monthRevenue: number;
@@ -83,6 +87,27 @@ export interface Commission {
   amount: number;
   status: CommissionStatus;
   createdAt: string;
+  orderCode?: string | null;
+  orderStatus?: string | null;
+  /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng chưa chuyển tiền. */
+  withdrawing?: boolean;
+}
+
+export type PayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+export interface AffiliatePayout {
+  id: string;
+  /** Số thực nhận (sau thuế TNCN và phí). */
+  amount: number;
+  grossAmount: number | null;
+  taxWithheld: number;
+  fee: number;
+  method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY';
+  status: PayoutStatus;
+  rejectionReason: string | null;
+  bankRef: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+  paidAt: string | null;
 }
 
 export const getAffiliateMe = () => api.get<AffiliateMe>('/affiliate/me').then((r) => r.data);
@@ -115,11 +140,36 @@ export interface PayoutResult {
   payoutId?: string;
   status?: string;
 }
+export const getMyPayouts = () => api.get<AffiliatePayout[]>('/affiliate/payouts').then((r) => r.data);
+/**
+ * Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. `taxId`: MST/CCCD khai lần đầu khi
+ * lần rút bị khấu trừ thuế TNCN.
+ */
 export const requestPayout = (
   amount: number,
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
-  bankInfo?: { bankName: string; accountNumber: string; accountName: string },
-) => api.post<PayoutResult>('/affiliate/payouts', { amount, method, bankInfo }).then((r) => r.data);
+  bankInfo: { bankName: string; accountNumber: string; accountName: string } | undefined,
+  idempotencyKey: string,
+  taxId?: string,
+) =>
+  api
+    .post<PayoutResult>(
+      '/affiliate/payouts',
+      { amount, method, bankInfo, ...(taxId ? { taxId } : {}) },
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    .then((r) => r.data);
+
+export interface TaxStatement {
+  year: number;
+  fullName: string | null;
+  taxId: string | null;
+  items: { id: string; paidAt: string; method: string; grossAmount: number; taxWithheld: number; amount: number; taxId: string | null }[];
+  totals: { grossAmount: number; taxWithheld: number; netAmount: number };
+}
+/** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (mặc định năm nay). */
+export const getTaxStatement = (year?: number) =>
+  api.get<TaxStatement>('/affiliate/tax-statement', { params: year ? { year } : {} }).then((r) => r.data);
 
 export interface StorefrontStat {
   slug: string;
@@ -172,12 +222,40 @@ export interface CtvOrderResult {
   status: string;
   items: CtvOrderItemResult[];
 }
-export const createCtvOrder = (dto: {
+export interface CtvOrderInput {
   items: CtvOrderItemInput[];
   customer: CtvOrderCustomerInput;
   paymentMethod: 'COD' | 'BANK_TRANSFER';
   note?: string;
-}) => api.post<CtvOrderResult>('/affiliate/orders', dto).then((r) => r.data);
+  /** Tổng CTV đang thấy ở báo giá: tổng lúc tạo đơn cao hơn thì máy chủ trả TOTAL_CHANGED thay vì ghi đơn đắt hơn. */
+  expectedTotal?: number;
+}
+/** Gửi lại cùng Idempotency-Key (bấm lại sau quá thời gian/mất mạng) thì máy chủ trả lại đơn đã tạo, không tạo đơn thứ hai. */
+export const createCtvOrder = (dto: CtvOrderInput, idempotencyKey: string) =>
+  api
+    .post<CtvOrderResult>('/affiliate/orders', dto, { headers: { 'Idempotency-Key': idempotencyKey } })
+    .then((r) => r.data);
+
+export interface CtvOrderQuoteItem {
+  variationId: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  isFlash: boolean;
+  /** Vì sao dòng giờ vàng đang tính giá thường (vượt số suất còn mua được); null = không có. */
+  flashLimitNotice: string | null;
+}
+export interface CtvOrderQuote {
+  items: CtvOrderQuoteItem[];
+  goods: number;
+  shippingFee: number;
+  total: number;
+  /** Cách thanh toán máy chủ sẽ từ chối cho đơn này kèm lý do (vd COD vượt trần mỗi đơn); API cũ không trả. */
+  blockedPaymentMethods?: Partial<Record<'COD' | 'BANK_TRANSFER', string>>;
+}
+/** Báo giá đơn hộ: đúng số tiền máy chủ sẽ ghi khi tạo đơn (giờ vàng như khách tự đặt, phí giao). Không giữ kho hay suất. */
+export const quoteCtvOrder = (items: CtvOrderItemInput[]) =>
+  api.post<CtvOrderQuote>('/affiliate/orders/quote', { items }).then((r) => r.data);
 
 // ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm) ──
 export interface ContentKitFaq {

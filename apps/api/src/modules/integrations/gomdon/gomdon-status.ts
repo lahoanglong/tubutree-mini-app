@@ -61,7 +61,26 @@ export const GOMDON_CANCEL = {
   TOO_LATE: 'TOO_LATE',
   /** Đơn không có vận đơn Gomdon nào để huỷ. */
   NOT_NEEDED: 'NOT_NEEDED',
+  /** Admin bấm "Đã xử lý tay" sau khi tự huỷ vận đơn trên cổng Gomdon / liên hệ hoàn hàng — hệ thống thôi tự huỷ. */
+  MANUAL_HANDLED: 'MANUAL_HANDLED',
 } as const;
+
+/** Lỗi huỷ vận đơn cần người xử lý (vào hàng đợi "Cần xử lý thu gom", admin được bấm "Đã xử lý tay"). */
+export const GOMDON_CANCEL_NEEDS_ATTENTION: readonly string[] = [GOMDON_CANCEL.FAILED, GOMDON_CANCEL.TOO_LATE];
+
+/**
+ * order_customer_id gửi Gomdon. Gomdon kiểm trùng trường này kể cả với vận đơn ĐÃ HUỶ, nên lần tạo lại thứ n
+ * (sau khi vận đơn cũ bị huỷ) gửi `${code}-R${n}`; lần đầu giữ nguyên mã đơn.
+ */
+export function gomdonCustomerId(code: string, attempt: number | null | undefined): string {
+  return attempt && attempt > 0 ? `${code}-R${attempt}` : code;
+}
+
+/** Ngược của gomdonCustomerId: mã đơn gốc + số lần tạo lại (0 = lần đầu). */
+export function parseGomdonCustomerId(value: string): { code: string; attempt: number } {
+  const m = /^(.+)-R(\d{1,4})$/.exec(value);
+  return m ? { code: m[1]!, attempt: Number(m[2]) } : { code: value, attempt: 0 };
+}
 
 /** Bảng mã trạng thái — đã đối chiếu tài liệu Gomdon (mục Webhook), khớp cả 12 mã. */
 export const GOMDON_STATUS_TEXT: Record<number, string> = {
@@ -130,6 +149,11 @@ export function isGomdonPickedUp(status: string | null | undefined): boolean {
   return n != null && n !== 1 && n !== 2 && n !== 10;
 }
 
+/** Gomdon: hàng đã hoàn về kho (8) hoặc hãng báo hỏng/mất (9) — không còn nằm ở hãng chờ giao tới khách. */
+export function isGomdonGoodsNotWithCarrier(status: string | null | undefined): boolean {
+  return status === '8' || status === '9';
+}
+
 /** Đơn "thanh toán được" để giao: COD (thu khi giao) hoặc đã thanh toán. */
 export function isGomdonPayable(order: { paymentMethod: string; paymentStatus: string }): boolean {
   return order.paymentMethod === 'COD' || order.paymentStatus === 'PAID';
@@ -137,4 +161,22 @@ export function isGomdonPayable(order: { paymentMethod: string; paymentStatus: s
 
 export function gomdonStatusText(status: number): string {
   return GOMDON_STATUS_TEXT[status] ?? `Trạng thái ${status}`;
+}
+
+/**
+ * Đơn có vận đơn Gomdon ĐANG SỐNG (thu gom tái chế): Gomdon là nguồn DUY NHẤT của thông tin vận chuyển và của
+ * mốc đang giao/đã giao. Vận đơn Gomdon đã huỷ ('2' / huỷ xong) hoặc admin đã "Đã xử lý tay" → Gomdon hết sở hữu.
+ */
+export function gomdonOwnsShipping(order: {
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+  gomdonStatus?: string | null;
+  gomdonCancelStatus?: string | null;
+}): boolean {
+  return (
+    Boolean(order.gomdonOrderId || order.gomdonPartnerCode) &&
+    order.gomdonStatus !== '2' &&
+    order.gomdonStatus !== GOMDON_STATE.MANUAL_HANDLED &&
+    order.gomdonCancelStatus !== GOMDON_CANCEL.CANCELLED
+  );
 }

@@ -58,7 +58,7 @@ test.describe('Admin — tab Retention & North-star', () => {
 
     await p.goto('/admin?tab=analytics');
 
-    await expect(p.getByText('Retention & North-star')).toBeVisible();
+    await expect(p.getByRole('button', { name: 'Retention & North-star' })).toHaveAttribute('aria-current', 'page');
     await expect(p.getByText('Khách mới hôm qua')).toBeVisible();
     // "5" (newBuyers) xuất hiện CẢ ở StatCard lẫn ở dòng bảng bên dưới (cùng snapshot mới nhất) →
     // getByText('5', {exact:true}) trần vi phạm strict mode (khớp 2 phần tử). Thu hẹp về đúng
@@ -72,7 +72,7 @@ test.describe('Admin — tab Retention & North-star', () => {
 
     await p.goto('/admin?tab=analytics');
 
-    await expect(p.getByText('Retention & North-star')).toBeVisible();
+    await expect(p.getByRole('button', { name: 'Retention & North-star' })).toHaveAttribute('aria-current', 'page');
     await expect(p.getByText('Chưa có snapshot nào')).toBeVisible();
   });
 });

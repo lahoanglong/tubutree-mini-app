@@ -1,10 +1,17 @@
-import { Controller, Post, Query } from '@nestjs/common';
+import { Controller, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../../common/staff-permissions';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PancakeSyncService } from './pancake-sync.service';
+import { PancakeOrderService } from './pancake-order.service';
+import { pancakeErrorText } from './pancake-outbound';
 
 @Controller('admin/pancake')
 export class PancakeController {
-  constructor(private readonly sync: PancakeSyncService) {}
+  constructor(
+    private readonly sync: PancakeSyncService,
+    private readonly orders: PancakeOrderService,
+  ) {}
 
   /**
    * Trigger đồng bộ catalog thủ công (admin).
@@ -18,7 +25,27 @@ export class PancakeController {
   @Post('sync')
   async runSync(@Query('withStock') withStock?: string) {
     const overwriteStock = withStock === '1' || withStock === 'true';
-    const count = await this.sync.syncProducts(undefined, { forceStock: overwriteStock });
+    let count: number;
+    try {
+      count = await this.sync.syncProducts(undefined, { forceStock: overwriteStock });
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new ServiceUnavailableException(
+        `Không đồng bộ được danh mục Pancake (${pancakeErrorText(err)}). Thử lại sau ít phút; lỗi kéo dài thì kiểm khoá Pancake.`,
+      );
+    }
     return { synced: count, stockOverwritten: overwriteStock };
+  }
+
+  /**
+   * "Đẩy lại Pancake": xếp lại lệnh tạo đơn kho cho đơn chưa lên Pancake (lỗi, hết lượt, quá hạn tự đẩy). Luật an
+   * toàn (không đẩy đơn đã huỷ/đã rời kho/chưa thanh toán qua cổng) nằm ở PancakeOrderService.retryPushByAdmin;
+   * tạo trùng được chặn bằng tra cứu theo mã đơn trước khi tạo lại.
+   */
+  @Roles('ADMIN')
+  @AllowStaff('KHO')
+  @Post('orders/:id/push')
+  retryPush(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.orders.retryPushByAdmin(adminId, id);
   }
 }

@@ -6,6 +6,7 @@ import { NotificationsService } from '../../src/modules/notifications/notificati
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { LoyaltyExpiryService } from '../../src/modules/loyalty/loyalty-expiry.service';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
+import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { milestoneGrantReason, revokeReferralRewardForOrder } from '../../src/modules/wallet/referral-reward';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
@@ -138,6 +139,31 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
       await runCron();
 
       expect(await expiredRows(user.id)).toHaveLength(0);
+      expect(await balance(user.id)).toBe(30);
+      expect(await standardSum(user.id)).toBe(30);
+    });
+
+    it('trả MỘT PHẦN thu 8 điểm tích (RETURN_REVERSED, refType RETURN_REQUEST): qua hạn, cron hai lần chỉ trừ 12 → còn 30', async () => {
+      const user = await customer();
+      await oldLot(user.id, 30);
+      const order = await deliveredOrder(user.id, 20);
+      // Đúng dòng OrderReversalService.reversePartialReturn ghi khi thu hồi điểm tích của phần trả.
+      await prisma.$transaction((tx) =>
+        applyPointsDelta(tx, {
+          userId: user.id,
+          delta: -8,
+          lot: 'STANDARD',
+          reason: `RETURN_REVERSED:${order.code}`,
+          refType: 'RETURN_REQUEST',
+          refId: `rr-${randCode(8)}`,
+        }),
+      );
+      expect(await balance(user.id)).toBe(42);
+
+      await ageLedger(user.id, 13);
+      await runCron();
+
+      expect((await expiredRows(user.id)).map((r) => r.delta)).toEqual([-12]);
       expect(await balance(user.id)).toBe(30);
       expect(await standardSum(user.id)).toBe(30);
     });

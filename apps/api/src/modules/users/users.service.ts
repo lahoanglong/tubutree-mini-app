@@ -4,6 +4,8 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { GeoService } from '../integrations/pancake/geo.service';
+import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 
 /** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
 export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
@@ -27,6 +29,7 @@ export class UsersService {
     // Optional: mirror DealerService/GameService — 18+ chỗ test dựng service trực tiếp không
     // truyền notifications. Thiếu wiring thì log cảnh báo, KHÔNG im lặng bỏ qua.
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly geo?: GeoService,
   ) {}
 
   async getMe(userId: string) {
@@ -89,6 +92,7 @@ export class UsersService {
   }
 
   async createAddress(userId: string, dto: CreateAddressDto) {
+    await assertDeliverableAddress(this.geo, dto);
     return this.prisma.$transaction(
       async (tx) => {
         const count = await tx.address.count({ where: { userId } });
@@ -107,7 +111,14 @@ export class UsersService {
   }
 
   async updateAddress(userId: string, id: string, dto: UpdateAddressDto) {
-    await this.assertOwner(userId, id);
+    const current = await this.assertOwner(userId, id);
+    // Chỉ sửa SĐT/đặt mặc định thì không bắt khách sửa luôn địa giới (checkout sẽ nhắc khi đặt đơn).
+    if (dto.provinceCode !== undefined || dto.wardCode !== undefined) {
+      await assertDeliverableAddress(this.geo, {
+        provinceCode: dto.provinceCode ?? current.provinceCode,
+        wardCode: dto.wardCode ?? current.wardCode,
+      });
+    }
     return this.prisma.$transaction(
       async (tx) => {
         if (dto.isDefault) {
@@ -153,6 +164,7 @@ export class UsersService {
     const addr = await this.prisma.address.findUnique({ where: { id: addressId } });
     if (!addr) throw new NotFoundException('Không tìm thấy địa chỉ.');
     if (addr.userId !== userId) throw new ForbiddenException('Địa chỉ không thuộc về bạn.');
+    return addr;
   }
 
   /** Lưu kết quả onboarding quiz (segments) vào metadata + đánh dấu đã onboard. */

@@ -104,13 +104,19 @@ export function gomdonCancelLabel(cancelStatus: string | null | undefined): Stat
     case 'NOT_NEEDED':
       return { label: 'Không có vận đơn cần huỷ', tone: 'neutral' };
     case 'FAILED':
-      return { label: 'Huỷ vận đơn thất bại', tone: 'danger', hint: 'Huỷ tay trên Gomdon để bưu tá không tới lấy hàng.' };
+      return {
+        label: 'Huỷ vận đơn thất bại',
+        tone: 'danger',
+        hint: 'Hệ thống tự thử huỷ lại trong 6 giờ. Huỷ tay trên Gomdon để bưu tá không tới lấy hàng, xong thì bấm "Đã xử lý tay".',
+      };
     case 'TOO_LATE':
       return {
         label: 'Bưu tá đã lấy hàng — không huỷ được',
         tone: 'danger',
-        hint: 'Liên hệ Gomdon/BestExpress chặn giao và hoàn hàng về kho.',
+        hint: 'Liên hệ Gomdon/BestExpress chặn giao và hoàn hàng về kho, xong thì bấm "Đã xử lý tay".',
       };
+    case 'MANUAL_HANDLED':
+      return { label: 'Đã xử lý huỷ tay', tone: 'neutral' };
     default:
       return null;
   }
@@ -131,6 +137,15 @@ const CLOSED_ORDER = new Set(['DELIVERED', 'CANCELLED', 'RETURNED']);
 const SHIPPED_ORDER = new Set(['SHIPPING', 'DELIVERED']);
 /** Trạng thái được bấm "Đã xử lý tay" — trùng GOMDON_MANUAL_HANDLEABLE phía BE. */
 const MANUAL_HANDLEABLE = new Set([...NO_WAYBILL_ATTENTION, ...PROBLEM_ATTENTION]);
+/** Huỷ vận đơn cần người xử lý — trùng GOMDON_CANCEL_NEEDS_ATTENTION phía BE. */
+const CANCEL_NEEDS_ATTENTION = new Set(['FAILED', 'TOO_LATE']);
+
+/** Báo động Gomdon chưa xử lý (bảng gomdon_alerts, API trả tối đa 10 cái mới nhất). */
+export interface GomdonAlertView {
+  id: string;
+  message: string;
+  createdAt: string;
+}
 
 export interface RecyclingOrderFields {
   status: string;
@@ -145,6 +160,7 @@ export interface RecyclingOrderFields {
   deliveredAt?: string | null;
   shippingCode?: string | null;
   shippingPartner?: string | null;
+  gomdonAlerts?: GomdonAlertView[];
 }
 
 /** Kho đã giao bằng hãng khác (Pancake ghi mã vận đơn hãng đó) — mã do Gomdon ghi luôn kèm BestExpress. */
@@ -155,9 +171,11 @@ function shippedByOtherCarrier(o: { shippingCode?: string | null; shippingPartne
 /** Đơn nằm trong hàng đợi "Cần xử lý thu gom" — cùng điều kiện với BE (admin-order-filter.ts). */
 export function needsRecyclingAttention(o: RecyclingOrderFields): boolean {
   if (!o.hasRecyclingPickup) return false;
+  // Báo động chưa ai xử lý: kể cả vận đơn trông bình thường (vd Gomdon tự gắn vận đơn cho đơn đã báo tạo tay).
+  if ((o.gomdonAlerts?.length ?? 0) > 0) return true;
   const s = o.gomdonStatus ?? null;
   if (s === GOMDON_STATE.MANUAL_HANDLED) return false;
-  if (o.gomdonCancelStatus === 'FAILED' || o.gomdonCancelStatus === 'TOO_LATE') return true;
+  if (o.gomdonCancelStatus && CANCEL_NEEDS_ATTENTION.has(o.gomdonCancelStatus)) return true;
   if (!s) return false;
   if (NO_WAYBILL_ATTENTION.has(s)) {
     // Hàng đã rời kho / kho đã giao bằng hãng khác → việc tạo vận đơn tay đã xong.
@@ -231,7 +249,9 @@ export function gomdonAdminActions(o: RecyclingOrderFields): GomdonAdminActions 
   } else if (!dead) {
     canCancel = !!o.gomdonOrderId && s !== '2' && s !== GOMDON_STATE.MANUAL_HANDLED && !isGomdonPickedUp(s);
   }
-  const canMarkHandled = !!s && MANUAL_HANDLEABLE.has(s);
+  // Đơn đã huỷ/trả mà huỷ vận đơn lỗi: CSKH huỷ tay trên cổng Gomdon rồi đánh dấu (BE GomdonOrderService.markHandled).
+  const cancelNeedsHand = dead && !!o.gomdonCancelStatus && CANCEL_NEEDS_ATTENTION.has(o.gomdonCancelStatus);
+  const canMarkHandled = cancelNeedsHand || (!!s && MANUAL_HANDLEABLE.has(s));
   return { canRetry, retryNeedsConfirm, retryWarning, canCancel, canMarkHandled };
 }
 

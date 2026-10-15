@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify toàn bộ fix Wave A + B + C (2026-06-22).
-# Chạy trên máy có Node 20+ và pnpm 9 đã cài.
+# Chạy trên máy có Node 22.22+ (xem .nvmrc) và pnpm 9 đã cài.
 #
 # Mục đích: ép TS sạch + test xanh + migration khô (dry-run) trước khi deploy.
 # Exit code:

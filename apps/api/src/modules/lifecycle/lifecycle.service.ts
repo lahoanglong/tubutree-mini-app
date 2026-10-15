@@ -5,6 +5,12 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 
+/** Giảm dưới 5% không đáng báo; admin đổi bằng SystemConfig wishlist.price_drop_min_pct (phân số 0..1). */
+const DEFAULT_PRICE_DROP_MIN_PCT = 0.05;
+const DEFAULT_PRICE_DROP_COOLDOWN_DAYS = 7;
+
+const formatDong = (n: number): string => `${Math.round(n).toLocaleString('vi-VN')}đ`;
+
 interface ReorderRow {
   userId: string;
   variationId: string;
@@ -76,6 +82,8 @@ export class LifecycleService {
       const ratio = await this.config.get<number>('reorder.remind_ratio', 0.8);
       const threshold = new Date(Date.now() - cycleDays * ratio * 864e5);
 
+      // Chỉ đơn bán lẻ khách tự mua: đơn CTV lên hộ mang userId của CTV (người dùng SP là khách của họ) và đơn đại lý là hàng buôn,
+      // người nhận "mua lại" không phải người dùng SP (cùng lọc với ReviewInviteService).
       // Đơn DELIVERED cuối của mỗi (user, variation) đã cũ hơn ngưỡng, CHƯA từng nhắc cho chu kỳ
       // này. Trước đây việc loại cặp đã nhắc chỉ làm ở JS SAU KHI fetch (dưới), nên LIMIT 500
       // (không ORDER BY) có thể toàn bộ là cặp cũ đã nhắc — lãng phí cả lô, cặp mới ngoài 500 dòng
@@ -94,6 +102,8 @@ export class LifecycleService {
         LEFT JOIN reorder_reminders rr
           ON rr."userId" = o."userId" AND rr."variationId" = oi."variationId"
         WHERE o.status::text = 'DELIVERED'
+          AND o.type::text = 'RETAIL'
+          AND o."placedForCustomer" = false
         GROUP BY o."userId", oi."variationId"
         HAVING MAX(o."createdAt") <= ${threshold}
            AND (MAX(rr."remindedAt") IS NULL OR MAX(rr."remindedAt") < MAX(o."createdAt"))
@@ -193,10 +203,23 @@ export class LifecycleService {
 
   /**
    * Price Drop Alert (§6.14.10): sản phẩm giảm giá → báo cho user đã ❤️ wishlist.
-   * Gọi từ Pancake sync khi phát hiện giá biến thể giảm. Lỗi gửi từng user không
+   * Gọi từ Pancake sync khi giá biến thể giảm và từ cron khi flash sale bắt đầu. Lỗi gửi từng user không
    * chặn cả lô (notify đã nuốt lỗi).
+   *
+   * `price` có thì: giảm dưới `wishlist.price_drop_min_pct` (mặc định 5%) không báo — giá Pancake nhích 1đ cũng từng
+   * gửi cho cả nghìn người — và nội dung ghi giá cũ/mới. Mỗi user chỉ nhận một thông báo cho một sản phẩm trong
+   * `wishlist.price_drop_cooldown_days` (mặc định 7, 0 = tắt) để giá dao động 100→90→100→90 không nhắc lặp.
    */
-  async notifyWishlistPriceDrop(productId: string, productName: string): Promise<void> {
+  async notifyWishlistPriceDrop(
+    productId: string,
+    productName: string,
+    price?: { oldPrice: number; newPrice: number },
+  ): Promise<void> {
+    if (price) {
+      const minPct = await this.fractionConfig('wishlist.price_drop_min_pct', DEFAULT_PRICE_DROP_MIN_PCT);
+      const dropPct = price.oldPrice > 0 ? (price.oldPrice - price.newPrice) / price.oldPrice : 0;
+      if (!(dropPct > 0) || dropPct < minPct) return;
+    }
     // Trần số người nhận: hàm này chạy NGAY TRONG cron đồng bộ Pancake (15 phút/lần). Một sản
     // phẩm hot giảm giá với 20 nghìn lượt yêu thích sẽ gửi 20 nghìn thông báo tuần tự, chặn
     // đứng phần còn lại của lượt đồng bộ và có thể để lượt kế chạy chồng lên.
@@ -207,15 +230,51 @@ export class LifecycleService {
       select: { userId: true },
     });
     if (items.length === 0) return;
+    const alerted = await this.recentlyAlertedUsers(
+      productId,
+      items.map((w) => w.userId),
+    );
+    const recipients = items.filter((w) => !alerted.has(w.userId));
+    if (recipients.length === 0) return;
     const product = await this.prisma.product
       .findUnique({ where: { id: productId }, select: { slug: true } })
       .catch(() => null);
-    const data: Record<string, string> = { product: productName };
+    const data: Record<string, string> = {
+      product: productName,
+      product_id: productId,
+      price_note: price ? ` từ ${formatDong(price.oldPrice)} xuống ${formatDong(price.newPrice)}` : '',
+    };
     if (product?.slug) data.product_slug = product.slug;
-    for (const w of items) {
+    for (const w of recipients) {
       await this.notifications.notify(w.userId, 'PRICE_DROP_ALERT', data).catch(() => undefined);
     }
     const capped = items.length === LifecycleService.PRICE_DROP_MAX_RECIPIENTS ? ' (đã chạm trần)' : '';
-    this.logger.log(`Price-drop alert: ${productName} → ${items.length} user${capped}.`);
+    this.logger.log(
+      `Price-drop alert: ${productName} → ${recipients.length}/${items.length} user${capped} (còn lại đang trong cooldown).`,
+    );
+  }
+
+  /** User đã nhận PRICE_DROP_ALERT của đúng sản phẩm này trong cửa sổ cooldown (đọc từ notification_logs). */
+  private async recentlyAlertedUsers(productId: string, userIds: string[]): Promise<Set<string>> {
+    const raw = await this.config.get<unknown>('wishlist.price_drop_cooldown_days', DEFAULT_PRICE_DROP_COOLDOWN_DAYS);
+    const days =
+      typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 90 ? raw : DEFAULT_PRICE_DROP_COOLDOWN_DAYS;
+    if (days === 0) return new Set();
+    const since = new Date(Date.now() - days * 864e5);
+    const logs = await this.prisma.notificationLog.findMany({
+      where: {
+        templateCode: 'PRICE_DROP_ALERT',
+        userId: { in: userIds },
+        sentAt: { gte: since },
+        payload: { path: ['data', 'product_id'], equals: productId },
+      },
+      select: { userId: true },
+    });
+    return new Set(logs.map((l) => l.userId));
+  }
+
+  private async fractionConfig(key: string, fallback: number): Promise<number> {
+    const v = await this.config.get<unknown>(key, fallback);
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
   }
 }

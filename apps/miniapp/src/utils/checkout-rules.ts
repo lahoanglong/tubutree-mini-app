@@ -22,20 +22,49 @@ export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): bool
 }
 
 /**
- * Đang chọn Ví Tubu mà số dư không đủ trả tổng đơn → tự rơi về COD, tránh đặt hàng thất bại (BE reject
- * nếu thanh toán vượt số dư). Ví chỉ trả TOÀN BỘ đơn.
- */
-export function shouldFallbackToCod(payment: string, walletBalance: number, total: number): boolean {
-  return payment === 'WALLET' && walletBalance < total;
-}
-
-/**
- * Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được). Cùng điều kiện với `shouldFallbackToCod`
- * (số dư < tổng đơn) để dòng bị mờ luôn có lời giải thích và dòng được chọn không bị tự đổi về COD.
+ * Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được): số dư < tổng đơn, đúng điều kiện máy chủ từ chối lúc đặt.
+ * Ví chỉ trả TOÀN BỘ đơn.
  */
 export function walletUnavailableReason(balance: number, total: number): string | null {
   if (balance >= total) return null;
   return `Số dư chưa đủ — cần thêm ${formatVnd(total - balance)}`;
+}
+
+/** Các cách thanh toán màn thanh toán cho chọn. ZALOPAY chưa mở (chưa nối cổng thanh toán thật). */
+export const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET'] as const;
+/** Cách được tự chọn khi lựa chọn hiện tại không dùng được. Ví trừ tiền ngay khi đặt nên chỉ dùng khi khách tự chọn. */
+const AUTO_PICK_METHODS = ['COD', 'BANK_TRANSFER'] as const;
+
+export interface PaymentQuote {
+  total: number;
+  blockedPaymentMethods?: Record<string, string>;
+}
+
+/**
+ * Lý do một cách thanh toán không dùng được cho đơn này (null = dùng được). COD và chuyển khoản theo đúng blockedPaymentMethods
+ * của báo giá (hạn mức COD từng đơn, giỏ tách đơn): máy chủ từ chối đặt đúng các cách đó, cùng câu. Ví so số dư mới nhất.
+ */
+export function paymentUnavailableReason(method: string, quote: PaymentQuote, walletBalance: number): string | null {
+  const blocked = quote.blockedPaymentMethods?.[method];
+  if (blocked) return blocked;
+  return method === 'WALLET' ? walletUnavailableReason(walletBalance, quote.total) : null;
+}
+
+/**
+ * Cách thanh toán sau mỗi lần báo giá: giữ lựa chọn của khách khi còn dùng được, không thì COD hoặc chuyển khoản nếu dùng được.
+ * '' = chưa chọn: nút đặt hàng khoá và `paymentMissingNote` nói khách cần làm gì.
+ */
+export function pickPaymentMethod(current: string, quote: PaymentQuote, walletBalance: number): string {
+  const usable = (m: string) => paymentUnavailableReason(m, quote, walletBalance) === null;
+  if ((CHECKOUT_PAYMENT_METHODS as readonly string[]).includes(current) && usable(current)) return current;
+  return AUTO_PICK_METHODS.find(usable) ?? '';
+}
+
+/** Câu dưới danh sách cách thanh toán khi chưa có cách nào được chọn. */
+export function paymentMissingNote(quote: PaymentQuote, walletBalance: number): string {
+  return CHECKOUT_PAYMENT_METHODS.some((m) => paymentUnavailableReason(m, quote, walletBalance) === null)
+    ? 'Chọn một cách thanh toán cho đơn này để đặt hàng.'
+    : 'Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.';
 }
 
 /**
@@ -97,4 +126,32 @@ export function checkoutPoints(
   if (usable === 0) return { ...base, label: heldText, lockNote: null };
   if (held === 0) return { ...base, label: `Bạn đang có ${formatPoints(usable)}`, lockNote: null };
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
+}
+
+/**
+ * Trần Điểm Xanh của đơn (`quote.pointsMax`, đã gồm số dư dùng được, trần theo giá trị hàng và luật hàng của gian hàng đối tác).
+ * Khách chỉ thấy số thật được trừ sau khi tick, nên trước khi tick ô phải nêu trần khi nó thấp hơn số điểm dùng được:
+ *  - giỏ có hàng của gian hàng đối tác (Điểm Xanh chỉ trả cho hàng Tubu): luôn nêu trần + câu giải thích báo giá trả về;
+ *  - giỏ chỉ hàng Tubu: nêu trần khi nó nhỏ hơn `usable`;
+ *  - trần 0: tắt ô (kèm câu giải thích nếu không có câu của hàng đối tác).
+ * Báo giá chưa có `pointsMax` (đang tải, API cũ): không đổi gì.
+ */
+export function pointsCapState(
+  quote: { pointsMax?: number; pointsPartnerNote?: string | null } | undefined,
+  usable = 0,
+): { disabled: boolean; capNote: string | null; partnerNote: string | null } {
+  const partnerNote = quote?.pointsPartnerNote ?? null;
+  if (!Number.isFinite(quote?.pointsMax)) return { disabled: partnerNote !== null, capNote: null, partnerNote };
+  const max = Math.max(0, quote!.pointsMax as number);
+  if (max === 0) {
+    if (partnerNote) return { disabled: true, capNote: null, partnerNote };
+    return usable > 0
+      ? { disabled: true, capNote: 'Đơn này chưa dùng được Điểm Xanh', partnerNote: null }
+      : { disabled: false, capNote: null, partnerNote: null };
+  }
+  if (partnerNote) return { disabled: false, capNote: `Đơn này dùng tối đa ${groupThousands(max)} Điểm Xanh`, partnerNote };
+  if (max < usable) {
+    return { disabled: false, capNote: `Đơn này dùng tối đa ${groupThousands(max)} Điểm Xanh, tính theo giá trị hàng của đơn`, partnerNote: null };
+  }
+  return { disabled: false, capNote: null, partnerNote: null };
 }

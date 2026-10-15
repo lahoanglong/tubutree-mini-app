@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, HttpCode, HttpStatus, Req, Res, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus, Req, Res, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { IsString, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
@@ -119,7 +119,8 @@ export class AuthController {
     } catch (e) {
       // Token trong cookie đã chết (hết hạn / bị thu hồi / reuse) — xoá cookie ngay. Để lại
       // thì trình duyệt vẫn gửi kèm nó ở mọi lần mở trang, mỗi lần lại một lượt 401 vô ích.
-      if (wantsCookieAuth(req)) clearRefreshCookies(res);
+      // Chỉ khi chắc chắn token chết (401); lỗi tạm thời (DB, mạng) mà xoá thì khách mất phiên còn hợp lệ.
+      if (e instanceof UnauthorizedException && wantsCookieAuth(req)) clearRefreshCookies(res);
       throw e;
     }
   }

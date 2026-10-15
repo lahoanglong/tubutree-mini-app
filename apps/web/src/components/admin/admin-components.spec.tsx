@@ -176,6 +176,45 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
     const live = mount(<RecyclingPanel order={order({ gomdonStatus: '1', gomdonOrderId: 'g1', gomdonPartnerCode: 'BE1' })} />);
     expect(byText(live.container, 'button', 'Đã xử lý tay')).toBeNull();
   });
+
+  it('UAT GOMDON-2: báo động chưa xử lý hiện ngay trong chi tiết đơn; "Đã xử lý" gọi API đóng đúng báo động', async () => {
+    const api = mockFetch({ '/admin/gomdon/alerts/': { body: { ok: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const alerts = [
+      { id: 'a1', message: 'Gomdon CÓ vận đơn BE9 cho đơn đã báo tạo tay — kiểm tra ngay tránh giao trùng 2 vận đơn.', createdAt: '2026-10-13T03:00:00.000Z' },
+      { id: 'a2', message: 'Huỷ vận đơn Gomdon thất bại.', createdAt: '2026-10-13T02:00:00.000Z' },
+    ];
+    const o = order({ gomdonStatus: '1', gomdonOrderId: 'g9', gomdonPartnerCode: 'BE9', gomdonAlerts: alerts });
+    const { container } = mount(<RecyclingPanel order={o} />);
+    const list = container.querySelector('[aria-label="Báo động Gomdon chưa xử lý"]');
+    expect(list?.textContent).toContain('tránh giao trùng 2 vận đơn');
+    expect(list?.textContent).toContain('Huỷ vận đơn Gomdon thất bại.');
+    const buttons = list!.querySelectorAll('button');
+    expect(buttons).toHaveLength(2);
+    click(buttons[0]!);
+    click(buttons[0]!);
+    await flush();
+    expect(api.calls).toHaveLength(1);
+    expect(api.calls[0]!.url).toContain('/admin/gomdon/alerts/a1/resolve');
+    expect(api.calls[0]!.init?.method).toBe('POST');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã đánh dấu báo động là đã xử lý');
+
+    const badge = mount(<RecyclingBadge order={o} />);
+    expect(badge.container.textContent).toContain('Thu gom: cần xử lý');
+  });
+
+  it('UAT GOMDON-9: đơn đã huỷ mà huỷ vận đơn lỗi → có "Đã xử lý tay"; đã xử lý → nhãn "Đã xử lý huỷ tay", không còn nút', () => {
+    const failed = mount(
+      <RecyclingPanel order={order({ status: 'CANCELLED', gomdonStatus: '1', gomdonOrderId: 'g1', gomdonCancelStatus: 'FAILED' })} />,
+    );
+    expect(byText(failed.container, 'button', 'Đã xử lý tay')).not.toBeNull();
+    const handled = mount(
+      <RecyclingPanel order={order({ status: 'CANCELLED', gomdonStatus: '1', gomdonOrderId: 'g1', gomdonCancelStatus: 'MANUAL_HANDLED' })} />,
+    );
+    expect(handled.container.textContent).toContain('Đã xử lý huỷ tay');
+    expect(byText(handled.container, 'button', 'Đã xử lý tay')).toBeNull();
+    expect(byText(handled.container, 'button', 'Huỷ vận đơn Gomdon')).toBeNull();
+  });
 });
 
 const claim = (over: Partial<AdminDealerRewardClaim> = {}): AdminDealerRewardClaim => ({
@@ -431,6 +470,51 @@ describe('PosScreen (màn thu ngân)', () => {
 });
 
 describe('GomdonConfigCard', () => {
+  it('UAT GOMDON-1: Gomdon từ chối tài khoản → cảnh báo rõ; "Kiểm tra kết nối" gọi API và hiện kết quả nguyên văn', async () => {
+    let checks = 0;
+    const api = mockFetch({
+      '/admin/gomdon/status': {
+        body: {
+          baseUrlSet: true,
+          credentialsSet: true,
+          configured: true,
+          webhookSecretSet: true,
+          recyclingToggle: true,
+          recyclingEnabled: false,
+          connection: {
+            lastOkAt: null,
+            lastErrorAt: '2026-10-13T03:00:00.000Z',
+            lastError: 'Đăng nhập Gomdon thất bại (HTTP 401): Sai mật khẩu',
+            credentialsRejected: true,
+            credentialsRejectedAt: '2026-10-13T03:00:00.000Z',
+          },
+        },
+      },
+      '/admin/gomdon/check-connection': () => {
+        checks += 1;
+        return checks === 1
+          ? { body: { ok: false, message: 'Đăng nhập Gomdon thất bại (HTTP 401): Sai mật khẩu', checkedAt: '2026-10-13T03:05:00.000Z' } }
+          : { body: { ok: true, message: 'Đăng nhập Gomdon thành công.', checkedAt: '2026-10-13T03:06:00.000Z' } };
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<GomdonConfigCard rows={[]} />);
+    await flush();
+    expect(container.textContent).toContain('Gomdon đang từ chối tài khoản');
+    expect(container.textContent).toContain('Sai mật khẩu');
+    expect(container.textContent).not.toContain('Công tắc đang bật nhưng khách vẫn KHÔNG thấy lựa chọn thu gom vì Gomdon chưa cấu hình đủ');
+
+    click(byText(container, 'button', 'Kiểm tra kết nối'));
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/admin/gomdon/check-connection'));
+    expect(call?.init?.method).toBe('POST');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('HTTP 401');
+
+    click(byText(container, 'button', 'Kiểm tra kết nối'));
+    await flush();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đăng nhập Gomdon thành công.');
+  });
+
   it('ghi chú tài khoản nằm ở env; không bao giờ hiện mật khẩu; lưu chỉ thay kho + cân nặng', async () => {
     const puts: unknown[] = [];
     const api = mockFetch({

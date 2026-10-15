@@ -150,7 +150,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
         district: '',
         ward: 'Phuong IT',
         street: '1 Duong IT',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },

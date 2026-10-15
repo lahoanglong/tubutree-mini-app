@@ -10,7 +10,11 @@ export interface StorefrontItem {
     inStock: boolean;
   };
 }
-export interface StorefrontItemEdit extends StorefrontItem { isPinned: boolean; isHidden: boolean; sortOrder: number; productId: string; }
+export interface StorefrontItemEdit extends StorefrontItem {
+  isPinned: boolean; isHidden: boolean; sortOrder: number; productId: string;
+  /** Lý do khách không thấy món này (null = khách thấy); món vừa thêm chưa có trường này cho tới lần tải lại. */
+  hiddenReason?: string | null;
+}
 export interface StorefrontCollection {
   id: string; title: string; kind: 'NORMAL' | 'COMBO'; layout: 'GRID' | 'CAROUSEL' | 'STACK';
   comboDiscountPct: number | null; items: StorefrontItem[];
@@ -18,7 +22,7 @@ export interface StorefrontCollection {
 export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'items'> { sortOrder: number; items: StorefrontItemEdit[]; }
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
-  type: 'CTV' | 'BRAND' | 'MERCHANT'; title: string; headerNote: string | null;
+  type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean; title: string; headerNote: string | null;
   ownerTier: { name: string; emoji: string } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;

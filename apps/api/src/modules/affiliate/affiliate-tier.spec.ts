@@ -14,7 +14,7 @@ const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as 
 function makeService(prisma: unknown, rewards?: unknown) {
   const pricing = {} as unknown as PricingService;
   const pancake = {} as unknown as PancakeOrderService;
-  const rewardsSvc = (rewards ?? { grant: jest.fn().mockResolvedValue(true) }) as RewardPointsService;
+  const rewardsSvc = (rewards ?? { grant: jest.fn().mockResolvedValue(true), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) }) as RewardPointsService;
   // Không test nào ở file này chạm recordTouch/placeOrderForCustomer (chỉ getCtvTiers/
   // getMilestones/claimMilestone) — no-op mặc định, chỉ để đủ tham số bắt buộc thứ 6 (Task 10).
   const analytics = {
@@ -188,7 +188,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
 
     it('chưa đạt ngưỡng (theo doanh số ĐÃ CHỐT) → BadRequest, không tạo claim, không cộng điểm', async () => {
       const tx = txWith(1_000_000);
-      const rewards = { grant: jest.fn() };
+      const rewards = { grant: jest.fn(), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) };
       const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       await expect(svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP)).rejects.toThrow(
         BadRequestException,
@@ -201,7 +201,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
 
     it('đủ điều kiện → ghi claim (rewardPoints, rewardXu 0) + cộng Điểm Xanh qua RewardPointsService.grant CÙNG tx, KHÔNG đụng walletBalance', async () => {
       const tx = txWith(5_000_000);
-      const rewards = { grant: jest.fn().mockResolvedValue(true) };
+      const rewards = { grant: jest.fn().mockResolvedValue(true), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) };
       const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       const res = await svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP);
 
@@ -219,6 +219,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         'AFFILIATE_MILESTONE',
         'claim-1',
         tx,
+        new Date('2027-10-15T00:00:00Z'),
       );
       // Tiền rút được (walletBalance) tuyệt đối không bị cộng.
       expect(tx.user.update).not.toHaveBeenCalled();
@@ -226,7 +227,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
 
     it('nhận thưởng tháng trước (còn trong hạn) → dùng biên tháng trước', async () => {
       const tx = txWith(3_500_000);
-      const rewards = { grant: jest.fn().mockResolvedValue(true) };
+      const rewards = { grant: jest.fn().mockResolvedValue(true), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) };
       const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       const res = await svc.claimMilestone('ctv-1', 'milestone-3m', '2026-08', NOW_SEP);
       expect(res.monthKey).toBe('2026-08');
@@ -237,7 +238,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
 
     it('claim trùng (unique userId+milestoneId+monthKey → P2002) → BadRequest "đã nhận", không cộng điểm', async () => {
       const tx = txWith(5_000_000, jest.fn().mockRejectedValue(p2002()));
-      const rewards = { grant: jest.fn() };
+      const rewards = { grant: jest.fn(), expiresAt: jest.fn().mockResolvedValue(new Date('2027-10-15T00:00:00Z')) };
       const svc = makeService({ $transaction: jest.fn((cb) => cb(tx)) }, rewards);
       await expect(svc.claimMilestone('ctv-1', 'milestone-3m', undefined, NOW_SEP)).rejects.toThrow(
         'Bạn đã nhận thưởng mốc này rồi.',

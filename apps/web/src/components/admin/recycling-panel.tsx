@@ -8,6 +8,7 @@ import {
   cancelGomdonWaybill,
   GOMDON_HANDLED_NOTE_MAX,
   markGomdonHandled,
+  resolveGomdonAlert,
   retryGomdon,
   type AdminOrder,
 } from '@/lib/admin-client';
@@ -49,6 +50,9 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Chặn bấm lặp trước khi React kịp render lại nút disabled (double-submit).
   const handledInFlight = useRef(false);
+  const alertInFlight = useRef(false);
+  /** Báo động vừa đóng — ẩn ngay, không chờ danh sách đơn tải lại. */
+  const [resolvedIds, setResolvedIds] = useState<string[]>([]);
   const { confirm, dialog } = useConfirm();
 
   const onDone = (text: string) => {
@@ -79,15 +83,38 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
       handledInFlight.current = false;
     },
   });
-  const busy = retry.isPending || cancel.isPending || markHandled.isPending;
+  const resolveAlert = useMutation({
+    mutationFn: (alertId: string) => resolveGomdonAlert(alertId),
+    onSuccess: (_r, alertId) => {
+      setResolvedIds((ids) => [...ids, alertId]);
+      onDone('Đã đánh dấu báo động là đã xử lý.');
+    },
+    onError: onFail,
+    onSettled: () => {
+      alertInFlight.current = false;
+    },
+  });
+  const busy = retry.isPending || cancel.isPending || markHandled.isPending || resolveAlert.isPending;
+
+  const onResolveAlert = (alertId: string) => {
+    if (alertInFlight.current || busy) return;
+    alertInFlight.current = true;
+    setMsg(null);
+    resolveAlert.mutate(alertId);
+  };
 
   const onMarkHandled = async () => {
     if (handledInFlight.current || busy) return;
+    const cancelByHand =
+      (order.status === 'CANCELLED' || order.status === 'RETURNED') &&
+      (order.gomdonCancelStatus === 'FAILED' || order.gomdonCancelStatus === 'TOO_LATE');
     const ok = await confirm({
       title: 'Đánh dấu đã xử lý tay',
-      message:
-        `Đánh dấu thu gom của đơn ${order.code} là "Đã xử lý tay"? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
-        'KHÔNG tự tạo vận đơn Gomdon cho đơn này nữa. Chỉ bấm khi đã xử lý xong ngoài hệ thống (tạo vận đơn tay / hẹn thu gom riêng / báo khách).',
+      message: cancelByHand
+        ? `Đánh dấu vận đơn Gomdon của đơn ${order.code} là đã huỷ/xử lý tay? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
+          'thôi tự huỷ vận đơn. Chỉ bấm khi đã huỷ trên cổng Gomdon hoặc đã thoả thuận với Gomdon/BestExpress.'
+        : `Đánh dấu thu gom của đơn ${order.code} là "Đã xử lý tay"? Đơn sẽ rời hàng đợi "Cần xử lý thu gom" và hệ thống ` +
+          'KHÔNG tự tạo vận đơn Gomdon cho đơn này nữa. Chỉ bấm khi đã xử lý xong ngoài hệ thống (tạo vận đơn tay / hẹn thu gom riêng / báo khách).',
       confirmLabel: 'Đã xử lý tay',
     });
     if (!ok || handledInFlight.current || busy) return;
@@ -100,6 +127,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
 
   const status = gomdonStatusLabel(order.gomdonStatus);
   const cancelLabel = gomdonCancelLabel(order.gomdonCancelStatus);
+  const openAlerts = (order.gomdonAlerts ?? []).filter((a) => !resolvedIds.includes(a.id));
 
   return (
     <section aria-label="Thu gom vật liệu tái chế" className="rounded-card border border-forest-200 bg-stone-0 p-3">
@@ -109,6 +137,31 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
         <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
         {cancelLabel && <ToneBadge tone={cancelLabel.tone}>{cancelLabel.label}</ToneBadge>}
       </div>
+
+      {openAlerts.length > 0 && (
+        <ul aria-label="Báo động Gomdon chưa xử lý" className="mt-2 space-y-2">
+          {openAlerts.map((a) => (
+            <li key={a.id}>
+              <Notice tone="danger">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="min-w-0 grow basis-60">
+                    <span className="font-semibold">Báo động {formatDateTime(a.createdAt)}:</span> {a.message}
+                  </p>
+                  <button
+                    type="button"
+                    aria-label={`Đã xử lý báo động lúc ${formatDateTime(a.createdAt)}`}
+                    onClick={() => onResolveAlert(a.id)}
+                    disabled={busy}
+                    className={BTN_XS_SECONDARY}
+                  >
+                    {resolveAlert.isPending && resolveAlert.variables === a.id ? 'Đang lưu…' : 'Đã xử lý'}
+                  </button>
+                </div>
+              </Notice>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
         <div className="flex flex-wrap items-center gap-2">

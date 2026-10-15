@@ -7,7 +7,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
-import { AdminService } from '../../src/modules/admin/admin.service';
+import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { GomdonOrderService } from '../../src/modules/integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../../src/modules/integrations/gomdon/gomdon.client';
@@ -27,7 +27,7 @@ import { createOrder, createUser, summarize, warmPool } from './helpers';
 describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
-  let admin: AdminService;
+  let returns: OrderReturnsService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -37,7 +37,7 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
         LoyaltyService,
         OrderReversalService,
         OrderStatusService,
-        AdminService,
+        OrderReturnsService,
         { provide: AffiliateService, useValue: {
           reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
           lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
@@ -55,7 +55,7 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
-    admin = moduleRef.get(AdminService);
+    returns = moduleRef.get(OrderReturnsService);
   });
 
   afterAll(async () => {
@@ -83,7 +83,7 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
     const adminUser = await createUser(prisma, { role: 'ADMIN' });
     const { user, order, req } = await deliveredCodOrderWithReturnRequest(350_000);
 
-    await admin.reviewReturn(adminUser.id, req.id, true, 'Đồng ý đổi trả');
+    await returns.review(adminUser.id, req.id, { approve: true, note: 'Đồng ý đổi trả' });
 
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     const wallet = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { walletBalance: true } });
@@ -92,7 +92,7 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
     expect(wallet.walletBalance).toBe(350_000);
 
     // Duyệt lại (double-tap / retry) trên request ĐÃ APPROVED → từ chối, KHÔNG cộng ví lần 2.
-    await expect(admin.reviewReturn(adminUser.id, req.id, true)).rejects.toThrow();
+    await expect(returns.review(adminUser.id, req.id, { approve: true })).rejects.toThrow();
     const wallet2 = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { walletBalance: true } });
     expect(wallet2.walletBalance).toBe(350_000);
   });
@@ -123,8 +123,8 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
     const { user, order, req } = await deliveredCodOrderWithReturnRequest(420_000);
 
     const results = await Promise.allSettled([
-      admin.reviewReturn(admin1.id, req.id, true, 'admin1'),
-      admin.reviewReturn(admin2.id, req.id, true, 'admin2'),
+      returns.review(admin1.id, req.id, { approve: true, note: 'admin1' }),
+      returns.review(admin2.id, req.id, { approve: true, note: 'admin2' }),
     ]);
     const s = summarize(results);
     // eslint-disable-next-line no-console

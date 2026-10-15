@@ -1,8 +1,16 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
 import type { Env } from '../../config/env.validation';
 import { normalizeZaloPhone } from '../../common/phone';
+
+const ZALO_BUSY_MESSAGE = 'Zalo đang bận, vui lòng thử lại sau ít phút.';
+
+/** Zalo không trả lời được (mất kết nối, quá hạn chờ, 5xx, quá tải 429): lỗi tạm của Zalo, không phải lỗi của khách. */
+function isZaloUnavailable(err: AxiosError): boolean {
+  const status = err.response?.status;
+  return status === undefined || status >= 500 || status === 429;
+}
 
 export interface ZaloUserInfo {
   zaloId: string; // openId / id
@@ -45,14 +53,17 @@ export class ZaloService {
       });
       const data = res.data as { access_token?: string; error?: number; error_description?: string };
       if (!data.access_token) {
-        throw new UnauthorizedException(`Zalo OAuth thất bại: ${data.error_description ?? 'unknown'}`);
+        // Lời của Zalo ("invalid code") chỉ để chẩn đoán; khách nhận câu tiếng Việt và biết phải làm gì tiếp.
+        this.logger.warn(`Zalo exchangeOAuthCode bị từ chối: ${data.error ?? '?'} ${data.error_description ?? 'unknown'}`);
+        throw new UnauthorizedException('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
       }
       return data.access_token;
     } catch (err) {
       if (err instanceof UnauthorizedException) throw err;
       const ax = err as AxiosError;
       this.logger.error(`Zalo exchangeOAuthCode error: ${ax.message}`);
-      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo.');
+      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
+      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo. Vui lòng đăng nhập lại.');
     }
   }
 
@@ -75,7 +86,8 @@ export class ZaloService {
         picture?: { data?: { url?: string } };
       };
       if (!data.id || (data.error && data.error !== 0)) {
-        throw new UnauthorizedException(`Zalo verify thất bại: ${data.message ?? 'unknown'}`);
+        this.logger.warn(`Zalo getUserInfo bị từ chối: ${data.error ?? '?'} ${data.message ?? 'unknown'}`);
+        throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
       }
       return {
         zaloId: data.id,
@@ -86,6 +98,7 @@ export class ZaloService {
       if (err instanceof UnauthorizedException) throw err;
       const ax = err as AxiosError;
       this.logger.error(`Zalo getUserInfo error: ${ax.message}`);
+      if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
       throw new UnauthorizedException('Không xác thực được tài khoản Zalo.');
     }
   }

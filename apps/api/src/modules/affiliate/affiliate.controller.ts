@@ -1,10 +1,25 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsInt, IsObject, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
-import { AffiliateService } from './affiliate.service';
-import { PlaceOrderForCustomerDto } from './dto/place-order-for-customer.dto';
+import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN } from './affiliate.service';
+import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
 class CreateLinkDto {
@@ -12,10 +27,27 @@ class CreateLinkDto {
   @IsOptional() @IsString() targetId?: string;
 }
 
-class PayoutDto {
+class PayoutBankInfoDto {
+  @IsString() @MinLength(2) @MaxLength(100) bankName!: string;
+  @IsString() @Matches(/^\d{6,20}$/, { message: 'Số tài khoản phải gồm 6–20 chữ số.' }) accountNumber!: string;
+  @IsString() @MinLength(2) @MaxLength(100) accountName!: string;
+}
+
+export class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
-  @IsOptional() @IsObject() bankInfo?: object;
+  // SELLER-10: rút ngân hàng bắt buộc đủ thông tin tài khoản; trước đây `{}` cũng qua và admin không biết chuyển vào đâu.
+  @ValidateIf((o: PayoutDto) => o.method !== 'WALLET_BALANCE')
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PayoutBankInfoDto)
+  bankInfo?: PayoutBankInfoDto;
+  /** MST cá nhân hoặc số CCCD, bắt buộc khi lần rút bị khấu trừ thuế TNCN mà hồ sơ chưa có (SELLER-11). */
+  @IsOptional() @IsString() @Matches(PERSONAL_TAX_ID_PATTERN, { message: PERSONAL_TAX_ID_FORMAT_MESSAGE }) taxId?: string;
+}
+
+export class TaxStatementQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2020) @Max(2100) year?: number;
 }
 
 class ClaimMilestoneDto {
@@ -69,6 +101,11 @@ export class AffiliateController {
     return this.affiliate.listCommissions(userId);
   }
 
+  @Get('payouts')
+  myPayouts(@CurrentUser('sub') userId: string) {
+    return this.affiliate.listMyPayouts(userId);
+  }
+
   // Idempotency-Key: mirror wallet.withdraw / affiliate.orders — chống double-tap/retry rút tiền
   // trùng lần (header optional ở tầng type, nhưng client thực tế BẮT BUỘC gửi khi rút tiền thật).
   @Post('payouts')
@@ -77,7 +114,19 @@ export class AffiliateController {
     @Body() dto: PayoutDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey);
+    return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey, dto.taxId);
+  }
+
+  /** Bảng kê thu nhập hoa hồng và thuế TNCN đã khấu trừ trong năm (mặc định năm nay, giờ VN). */
+  @Get('tax-statement')
+  taxStatement(@CurrentUser('sub') userId: string, @Query() q: TaxStatementQuery) {
+    return this.affiliate.taxStatement(userId, q.year ?? vnDateParts().year);
+  }
+
+  // Báo giá form lên đơn hộ: đúng giá sẽ tính khi tạo đơn (giờ vàng như khách tự đặt, phí giao).
+  @Post('orders/quote')
+  quoteOrderForCustomer(@CurrentUser('sub') userId: string, @Body() dto: QuoteOrderForCustomerDto) {
+    return this.affiliate.quoteOrderForCustomer(userId, dto);
   }
 
   // CTV lên đơn hộ khách (COD/chuyển khoản) → CTV hưởng hoa hồng (placedForCustomer).

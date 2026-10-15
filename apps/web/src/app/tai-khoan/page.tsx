@@ -2,41 +2,61 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { ChevronRight, MapPin } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { fetchOrders, formatVnd } from '@/lib/shop-client';
-import { canPayAgain, orderDetailHref, orderStatusLabel, orderStatusTone } from '@/lib/order-view';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { formatVnd, getMe } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
-import { RecyclingStatus } from '@/components/recycling-status';
-import { formatDate } from '@/lib/format-date';
+import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { OrdersSection } from './orders-section';
+
+const TILE = 'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0';
 
 export default function AccountPage() {
-  const { user, status, logout } = useAuth();
-  const ordersQ = useQuery({ queryKey: ['orders'], queryFn: fetchOrders, enabled: status === 'authenticated' });
+  const { user, logout } = useAuth();
+  const phase = useAuthPhase();
+  // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: sau khi đặt đơn dùng điểm, huỷ đơn có tiền về ví hay
+  // trả hàng thì số trên thẻ phải đổi ngay. Lấy lại mỗi lần vào trang và mỗi lần quay lại tab thay vì chờ F5;
+  // chưa lấy được (mất mạng) thì giữ số cũ.
+  const meQ = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    enabled: phase === 'authenticated',
+    refetchOnWindowFocus: true,
+  });
 
-  if (status === 'idle' || status === 'loading') {
+  if (phase === 'loading') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="sr-only">Tài khoản</h1>
-        <p className="text-stone-600">Đang tải…</p>
+        <AuthLoading />
       </main>
     );
   }
 
-  if (status !== 'authenticated' || !user) {
+  if (phase === 'unavailable') {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-20 text-center">
+      <main className="mx-auto max-w-3xl px-4 py-6">
         <h1 className={ui.pageTitle}>Tài khoản</h1>
-        <p className="mt-3 text-stone-700">Vui lòng đăng nhập để xem tài khoản.</p>
-        <Link href="/dang-nhap" className={`${ui.btnPrimary} mt-4`}>
-          Đăng nhập với Zalo
-        </Link>
+        <SessionUnavailable />
+      </main>
+    );
+  }
+
+  if (phase === 'guest' || !user) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-6">
+        <h1 className={ui.pageTitle}>Tài khoản</h1>
+        <LoginRequired message="Đăng nhập để xem tài khoản và đơn hàng của bạn." returnTo="/tai-khoan" />
       </main>
     );
   }
 
   // Điểm Xanh = lô thường + lô quy đổi (tiền trả trước, không hết hạn): cùng một con số với Mini App.
-  const points = pointsSummary(user);
+  const balances = meQ.data ?? user;
+  const points = pointsSummary(balances);
+  const walletBalance = balances.walletBalance;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
@@ -48,66 +68,38 @@ export default function AccountPage() {
       <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised">
         <div className="text-lg font-bold">{user.fullName ?? 'Khách Tubu'}</div>
         <div className="mt-1 text-sm text-forest-100">Mã giới thiệu: {user.referralCode}</div>
-        <div className="mt-3 flex gap-6">
-          <div>
+        <div className="mt-4 grid grid-cols-2 gap-6">
+          <Link href="/tai-khoan/diem-xanh" className={TILE}>
             <div className="text-xl font-bold">{points.total.toLocaleString('vi-VN')}</div>
             <div className="text-xs text-forest-100">Điểm Xanh</div>
             {points.convertedNote && <div className="text-xs text-forest-100">{points.convertedNote}</div>}
-          </div>
-          <div>
-            <div className="text-xl font-bold">{formatVnd(user.walletBalance)}</div>
+            <div className="mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline">
+              Xem lịch sử
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </div>
+          </Link>
+          <Link href="/tai-khoan/vi-tubu" className={TILE}>
+            <div className="text-xl font-bold">{formatVnd(walletBalance)}</div>
             <div className="text-xs text-forest-100">Ví Tubu</div>
-          </div>
+            <div className="mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline">
+              Xem lịch sử
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </div>
+          </Link>
         </div>
       </section>
 
-      <section className="mt-6">
-        <h2 className={ui.sectionTitle}>Đơn hàng của tôi</h2>
-        {ordersQ.isLoading ? (
-          <p className="py-6 text-center text-stone-600">Đang tải…</p>
-        ) : ordersQ.isError ? (
-          <div className={`mt-3 p-6 text-center ${ui.card}`}>
-            <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
-            <button type="button" onClick={() => void ordersQ.refetch()} className={`${ui.btnText} mt-1 text-forest-700`}>
-              Thử lại
-            </button>
-          </div>
-        ) : ordersQ.data && ordersQ.data.length > 0 ? (
-          <ul className="mt-3 space-y-3">
-            {ordersQ.data.map((o) => (
-              <li key={o.code} className={`p-4 ${ui.card}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-stone-900">#{o.code}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-                    {orderStatusLabel(o.status)}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-stone-600">
-                  {o.items.length} sản phẩm · {formatDate(o.createdAt)}
-                </div>
-                <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
-                <RecyclingStatus order={o} />
-                {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
-                {canPayAgain(o) ? (
-                  <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>
-                    Thanh toán
-                  </Link>
-                ) : (
-                  <Link
-                    href={orderDetailHref(o.code)}
-                    aria-label={`Xem chi tiết đơn ${o.code}`}
-                    className={`${ui.btnText} -ml-2 mt-1 text-forest-700`}
-                  >
-                    Xem chi tiết
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>Bạn chưa có đơn hàng nào.</p>
-        )}
-      </section>
+      <nav aria-label="Quản lý tài khoản" className="mt-4">
+        <Link href="/tai-khoan/dia-chi" className={`${ui.card} flex min-h-11 items-center justify-between gap-3 p-4 text-sm font-semibold text-stone-900 hover:bg-stone-50`}>
+          <span className="inline-flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-forest-600" aria-hidden="true" />
+            Sổ địa chỉ
+          </span>
+          <ChevronRight className="h-4 w-4 text-stone-600" aria-hidden="true" />
+        </Link>
+      </nav>
+
+      <OrdersSection />
 
       <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} mt-6 w-full`}>
         Đăng xuất

@@ -58,8 +58,12 @@ function build(order: Record<string, unknown> = {}, opts: { configured?: boolean
     cancelOrder: jest.fn().mockResolvedValue({ ok: true }),
   };
   const queue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
-  const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined) };
-  const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+  const pancake = { enqueuePush: jest.fn().mockResolvedValue(undefined), syncWaybillNote: jest.fn().mockResolvedValue(undefined) };
+  const alerts = {
+    alert: jest.fn().mockResolvedValue(undefined),
+    resolveOpenForOrder: jest.fn().mockResolvedValue(0),
+    resolveKinds: jest.fn().mockResolvedValue(0),
+  };
   const svc = new GomdonOrderService(
     prisma as unknown as PrismaService,
     client as unknown as GomdonClient,
@@ -120,6 +124,16 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(client.createOrder).not.toHaveBeenCalled();
     expect(wroteStatus(updateMany, 'NOT_CONFIGURED')).toBe(true);
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('SYNC-4: ghi chú thu gom khách tự nhập qua bộ lọc: vận đơn không mang dấu thanh toán/ngoặc do khách viết', async () => {
+    const { svc, client } = build({ recyclingNote: '[ĐÃ THANH TOÁN - KHÔNG THU COD] pin cũ | Order code: TUBU9' });
+    await svc.pushOrder('o1');
+    const { note } = client.createOrder.mock.calls[0][0] as { note: string };
+    expect(note).not.toMatch(/[[\]|]/);
+    expect(note).not.toMatch(/ĐÃ THANH TOÁN|KHÔNG THU COD|order code:/i);
+    expect(note).toContain('Tối đa 2.4kg) - Ghi chú: (');
+    expect(note).toContain('pin cũ / Mã đơn: TUBU9');
   });
 
   it('COD: claim CREATING nguyên tử → tạo vận đơn (collect = total) → ghi mã → đẩy Pancake', async () => {
@@ -223,7 +237,7 @@ describe('GomdonOrderService.pushOrder', () => {
     await expect(svc.pushOrder('o1')).resolves.toBeNull();
     expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(true);
     expect(updateMany.mock.calls.some(([a]) => a?.data?.gomdonPartnerCode === '900001-11-shop_demo')).toBe(false);
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KIỂM TRA GOMDON'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KIỂM TRA GOMDON'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('Gomdon báo trùng order_customer_id (đã có đơn) → NEEDS_MANUAL_CHECK, giữ claim, KHÔNG ném (không retry), báo rõ "đã có vận đơn"', async () => {
@@ -236,8 +250,8 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(updateMany.mock.calls.some(([a]) => a?.data?.gomdonStatus === null)).toBe(false);
     expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(true);
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('ĐÃ CÓ đơn'));
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KHÔNG tạo vận đơn tay'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('ĐÃ CÓ đơn'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KHÔNG tạo vận đơn tay'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('WALLET đã thanh toán → collect_amount = 0', async () => {
@@ -246,7 +260,7 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(client.createOrder.mock.calls[0][0].collect_amount).toBe(0);
   });
 
-  it('chuyển khoản đã PAID (AWAITING_PAYMENT → tạo) và Pancake đã có đơn → tạo vận đơn + báo CSKH ghi mã vào Pancake', async () => {
+  it('chuyển khoản đã PAID (AWAITING_PAYMENT → tạo) và Pancake đã có đơn → tạo vận đơn + tự ghi mã vào ghi chú Pancake, không báo động (R2-GOMDON-1)', async () => {
     const { svc, client, pancake, alerts } = build({
       paymentMethod: 'BANK_TRANSFER',
       paymentStatus: 'PAID',
@@ -258,7 +272,25 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(await svc.pushOrder('o1')).toBe('BE77');
     expect(client.createOrder).toHaveBeenCalledTimes(1);
     expect(pancake.enqueuePush).not.toHaveBeenCalled();
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('BE77'));
+    expect(pancake.syncWaybillNote).toHaveBeenCalledWith('o1');
+    expect(alerts.alert).not.toHaveBeenCalled();
+    // Việc "tạo/kiểm tra vận đơn tay" cũ tự đóng khi hệ thống gắn được vận đơn (R2-GOMDON-3).
+    expect(alerts.resolveKinds).toHaveBeenCalledWith('o1', ['WAYBILL_NEEDED']);
+  });
+
+  it('đơn COD đã lên Pancake (sau lần tạo lỗi) mà ghi mã vào Pancake thất bại → báo "ghi mã vào Pancake", không nói "khách thanh toán"', async () => {
+    const { svc, pancake, alerts } = build({ gomdonStatus: null, pancakeOrderId: 'pk1' });
+    pancake.syncWaybillNote.mockRejectedValueOnce(new Error('Pancake 503'));
+    const findUnique = jest.fn().mockResolvedValue({ status: 'CONFIRMED', pancakeOrderId: 'pk1' });
+    (svc as unknown as { prisma: { order: { findUnique: jest.Mock } } }).prisma.order.findUnique = findUnique;
+    expect(await svc.pushOrder('o1')).toBe('BE77');
+    expect(alerts.alert).toHaveBeenCalledWith(
+      'TUBU1001',
+      expect.stringMatching(/vận đơn Gomdon BE77 nhưng chưa ghi được mã vào đơn Pancake #pk1 \(Pancake 503\).*KHÔNG tạo vận đơn khác/),
+      'OPS_GOMDON_ALERT',
+      'WAYBILL_NOTE',
+    );
+    expect(alerts.alert.mock.calls[0][1]).not.toContain('khách thanh toán');
   });
 
   it('claim thua (count=0, worker khác đang tạo) → KHÔNG gọi tạo đơn', async () => {
@@ -291,7 +323,7 @@ describe('GomdonOrderService.pushOrder', () => {
       data: { gomdonStatus: 'NEEDS_MANUAL_CHECK' },
     });
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KIỂM TRA GOMDON'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('KIỂM TRA GOMDON'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('tạo xong nhưng claim đã bị chuyển NEEDS_MANUAL_CHECK (lần chạy chồng) → vẫn ghi ĐỦ mã + trạng thái thật', async () => {
@@ -360,7 +392,7 @@ describe('GomdonOrderService.pushOrder', () => {
     const { svc, prisma, queue, pancake } = build();
     prisma.order.findUnique.mockResolvedValueOnce({ status: 'CANCELLED', pancakeOrderId: null });
     expect(await svc.pushOrder('o1')).toBe('BE77');
-    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
     expect(pancake.enqueuePush).not.toHaveBeenCalled();
   });
 });
@@ -372,7 +404,7 @@ describe('GomdonOrderService.markFinalPushFailure (fail-safe hết lượt retry
     await svc.markFinalPushFailure('o1', new Error('Sai địa chỉ'));
     expect(updateMany.mock.calls[1][0].data).toEqual({ gomdonStatus: 'FAILED' });
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('TẠO VẬN ĐƠN TAY'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('TẠO VẬN ĐƠN TAY'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
   });
 
   it('đơn đã huỷ → không đẩy Pancake', async () => {
@@ -391,10 +423,12 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
   const cancelled = { status: 'CANCELLED', gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1' };
 
   it('đơn CANCELLED có vận đơn chưa lấy hàng → gọi cancelOrder + ghi CANCELLED', async () => {
-    const { svc, client, updateMany } = build(cancelled);
+    const { svc, client, updateMany, alerts } = build(cancelled);
     await svc.cancelOnGomdon('o1', false);
     expect(client.cancelOrder).toHaveBeenCalledWith('77');
     expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'CANCELLED' });
+    // Huỷ xong → các việc "huỷ tay / tạo tay / ghi mã" còn mở của đơn tự đóng (R2-GOMDON-3).
+    expect(alerts.resolveKinds).toHaveBeenCalledWith('o1', ['CANCEL_NEEDED', 'WAYBILL_NEEDED', 'WAYBILL_NOTE']);
   });
 
   it('bưu tá đã lấy hàng → TOO_LATE + báo CSKH, không gọi API', async () => {
@@ -404,6 +438,18 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
     expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'TOO_LATE' });
     expect(alerts.alert).toHaveBeenCalled();
   });
+
+  it.each(['8', '9'])(
+    'Gomdon đã báo hoàn hàng về kho/hỏng-mất (%s) → NOT_NEEDED, KHÔNG báo "bưu tá đã lấy hàng — chặn giao" (R3-CANCEL-3)',
+    async (gomdonStatus) => {
+      const { svc, client, alerts, updateMany } = build({ ...cancelled, gomdonStatus });
+      await svc.cancelOnGomdon('o1', false);
+      expect(client.cancelOrder).not.toHaveBeenCalled();
+      expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'NOT_NEEDED' });
+      expect(alerts.alert).not.toHaveBeenCalled();
+      expect(alerts.resolveKinds).toHaveBeenCalledWith('o1', expect.arrayContaining(['CANCEL_NEEDED']));
+    },
+  );
 
   it('đã huỷ xong trước đó → no-op', async () => {
     const { svc, client } = build({ ...cancelled, gomdonCancelStatus: 'CANCELLED' });
@@ -433,7 +479,7 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
     expect(client.cancelOrder).not.toHaveBeenCalled();
     expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonStatus: 'NEEDS_MANUAL_CHECK' });
     expect(updateMany.mock.calls[1][0].data).toEqual({ gomdonCancelStatus: 'FAILED' });
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('kiểm tra & huỷ tay'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('kiểm tra & huỷ tay'), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
   });
 
   it('đơn huỷ SAU khi đã "Đã xử lý tay" → mở lại NEEDS_MANUAL_CHECK + FAILED + báo kiểm tra vận đơn tay, không gọi API', async () => {
@@ -461,8 +507,8 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
     const b = build(cancelled);
     b.client.cancelOrder.mockRejectedValue(new Error('timeout'));
     await b.svc.cancelOnGomdon('o1', true);
-    expect(b.updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'FAILED' });
-    expect(b.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('huỷ tay'));
+    expect(b.updateMany.mock.calls[0][0].data).toMatchObject({ gomdonCancelStatus: 'FAILED' });
+    expect(b.alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('huỷ tay'), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
   });
 
   it('đơn không còn CANCELLED → bỏ qua', async () => {
@@ -478,8 +524,8 @@ describe('GomdonOrderService.cancelOnGomdon', () => {
     const written = updateMany.mock.calls.map(([a]) => a.data.gomdonCancelStatus);
     expect(written).toEqual(['FAILED']);
     expect(written).not.toContain('NOT_NEEDED');
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('BE77'));
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringMatching(/huỷ tay/i));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('BE77'), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringMatching(/huỷ tay/i), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
   });
 
   it('chỉ có mã BestExpress nhưng Gomdon đã báo huỷ (2) / bưu tá đã lấy (3) → CANCELLED / TOO_LATE như vận đơn thường', async () => {
@@ -517,7 +563,7 @@ describe('GomdonOrderService.pushOrder — đơn đã huỷ còn kẹt CREATING'
       data: { gomdonStatus: 'NEEDS_MANUAL_CHECK' },
     });
     expect(updateMany.mock.calls.some(([a]) => a.data.gomdonCancelStatus === 'FAILED')).toBe(true);
-    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('đơn đã huỷ nhưng có thể đã tạo vận đơn'));
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('đơn đã huỷ nhưng có thể đã tạo vận đơn'), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
     expect(pancake.enqueuePush).not.toHaveBeenCalled();
   });
 
@@ -587,7 +633,7 @@ describe('GomdonOrderService.enqueuePush', () => {
     queue.getJob.mockResolvedValueOnce({ getState: jest.fn().mockResolvedValue('completed'), remove });
     await svc.enqueuePush('o1');
     expect(remove).toHaveBeenCalled();
-    expect(queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
   });
 });
 
@@ -600,7 +646,7 @@ describe('GomdonOrderService.retryPush (admin "Thử lại tạo vận đơn")',
       where: { id: 'o1', gomdonStatus: 'FAILED', gomdonOrderId: null, gomdonPartnerCode: null },
       data: { gomdonStatus: null },
     });
-    expect(queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
   });
 
   it('NEEDS_MANUAL_CHECK mà chưa xác nhận không có vận đơn → từ chối (tránh vận đơn trùng)', async () => {
@@ -693,8 +739,8 @@ describe('GomdonOrderService.cancelWaybill (admin "Huỷ vận đơn")', () => {
     const { svc, queue, updateMany } = build({ ...live, status: 'CANCELLED', gomdonCancelStatus: 'FAILED' });
     const out = await svc.cancelWaybill('o1');
     expect(out.result).toBe('QUEUED');
-    expect(updateMany.mock.calls[0][0]).toEqual({ where: { id: 'o1', gomdonCancelStatus: 'FAILED' }, data: { gomdonCancelStatus: null } });
-    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(updateMany.mock.calls[0][0]).toEqual({ where: { id: 'o1', gomdonCancelStatus: 'FAILED' }, data: { gomdonCancelStatus: null, gomdonCancelRetrySince: null } });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('chưa có mã vận đơn → từ chối', async () => {
@@ -714,6 +760,172 @@ describe('GomdonOrderService.cancelWaybill (admin "Huỷ vận đơn")', () => {
   it('đơn đã CANCELLED, vận đơn chỉ có mã BestExpress → vẫn xếp job huỷ (job sẽ báo huỷ tay)', async () => {
     const { svc, queue } = build({ status: 'CANCELLED', gomdonOrderId: null, gomdonPartnerCode: 'BE77', gomdonStatus: '1' });
     await expect(svc.cancelWaybill('o1')).resolves.toEqual(expect.objectContaining({ result: 'QUEUED' }));
-    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
+  });
+});
+
+describe('UAT GOMDON-1: Gomdon chập chờn không biến đơn thu gom thành "tạo vận đơn tay" ngay', () => {
+  const transient = new GomdonRejectedError('Gomdon tạo đơn thất bại (HTTP 503)', { transient: true });
+
+  it('lỗi TẠM, đơn còn trong cửa sổ thử lại → KHÔNG chốt FAILED, không báo tạo tay, không đẩy Pancake (cron thử tiếp)', async () => {
+    const { svc, updateMany, alerts, pancake } = build({ createdAt: new Date(Date.now() - 20 * 60_000) });
+    await svc.markFinalPushFailure('o1', transient);
+    expect(wroteStatus(updateMany, 'FAILED')).toBe(false);
+    expect(alerts.alert).not.toHaveBeenCalled();
+    expect(pancake.enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('lỗi TẠM nhưng đã quá cửa sổ → FAILED + báo tạo tay như cũ', async () => {
+    const old = new Date(Date.now() - GomdonOrderService.TRANSIENT_PUSH_WINDOW_MS - 60_000);
+    const updateMany = jest.fn().mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    const { svc, alerts } = build({ createdAt: old }, { updateMany });
+    await svc.markFinalPushFailure('o1', transient);
+    expect(wroteStatus(updateMany, 'FAILED')).toBe(true);
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('TẠO VẬN ĐƠN TAY'), 'OPS_GOMDON_ALERT', 'WAYBILL_NEEDED');
+  });
+
+  it('đơn trả trước: cửa sổ tính từ lúc khách thanh toán (paidAt), không từ lúc đặt', async () => {
+    const { svc, updateMany } = build({
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      createdAt: new Date(Date.now() - 5 * 3600_000),
+      paidAt: new Date(Date.now() - 10 * 60_000),
+    });
+    await svc.markFinalPushFailure('o1', transient);
+    expect(wroteStatus(updateMany, 'FAILED')).toBe(false);
+  });
+
+  it('lỗi dữ liệu dứt khoát → FAILED ngay dù đơn mới đặt', async () => {
+    const updateMany = jest.fn().mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    const { svc } = build({ createdAt: new Date() }, { updateMany });
+    await svc.markFinalPushFailure('o1', new GomdonRejectedError('The dest ward field is required.'));
+    expect(wroteStatus(updateMany, 'FAILED')).toBe(true);
+  });
+
+  const cancelled = { status: 'CANCELLED', gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1' };
+
+  it('huỷ vận đơn lỗi tạm hết lượt → FAILED + ghi mốc tự thử lại (cron thử tiếp) + báo 1 lần', async () => {
+    const { svc, client, updateMany, alerts } = build(cancelled);
+    client.cancelOrder.mockRejectedValue(new Error('socket hang up'));
+    await svc.cancelOnGomdon('o1', true);
+    const data = updateMany.mock.calls[0][0].data;
+    expect(data.gomdonCancelStatus).toBe('FAILED');
+    expect(data.gomdonCancelRetrySince).toBeInstanceOf(Date);
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('cron chạy lại lần huỷ đã FAILED mà vẫn lỗi → giữ mốc cũ, KHÔNG báo động lặp', async () => {
+    const since = new Date(Date.now() - 3600_000);
+    const { svc, client, updateMany, alerts } = build({ ...cancelled, gomdonCancelStatus: 'FAILED', gomdonCancelRetrySince: since });
+    client.cancelOrder.mockResolvedValue({ ok: false, message: 'Hệ thống bận' });
+    await svc.cancelOnGomdon('o1', true);
+    expect(updateMany.mock.calls[0][0].data).toMatchObject({ gomdonCancelStatus: 'FAILED', gomdonCancelRetrySince: since });
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('cron chạy lại lần huỷ đã FAILED và lần này được → CANCELLED', async () => {
+    const { svc, updateMany } = build({ ...cancelled, gomdonCancelStatus: 'FAILED', gomdonCancelRetrySince: new Date() });
+    await svc.cancelOnGomdon('o1', false);
+    expect(updateMany.mock.calls[0][0].data).toMatchObject({ gomdonCancelStatus: 'CANCELLED' });
+  });
+
+  it('Gomdon trả lời dứt khoát "Không tìm thấy đơn hàng" → không retry, FAILED KHÔNG có mốc tự thử lại, báo kiểm tra', async () => {
+    const { svc, client, updateMany, alerts } = build(cancelled);
+    client.cancelOrder.mockResolvedValue({ ok: false, message: 'Không tìm thấy đơn hàng' });
+    await expect(svc.cancelOnGomdon('o1', false)).resolves.toBeUndefined();
+    expect(updateMany.mock.calls[0][0].data).toEqual({ gomdonCancelStatus: 'FAILED', gomdonCancelRetrySince: null });
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('Không tìm thấy'), 'OPS_GOMDON_ALERT', 'CANCEL_NEEDED');
+  });
+});
+
+describe('UAT GOMDON-3: không tạo vận đơn Gomdon khi hàng đã rời kho bằng hãng khác', () => {
+  it('đơn đã SHIPPING (kho giao GHN qua Pancake) → KHÔNG gọi Gomdon, chốt FAILED + báo hẹn thu gom riêng', async () => {
+    const { svc, client, updateMany, alerts, pancake } = build({
+      status: 'SHIPPING',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      gomdonStatus: 'AWAITING_PAYMENT',
+      pancakeOrderId: 'pk1',
+      shippingCode: 'GHN777888',
+      shippingPartner: 'GHN',
+    });
+    expect(await svc.pushOrder('o1')).toBeNull();
+    expect(client.createOrder).not.toHaveBeenCalled();
+    expect(wroteStatus(updateMany, 'FAILED')).toBe(true);
+    expect(pancake.enqueuePush).not.toHaveBeenCalled();
+    expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('GHN777888'));
+  });
+
+  it('đơn còn CONFIRMED nhưng Pancake đã ghi vận đơn hãng khác → cũng không tạo', async () => {
+    const { svc, client } = build({ shippingCode: 'S123456789', shippingPartner: 'GHTK' });
+    await svc.pushOrder('o1');
+    expect(client.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('claim chống race: điều kiện "chưa rời kho, chưa có vận đơn hãng khác" nằm ngay trong updateMany', async () => {
+    const { svc, updateMany } = build();
+    await svc.pushOrder('o1');
+    const where = updateMany.mock.calls[0][0].where;
+    expect(where.status).toEqual({ notIn: ['CANCELLED', 'RETURNED', 'SHIPPING', 'DELIVERED'] });
+    expect(where.AND).toEqual(
+      expect.arrayContaining([{ OR: [{ shippingCode: null }, { shippingPartner: 'BestExpress' }] }]),
+    );
+  });
+});
+
+describe('UAT GOMDON-8: tạo lại vận đơn sau khi vận đơn cũ bị huỷ dùng order_customer_id mới', () => {
+  it('lần tạo đầu gửi đúng mã đơn; lần tạo lại thứ n gửi `${code}-R${n}`', async () => {
+    const a = build();
+    await a.svc.pushOrder('o1');
+    expect(a.client.createOrder.mock.calls[0][0].order_customer_id).toBe('TUBU1001');
+    const b = build({ gomdonAttempt: 2 });
+    await b.svc.pushOrder('o1');
+    expect(b.client.createOrder.mock.calls[0][0].order_customer_id).toBe('TUBU1001-R2');
+  });
+
+  it('retryPush từ "2" tăng số lần tạo và báo "đang tạo" (không khẳng định thành công)', async () => {
+    const { svc, updateMany } = build({ gomdonStatus: '2', gomdonOrderId: '77', gomdonPartnerCode: 'BE77' });
+    const r = await svc.retryPush('o1');
+    expect(updateMany.mock.calls[0][0].data.gomdonAttempt).toEqual({ increment: 1 });
+    expect(r.message).toContain('theo dõi');
+  });
+
+  it('retryPush từ NEEDS_MANUAL_CHECK đã xác nhận KHÔNG đổi mã (giữ lưới chặn trùng của Gomdon)', async () => {
+    const { svc, updateMany } = build({ gomdonStatus: 'NEEDS_MANUAL_CHECK' });
+    await svc.retryPush('o1', { confirmedNoWaybill: true });
+    expect(updateMany.mock.calls[0][0].data.gomdonAttempt).toBeUndefined();
+  });
+});
+
+describe('UAT GOMDON-9: đơn đã huỷ mà huỷ vận đơn thất bại được gỡ khỏi hàng đợi sau khi huỷ tay', () => {
+  const failedCancel = { status: 'CANCELLED', gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1', gomdonCancelStatus: 'FAILED' };
+
+  it('markHandled trên đơn huỷ có huỷ vận đơn FAILED/TOO_LATE → gomdonCancelStatus MANUAL_HANDLED (guard nguyên tử)', async () => {
+    for (const cancelStatus of ['FAILED', 'TOO_LATE']) {
+      const { svc, updateMany } = build({ ...failedCancel, gomdonCancelStatus: cancelStatus });
+      const out = await svc.markHandled('o1', 'admin1');
+      expect(out.result).toBe('MANUAL_HANDLED');
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'o1', hasRecyclingPickup: true, gomdonCancelStatus: { in: ['FAILED', 'TOO_LATE'] } },
+        data: { gomdonCancelStatus: 'MANUAL_HANDLED', gomdonCancelRetrySince: null },
+      });
+    }
+  });
+
+  it('job huỷ thấy MANUAL_HANDLED → không gọi Gomdon nữa', async () => {
+    const { svc, client } = build({ ...failedCancel, gomdonCancelStatus: 'MANUAL_HANDLED' });
+    await svc.cancelOnGomdon('o1', false);
+    expect(client.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('admin "Huỷ vận đơn" trên đơn đã xử lý huỷ tay → từ chối', async () => {
+    const { svc } = build({ ...failedCancel, gomdonCancelStatus: 'MANUAL_HANDLED' });
+    await expect(svc.cancelWaybill('o1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('UAT GOMDON-2: "Đã xử lý tay" đóng luôn các cảnh báo Gomdon đang mở của đơn', async () => {
+    const { svc, alerts } = build({ gomdonStatus: 'FAILED' });
+    await svc.markHandled('o1', 'admin1');
+    expect(alerts.resolveOpenForOrder).toHaveBeenCalledWith('o1', 'admin1');
   });
 });

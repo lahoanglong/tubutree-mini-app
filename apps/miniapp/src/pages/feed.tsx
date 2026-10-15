@@ -5,6 +5,8 @@ import { Plus, HelpCircle, Hash, Trophy, PartyPopper, X } from 'lucide-react';
 import { getFeed, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { SessionUnavailable } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -27,9 +29,9 @@ const SORTS: { key: FeedSort; label: string }[] = [
 ];
 
 export default function FeedPage() {
-  const status = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
-  const authed = status === 'authenticated';
+  const authed = phase === 'authenticated';
   const navigate = useNavigate();
   const location = useLocation();
   const [category, setCategory] = useState<string | undefined>(undefined);
@@ -75,7 +77,7 @@ export default function FeedPage() {
   const filtering = Boolean(dq || unanswered || tag);
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
-  if (status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
@@ -84,6 +86,17 @@ export default function FeedPage() {
             <Skeleton key={i} height={140} radius="var(--radius-card)" />
           ))}
         </div>
+      </Page>
+    );
+  }
+
+
+  // Mất kết nối lúc khôi phục phiên: không phải khách — nói đúng vậy + Thử lại, không mời đăng nhập lại.
+  if (phase === 'unavailable') {
+    return (
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title={vi.community.title} />
+        <SessionUnavailable />
       </Page>
     );
   }

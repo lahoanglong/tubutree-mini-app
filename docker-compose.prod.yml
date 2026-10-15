@@ -6,10 +6,19 @@
 #
 # Biến lấy từ file .env cùng thư mục (xem .env.production.example).
 # ──────────────────────────────────────────────────────────────
+# Docker mặc định json-file KHÔNG xoay vòng: một sự cố kéo dài (Redis down log ECONNREFUSED liên tục,
+# webhook ghi log mỗi request) có thể làm đầy đĩa và kéo sập Postgres. Tối đa 5 × 10MB mỗi container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tubu}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}
@@ -26,7 +35,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
+    logging: *default-logging
+    # BullMQ bắt buộc noeviction (Redis chỉ chứa job queue). Ghi rõ để không ai thêm maxmemory kèm policy LRU.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     volumes:
       - redis_data:/data
     healthcheck:
@@ -41,6 +52,10 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    # Worker BullMQ chờ job đang chạy xong khi tắt (gọi Pancake tối đa 15s): mặc định 10s của Docker sẽ SIGKILL
+    # giữa chừng. Lệnh tạo đơn đã có tra cứu chống trùng, đây chỉ để deploy không cắt ngang lệnh đang gửi.
+    stop_grace_period: 30s
+    logging: *default-logging
     env_file: .env
     environment:
       NODE_ENV: production
@@ -72,7 +87,10 @@ services:
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
         NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
+        # Để trống ở production: build web dừng nếu ZALO_APP_ID rỗng. Chỉ đặt 1 cho bản thử không dùng Zalo.
+        ALLOW_EMPTY_ZALO_APP_ID: ${ALLOW_EMPTY_ZALO_APP_ID:-}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -103,6 +121,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - '80:80'
       - '443:443'

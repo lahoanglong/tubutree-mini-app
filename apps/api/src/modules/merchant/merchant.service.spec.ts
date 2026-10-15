@@ -189,7 +189,7 @@ describe('MerchantService', () => {
 
   describe('createProduct (Merchant tự đăng)', () => {
     it('tạo sản phẩm với trạng thái PENDING_REVIEW chờ admin duyệt', async () => {
-      const store = { id: 's1', ownerUserId: 'u1', title: 'Xanh Shop', collections: [{ id: 'col1' }] };
+      const store = { id: 's1', type: 'MERCHANT', ownerUserId: 'u1', title: 'Xanh Shop', collections: [{ id: 'col1' }] };
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
@@ -286,7 +286,8 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'ADMIN' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'var-1' }]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: { findFirst: jest.fn().mockResolvedValue(null) },
       });
       const svc = new MerchantService(prisma, orderStatus);
@@ -298,7 +299,8 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'ADMIN' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'var-1' }]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
       });
       (orderStatus.setStatus as jest.Mock).mockResolvedValueOnce({ id: 'ord-1', status: 'PACKED' });
@@ -326,7 +328,8 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'ADMIN' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([{ variations: [{ id: 'var-1' }] }]) },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'var-1' }]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
       });
       const { InvalidOrderTransitionError } = jest.requireActual('../orders/order-transition');
@@ -340,7 +343,8 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'ADMIN' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-sf-1' }) },
       });
       (orderStatus.setStatus as jest.Mock).mockResolvedValueOnce({ id: 'ord-sf-1', status: 'SHIPPING' });
@@ -358,10 +362,18 @@ describe('MerchantService', () => {
   // tự chuyển trạng thái qua /merchant cho DEALER lẫn AFFILIATE, chỉ ADMIN mới được (đã có toàn
   // quyền qua /admin sẵn).
   describe('updateMerchantOrderStatus — chặn tự chuyển trạng thái (P0 A5-03=A6-02)', () => {
+    const ownOrderMocks = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', type: 'MERCHANT', ownerUserId: 'u1', collections: [] }) },
+      variation: { findMany: jest.fn().mockResolvedValue([]) },
+      merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
+      order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1' }) },
+    };
+
     it('chặn AFFILIATE (CTV) tự chuyển trạng thái đơn — 403, không được tự "giao ảo"', async () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv-1', role: 'AFFILIATE' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('ctv-1', 'ord-1', 'DELIVERED')).rejects.toThrow(ForbiddenException);
@@ -372,6 +384,7 @@ describe('MerchantService', () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'dealer-1', role: 'DEALER' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('dealer-1', 'ord-1', 'PACKED')).rejects.toThrow(ForbiddenException);
@@ -382,9 +395,24 @@ describe('MerchantService', () => {
       const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ctv-1', role: 'AFFILIATE' }) },
+        ...ownOrderMocks,
       });
       const svc = new MerchantService(prisma, freshOrderStatus);
       await expect(svc.updateMerchantOrderStatus('ctv-1', 'ord-1', 'NOT_A_STATUS')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('đơn không thuộc gian hàng của người gọi → 404 "Không tìm thấy đơn của gian hàng bạn.", không lộ đơn có tồn tại', async () => {
+      const freshOrderStatus = { setStatus: jest.fn() } as unknown as OrderStatusService;
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'dealer-2', role: 'DEALER' }) },
+        ...ownOrderMocks,
+        order: { findFirst: jest.fn().mockResolvedValue(null) },
+      });
+      const svc = new MerchantService(prisma, freshOrderStatus);
+      await expect(svc.updateMerchantOrderStatus('dealer-2', 'ord-1', 'DELIVERED')).rejects.toThrow(
+        new NotFoundException('Không tìm thấy đơn của gian hàng bạn.'),
+      );
+      expect(freshOrderStatus.setStatus).not.toHaveBeenCalled();
     });
   });
 
@@ -420,6 +448,7 @@ describe('MerchantService', () => {
           count: jest.fn().mockResolvedValue(1),
           findMany: jest.fn().mockResolvedValue([{ id: 'item-1', product: resellProductRow }]),
         },
+        orderItem: { groupBy: jest.fn().mockResolvedValue([]) },
       });
     }
 
@@ -447,6 +476,18 @@ describe('MerchantService', () => {
       expect(res.resellProducts[0]!.variations[0]).toHaveProperty('dealerPrices');
     });
 
+    it('R2-MERCHANT-9: kèm số đơn vị khách đã đặt mà chưa gửi (đã trừ khỏi ô tồn kho) để form ghi rõ', async () => {
+      const prisma = makeProductsPrisma('DEALER') as unknown as { orderItem: { groupBy: jest.Mock } };
+      prisma.orderItem.groupBy.mockResolvedValue([{ variationId: 'var-1', _sum: { quantity: 2 } }]);
+      const res = await new MerchantService(prisma as unknown as PrismaService, orderStatus).listMyProducts('u1');
+      expect(res.ownProducts[0]).toMatchObject({ heldQty: 2 });
+      const where = prisma.orderItem.groupBy.mock.calls[0][0].where;
+      expect(where).toEqual({
+        variationId: { in: ['var-1'] },
+        order: { fulfiller: 'MERCHANT', fulfillerStorefrontId: 's1', status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] } },
+      });
+    });
+
     it('ADMIN: vẫn thấy dealerPrices/affiliateRate như cũ', async () => {
       const svc = new MerchantService(makeProductsPrisma('ADMIN'), orderStatus);
       const res = await svc.listMyProducts('u1');
@@ -467,6 +508,7 @@ describe('MerchantService', () => {
       code: 'TB0001',
       status: 'DELIVERED',
       user: { id: 'cust-1', fullName: 'Nguyễn Văn An', phone: '0901234567' },
+      items: [],
       shippingAddress: {
         recipient: 'Nguyễn Văn An',
         phone: '0901234567',
@@ -481,7 +523,8 @@ describe('MerchantService', () => {
       return makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: {
           count: jest.fn().mockResolvedValue(1),
           findMany: jest.fn().mockResolvedValue([rawOrder]),
@@ -514,6 +557,25 @@ describe('MerchantService', () => {
       expect(JSON.stringify(order)).not.toContain('12 Lê Lợi');
     });
 
+    it('R5-PARTNER-6: gian hàng đối tác (MERCHANT) không nhận tài khoản người mua dưới bất kỳ dạng nào, kể cả bản đã che', async () => {
+      const partnerStore = { ...store, type: 'MERCHANT' };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(partnerStore) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
+        order: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([rawOrder]) },
+      });
+      const res = await new MerchantService(prisma, orderStatus).listMerchantOrders('u1');
+      const order = res.data[0] as unknown as Record<string, unknown>;
+      expect(order).not.toHaveProperty('user');
+      const json = JSON.stringify(res);
+      for (const leaked of ['0901234567', '090****567', 'Nguyễn Văn An', 'An***', 'cust-1', '12 Lê Lợi']) {
+        expect(json).not.toContain(leaked);
+      }
+      expect(order.shippingAddress).toEqual({ ward: 'Phường Bến Nghé', district: 'Quận 1', province: 'TP.HCM' });
+    });
+
     it('ADMIN: vẫn thấy đầy đủ tên/SĐT/địa chỉ để vận hành', async () => {
       const svc = new MerchantService(makeOrdersPrisma('ADMIN'), orderStatus);
       const res = await svc.listMerchantOrders('u1');
@@ -544,11 +606,12 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
         storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1', slug: 'shop1', subdomain: 'shop1', collections: [] }) },
-        product: { findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: {
           count: jest.fn().mockResolvedValue(1),
           findMany: jest.fn().mockResolvedValue([
-            { id: 'ord-1', code: 'TB0001', status: 'DELIVERED', user: { id: 'c1', fullName, phone: '0901234567' }, shippingAddress: null },
+            { id: 'ord-1', code: 'TB0001', status: 'DELIVERED', user: { id: 'c1', fullName, phone: '0901234567' }, shippingAddress: null, items: [] },
           ]),
         },
       });
@@ -583,7 +646,8 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store) },
-        product: { findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
         order: { count: jest.fn().mockResolvedValue(0), findMany },
       });
       return { svc: new MerchantService(prisma, orderStatus), findMany };
@@ -605,7 +669,6 @@ describe('MerchantService', () => {
       const user = (select.user as { select: Record<string, unknown> }).select;
       expect(user).not.toHaveProperty('id');
       const item = (select.items as { select: Record<string, unknown> }).select;
-      expect(item).not.toHaveProperty('variationId');
       expect(item).not.toHaveProperty('flashSaleItemId');
     });
 
@@ -621,6 +684,173 @@ describe('MerchantService', () => {
       for (const k of ['id', 'productName', 'variationName', 'unitPrice', 'quantity', 'backorderedQty']) {
         expect(item).toHaveProperty(k);
       }
+    });
+  });
+
+  // R2-MERCHANT-5: sau khi liên kết mã Pancake, gian hàng không được thấy đơn cũ của SKU đó hay hàng của nhãn khác trong đơn.
+  describe('listMerchantOrders — gian hàng đối tác chỉ thấy dòng hàng của mình, trong thời gian liên kết', () => {
+    const LINKED_AT = new Date('2026-10-10T00:00:00Z');
+    const MSTORE = { id: 'sf-m', ownerUserId: 'u1', type: 'MERCHANT', collections: [] };
+    const line = (id: string, variationId: string, total: number) => ({
+      id,
+      variationId,
+      productName: id,
+      productSlug: id,
+      variationName: 'V',
+      unitPrice: total,
+      quantity: 1,
+      total,
+    });
+    function setup(orders: unknown[]) {
+      const findMany = jest.fn().mockResolvedValue(orders);
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(MSTORE) },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v-own' }, { id: 'v-pk' }]) },
+        merchantPancakeLink: {
+          findMany: jest.fn().mockResolvedValue([{ variationId: 'v-pk', linkedAt: LINKED_AT, unlinkedAt: null }]),
+        },
+        order: { count: jest.fn().mockResolvedValue(orders.length), findMany },
+      });
+      return { svc: new MerchantService(prisma, orderStatus), findMany };
+    }
+
+    it('lọc đơn: biến thể tự tạo bất kỳ lúc nào, biến thể Pancake chỉ từ lúc liên kết; không còn lọc theo storefrontId', async () => {
+      const { svc, findMany } = setup([]);
+      await svc.listMerchantOrders('u1');
+      expect(findMany.mock.calls[0][0].where).toEqual({
+        OR: [
+          { items: { some: { variationId: { in: ['v-own'] } } } },
+          { createdAt: { gte: LINKED_AT }, items: { some: { variationId: 'v-pk' } } },
+        ],
+      });
+    });
+
+    it('đơn Tubu giao có hàng nhãn khác: chỉ trả dòng của gian hàng, ẩn tổng đơn, không lộ variationId', async () => {
+      const order = {
+        id: 'o1',
+        code: 'TUBU1',
+        createdAt: new Date('2026-10-12T00:00:00Z'),
+        fulfiller: 'TUBU',
+        fulfillerStorefrontId: null,
+        subtotal: 263_000,
+        discount: 0,
+        shippingFee: 0,
+        total: 263_000,
+        user: null,
+        shippingAddress: null,
+        items: [line('Trà', 'v-pk', 65_000), line('Dầu tràm Cobote', 'v-other', 198_000)],
+      };
+      const { svc } = setup([order]);
+      const res = await svc.listMerchantOrders('u1');
+      const o = res.data[0] as Record<string, unknown> & { items: Record<string, unknown>[] };
+      expect(o.items.map((i) => i.productName)).toEqual(['Trà']);
+      expect(o).toMatchObject({ total: null, subtotal: null, discount: null, shippingFee: null, ownTotal: 65_000, partial: true });
+      expect(o).not.toHaveProperty('fulfiller');
+      expect(JSON.stringify(o)).not.toContain('Cobote');
+      expect(JSON.stringify(o)).not.toContain('v-pk');
+    });
+
+    it('đơn gian hàng tự giao: giữ nguyên tổng và đánh dấu selfFulfilled để màn hình chỉ sang tab Đơn cần giao', async () => {
+      const order = {
+        id: 'o2',
+        code: 'TUBU2',
+        createdAt: new Date('2026-10-12T00:00:00Z'),
+        fulfiller: 'MERCHANT',
+        fulfillerStorefrontId: 'sf-m',
+        total: 115_000,
+        user: null,
+        shippingAddress: null,
+        items: [line('Xà phòng', 'v-own', 90_000)],
+      };
+      const { svc } = setup([order]);
+      const res = await svc.listMerchantOrders('u1');
+      expect(res.data[0]).toMatchObject({ total: 115_000, selfFulfilled: true, partial: false });
+    });
+  });
+
+  describe('setOrdersPaused — "Tạm nghỉ" (R2-MERCHANT-13)', () => {
+    function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
+      const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...store, ...data }));
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+      });
+      return { svc: new MerchantService(prisma, orderStatus), update };
+    }
+
+    it('bật thì ghi mốc tạm nghỉ (giữ mốc cũ nếu đang nghỉ), tắt thì xoá', async () => {
+      const since = new Date('2026-10-01T00:00:00Z');
+      const a = setup({ id: 'sf-m', type: 'MERCHANT', ownerUserId: 'u1', ordersPausedAt: null, collections: [] });
+      await a.svc.setOrdersPaused('u1', true);
+      expect(a.update.mock.calls[0][0].data.ordersPausedAt).toBeInstanceOf(Date);
+      const b = setup({ id: 'sf-m', type: 'MERCHANT', ownerUserId: 'u1', ordersPausedAt: since, collections: [] });
+      await b.svc.setOrdersPaused('u1', true);
+      expect(b.update.mock.calls[0][0].data.ordersPausedAt).toBe(since);
+      await b.svc.setOrdersPaused('u1', false);
+      expect(b.update.mock.calls[1][0].data.ordersPausedAt).toBeNull();
+    });
+
+    it('gian hàng CTV không có hàng tự giao → 403', async () => {
+      const { svc } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', collections: [] });
+      await expect(svc.setOrdersPaused('u1', true)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('đại lý còn gian hàng loại CTV vẫn bật được tạm nghỉ, loại gian hàng giữ nguyên', async () => {
+      const { svc, update } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', collections: [] }, 'DEALER');
+      await svc.setOrdersPaused('u1', true);
+      expect(update.mock.calls[0][0].data).not.toHaveProperty('type');
+    });
+  });
+
+  describe('updateStore — đổi tên gian hàng (R2-MERCHANT-7), kho gửi hàng chỉ cho gian hàng tự giao (SELLER-8)', () => {
+    function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
+      const storefrontUpdate = jest.fn().mockResolvedValue({ ...store });
+      const productUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store), update: storefrontUpdate },
+        product: { updateMany: productUpdateMany },
+        $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      });
+      return { svc: new MerchantService(prisma, orderStatus), storefrontUpdate, productUpdateMany };
+    }
+
+    it('đổi tên → tên nhãn của sản phẩm tự đăng (đang mang tên cũ) đổi theo', async () => {
+      const { svc, productUpdateMany } = setup({ id: 'sf-m', type: 'MERCHANT', ownerUserId: 'u1', title: 'Shop A', collections: [] });
+      await svc.updateStore('u1', { title: 'Vườn Xanh' });
+      expect(productUpdateMany).toHaveBeenCalledWith({ where: { storefrontId: 'sf-m', brand: 'Shop A' }, data: { brand: 'Vườn Xanh' } });
+    });
+
+    it('gian hàng CTV: không lưu kho gửi hàng/SĐT kho (trang công khai không lộ SĐT)', async () => {
+      const { svc, storefrontUpdate, productUpdateMany } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', title: 'CTV', collections: [] });
+      await svc.updateStore('u1', { warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi' } as never);
+      const data = storefrontUpdate.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('warehousePhone');
+      expect(data).not.toHaveProperty('warehouseAddress');
+      expect(productUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('đại lý còn gian hàng loại CTV: lưu được kho gửi hàng, không đổi loại gian hàng', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: true, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
+      await svc.updateStore('u1', { warehousePhone: '0955555555' } as never);
+      const data = storefrontUpdate.mock.calls[0][0].data;
+      expect(data).toHaveProperty('warehousePhone', '0955555555');
+      expect(data).not.toHaveProperty('type');
+    });
+
+    it('đại lý có gian hàng CTV chưa có cờ: lần vào Cổng đầu tiên bật isPartner, không đổi loại', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: false, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
+      await svc.updateStore('u1', { warehousePhone: '0955555555' } as never);
+      expect(storefrontUpdate.mock.calls[0][0]).toEqual({ where: { id: 'sf-c' }, data: { isPartner: true } });
+      expect(storefrontUpdate.mock.calls[1][0].data).toHaveProperty('warehousePhone', '0955555555');
+      expect(storefrontUpdate.mock.calls.every(([a]) => !('type' in a.data))).toBe(true);
+    });
+
+    it('CTV thường (không phải đại lý) không được bật cờ', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: false, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'AFFILIATE');
+      await svc.updateStore('u1', { title: 'Mới' });
+      expect(storefrontUpdate.mock.calls.every(([a]) => !('isPartner' in a.data))).toBe(true);
     });
   });
 

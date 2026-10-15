@@ -8,6 +8,8 @@ import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, ty
 import { getErrorMessage } from '../services/api';
 import { shareLink } from '../services/zmp-bridge';
 import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { canWithdraw as canWithdrawRule, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints } from '../utils/format';
@@ -41,7 +43,8 @@ export default function WalletPage() {
   const qc = useQueryClient();
   // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
   // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
-  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   // CTV chỉ hưởng hoa hồng; API không bao giờ thưởng Điểm Xanh giới thiệu cho role này.
   const isAffiliate = useAuthStore((s) => s.user?.role === 'AFFILIATE');
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
@@ -104,16 +107,22 @@ export default function WalletPage() {
   const points = loyalty ? pointsSummary(loyalty) : null;
   const convertedNote = convertedPointsNote(points?.converted);
 
+  const pageSkeleton = (
+    <div style={{ padding: 16, gap: 12, display: 'flex', flexDirection: 'column' }}>
+      <Skeleton height={140} radius="var(--radius-card)" />
+      <Skeleton height={110} radius="var(--radius-card)" />
+      <Skeleton height={90} radius="var(--radius-card)" />
+    </div>
+  );
+
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={vi.profile.wallet} />
-      {!authed || walletQ.isLoading ? (
-        <div style={{ padding: 16, gap: 12, display: 'flex', flexDirection: 'column' }}>
-          <Skeleton height={140} radius="var(--radius-card)" />
-          <Skeleton height={110} radius="var(--radius-card)" />
-          <Skeleton height={90} radius="var(--radius-card)" />
-        </div>
-      ) : walletQ.isError ? (
+      {phase !== 'authenticated' ? (
+        <AuthPhaseView phase={phase} loading={pageSkeleton} />
+      ) : walletQ.isLoading ? (
+        pageSkeleton
+      ) : walletQ.isError && !w ? (
         <div style={{ padding: 24 }}>
           <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
         </div>
@@ -328,13 +337,13 @@ export default function WalletPage() {
             />
           </Field>
           <Field label="Tên ngân hàng">
-            <Input placeholder="VD: Techcombank" value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
+            <Input placeholder="VD: Techcombank" maxLength={120} value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
           </Field>
           <Field label="Số tài khoản">
-            <Input value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
+            <Input inputMode="numeric" maxLength={24} value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
           </Field>
           <Field label="Chủ tài khoản">
-            <Input placeholder="Tên in trên thẻ" value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
+            <Input placeholder="Tên in trên thẻ" maxLength={120} value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
           </Field>
         </div>
         {amountNum >= min && (

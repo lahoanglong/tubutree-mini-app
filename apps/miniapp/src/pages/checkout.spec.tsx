@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AxiosError, type AxiosResponse } from 'axios';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -63,9 +64,15 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoade
 vi.mock('../components/checkout/voucher-sheet', () => ({ VoucherSheet: () => null }));
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../services/geo-api', () => ({
+  getProvinces: vi.fn().mockResolvedValue([{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }]),
+  getCommunes: vi.fn().mockResolvedValue([]),
+}));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import CheckoutPage from './checkout';
+import { createQueryClient } from '../services/query-client';
+import { vi as viCopy } from '../i18n/vi';
 
 const ADDRESS = {
   id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 Lê Lợi', province: 'TP. Hồ Chí Minh', provinceCode: '84_VN79',
@@ -133,6 +140,15 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
 
     const body = await placeOrderClick();
     expect(body.referralCode).toBe('AB12CD34');
+  });
+
+  it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {
+    const { container } = renderPage();
+    const name = await screen.findByText('Xà bông thảo mộc');
+    const row = name.closest('div')!.parentElement as HTMLElement;
+    expect(row.querySelector('img')).toBeNull();
+    expect(row.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('img[alt="Xà bông thảo mộc"]')).toBeNull();
   });
 
   it('không nhập gì và không có link giới thiệu → KHÔNG gửi referralCode (hành vi cũ giữ nguyên)', async () => {
@@ -435,6 +451,35 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
   });
 });
 
+describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.slug = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getWallet.mockResolvedValue({ balance: 0 });
+    mocks.getLoyalty.mockResolvedValue(null);
+  });
+
+  it('báo giá có couponNotice → hiện câu giải thích dưới chip mã, không hiện dòng giảm', async () => {
+    const notice = 'Mã chưa được áp dụng cho đơn này (hàng giờ vàng không được tính vào điều kiện của mã): Đơn tối thiểu 150.000đ để dùng mã này.';
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'UAT50K', couponNotice: notice });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 0, couponNotice: notice });
+    renderPage();
+    const el = await screen.findByTestId('coupon-notice');
+    expect(el.textContent).toBe(notice);
+    expect(screen.getByText('UAT50K')).toBeTruthy();
+  });
+
+  it('mã áp bình thường → không có câu giải thích', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5000, couponNotice: null });
+    renderPage();
+    await screen.findByText('SALE');
+    expect(screen.queryByTestId('coupon-notice')).toBeNull();
+  });
+});
+
 describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -502,5 +547,524 @@ describe('CheckoutPage — hàng chọn không chứa phần tử focus được
     fireEvent.click(second.querySelector('input')!);
     await waitFor(() => expect(second).toHaveAttribute('aria-checked', 'true'));
     expect(within(box).getAllByRole('radio').filter((r) => r.getAttribute('aria-checked') === 'true')).toHaveLength(1);
+  });
+});
+
+describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và địa chỉ địa giới cũ (PANCAKE-16)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('gửi kèm tổng khách đang thấy (expectedTotal = tổng báo giá)', async () => {
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    renderPage();
+    const body = await placeOrderClick();
+    expect(body.expectedTotal).toBe(70_000);
+  });
+
+  it('BE trả TOTAL_CHANGED → hiện sheet báo tổng mới (không snackbar), tải lại báo giá', async () => {
+    const message = 'Tổng tiền đơn vừa thay đổi từ 70.000đ thành 75.000đ do giá hoặc phí giao vừa cập nhật. Vui lòng xem lại trước khi đặt.';
+    const response = { status: 400, data: { statusCode: 400, code: 'TOTAL_CHANGED', message } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    await placeOrderClick();
+    expect(await screen.findByText('Tổng tiền đơn vừa thay đổi')).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('địa chỉ đang chọn theo địa giới cũ → cảnh báo + nút Cập nhật địa chỉ mở form sửa đúng địa chỉ đó', async () => {
+    mocks.getAddresses.mockResolvedValue([{ ...ADDRESS, provinceCode: '79', wardCode: '26734' }]);
+    renderPage();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('theo địa giới cũ');
+    fireEvent.click(within(alert).getByText('Cập nhật địa chỉ'));
+    await waitFor(() => expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument());
+    expect(screen.getByDisplayValue('Ánh')).toBeInTheDocument();
+  });
+
+  it('địa chỉ hệ mới → không cảnh báo', async () => {
+    renderPage();
+    await screen.findByText('Phương thức thanh toán');
+    expect(screen.queryByText(/theo địa giới cũ/)).not.toBeInTheDocument();
+  });
+});
+
+const badRequest = (message: string) =>
+  Object.assign(new Error(message), { isAxiosError: true, response: { status: 400, data: { message } } });
+
+describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-18)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('đặt đơn bị từ chối vì không đủ tồn → banner cố định (không chỉ toast) có nút "Về giỏ hàng"', async () => {
+    mocks.placeOrder.mockRejectedValue(badRequest('Sản phẩm "Xà bông thảo mộc" không đủ tồn kho.'));
+    renderPage();
+    await placeOrderClick();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(banner).toHaveAttribute('role', 'alert');
+    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" không đủ tồn kho.')).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
+  it('giỏ đang có dòng vượt tồn → báo ngay và khoá nút Đặt hàng', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 }] });
+    renderPage();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" chỉ còn 1 sản phẩm. Vui lòng sửa số lượng trong giỏ.')).toBeInTheDocument();
+    const btn = await screen.findByText(/Đặt hàng · /);
+    expect(btn.closest('button')).toBeDisabled();
+  });
+
+  it('lỗi khác (không phải tồn kho) vẫn báo bằng thông báo nhanh như cũ', async () => {
+    mocks.placeOrder.mockRejectedValue(badRequest('Mã giảm giá đã hết hạn.'));
+    renderPage();
+    await placeOrderClick();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết hạn.', type: 'error' }));
+    expect(screen.queryByTestId('checkout-cart-issue')).toBeNull();
+  });
+});
+
+describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
+  const TUBU = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' };
+  const SHOP = { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' };
+  const BLOCK_REASON = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+  const SPLIT_CART = {
+    ...CART,
+    items: [
+      { ...CART.items[0]!, fulfiller: TUBU },
+      { id: 'ci2', variationId: 'v2', productName: 'Mật ong rừng', variationName: null, slug: 'mat-ong', thumbnail: null, unitPrice: 200_000, quantity: 1, stock: 5, total: 200_000, fulfiller: SHOP },
+    ],
+    subtotal: 250_000,
+  };
+  const SPLIT_QUOTE = {
+    ...QUOTE,
+    subtotal: 250_000, shippingFee: 45_000, total: 295_000,
+    shipments: [
+      { key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 },
+      { key: 'MERCHANT:sf1', fulfiller: SHOP, itemIds: ['ci2'], subtotal: 200_000, discount: 0, shippingFee: 25_000, total: 225_000 },
+    ],
+    blockedPaymentMethods: { BANK_TRANSFER: BLOCK_REASON },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(SPLIT_CART);
+    mocks.checkoutQuote.mockResolvedValue(SPLIT_QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('món chia theo nơi giao kèm phí giao từng kiện; báo sẽ thành 2 đơn riêng', async () => {
+    renderPage();
+    const tubu = await screen.findByRole('region', { name: 'Tubu Tree giao' });
+    const shop = screen.getByRole('region', { name: 'Mật ong Linh giao' });
+    expect(tubu.textContent).toContain('Xà bông thảo mộc');
+    expect(tubu.textContent).toMatch(/Phí giao\s*20\.000đ/);
+    expect(shop.textContent).toContain('Mật ong rừng');
+    expect(shop.textContent).toMatch(/Phí giao\s*25\.000đ/);
+    expect(screen.getByText(/sẽ thành 2 đơn riêng/)).toBeInTheDocument();
+  });
+
+  it('chuyển khoản bị máy chủ khoá: dòng bị vô hiệu kèm đúng lý do; đặt hàng gửi COD', async () => {
+    renderPage();
+    const bank = await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ });
+    await waitFor(() => expect(bank).toHaveAttribute('aria-disabled', 'true'));
+    expect(document.getElementById(bank.getAttribute('aria-describedby')!)!.textContent).toBe(BLOCK_REASON);
+    fireEvent.click(bank);
+    expect(bank).toHaveAttribute('aria-checked', 'false');
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('COD');
+  });
+
+  it('R5-CHECKOUT-4: giỏ chỉ hàng gian hàng tự giao (một kiện) → nói gian hàng nào giao, không nói "1 nơi giao… 1 đơn riêng"', async () => {
+    mocks.getCart.mockResolvedValue({ ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...SPLIT_QUOTE, subtotal: 200_000, shippingFee: 25_000, total: 225_000, shipments: [SPLIT_QUOTE.shipments[1]!] });
+    renderPage();
+    const shop = await screen.findByRole('region', { name: 'Mật ong Linh giao' });
+    expect(shop.textContent).toContain('Mật ong rừng');
+    expect(screen.getByText('Đơn này do Mật ong Linh giao, phí giao theo gian hàng.')).toBeInTheDocument();
+    expect(screen.queryByText(/nơi giao nên sẽ thành/)).toBeNull();
+  });
+
+  it('R5-CHECKOUT-6: giỏ đổi ở nơi khác sang hàng gian hàng tự giao, máy chủ từ chối cách thanh toán (PAYMENT_METHOD_NOT_ALLOWED) → tải lại cả giỏ, kiện mới có đủ món', async () => {
+    const TUBU_QUOTE = {
+      ...QUOTE,
+      shipments: [{ key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 }],
+    };
+    const SHOP_QUOTE = { ...SPLIT_QUOTE, subtotal: 200_000, shippingFee: 25_000, total: 225_000, shipments: [SPLIT_QUOTE.shipments[1]!] };
+    let changed = false;
+    mocks.getCart.mockImplementation(async () => (changed ? { ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 } : CART));
+    mocks.checkoutQuote.mockImplementation(async () => (changed ? SHOP_QUOTE : TUBU_QUOTE));
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: BLOCK_REASON } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    const bank = await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ });
+    await waitFor(() => expect(bank).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.click(bank);
+    await waitFor(() => expect(bank).toHaveAttribute('aria-checked', 'true'));
+
+    changed = true;
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('BANK_TRANSFER');
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: BLOCK_REASON, type: 'error' }));
+    const shop = await screen.findByRole('region', { name: 'Mật ong Linh giao' });
+    await waitFor(() => expect(shop.textContent).toContain('Mật ong rừng'));
+    expect(screen.queryByText('Xà bông thảo mộc')).toBeNull();
+  });
+
+  it('giỏ toàn hàng Tubu: không chia nhóm, không báo tách đơn', async () => {
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue({
+      ...QUOTE,
+      shipments: [{ key: 'TUBU', fulfiller: TUBU, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 20_000, total: 70_000 }],
+    });
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByRole('region', { name: 'Tubu Tree giao' })).toBeNull();
+    expect(screen.queryByText(/đơn riêng/)).toBeNull();
+  });
+});
+
+describe('CheckoutPage — COD theo từng đơn, báo giá quyết định phương thức dùng được (R4-CHECKOUT-2)', () => {
+  const COD_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.';
+  const COD_SPLIT_OVER =
+    'Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa 5.000.000đ, mà đơn do Tubu Tree giao là 5.400.000đ. Bạn có thể trả bằng Ví Tubu nếu số dư đủ, hoặc đặt riêng phần hàng Tubu Tree giao để chuyển khoản.';
+  const SPLIT = 'Đơn gồm hàng do nhiều nơi giao nên chỉ thanh toán được khi nhận hàng (COD) hoặc bằng Ví Tubu.';
+  const NONE = 'Đơn này chưa có cách thanh toán dùng được. Xem hướng dẫn dưới từng cách thanh toán ở trên.';
+  const PICK = 'Chọn một cách thanh toán cho đơn này để đặt hàng.';
+  const BOTH_BLOCKED = { ...QUOTE, total: 5_600_000, blockedPaymentMethods: { COD: COD_SPLIT_OVER, BANK_TRANSFER: SPLIT } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  const placeButton = async () => (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+  const describedBy = (el: HTMLElement) => document.getElementById(el.getAttribute('aria-describedby')!)!.textContent;
+
+  it('COD bị khoá: dòng COD vô hiệu kèm đúng lý do máy chủ, tự chọn chuyển khoản, đặt hàng gửi BANK_TRANSFER', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, total: 5_400_000, blockedPaymentMethods: { COD: COD_OVER } });
+    renderPage();
+    const cod = await screen.findByRole('radio', { name: /^Thanh toán khi nhận hàng/ });
+    await waitFor(() => expect(cod).toHaveAttribute('aria-disabled', 'true'));
+    expect(describedBy(cod)).toBe(COD_OVER);
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true'));
+    expect(cod).toHaveAttribute('aria-checked', 'false');
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('BANK_TRANSFER');
+  });
+
+  it('máy chủ từ chối cách đang chọn lúc đặt (PAYMENT_METHOD_NOT_ALLOWED) → báo lỗi, tải lại báo giá, khoá COD và tự chọn chuyển khoản; đặt lại gửi BANK_TRANSFER (R7 review #4)', async () => {
+    let blocked = false;
+    mocks.checkoutQuote.mockImplementation(async () => (blocked ? { ...QUOTE, blockedPaymentMethods: { COD: COD_OVER } } : QUOTE));
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: COD_OVER } } as AxiosResponse;
+    mocks.placeOrder
+      .mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response))
+      .mockResolvedValue({ id: 'o1', code: 'TT001' });
+    renderPage();
+    const cod = await screen.findByRole('radio', { name: /^Thanh toán khi nhận hàng/ });
+    await waitFor(() => expect(cod).toHaveAttribute('aria-checked', 'true'));
+
+    blocked = true;
+    const quotesBefore = mocks.checkoutQuote.mock.calls.length;
+    const first = await placeOrderClick();
+    expect(first.paymentMethod).toBe('COD');
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: COD_OVER, type: 'error' }));
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThan(quotesBefore));
+    await waitFor(() => expect(cod).toHaveAttribute('aria-disabled', 'true'));
+    expect(describedBy(cod)).toBe(COD_OVER);
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.click(await placeButton());
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví thiếu: không phương thức nào được chọn, nút đặt hàng khoá, nói rõ chưa có cách thanh toán', async () => {
+    mocks.checkoutQuote.mockResolvedValue(BOTH_BLOCKED);
+    renderPage();
+    expect(await screen.findByText(NONE)).toBeInTheDocument();
+    for (const name of [/^Thanh toán khi nhận hàng/, /^Chuyển khoản ngân hàng/, /^Ví Tubu/]) {
+      const row = screen.getByRole('radio', { name });
+      expect(row).toHaveAttribute('aria-disabled', 'true');
+      expect(row).toHaveAttribute('aria-checked', 'false');
+    }
+    expect(await placeButton()).toBeDisabled();
+    fireEvent.click(await placeButton());
+    expect(mocks.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it('COD và chuyển khoản đều khoá, Ví đủ: không tự trừ Ví, nhắc chọn; khách chọn Ví thì đặt được và gửi WALLET', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: 9_000_000 });
+    mocks.checkoutQuote.mockResolvedValue(BOTH_BLOCKED);
+    renderPage();
+    expect(await screen.findByText(PICK)).toBeInTheDocument();
+    const wallet = screen.getByRole('radio', { name: /^Ví Tubu/ });
+    expect(wallet).toHaveAttribute('aria-checked', 'false');
+    expect(await placeButton()).toBeDisabled();
+    fireEvent.click(wallet);
+    await waitFor(() => expect(wallet).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.queryByText(PICK)).toBeNull();
+    const body = await placeOrderClick();
+    expect(body.paymentMethod).toBe('WALLET');
+  });
+});
+
+describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn thứ hai (R2-MONEY-2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  async function clickPlace(times: number) {
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(times));
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+  }
+
+  it('quá thời gian chờ rồi bấm lại cùng nội dung → gửi lại đúng Idempotency-Key cũ', async () => {
+    mocks.placeOrder
+      .mockRejectedValueOnce(new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED'))
+      .mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    renderPage();
+    await clickPlace(1);
+    await clickPlace(2);
+    const [k1, k2] = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
+    expect(k1).toBeTruthy();
+    expect(k2).toBe(k1);
+  });
+
+  it('lỗi 5xx rồi bấm lại → cùng key; đổi cách thanh toán rồi bấm → key mới', async () => {
+    const response = { status: 502, data: { message: 'Bad Gateway' } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Gateway', 'ERR_BAD_RESPONSE', undefined, undefined, response));
+    renderPage();
+    await clickPlace(1);
+    await clickPlace(2);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await clickPlace(3);
+    const keys = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('BE báo CART_CHANGED → báo khách và tải lại giỏ', async () => {
+    const message = 'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+    const response = { status: 400, data: { statusCode: 400, code: 'CART_CHANGED', message } } as AxiosResponse;
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    renderPage();
+    await clickPlace(1);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+});
+
+describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () => {
+  const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 300, redeemablePoints: 300 });
+  });
+
+  const pointsRow = async () => (await screen.findByText('Điểm Xanh', { selector: 'span, div, p' })).closest('[role="checkbox"]') as HTMLElement;
+
+  it('giỏ có hàng của gian hàng đối tác: nêu trần điểm của đơn và câu giải thích, vẫn bật được', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 12, pointsPartnerNote: NOTE });
+    renderPage();
+    expect(await screen.findByText('Đơn này dùng tối đa 12 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    const row = await pointsRow();
+    expect(row.getAttribute('aria-disabled')).toBe('false');
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.some((c) => c[1] === 300)).toBe(true));
+  });
+
+  it('R4-BUYER-2: giỏ chỉ hàng Tubu, trần của đơn thấp hơn số dư: nêu trần ngay khi chưa tick, tick xong ra đúng số thật', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 8013, redeemablePoints: 7972 });
+    mocks.checkoutQuote.mockImplementation(async (_addr: string, pointsToUse: number) => ({
+      ...QUOTE,
+      pointsBalance: 8013,
+      redeemablePoints: 7972,
+      pointsMax: 42,
+      pointsPartnerNote: null,
+      pointsUsed: pointsToUse > 0 ? 42 : 0,
+      pointsDiscount: pointsToUse > 0 ? 42_000 : 0,
+    }));
+    renderPage();
+    expect(await screen.findByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
+    expect(screen.getByText(/Dùng được 7\.972\/8\.013 điểm/)).toBeInTheDocument();
+    fireEvent.click(await pointsRow());
+    expect(await screen.findByText('Dùng 42 điểm — giảm 42.000đ')).toBeInTheDocument();
+  });
+
+  it('R4-BUYER-2: có điểm quy đổi mà đơn bị trần: vẫn nói phần không hết hạn nhưng không hứa "trả tới 100% giá trị hàng"', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 1_000, lockedPoints: 0, redeemablePoints: 0 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 1_000, redeemablePoints: 0, pointsMax: 42, pointsPartnerNote: null });
+    renderPage();
+    expect(await screen.findByText('Đơn này dùng tối đa 42 Điểm Xanh, tính theo giá trị hàng của đơn')).toBeInTheDocument();
+    expect(screen.getByText('trong đó 1.000 điểm không hết hạn')).toBeInTheDocument();
+    expect(screen.queryByText(/trả tới 100%/)).toBeNull();
+  });
+
+  it('R4-BUYER-2: trần của đơn không thấp hơn số điểm dùng được thì không thêm dòng trần', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 300, pointsPartnerNote: null });
+    renderPage();
+    expect(await screen.findByText('Bạn đang có 300 điểm')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
+    expect(screen.queryByText(/Đơn này dùng tối đa/)).toBeNull();
+  });
+
+  it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
+    renderPage();
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    const row = await pointsRow();
+    expect(row.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(row);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.checkoutQuote.mock.calls.every((c) => c[1] === 0)).toBe(true);
+  });
+});
+
+describe('CheckoutPage — mất mạng khi bấm Đặt hàng (R4-BUYER-1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+  afterEach(() => {
+    onlineManager.setOnline(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('offline: yêu cầu đặt đơn vẫn được gửi, lỗi mạng hiện câu "mất mạng", nút bấm lại được và bật mạng lại không tự đặt thêm', async () => {
+    const qc = createQueryClient();
+    qc.setDefaultOptions({ ...qc.getDefaultOptions(), queries: { retry: false } });
+    mocks.placeOrder.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+
+    onlineManager.setOnline(false);
+    vi.stubGlobal('navigator', { ...window.navigator, onLine: false });
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viCopy.errors.offline, type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+
+    onlineManager.setOnline(true);
+    await qc.resumePausedMutations();
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+  });
+});
+
+// R5-BUYER-5: giỏ rỗng (hoặc giỏ chưa tải xong) mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
+describe('CheckoutPage — không báo giá khi chưa có hàng (R5-BUYER-5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('giỏ rỗng: hiện "Giỏ còn trống" và không gọi báo giá', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [], itemCount: 0, subtotal: 0 });
+    renderPage();
+    expect(await screen.findByText(viCopy.cart.emptyHeading)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalled());
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
+  });
+
+  it('địa chỉ về trước giỏ: chưa báo giá cho tới khi giỏ tải xong và có hàng', async () => {
+    let resolveCart!: (v: typeof CART) => void;
+    mocks.getCart.mockReturnValue(new Promise((r) => (resolveCart = r)));
+    renderPage();
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
+
+    resolveCart(CART);
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(1));
   });
 });

@@ -11,6 +11,13 @@ vi.mock('next/navigation', () => ({
     throw new Error('NEXT_NOT_FOUND');
   },
 }));
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a data-next-link="" href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getBrand: async () => mocks.brand,
@@ -88,7 +95,18 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(link.textContent).toContain('80.000');
   });
 
-  it('chương trình đại lý giữ chu kỳ quý/năm', async () => {
-    expect((await html()).textContent).toContain('/ quý');
+  it('thẻ sản phẩm dùng next/link (điều hướng trong ứng dụng, không tải lại cả trang) — BUYERWEB-18', async () => {
+    const link = (await html()).querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!;
+    expect(link.hasAttribute('data-next-link')).toBe(true);
+  });
+
+  it('không lộ chương trình đại lý (thưởng/chiết khấu B2B) cho khách lẻ — BUYERWEB-18', async () => {
+    const box = await html();
+    const text = box.textContent ?? '';
+    expect(text).not.toContain('Chương trình đại lý');
+    expect(text).not.toContain('Thưởng quý');
+    expect(text).not.toContain('Đạt chỉ tiêu');
+    expect(text).not.toContain('Đạt doanh số');
+    expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Câu chuyện thương hiệu']);
   });
 });

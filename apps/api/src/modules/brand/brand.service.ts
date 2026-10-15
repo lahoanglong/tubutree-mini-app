@@ -76,6 +76,10 @@ function brandSalesRange(period: BrandSalesPeriod, now: Date): { from: Date; to:
   }
 }
 
+function assertPromotionWindow(startAt: Date, endAt: Date): void {
+  if (!(endAt.getTime() > startAt.getTime())) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+}
+
 @Injectable()
 export class BrandService {
   constructor(private readonly prisma: PrismaService) {}
@@ -284,6 +288,7 @@ export class BrandService {
     dto: { title: string; subtitle?: string; themeColor?: string; couponCode?: string; startAt: string; endAt: string; sortOrder?: number },
     now: Date = new Date(),
   ) {
+    assertPromotionWindow(new Date(dto.startAt), new Date(dto.endAt));
     const couponCode = await this.resolvePromotionCoupon(dto.couponCode, now);
     return this.prisma.brandPromotion.create({
       data: {
@@ -316,6 +321,11 @@ export class BrandService {
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.startAt === 'string') data.startAt = new Date(dto.startAt);
     if (typeof dto.endAt === 'string') data.endAt = new Date(dto.endAt);
+    if (data.startAt || data.endAt) {
+      const current = await this.prisma.brandPromotion.findUnique({ where: { id }, select: { startAt: true, endAt: true } });
+      if (!current) throw new NotFoundException('Không tìm thấy khuyến mãi.');
+      assertPromotionWindow((data.startAt as Date | undefined) ?? current.startAt, (data.endAt as Date | undefined) ?? current.endAt);
+    }
     if (typeof dto.couponCode === 'string') {
       const wanted = dto.couponCode.trim();
       if (!wanted) {
@@ -535,6 +545,9 @@ export class BrandService {
    * Doanh thu = tổng `OrderItem.total` của các dòng thuộc SP của nhãn (giá bán gốc × số lượng, trước mã giảm
    * giá toàn đơn và chưa gồm phí ship — giảm giá theo đơn không chia được cho từng nhãn một cách công bằng).
    * Một đơn có hàng của nhiều nhãn chỉ tính phần dòng của nhãn này. `now` truyền vào để test tất định.
+   * Đơn vị đã trả MỘT PHẦN (yêu cầu trả APPROVED, fullReturn = false — cùng bộ lọc partialReturnTotals) bị trừ khỏi số đơn vị
+   * và khỏi doanh thu theo CÙNG cơ sở `OrderItem.total`: phần còn lại = total − round(total × đã trả / số lượng), trả hết dòng = 0.
+   * Số đơn (orderCount) không đổi: đơn vẫn là đơn đã bán dù một phần bị trả.
    */
   async getOwnedSales(userId: string, period: BrandSalesPeriod = '30d', now: Date = new Date()) {
     const brand = await this.assertOwnedBrand(userId);
@@ -588,6 +601,20 @@ export class BrandService {
       row.revenue += lineRevenue;
       byProduct.set(product.id, row);
     }
+    const returned = await this.partialReturnAdjustments(brand.id, from, to);
+    let deliveredRevenue = deliveredLines._sum.total ?? 0;
+    for (const r of returned) {
+      const product = productOf.get(r.variationId);
+      if (!product) continue;
+      revenue -= r.revenue;
+      unitsSold -= r.quantity;
+      if (r.delivered) deliveredRevenue -= r.revenue;
+      const row = byProduct.get(product.id);
+      if (row) {
+        row.quantity -= r.quantity;
+        row.revenue -= r.revenue;
+      }
+    }
     const topProducts = [...byProduct.values()]
       .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
       .slice(0, SALES_TOP_PRODUCTS);
@@ -597,9 +624,50 @@ export class BrandService {
       orderCount,
       unitsSold,
       revenue,
-      delivered: { orderCount: deliveredOrderCount, revenue: deliveredLines._sum.total ?? 0 },
+      delivered: { orderCount: deliveredOrderCount, revenue: deliveredRevenue },
       topProducts,
     };
+  }
+
+  /**
+   * Phần đã trả một phần (đơn vị + giá trị theo `OrderItem.total`) của các dòng thuộc nhãn, trong các đơn nằm trong kỳ
+   * [from, to] và không thuộc trạng thái bị loại (cùng bộ lọc `orderWhere` của getOwnedSales). Một truy vấn gom trong DB:
+   * yêu cầu trả đã duyệt (chỉ từ `from` vì yêu cầu không thể có trước đơn) JOIN dòng trả → dòng đơn → biến thể → SP của nhãn,
+   * nên không kéo yêu cầu của nhãn khác và không gửi `IN` danh sách id lớn. `ReturnRequest*` không có quan hệ Prisma tới
+   * Order/OrderItem nên dùng $queryRaw (tham số hoá). Số đơn vị đã trả cộng dồn theo dòng đơn, kẹp ở số lượng dòng.
+   */
+  private async partialReturnAdjustments(
+    brandId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ variationId: string; quantity: number; revenue: number; delivered: boolean }[]> {
+    // Date → chuỗi ISO UTC rồi ép ::timestamp: cột timestamp(3) lưu UTC, không phụ thuộc múi giờ phiên DB.
+    const rows = await this.prisma.$queryRaw<
+      { variationId: string; quantity: number; total: number; status: string; returned: bigint | number }[]
+    >(Prisma.sql`
+      SELECT oi."variationId" AS "variationId", oi."quantity" AS "quantity", oi."total" AS "total",
+             o."status"::text AS "status", SUM(ri."quantity") AS "returned"
+      FROM "return_requests" rr
+      JOIN "return_request_items" ri ON ri."returnRequestId" = rr."id"
+      JOIN "order_items" oi ON oi."id" = ri."orderItemId" AND oi."orderId" = rr."orderId"
+      JOIN "orders" o ON o."id" = oi."orderId"
+      JOIN "variations" v ON v."id" = oi."variationId"
+      JOIN "products" p ON p."id" = v."productId"
+      WHERE rr."status" = 'APPROVED' AND rr."fullReturn" = false
+        AND rr."createdAt" >= ${from.toISOString()}::timestamp
+        AND p."brandId" = ${brandId}
+        AND o."createdAt" >= ${from.toISOString()}::timestamp AND o."createdAt" <= ${to.toISOString()}::timestamp
+        AND NOT (o."status"::text = ANY(${[...SALES_ORDER_STATUS_EXCLUDED]}::text[]))
+        AND NOT (o."paymentStatus"::text = ANY(${[...SALES_ORDER_PAYMENT_EXCLUDED]}::text[]))
+      GROUP BY oi."id", oi."variationId", oi."quantity", oi."total", o."status"`);
+    const out: { variationId: string; quantity: number; revenue: number; delivered: boolean }[] = [];
+    for (const r of rows) {
+      const q = Math.min(Number(r.returned), r.quantity);
+      if (q <= 0 || r.quantity <= 0) continue;
+      const revenue = q >= r.quantity ? r.total : Math.round((r.total * q) / r.quantity);
+      out.push({ variationId: r.variationId, quantity: q, revenue, delivered: r.status === 'DELIVERED' });
+    }
+    return out;
   }
 
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */

@@ -1,7 +1,9 @@
 name: VM Ops (maintenance)
 
-# Workflow bảo trì VM prod — dispatch TAY (không tự chạy theo push).
-# Dùng đúng 3 secret như deploy.yml: VM_HOST / VM_USER / VM_SSH_KEY.
+# Workflow bảo trì máy chủ prod — dispatch TAY (không tự chạy theo push).
+# Dùng đúng 3 secret như deploy.yml: VM_HOST / VM_USER / VM_SSH_KEY, cùng 2 biến repo DEPLOY_DIR /
+# COMPOSE_FILE (mặc định VPS Vietnix: /opt/tubutree + docker-compose.vietnix.yml). Giá trị KHÔNG bí mật đi bằng biến
+# (vars.*, `gh variable set`) chứ không bằng secret: BACKUP_RCLONE_REMOTE cho crontab, OPS_ALERT_ENV_LABEL cho set-env.
 # Mỗi lần chọn 1 action. KHÔNG bao giờ in giá trị secret ra log (chỉ SET/EMPTY).
 #
 #   gh workflow run ops.yml -f action=audit
@@ -46,6 +48,27 @@ jobs:
           ACCESSTRADE_TOKEN: ${{ secrets.ACCESSTRADE_TOKEN }}
           ACCESSTRADE_PUBLISHER_ID: ${{ secrets.ACCESSTRADE_PUBLISHER_ID }}
           ACCESSTRADE_WEBHOOK_SECRET_GH: ${{ secrets.ACCESSTRADE_WEBHOOK_SECRET }}
+          # Pancake (nguồn chân lý catalog/đơn) + Gomdon (thu gom tái chế) — docs/GO-LIVE-KEYS.md mục 4-5.
+          PANCAKE_API_KEY: ${{ secrets.PANCAKE_API_KEY }}
+          PANCAKE_SHOP_ID: ${{ secrets.PANCAKE_SHOP_ID }}
+          PANCAKE_WEBHOOK_SECRET: ${{ secrets.PANCAKE_WEBHOOK_SECRET }}
+          GOMDON_PHONE: ${{ secrets.GOMDON_PHONE }}
+          GOMDON_PASSWORD: ${{ secrets.GOMDON_PASSWORD }}
+          GOMDON_WEBHOOK_SECRET: ${{ secrets.GOMDON_WEBHOOK_SECRET }}
+          # Kênh báo động vận hành ngoài app (Slack/Google Chat/n8n) — docs/GO-LIVE-KEYS.md mục báo động vận hành.
+          OPS_ALERT_WEBHOOK_URL: ${{ secrets.OPS_ALERT_WEBHOOK_URL }}
+          # Email báo động vận hành (SMTP, gửi đúng các lần webhook trên gửi) — cùng mục trong docs/GO-LIVE-KEYS.md.
+          OPS_ALERT_EMAIL_TO: ${{ secrets.OPS_ALERT_EMAIL_TO }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          # Nhãn môi trường trong tiêu đề email ("staging"): giá trị thường, đặt bằng biến repo (vars) chứ không phải secret.
+          OPS_ALERT_ENV_LABEL: ${{ vars.OPS_ALERT_ENV_LABEL || '' }}
+          # action=crontab: URL dead-man switch (healthchecks.io...) báo khi backup lỗi/không chạy.
+          BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
           # Chỉ dùng cho action=grant-admin — SĐT tài khoản cần cấp quyền ADMIN. GitHub tự mask
           # giá trị secret này trong mọi log (kể cả khi script echo ra) → không lộ dù repo public.
           ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
@@ -54,7 +77,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -63,8 +86,9 @@ jobs:
             # 0 dòng — bình thường, không phải lỗi) đã được guard tường minh bằng `|| true`.
             set -euo pipefail
             ACTION="${{ github.event.inputs.action }}"
-            cd ~/tubutree
-            COMPOSE="docker compose -f docker-compose.prod.yml"
+            cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
+            COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}"
+            COMPOSE="docker compose -f $COMPOSE_FILE"
             PGUSER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2- || true); PGUSER="${PGUSER:-tubu}"
             PGDB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | cut -d= -f2- || true); PGDB="${PGDB:-tubutree}"
             psql_q() { $COMPOSE exec -T postgres psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 "$@"; }
@@ -101,10 +125,39 @@ jobs:
                 echo "=== ENV (required-in-prod) ==="
                 envstate CORS_ORIGINS
                 envstate ACCESSTRADE_WEBHOOK_SECRET
-                envstate PANCAKE_WEBHOOK_SECRET
                 envstate JWT_ACCESS_SECRET
                 envstate JWT_REFRESH_SECRET
                 envstate POSTGRES_PASSWORD
+                echo "=== ENV (tích hợp: Pancake / Gomdon / Zalo / ZaloPay) ==="
+                envstate PANCAKE_BASE_URL
+                envstate PANCAKE_API_KEY
+                envstate PANCAKE_SHOP_ID
+                envstate PANCAKE_WEBHOOK_SECRET
+                envstate GOMDON_BASE_URL
+                envstate GOMDON_PHONE
+                envstate GOMDON_PASSWORD
+                envstate GOMDON_WEBHOOK_SECRET
+                envstate ZALO_APP_SECRET
+                envstate ZALO_OA_ACCESS_TOKEN
+                envstate ZALO_OA_WEBHOOK_SECRET
+                envstate ZALOPAY_APP_ID
+                envstate ZALOPAY_KEY1
+                envstate ZALOPAY_KEY2
+                echo "=== ENV (báo động vận hành) ==="
+                envstate OPS_ALERT_WEBHOOK_URL
+                envstate OPS_ALERT_EMAIL_TO
+                envstate SMTP_HOST
+                envstate SMTP_PORT
+                envstate SMTP_SECURE
+                envstate SMTP_USER
+                envstate SMTP_PASS
+                envstate SMTP_FROM
+                envstate OPS_ALERT_ENV_LABEL
+                echo "=== API health (db + redis) ==="
+                $COMPOSE exec -T api node -e 'fetch("http://localhost:3001/api/health").then(async r=>console.log(r.status, await r.text())).catch(e=>console.log("ERR", e.message))' || true
+                echo "=== Redis: policy + bộ nhớ ==="
+                $COMPOSE exec -T redis redis-cli config get maxmemory-policy | tr '\n' ' ' || true; echo
+                $COMPOSE exec -T redis redis-cli info memory | grep -E '^(used_memory_human|maxmemory_human):' || true
                 echo "=== DB: applied migrations ==="
                 psql_q -c "SELECT migration_name, finished_at IS NOT NULL AS done FROM _prisma_migrations ORDER BY migration_name;" || echo "(không đọc được _prisma_migrations)"
                 echo "=== DB: GIN indexes trên products ==="
@@ -122,7 +175,7 @@ jobs:
                 # /var/backups thuộc root → tạo + chown cho user SSH trước (như deploy.yml).
                 sudo mkdir -p /var/backups/tubutree
                 sudo chown "$(id -u):$(id -g)" /var/backups/tubutree
-                bash tools/backup/backup-db.sh
+                COMPOSE_FILE="$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" bash tools/backup/backup-db.sh
                 echo "=== Danh sách backup ==="
                 ls -lh /var/backups/tubutree/
                 ;;
@@ -181,11 +234,77 @@ jobs:
                 set_if ACCESSTRADE_PUBLISHER_ID "${ACCESSTRADE_PUBLISHER_ID:-}"
                 # Webhook secret thật (nếu cấp) ĐÈ placeholder ngẫu nhiên sinh ở trên.
                 set_if ACCESSTRADE_WEBHOOK_SECRET "${ACCESSTRADE_WEBHOOK_SECRET_GH:-}"
+                echo "=== Key go-live (Pancake / Gomdon) ==="
+                set_if PANCAKE_API_KEY "${PANCAKE_API_KEY:-}"
+                set_if PANCAKE_SHOP_ID "${PANCAKE_SHOP_ID:-}"
+                set_if PANCAKE_WEBHOOK_SECRET "${PANCAKE_WEBHOOK_SECRET:-}"
+                set_if GOMDON_PHONE "${GOMDON_PHONE:-}"
+                set_if GOMDON_PASSWORD "${GOMDON_PASSWORD:-}"
+                set_if GOMDON_WEBHOOK_SECRET "${GOMDON_WEBHOOK_SECRET:-}"
+                echo "=== Báo động vận hành (Slack/Google Chat/n8n) ==="
+                # API từ chối khởi động khi URL sai dạng (thiếu https://) — không ghi giá trị đó vào .env.
+                case "${OPS_ALERT_WEBHOOK_URL:-}" in
+                  "") echo "  OPS_ALERT_WEBHOOK_URL: secret rỗng — giữ nguyên (báo động chỉ in-app)";;
+                  http://*|https://*) set_if OPS_ALERT_WEBHOOK_URL "$OPS_ALERT_WEBHOOK_URL";;
+                  *) echo "  OPS_ALERT_WEBHOOK_URL: secret không bắt đầu bằng https:// (hoặc http://) — KHÔNG ghi, sửa secret rồi chạy lại"; exit 1;;
+                esac
+                echo "=== Báo động vận hành qua email (SMTP) ==="
+                # Nhãn môi trường (biến repo OPS_ALERT_ENV_LABEL, không phải secret). API không khởi động khi nhãn quá 24 ký tự,
+                # nhiều dòng hoặc có [ ] (nằm trong tiêu đề email) — kiểm trước khi ghi, và trước mọi khoá SMTP.
+                case "${OPS_ALERT_ENV_LABEL:-}" in
+                  "") echo "  OPS_ALERT_ENV_LABEL: biến repo rỗng — giữ nguyên (tiêu đề email dùng NODE_ENV)";;
+                  *[][]*|*$'\n'*|*$'\r'*) echo "  OPS_ALERT_ENV_LABEL: có xuống dòng hoặc [ ] — KHÔNG ghi, sửa biến repo rồi chạy lại"; exit 1;;
+                  *)
+                    if [ "${#OPS_ALERT_ENV_LABEL}" -gt 24 ]; then echo "  OPS_ALERT_ENV_LABEL: quá 24 ký tự — KHÔNG ghi, sửa biến repo rồi chạy lại"; exit 1; fi
+                    set_if OPS_ALERT_ENV_LABEL "$OPS_ALERT_ENV_LABEL";;
+                esac
+                # API từ chối khởi động khi cấu hình email dở dang. Gộp secret mới với giá trị đã có trong .env; còn thiếu thì
+                # KHÔNG ghi khoá nào (không để lại cấu hình nửa vời làm deploy sau bị chặn).
+                effective() { if [ -n "${2:-}" ]; then printf '%s' "$2"; else grep -E "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true; fi; }
+                E_TO=$(effective OPS_ALERT_EMAIL_TO "${OPS_ALERT_EMAIL_TO:-}")
+                E_HOST=$(effective SMTP_HOST "${SMTP_HOST:-}")
+                E_USER=$(effective SMTP_USER "${SMTP_USER:-}")
+                E_PASS=$(effective SMTP_PASS "${SMTP_PASS:-}")
+                E_FROM=$(effective SMTP_FROM "${SMTP_FROM:-}")
+                E_OTHER="$(effective SMTP_PORT "${SMTP_PORT:-}")$(effective SMTP_SECURE "${SMTP_SECURE:-}")"
+                if [ -z "$E_TO$E_HOST$E_USER$E_PASS$E_FROM$E_OTHER" ]; then
+                  echo "  (chưa đặt secret email nào — giữ nguyên, báo động chỉ in-app + webhook)"
+                else
+                  E_MISSING=""
+                  [ -n "$E_TO" ] || E_MISSING="$E_MISSING OPS_ALERT_EMAIL_TO"
+                  [ -n "$E_HOST" ] || E_MISSING="$E_MISSING SMTP_HOST"
+                  { [ -z "$E_USER" ] || [ -n "$E_PASS" ]; } || E_MISSING="$E_MISSING SMTP_PASS"
+                  { [ -z "$E_PASS" ] || [ -n "$E_USER" ]; } || E_MISSING="$E_MISSING SMTP_USER"
+                  if [ -z "$E_FROM" ]; then case "$E_USER" in *@*) ;; *) E_MISSING="$E_MISSING SMTP_FROM";; esac; fi
+                  if [ -n "$E_MISSING" ]; then
+                    echo "  Cấu hình email chưa đủ, còn thiếu:$E_MISSING — KHÔNG ghi khoá nào, đặt thêm secret rồi chạy lại set-env"
+                    exit 1
+                  fi
+                  set_if OPS_ALERT_EMAIL_TO "${OPS_ALERT_EMAIL_TO:-}"
+                  set_if SMTP_HOST "${SMTP_HOST:-}"
+                  set_if SMTP_PORT "${SMTP_PORT:-}"
+                  set_if SMTP_SECURE "${SMTP_SECURE:-}"
+                  set_if SMTP_USER "${SMTP_USER:-}"
+                  set_if SMTP_PASS "${SMTP_PASS:-}"
+                  set_if SMTP_FROM "${SMTP_FROM:-}"
+                fi
 
                 echo "=== Trạng thái sau khi set (chỉ SET/EMPTY) ==="
                 envstate CORS_ORIGINS
                 envstate ACCESSTRADE_WEBHOOK_SECRET
+                envstate PANCAKE_API_KEY
+                envstate PANCAKE_SHOP_ID
                 envstate PANCAKE_WEBHOOK_SECRET
+                envstate GOMDON_PHONE
+                envstate GOMDON_PASSWORD
+                envstate GOMDON_WEBHOOK_SECRET
+                envstate OPS_ALERT_WEBHOOK_URL
+                envstate OPS_ALERT_EMAIL_TO
+                envstate SMTP_HOST
+                envstate SMTP_USER
+                envstate SMTP_PASS
+                envstate SMTP_FROM
+                envstate OPS_ALERT_ENV_LABEL
                 envstate DEEPSEEK_API_KEY
                 envstate GEMINI_API_KEY
                 envstate GEMINI_BASE_URL
@@ -202,14 +321,29 @@ jobs:
 
               crontab)
                 echo "=== Cài cron backup hằng ngày 02:00 ==="
-                SCRIPT="$HOME/tubutree/tools/backup/backup-db.sh"
-                LINE="0 2 * * * $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
+                SCRIPT="$(pwd)/tools/backup/backup-db.sh"
+                # Cron chạy bằng user SSH: thư mục backup và file log phải thuộc user này, nếu không shell không mở
+                # được file log để redirect và bỏ qua luôn lệnh backup (không có bản nào, không có log báo lỗi).
+                sudo mkdir -p /var/backups/tubutree
+                sudo touch /var/log/tubutree-backup.log
+                sudo chown "$(id -u):$(id -g)" /var/backups/tubutree /var/log/tubutree-backup.log
+                # Bản ngoài máy (RCLONE_REMOTE, biến repo BACKUP_RCLONE_REMOTE) cần `rclone config` sẵn trên máy
+                # chủ — xem tools/backup/README.md. Trống thì chỉ giữ bản local (cảnh báo bên dưới).
+                REMOTE="${{ vars.BACKUP_RCLONE_REMOTE || '' }}"
+                LINE="0 2 * * * COMPOSE_FILE=$(pwd)/$COMPOSE_FILE POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=$REMOTE HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-} $SCRIPT >> /var/log/tubutree-backup.log 2>&1"
                 # grep -v khớp 0 dòng là BÌNH THƯỜNG (crontab trống, hoặc dòng cũ y hệt bị lọc ra
                 # trước khi echo dòng mới) → không phải lỗi, || true để không cắt ngang trước `echo "$LINE"`.
                 ( crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' || true; echo "$LINE" ) | crontab -
-                echo "=== crontab hiện tại ==="
-                crontab -l | grep backup
-                sudo touch /var/log/tubutree-backup.log 2>/dev/null || true
+                [ -n "$REMOTE" ] || echo "CẢNH BÁO: chưa đặt biến repo BACKUP_RCLONE_REMOTE — backup chỉ nằm trên cùng đĩa với Postgres."
+                [ -n "${BACKUP_HEALTHCHECK_URL:-}" ] || echo "CẢNH BÁO: chưa đặt secret BACKUP_HEALTHCHECK_URL — backup lỗi hoặc cron không chạy sẽ không ai được báo."
+                echo "=== crontab hiện tại (che URL healthcheck) ==="
+                crontab -l | grep backup | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
+                echo "=== Chạy thử backup một lần với đúng biến của cron (ghi vào cùng file log) ==="
+                COMPOSE_FILE="$(pwd)/$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" RCLONE_REMOTE="$REMOTE" \
+                  HEALTHCHECK_URL="${BACKUP_HEALTHCHECK_URL:-}" bash "$SCRIPT" >> /var/log/tubutree-backup.log 2>&1 \
+                  || { tail -20 /var/log/tubutree-backup.log; echo "Backup chạy thử LỖI — xem log ở trên."; exit 1; }
+                tail -5 /var/log/tubutree-backup.log
+                ls -lh /var/backups/tubutree/ | tail -3
                 ;;
 
               *) echo "Action không hợp lệ: $ACTION"; exit 1 ;;

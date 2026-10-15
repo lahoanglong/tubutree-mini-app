@@ -2,7 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { CartService } from '../cart/cart.service';
-import type { CouponsService } from '../coupons/coupons.service';
+import { CouponProductScopeError, type CouponsService } from '../coupons/coupons.service';
+import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 // P0 A3-05 (quyền lợi hạng): các test "tier perks" bên dưới dựng PricingService THẬT (không mock)
 // để khẳng định khách THẬT SỰ nhận đúng số tiền hứa, không chỉ "hàm được gọi đúng tham số" — nên cần
 // import giá trị (class), không chỉ type.
@@ -27,8 +28,11 @@ const WINDOW_DAYS = 9;
 
 const ADDRESS = {
   id: 'addr1', userId: 'u1', recipient: 'A', phone: '09', province: 'HN', district: 'BD',
-  ward: 'W', street: 'S', provinceCode: '1', districtCode: '2', wardCode: '3',
+  ward: 'W', street: 'S', provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
 };
+const TUBU_LINE = { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree', ownerUserId: null };
+const SF_BRAND = { id: 'sf-linh', slug: 'linh-shop', type: 'BRAND', ownerUserId: 'owner-linh' };
+const SF_CTV = { id: 'sf-lan', slug: 'abcd1234', type: 'CTV', ownerUserId: 'ctv-lan' };
 const CART = {
   items: [{ variationId: 'v1', productId: 'prod1', productName: 'P', variationName: 'V', unitPrice: 100, quantity: 1, total: 100 }],
   subtotal: 100, discount: 0, freeship: false, couponCode: null,
@@ -62,6 +66,12 @@ function build(
     tier?: { discountPct: number } | null;
     /** P0 A3-05: dùng PricingService THẬT thay vì mock cứng — cho test end-to-end freeship/giảm % hạng. */
     pricing?: PricingService;
+    geo?: { checkWard: jest.Mock };
+    systemConfig?: { get: jest.Mock };
+    /** Gian hàng đã xuất bản mà checkout tra theo storefrontSlug (slug/subdomain/tên miền). */
+    storefront?: { id: string; slug: string; subdomain?: string; type: string; ownerUserId: string } | null;
+    /** Cấu hình giao của gian hàng đối tác (phí giao, ngưỡng miễn phí, phí sàn). */
+    merchantStores?: Array<{ id: string; shippingFee: number | null; freeShipFrom: number | null; commissionPct: number | null }>;
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -83,6 +93,14 @@ function build(
     // SELECT … FOR UPDATE khoá dòng users trước khi trừ điểm (xem placeOrder).
     $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
+    storefront: {
+      findFirst: jest.fn().mockImplementation(({ where }: { where: { OR: Array<Record<string, string>> } }) => {
+        const sf = opts.storefront;
+        const hit = sf && where.OR.some((c) => Object.values(c).some((v) => v === sf.slug || v === sf.subdomain));
+        return Promise.resolve(hit ? { id: sf.id, slug: sf.slug, type: sf.type, ownerUserId: sf.ownerUserId } : null);
+      }),
+      findMany: jest.fn().mockResolvedValue(opts.merchantStores ?? []),
+    },
     pointsTransaction: { create: jest.fn().mockResolvedValue({ id: 'ptx' }) },
     // Kiểm lại SP còn bán trong tx (cart/sellable.ts) — mặc định mọi variation đều còn bán.
     variation: {
@@ -95,7 +113,21 @@ function build(
     .fn()
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
-  const cart = { getCart: jest.fn().mockResolvedValue({ unavailableItems: [], ...((opts.cartData ?? CART) as object) }), clear: jest.fn(), removeItems: jest.fn() } as unknown as CartService;
+  const cartData = (opts.cartData ?? CART) as { items: Array<Record<string, unknown>> };
+  const cart = {
+    // Đọc lúc gọi (không chụp lúc build): vài test sửa CART tại chỗ sau khi dựng service.
+    getCart: jest.fn().mockImplementation(async () => ({
+      unavailableItems: [],
+      ...cartData,
+      items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
+    })),
+    // Khoá giỏ trong tx đọc lại đúng các dòng giỏ hiện tại (không ai đổi giỏ giữa chừng).
+    lockForCheckout: jest.fn().mockImplementation(async () =>
+      cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
+    ),
+    clear: jest.fn(),
+    removeItems: jest.fn(),
+  } as unknown as CartService;
   const coupons = {
     redeem: jest.fn(),
     validateAndCompute:
@@ -155,7 +187,7 @@ function build(
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics);
+  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics, opts.geo as never, opts.systemConfig as never);
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
 }
 
@@ -212,17 +244,16 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(orderCreate.mock.calls[0][0].data.pointsEarned).toBe(10); // calcPointsEarned mock = 10
   });
 
-  it('COD vượt hạn mức 5tr → BadRequest', async () => {
-    const { svc } = build({ total: 6_000_000 });
-    // ép subtotal lớn để total vượt mức
-    (CART as { subtotal: number }).subtotal = 6_000_000;
-    (CART.items[0] as { total: number }).total = 6_000_000;
-    await expect(
-      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never),
-    ).rejects.toThrow('COD');
-    // khôi phục
-    (CART as { subtotal: number }).subtotal = 100;
-    (CART.items[0] as { total: number }).total = 100;
+  it('COD vượt hạn mức 5tr → BadRequest PAYMENT_METHOD_NOT_ALLOWED, báo giá khoá COD với cùng lý do', async () => {
+    const big = { ...CART, subtotal: 6_000_000, items: [{ ...CART.items[0]!, total: 6_000_000 }] };
+    const { svc, orderCreate } = build({ cartData: big });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.blockedPaymentMethods.COD).toMatch(/^Thanh toán khi nhận hàng \(COD\) chỉ nhận đơn tối đa 5\.000\.000đ/);
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: BadRequestException) => e);
+    expect((err as BadRequestException).getResponse()).toEqual(
+      expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 
   it('idempotency: key đã tồn tại, cùng user + cùng payload → trả đơn cũ, không tạo mới', async () => {
@@ -239,7 +270,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       // hiện trên Postgres thật.
       shippingAddress: {
         ward: 'W', phone: '09', street: 'S', district: 'BD', province: 'HN',
-        wardCode: '3', recipient: 'A', districtCode: '2', provinceCode: '1',
+        wardCode: '84_VN01_00003', recipient: 'A', districtCode: '2', provinceCode: '84_VN01',
       },
     });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123');
@@ -268,7 +299,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       paymentMethod: 'COD', // đơn cũ đã tạo bằng COD
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     // Lần gọi lại đổi sang WALLET với CÙNG key (client tưởng lần trước fail).
@@ -286,7 +317,7 @@ describe('CheckoutService.placeOrder — money safety', () => {
       paymentMethod: 'COD',
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     // address.findUnique mặc định trả ADDRESS (addr1, HN/BD) — mock đè để mô phỏng đổi sang địa chỉ khác.
@@ -301,11 +332,82 @@ describe('CheckoutService.placeOrder — money safety', () => {
   });
 });
 
+describe('CheckoutService.placeOrder — giỏ đổi khi chờ khoá giỏ (R2-MONEY-2)', () => {
+  const CART_I1 = {
+    items: [{ id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 }],
+    subtotal: 100, discount: 0, freeship: false, couponCode: null,
+  };
+
+  it('số lượng dòng vừa đổi ở tab khác → CART_CHANGED, không tạo đơn, không trừ ví', async () => {
+    const { svc, cart, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([{ id: 'i1', variationId: 'v1', quantity: 3 }]);
+    ledger.mockClear();
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never, 'k1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(((err as BadRequestException).getResponse() as { code?: string }).code).toBe('CART_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it('dòng đã biến mất (lần bấm trước vừa đặt xong) và không có đơn mới khớp → CART_CHANGED', async () => {
+    const { svc, cart, prisma, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.order as unknown as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue(null);
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'k2').catch((e: unknown) => e);
+    expect(((err as BadRequestException).getResponse() as { code?: string }).code).toBe('CART_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('dòng đã biến mất và có đơn vừa đặt cùng địa chỉ + cách trả → trả lại đơn đó', async () => {
+    const { svc, cart, prisma, orderCreate } = build({ cartData: CART_I1 });
+    (cart.lockForCheckout as jest.Mock).mockResolvedValueOnce([]);
+    const { id: _id, userId: _u, ...snapshot } = ADDRESS;
+    (prisma.order as unknown as { findFirst: jest.Mock }).findFirst = jest.fn().mockResolvedValue({
+      id: 'o-prev', code: 'TUBU1', checkoutGroup: null, paymentMethod: 'COD', total: 100, shippingAddress: snapshot, hasRecyclingPickup: false,
+    });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'o-prev', items: [] });
+    const res = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'k3');
+    expect(res.id).toBe('o-prev');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
 describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', () => {
   it('lưu storefrontSlug vào order khi đặt từ gian hàng', async () => {
-    const { svc, orderCreate } = build({ stockCount: 1 });
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
     expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBe('linh-shop');
+    expect(orderCreate.mock.calls[0][0].data.storefrontId).toBe('sf-linh');
+  });
+
+  it('SELLER-5: định danh không khớp gian hàng đang xuất bản nào → không ghi công (slug + storefrontId null)', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: SF_BRAND });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'shop-gia-mao' } as never);
+    expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBeNull();
+    expect(orderCreate.mock.calls[0][0].data.storefrontId).toBeNull();
+  });
+
+  it('SELLER-5: mua qua subdomain → đơn lưu slug CHUẨN và id gian hàng, không lưu chuỗi khách gửi', async () => {
+    const { svc, orderCreate } = build({ stockCount: 1, storefront: { ...SF_BRAND, subdomain: 'linh' } });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'LINH' } as never);
+    expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBe('linh-shop');
+    expect(orderCreate.mock.calls[0][0].data.storefrontId).toBe('sf-linh');
+  });
+
+  it('SELLER-4: gian hàng CTV, mã giới thiệu phiên không khớp ai → chủ gian hàng là người giới thiệu (trước touch cũ)', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv-khac', storefrontSlug: null, kind: 'ctv' });
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch, storefront: { ...SF_CTV, subdomain: 'lan' } });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'lan', referralCode: 'LAN' } as never);
+    expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBe('ctv-lan');
+    expect(orderCreate.mock.calls[0][0].data.storefrontSlug).toBe('abcd1234');
+    expect(getActiveTouch).not.toHaveBeenCalled();
+  });
+
+  it('SELLER-4: chủ gian hàng CTV tự mua trong gian hàng mình → không tự giới thiệu chính mình', async () => {
+    const getActiveTouch = jest.fn().mockResolvedValue(null);
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch, storefront: { ...SF_CTV, ownerUserId: 'u1' } });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'abcd1234' } as never);
+    expect(orderCreate.mock.calls[0][0].data.referrerUserId).toBeNull();
   });
 
   it('storefrontSlug null khi không truyền', async () => {
@@ -316,11 +418,11 @@ describe('CheckoutService.placeOrder — storefrontSlug attribution (Lớp 2)', 
 
   it('attribution 3 ngày: KHÔNG có referralCode nhưng còn touch → referrer + slug từ touch', async () => {
     const getActiveTouch = jest.fn().mockResolvedValue({ referrerUserId: 'ctv9', storefrontSlug: 'shopX', kind: 'ctv' });
-    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch });
+    const { svc, orderCreate } = build({ stockCount: 1, getActiveTouch, storefront: { ...SF_CTV, id: 'sf-x', slug: 'shopx', ownerUserId: 'ctv9' } });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     const data = orderCreate.mock.calls[0][0].data;
     expect(data.referrerUserId).toBe('ctv9');
-    expect(data.storefrontSlug).toBe('shopX');
+    expect(data.storefrontSlug).toBe('shopx');
   });
 
   it('attribution 3 ngày: touch kind=brand → KHÔNG lấy storefrontSlug (vẫn lấy referrer)', async () => {
@@ -416,11 +518,12 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
 
   it('combo nhận đúng storefrontSlug + lines có productId', async () => {
     const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) };
-    const { svc } = build({ stockCount: 1, combo });
+    const { svc } = build({ stockCount: 1, combo, storefront: SF_BRAND });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
     expect(combo.computeForStorefront).toHaveBeenCalledWith(
       'linh-shop',
       [{ variationId: 'v1', productId: 'prod1', total: 100 }],
+      'u1',
     );
   });
 
@@ -439,7 +542,7 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
       const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
       // coupon được tính trên 80 (sau combo), KHÔNG phải 100
-      expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80);
+      expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80, [{ productId: 'prod1', total: 80 }]);
       const data = orderCreate.mock.calls[0][0].data;
       // discount = combo 20 + coupon 24 = 44 (≤ subtotal); total = 100 - 44 = 56
       expect(data.discount).toBe(44);
@@ -492,7 +595,7 @@ describe('CheckoutService.placeOrder — stock atomic (B5)', () => {
     // Đẩy couponCode vào CART rồi khôi phục để không ảnh hưởng test khác.
     (CART as { couponCode: string | null }).couponCode = 'SALE10';
     try {
-      const { svc, prisma } = build({ stockCount: 1 });
+      const { svc, prisma } = build({ stockCount: 1, validateAndCompute: jest.fn().mockResolvedValue({ discount: 10000, freeship: false }) });
       // Lấy reference tới coupons mock từ instance (đã inject trong build).
       const coupons = (svc as unknown as { coupons: { redeem: jest.Mock } }).coupons;
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
@@ -716,16 +819,16 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
   });
 
   it('placeOrder itemIds=[i2] → chỉ xoá món đã mua (removeItems), KHÔNG clear cả giỏ', async () => {
-    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i2'] } as never);
     const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
-    expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2']);
+    expect(cartMock.removeItems).toHaveBeenCalledWith('u1', ['i2'], prisma);
     expect(cartMock.clear).not.toHaveBeenCalled();
   });
 
   it('subset < minOrder coupon → BỎ coupon (không redeem, order.couponCode=null)', async () => {
     // Coupon áp được trên full cart, nhưng subset 300đ < minOrder → validateAndCompute THROW.
-    const validateAndCompute = jest.fn().mockRejectedValue(new Error('Đơn tối thiểu chưa đạt'));
+    const validateAndCompute = jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu chưa đạt'));
     const { svc, orderCreate, coupons } = build({
       cartData: { ...TWO_ITEM_CART, couponCode: 'GIAM50', discount: 50 },
       validateAndCompute,
@@ -740,10 +843,10 @@ describe('CheckoutService — checkout TẬP CON (chọn từng món)', () => {
   });
 
   it('full cart (không itemIds) → clear cả giỏ như cũ (không regression)', async () => {
-    const { svc, cart } = build({ cartData: TWO_ITEM_CART });
+    const { svc, cart, prisma } = build({ cartData: TWO_ITEM_CART });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     const cartMock = cart as unknown as { removeItems: jest.Mock; clear: jest.Mock };
-    expect(cartMock.clear).toHaveBeenCalledWith('u1');
+    expect(cartMock.clear).toHaveBeenCalledWith('u1', prisma);
     expect(cartMock.removeItems).not.toHaveBeenCalled();
   });
 
@@ -767,14 +870,16 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     };
     const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) };
     const validateAndCompute = jest.fn().mockResolvedValue({ discount: 0, freeship: false });
-    const { svc } = build({ cartData: FLASH_CART, combo, validateAndCompute });
+    const { svc } = build({ cartData: FLASH_CART, combo, validateAndCompute, storefront: { ...SF_BRAND, slug: 'storex' } });
     await svc.quote('u1', { addressId: 'addr1', storefrontSlug: 'storeX' } as never);
     // combo nhận ĐÚNG 1 line non-flash (v2), KHÔNG có v1 flash.
-    expect(combo.computeForStorefront).toHaveBeenCalledWith('storeX', [
-      { variationId: 'v2', productId: 'p2', total: 100000 },
-    ]);
+    expect(combo.computeForStorefront).toHaveBeenCalledWith(
+      'storex',
+      [{ variationId: 'v2', productId: 'p2', total: 100000 }],
+      'u1',
+    );
     // coupon base = 100000 (loại flash 80k), KHÔNG phải 180000.
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000);
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
   });
 
   it('placeOrder gọi consumeQuota(tx) cho line flash + đóng dấu flashSaleItemId lên OrderItem', async () => {
@@ -925,7 +1030,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       hasRecyclingPickup: false,
       shippingAddress: {
         recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-        provinceCode: '1', districtCode: '2', wardCode: '3',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
       },
     });
     await expect(
@@ -1047,7 +1152,7 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     );
     const data = orderCreate.mock.calls[0][0].data;
 
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000, [{ productId: 'p1', total: 450000 }]); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
     expect(data.pointsUsed).toBe(76);
     expect(data.shippingFee).toBe(0);
     // discount field gộp cả 4 nguồn: combo 50.000 + coupon 45.000 + điểm 76.000 + hạng 20.250 = 191.250
@@ -1058,6 +1163,9 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     expect(data.total).toBeGreaterThan(0);
     expect(data.discount).toBeLessThan(data.subtotal);
     expect(data.discount + data.total).toBe(data.subtotal);
+    // R2-BUYERMINI-8: lưu từng phần để chi tiết đơn tách "Mã giảm giá" và "Điểm Xanh" bằng số tiền thật.
+    expect(data).toMatchObject({ comboDiscount: 50000, couponDiscount: 45000, tierDiscount: 20250, pointsDiscount: 76000 });
+    expect(data.comboDiscount + data.couponDiscount + data.tierDiscount + data.pointsDiscount).toBe(data.discount);
   });
 });
 
@@ -1231,12 +1339,527 @@ describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0�
         id: 'existing', userId: 'u1', paymentMethod: 'COD', total: 0,
         shippingAddress: {
           recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S',
-          provinceCode: '1', districtCode: '2', wardCode: '3',
+          provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
         },
       });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER' } as never, 'key-0d');
       expect(orderCreate).not.toHaveBeenCalled();
       expect(prisma.order.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'existing' }, include: { items: true } });
     });
+  });
+});
+
+describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa giới', () => {
+  it('PANCAKE-13: tổng tính lại CAO HƠN tổng khách đã thấy → 400 TOTAL_CHANGED, không tạo đơn, không trừ ví', async () => {
+    const { svc, orderCreate } = build({ walletBalance: 1000 });
+    ledger.mockClear();
+    const err = await svc
+      .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET', expectedTotal: 90 } as never)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toMatchObject({
+      code: 'TOTAL_CHANGED',
+      message: expect.stringContaining('Tổng tiền đơn vừa thay đổi từ 90đ thành 100đ'),
+    });
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  describe('R4-CHECKOUT-4: câu TOTAL_CHANGED nói đúng nguyên nhân thay vì luôn "do giá hoặc phí giao"', () => {
+    const totalChanged = async (b: ReturnType<typeof build>, expectedTotal: number) => {
+      const err = await b.svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      const res = (err as BadRequestException).getResponse() as { code: string; message: string };
+      expect(res.code).toBe('TOTAL_CHANGED');
+      expect(b.orderCreate).not.toHaveBeenCalled();
+      return res.message;
+    };
+
+    it('mã giảm giá bị gỡ khỏi giỏ ngay lúc đặt (admin tắt mã) → nêu mã và lý do, không đổ cho giá/phí giao', async () => {
+      const b = build({ cartData: { ...CART, couponRemoved: { code: 'GIAM50', reason: 'Mã giảm giá đã ngừng áp dụng.' } } });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ vì mã GIAM50 không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('mã còn trong giỏ nhưng lúc đặt không áp được → kèm lời báo của mã', async () => {
+      const b = build({
+        cartData: { ...CART, couponCode: 'XANH10' },
+        validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.')),
+      });
+      expect(await totalChanged(b, 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ. Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 150.000đ để dùng mã này. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+
+    it('không liên quan mã → câu trung tính nêu cả ưu đãi, không khẳng định riêng giá hoặc phí giao', async () => {
+      expect(await totalChanged(build(), 60)).toBe(
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+      );
+    });
+  });
+
+  it('R4-CHECKOUT-3: mã gắn sản phẩm mà sản phẩm đó chỉ có ở giá giờ vàng → lời báo nói đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
+    const cartData = {
+      ...CART,
+      couponCode: 'PSGRAN',
+      items: [
+        { ...CART.items[0]!, isFlash: true, flashSaleItemId: 'fi1' },
+        { variationId: 'v2', productId: 'prod2', productName: 'Q', variationName: 'V', unitPrice: 50, quantity: 1, total: 50 },
+      ],
+      subtotal: 150,
+    };
+    const { svc } = build({ cartData, validateAndCompute: jest.fn().mockRejectedValue(new CouponProductScopeError(['prod1'])) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
+    expect(q.couponNotice).not.toContain('chưa có sản phẩm đó');
+  });
+
+  it('PANCAKE-13: tổng bằng hoặc thấp hơn số đã thấy, hoặc client cũ không gửi → đặt bình thường', async () => {
+    for (const expectedTotal of [100, 150, undefined]) {
+      const { svc, orderCreate } = build();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('PANCAKE-12: dòng giỏ có đơn giá 0đ → không báo giá, không đặt được', async () => {
+    const cartData = {
+      ...CART,
+      items: [{ ...CART.items[0], productName: 'Nước rửa chén 5L', unitPrice: 0, total: 0 }],
+      subtotal: 0,
+    };
+    const { svc, orderCreate } = build({ cartData });
+    await expect(svc.quote('u1', { addressId: 'addr1' })).rejects.toThrow('"Nước rửa chén 5L" đang được cập nhật giá');
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('PANCAKE-16: địa chỉ mã cũ "00" → báo giá và đặt đơn đều 400 ADDRESS_OUTDATED', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.address.findUnique as jest.Mock).mockResolvedValue({ ...ADDRESS, provinceCode: '00', districtCode: '00', wardCode: '00' });
+    const err = await svc.quote('u1', { addressId: 'addr1' }).catch((e: unknown) => e);
+    expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'ADDRESS_OUTDATED' });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('địa giới mới');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('PANCAKE-16: phường không thuộc tỉnh theo danh mục Pancake → 400; danh mục chưa tải được → vẫn đặt', async () => {
+    const bad = build({ geo: { checkWard: jest.fn().mockResolvedValue('invalid') } });
+    await expect(bad.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(
+      'Phường/xã không thuộc tỉnh/thành',
+    );
+    expect(bad.orderCreate).not.toHaveBeenCalled();
+
+    const down = build({ geo: { checkWard: jest.fn().mockResolvedValue('unknown') } });
+    await down.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(down.orderCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên phần hàng được tính thì KHÔNG tiêu lượt', () => {
+  // Giỏ: 1 hàng thường 89k + 2 hàng flash 39k. Mã UAT50K minOrder 150k: đạt trên cả giỏ (167k) nhưng
+  // không đạt trên phần không flash (89k) → giỏ giữ mã với giảm 0đ.
+  const FLASH_MIX = {
+    items: [
+      { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'N', variationName: 'VN', unitPrice: 89000, quantity: 1, total: 89000, isFlash: false, flashSaleItemId: null },
+      { id: 'i2', variationId: 'v2', productId: 'p2', productName: 'F', variationName: 'VF', unitPrice: 39000, quantity: 2, total: 78000, isFlash: true, flashSaleItemId: 'fi2' },
+    ],
+    subtotal: 167000, discount: 0, freeship: false, couponCode: 'UAT50K',
+  };
+  const notMet = () => jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.'));
+
+  it('đặt TOÀN giỏ: không redeem, đơn không gắn mã, không giảm', async () => {
+    const { svc, orderCreate, coupons } = build({ cartData: FLASH_MIX, validateAndCompute: notMet() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.couponCode).toBeNull();
+    expect(data.discount).toBe(0);
+  });
+
+  it('quote: giảm 0 + couponNotice giải thích vì sao mã chưa áp', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: notMet() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toContain('150.000đ');
+    expect(q.couponNotice).toContain('giờ vàng');
+  });
+
+  it('lỗi hạ tầng khi kiểm mã (không phải BadRequest) → báo lỗi, không âm thầm đặt đơn bỏ mã', async () => {
+    const { svc, orderCreate } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockRejectedValue(new Error('db timeout')) });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('db timeout');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('R2-BUYERMINI-3: mã áp được trên giỏ có hàng giờ vàng → couponNotice nói mã chỉ giảm trên phần hàng còn lại', async () => {
+    const { svc } = build({ cartData: FLASH_MIX, validateAndCompute: jest.fn().mockResolvedValue({ discount: 8900, freeship: false }) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 89.000đ hàng còn lại.');
+  });
+
+  it('mã áp được → couponApplied true, couponNotice null', async () => {
+    const { svc } = build({
+      cartData: { ...FLASH_MIX, items: [FLASH_MIX.items[0]], subtotal: 89000 },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 20000, freeship: false }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(20000);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
+  });
+
+  // Mã không có đơn tối thiểu (BIRTHDAY/WINBACK, mã admin không đặt minOrder) vẫn "hợp lệ" trên phần
+  // hàng được tính bằng 0đ → giảm 0đ. Không được tính là đã áp, nếu không mã một lần bị đốt cho đơn 0đ giảm.
+  const ALL_FLASH = { ...FLASH_MIX, items: [FLASH_MIX.items[1]], subtotal: 78000 };
+  const zeroDiscount = () => jest.fn().mockResolvedValue({ discount: 0, freeship: false });
+
+  it('giỏ toàn hàng giờ vàng + mã không có đơn tối thiểu → giảm 0đ: không redeem, đơn không gắn mã', async () => {
+    const { svc, orderCreate, coupons } = build({ cartData: ALL_FLASH, validateAndCompute: zeroDiscount() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data.couponCode).toBeNull();
+    expect(data.discount).toBe(0);
+  });
+
+  it('quote: mã hợp lệ nhưng giảm 0đ → couponApplied false + couponNotice nói rõ', async () => {
+    const { svc } = build({ cartData: ALL_FLASH, validateAndCompute: zeroDiscount() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.discount).toBe(0);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+    expect(q.couponNotice).toContain('giờ vàng');
+  });
+
+  it('mã miễn phí vận chuyển (giảm hàng 0đ nhưng miễn được phí giao 19.000đ) → vẫn tính là đã áp', async () => {
+    const { svc, pricing } = build({ cartData: ALL_FLASH, validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }) });
+    (pricing.calcShippingFee as jest.Mock).mockResolvedValue(19_000);
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
+  });
+});
+
+describe('CheckoutService — thông báo khi đặt đơn (BUYERMINI-8)', () => {
+  beforeAll(() => jest.useFakeTimers({ now: new Date('2026-10-13T03:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] }));
+  afterAll(() => jest.useRealTimers());
+
+  it.each(['BANK_TRANSFER', 'ZALOPAY'])('đơn %s chưa trả → "chờ thanh toán" kèm số tiền và hạn (TTL từ SystemConfig), KHÔNG "đã xác nhận"', async (paymentMethod) => {
+    const systemConfig = { get: jest.fn().mockResolvedValue(24) };
+    const { svc, notifications } = build({ total: 114_000, systemConfig });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    expect(systemConfig.get).toHaveBeenCalledWith('orders.pending_payment_ttl_hours', 24);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_AWAITING_PAYMENT', {
+      order_code: expect.any(String),
+      amount: expect.stringMatching(/đ$/),
+      deadline: '10:00 14/10/2026',
+    });
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+  });
+
+  it.each(['COD', 'WALLET'])('đơn %s → "đã xác nhận" như cũ', async (paymentMethod) => {
+    const { svc, notifications } = build({ walletBalance: 1_000_000 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: expect.any(String) });
+  });
+});
+
+// D4 (docs/2026-10-14-merchant-fulfilment-design.md mục 3): một lần đặt có hàng Tubu và hàng đối tác tự giao thành một đơn
+// cho mỗi nơi giao.
+describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
+  const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+  const TUBU_ITEM = { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'Nước rửa chén', variationName: '5L', unitPrice: 100_000, quantity: 1, total: 100_000 };
+  const SHOP_ITEM = { id: 'i2', variationId: 'vm', productId: 'pm', productName: 'Mật ong', variationName: '500ml', unitPrice: 200_000, quantity: 1, total: 200_000, fulfiller: SHOP_A };
+  const MIXED = { items: [SHOP_ITEM, TUBU_ITEM], subtotal: 300_000, discount: 0, freeship: false, couponCode: 'GIAM30' };
+  const ONLY_SHOP = { items: [SHOP_ITEM], subtotal: 200_000, discount: 0, freeship: false, couponCode: null };
+
+  function buildSplit(over: Parameters<typeof build>[0] = {}) {
+    const b = build({
+      cartData: MIXED,
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 30_000, freeship: false }),
+      ...over,
+    });
+    b.orderCreate.mockImplementation((args: any) => Promise.resolve({ id: `id-${args.data.code}`, ...args.data }));
+    (b.pricing.calcShippingFee as jest.Mock).mockResolvedValue(20_000);
+    return b;
+  }
+
+  it('hàng Tubu + hàng đối tác → 2 đơn: Tubu trước, cùng checkoutGroup, phí giao từng kiện, giảm giá chia theo tỉ lệ', async () => {
+    const { svc, orderCreate, coupons } = buildSplit();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-1');
+    expect(orderCreate).toHaveBeenCalledTimes(2);
+    const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
+    expect(tubu.fulfiller).toBe('TUBU');
+    expect(tubu.fulfillerStorefrontId).toBeNull();
+    expect(tubu.merchantCommissionPct).toBeNull();
+    expect(shop.fulfiller).toBe('MERCHANT');
+    expect(shop.fulfillerStorefrontId).toBe('sf-a');
+    expect(shop.merchantCommissionPct).toBe(0.15);
+    expect(tubu.checkoutGroup).toBe(tubu.code);
+    expect(shop.checkoutGroup).toBe(tubu.code);
+    expect(shop.code).not.toBe(tubu.code);
+    expect(tubu.items.create.map((i: { variationId: string }) => i.variationId)).toEqual(['v1']);
+    expect(shop.items.create.map((i: { variationId: string }) => i.variationId)).toEqual(['vm']);
+    expect(tubu.shippingFee).toBe(20_000);
+    expect(shop.shippingFee).toBe(30_000);
+    // Mã giảm 30.000đ trên 300.000đ hàng: 1/3 vào kiện Tubu, 2/3 vào kiện shop; tổng hai đơn đúng từng đồng.
+    expect(tubu.discount).toBe(10_000);
+    expect(shop.discount).toBe(20_000);
+    expect(tubu.total + shop.total).toBe(300_000 - 30_000 + 20_000 + 30_000);
+    expect(tubu.idempotencyKey).toBe('idem-1');
+    expect(shop.idempotencyKey).toBeNull();
+    expect(tubu.couponCode).toBe('GIAM30');
+    expect(shop.couponCode).toBeNull();
+    expect(coupons.redeem).toHaveBeenCalledTimes(1);
+    expect((coupons.redeem as jest.Mock).mock.calls[0][2]).toBe(`id-${tubu.code}`);
+  });
+
+  it('chỉ đơn Tubu đi Pancake; đơn đối tác báo chủ gian hàng MERCHANT_ORDER_NEW', async () => {
+    const { svc, pancake, notifications } = buildSplit();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(pancake.enqueuePush).toHaveBeenCalledTimes(1);
+    const notify = notifications.notify as jest.Mock;
+    expect(notify).toHaveBeenCalledWith('u-a', 'MERCHANT_ORDER_NEW', expect.objectContaining({ total: expect.any(String) }));
+    expect(notify.mock.calls.filter((c) => c[1] === 'ORDER_CONFIRMED')).toHaveLength(2);
+  });
+
+  it('chuyển khoản/ZaloPay bị chặn khi có hàng đối tác tự giao → PAYMENT_METHOD_NOT_ALLOWED, không tạo đơn', async () => {
+    const { svc, orderCreate } = buildSplit();
+    const err = await svc
+      .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'BANK_TRANSFER' } as never)
+      .catch((e: BadRequestException) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toEqual(expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED' }));
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('quote trả từng kiện và lý do chặn phương thức để FE khoá nút', async () => {
+    const { svc } = buildSplit();
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shipments.map((s) => [s.fulfiller.kind, s.itemIds, s.shippingFee])).toEqual([
+      ['TUBU', ['i1'], 20_000],
+      ['MERCHANT', ['i2'], 30_000],
+    ]);
+    expect(Object.keys(q.blockedPaymentMethods).sort()).toEqual(['BANK_TRANSFER', 'ZALOPAY']);
+    expect(q.total).toBe(q.shipments.reduce((s, x) => s + x.total, 0));
+  });
+
+  it('giỏ chỉ hàng Tubu: một đơn, không checkoutGroup, không chặn phương thức nào', async () => {
+    const { svc } = build();
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.shipments).toHaveLength(1);
+    expect(q.blockedPaymentMethods).toEqual({});
+  });
+
+  describe('R4-CHECKOUT-2: hạn mức COD theo từng đơn sau khi tách; báo giá là nguồn duy nhất của lựa chọn bị khoá', () => {
+    const big = (item: Record<string, unknown>, unitPrice: number, quantity: number) => ({ ...item, unitPrice, quantity, total: unitPrice * quantity });
+    // 2.600.000đ hàng Tubu + 3.000.000đ hàng đối tác = 5.600.000đ; mỗi đơn đều dưới 5.000.000đ.
+    const MIXED_BIG = {
+      items: [big(TUBU_ITEM, 260_000, 10), big(SHOP_ITEM, 150_000, 20)],
+      subtotal: 5_600_000, discount: 0, freeship: false, couponCode: null,
+    };
+    // Phần đối tác 5.200.000đ: riêng đơn đó vượt mức.
+    const SHOP_OVER = {
+      items: [big(TUBU_ITEM, 100_000, 1), big(SHOP_ITEM, 260_000, 20)],
+      subtotal: 5_300_000, discount: 0, freeship: false, couponCode: null,
+    };
+
+    it('giỏ tổng 5.600.000đ, từng đơn dưới mức → báo giá không khoá COD, đặt COD tạo đủ hai đơn', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: MIXED_BIG, walletBalance: 0 });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.total).toBeGreaterThan(5_000_000);
+      expect(q.blockedPaymentMethods.COD).toBeUndefined();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(2);
+      expect(orderCreate.mock.calls.map((c) => c[0].data.paymentMethod)).toEqual(['COD', 'COD']);
+    });
+
+    it('một đơn con vượt mức → báo giá khoá COD kèm lý do; đặt COD bị từ chối đúng câu đó, mã PAYMENT_METHOD_NOT_ALLOWED', async () => {
+      const { svc, orderCreate } = buildSplit({ cartData: SHOP_OVER });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(Object.keys(q.blockedPaymentMethods).sort()).toEqual(['BANK_TRANSFER', 'COD', 'ZALOPAY']);
+      expect(q.blockedPaymentMethods.COD).toContain('đơn do Shop A giao là 5.230.000đ');
+      const err = await svc
+        .placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: q.total } as never)
+        .catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({ code: 'PAYMENT_METHOD_NOT_ALLOWED', message: q.blockedPaymentMethods.COD }),
+      );
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('mọi phương thức khoá trong báo giá đều bị đặt hàng từ chối, phương thức không khoá thì đặt được', async () => {
+      for (const cartData of [MIXED_BIG, SHOP_OVER, ONLY_SHOP]) {
+        const { svc } = buildSplit({ cartData, walletBalance: 100_000_000 });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        for (const method of ['COD', 'BANK_TRANSFER', 'ZALOPAY', 'WALLET']) {
+          const res = await svc
+            .placeOrder('u1', { addressId: 'addr1', paymentMethod: method, expectedTotal: q.total } as never)
+            .then(() => null, (e: BadRequestException) => (e.getResponse() as { message: string }).message);
+          expect([method, res]).toEqual([method, q.blockedPaymentMethods[method] ?? null]);
+        }
+      }
+    });
+  });
+
+  it('phí giao theo cấu hình của shop; miễn phí khi đạt ngưỡng của shop; mã freeship Tubu không miễn phí giao của đối tác', async () => {
+    const { svc, orderCreate } = buildSplit({
+      cartData: ONLY_SHOP,
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+      merchantStores: [{ id: 'sf-a', shippingFee: 25_000, freeShipFrom: null, commissionPct: 0.1 }],
+    });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(orderCreate.mock.calls[0][0].data.shippingFee).toBe(25_000);
+    expect(orderCreate.mock.calls[0][0].data.merchantCommissionPct).toBe(0.1);
+    expect(orderCreate.mock.calls[0][0].data.checkoutGroup).toBeNull();
+
+    const b2 = buildSplit({
+      cartData: ONLY_SHOP,
+      merchantStores: [{ id: 'sf-a', shippingFee: 25_000, freeShipFrom: 150_000, commissionPct: null }],
+    });
+    await b2.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(b2.orderCreate.mock.calls[0][0].data.shippingFee).toBe(0);
+  });
+
+  it('mã freeship trên giỏ chỉ có hàng gian hàng tự giao → không miễn được gì: không tính là đã áp, không tiêu lượt, báo rõ', async () => {
+    const { svc, orderCreate, coupons } = buildSplit({
+      cartData: { ...ONLY_SHOP, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
+    expect(q.couponNotice).toContain('Tubu Tree giao');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+    expect(orderCreate.mock.calls[0][0].data.couponCode).toBeNull();
+  });
+
+  it('mã freeship khi kiện Tubu đã được miễn phí giao (đạt ngưỡng) → không tiêu lượt', async () => {
+    const { svc, coupons, pricing } = buildSplit({
+      cartData: { ...MIXED, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    (pricing.calcShippingFee as jest.Mock).mockResolvedValue(0);
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  it('mã freeship khi kiện Tubu có phí giao → miễn phí giao kiện Tubu, tính là đã áp, phí gian hàng giữ nguyên', async () => {
+    const { svc, orderCreate, coupons } = buildSplit({
+      cartData: { ...MIXED, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(true);
+    expect(q.couponNotice).toBeNull();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
+    expect(tubu.shippingFee).toBe(0);
+    expect(shop.shippingFee).toBe(30_000);
+    expect(tubu.couponCode).toBe('FREESHIP');
+    expect(coupons.redeem).toHaveBeenCalledTimes(1);
+  });
+
+  it('thu gom tái chế mà đơn không có hàng Tubu → 400, không tạo đơn', async () => {
+    const { svc, orderCreate } = buildSplit({ cartData: ONLY_SHOP });
+    await expect(
+      svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never),
+    ).rejects.toThrow('chỉ đi cùng hàng do Tubu Tree giao');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('thu gom tái chế chỉ gắn vào đơn Tubu của lần đặt bị tách', async () => {
+    const { svc, orderCreate, gomdon } = buildSplit();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', hasRecyclingPickup: true } as never);
+    const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
+    expect(tubu.hasRecyclingPickup).toBe(true);
+    expect(shop.hasRecyclingPickup).toBe(false);
+    expect(gomdon.enqueuePush).toHaveBeenCalledTimes(1);
+  });
+
+  it('dòng không có đường giao (hàng Tubu thiếu mã Pancake) → 400 nêu tên sản phẩm, không tạo đơn', async () => {
+    const lost = { ...TUBU_ITEM, fulfiller: { kind: 'UNAVAILABLE', storefrontId: null, name: '', ownerUserId: null } };
+    const { svc, orderCreate } = buildSplit({ cartData: { ...MIXED, items: [lost] } });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow(
+      'Nước rửa chén',
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('WALLET: trừ ví riêng từng đơn, tổng trừ = tổng hai đơn', async () => {
+    const { svc, orderCreate } = buildSplit({ walletBalance: 10_000_000 });
+    ledger.mockClear();
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
+    const totals = orderCreate.mock.calls.map((c) => c[0].data.total as number);
+    expect(ledger).toHaveBeenCalledTimes(2);
+    expect(ledger.mock.calls.map((c) => -(c[1] as { delta: number }).delta)).toEqual(totals);
+  });
+});
+
+// R3-MERCHANT-1: phản hồi đặt hàng và báo giá cho khách không kèm phí sàn đối tác, khoá nội bộ hay ID chủ gian hàng.
+describe('CheckoutService — không lộ trường nội bộ cho khách (R3-MERCHANT-1)', () => {
+  const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+  const SHOP_ITEM = { id: 'i2', variationId: 'vm', productId: 'pm', productName: 'Xà phòng', variationName: '100g', unitPrice: 50_000, quantity: 1, total: 50_000, fulfiller: SHOP_A };
+  const ONLY_SHOP = { items: [SHOP_ITEM], subtotal: 50_000, discount: 0, freeship: false, couponCode: null };
+  const RAW_ORDER = {
+    id: 'o1',
+    code: 'TT1',
+    total: 80_000,
+    status: 'PENDING_PAYMENT',
+    checkoutGroup: null,
+    userId: 'u1',
+    items: [{ id: 'oi1', variationId: 'vm' }],
+    merchantCommissionPct: 0.15,
+    commission: 0,
+    endCustomerKey: '0912345678',
+    idempotencyKey: 'idem-1',
+    pancakeOrderId: 'pk-1',
+    pancakePushStatus: 'SYNCED',
+    pancakeSyncError: 'lỗi',
+    pancakePushAttempts: 2,
+    gomdonAttempt: 1,
+    reviewInvitedAt: null,
+    gomdonStatusAt: null,
+    autoCancelBlockedAt: null,
+    recipientSearch: 'khach it 1 duong it',
+  };
+  const HIDDEN = [
+    'merchantCommissionPct', 'commission', 'endCustomerKey', 'idempotencyKey', 'pancakeOrderId', 'pancakePushStatus',
+    'pancakeSyncError', 'pancakePushAttempts', 'gomdonAttempt', 'reviewInvitedAt', 'gomdonStatusAt', 'autoCancelBlockedAt',
+    'recipientSearch',
+  ];
+
+  it('placeOrder trả đơn đã lọc cột nội bộ, vẫn giữ mã đơn và tổng tiền', async () => {
+    const { svc, prisma } = build({ cartData: ONLY_SHOP });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...RAW_ORDER });
+    const res = (await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)) as unknown as Record<string, unknown>;
+    expect(res).toMatchObject({ code: 'TT1', total: 80_000 });
+    for (const key of HIDDEN) expect(res).not.toHaveProperty(key);
+  });
+
+  it('lần đặt bị tách theo nơi giao: đơn trả về cũng đã lọc, kèm splitOrders', async () => {
+    const { svc, prisma } = build({ cartData: ONLY_SHOP });
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...RAW_ORDER, checkoutGroup: 'TT1' });
+    (prisma.order as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([]);
+    const res = (await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)) as unknown as Record<string, unknown>;
+    expect(res).toHaveProperty('splitOrders');
+    for (const key of HIDDEN) expect(res).not.toHaveProperty(key);
+  });
+
+  it('báo giá: items[].fulfiller không kèm ownerUserId của chủ gian hàng', async () => {
+    const { svc } = build({ cartData: ONLY_SHOP });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.items[0]!.fulfiller).toEqual({ kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A' });
+    expect(JSON.stringify(q)).not.toContain('u-a');
   });
 });

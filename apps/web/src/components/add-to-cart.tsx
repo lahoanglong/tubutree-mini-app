@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
-import { addToCart, formatVnd } from '@/lib/shop-client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
+import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
+import { variationPricing } from '@/lib/flash-price';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { formatDateTime } from '@/lib/format-date';
+import { usePdpSelection } from './pdp-selection';
 
 interface Variation {
   id: string;
@@ -15,19 +20,48 @@ interface Variation {
   stock: number;
 }
 
-export default function AddToCart({ variations }: { variations: Variation[] }) {
+/** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
+const LOW_STOCK_NOTICE = 5;
+
+export default function AddToCart({
+  slug,
+  variations: isrVariations,
+  blockedReason = null,
+}: {
+  slug: string;
+  variations: Variation[];
+  /** Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): khách xem được trang nhưng chưa mua được. */
+  blockedReason?: string | null;
+}) {
   const router = useRouter();
   const qc = useQueryClient();
-  const { status } = useAuth();
-  const inStock = variations.filter((v) => v.stock > 0);
-  const [selectedId, setSelectedId] = useState<string>((inStock[0] ?? variations[0])?.id ?? '');
+  const phase = useAuthPhase();
+  // Tồn kho trong HTML là bản ISR (tối đa 5 phút tuổi). Khi mở trang hỏi lại tồn kho thật; lỗi/chưa xong thì dùng bản ISR.
+  const stockQ = useQuery({
+    queryKey: ['product-stock', slug],
+    queryFn: () => getProductStock(slug),
+    staleTime: 30_000,
+    retry: 0,
+  });
+  const variations = useMemo(
+    () => isrVariations.map((v) => ({ ...v, stock: stockQ.data?.[v.id] ?? v.stock })),
+    [isrVariations, stockQ.data],
+  );
+  const inStock = isrVariations.filter((v) => v.stock > 0);
+  const shared = usePdpSelection();
+  const [localId, setLocalId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
+  const selectedId = shared?.selectedId ?? localId;
+  const setSelectedId = shared?.setSelectedId ?? setLocalId;
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const userPicked = useRef(false);
 
+  const flash = useActiveFlashSales();
   const selected = variations.find((v) => v.id === selectedId);
-  const price = selected?.salePrice ?? selected?.retailPrice ?? 0;
+  const selectedPricing = selected ? variationPricing(selected, flash) : null;
+  const price = selectedPricing?.price ?? 0;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -39,16 +73,36 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
     setQty(1);
   }, [selectedId]);
 
-  const onAdd = async () => {
-    if (status !== 'authenticated') {
-      router.push('/dang-nhap');
-      return;
+  // Tồn kho thật vừa về thấp hơn số đang chọn → kéo số lượng xuống cho khớp.
+  useEffect(() => {
+    setQty((q) => Math.min(q, maxQty));
+  }, [maxQty]);
+
+  // Khách vào từ thẻ ghi giá Giờ vàng thì mở đúng phân loại đang giảm (cùng cách Mini App), trừ khi khách đã tự chọn hoặc
+  // phân loại đó hết hàng.
+  useEffect(() => {
+    if (userPicked.current || flash.length === 0) return;
+    const onSale = variations.find((v) => v.stock > 0 && variationPricing(v, flash).isFlash);
+    if (onSale && onSale.id !== selectedId) setSelectedId(onSale.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi đợt Giờ vàng vừa về
+  }, [flash]);
+
+  // Phân loại mặc định (theo bản ISR) hết hàng thật rồi mà còn phân loại khác → chọn giúp, trừ khi khách đã tự chọn.
+  useEffect(() => {
+    if (userPicked.current || !stockQ.data) return;
+    const current = variations.find((v) => v.id === selectedId);
+    if (current && current.stock <= 0) {
+      const alt = variations.find((v) => v.stock > 0);
+      if (alt) setSelectedId(alt.id);
     }
-    if (!selected || !available) return;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi tồn kho thật vừa về
+  }, [stockQ.data]);
+
+  const add = async (variationId: string, quantity: number) => {
     setBusy(true);
     setMsg(null);
     try {
-      const cart = await addToCart(selected.id, qty);
+      const cart = await addToCart(variationId, quantity);
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -58,10 +112,51 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Không thêm được vào giỏ.');
       setSuccess(false);
+      // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
+      void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
       setBusy(false);
     }
   };
+
+  // Khách bấm "Thêm vào giỏ" khi chưa đăng nhập rồi đăng nhập xong thì quay lại đây: thêm nốt món đó.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (phase !== 'authenticated' || resumed.current || blockedReason) return;
+    resumed.current = true;
+    const pending = takePendingAdd(isrVariations.map((v) => v.id));
+    if (!pending) return;
+    userPicked.current = true;
+    setSelectedId(pending.variationId);
+    void add(pending.variationId, pending.quantity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chạy đúng một lần khi vừa có phiên
+  }, [phase]);
+
+  const onAdd = async () => {
+    if (phase === 'loading' || blockedReason) return;
+    if (phase === 'unavailable') {
+      setSuccess(false);
+      setMsg('Chưa kết nối được tới Tubu Tree nên chưa thêm được vào giỏ. Bạn kiểm tra mạng rồi bấm lại nhé.');
+      return;
+    }
+    if (phase === 'guest') {
+      if (selected && available) rememberPendingAdd({ variationId: selected.id, quantity: qty });
+      router.push(loginHref(`/san-pham/${encodeURIComponent(slug)}`));
+      return;
+    }
+    if (!selected || !available) return;
+    await add(selected.id, Math.min(qty, maxQty));
+  };
+
+  if (blockedReason) {
+    return (
+      <div className="mt-4">
+        <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
+          Tạm thời chưa mua được
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4">
@@ -74,24 +169,40 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
             {variations.map((v) => {
               const out = v.stock <= 0;
               const active = v.id === selectedId;
+              const vp = variationPricing(v, flash);
               return (
                 <button
                   key={v.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setSelectedId(v.id)}
+                  onClick={() => {
+                    userPicked.current = true;
+                    setSelectedId(v.id);
+                  }}
                   className={`min-h-11 rounded-control border px-4 text-sm transition ${
                     active
                       ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700'
                       : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
                   } ${out ? 'opacity-60 line-through' : ''}`}
                 >
-                  {v.name} · {formatVnd(v.salePrice ?? v.retailPrice)}
+                  {v.name} · {formatVnd(vp.price)}
+                  {vp.isFlash && <span className="ml-1.5 text-xs font-bold text-promo-fg">Giờ vàng</span>}
                 </button>
               );
             })}
           </div>
         </div>
+      )}
+
+      {selectedPricing?.isFlash && (
+        <p data-testid="flash-price-note" className="mt-3 text-sm font-medium text-promo-fg">
+          Giá Giờ vàng {formatVnd(selectedPricing.price)}, giá gốc {formatVnd(selectedPricing.originalPrice)}
+          {selectedPricing.endAt ? ` · đến ${formatDateTime(selectedPricing.endAt)}` : ''}
+        </p>
+      )}
+
+      {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
+        <p className="mt-3 text-sm font-medium text-warning-fg">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
       <div className="mt-4 flex items-center gap-3">
@@ -116,7 +227,12 @@ export default function AddToCart({ variations }: { variations: Variation[] }) {
             +
           </button>
         </div>
-        <button type="button" onClick={onAdd} disabled={busy || !available} className={`${ui.btnPrimary} flex-1`}>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={busy || !available || phase === 'loading'}
+          className={`${ui.btnPrimary} flex-1`}
+        >
           {!available ? 'Hết hàng' : busy ? 'Đang thêm…' : `Thêm vào giỏ · ${formatVnd(price * qty)}`}
         </button>
       </div>

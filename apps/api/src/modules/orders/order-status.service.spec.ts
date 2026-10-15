@@ -112,6 +112,133 @@ describe('OrderStatusService', () => {
     });
   });
 
+  it('D4: patch (hãng + mã vận đơn) ghi trong CÙNG câu lật trạng thái', async () => {
+    const order = makeOrder({ status: 'PACKED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'SHIPPING' });
+    const tx = mockTx();
+    const shippedAt = new Date('2026-10-14T03:00:00Z');
+
+    await service.setStatus('o1', 'SHIPPING' as never, {
+      actorType: 'MERCHANT',
+      patch: { shippingPartner: 'GHTK', shippingCode: 'S123', trackingLink: null, shippedAt },
+    });
+
+    expect(tx.order.updateMany.mock.calls[0][0].data).toEqual({
+      status: 'SHIPPING',
+      shippingPartner: 'GHTK',
+      shippingCode: 'S123',
+      trackingLink: null,
+      shippedAt,
+    });
+  });
+
+  it('D4: khách/admin/hệ thống huỷ đơn đối tác tự giao → báo chủ gian hàng; đối tác tự huỷ thì không báo lại chính họ', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest
+      .fn()
+      .mockResolvedValue({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
+    mockTx();
+
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN', note: 'Admin: Khách đổi ý' });
+    expect(notifications.notify).toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      reason: 'Tubu Tree huỷ đơn',
+    });
+
+    notifications.notify.mockClear();
+    prisma.order.findFirst.mockResolvedValue(order);
+    mockTx();
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'MERCHANT', note: 'Hết hàng' });
+    expect(notifications.notify).not.toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+  });
+
+  it.each([
+    ['CUSTOMER', 'Khách huỷ đơn'],
+    ['ADMIN', 'Tubu Tree huỷ đơn'],
+    ['PANCAKE', 'Kho Pancake báo huỷ đơn'],
+    ['SYSTEM', 'Hệ thống tự huỷ đơn quá hạn thanh toán'],
+    [undefined, 'Hệ thống tự huỷ đơn quá hạn thanh toán'],
+  ])('SYNC-9: huỷ bởi %s → chủ gian hàng đọc "%s", không bao giờ thấy ghi chú nội bộ', async (actorType, label) => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest
+      .fn()
+      .mockResolvedValue({ fulfiller: 'MERCHANT', fulfillerStorefront: { ownerUserId: 'shop-owner' } });
+    mockTx();
+    const internal = 'Tự huỷ: quá 24 giờ chưa thanh toán — đã mở lệnh ZALOPAY: đối chiếu ZALOPAY, đã trừ tiền thì hoàn thủ công';
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: actorType as never, note: internal });
+    const call = notifications.notify.mock.calls.find((c) => c[1] === 'MERCHANT_ORDER_CANCELLED');
+    expect(call?.[2]).toEqual({ order_code: 'TUBU1', reason: label });
+    expect(JSON.stringify(call)).not.toContain('hoàn thủ công');
+  });
+
+  // R2-LIFECYCLE-5: đơn đã trả bị admin/hệ thống/Pancake huỷ hoặc trả — khách được báo số tiền hoàn và nơi tiền về.
+  it.each([
+    ['CANCELLED', 'ORDER_CANCELLED'],
+    ['RETURNED', 'ORDER_RETURNED'],
+  ])('lật %s đơn đã trả → thông báo kèm refund_note (tiền vào Ví + Điểm Xanh hoàn lại)', async (to, code) => {
+    const order = makeOrder({ status: to === 'RETURNED' ? 'DELIVERED' : 'CONFIRMED', paymentStatus: 'PAID' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: to });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    reversal.reverseFinancials.mockResolvedValue({ moneyRefunded: true, pointsRefunded: 15, refund: { amount: 103_000, to: 'WALLET' } });
+    mockTx();
+    await service.setStatus('o1', to as never, { actorType: 'ADMIN' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', code, {
+      order_code: 'TUBU1',
+      refund_note: ' Đã hoàn 103.000đ vào Ví Tubu. Đã hoàn 15 Điểm Xanh.',
+    });
+  });
+
+  it('R3-MONEY-7: admin huỷ kèm lý do → tin nói lý do và cả Điểm Xanh thường (lô STANDARD) được hoàn sau tx', async () => {
+    const order = makeOrder({ status: 'CONFIRMED', paymentStatus: 'PAID' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    reversal.reverseFinancials.mockResolvedValue({ moneyRefunded: true, pointsRefunded: 0, refund: { amount: 95_000, to: 'WALLET' } });
+    loyalty.reverseOrderPoints.mockResolvedValue(19);
+    mockTx();
+    await service.setStatus('o1', 'CANCELLED' as never, {
+      actorType: 'ADMIN',
+      note: 'Admin: Hết hàng nhà cung cấp',
+      customerReason: 'Hết hàng nhà cung cấp.',
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
+      order_code: 'TUBU1',
+      refund_note: ' Lý do: Hết hàng nhà cung cấp. Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
+    });
+  });
+
+  it('đơn chưa thu tiền bị huỷ → refund_note rỗng (không nói gì về tiền)', async () => {
+    const order = makeOrder({ status: 'CONFIRMED' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue(null);
+    reversal.reverseFinancials.mockResolvedValue({ moneyRefunded: false, pointsRefunded: 0, refund: null });
+    mockTx();
+    await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', { order_code: 'TUBU1', refund_note: '' });
+  });
+
+  it('UAT GOMDON-10: ghi chú hệ thống (webhook/cron/admin) KHÔNG nối vào Order.note — ô "Ghi chú" khách tự viết', async () => {
+    const order = makeOrder({ status: 'SHIPPING', note: 'Giao giờ hành chính' });
+    prisma.order.findFirst.mockResolvedValue(order);
+    prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+    const tx = mockTx();
+
+    await service.setStatus('o1', 'DELIVERED' as never, { actorType: 'SYSTEM', note: 'Gomdon webhook: Giao thành công (status 7)' });
+
+    const data = tx.order.updateMany.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('note');
+    expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ note: 'Gomdon webhook: Giao thành công (status 7)' }),
+    });
+  });
+
   /**
    * Task 6 review finding: trước đây this.analytics luôn undefined trong test (không wiring),
    * nên if(this.analytics) no-op câm lặng và không ai chứng minh được from/to không bị đảo
@@ -288,6 +415,20 @@ describe('OrderStatusService', () => {
     expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
   });
 
+  it.each(['SHIPPING', 'DELIVERED'])(
+    'thua race vì đơn vừa bị HUỶ, Pancake báo %s → ném InvalidOrderTransitionError như lúc đọc tuần tự (processor gắn "Cần xử lý") (R3-CANCEL-5)',
+    async (target) => {
+      const order = makeOrder({ status: 'PACKED', paymentMethod: 'COD' });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+      mockTx(0);
+      const err = await service.setStatus('o1', target as never, { actorType: 'PANCAKE' }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(InvalidOrderTransitionError);
+      expect(err).toMatchObject({ from: 'CANCELLED', to: target });
+      expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+    },
+  );
+
   it('ném NotFoundException khi không tìm thấy đơn', async () => {
     prisma.order.findFirst.mockResolvedValue(null);
     await expect(service.setStatus('missing', 'CANCELLED' as never)).rejects.toThrow(NotFoundException);
@@ -339,7 +480,7 @@ describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận 
   it('admin/merchant/Pancake huỷ đơn thu gom → enqueue job huỷ vận đơn (jobId cancel-<id>)', async () => {
     const { svc, queue } = make(makeOrder({ hasRecyclingPickup: true, gomdonOrderId: '77' }));
     await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
-    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, { jobId: 'cancel-o1' });
+    expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
   });
 
   it('đơn thường / chuyển sang trạng thái khác CANCELLED → không enqueue', async () => {
@@ -546,7 +687,11 @@ describe('OrderStatusService.markPaid', () => {
     for (const r of reads) findFirst.mockResolvedValueOnce(r);
     findFirst.mockResolvedValue(reads[reads.length - 1]);
     const prisma = {
-      order: { findFirst, findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]) },
+      order: {
+        findFirst,
+        findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -577,6 +722,15 @@ describe('OrderStatusService.markPaid', () => {
       ...over,
     });
   type FlipCall = [{ where: unknown; data: Record<string, unknown> }];
+
+  it('lật PAID → gỡ cảnh báo "Khách chuyển thiếu" (đơn đã đủ tiền), không đụng lý do khác', async () => {
+    const { svc, prisma } = make([pending()]);
+    await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Khách chuyển thiếu' } }] },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+  });
 
   it('PENDING_PAYMENT+UNPAID → lật PAID + CONFIRMED có guard, ghi lịch sử (ai bấm) + order_paid trong CÙNG tx, báo khách', async () => {
     const { svc, tx, analytics, notifications } = make([pending()]);
@@ -634,6 +788,19 @@ describe('OrderStatusService.markPaid', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  // Đơn đã nhận tiền, rồi huỷ/trả và đã hoàn: một xác nhận tiền đến sau (webhook gửi lại) không phải tiền mới —
+  // CLOSED sẽ khiến caller tạo khoản hoàn tiền về muộn thứ hai.
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s đã REFUNDED → NOT_PAYABLE (không phải CLOSED)', async (status) => {
+    const { svc, prisma } = make([pending({ status, paymentStatus: 'REFUNDED' })]);
+    expect((await svc.markPaid('o1', { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('thua race: đọc lại thấy đơn vừa huỷ và đã hoàn (REFUNDED) → NOT_PAYABLE', async () => {
+    const { svc } = make([pending(), pending({ status: 'CANCELLED', paymentStatus: 'REFUNDED' })], [0]);
+    expect((await svc.markPaid('o1', { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+  });
+
   it('paymentStatus REFUNDED → NOT_PAYABLE', async () => {
     const { svc, prisma } = make([pending({ status: 'CONFIRMED', paymentStatus: 'REFUNDED' })]);
     expect((await svc.markPaid('o1', { actorType: 'ADMIN' })).outcome).toBe('NOT_PAYABLE');
@@ -660,7 +827,7 @@ describe('OrderStatusService.markPaid', () => {
   it('đơn thu gom tái chế → đặt vận đơn Gomdon sau khi PAID; lỗi enqueue không làm hỏng kết quả', async () => {
     const a = make([pending({ hasRecyclingPickup: true })]);
     await a.svc.markPaid('o1', { actorType: 'ADMIN' });
-    expect(a.queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, { jobId: 'o1' });
+    expect(a.queue.add).toHaveBeenCalledWith('push', { orderId: 'o1' }, expect.objectContaining({ jobId: 'o1' }));
 
     const b = make([pending({ hasRecyclingPickup: true })]);
     b.queue.add.mockRejectedValue(new Error('redis'));

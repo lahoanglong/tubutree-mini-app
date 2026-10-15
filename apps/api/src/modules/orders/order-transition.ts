@@ -1,4 +1,5 @@
 import type { OrderStatus, PaymentMethod } from '@tubutree/shared-types';
+import { isGomdonGoodsNotWithCarrier, isGomdonPickedUp } from '../integrations/gomdon/gomdon-status';
 
 /**
  * Bảng chuyển trạng thái đơn hàng — NGUỒN CHÂN LÝ DUY NHẤT.
@@ -129,22 +130,89 @@ export function assertPaidBeforeFulfilment(
   throw new UnpaidPrepaidTransitionError(order.code, order.paymentMethod, from, to);
 }
 
+/** Dấu vết bàn giao vận chuyển trên đơn — đủ cột để quyết định mà không cần gọi ra ngoài. */
+export interface HandoverFacts {
+  status: string;
+  shippingCode?: string | null;
+  shippingPartner?: string | null;
+  shippedAt?: Date | string | null;
+  hasRecyclingPickup?: boolean | null;
+  gomdonStatus?: string | null;
+  gomdonOrderId?: string | null;
+  gomdonPartnerCode?: string | null;
+}
+
+export type HandoverKind = 'SHIPPING' | 'CARRIER_WAYBILL' | 'MERCHANT_SHIPPED' | 'GOMDON_PICKED_UP';
+export interface Handover {
+  kind: HandoverKind;
+  /** Mô tả ngắn cho lời báo ("đơn đang giao", "mã vận đơn GHN 123"...). */
+  detail: string;
+}
+
+/**
+ * D1: đơn huỷ được tới khi hàng bàn giao cho đơn vị vận chuyển; sau mốc đó chỉ còn luồng hoàn/trả, với MỌI người bấm
+ * (khách, admin, CSKH, kho, nhà bán). Mốc bàn giao là bất kỳ dấu hiệu nào: đơn đã SHIPPING, đã có mã vận đơn của hãng
+ * (Pancake gán khi kho đặt hãng), gian hàng tự giao đã báo gửi (shippedAt), hay bưu tá Gomdon đã lấy hàng. Vận đơn
+ * Gomdon vừa tạo (bưu tá chưa tới) chưa phải bàn giao. null = còn huỷ được.
+ *
+ * `pancakeReportedCancel`: chính Pancake báo huỷ. Mã vận đơn hãng chỉ là kho đã đặt hãng — Pancake chỉ cho huỷ khi hàng
+ * chưa gửi đi (trạng thái < 2) và huỷ luôn vận đơn đó, nên mã vận đơn một mình không chặn lệnh huỷ này; còn chặn nếu đơn
+ * đã SHIPPING, gian hàng đã gửi, hay bưu tá Gomdon đã lấy hàng (Pancake không biết các mốc đó).
+ */
+export function cancelHandover(order: HandoverFacts, opts: { pancakeReportedCancel?: boolean } = {}): Handover | null {
+  const gomdonCodes = [order.gomdonPartnerCode, order.gomdonOrderId].filter((c): c is string => Boolean(c));
+  const hasGomdonWaybill = Boolean(order.hasRecyclingPickup) && gomdonCodes.length > 0;
+  if (hasGomdonWaybill && isGomdonGoodsNotWithCarrier(order.gomdonStatus)) return null;
+  if (order.status === 'SHIPPING') return { kind: 'SHIPPING', detail: 'đơn đang giao' };
+  if (order.shippedAt) return { kind: 'MERCHANT_SHIPPED', detail: 'gian hàng đã gửi hàng cho đơn vị vận chuyển' };
+  if (!opts.pancakeReportedCancel && order.shippingCode && !gomdonCodes.includes(order.shippingCode)) {
+    return { kind: 'CARRIER_WAYBILL', detail: `đã có mã vận đơn ${order.shippingPartner ?? 'hãng vận chuyển'} ${order.shippingCode}` };
+  }
+  if (order.hasRecyclingPickup && isGomdonPickedUp(order.gomdonStatus)) {
+    return { kind: 'GOMDON_PICKED_UP', detail: 'bưu tá Gomdon/BestExpress đã lấy hàng' };
+  }
+  return null;
+}
+
+/** Lời báo cho người vận hành (admin/CSKH/kho/nhà bán) khi bấm huỷ đơn đã bàn giao — khách có câu riêng. */
+export function cancelAfterHandoverMessage(code: string, handover: Handover): string {
+  return (
+    `Đơn ${code} đã bàn giao vận chuyển (${handover.detail}) — không huỷ được nữa. Liên hệ đơn vị vận chuyển để chặn ` +
+    'giao/hoàn hàng; hàng hoàn về kho thì đơn tự huỷ và hoàn tiền, khách đã nhận hàng thì xử lý ở mục Đổi/Trả.'
+  );
+}
+
+export class CancelAfterHandoverError extends InvalidOrderTransitionError {
+  constructor(
+    code: string,
+    from: OrderStatus,
+    readonly handover: Handover,
+  ) {
+    super(from, 'CANCELLED', cancelAfterHandoverMessage(code, handover));
+    this.name = 'CancelAfterHandoverError';
+  }
+}
+
 /**
  * Các trạng thái đơn được phép chuyển tới ngay lúc này (không gồm chính nó) — cùng luật với
- * OrderStatusService.setStatus (bảng chuyển + khoá giao khi trả trước chưa PAID), để web admin chỉ hiện nút
- * mà API sẽ nhận. Trạng thái lạ trả rỗng thay vì ném: dùng cho danh sách, một dòng hỏng không được làm sập cả trang.
+ * OrderStatusService.setStatus (bảng chuyển + khoá giao khi trả trước chưa PAID + D1 không huỷ sau bàn giao), để web
+ * admin chỉ hiện nút mà API sẽ nhận. Trạng thái lạ trả rỗng thay vì ném: dùng cho danh sách, một dòng hỏng không được
+ * làm sập cả trang.
  */
-export function allowedNextStatuses(order: {
-  status: string;
-  code: string;
-  paymentMethod: string;
-  paymentStatus: string;
-  onCredit?: boolean;
-}): OrderStatus[] {
+export function allowedNextStatuses(
+  order: HandoverFacts & {
+    code: string;
+    paymentMethod: string;
+    paymentStatus: string;
+    onCredit?: boolean;
+  },
+): OrderStatus[] {
   const from = order.status as OrderStatus;
   if (!Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS, from)) return [];
+  const handedOver = cancelHandover(order) !== null;
   return ORDER_TRANSITIONS[from].filter((to) => {
     if (to === from) return false;
+    if (to === 'CANCELLED' && handedOver) return false;
     try {
       assertPaidBeforeFulfilment(order, from, to);
       return true;

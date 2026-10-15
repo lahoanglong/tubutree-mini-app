@@ -255,3 +255,164 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     await expect(mk().svc.set(key, '30000' as unknown as number, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán (ADMINOPS-3)', () => {
+  function mk(existing: unknown = null) {
+    const tx = {
+      systemConfig: {
+        findUnique: jest.fn().mockResolvedValue(existing === null ? null : { value: existing }),
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['shipping.flat_fee_below_threshold', 19_000, [-19_000, 1_000_001, 1.5]],
+    ['shipping.free_threshold', 200_000, [-1, 50_000_001]],
+    ['loyalty.vnd_per_point', 10_000, [1, 999, 0, 1_000_001]],
+    ['wallet.withdraw_fee', 3_000, [-100_000, 100_001]],
+    ['wallet.withdraw_min', 100_000, [-1, 100_000_001]],
+    ['affiliate.min_withdraw_bank', 50_000, [-1]],
+    ['referral.min_order_amount', 200_000, [-5]],
+    ['groupbuy.max_open_per_user', 3, [-3, 0, 101]],
+    ['game.max_plots', 5, [0, 100_000]],
+    ['game.spin_voucher_min_order_multiplier', 6, [0, 0.5, 51]],
+  ] as const)('%s: nhận %d, từ chối %j', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(fine);
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    ['payment.bank_account_no', '9984606774', ['abc 12', '', '12345', '1'.repeat(21), 9984606774]],
+    ['payment.bank_bin', '970407', ['', '97040', '9704071', 'abcdef']],
+    // R4-ADMIN-8: trang chuyển khoản của khách in hai dòng này — để trống là khách thấy "Ngân hàng: " trống trơn.
+    ['payment.bank_name', 'Techcombank', ['', '   ', 970407, 'x'.repeat(101)]],
+    ['payment.bank_account_name', 'CONG TY TUBU TREE', ['', ' \t ', 1, 'X'.repeat(101)]],
+    ['shipping.tier_freeship_overrides', { LOC_BIEC: 99_000, DAI_THU: 0 }, [{ CO_THU: -50_000 }, { CO_THU: 1.5 }, [1], 'x']],
+    [
+      'subscribe.discount_tiers',
+      [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }],
+      [[{ minActive: 1, pct: 1.5 }], [{ minActive: 0, pct: 0.1 }], [{ minActive: 1, pct: -0.1 }], { pct: 0.1 }],
+    ],
+    [
+      'community.banned_keywords',
+      ['cá độ', 'vay nong'],
+      ['casino', [''], ['   '], [1], [{ w: 'x' }], ['x'.repeat(61)], Array.from({ length: 301 }, (_, i) => `t${i}`)],
+    ],
+  ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine as never, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(null);
+      await expect(bad.svc.set(key, v as never, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it.each([
+    ['attendance.late_fine', 10_000, [-1, 1.5, 500_001]],
+    ['refill.seeds_per_bottle', 50, [-1, 10_001]],
+    ['game.streak_repair_cost', 150, [-1, 0]],
+    ['game.streak_freeze_cost', 80, [-1, 0]],
+    ['game.dew_seeds', 15, [-1, 10_001]],
+    ['game.daily_login_seeds', 10, [-5]],
+    ['game.harvest_coupon_min_order', 199_000, [-1, 50_000_001]],
+    ['groupbuy.target_size', 3, [-1, 0, 1, 51]],
+    ['referral.window_days', 30, [-1, 0, 366]],
+    ['affiliate.attribution_days', 7, [-1, 0, 366]],
+    ['flashsale.default_per_user_limit', 5, [-1, 0]],
+  ] as const)('round 2 (ADMINOPS-3) %s: nhận %d, từ chối %j', async (key, fine, badValues) => {
+    const ok = mk(fine);
+    await ok.svc.set(key, fine, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const v of badValues) {
+      const bad = mk(fine);
+      await expect(bad.svc.set(key, v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('refill.pickup_phone: rỗng (ẩn) hoặc SĐT Việt Nam', async () => {
+    for (const v of ['', '0901234567', '+84901234567']) await mk('').svc.set('refill.pickup_phone', v, 'admin1');
+    // Khoá cũ giữ luật di động; số bàn/tổng đài chỉ nhận ở bảng điểm nhận (PICKUP_LOCATION_PHONE_PATTERN).
+    for (const v of ['abc', '12345', '09012345678901', '02838221234', '19001234']) {
+      await expect(mk('').svc.set('refill.pickup_phone', v, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('ETA giao hàng đặt lại null (ẩn dòng "Giao dự kiến") được; khoá khác vẫn chặn null', async () => {
+    const eta = mk(3);
+    await eta.svc.set('shipping.eta_min_days', null as never, 'admin1');
+    expect(eta.tx.systemConfig.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { value: Prisma.JsonNull, updatedBy: 'admin1' } }));
+    await expect(mk(3).svc.set('game.dew_seeds', null as never, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('hasWriteRule: khoá có luật ghi là khoá hệ thống biết, khoá gõ sai thì không', () => {
+    expect(SystemConfigService.hasWriteRule('shipping.free_threshold')).toBe(true);
+    expect(SystemConfigService.hasWriteRule('payment.bank_bin')).toBe(true);
+    expect(SystemConfigService.hasWriteRule('shipping.freeship_threshold_typo')).toBe(false);
+  });
+});
+
+describe('SystemConfigService.set — phí sàn mặc định của gian hàng đối tác (Q8 review S1)', () => {
+  function makeTx(existing: { value: unknown } | null, stores: { id: string; consignmentFeePct: number; consignmentFeeFixed: number }[], withHistory: string[]) {
+    const { prisma } = makePrisma({ existing });
+    const tx = prisma as unknown as Record<string, unknown>;
+    tx.$executeRaw = jest.fn().mockResolvedValue(0);
+    tx.$queryRaw = jest.fn().mockResolvedValue(stores);
+    const createMany = jest.fn().mockResolvedValue({ count: 0 });
+    tx.storefrontTermsHistory = {
+      groupBy: jest.fn().mockResolvedValue(withHistory.map((storefrontId) => ({ storefrontId }))),
+      createMany,
+    };
+    return { prisma, tx, createMany };
+  }
+
+  it('đổi mặc định 15% → 20%: gian hàng đang theo mặc định được thêm dòng lịch sử 20% từ bây giờ; chưa có lịch sử thì ghi mốc gốc 15% trước', async () => {
+    const { prisma, tx, createMany } = makeTx({ value: 0.15 }, [
+      { id: 'sf-new', consignmentFeePct: 0.02, consignmentFeeFixed: 3_400 },
+      { id: 'sf-old', consignmentFeePct: 0, consignmentFeeFixed: 0 },
+    ], ['sf-old']);
+    await new SystemConfigService(prisma).set('merchant.commission_pct', 0.2, 'admin-1');
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const rows = createMany.mock.calls.flatMap((c) => c[0].data);
+    expect(rows).toEqual([
+      { storefrontId: 'sf-new', commissionPct: 0.15, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400, effectiveFrom: new Date(0) },
+      expect.objectContaining({ storefrontId: 'sf-new', commissionPct: 0.2, consignmentFeePct: 0.02, consignmentFeeFixed: 3_400, changedById: 'admin-1' }),
+      expect.objectContaining({ storefrontId: 'sf-old', commissionPct: 0.2, changedById: 'admin-1' }),
+    ]);
+  });
+
+  it('chưa từng đặt khoá: mức cũ là mặc định trong mã (15%); ghi lại đúng số cũ thì không thêm dòng', async () => {
+    const first = makeTx(null, [{ id: 'sf-a', consignmentFeePct: 0, consignmentFeeFixed: 0 }], []);
+    await new SystemConfigService(first.prisma).set('merchant.commission_pct', 0.1, 'admin-1');
+    expect(first.createMany.mock.calls.flatMap((c) => c[0].data).map((r: { commissionPct: number }) => r.commissionPct)).toEqual([0.15, 0.1]);
+
+    const same = makeTx({ value: 0.1 }, [{ id: 'sf-a', consignmentFeePct: 0, consignmentFeeFixed: 0 }], ['sf-a']);
+    await new SystemConfigService(same.prisma).set('merchant.commission_pct', 0.1, 'admin-1');
+    expect(same.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ (Q8 review S6)', () => {
+  it('chặn thời điểm không có thật hoặc sai dạng; nhận ISO 8601 hợp lệ', async () => {
+    const { prisma, upsert } = makePrisma({ existing: { value: '2026-10-14T00:00:00Z' } });
+    const service = new SystemConfigService(prisma);
+    for (const bad of ['2026-13-01', '2026-02-30T00:00:00Z', 'mai']) {
+      await expect(service.set('merchant.consignment_settle_from', bad, 'admin1')).rejects.toThrow(BadRequestException);
+    }
+    expect(upsert).not.toHaveBeenCalled();
+    await service.set('merchant.consignment_settle_from', '2026-11-01T00:00:00+07:00', 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
+});

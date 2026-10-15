@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEAD_CONFIG_KEYS, deadConfigKeyReason, isDeadConfigKey } from './dead-config-keys';
+import { DEFAULT_BANNED_KEYWORDS } from '../feed/content-filter';
 
 const SRC_ROOT = join(__dirname, '../..');
 const SEED_PATH = join(__dirname, '../../../prisma/seed.ts');
@@ -88,6 +89,11 @@ describe('khoá config chết (C-054)', () => {
     expect(isDeadConfigKey('affiliate.last_click_window_days')).toBe(true);
     expect(isDeadConfigKey('affiliate.attribution_days')).toBe(false);
     expect(seededConfigs().map((r) => r.key)).toEqual(expect.arrayContaining(['affiliate.attribution_days']));
+  });
+
+  it('từ cấm cộng đồng: seed trùng danh sách mặc định trong code để admin thấy đúng cái đang chạy (R2-ENGAGE-11)', () => {
+    const row = seededConfigs().find((r) => r.key === 'community.banned_keywords');
+    expect(row?.value).toEqual([...DEFAULT_BANNED_KEYWORDS]);
   });
 
   it('khoá chỉ có trong bảng biên giá trị, không code nào đọc, bị đánh dấu chết (cashback.merchant_tubu_share)', () => {

@@ -1,19 +1,21 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FlashSaleService } from './flash-sale.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
-class CreateSaleDto {
-  @IsString() title!: string;
-  @IsString() startAt!: string;
-  @IsString() endAt!: string;
+export class CreateSaleDto {
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
+  @IsDateString() startAt!: string;
+  @IsDateString() endAt!: string;
 }
 class UpdateSaleDto {
-  @IsOptional() @IsString() title?: string;
-  @IsOptional() @IsString() startAt?: string;
-  @IsOptional() @IsString() endAt?: string;
-  @IsOptional() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
+  @OptionalNotNull() @IsDateString() startAt?: string;
+  @OptionalNotNull() @IsDateString() endAt?: string;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
 }
 class AddItemDto {
   @IsString() variationId!: string;
@@ -40,6 +42,11 @@ export class FlashSaleAdminController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateSaleDto) {
     return this.flashSale.updateSale(id, dto);
+  }
+
+  @Delete(':id')
+  removeSale(@Param('id') id: string) {
+    return this.flashSale.deleteSale(id);
   }
 
   @Post(':id/items')

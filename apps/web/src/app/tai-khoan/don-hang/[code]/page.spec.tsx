@@ -24,7 +24,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('next/navigation', () => ({ useParams: () => mocks.params }));
+vi.mock('next/navigation', () => ({ useParams: () => mocks.params, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   fetchOrder: async (code: string) => {
@@ -32,6 +32,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     if (mocks.order instanceof Error) throw mocks.order;
     return typeof mocks.order === 'function' ? (mocks.order as () => unknown)() : mocks.order;
   },
+  fetchMyReturns: async () => [],
   getBankQr: async () => {
     mocks.qr.calls += 1;
     return {
@@ -50,6 +51,10 @@ const ORDER = {
   status: 'PENDING_PAYMENT',
   subtotal: 300000,
   discount: 30000,
+  couponDiscount: 30000,
+  comboDiscount: 0,
+  tierDiscount: 0,
+  pointsDiscount: 0,
   shippingFee: 30000,
   total: 300000,
   paymentMethod: 'BANK_TRANSFER',
@@ -110,6 +115,14 @@ describe('/tai-khoan/don-hang/[code] — lời liên hệ hủy/đổi đơn (Q-
     expect(t).toContain('Zalo OA Tubu Tree Official');
   });
 
+  it('hotline cấu hình số liền 18001234 được ghi "1800 1234" cho dễ đọc (R5-BUYER-5)', async () => {
+    mocks.support = { hotline: '18001234', email: 'cskh@tubutree.com' };
+    const { container } = await mount();
+    const t = contact(container);
+    expect(t).toContain('Gọi hotline 1800 1234');
+    expect(t).not.toContain('18001234');
+  });
+
   it('đọc cấu hình lỗi: vẫn hiện hotline/email mặc định, không nhắc Zalo OA', async () => {
     mocks.support = new Error('boom');
     const { container } = await mount();
@@ -143,16 +156,55 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(labels).toEqual(expect.arrayContaining(['Sao chép: 9984606774', 'Sao chép: TB-9']));
   });
 
-  // Order.discount gộp mã + combo + giảm hạng + Điểm Xanh nên số tiền không được gắn riêng cho mã.
-  it('dòng Giảm giá là tổng trung tính, mã và Điểm Xanh nằm ở dòng ghi chú riêng', async () => {
-    mocks.order = { ...structuredClone(ORDER), discount: 80000, pointsUsed: 500 };
+  // R4-BUYER-7: Order.discount gộp nhiều nguồn; mỗi khoản một dòng đúng tên, không gắn cả tổng cho mã.
+  const LEGACY = (() => {
+    const { couponDiscount: _c, comboDiscount: _b, tierDiscount: _t, pointsDiscount: _p, ...rest } = structuredClone(ORDER);
+    return rest;
+  })();
+  const rowOf = (container: HTMLElement, label: string) =>
+    Array.from(container.querySelectorAll('div.flex.justify-between')).find((r) => r.firstElementChild?.textContent === label);
+
+  it('đơn có số liệu từng khoản: mỗi nguồn giảm một dòng, cộng lại bằng tổng giảm', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER), discount: 80000, couponDiscount: 30000, comboDiscount: 10000,
+      tierDiscount: 5000, pointsDiscount: 35000, pointsUsed: 35,
+    };
     const { container } = await mount();
-    const rows = Array.from(container.querySelectorAll('div.flex.justify-between'));
-    const row = rows.find((r) => (r.textContent ?? '').includes('-80.000đ'));
-    expect(row?.firstElementChild?.textContent).toBe('Giảm giá');
-    expect(container.textContent).not.toContain('Giảm giá (');
-    expect(container.textContent).toContain('Mã giảm giá đã áp dụng: WELCOME30');
-    expect(container.textContent).toContain('Đã dùng 500 Điểm Xanh (đã tính trong giảm giá)');
+    expect(rowOf(container, 'Mã giảm giá (WELCOME30)')?.textContent).toContain('-30.000đ');
+    expect(rowOf(container, 'Ưu đãi combo')?.textContent).toContain('-10.000đ');
+    expect(rowOf(container, 'Ưu đãi hạng thành viên')?.textContent).toContain('-5.000đ');
+    expect(rowOf(container, 'Điểm Xanh (35 điểm)')?.textContent).toContain('-35.000đ');
+    expect(rowOf(container, 'Giảm giá')).toBeUndefined();
+    expect(container.textContent).not.toContain('đã tính trong giảm giá');
+    expect(container.textContent).not.toContain('Mã giảm giá đã áp dụng');
+  });
+
+  it('khoản nào bằng 0 thì không có dòng', async () => {
+    mocks.order = { ...structuredClone(ORDER), discount: 30000, couponDiscount: 30000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 0 };
+    const { container } = await mount();
+    expect(rowOf(container, 'Mã giảm giá (WELCOME30)')?.textContent).toContain('-30.000đ');
+    expect(container.textContent).not.toContain('Ưu đãi combo');
+    expect(container.textContent).not.toContain('Điểm Xanh (');
+  });
+
+  it('đơn tách của nhóm đặt hàng: tên mã lấy từ đơn đầu của nhóm (groupCouponCode)', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER), couponCode: null, groupCouponCode: 'FREESHIP', discount: 20000, couponDiscount: 20000,
+    };
+    const { container } = await mount();
+    expect(rowOf(container, 'Mã giảm giá (FREESHIP)')?.textContent).toContain('-20.000đ');
+  });
+
+  it('đơn cũ chưa có số liệu từng khoản: một dòng tổng, ghi rõ đã gồm Điểm Xanh khi có dùng điểm', async () => {
+    mocks.order = { ...LEGACY, discount: 80000, pointsUsed: 500 };
+    const { container } = await mount();
+    expect(rowOf(container, 'Giảm giá (gồm Điểm Xanh)')?.textContent).toContain('-80.000đ');
+  });
+
+  it('đơn cũ không dùng điểm: một dòng "Giảm giá"', async () => {
+    mocks.order = LEGACY;
+    const { container } = await mount();
+    expect(rowOf(container, 'Giảm giá')?.textContent).toContain('-30.000đ');
   });
 
   it('ngày đặt đơn theo giờ Việt Nam, dáng HH:mm dd/MM/yyyy', async () => {
@@ -182,6 +234,24 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(link).not.toBeNull();
     expect(link!.rel).toContain('noopener');
     expect(link!.target).toBe('_blank');
+  });
+
+  it('UAT GOMDON-11: đơn COD đã giao (API vẫn để UNPAID) → "Đã thu tiền khi giao", không hiện "Chưa thanh toán"', async () => {
+    mocks.order = { ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Đã thu tiền khi giao');
+    expect(container.textContent).not.toContain('Chưa thanh toán');
+  });
+
+  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không QR, không hạn "tự huỷ", không nút hủy', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2026-10-02T03:00:00Z', canCancel: false, manualHandling: true };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.');
+    expect(mocks.qr.calls).toBe(0);
+    expect(container.textContent).not.toContain('quá hạn đơn sẽ tự huỷ');
+    expect(container.textContent).not.toContain('Thanh toán trước');
+    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
+    expect(buttons(container).map((b) => b.textContent)).not.toContain('Hủy đơn');
   });
 
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {
@@ -270,7 +340,74 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     mocks.auth = { user: null, status: 'anonymous' };
     const { container } = await mount();
     expect(mocks.orderCalls).toEqual([]);
-    expect(container.querySelector('a[href="/dang-nhap"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Ftai-khoan%2Fdon-hang%2FTB-9"]')).not.toBeNull();
     expect(headingProblems(container)).toEqual([]);
+  });
+});
+
+describe('/tai-khoan/don-hang/[code] — đơn tách theo nơi giao (D4)', () => {
+  it('đơn gian hàng tự giao: ghi rõ ai giao và SĐT gian hàng; liệt kê đơn cùng lần đặt kèm liên kết', async () => {
+    mocks.order = {
+      ...structuredClone(ORDER),
+      status: 'CONFIRMED',
+      paymentMethod: 'COD',
+      fulfilment: { kind: 'MERCHANT', name: 'Mật ong Linh', phone: '0900000009' },
+      siblings: [{ code: 'TB-8', status: 'SHIPPING', total: 130000, fulfillerName: 'Tubu Tree' }],
+    };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Giao bởi Mật ong Linh (gian hàng đối tác tự đóng gói và giao)');
+    expect(container.textContent).toContain('Liên hệ gian hàng: 0900000009');
+    const siblings = container.querySelector('section[aria-label="Đơn cùng lần đặt"]')!;
+    expect(siblings.textContent).toContain('TB-8 · Tubu Tree giao');
+    expect(siblings.querySelector('a')!.getAttribute('href')).toContain('TB-8');
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
+  it('đơn Tubu giao không tách: không hiện dòng nơi giao hay danh sách đơn cùng lần đặt', async () => {
+    mocks.order = { ...structuredClone(ORDER), fulfilment: { kind: 'TUBU', name: 'Tubu Tree', phone: null }, siblings: [] };
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Giao bởi');
+    expect(container.querySelector('section[aria-label="Đơn cùng lần đặt"]')).toBeNull();
+  });
+});
+
+// R8: mỗi lần mua một đánh giá; API trả trạng thái đánh giá của từng dòng ở chính đơn này.
+describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đơn (R8)', () => {
+  const delivered = (item: Record<string, unknown>) => ({
+    ...structuredClone(ORDER),
+    id: 'ord-1',
+    status: 'DELIVERED',
+    paymentMethod: 'COD',
+    paymentStatus: 'PAID',
+    items: [{ ...ORDER.items[0], productSlug: 'dau-goi-bo-ket', ...item }],
+  });
+  const reviewLinks = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('a')).filter((a) => /^(Viết|Sửa) đánh giá$/.test(a.textContent ?? ''));
+
+  it('dòng còn viết được → "Viết đánh giá" mở trang sản phẩm, cuộn tới khối đánh giá và chọn sẵn đơn này', async () => {
+    mocks.order = delivered({ reviewId: null, reviewable: true });
+    const { container } = await mount();
+    const links = reviewLinks(container);
+    expect(links.map((a) => a.textContent)).toEqual(['Viết đánh giá']);
+    expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
+    expect(links[0]!.className).toContain('min-h-11');
+  });
+
+  it('dòng đã đánh giá ở đơn này → "Sửa đánh giá" (cùng đường dẫn, trang sản phẩm mở sửa đúng đánh giá)', async () => {
+    mocks.order = delivered({ reviewId: 'rv-1', reviewable: false });
+    const { container } = await mount();
+    const links = reviewLinks(container);
+    expect(links.map((a) => a.textContent)).toEqual(['Sửa đánh giá']);
+    expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
+  });
+
+  it.each([
+    ['đơn không tính để đánh giá (CTV đặt hộ)', { reviewId: null, reviewable: false }, 'DELIVERED'],
+    ['đơn chưa giao', { reviewable: true }, 'SHIPPING'],
+    ['đơn cũ không có slug', { productSlug: null, reviewable: true }, 'DELIVERED'],
+  ])('%s → không có lối vào đánh giá', async (_n, item, status) => {
+    mocks.order = { ...delivered(item), status };
+    const { container } = await mount();
+    expect(reviewLinks(container)).toEqual([]);
   });
 });

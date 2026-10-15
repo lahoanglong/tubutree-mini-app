@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowStaff } from '../../common/staff-permissions';
 import { CskhService } from './cskh.service';
 import { CreateQuickReplyDto, UpdateQuickReplyDto } from './dto/quick-reply.dto';
 
 @Roles('ADMIN')
+@AllowStaff('CSKH')
 @Controller('admin/quick-replies')
 export class CskhAdminController {
   constructor(private readonly cskh: CskhService) {}

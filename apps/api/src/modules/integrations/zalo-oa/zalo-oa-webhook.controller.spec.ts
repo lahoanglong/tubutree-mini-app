@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ZaloOaWebhookController } from './zalo-oa-webhook.controller';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
+import { QUEUE_COMMAND_TIMEOUT_MS } from '../../../jobs/queue-timeout';
 
 const SECRET = 'zalo-oa-webhook-secret';
 const body = { event_name: 'user_send_text', sender: { id: 'zalo-u1' }, message: { text: 'Ship bao lâu?', msg_id: 'm1' } };
@@ -24,6 +25,19 @@ describe('ZaloOaWebhookController.handle (verify token tĩnh)', () => {
     expect(r).toEqual({ received: true });
     expect(create.mock.calls[0][0].data).toMatchObject({ zaloUserId: 'zalo-u1', msgId: 'm1', messageText: 'Ship bao lâu?' });
     expect(add).toHaveBeenCalledWith('process', { eventId: 'evt1' }, { jobId: 'evt1' });
+  });
+
+  it('Redis mất kết nối (add treo) → vẫn trả 200 sau hạn chờ thay vì treo webhook', async () => {
+    jest.useFakeTimers();
+    try {
+      const { ctrl, add } = makeController(SECRET);
+      add.mockReturnValueOnce(new Promise(() => undefined));
+      const res = ctrl.handle(body, SECRET);
+      await jest.advanceTimersByTimeAsync(QUEUE_COMMAND_TIMEOUT_MS);
+      await expect(res).resolves.toEqual({ received: true });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('msg_id trùng (Zalo gửi lại/retry) → P2002 → trả received:true, KHÔNG enqueue lại', async () => {

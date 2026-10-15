@@ -98,12 +98,61 @@ export interface ProductDetail {
   basePrice: number;
   salePrice: number | null;
   certifications: string[];
+  /** Slug trang nhãn hàng (/brand/:slug) khi nhãn đã công khai; null/thiếu → tên nhãn chỉ là chữ. */
+  brandSlug?: string | null;
   variations: VariationDetail[];
+  ratingAvg?: number;
+  reviewCount?: number;
+  fulfilment?: 'TUBU' | 'MERCHANT';
+  /** Ai giao (D4): tên gian hàng lấy theo gian hàng hiện tại, phí giao riêng của gian hàng. API cũ chưa trả. */
+  fulfiller?: ProductFulfiller;
+  /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không dùng Điểm Xanh. API cũ chưa trả → hàng Tubu. */
+  partnerOwned?: boolean;
+}
+
+export interface ProductFulfiller {
+  /** UNAVAILABLE: gian hàng tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (xem `reason`). */
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
+}
+
+/** Gian hàng chưa nhận đơn: câu báo cho khách và tắt nút mua; null khi mua được. */
+export function pdpUnavailableText(p: Pick<ProductDetail, 'fulfiller'>): string | null {
+  const f = p.fulfiller;
+  if (f?.kind !== 'UNAVAILABLE') return null;
+  const who = f.name || 'Gian hàng';
+  return f.reason === 'STORE_PAUSED' ? `${who} đang tạm nghỉ, chưa nhận đơn.` : `${who} đã ngừng bán trên Tubu Tree.`;
+}
+
+/** Dòng "ai giao" trên trang sản phẩm; null khi API không nói (sản phẩm cũ) hoặc gian hàng chưa nhận đơn. */
+export function pdpFulfillerText(p: Pick<ProductDetail, 'fulfilment' | 'fulfiller'>): string | null {
+  const f = p.fulfiller;
+  if (f?.kind === 'UNAVAILABLE') return null;
+  if (f?.kind === 'TUBU' || (!f && p.fulfilment === 'TUBU')) return 'Tubu Tree giao hàng';
+  if (!f && p.fulfilment !== 'MERCHANT') return null;
+  const who = f ? `Do ${f.name} giao` : 'Gian hàng đối tác tự giao';
+  const fee =
+    f?.shippingFee != null
+      ? `phí giao ${formatVnd(f.shippingFee)}${f.freeShipFrom != null ? ` (miễn phí từ ${formatVnd(f.freeShipFrom)})` : ''}`
+      : 'phí giao riêng';
+  return `${who}, đi kiện riêng · ${fee} · thanh toán COD hoặc Ví Tubu, không nhận chuyển khoản`;
+}
+/** Khách phải biết từ trang sản phẩm: hàng của gian hàng đối tác chỉ bán giá lẻ và không dùng Điểm Xanh (D4). null = hàng Tubu. */
+export function pdpPartnerNote(p: Pick<ProductDetail, 'partnerOwned' | 'fulfilment' | 'fulfiller'>): string | null {
+  const partner = p.partnerOwned === true || p.fulfiller?.kind === 'MERCHANT' || (!p.fulfiller && p.fulfilment === 'MERCHANT');
+  return partner ? 'Hàng của gian hàng đối tác: chỉ bán theo giá lẻ, không dùng Điểm Xanh.' : null;
 }
 interface Page<T> {
   data: T[];
   meta: { page: number; limit: number; total: number };
 }
+export type ProductPage = Page<ProductCard>;
+
+/** 24 chia hết cho 2/3/4 cột của lưới trang chủ nên hàng cuối không bị lẻ. */
+export const HOME_PAGE_SIZE = 24;
 
 /** Fetch catalog server-side (ISR 5 phút). Lỗi API: xem fetchList. */
 export async function getProducts(params: Record<string, string> = {}): Promise<ProductCard[]> {
@@ -111,12 +160,28 @@ export async function getProducts(params: Record<string, string> = {}): Promise<
   return fetchList<ProductCard>(`/products?${qs}`, 300, (json) => (json as Page<ProductCard>).data);
 }
 
+/**
+ * Một trang catalog kèm tổng số sản phẩm (meta.total) — trang chủ cần tổng thật để phân trang và để nhãn
+ * "N sản phẩm" không chỉ đếm những gì đang hiện. Lỗi API: xem fetchList.
+ */
+export async function getProductsPage(params: Record<string, string> = {}): Promise<ProductPage> {
+  const qs = new URLSearchParams({ limit: String(HOME_PAGE_SIZE), ...params }).toString();
+  const [page] = await fetchList<ProductPage>(`/products?${qs}`, 300, (json) => [json as ProductPage]);
+  return page ?? { data: [], meta: { page: 1, limit: HOME_PAGE_SIZE, total: 0 } };
+}
+
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
   return fetchDetail<ProductDetail>(`/products/${slug}`, 300);
 }
 
-export async function getBrands(): Promise<{ brand: string; count: number }[]> {
-  return fetchList<{ brand: string; count: number }>('/brands', 600, (json) => json as { brand: string; count: number }[]);
+export interface BrandCount {
+  brand: string;
+  count: number;
+  /** Slug trang /brand/:slug khi nhãn đã công khai; API cũ chưa trả → không có liên kết. */
+  slug?: string | null;
+}
+export async function getBrands(): Promise<BrandCount[]> {
+  return fetchList<BrandCount>('/brands', 600, (json) => json as BrandCount[]);
 }
 
 export async function getStorefront(slug: string): Promise<StorefrontDetail | null> {
@@ -165,22 +230,21 @@ export interface StorefrontDetail {
   subdomain?: string | null;
   customDomain?: string | null;
   type?: string | null;
+  isPartner?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;
   coverUrl?: string | null;
   theme?: string | null;
   themeColor?: string | null;
-  bankName?: string | null;
-  bankBin?: string | null;
-  bankAccountNo?: string | null;
-  bankAccountName?: string | null;
   warehouseAddress?: string | null;
   warehouseCity?: string | null;
   warehouseDistrict?: string | null;
   warehouseWard?: string | null;
   warehousePhone?: string | null;
   ownerTier?: { name: string; emoji: string } | null;
+  /** Mã giới thiệu của chủ gian hàng CTV (null với gian hàng khác) — không suy từ slug/subdomain. */
+  referralCode?: string | null;
   collections: StorefrontCollection[];
 }
 

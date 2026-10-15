@@ -3,7 +3,7 @@ import { Package } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import type { OrderView } from '../../services/shop-api';
 import { formatDate } from '../../utils/format';
-import { STATUS_TONE, isReorderable, orderUnitCount } from '../../utils/order-status';
+import { STATUS_TONE, buyerStatusLabel, isReorderable, orderUnitCount } from '../../utils/order-status';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -59,7 +59,7 @@ export function OrderCard({ order: o, onOpen, onReorder }: OrderCardProps) {
             {o.code}
           </Text>
         </button>
-        <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{vi.orderStatus[o.status] ?? o.status}</Badge>
+        <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{buyerStatusLabel(o)}</Badge>
       </div>
       <div id={summaryId} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <div

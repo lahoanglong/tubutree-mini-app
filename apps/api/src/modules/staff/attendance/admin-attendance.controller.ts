@@ -19,9 +19,14 @@ export class AdminAttendanceController {
     return this.attendance.listLive();
   }
 
+  /** "Chốt ra ca" cho phiên nhân viên quên ra ca → tính lại lương ngày đó (tháng đã chốt thì không cho đóng). */
   @Post('manual-checkout')
-  manualCheckout(@Body() dto: ManualCheckoutDto) {
-    return this.attendance.manualCheckout(dto.sessionId);
+  async manualCheckout(@Body() dto: ManualCheckoutDto) {
+    const owner = await this.attendance.sessionOwner(dto.sessionId);
+    await this.payroll.assertMonthEditable(owner.staffId, owner.workDate);
+    const res = await this.attendance.manualCheckout(dto.sessionId);
+    await this.payroll.recomputeDay(owner.staffId, owner.workDate);
+    return res;
   }
 
   /** QL sửa giờ phiên → recompute lương ngày đó. */

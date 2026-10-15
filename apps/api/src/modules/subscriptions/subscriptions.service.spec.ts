@@ -7,7 +7,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { WalletLedgerService } from '../wallet/wallet-ledger.service';
-import { formatVnDate } from '../../common/vn-time';
+import { formatVnDate, vnDateKey } from '../../common/vn-time';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -32,7 +32,7 @@ function makeAnalytics() {
 function makeService(opts: { variation?: unknown; address?: unknown; create?: jest.Mock; open?: unknown } = {}) {
   const create = opts.create ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
   const prisma = {
-    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
+    variation: { findUnique: jest.fn().mockResolvedValue('variation' in opts ? opts.variation : { id: 'v1', pancakeId: 'pv1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }) },
     address: { findUnique: jest.fn().mockResolvedValue(opts.address ?? { id: 'a1', userId: 'u1' }) },
     subscription: { create, findFirst: jest.fn().mockResolvedValue(opts.open ?? null) },
     // create() giờ chạy trong $transaction (subscription.create + event atomic) — mock chạy
@@ -80,6 +80,19 @@ describe('SubscriptionsService.create', () => {
       await expect(svc.create('u1', dto())).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
       expect(create).not.toHaveBeenCalled();
     }
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác (kể cả Tubu giao hộ, có mã Pancake) không đăng ký định kỳ được, không ghi gì', async () => {
+    const { svc, create } = makeService({
+      variation: { id: 'v1', pancakeId: 'pv1', isActive: true, product: { name: 'Mật ong rừng', isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefrontId: 'sf-doi-tac' } },
+    });
+    await expect(svc.create('u1', dto())).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không đặt định kỳ được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('từ chối địa chỉ của người khác', async () => {
@@ -159,23 +172,36 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       tiers?: Tier[];
       stockCount?: number;
       variationInactive?: boolean;
+      partnerOwned?: boolean;
       discontinuedInTx?: boolean;
       addressInvalid?: boolean;
       paymentMethod?: 'COD' | 'WALLET' | 'BANK_TRANSFER';
       lockedStatus?: string;
       applyDelta?: jest.Mock;
       quantity?: number;
+      retryCount?: number;
+      orderCreateError?: Error;
+      existingOrder?: unknown;
+      retryDays?: number;
+      dueRows?: unknown[];
     } = {},
   ) {
-    const due = [{ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, nextRunAt: new Date(Date.now() - 60_000) }];
+    const due = opts.dueRows ?? [
+      { id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, retryCount: opts.retryCount ?? 0, nextRunAt: new Date(Date.now() - 60_000) },
+    ];
     const updateMany = jest.fn().mockResolvedValue({ count: claimCount });
-    const orderCreate = jest.fn().mockImplementation((args) => Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }));
+    const orderCreate = jest.fn().mockImplementation((args) =>
+      opts.orderCreateError
+        ? Promise.reject(opts.orderCreateError)
+        : Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }),
+    );
     const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: 4 });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
+    const findMany = jest.fn().mockResolvedValue(due);
     const prisma = {
       subscription: {
-        findMany: jest.fn().mockResolvedValue(due),
+        findMany,
         updateMany,
         update: subUpdate,
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 1),
@@ -185,8 +211,11 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       variation: {
         findUnique: jest.fn().mockResolvedValue(
           opts.variationInactive
-            ? { id: 'v1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
-            : { id: 'v1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } },
+            ? { id: 'v1', pancakeId: 'pv1', isActive: false, salePrice: null, retailPrice: 100000, name: 'V', product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }
+            : {
+                id: 'v1', pancakeId: 'pv1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V',
+                product: { name: 'P', isActive: true, approvalStatus: 'APPROVED', storefrontId: opts.partnerOwned ? 'sf-doi-tac' : null },
+              },
         ),
         // Kiểm lại SP còn bán trong tx (cart/sellable.ts).
         findMany: jest.fn().mockResolvedValue(opts.discontinuedInTx ? [] : [{ id: 'v1' }]),
@@ -212,14 +241,18 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         ),
       },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
-      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(null) },
+      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(opts.existingOrder ?? null) },
       // Tạo đơn định kỳ giờ chạy trong $transaction (trừ stock atomic + order.create) — mock
       // chạy callback với chính prisma mock (đủ variation.updateMany + order.create cho test).
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
-        k === 'subscribe.discount_tiers' && opts.tiers ? (opts.tiers as unknown as T) : (fb as T),
+        k === 'subscribe.discount_tiers' && opts.tiers
+          ? (opts.tiers as unknown as T)
+          : k === 'subscribe.stock_retry_days' && opts.retryDays !== undefined
+            ? (opts.retryDays as unknown as T)
+            : (fb as T),
     } as unknown as SystemConfigService;
     const pr = {
       calcShippingFee: jest.fn().mockResolvedValue(0),
@@ -242,6 +275,8 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       enqueuePush,
       analytics,
       subUpdate,
+      findMany,
+      prisma,
     };
   }
 
@@ -322,6 +357,109 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         platform: 'system',
         props: expect.objectContaining({ subscriptionId: 's1', action: 'order_failed', reason: 'out_of_stock' }),
       }),
+    );
+  });
+
+  // ENGAGE-14: hết hàng đúng đêm cron làm gói 4-10 tuần mất cả kỳ, lỗi tạm thời thì khách không được báo.
+  describe('thử lại kỳ khi hết hàng/lỗi tạm thời (ENGAGE-14)', () => {
+    const tomorrowVn = () => new Date(`${vnDateKey(new Date(Date.now() + 864e5))}T00:00:00+07:00`);
+    const retryWrite = (updateMany: jest.Mock) =>
+      updateMany.mock.calls.find(([a]) => a.data && 'retryCount' in a.data && a.data.nextRunAt)?.[0];
+
+    it('hết hàng lần đầu → hẹn thử lại 0h ngày mai (giờ VN) thay vì bỏ cả chu kỳ, retryCount +1', async () => {
+      const { svc, updateMany } = makeProcess(1, { stockCount: 0 });
+      await svc.processDue();
+      const write = retryWrite(updateMany);
+      expect(write.where).toMatchObject({ id: 's1', status: 'ACTIVE' });
+      expect(write.data.nextRunAt).toEqual(tomorrowVn());
+      expect(write.data.retryCount).toEqual({ increment: 1 });
+    });
+
+    it('lần đầu báo khách "sẽ thử lại ngày mai", không nói "kỳ sau"', async () => {
+      const { svc, notify } = makeProcess(1, { stockCount: 0 });
+      await svc.processDue();
+      const [, code, data] = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_ORDER_FAILED')!;
+      expect(code).toBe('SUBSCRIPTION_ORDER_FAILED');
+      expect(data.reason).toMatch(/Hết hàng tạm thời/);
+      expect(data.retry).toMatch(/thử lại vào ngày mai/);
+    });
+
+    it('lần thử lại sau (retryCount>0) hết hàng tiếp nhưng còn lượt → tiếp tục hẹn ngày mai, không báo thêm', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryCount: 1 });
+      await svc.processDue();
+      expect(retryWrite(updateMany).data.retryCount).toEqual({ increment: 1 });
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('hết lượt thử lại (retryCount = trần) → bỏ kỳ: giữ nextRunAt của claim, reset retryCount, báo ngày kỳ kế tiếp', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryCount: 3 });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { retryCount: 0 } });
+      const [, , data] = notify.mock.calls.find((c) => c[1] === 'SUBSCRIPTION_ORDER_FAILED')!;
+      expect(data.retry).toMatch(/kỳ kế tiếp ngày \d{2}\/\d{2}\/\d{4}/);
+    });
+
+    it('subscribe.stock_retry_days = 0 → tắt thử lại, bỏ kỳ ngay như cũ nhưng vẫn báo', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryDays: 0 });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('lỗi tạm thời khác (vd P2034) → trước đây chỉ log: giờ cũng hẹn thử lại ngày mai và báo khách', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('P2034 write conflict') });
+      await svc.processDue();
+      expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }));
+    });
+
+    it('lỗi sau khi đơn kỳ ĐÃ ghi (idempotencyKey có đơn) → không thử lại, không báo hỏng', async () => {
+      const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('boom'), existingOrder: { id: 'o-existing' } });
+      await svc.processDue();
+      expect(retryWrite(updateMany)).toBeUndefined();
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+    });
+
+    it('ra đơn thành công → reset retryCount về 0 trong cùng tx', async () => {
+      const { svc, subUpdate } = makeProcess(1, { retryCount: 2 });
+      await svc.processDue();
+      expect(subUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ lastOrderId: 'o1', retryCount: 0 }) }),
+      );
+    });
+  });
+
+  describe('quét gói đến hạn theo trang (ENGAGE-14)', () => {
+    it('lấy theo thứ tự nextRunAt cũ nhất trước, trang 200', async () => {
+      const { svc, findMany } = makeProcess(0);
+      await svc.processDue();
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: [{ nextRunAt: 'asc' }, { id: 'asc' }], take: 200 }),
+      );
+    });
+
+    it('trang đầy 200 → quét tiếp trang sau đến khi hết (không dồn phần dư sang đêm sau)', async () => {
+      const full = Array.from({ length: 200 }, (_, i) => ({
+        id: `s${i}`, userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, retryCount: 0,
+        nextRunAt: new Date(Date.now() - 60_000),
+      }));
+      const { svc, findMany } = makeProcess(0);
+      findMany.mockResolvedValueOnce(full).mockResolvedValueOnce(full.slice(0, 5)).mockResolvedValue([]);
+      await svc.processDue();
+      expect(findMany).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('Q8 S2: gói cũ của hàng đã thành hàng gian hàng đối tác → không ra đơn giảm giá định kỳ, tạm dừng lịch + báo khách lý do', async () => {
+    const { svc, analytics, updateMany, orderCreate, stockExecuteRaw, notify } = makeProcess(1, { partnerOwned: true });
+    await svc.processDue();
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(stockExecuteRaw).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(JSON.stringify(notify.mock.calls)).toContain('hàng của gian hàng đối tác, không đặt định kỳ được');
+    expect(analytics.recordBestEffort).toHaveBeenCalledWith(
+      expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'partner_goods' }) }),
     );
   });
 
@@ -473,6 +611,22 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       expect(orderCreate).not.toHaveBeenCalled();
     });
 
+    it('sản phẩm thành hàng của gian hàng đối tác giữa lúc kiểm và lúc ra đơn đầu giao ngay → 400 tiếng Việt kèm mã, không tạo gói lẫn đơn (Q8 review vòng 3 S3)', async () => {
+      const { svc, prisma, orderCreate, stockExecuteRaw } = makeProcess(1, { partnerOwned: true });
+      (prisma.variation.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: 'v1', pancakeId: 'pv1', isActive: true, salePrice: null, retailPrice: 100000, name: 'V',
+        product: { name: 'P', isActive: true, approvalStatus: 'APPROVED', storefrontId: null },
+      });
+      const err = await svc.create('u1', { variationId: 'v1', quantity: 1, intervalWeeks: 4, addressId: 'a1' }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "P" là hàng của gian hàng đối tác, không đặt định kỳ được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      });
+      expect(stockExecuteRaw).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
     it('Ví Tubu / chuyển khoản không bị hạn mức COD', async () => {
       for (const paymentMethod of ['WALLET', 'BANK_TRANSFER'] as const) {
         const { svc, orderCreate } = makeProcess(1, { quantity: 60, paymentMethod });
@@ -597,6 +751,12 @@ describe('SubscriptionsService.skipCycle', () => {
     expect(data.status).toBeUndefined();
   });
 
+  it('bỏ kỳ giữa lúc đang thử lại vì hết hàng → xoá bộ đếm thử lại để kỳ sau đủ lượt (ENGAGE-14)', async () => {
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: new Date('2026-07-10T00:00:00.000Z') });
+    await svc.skipCycle('u1', 's1');
+    expect(update.mock.calls[0][0].data.retryCount).toBe(0);
+  });
+
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSkip(null);
     await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
@@ -614,12 +774,15 @@ describe('SubscriptionsService.skipCycle', () => {
 });
 
 describe('SubscriptionsService.setStatus', () => {
-  function makeSetStatus(sub: unknown) {
+  function makeSetStatus(sub: unknown, productStorefrontId: string | null = null) {
     const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
     const prisma = {
       subscription: {
         findUnique: jest.fn().mockResolvedValue(sub),
         update,
+      },
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ product: { name: 'Mật ong rừng', storefrontId: productStorefrontId } }),
       },
       // setStatus() giờ chạy trong $transaction (subscription.update + event atomic) — mock
       // chạy callback với chính prisma mock (đủ subscription.update cho test).
@@ -629,6 +792,15 @@ describe('SubscriptionsService.setStatus', () => {
     const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics, walletLedger());
     return { svc, update, analytics };
   }
+
+  it('Q8 S2: không bật lại gói của hàng gian hàng đối tác; tạm dừng/huỷ vẫn được', async () => {
+    const sub = { id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: new Date(Date.now() + 999_999_999) };
+    const { svc, update } = makeSetStatus(sub, 'sf-doi-tac');
+    await expect(svc.setStatus('u1', 's1', 'ACTIVE')).rejects.toMatchObject({ response: { code: 'PARTNER_GOODS_NOT_ELIGIBLE' } });
+    expect(update).not.toHaveBeenCalled();
+    await svc.setStatus('u1', 's1', 'CANCELLED');
+    expect(update).toHaveBeenCalledTimes(1);
+  });
 
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSetStatus(null);
@@ -706,6 +878,30 @@ describe('SubscriptionsService.list', () => {
     const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
+  });
+
+  // R2-ENGAGE-9: thẻ định kỳ phải cho khách thấy số tiền thật bị tính mỗi kỳ, cùng công thức với đơn kỳ.
+  it('R2-ENGAGE-9: trả tiền hàng mỗi kỳ trước/sau giảm theo đúng công thức đơn kỳ (làm tròn xuống phần giảm)', async () => {
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 3, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date() },
+        ]),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: 99_990, retailPrice: 120_000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' ? ([{ minActive: 1, pct: 0.14 }] as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
+    const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    const [row] = await svc.list('u1');
+    expect(row).toMatchObject({ cycleSubtotal: 299_970, cycleDiscount: 41_995, cycleGoods: 257_975 });
   });
 
   it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {

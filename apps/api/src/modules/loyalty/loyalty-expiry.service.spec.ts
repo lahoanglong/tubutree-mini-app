@@ -3,6 +3,7 @@ import {
   loadPointExpiryTxns,
   LoyaltyExpiryService,
   lotRecoverable,
+  nextPointExpiry,
   orderLotKey,
   reviewLotKey,
   type PointExpiryTxn,
@@ -34,6 +35,39 @@ const tx = (
 const review = (id: string, delta: number, createdAt: string, expiresAt: string | null, reviewId: string) =>
   tx(id, delta, createdAt, expiresAt, delta > 0 ? 'REVIEW:tinh-dau' : 'REVIEW_DELETE:p1', { refType: 'REVIEW', refId: reviewId });
 const expired = (id: string, amount: number, createdAt: string) => tx(id, -amount, createdAt, null, 'POINTS_EXPIRED');
+
+describe('nextPointExpiry (R2-ENGAGE-8: điểm sắp hết hạn gần nhất cho trang Điểm Xanh)', () => {
+  it('không có lô nào có hạn còn tồn → null', () => {
+    expect(nextPointExpiry([], NOW)).toBeNull();
+    expect(nextPointExpiry([tx('a', 100, '2026-01-01')], NOW)).toBeNull();
+  });
+
+  it('bỏ lô đã hết hạn và lô đã bị tiêu hết; lấy lô còn tồn có hạn sớm nhất', () => {
+    const r = nextPointExpiry(
+      [
+        tx('old', 40, '2025-01-01', '2026-01-01'),
+        tx('a', 100, '2025-09-01', '2026-09-01T03:00:00.000Z'),
+        tx('b', 60, '2025-12-01', '2026-12-01T03:00:00.000Z'),
+        tx('spend', -100, '2026-02-01'),
+      ],
+      NOW,
+    );
+    // FIFO: khoản tiêu 100 ăn lô 'old' (40, đã hết hạn) rồi 60 của lô 'a' → a còn 40.
+    expect(r).toEqual({ amount: 40, expiresAt: new Date('2026-09-01T03:00:00.000Z') });
+  });
+
+  it('gộp mọi lô hết hạn trong CÙNG ngày (giờ VN) với lô sớm nhất, không gộp ngày sau', () => {
+    const r = nextPointExpiry(
+      [
+        tx('a', 10, '2025-09-01', '2026-09-01T01:00:00.000Z'),
+        tx('b', 20, '2025-09-01', '2026-09-01T10:00:00.000Z'),
+        tx('c', 30, '2025-09-02', '2026-09-02T03:00:00.000Z'),
+      ],
+      NOW,
+    );
+    expect(r).toEqual({ amount: 30, expiresAt: new Date('2026-09-01T01:00:00.000Z') });
+  });
+});
 
 describe('computePointExpiry (pure FIFO helper)', () => {
   const WINDOW = 7 * DAY;
@@ -469,6 +503,52 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       });
     });
 
+    describe('trả MỘT PHẦN: RETURN_REVERSED:<mã> (refType RETURN_REQUEST, refId = yêu cầu) ăn lô ORDER_DELIVERED:<mã>', () => {
+      const partialBack = (id: string, delta: number, createdAt: string, code = 'C1', requestId = 'rr1') =>
+        tx(id, delta, createdAt, null, `RETURN_REVERSED:${code}`, { refType: 'RETURN_REQUEST', refId: requestId });
+
+      it('lô game 30 không hạn, đơn +20 có hạn, trả một phần thu 8 → tới hạn chỉ còn 12 hết hạn (không trừ oan 8 của lô game)', () => {
+        const txns = [tx('g', 30, '2025-01-01', null), delivered('d', 20, '2025-05-01', PAST, 'o1'), partialBack('p', -8, '2025-05-02')];
+        expect(computePointExpiry(txns, NOW, WINDOW).expiredNow).toBe(12);
+        expect(lotRecoverable(txns, orderLotKey('o1'))).toBe(12);
+      });
+
+      it('trả một phần rồi trả nốt (ORDER_REVERSED phần còn lại): lô đơn hết đúng một lần, không đếm hai lần', () => {
+        const r = computePointExpiry(
+          [
+            tx('g', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1'),
+            partialBack('p', -8, '2025-05-02'),
+            reversed('v', -12, '2025-05-03', 'o1'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+      });
+
+      it('hai lần trả một phần của cùng đơn cộng dồn vào lô đơn; mã đơn khác không ăn lô này', () => {
+        const r = computePointExpiry(
+          [
+            tx('g', 30, '2025-01-01', null),
+            delivered('d', 20, '2025-05-01', PAST, 'o1', 'C1'),
+            delivered('e', 10, '2025-05-01', FUTURE, 'o2', 'C2'),
+            partialBack('p1', -5, '2025-05-02', 'C1', 'rr1'),
+            partialBack('p2', -5, '2025-05-03', 'C1', 'rr2'),
+            partialBack('p3', -4, '2025-05-04', 'C2', 'rr3'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(10);
+      });
+
+      it('dòng RETURN_REVERSED không có lô đơn tương ứng (dòng cũ thiếu ORDER_DELIVERED) vẫn FIFO như cũ', () => {
+        const r = computePointExpiry([tx('g', 30, '2025-01-01', PAST), partialBack('p', -8, '2025-05-02', 'C9')], NOW, WINDOW);
+        expect(r.expiredNow).toBe(22);
+      });
+    });
+
     describe('thu hồi thưởng giới thiệu: dòng REVOKE ăn lô thưởng cùng hậu tố reason', () => {
       const REFERRAL = { refType: 'REFERRAL' };
       const grant = (id: string, delta: number, createdAt: string, expiresAt: string | null, refereeId: string) =>
@@ -515,6 +595,36 @@ describe('computePointExpiry (pure FIFO helper)', () => {
           WINDOW,
         );
         expect(r.expiredNow).toBe(5);
+      });
+
+      it('thu hồi theo tỷ lệ khi trả một phần (PARTIAL_REVOKE:<người được mời>:<yêu cầu>) ăn lô thưởng, không ăn lô cũ hơn', () => {
+        const partial = (id: string, delta: number, createdAt: string, refereeId: string, requestId: string) =>
+          tx(id, delta, createdAt, null, `REFERRAL_ORDER2_PARTIAL_REVOKE:${refereeId}:${requestId}`, { ...REFERRAL, refId: 'o2' });
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g', 100, '2025-05-01', PAST, 'u1'),
+            partial('p1', -33, '2025-05-02', 'u1', 'rr1'),
+            partial('p2', -17, '2025-05-03', 'u1', 'rr2'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(50); // chỉ phần chưa thu hồi của lô thưởng hết hạn; lô 30 không hạn còn nguyên
+      });
+
+      it('thu hồi một phần của người được mời khác không ăn lô thưởng này', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g1', 10, '2025-05-01', PAST, 'u1'),
+            grant('g2', 10, '2025-05-02', FUTURE, 'u2'),
+            tx('p', -4, '2025-05-03', null, 'REFERRAL_ORDER2_PARTIAL_REVOKE:u2:rr1', { ...REFERRAL, refId: 'o9' }),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(10);
       });
 
       describe('mốc thưởng thêm: thu hồi đời n chỉ ăn lô đời n', () => {

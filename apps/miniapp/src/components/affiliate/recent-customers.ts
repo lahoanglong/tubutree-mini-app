@@ -1,3 +1,5 @@
+import { parseTypedVnPhone } from '../../utils/vn-phone';
+
 /**
  * Khách gần đây của CTV khi lên đơn hộ — lưu trên máy của CTV để lần sau điền sẵn tên, SĐT và
  * địa chỉ thay vì nhập lại cả 5 trường (mỗi đơn từng mất khoảng 13 chạm).
@@ -22,8 +24,9 @@ const KEY_PREFIX = 'tubu_ctv_recent_customers';
 
 const keyOf = (userId: string) => `${KEY_PREFIX}:${userId}`;
 
-/** SĐT về dạng nội địa 0xxxxxxxxx để +84... và 0... cùng một khách. */
-export const normalizeCustomerPhone = (phone: string) => phone.replace(/\s/g, '').replace(/^\+84/, '0');
+/** SĐT về dạng nội địa 0xxxxxxxxx để +84..., 84... và 0... cùng một khách; số lưu từ bản cũ không hợp lệ chỉ bỏ khoảng trắng. */
+export const normalizeCustomerPhone = (phone: string) =>
+  parseTypedVnPhone(phone) ?? phone.replace(/\s/g, '').replace(/^\+84/, '0');
 
 const STRING_FIELDS = ['recipient', 'phone', 'street', 'province', 'provinceCode', 'ward', 'wardCode'] as const;
 

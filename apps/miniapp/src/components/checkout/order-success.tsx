@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries } from '@tanstack/react-query';
-import { CheckCircle2, Copy, Repeat } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Copy, Repeat } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
-import { fetchProduct } from '../../services/shop-api';
+import { fetchProduct, type PlacedOrder } from '../../services/shop-api';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
 import { formatVnd } from '../../utils/format';
+import { isRetailOnly } from '../../utils/retail-only';
 import { shippingEtaLabel } from '../../utils/shipping-eta';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
@@ -28,8 +29,8 @@ export interface SubscribeCandidate {
 
 /**
  * Sản phẩm đầu tiên của đơn cho phép "Đặt định kỳ" — CÙNG điều kiện PDP đang dùng để hiện nút
- * (product-detail.tsx: `selected && inStock`, tức variation đang bán và stock > 0). Dùng chung
- * queryKey ['product', slug] với PDP. Đơn không có dòng nào đủ điều kiện → null (ẩn gợi ý).
+ * (product-detail.tsx: `selected && inStock && !retailOnly`, tức variation đang bán, stock > 0 và không phải hàng gian hàng
+ * đối tác). Dùng chung queryKey ['product', slug] với PDP. Đơn không có dòng nào đủ điều kiện → null (ẩn gợi ý).
  */
 export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | null {
   const slugs = [...new Set(order.items.map((it) => it.productSlug).filter((s): s is string => !!s))].slice(0, MAX_SUBSCRIBE_CHECKS);
@@ -43,7 +44,9 @@ export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | nul
   });
   for (const it of order.items) {
     const idx = it.productSlug ? slugs.indexOf(it.productSlug) : -1;
-    const variation = idx >= 0 ? products[idx]?.data?.variations.find((v) => v.id === it.variationId) : undefined;
+    const product = idx >= 0 ? products[idx]?.data : undefined;
+    if (!product || isRetailOnly(product)) continue;
+    const variation = product.variations.find((v) => v.id === it.variationId);
     if (variation && variation.stock > 0) {
       return { variationId: it.variationId, quantity: it.quantity, productName: it.productName };
     }
@@ -61,7 +64,7 @@ export function OrderSuccess({
   onTrack,
   onContinue,
 }: {
-  order: OrderDTO;
+  order: PlacedOrder;
   onTrack: () => void;
   onContinue: () => void;
 }) {
@@ -78,12 +81,18 @@ export function OrderSuccess({
     else onContinue();
   };
 
+  // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn (D4): khách phải thấy đủ các mã và tổng thật phải trả,
+  // và sao chép được cả danh sách chứ không chỉ mã đơn đầu.
+  const split = order.splitOrders && order.splitOrders.length > 1 ? order.splitOrders : null;
+  const codes = split ? split.map((o) => o.code) : [order.code];
+  const codesText = codes.join(', ');
+
   const copyCode = () => {
-    void copyText(order.code).then((ok) =>
+    void copyText(codesText).then((ok) =>
       openSnackbar(
         ok
           ? { text: vi.success.copied, type: 'success' }
-          : { text: vi.success.copyFailed(order.code), type: 'info', duration: 4000 },
+          : { text: vi.success.copyFailed(codesText), type: 'info', duration: 4000 },
       ),
     );
   };
@@ -91,6 +100,11 @@ export function OrderSuccess({
   // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
   // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   const eta = cfg.isLoaded && cfg.shippingEta ? shippingEtaLabel(cfg.shippingEta) : null;
+  const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
+  // Màn Thanh toán hứa điểm của cả lần đặt — màn này phải nói cùng con số, không chỉ điểm của đơn đầu.
+  const pointsEarned = split && split.every((o) => o.pointsEarned != null)
+    ? split.reduce((sum, o) => sum + (o.pointsEarned ?? 0), 0)
+    : order.pointsEarned;
 
   return (
     <div style={{ padding: '32px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -119,30 +133,77 @@ export function OrderSuccess({
             <Text variant="caption" tone="tertiary" as="div">
               {vi.success.orderCode}
             </Text>
-            <Text variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
-              {order.code}
-            </Text>
+            {codes.map((c) => (
+              <Text key={c} variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
+                {c}
+              </Text>
+            ))}
           </div>
           <IconButton icon={Copy} label={vi.success.copyCode} onPress={copyCode} />
         </div>
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
-          <KeyValueRow label={vi.success.total} value={formatVnd(order.total)} emphasis />
+          <KeyValueRow
+            label={split ? `Tổng ${split.length} đơn` : vi.success.total}
+            value={formatVnd(grandTotal)}
+            emphasis
+          />
           {order.paymentMethod === 'COD' && (
             <Text variant="caption" tone="secondary" as="div">
               {vi.success.prepareCash}
             </Text>
           )}
-          {order.pointsEarned > 0 && (
+          {pointsEarned > 0 && (
             <>
-              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(order.pointsEarned)} tone="success" />
+              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(pointsEarned)} tone="success" />
               <Text variant="caption" tone="tertiary" as="div">
-                {vi.success.pointsComing(order.pointsEarned)}
+                {vi.success.pointsComing(pointsEarned)}
               </Text>
             </>
           )}
           {eta && <KeyValueRow label={vi.success.etaLabel} value={eta} />}
         </div>
       </Card>
+
+      {split && (
+        <section aria-label="Đơn cùng lần đặt">
+          <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>
+            Hàng do {split.length} nơi giao nên được tách thành {split.length} đơn
+          </Heading>
+          <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
+            Mỗi đơn có mã, phí giao và lộ trình riêng.
+          </Text>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {split.map((o) => (
+              <li key={o.code}>
+                <button
+                  type="button"
+                  className="tubu-press"
+                  aria-label={`Xem đơn ${o.code}, ${o.fulfillerName} giao, ${formatVnd(o.total)}`}
+                  onClick={() => navigate(`/order/${o.code}`, { replace: true })}
+                  style={{
+                    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+                    border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-control)',
+                    background: 'var(--color-bg-surface)', textAlign: 'left', cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 700 }}>
+                      {o.code}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
+                      {o.fulfillerName} giao
+                    </Text>
+                  </span>
+                  <Text variant="body-sm" as="span" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {formatVnd(o.total)}
+                  </Text>
+                  <Icon icon={ChevronRight} size="sm" tone="muted" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section aria-label={vi.success.nextTitle}>
         <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>

@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AdminPendingPost, AdminReport, CommunityEvent } from '../services/feed-api';
+import type { AdminPendingPost, AdminReport, AdminCommunityEvent, EventParticipant } from '../services/feed-api';
 
 const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
   adminResolveReport: vi.fn(),
   adminHidePost: vi.fn(),
   removeComment: vi.fn(),
-  listEvents: vi.fn(),
+  adminEvents: vi.fn(),
+  adminEventParticipants: vi.fn(),
   createEvent: vi.fn(),
   closeEvent: vi.fn(),
   pickEventWinner: vi.fn(),
@@ -35,7 +36,8 @@ vi.mock('../services/feed-api', () => ({
   adminResolveReport: mocks.adminResolveReport,
   adminHidePost: mocks.adminHidePost,
   removeComment: mocks.removeComment,
-  listEvents: mocks.listEvents,
+  adminEvents: mocks.adminEvents,
+  adminEventParticipants: mocks.adminEventParticipants,
   createEvent: mocks.createEvent,
   closeEvent: mocks.closeEvent,
   pickEventWinner: mocks.pickEventWinner,
@@ -80,7 +82,7 @@ const REPORT = (id: string, over: Partial<AdminReport> = {}): AdminReport => ({
   target: { kind: 'POST', author: 'Minh Tâm', title: `Bài bị báo ${id}`, excerpt: `Trích ${id}`, alreadyHandled: false, postId: 'p1' },
   ...over,
 });
-const EVENT = (id: string): CommunityEvent => ({
+const EVENT = (id: string, over: Partial<AdminCommunityEvent> = {}): AdminCommunityEvent => ({
   id,
   title: `Sự kiện ${id}`,
   description: `Mô tả ${id}`,
@@ -90,7 +92,19 @@ const EVENT = (id: string): CommunityEvent => ({
   rewardPoints: 5,
   status: 'ACTIVE',
   winnerUserId: null,
+  winner: null,
   createdAt: new Date(Date.now() - 48 * HOUR).toISOString(),
+  ...over,
+});
+const PARTICIPANT = (id: string, over: Partial<EventParticipant> = {}): EventParticipant => ({
+  userId: `u-${id}`,
+  name: `Người ${id}`,
+  avatar: null,
+  postId: `p-${id}`,
+  postTitle: `Vườn của ${id}`,
+  postedAt: new Date(Date.now() - 3 * HOUR).toISOString(),
+  postCount: 1,
+  ...over,
 });
 
 function renderPage() {
@@ -114,7 +128,8 @@ beforeEach(() => {
   mocks.adminResolveReport.mockResolvedValue({ ok: true });
   mocks.adminHidePost.mockResolvedValue({ ok: true });
   mocks.removeComment.mockResolvedValue({ ok: true });
-  mocks.listEvents.mockResolvedValue([EVENT('e1')]);
+  mocks.adminEvents.mockImplementation(async (status: string) => (status === 'OPEN' ? [EVENT('e1')] : []));
+  mocks.adminEventParticipants.mockResolvedValue([PARTICIPANT('an'), PARTICIPANT('binh', { postCount: 2 })]);
   mocks.createEvent.mockResolvedValue(EVENT('new'));
   mocks.closeEvent.mockResolvedValue({ ok: true });
   mocks.pickEventWinner.mockResolvedValue({ ok: true });
@@ -320,7 +335,7 @@ describe('CommunityModerationPage — sự kiện', () => {
     await waitFor(() => expect((screen.getByPlaceholderText('Tên sự kiện') as HTMLInputElement).value).toBe(''));
     expect((screen.getByPlaceholderText('Thưởng Điểm Xanh') as HTMLInputElement).value).toBe('0');
     expect(dateInputs()[0]!.value).toBe('');
-    await waitFor(() => expect(mocks.listEvents).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.adminEvents).toHaveBeenCalledTimes(2));
   });
 
   it('thưởng không phải số thì gửi 0', async () => {
@@ -344,15 +359,74 @@ describe('CommunityModerationPage — sự kiện', () => {
     expect((screen.getByPlaceholderText('Tên sự kiện') as HTMLInputElement).value).toBe('A');
   });
 
-  it('Chọn người thắng: khoá tới khi có userId, gửi userId đã cắt khoảng trắng', async () => {
+  // R2-ENGAGE-14: không còn dán userId thô; chọn từ người dự thi (tên + ảnh), chốt có bước xác nhận.
+  it('Chọn người thắng: mở danh sách người dự thi (tên, bài mới nhất, số bài), không có ô nhập userId', async () => {
     await openEventsTab();
-    const pick = screen.getByRole('button', { name: 'Chọn người thắng' });
-    expect(pick).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText('Nhập userId người thắng'), { target: { value: '  u-77  ' } });
-    expect(pick).not.toBeDisabled();
-    fireEvent.click(pick);
-    await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledWith('e1', 'u-77'));
+    expect(screen.queryByPlaceholderText(/userId/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+    expect(await screen.findByText('Người an')).toBeInTheDocument();
+    expect(mocks.adminEventParticipants).toHaveBeenCalledWith('e1');
+    expect(screen.getByText('Vườn của an')).toBeInTheDocument();
+    expect(screen.getByText(/2 bài dự thi/)).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('chốt người thắng: phải chọn một người rồi mới bấm được, gửi đúng userId của người đó', async () => {
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+    await screen.findByText('Người binh');
+    const confirm = screen.getByRole('button', { name: 'Chọn người thắng' });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: /Người binh/ }));
+    expect(screen.getByRole('radio', { name: /Người binh/ })).toHaveAttribute('aria-checked', 'true');
+    const go = screen.getByRole('button', { name: 'Chốt Người binh là người thắng' });
+    expect(go).not.toBeDisabled();
+    fireEvent.click(go);
+    await waitFor(() => expect(mocks.pickEventWinner).toHaveBeenCalledWith('e1', 'u-binh'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chọn người thắng', type: 'success' }));
+    await waitFor(() => expect(mocks.adminEvents).toHaveBeenCalledTimes(2));
+  });
+
+  it('chưa có bài dự thi: nói rõ thay vì để trống', async () => {
+    mocks.adminEventParticipants.mockResolvedValue([]);
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+    expect(await screen.findByText(/Chưa có bài dự thi nào được đăng/)).toBeInTheDocument();
+  });
+
+  it('chốt lỗi (sự kiện đã đóng): báo lỗi, giữ lựa chọn', async () => {
+    mocks.pickEventWinner.mockRejectedValue(new Error('Sự kiện đã đóng'));
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn người thắng' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Người an/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chốt Người an là người thắng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Sự kiện đã đóng', type: 'error' }));
+    expect(screen.getByRole('radio', { name: /Người an/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('tab "Đã đóng": sự kiện đóng không biến mất; hiện người thắng, hoặc "đóng không chọn người thắng"', async () => {
+    mocks.adminEvents.mockImplementation(async (status: string) =>
+      status === 'OPEN'
+        ? [EVENT('e1')]
+        : [
+            EVENT('c1', { status: 'CLOSED', winnerUserId: 'u1', winner: { id: 'u1', name: 'Lan Anh', avatar: null } }),
+            EVENT('c2', { status: 'CLOSED' }),
+          ],
+    );
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đã đóng' }));
+    expect(await screen.findByText('Sự kiện c1')).toBeInTheDocument();
+    expect(mocks.adminEvents).toHaveBeenCalledWith('CLOSED');
+    expect(screen.getByText('Lan Anh')).toBeInTheDocument();
+    expect(screen.getByText('Người thắng')).toBeInTheDocument();
+    expect(screen.getByText('Đóng không chọn người thắng')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+  });
+
+  it('tab "Đã đóng" trống: nói chưa có sự kiện đã đóng', async () => {
+    await openEventsTab();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đã đóng' }));
+    expect(await screen.findByText('Chưa có sự kiện nào đã đóng')).toBeInTheDocument();
   });
 
   it('Đóng sự kiện: gọi closeEvent(id), báo đã đóng và tải lại', async () => {
@@ -360,11 +434,11 @@ describe('CommunityModerationPage — sự kiện', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledWith('e1'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đóng sự kiện', type: 'success' }));
-    await waitFor(() => expect(mocks.listEvents).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.adminEvents).toHaveBeenCalledTimes(2));
   });
 
   it('không có sự kiện: hiện trạng thái trống bên dưới biểu mẫu', async () => {
-    mocks.listEvents.mockResolvedValue([]);
+    mocks.adminEvents.mockResolvedValue([]);
     renderPage();
     await screen.findByText('Tiêu đề a');
     goTab('Sự kiện');
@@ -396,7 +470,7 @@ describe('CommunityModerationPage — tiêu đề, tab, vùng chạm, nhãn (C-0
   it('ba mục là tablist có aria-selected, đổi theo tab đang mở', async () => {
     renderPage();
     await screen.findByText('Tiêu đề a');
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    const tabs = within(screen.getAllByRole('tablist')[0]!).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(['Chờ duyệt', 'Báo cáo', 'Sự kiện']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(tabs[1]!);
@@ -425,7 +499,6 @@ describe('CommunityModerationPage — tiêu đề, tab, vùng chạm, nhãn (C-0
     expect(screen.getByRole('textbox', { name: 'Mô tả sự kiện (không bắt buộc)' })).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Thưởng Điểm Xanh' })).toBeInTheDocument();
     expect(screen.getByText('1 điểm = 1.000đ, tối đa 1.000 điểm')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Nhập userId người thắng' })).toBeInTheDocument();
     const start = screen.getByLabelText('Bắt đầu') as HTMLInputElement;
     const end = screen.getByLabelText('Kết thúc') as HTMLInputElement;
     expect(start.type).toBe('datetime-local');

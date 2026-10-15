@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FaqService } from '../faq/faq.service';
 import { LlmClient, type ChatMessage } from './llm.client';
+import { productQueryTokens, rankProducts } from './product-match';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 
 export interface ProductSuggestion {
   id: string;
@@ -20,11 +22,20 @@ interface FaqContext {
   answer: string;
 }
 
+const MAX_SUGGESTIONS = 5;
+// Ứng viên lấy từ DB trước khi xếp hạng: đủ rộng để sản phẩm khớp nhiều từ nhất không bị cắt bởi thứ tự nổi bật.
+const SUGGEST_CANDIDATES = 100;
 const MAX_HISTORY = 6;
 // Chặn phình token: chỉ nạp tối đa 20 FAQ (đã sắp theo sortOrder) vào system prompt.
 const MAX_FAQ_IN_PROMPT = 20;
-const OFFLINE_REPLY =
+const OFFLINE_REPLY_WITH_PRODUCTS =
   'Trợ lý AI đang tạm nghỉ, bạn quay lại sau nhé! Trong lúc đó bạn có thể tham khảo vài sản phẩm gợi ý bên dưới 🌿';
+const OFFLINE_REPLY_NO_MATCH =
+  'Trợ lý AI đang tạm nghỉ, bạn quay lại sau nhé! Hiện chưa tìm thấy sản phẩm khớp câu hỏi: bạn thử gõ tên sản phẩm ngắn hơn (vd "nước rửa chén", "nước giặt") hoặc xem mục Sản phẩm nhé 🌿';
+
+/** Chỉ hứa "gợi ý bên dưới" khi thật sự có sản phẩm kèm theo. */
+const offlineReply = (products: readonly ProductSuggestion[]): string =>
+  products.length > 0 ? OFFLINE_REPLY_WITH_PRODUCTS : OFFLINE_REPLY_NO_MATCH;
 
 /**
  * AI tư vấn 24/7 (§6.14.3). RAG-lite: tìm sản phẩm khớp câu hỏi trong catalog →
@@ -48,7 +59,7 @@ export class AiAdvisorService {
     const products = await this.suggestProducts(text);
 
     if (!this.llm.isConfigured()) {
-      return { reply: OFFLINE_REPLY, products };
+      return { reply: offlineReply(products), products };
     }
 
     // Chỉ tốn round-trip DB lấy FAQ khi LLM thực sự được gọi (offline đã return ở trên).
@@ -66,29 +77,26 @@ export class AiAdvisorService {
       // DeepSeek + Gemini cùng lỗi (LlmClient hết phương án) → fallback graceful thay vì để
       // ServiceUnavailableException tràn thành 503, giữ uptime cảm nhận được cho người dùng.
       this.logger.error(`LLM tạm ngưng hoạt động, fallback offline reply: ${(e as Error).message}`);
-      return { reply: OFFLINE_REPLY, products };
+      return { reply: offlineReply(products), products };
     }
   }
 
-  /** RAG: tìm tối đa 5 sản phẩm ACTIVE khớp bất kỳ token nào trong câu hỏi (theo tên). */
+  /**
+   * RAG: tối đa 5 sản phẩm HIỆN CÔNG KHAI (cùng điều kiện với catalog, xem PUBLIC_PRODUCT_WHERE) khớp câu hỏi: kết quả
+   * vào cả system prompt lẫn danh sách link khách bấm vào, nên SP chờ duyệt/bị từ chối không được lọt. Tra trên `nameSearch` (tên đã bỏ dấu, cùng cột với GET /products?q=)
+   * nên gõ không dấu vẫn tìm được; từ đệm bị bỏ, sản phẩm chỉ khớp một từ chung bị loại, còn lại xếp theo số từ khớp.
+   * DB chỉ lọc thô (chứa chuỗi con) và lấy ứng viên theo độ nổi bật; việc khớp nguyên từ + xếp hạng làm ở rankProducts.
+   */
   private async suggestProducts(query: string): Promise<ProductSuggestion[]> {
-    const tokens = Array.from(
-      new Set(
-        query
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-          .split(/\s+/)
-          .filter((t) => t.length >= 3),
-      ),
-    ).slice(0, 8);
+    const tokens = productQueryTokens(query);
     if (tokens.length === 0) return [];
-    const products = await this.prisma.product.findMany({
-      where: { isActive: true, OR: tokens.map((t) => ({ name: { contains: t, mode: 'insensitive' as const } })) },
-      take: 5,
+    const candidates = await this.prisma.product.findMany({
+      where: { ...PUBLIC_PRODUCT_WHERE, OR: tokens.map((t) => ({ nameSearch: { contains: t } })) },
+      take: SUGGEST_CANDIDATES,
       orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
       select: { id: true, name: true, slug: true, brand: true, shortDesc: true, thumbnail: true, basePrice: true, salePrice: true },
     });
-    return products;
+    return rankProducts(tokens, candidates, MAX_SUGGESTIONS);
   }
 
   private systemPrompt(products: ProductSuggestion[], faqs: FaqContext[] = []): string {

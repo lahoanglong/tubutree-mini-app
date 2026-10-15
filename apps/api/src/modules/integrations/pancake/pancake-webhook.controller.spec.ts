@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { PancakeWebhookController } from './pancake-webhook.controller';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
+import { QUEUE_COMMAND_TIMEOUT_MS } from '../../../jobs/queue-timeout';
 
 const SECRET = 'pancake-webhook-secret';
 const body = { event: 'order.status_updated', data: { id: 'p1', status: 'delivered' } };
@@ -48,6 +49,14 @@ describe('PancakeWebhookController.handle (verify token tĩnh)', () => {
     expect(add).not.toHaveBeenCalled();
   });
 
+  it('trùng khoá với sự kiện đã IGNORED (đơn lạ / tồn kho cũ) → coi như trùng, không enqueue lại', async () => {
+    const { ctrl, create, add, findUnique } = makeController(SECRET);
+    create.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: 'P2002' }));
+    findUnique.mockResolvedValueOnce({ id: 'evt0', status: 'IGNORED' });
+    await expect(ctrl.handle(body, SECRET)).resolves.toEqual({ received: true, duplicate: true });
+    expect(add).not.toHaveBeenCalled();
+  });
+
   it('trùng khoá với sự kiện chưa xong (FAILED) → enqueue lại đúng event cũ', async () => {
     const { ctrl, create, add, findUnique } = makeController(SECRET);
     create.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: 'P2002' }));
@@ -60,6 +69,19 @@ describe('PancakeWebhookController.handle (verify token tĩnh)', () => {
     const { ctrl, add } = makeController(SECRET);
     add.mockRejectedValueOnce(new Error('redis down'));
     await expect(ctrl.handle(body, SECRET)).resolves.toEqual({ received: true });
+  });
+
+  it('Redis mất kết nối (lệnh queue treo, không reject) → vẫn trả 200 sau hạn chờ, không treo request', async () => {
+    jest.useFakeTimers();
+    try {
+      const { ctrl, add } = makeController(SECRET);
+      add.mockReturnValueOnce(new Promise(() => undefined));
+      const res = ctrl.handle(body, SECRET);
+      await jest.advanceTimersByTimeAsync(QUEUE_COMMAND_TIMEOUT_MS);
+      await expect(res).resolves.toEqual({ received: true });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('chưa cấu hình secret (dev) → bỏ qua verify, vẫn xử lý', async () => {

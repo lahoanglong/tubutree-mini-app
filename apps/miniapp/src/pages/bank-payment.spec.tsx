@@ -13,6 +13,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useParams: () => ({ code: 'TT001' }),
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/bank-payment/TT001', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/payment-api', () => ({ getBankQr: mocks.getBankQr }));
@@ -114,6 +115,23 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
   });
 });
 
+// BUYERMINI-17: header tự dựng căn giữa nên dòng phụ chạy dưới nút Quay lại nổi (fixed, x 12→56) và mất chữ đầu.
+describe('Thanh toán chuyển khoản: header chừa chỗ cho nút Quay lại (BUYERMINI-17)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+  });
+
+  it('tiêu đề và dòng hướng dẫn nằm chung khối đã chừa 48px bên trái, không chạy dưới nút Quay lại', async () => {
+    renderPage();
+    const hint = await screen.findByText('Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới');
+    const block = hint.parentElement as HTMLElement;
+    expect(block.contains(screen.getByRole('heading', { level: 1 }))).toBe(true);
+    expect(block.style.paddingLeft).toBe('48px');
+    expect(block.style.textAlign).not.toBe('center');
+  });
+});
+
 describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 (axe page-has-heading-one, C-114)', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -149,3 +167,41 @@ describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 
     expect(onlyH1().textContent).toBe('Thanh toán chuyển khoản');
   });
 });
+
+describe('Thanh toán chuyển khoản: lần dò nền lỗi không làm mất mã QR (R5-BUYER-1)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('đã có mã QR rồi mà bấm Kiểm tra gặp lỗi mạng: vẫn giữ nguyên QR và số tài khoản, chỉ báo lỗi bằng thông báo nhỏ', async () => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(new Error('Network Error'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({
+        text: 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        type: 'error',
+        position: 'top',
+      }),
+    );
+    expect(screen.queryByText('Không tải được thông tin thanh toán.')).toBeNull();
+    expect(screen.getByText('0123456789')).toBeInTheDocument();
+  });
+});
+
+describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('có hạn → nói rõ chuyển trước giờ nào và quá hạn đơn tự huỷ', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: '2026-10-14T03:00:00.000Z' });
+    renderPage();
+    const note = await screen.findByRole('note');
+    expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
+  });
+
+  it('API bản cũ không trả hạn → không hiện khung hạn', async () => {
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByText(/Giữ nguyên nội dung/);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+});
+

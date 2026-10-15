@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import {
   applyPancakeStock,
   forcePancakeStock,
@@ -20,8 +21,13 @@ function mockTx() {
   const $queryRaw = jest.fn().mockResolvedValue([{ reserved: 0 }]);
   return { tx: { $executeRaw, $queryRaw } as never, $executeRaw, $queryRaw };
 }
-const sqlOf = (m: jest.Mock, i = 0) => (m.mock.calls[i]![0] as string[]).join('?');
-const argsOf = (m: jest.Mock, i = 0) => m.mock.calls[i]!.slice(1);
+/** Câu lệnh đã ghép (mảnh `Prisma.sql` lồng bên trong được trải phẳng): SQL với `?` và đúng thứ tự tham số. */
+const flat = (m: jest.Mock, i: number) => {
+  const [strings, ...values] = m.mock.calls[i]! as [string[], ...Prisma.Sql[]];
+  return Prisma.sql(strings, ...values);
+};
+const sqlOf = (m: jest.Mock, i = 0) => flat(m, i).sql;
+const argsOf = (m: jest.Mock, i = 0) => flat(m, i).values;
 
 describe('variation-stock', () => {
   describe('reserveVariationStock', () => {
@@ -96,6 +102,61 @@ describe('variation-stock', () => {
       expect(argsOf($executeRaw, 0)).toContain("pv-'; DROP TABLE variations; --");
       expect(argsOf($executeRaw, 0)).toContain(7);
     });
+
+    it('không kèm nguồn số → áp vô điều kiện như cũ, không đọc/ghi mốc nào', async () => {
+      const { tx, $executeRaw } = mockTx();
+      await expect(applyPancakeStock(tx, 'pv-1', 7)).resolves.toBe(true);
+      expect(sqlOf($executeRaw)).not.toMatch(/pancakeStock(EventAt|SyncReadAt|WebhookReceivedAt)/);
+      expect(argsOf($executeRaw)).toEqual([7, 7, 7, 7, 'pv-1']);
+    });
+
+    it('webhook kèm updated_at → so mốc Pancake với webhook đã áp, so lúc NHẬN với lúc đồng bộ đọc, ghi cả hai mốc trong CÙNG câu (R4-SYNC-2, R5-SYNC-3)', async () => {
+      const { tx, $executeRaw } = mockTx();
+      const at = new Date('2026-10-14T07:00:02.000Z');
+      const receivedAt = new Date('2026-10-14T07:00:03.000Z');
+      await applyPancakeStock(tx, 'pv-1', 80, { kind: 'webhook', eventAt: at, receivedAt });
+      expect($executeRaw).toHaveBeenCalledTimes(1);
+      const sql = sqlOf($executeRaw);
+      expect(sql).toContain('"pancakeStockEventAt" = ?');
+      expect(sql).toContain('("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ?)');
+      expect(sql).toContain('("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ?)');
+      expect(sql).toContain('"pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ?)');
+      expect(sql).not.toContain('"pancakeStockSyncReadAt" =');
+      const args = argsOf($executeRaw);
+      expect(args.filter((a: unknown) => a === at)).toHaveLength(2);
+      expect(args.filter((a: unknown) => a === receivedAt)).toHaveLength(2);
+    });
+
+    it('webhook không có updated_at → không so mốc Pancake, vẫn không áp nếu nhận trước lúc đồng bộ đọc', async () => {
+      const { tx, $executeRaw } = mockTx();
+      const receivedAt = new Date('2026-10-14T07:00:03.000Z');
+      await applyPancakeStock(tx, 'pv-1', 80, { kind: 'webhook', receivedAt });
+      const sql = sqlOf($executeRaw);
+      expect(sql).not.toContain('pancakeStockEventAt');
+      expect(sql).toContain('("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ?)');
+      expect(argsOf($executeRaw).filter((a: unknown) => a === receivedAt)).toHaveLength(2);
+    });
+
+    it('lượt đồng bộ → chỉ so lúc đọc với giờ máy chủ (lúc nhận webhook đã áp, lúc đọc của lượt trước), không so với updated_at Pancake', async () => {
+      const { tx, $executeRaw } = mockTx();
+      const readAt = new Date('2026-10-15T03:00:00.000Z');
+      await applyPancakeStock(tx, 'pv-1', 40, { kind: 'sync', readAt });
+      expect($executeRaw).toHaveBeenCalledTimes(1);
+      const sql = sqlOf($executeRaw);
+      expect(sql).not.toContain('pancakeStockEventAt');
+      expect(sql).toContain('"pancakeStockSyncReadAt" = ?');
+      expect(sql).toContain('("pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ?)');
+      expect(sql).toContain('("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" <= ?)');
+      expect(argsOf($executeRaw).filter((a: unknown) => a === readAt)).toHaveLength(3);
+    });
+
+    it('0 dòng bị sửa (sự kiện cũ hơn / không có biến thể) → false', async () => {
+      const { tx, $executeRaw } = mockTx();
+      $executeRaw.mockResolvedValue(0);
+      await expect(
+        applyPancakeStock(tx, 'pv-1', 90, { kind: 'webhook', eventAt: new Date('2026-10-14T07:00:01.000Z'), receivedAt: new Date() }),
+      ).resolves.toBe(false);
+    });
   });
 
   describe('forcePancakeStock', () => {
@@ -105,6 +166,17 @@ describe('variation-stock', () => {
       const sql = sqlOf($executeRaw);
       expect(sql).toContain('"reservedStock" = 0');
       expect(argsOf($executeRaw)).toEqual([42, 42, 'pv-1']);
+    });
+
+    it('kèm lúc đọc → mốc đọc của đồng bộ chỉ tiến, không đụng mốc updated_at của webhook', async () => {
+      const { tx, $executeRaw } = mockTx();
+      const readAt = new Date('2026-10-15T03:00:00.000Z');
+      await forcePancakeStock(tx, 'pv-1', 42, { readAt });
+      const sql = sqlOf($executeRaw);
+      expect(sql).toContain('"reservedStock" = 0');
+      expect(sql).toContain('"pancakeStockSyncReadAt" = GREATEST("pancakeStockSyncReadAt", ?)');
+      expect(sql).not.toContain('pancakeStockEventAt');
+      expect(argsOf($executeRaw)).toEqual([42, 42, readAt, 'pv-1']);
     });
   });
 });

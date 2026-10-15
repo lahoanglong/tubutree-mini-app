@@ -9,7 +9,9 @@ import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
+import { DEFAULT_TREE_TYPE, harvestCouponMinOrder, spinVoucherMinOrder } from './game.constants';
+import { countReferralSuccesses } from '../wallet/referral-reward';
+import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -54,15 +56,7 @@ export class GameService {
 
   // ── Profile ────────────────────────────────────────
   async ensureProfile(userId: string) {
-    const target = await this.config.get<number>('game.tree_default_target', 600);
-    const existing = await this.prisma.gameProfile.findUnique({ where: { userId } });
-    if (existing) return existing;
-    return this.prisma.gameProfile.create({
-      data: {
-        userId,
-        ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
-      },
-    });
+    return ensureGameProfile(this.prisma, this.config, userId);
   }
 
   async getProfile(userId: string) {
@@ -139,6 +133,8 @@ export class GameService {
     // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
     // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
     const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
+    const treeTarget = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tree_default_target', 600) : 0;
+    const voucherMinOrder = prize.rewardType === 'COUPON' ? await spinVoucherMinOrder(this.config, prize.value) : 0;
 
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
@@ -173,22 +169,30 @@ export class GameService {
       });
 
       let rewardRefId: string | null = null;
+      let coupon: { code: string; minOrder: number; expiresAt: Date } | undefined;
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
         // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
         // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
         // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
-        await tx.gameProfile.update({
+        // Upsert: khách quay trước khi từng mở Vườn Xanh chưa có hồ sơ (update ném P2025 → 404 "Không tìm thấy bản ghi").
+        await tx.gameProfile.upsert({
           where: { userId },
-          data: { totalSeeds: { increment: prize.value } },
+          update: { totalSeeds: { increment: prize.value } },
+          create: {
+            userId,
+            totalSeeds: prize.value,
+            ecoImpact: { progress: 0, target: treeTarget, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
+          },
         });
         await tx.gameProfile.updateMany({
           where: { userId, totalSeeds: { gt: tankCap } },
           data: { totalSeeds: tankCap },
         });
       } else if (prize.rewardType === 'COUPON') {
-        rewardRefId = await this.grantCoupon(userId, prize.value, tx);
+        coupon = await this.grantCouponWithTerms(userId, prize.value, tx, voucherMinOrder);
+        rewardRefId = coupon.code;
       }
 
       await tx.gameSpin.create({
@@ -209,7 +213,9 @@ export class GameService {
         props: { action: 'spin', prizeId: prize.id, rewardType: prize.rewardType, rewardRefId },
       });
 
-      return { prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value } };
+      return {
+        prize: { id: prize.id, name: prize.name, rewardType: prize.rewardType, value: prize.value, ...(coupon ? { coupon } : {}) },
+      };
     });
   }
 
@@ -508,7 +514,7 @@ export class GameService {
    * không lệch định nghĩa "đạt điều kiện" (trước đây chỉ getMissions có logic này). */
   private missionRawProgress(
     code: string,
-    metrics: { streakDays: number; ordersCount: number; reviewsCount: number; referralsCount: number },
+    metrics: { streakDays: number; ordersCount: number; reviewedProductsCount: number; referralsCount: number },
   ): number {
     switch (code) {
       case 'CHECKIN_7':
@@ -516,7 +522,7 @@ export class GameService {
       case 'FIRST_ORDER':
         return metrics.ordersCount;
       case 'REVIEW_3':
-        return metrics.reviewsCount;
+        return metrics.reviewedProductsCount;
       case 'INVITE_3':
         return metrics.referralsCount;
       default:
@@ -524,20 +530,31 @@ export class GameService {
     }
   }
 
+  /**
+   * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách: đơn đặt rồi huỷ không còn giữ được thưởng. INVITE_3 dùng đúng
+   * số lượt giới thiệu thành công của chương trình giới thiệu (bạn được mời mua thành công, trừ lượt bị thu hồi), không
+   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1). REVIEW_3 chỉ tính đánh giá có ảnh,
+   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh"), và đếm theo SẢN PHẨM khác nhau: mỗi lần mua được một đánh giá
+   * nên đếm theo dòng thì mua cùng một sản phẩm ba lần là xong nhiệm vụ.
+   */
   private async missionMetrics(userId: string) {
-    const [profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
+    const [profile, ordersCount, reviewedProducts, referralsCount] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.prisma.order.count({
-        where: { userId, status: { in: ['DELIVERED', 'CONFIRMED', 'SHIPPING', 'PACKED'] } },
+        where: { userId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
       }),
-      this.prisma.review.count({
-        where: { userId },
+      this.prisma.review.groupBy({
+        by: ['productId'],
+        where: { userId, NOT: { images: { isEmpty: true } } },
       }),
-      this.prisma.user.count({
-        where: { referredById: userId },
-      }),
+      countReferralSuccesses(this.prisma, userId),
     ]);
-    return { streakDays: profile?.streakDays ?? 0, ordersCount, reviewsCount, referralsCount };
+    return {
+      streakDays: profile?.streakDays ?? 0,
+      ordersCount,
+      reviewedProductsCount: reviewedProducts.length,
+      referralsCount,
+    };
   }
 
   /** Nhiệm vụ không lặp lại: 1 chu kỳ duy nhất, cố định '0'. Nhiệm vụ lặp lại (isRepeatable, vd
@@ -559,14 +576,19 @@ export class GameService {
         ? await this.prisma.missionProgress.findMany({ where: { userId, missionId: { in: missionIds } } })
         : [];
     const claimedKeys = new Set(claims.map((c) => `${c.missionId}:${c.cycleKey}`));
+    // Nhiệm vụ không lặp lại: đã nhận ở chu kỳ nào cũng là đã nhận (dòng cũ có cycleKey khác '0' khi nhiệm vụ từng lặp lại).
+    const claimedOnce = new Set(claims.map((c) => c.missionId));
 
     return missions.map((m) => {
       const targetGoal = m.goal > 0 ? m.goal : 1;
       const raw = this.missionRawProgress(m.code, metrics);
-      const progress = Math.min(targetGoal, raw);
-      const completed = raw >= targetGoal;
       const cycleKey = this.missionCycleKey(m, raw, targetGoal);
-      const claimed = claimedKeys.has(`${m.id}:${cycleKey}`);
+      const claimed = m.isRepeatable ? claimedKeys.has(`${m.id}:${cycleKey}`) : claimedOnce.has(m.id);
+      // Nhiệm vụ không lặp lại đã nhận là đã xong: chỉ số thô có thể tụt sau lúc nhận (đơn trả, đánh giá xoá, REVIEW_3 đếm
+      // theo sản phẩm) mà thẻ không được quay về "1/3" kèm dấu đã nhận.
+      const done = !m.isRepeatable && claimed;
+      const progress = done ? targetGoal : Math.min(targetGoal, raw);
+      const completed = done || raw >= targetGoal;
 
       return {
         code: m.code,
@@ -597,6 +619,11 @@ export class GameService {
     const metrics = await this.missionMetrics(userId);
     const targetGoal = mission.goal > 0 ? mission.goal : 1;
     const raw = this.missionRawProgress(mission.code, metrics);
+    // Đã nhận thì báo đã nhận trước khi xét điều kiện, cùng lý do getMissions coi nhiệm vụ đã nhận là đã xong.
+    if (!mission.isRepeatable) {
+      const prior = await this.prisma.missionProgress.findFirst({ where: { userId, missionId: mission.id } });
+      if (prior) throw new BadRequestException('Bạn đã nhận thưởng nhiệm vụ này rồi.');
+    }
     if (raw < targetGoal) {
       throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
     }
@@ -703,16 +730,26 @@ export class GameService {
     tx?: Prisma.TransactionClient,
     minOrder: number = amount,
   ): Promise<string> {
+    return (await this.grantCouponWithTerms(userId, amount, tx, minOrder)).code;
+  }
+
+  private async grantCouponWithTerms(
+    userId: string,
+    amount: number,
+    tx?: Prisma.TransactionClient,
+    minOrder: number = amount,
+  ): Promise<{ code: string; minOrder: number; expiresAt: Date }> {
     const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
+    const effectiveMinOrder = Math.max(amount, minOrder);
     const db = tx ?? this.prisma;
     await db.coupon.create({
       data: {
         code,
         type: 'AMOUNT',
         value: amount,
-        minOrder: Math.max(amount, minOrder),
+        minOrder: effectiveMinOrder,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,
@@ -720,7 +757,7 @@ export class GameService {
         scopeMeta: { userId } as object,
       },
     });
-    return code;
+    return { code, minOrder: effectiveMinOrder, expiresAt: end };
   }
 
   private pickWeighted(prizes: SpinPrize[]): SpinPrize {

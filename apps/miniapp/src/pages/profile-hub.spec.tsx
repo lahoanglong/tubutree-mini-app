@@ -37,7 +37,9 @@ vi.mock('../store/auth', () => {
     logout: vi.fn(),
     restore: mocks.restore,
   });
-  const useAuthStore = Object.assign(() => state(), { getState: () => ({ ...state(), login: mocks.login }) });
+  const useAuthStore = Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), {
+    getState: () => ({ ...state(), login: mocks.login }),
+  });
   return { useAuthStore };
 });
 

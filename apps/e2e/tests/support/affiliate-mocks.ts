@@ -4,13 +4,15 @@ import type {
   CtvMilestoneItem,
   CtvMilestonesResponse,
   CtvTiersResponse,
+  TaxStatement,
 } from '../../../miniapp/src/services/affiliate-api';
 import type { MockApi } from './mock-api';
 
 /**
  * Mock Dashboard CTV (apps/miniapp/src/pages/affiliate.tsx) — route affiliate.controller.ts:
  *   GET /affiliate/me, /dashboard, /links, /commissions, /analytics/storefronts, /analytics/products,
- *   GET /affiliate/tiers, GET /affiliate/milestones, POST /affiliate/milestones/:id/claim.
+ *   GET /affiliate/tiers, GET /affiliate/milestones, POST /affiliate/milestones/:id/claim,
+ *   GET /affiliate/payouts (lịch sử rút), GET /affiliate/tax-statement (bảng kê thuế TNCN năm nay).
  * Dữ liệu bậc/mốc chép từ apps/api/src/modules/affiliate/ctv-milestones.ts (CTV_TIERS,
  * CTV_MONTHLY_MILESTONES). Bậc CTV chỉ là danh hiệu — KHÔNG có bonusPct.
  */
@@ -91,6 +93,15 @@ export const CTV_MILESTONES_EMPTY: CtvMilestonesResponse = {
   previousMonth: null,
 };
 
+/** Năm chưa có lệnh rút nào bị khấu trừ thuế → khối "đã khấu trừ thuế TNCN" không hiện. */
+export const CTV_TAX_STATEMENT_EMPTY: TaxStatement = {
+  year: 2026,
+  fullName: 'Affiliate 1',
+  taxId: null,
+  items: [],
+  totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 },
+};
+
 export function mockAffiliateDashboard(
   api: MockApi,
   opts: { me?: Partial<AffiliateMe>; milestones?: CtvMilestonesResponse | (() => CtvMilestonesResponse) } = {},
@@ -103,6 +114,8 @@ export function mockAffiliateDashboard(
   api.get('/affiliate/analytics/storefronts', { storefronts: [] });
   api.get('/affiliate/analytics/products', []);
   api.get('/affiliate/tiers', CTV_TIERS);
+  api.get('/affiliate/payouts', []);
+  api.get('/affiliate/tax-statement', CTV_TAX_STATEMENT_EMPTY);
   const ms = opts.milestones ?? CTV_MILESTONES_EMPTY;
   api.get('/affiliate/milestones', typeof ms === 'function' ? () => ms() : ms);
 }

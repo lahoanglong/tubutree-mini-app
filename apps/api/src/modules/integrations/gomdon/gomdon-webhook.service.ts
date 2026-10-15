@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -7,7 +7,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { OrderStatusService, InvalidOrderTransitionError } from '../../orders/order-status.service';
 import { QUEUE_GOMDON_EVENTS, QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import type { GomdonWebhookPayload } from './gomdon.types';
-import { GomdonAlertService } from './gomdon-alert.service';
+import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
+import { PancakeOrderService, waybillNoteAlert } from '../pancake/pancake-order.service';
 import { GOMDON_JOB_EVENT, addGomdonJob, enqueueGomdonCancel } from './gomdon-queue';
 import {
   GOMDON_CANCEL,
@@ -20,7 +21,12 @@ import {
   gomdonStatusText,
   isGomdonPayable,
   isGomdonTerminal,
+  parseGomdonCustomerId,
 } from './gomdon-status';
+import { gomdonHealth } from './gomdon-health';
+
+/** Báo động "payload webhook không đọc được" tối đa 1 lần / Content-Type trong khoảng này. */
+const UNREADABLE_ALERT_GAP_MS = 10 * 60_000;
 
 export const GOMDON_EVENT_STATUS = {
   RECEIVED: 'RECEIVED',
@@ -95,6 +101,9 @@ export function gomdonDedupeKey(p: ParsedGomdonEvent, body: GomdonWebhookPayload
 
 const isDead = (status: string) => status === 'CANCELLED' || status === 'RETURNED';
 
+/** Hàng đang/đã quay về kho: việc "xử lý đơn với khách" xong khi đơn được huỷ/trả — báo động tự đóng lúc đó. */
+const GOODS_RETURNING_STATUSES: ReadonlySet<number> = new Set([6, 8]);
+
 const PROBLEM_ADVICE: Record<number, string> = {
   2: 'Vận đơn bị huỷ phía Gomdon trong khi đơn vẫn hiệu lực — tạo lại vận đơn/hẹn thu gom với khách.',
   6: 'Hàng đang chuyển hoàn về kho — xử lý đơn với khách (KHÔNG tự hoàn tiền).',
@@ -114,6 +123,7 @@ const PROBLEM_ADVICE: Record<number, string> = {
 @Injectable()
 export class GomdonWebhookService {
   private readonly logger = new Logger(GomdonWebhookService.name);
+  private readonly unreadableAlertedAt = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -121,11 +131,19 @@ export class GomdonWebhookService {
     private readonly alerts: GomdonAlertService,
     @InjectQueue(QUEUE_GOMDON_EVENTS) private readonly eventsQueue: Queue,
     @InjectQueue(QUEUE_GOMDON_PUSH) private readonly pushQueue: Queue,
+    @Optional() private readonly pancakeOrder?: PancakeOrderService,
   ) {}
 
-  /** Lưu event (dedupe) rồi enqueue xử lý. Ném lỗi chỉ khi KHÔNG lưu được (để Gomdon gửi lại). */
-  async receive(body: GomdonWebhookPayload): Promise<{ result: true; duplicate?: true }> {
+  /**
+   * Lưu event (dedupe) rồi enqueue xử lý. Ném lỗi khi KHÔNG lưu được, hoặc khi payload không đọc được (thiếu
+   * status — vd Gomdon đổi Content-Type): trả 200 lúc đó là Gomdon thôi gửi lại và event mất không ai biết.
+   */
+  async receive(body: GomdonWebhookPayload, meta: { contentType?: string } = {}): Promise<{ result: true; duplicate?: true }> {
     const parsed = parseGomdonPayload(body ?? {});
+    if (parsed.status == null) {
+      await this.reportUnreadable(body ?? {}, parsed.orderCode, meta.contentType);
+      throw new BadRequestException('Không đọc được payload webhook Gomdon (thiếu status).');
+    }
     const dedupeKey = gomdonDedupeKey(parsed, body ?? {});
     // Chỉ log định danh + status — không log nguyên payload (địa chỉ/SĐT khách, phí...).
     this.logger.log(
@@ -168,6 +186,8 @@ export class GomdonWebhookService {
   async processEvent(eventId: string): Promise<void> {
     const event = await this.prisma.gomdonWebhookEvent.findUnique({ where: { id: eventId } });
     if (!event || event.status === GOMDON_EVENT_STATUS.PROCESSED || event.status === GOMDON_EVENT_STATUS.IGNORED) return;
+    // Người vận hành đã bấm "Đã xử lý": job còn trong hàng đợi (BullMQ retry, Gomdon gửi lại) không được chạy đè.
+    if (event.dismissedAt) return;
 
     try {
       const outcome = await this.apply(event.rawPayload as unknown as GomdonWebhookPayload);
@@ -194,6 +214,20 @@ export class GomdonWebhookService {
     }
   }
 
+  /** Chỉ báo tên trường + Content-Type (không báo giá trị: địa chỉ/SĐT khách). */
+  private async reportUnreadable(body: object, orderCode: string | null, contentType: string | undefined): Promise<void> {
+    const ct = contentType?.split(';')[0]?.trim() || 'không có';
+    const keys = Object.keys(body).slice(0, 20).join(', ') || 'không có';
+    const message = `Webhook Gomdon không đọc được (Content-Type: ${contentType ?? 'không có'}; trường nhận được: ${keys}) — đã trả 400 để Gomdon gửi lại. Báo Gomdon kiểm tra định dạng webhook (cần JSON hoặc form có trường status).`;
+    this.logger.error(message);
+    await gomdonHealth.recordError(message);
+    const now = Date.now();
+    const last = this.unreadableAlertedAt.get(ct);
+    if (last != null && now - last < UNREADABLE_ALERT_GAP_MS) return;
+    this.unreadableAlertedAt.set(ct, now);
+    await this.alerts.alert(orderCode ?? '(không rõ đơn)', message);
+  }
+
   private ignored(reason: string, orderId?: string): Outcome {
     this.logger.warn(`Bỏ qua webhook Gomdon: ${reason}`);
     return { status: GOMDON_EVENT_STATUS.IGNORED, reason, orderId };
@@ -213,9 +247,11 @@ export class GomdonWebhookService {
     // mã đơn (order_customer_id) CHỈ với đơn thu gom chưa gắn vận đơn nào, rồi điền mã.
     // Không nhận lại vận đơn ĐÃ HUỶ (status 2): webhook trễ của vận đơn cũ (admin huỷ → tạo lại) mà
     // được gắn vào đơn đang chờ tạo lại thì pushOrder thấy "đã có mã" và không bao giờ tạo vận đơn mới.
+    // Lần tạo lại thứ n gửi order_customer_id `${code}-R${n}` (gomdonCustomerId) — chỉ nhận đúng lần tạo hiện tại.
     if (p.orderCode && (p.gomdonOrderId || p.partnerCode) && p.status !== 2) {
+      const { code, attempt } = parseGomdonCustomerId(p.orderCode);
       const order = await this.prisma.order.findFirst({
-        where: { code: p.orderCode, hasRecyclingPickup: true, gomdonOrderId: null, gomdonPartnerCode: null },
+        where: { code, gomdonAttempt: attempt, hasRecyclingPickup: true, gomdonOrderId: null, gomdonPartnerCode: null },
       });
       if (order) return { order, backfill: true };
     }
@@ -234,8 +270,8 @@ export class GomdonWebhookService {
         `không khớp đơn thu gom nào (order_id=${p.gomdonOrderId}, order_code=${p.partnerCode}, order_customer_id=${p.orderCode})`,
       );
     }
-    // Đối chiếu chéo: có order_customer_id thì phải trùng mã đơn đã khớp.
-    if (p.orderCode && p.orderCode !== order.code) {
+    // Đối chiếu chéo: có order_customer_id thì phải trùng mã đơn đã khớp (kể cả dạng `${code}-R${n}`).
+    if (p.orderCode && parseGomdonCustomerId(p.orderCode).code !== order.code) {
       return this.ignored(`order_customer_id ${p.orderCode} lệch mã đơn ${order.code}`, order.id);
     }
     if (order.gomdonOrderId && p.gomdonOrderId && order.gomdonOrderId !== p.gomdonOrderId) {
@@ -332,8 +368,11 @@ export class GomdonWebhookService {
           `Gomdon CÓ vận đơn ${partnerCode} cho đơn đã được đánh dấu "Đã xử lý tay" — kiểm tra ngay tránh giao trùng 2 vận đơn.`,
         );
       } else if (cur === GOMDON_STATE.NEEDS_MANUAL_CHECK) {
-        await this.alerts.alert(order.code, `Đã tự khớp vận đơn Gomdon ${partnerCode} — KHÔNG tạo vận đơn tay.`);
+        this.logger.warn(`Đã tự khớp vận đơn Gomdon ${partnerCode} cho đơn ${order.code} (đang chờ kiểm tra tay).`);
       }
+      // Hệ thống đã biết vận đơn: việc "tạo/kiểm tra vận đơn tay" cũ hết hiệu lực (báo trùng ở trên vẫn mở).
+      await this.alerts.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NEEDED]);
+      if (!isDead(order.status) && order.pancakeOrderId && partnerCode) await this.syncPancakeNote(order, partnerCode);
     }
     if (backfill && isDead(order.status)) {
       await enqueueGomdonCancel(this.pushQueue, order.id);
@@ -382,10 +421,21 @@ export class GomdonWebhookService {
           where: { id: order.id, OR: [{ gomdonCancelStatus: null }, { gomdonCancelStatus: GOMDON_CANCEL.FAILED }] },
           data: { gomdonCancelStatus: GOMDON_CANCEL.CANCELLED },
         });
+        if (isDead(order.status)) {
+          await this.alerts.resolveKinds(order.id, [
+            GOMDON_ALERT_KIND.CANCEL_NEEDED,
+            GOMDON_ALERT_KIND.WAYBILL_NEEDED,
+            GOMDON_ALERT_KIND.WAYBILL_NOTE,
+          ]);
+        }
         return;
       }
       // Ghi nhận + báo CSKH. KHÔNG tự huỷ/hoàn tiền/restock — người xử lý quyết định.
-      await this.alerts.alert(order.code, `Gomdon báo "${text}". ${PROBLEM_ADVICE[status] ?? ''}`.trim());
+      await this.alerts.alert(
+        order.code,
+        `Gomdon báo "${text}". ${PROBLEM_ADVICE[status] ?? ''}`.trim(),
+        ...(GOODS_RETURNING_STATUSES.has(status) ? ([GOMDON_ALERT_TEMPLATE, GOMDON_ALERT_KIND.GOODS_RETURNED] as const) : []),
+      );
     }
   }
 
@@ -397,6 +447,21 @@ export class GomdonWebhookService {
     if (order.status !== 'CANCELLED') return;
     if (order.gomdonCancelStatus != null && order.gomdonCancelStatus !== GOMDON_CANCEL.FAILED) return;
     await enqueueGomdonCancel(this.pushQueue, order.id);
+  }
+
+  /** Vận đơn tự khớp cho đơn đã có trên Pancake: ghi mã vào ghi chú Pancake; Pancake từ chối thì báo ghi tay. */
+  private async syncPancakeNote(order: Order, partnerCode: string): Promise<void> {
+    if (!this.pancakeOrder || !order.pancakeOrderId) return;
+    try {
+      await this.pancakeOrder.syncWaybillNote(order.id);
+    } catch (err) {
+      await this.alerts.alert(
+        order.code,
+        waybillNoteAlert(partnerCode, order.pancakeOrderId, err),
+        GOMDON_ALERT_TEMPLATE,
+        GOMDON_ALERT_KIND.WAYBILL_NOTE,
+      );
+    }
   }
 
   /** Chỉ nuốt lỗi chuyển trạng thái không hợp lệ (webhook trễ); lỗi khác ném tiếp để retry. */

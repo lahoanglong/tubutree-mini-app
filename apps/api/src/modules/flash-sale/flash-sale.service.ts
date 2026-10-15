@@ -4,11 +4,20 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
 export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
+export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
+export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
+
+/** Chốt chặn gõ nhầm (R4-ADMIN-11): giá flash 1đ, đợt kéo dài 10 năm vì gõ sai năm. */
+export const FLASH_MAX_DISCOUNT_KEY = 'flashsale.max_discount_pct';
+export const FLASH_MAX_DISCOUNT_DEFAULT = 0.9;
+export const FLASH_MAX_DURATION_KEY = 'flashsale.max_duration_days';
+export const FLASH_MAX_DURATION_DEFAULT_DAYS = 31;
 
 export interface EffectivePrice {
   flashPrice: number;
@@ -16,7 +25,39 @@ export interface EffectivePrice {
   endAt: Date;
   soldCount: number;
   quota: number;
+  /** Chỉ có khi tra theo khách: số suất giờ vàng khách còn mua được = min(quotaLeft, perUserLeft). */
+  allowance?: number;
+  quotaLeft?: number;
+  perUserLeft?: number;
 }
+
+/**
+ * Giá niêm yết có thể bị hạ sau khi tạo đợt (đồng bộ Pancake, sửa tay) làm giá flash không còn rẻ hơn. Giỏ hàng vẫn tính
+ * min(flash, giá đang bán) nên khách không trả cao hơn, nhưng quảng bá món đó là "giờ vàng" kèm % âm là sai (BUYERMINI-12).
+ */
+function isStillDiscounted(it: { flashPrice: number; variation: { salePrice: number | null; retailPrice: number } }): boolean {
+  return it.flashPrice < (it.variation.salePrice ?? it.variation.retailPrice);
+}
+
+/**
+ * Khung giờ đợt flash: đọc được, bắt đầu trước kết thúc, không dài quá `maxDays` ngày và (khi đặt endAt mới) chưa kết
+ * thúc.
+ */
+function assertSaleWindow(startAt: Date, endAt: Date, maxDays: number, checkEndInFuture = true): void {
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+    throw new BadRequestException('Thời gian bắt đầu/kết thúc không hợp lệ.');
+  }
+  if (!(startAt < endAt)) throw new BadRequestException('Thời gian bắt đầu phải trước thời gian kết thúc.');
+  if (endAt.getTime() - startAt.getTime() > maxDays * 86_400_000) {
+    throw new BadRequestException(
+      `Đợt flash sale dài tối đa ${maxDays} ngày — kiểm tra lại năm/tháng của thời gian kết thúc. ` +
+        `Cần đợt dài hơn thì nâng "${FLASH_MAX_DURATION_KEY}" ở trang Cấu hình.`,
+    );
+  }
+  if (checkEndInFuture && endAt.getTime() <= Date.now()) throw new BadRequestException('Thời gian kết thúc phải ở tương lai.');
+}
+
+const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 
 @Injectable()
 export class FlashSaleService {
@@ -26,6 +67,7 @@ export class FlashSaleService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
+    private readonly lifecycle: LifecycleService,
   ) {}
 
   /**
@@ -33,7 +75,11 @@ export class FlashSaleService {
    * Chỉ chứa variation có flash; caller tự fallback salePrice ?? retailPrice cho phần còn lại.
    * Lưu ý: Prisma không so 2 cột trong where (soldCount<quota) → lọc bằng JS sau khi lấy item active.
    */
-  async resolveEffective(variationIds: string[], now: Date = new Date()): Promise<Map<string, EffectivePrice>> {
+  async resolveEffective(
+    variationIds: string[],
+    now: Date = new Date(),
+    userId?: string,
+  ): Promise<Map<string, EffectivePrice>> {
     const map = new Map<string, EffectivePrice>();
     if (variationIds.length === 0) return map;
     const items = await this.prisma.flashSaleItem.findMany({
@@ -44,15 +90,31 @@ export class FlashSaleService {
       },
       include: { flashSale: { select: { endAt: true } } },
     });
-    for (const it of items) {
-      if (it.soldCount >= it.quota) continue;
-      map.set(it.variationId, {
+    const open = items.filter((it) => it.soldCount < it.quota);
+    // Cùng hai giới hạn consumeQuota kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
+    // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
+    const bought = new Map<string, number>();
+    if (userId && open.length > 0) {
+      const purchases = await this.prisma.flashSalePurchase.findMany({
+        where: { userId, flashSaleItemId: { in: open.map((it) => it.id) } },
+        select: { flashSaleItemId: true, quantity: true },
+      });
+      for (const p of purchases) bought.set(p.flashSaleItemId, p.quantity);
+    }
+    for (const it of open) {
+      const entry: EffectivePrice = {
         flashPrice: it.flashPrice,
         itemId: it.id,
         endAt: it.flashSale.endAt,
         soldCount: it.soldCount,
         quota: it.quota,
-      });
+      };
+      if (userId) {
+        entry.quotaLeft = it.quota - it.soldCount;
+        entry.perUserLeft = Math.max(0, it.perUserLimit - (bought.get(it.id) ?? 0));
+        entry.allowance = Math.min(entry.quotaLeft, entry.perUserLeft);
+      }
+      map.set(it.variationId, entry);
     }
     return map;
   }
@@ -70,7 +132,7 @@ export class FlashSaleService {
       },
     });
     return items
-      .filter((it) => it.soldCount < it.quota)
+      .filter((it) => it.soldCount < it.quota && isStillDiscounted(it))
       .map((it) => ({
         itemId: it.id,
         variationId: it.variationId,
@@ -79,6 +141,7 @@ export class FlashSaleService {
         thumbnail: it.variation.product.thumbnail,
         flashPrice: it.flashPrice,
         retailPrice: it.variation.retailPrice,
+        salePrice: it.variation.salePrice,
         soldCount: it.soldCount,
         quota: it.quota,
         endAt: it.flashSale.endAt,
@@ -154,17 +217,25 @@ export class FlashSaleService {
   async createSale(adminId: string, dto: { title: string; startAt: string; endAt: string }) {
     const startAt = new Date(dto.startAt),
       endAt = new Date(dto.endAt);
-    if (!(startAt < endAt)) throw new BadRequestException('startAt phải trước endAt.');
+    assertSaleWindow(startAt, endAt, await this.maxSaleDays());
     return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
   }
 
-  /** Cập nhật đợt flash sale (admin). */
+  /**
+   * Cập nhật đợt flash sale (admin). Đợt đã bắt đầu không đổi được giờ bắt đầu: đẩy sang tương lai thì giá flash biến mất
+   * khỏi khách đang xem rồi đợt xoá được như đợt chưa bắt đầu (R3-UI-5). Đổi khung giờ cũng không được làm một biến thể
+   * nằm trong hai đợt trùng giờ — addItem chặn điều đó lúc thêm, ở đây chặn lúc dời giờ.
+   */
   async updateSale(id: string, dto: { title?: string; startAt?: string; endAt?: string; isActive?: boolean }) {
     if (dto.startAt !== undefined || dto.endAt !== undefined) {
-      const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id } });
+      const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
       const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
       const end = dto.endAt ? new Date(dto.endAt) : current.endAt;
-      if (!(start < end)) throw new BadRequestException('startAt phải trước endAt.');
+      assertSaleWindow(start, end, await this.maxSaleDays(), dto.endAt !== undefined);
+      if (current.startAt.getTime() <= Date.now() && start.getTime() !== current.startAt.getTime()) {
+        throw new BadRequestException(FLASH_START_LOCKED_MSG);
+      }
+      await this.assertNoItemClash(id, current.items?.map((it) => it.variationId) ?? [], start, end);
     }
     return this.prisma.flashSale.update({
       where: { id },
@@ -175,6 +246,38 @@ export class FlashSaleService {
         isActive: dto.isActive,
       },
     });
+  }
+
+  private maxSaleDays(): Promise<number> {
+    return this.config.get<number>(FLASH_MAX_DURATION_KEY, FLASH_MAX_DURATION_DEFAULT_DAYS);
+  }
+
+  /** Không biến thể nào của đợt `saleId` nằm trong đợt khác trùng khung giờ [start, end). */
+  private async assertNoItemClash(saleId: string, variationIds: string[], start: Date, end: Date): Promise<void> {
+    if (variationIds.length === 0) return;
+    const from = new Date(Math.max(start.getTime(), Date.now()));
+    const clash = await this.prisma.flashSaleItem.findFirst({
+      where: { variationId: { in: variationIds }, flashSale: { id: { not: saleId }, startAt: { lt: end }, endAt: { gt: from } } },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
+  }
+
+  /**
+   * Xoá đợt flash sale CHƯA bắt đầu (admin): gõ nhầm tên/giờ thì tạo lại được. Đợt đã bắt đầu có thể đã có người xem giá
+   * và đặt hàng nên chỉ cho tắt. Item, lượt mua và nhắc tôi xoá theo cascade.
+   */
+  async deleteSale(id: string) {
+    const sale = await this.prisma.flashSale.findUnique({ where: { id }, include: { items: { select: { soldCount: true } } } });
+    if (!sale) throw new BadRequestException('Không tìm thấy đợt flash sale.');
+    if (sale.startAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Đợt flash sale đã bắt đầu, chỉ có thể tắt chứ không xoá.');
+    }
+    if (sale.items.some((it) => it.soldCount > 0)) {
+      throw new BadRequestException('Đợt flash sale đã phát sinh đơn, chỉ có thể tắt chứ không xoá.');
+    }
+    await this.prisma.flashSale.delete({ where: { id } });
+    return { ok: true };
   }
 
   /** Danh sách toàn bộ đợt flash sale kèm item (admin). */
@@ -194,7 +297,7 @@ export class FlashSaleService {
    *  - đợt flash tồn tại; variation tồn tại; flashPrice < giá đang bán (salePrice ?? retailPrice)
    *    (kèm % giảm tối thiểu theo config).
    *  - quota không vượt tồn kho.
-   *  - variation chưa tham gia đợt flash active/tương lai khác.
+   *  - variation chưa nằm trong đợt flash khác trùng khung giờ.
    */
   async addItem(saleId: string, dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number }) {
     const sale = await this.prisma.flashSale.findUnique({ where: { id: saleId } });
@@ -207,11 +310,21 @@ export class FlashSaleService {
     if (minPct > 0 && dto.flashPrice > standing * (1 - minPct)) {
       throw new BadRequestException(`Mức giảm phải ≥ ${Math.round(minPct * 100)}%.`);
     }
+    const maxPct = await this.config.get<number>(FLASH_MAX_DISCOUNT_KEY, FLASH_MAX_DISCOUNT_DEFAULT);
+    const floor = Math.ceil(standing * (1 - maxPct) - 1e-6);
+    if (maxPct < 1 && dto.flashPrice < floor) {
+      throw new BadRequestException(
+        `Giá flash ${vnd(dto.flashPrice)} giảm quá ${Math.round(maxPct * 100)}% so với giá đang bán ${vnd(standing)} — ` +
+          `giá flash thấp nhất là ${vnd(floor)}. Kiểm tra lại số 0; muốn bán sâu hơn thì nâng "${FLASH_MAX_DISCOUNT_KEY}" ở trang Cấu hình.`,
+      );
+    }
     if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
+    // Chỉ chặn đợt TRÙNG khung giờ (hai giá flash cùng lúc cho một SKU); đợt kế tiếp không trùng giờ thì xếp được.
+    const from = new Date(Math.max(sale.startAt.getTime(), Date.now()));
     const clash = await this.prisma.flashSaleItem.findFirst({
-      where: { variationId: dto.variationId, flashSale: { endAt: { gt: new Date() } } },
+      where: { variationId: dto.variationId, flashSale: { startAt: { lt: sale.endAt }, endAt: { gt: from } } },
     });
-    if (clash) throw new BadRequestException('Sản phẩm đã có trong đợt flash khác.');
+    if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
     return this.prisma.flashSaleItem.create({
       data: { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit },
@@ -242,7 +355,7 @@ export class FlashSaleService {
       },
       orderBy: { flashSale: { startAt: 'asc' } },
     });
-    return items.map((it) => ({
+    return items.filter(isStillDiscounted).map((it) => ({
       itemId: it.id,
       variationId: it.variationId,
       productSlug: it.variation.product.slug,
@@ -250,6 +363,7 @@ export class FlashSaleService {
       thumbnail: it.variation.product.thumbnail,
       flashPrice: it.flashPrice,
       retailPrice: it.variation.retailPrice,
+      salePrice: it.variation.salePrice,
       startAt: it.flashSale.startAt,
       reminded: it.reminders.length > 0,
     }));
@@ -277,11 +391,12 @@ export class FlashSaleService {
   }
 
   /**
-   * Cron mỗi giờ: quét reminder chưa notify, item nào sale ĐÃ bắt đầu (startAt<=now<endAt, isActive)
+   * Cron mỗi phút (nhắc "đã bắt đầu" phải tới ngay đầu giờ vàng, không đợi giờ tròn): quét reminder chưa notify,
+   * item nào sale ĐÃ bắt đầu (startAt<=now<endAt, isActive)
    * thì claim atomic (updateMany guard notifiedAt: null) rồi notify FLASH_STARTING. notify() nuốt lỗi
    * để 1 lần gửi hỏng không chặn cả lô.
    */
-  @Cron('0 * * * *', { timeZone: CRON_TZ })
+  @Cron('* * * * *', { timeZone: CRON_TZ })
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
     try {
       // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét
@@ -324,7 +439,7 @@ export class FlashSaleService {
           sent++;
         } catch (err) {
           // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
-          // và không có dấu vết nào. Trả cờ về để lượt cron sau (mỗi giờ) thử lại.
+          // và không có dấu vết nào. Trả cờ về để lượt cron sau thử lại.
           this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
           await this.prisma.flashSaleReminder
             .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
@@ -344,6 +459,53 @@ export class FlashSaleService {
         data: { notifiedAt: now },
       });
       if (stale.count > 0) this.logger.log(`Đóng sổ ${stale.count} nhắc giờ vàng đã hết hạn.`);
+    } catch (err) {
+      this.logger.error(err);
+    }
+  }
+
+  /**
+   * Cron :10 mỗi giờ: sale vừa bắt đầu (trong 2 giờ qua, còn chạy) → báo user đã ❤️ wishlist sản phẩm, như khi giá
+   * Pancake giảm. Mỗi sản phẩm một lần, theo biến thể giảm sâu nhất. Cửa sổ 2 giờ để một lượt cron lỡ không làm mất báo;
+   * lượt thứ hai trong cửa sổ không gửi lại vì notifyWishlistPriceDrop có cooldown theo user × sản phẩm.
+   */
+  @Cron('10 * * * *', { timeZone: CRON_TZ })
+  async notifyWishlistOfStartedSales(now: Date = new Date()): Promise<void> {
+    try {
+      const sales = await this.prisma.flashSale.findMany({
+        where: { isActive: true, startAt: { gt: new Date(now.getTime() - 2 * 3600e3), lte: now }, endAt: { gt: now } },
+        include: {
+          items: {
+            select: {
+              id: true,
+              flashPrice: true,
+              quota: true,
+              soldCount: true,
+              variation: { select: { retailPrice: true, salePrice: true, product: { select: { id: true, name: true } } } },
+            },
+          },
+        },
+        orderBy: { startAt: 'asc' },
+        take: 20,
+      });
+      for (const sale of sales) {
+        const best = new Map<string, { name: string; oldPrice: number; newPrice: number }>();
+        for (const it of sale.items) {
+          const base = it.variation.salePrice ?? it.variation.retailPrice;
+          if (it.soldCount >= it.quota || !(it.flashPrice < base)) continue;
+          const cur = best.get(it.variation.product.id);
+          if (!cur || (base - it.flashPrice) / base > (cur.oldPrice - cur.newPrice) / cur.oldPrice) {
+            best.set(it.variation.product.id, { name: it.variation.product.name, oldPrice: base, newPrice: it.flashPrice });
+          }
+        }
+        for (const [productId, b] of best) {
+          await this.lifecycle
+            .notifyWishlistPriceDrop(productId, b.name, { oldPrice: b.oldPrice, newPrice: b.newPrice })
+            .catch((err) =>
+              this.logger.error(`Báo wishlist flash sale lỗi (product=${productId}): ${err instanceof Error ? err.message : err}`),
+            );
+        }
+      }
     } catch (err) {
       this.logger.error(err);
     }

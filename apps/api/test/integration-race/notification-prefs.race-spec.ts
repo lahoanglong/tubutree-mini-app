@@ -15,7 +15,7 @@ describe('Tuỳ chọn thông báo khuyến mãi (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let svc: NotificationsService;
-  const sendTemplate = jest.fn().mockResolvedValue(true);
+  const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({

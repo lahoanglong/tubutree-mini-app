@@ -29,6 +29,19 @@ describe('SystemConfigController.publicConfig', () => {
     expect(out.affiliateMinWithdrawBank).toBe(80000);
   });
 
+  // SELLER-11: CTV cần thấy số thực nhận sau thuế TNCN trước khi bấm rút; số phải là số service dùng để khấu trừ.
+  it('trả mức khấu trừ thuế TNCN khi rút hoa hồng (cùng khoá và mặc định với affiliate.service)', async () => {
+    expect((await new SystemConfigController(makeConfig()).publicConfig()).affiliatePitWithhold).toEqual({
+      pct: 0.1,
+      threshold: 2_000_000,
+    });
+    const config = makeConfig({ 'affiliate.pit_withhold_pct': 0, 'affiliate.pit_withhold_threshold': 5_000_000 });
+    expect((await new SystemConfigController(config).publicConfig()).affiliatePitWithhold).toEqual({
+      pct: 0,
+      threshold: 5_000_000,
+    });
+  });
+
   it('chưa cấu hình → trả đúng mặc định hiện hành (12%, 50k)', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.12);
@@ -43,6 +56,22 @@ describe('SystemConfigController.publicConfig', () => {
     expect(out.affiliateWalletMultiplier).toBe(1);
     const get = (config as unknown as { get: jest.Mock }).get;
     expect(get.mock.calls.map((c) => c[0])).not.toContain('affiliate.tubu_wallet_multiplier');
+  });
+
+  // ENGAGE-20: miniapp hứa "Tiết kiệm đến 30%" trong khi mức mua chung thật là groupbuy.discount_pct (mặc định 15%);
+  // BUYERMINI-16: màn đơn hàng ghi cứng "7 ngày" trong khi hạn đổi/trả đọc returns.window_days.
+  it('trả mức giảm/quy mô nhóm mua chung và hạn đổi/trả theo config', async () => {
+    const out = await new SystemConfigController(
+      makeConfig({ 'groupbuy.discount_pct': 20, 'groupbuy.target_size': 4, 'returns.window_days': 10 }),
+    ).publicConfig();
+    expect(out.groupBuy).toEqual({ discountPct: 20, targetSize: 4 });
+    expect(out.returnWindowDays).toBe(10);
+  });
+
+  it('chưa cấu hình → mặc định mua chung 15% / 3 người, đổi/trả 7 ngày (khớp giá trị service dùng)', async () => {
+    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    expect(out.groupBuy).toEqual({ discountPct: 15, targetSize: 3 });
+    expect(out.returnWindowDays).toBe(7);
   });
 
   it('dùng default 200000 khi config chưa set', async () => {

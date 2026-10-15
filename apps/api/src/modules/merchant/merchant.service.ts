@@ -1,11 +1,29 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName } from '../../common/mask-name';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
-import { normalizeSubdomain, normalizeCustomDomain, assertIdentifierAvailable } from '../storefront/identifier-validation';
+import {
+  normalizeSubdomain,
+  normalizeCustomDomain,
+  assertIdentifierAvailable,
+  recordReleasedIdentifiers,
+} from '../storefront/identifier-validation';
+import { NotificationsService } from '../notifications/notifications.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { notifyAdmins } from '../../common/notify-admins';
+import {
+  findLinkablePancakeVariation,
+  toMerchantPancakeCheck,
+  unlinkTubuFulfilledVariation,
+  type LinkablePancakeVariation,
+  type MerchantPancakeCheck,
+} from './merchant-pancake-link';
+import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
+import { isPartnerStore } from './partner-store';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -92,9 +110,12 @@ const MERCHANT_ORDER_SELECT = {
   trackingLink: true,
   createdAt: true,
   updatedAt: true,
+  fulfiller: true,
+  fulfillerStorefrontId: true,
   items: {
     select: {
       id: true,
+      variationId: true,
       productName: true,
       productSlug: true,
       variationName: true,
@@ -125,6 +146,8 @@ export interface UpdateStoreDto {
   avatarUrl?: string;
   coverUrl?: string;
   isPublished?: boolean;
+  shippingFee?: number | null;
+  freeShipFrom?: number | null;
 }
 
 export interface CreateMerchantProductDto {
@@ -141,14 +164,118 @@ export interface CreateMerchantProductDto {
   ingredients?: unknown;
   certifications?: string[];
   stock?: number;
+  /** Mã biến thể Pancake xin "Tubu giao hộ" (D4); chỉ dùng khi `tubuFulfils`. */
+  pancakeCode?: string;
+  tubuFulfils?: boolean;
 }
+
+export interface UpdateMerchantProductDto {
+  name?: string;
+  description?: string;
+  shortDesc?: string;
+  basePrice?: number;
+  salePrice?: number | null;
+  images?: string[];
+  thumbnail?: string;
+  stock?: number;
+  isActive?: boolean;
+  /** Sản phẩm chưa liên kết: chuỗi = mã Pancake mới (gửi duyệt lại), null hoặc rỗng = bỏ mã, chuyển sang tự giao. */
+  pancakeCode?: string | null;
+}
+
+/** Năm trường nội dung phải qua kiểm duyệt: đổi chúng ở sản phẩm đang bán thì thành bản sửa chờ duyệt (R3-MERCHANT-4). */
+interface ProductContent {
+  name: string;
+  description: string;
+  shortDesc: string | null;
+  images: string[];
+  thumbnail: string | null;
+}
+
+function contentOf(c: { name: string; description: string; shortDesc: string | null; images: string[]; thumbnail: string | null }): ProductContent {
+  return { name: c.name, description: c.description, shortDesc: c.shortDesc, images: c.images, thumbnail: c.thumbnail };
+}
+
+function sameContent(a: ProductContent, b: ProductContent): boolean {
+  return (
+    a.name === b.name &&
+    a.description === b.description &&
+    (a.shortDesc ?? '') === (b.shortDesc ?? '') &&
+    JSON.stringify(a.images) === JSON.stringify(b.images) &&
+    (a.thumbnail ?? '') === (b.thumbnail ?? '')
+  );
+}
+
+/** Sản phẩm trả cho đối tác: nội dung đang bán ở các cột thường, bản sửa đang chờ duyệt ở `pendingEdit` (null = không có). */
+function withPendingEdit<P extends { editDraft?: (ProductContent & { updatedAt: Date }) | null }>(product: P) {
+  const { editDraft, ...rest } = product;
+  return {
+    ...rest,
+    pendingEdit: editDraft ? { ...contentOf(editDraft), submittedAt: editDraft.updatedAt } : null,
+  };
+}
+
+function linkModeLabel(link: LinkablePancakeVariation | null): string {
+  if (!link) return 'Đối tác tự giao';
+  return link.requiresAdminConfirm ? 'Tubu giao hộ — xin chuyển sản phẩm đang bán, cần admin xác nhận' : 'Tubu giao hộ';
+}
+
+/**
+ * Phạm vi đơn gian hàng được xem ở "Đơn qua gian hàng": biến thể do chính gian hàng tạo (hàng tự giao) và biến thể Pancake
+ * trong khoảng thời gian đang liên kết. Một dòng hàng thuộc gian hàng khi khớp một trong hai.
+ */
+interface MerchantOrderScope {
+  storeId: string;
+  isPartner: boolean;
+  ownVariationIds: string[];
+  links: { variationId: string; linkedAt: Date; unlinkedAt: Date | null }[];
+}
+
+function ownsLine(scope: MerchantOrderScope, line: { variationId: string }, orderCreatedAt: Date): boolean {
+  if (scope.ownVariationIds.includes(line.variationId)) return true;
+  return scope.links.some(
+    (l) =>
+      l.variationId === line.variationId &&
+      orderCreatedAt >= l.linkedAt &&
+      (l.unlinkedAt === null || orderCreatedAt < l.unlinkedAt),
+  );
+}
+
+export const CTV_CANNOT_CREATE_PRODUCT =
+  'Gian hàng CTV bán lại sản phẩm Tubu Tree, không đăng sản phẩm riêng. Muốn bán hàng của bạn, hãy đăng ký làm đại lý/đối tác.';
 
 @Injectable()
 export class MerchantService {
+  private readonly logger = new Logger(MerchantService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderStatus: OrderStatusService,
+    @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /**
+   * Chỉ gian hàng đối tác (đại lý đã duyệt) đăng sản phẩm riêng: hàng tự giao chỉ có người xử lý đơn ở gian hàng MERCHANT. CTV
+   * đăng ký một chạm, không duyệt, nên chỉ bán lại hàng Tubu (SELLER-1); gian hàng của admin cũng là loại CTV.
+   */
+  private async assertCanSellOwnProducts(userId: string) {
+    const store = await this.getOrCreateStore(userId);
+    if (!isPartnerStore(store)) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    return store;
+  }
+
+  /** Kiểm mã biến thể Pancake cho "Tubu giao hộ" (form đăng sản phẩm, nút "Kiểm tra"). */
+  async checkPancakeVariation(userId: string, code: string): Promise<MerchantPancakeCheck> {
+    await this.assertCanSellOwnProducts(userId);
+    const found = await findLinkablePancakeVariation(this.prisma, code);
+    if (!found) {
+      throw new NotFoundException(
+        'Không tìm thấy mã biến thể này trong danh mục Pancake của Tubu Tree, hoặc mã đã được gian hàng khác liên kết. Kiểm tra lại mã với kho Tubu.',
+      );
+    }
+    return toMerchantPancakeCheck(found);
+  }
 
   /**
    * Vai trò thật của caller — dùng để gác các quyết định "ai được tin" (P0 A5-03/A5-04/A5-05,
@@ -170,7 +297,13 @@ export class MerchantService {
       where: { ownerUserId: userId },
       include: STORE_INCLUDE,
     });
-    if (store) return store;
+    if (store) {
+      if (user.role === 'DEALER' && store.type === 'CTV' && !store.isPartner) {
+        await this.prisma.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
+        return { ...store, isPartner: true };
+      }
+      return store;
+    }
 
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
@@ -194,6 +327,7 @@ export class MerchantService {
         return await this.prisma.storefront.create({
           data: {
             type: user.role === 'DEALER' ? 'MERCHANT' : 'CTV',
+            isPartner: user.role === 'DEALER',
             slug: baseSlug,
             subdomain,
             ownerUserId: userId,
@@ -235,7 +369,16 @@ export class MerchantService {
 
   async updateStore(userId: string, dto: UpdateStoreDto) {
     const store = await this.getOrCreateStore(userId);
+    const cooldownDays =
+      (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
+      DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
+    const partner = isPartnerStore(store);
+    if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && !partner) {
+      throw new BadRequestException('Phí giao hàng chỉ áp dụng cho gian hàng đối tác tự giao hàng.');
+    }
 
+    // Kho gửi hàng/SĐT liên hệ chỉ có nghĩa với gian hàng tự giao; gian hàng CTV không lưu (SELLER-8).
+    const selfShips = partner;
     const updateData: Prisma.StorefrontUpdateInput = {
       title: dto.title,
       headerNote: dto.headerNote,
@@ -244,14 +387,24 @@ export class MerchantService {
       bankBin: dto.bankBin,
       bankAccountNo: dto.bankAccountNo,
       bankAccountName: dto.bankAccountName,
-      warehouseAddress: dto.warehouseAddress,
-      warehouseCity: dto.warehouseCity,
-      warehouseDistrict: dto.warehouseDistrict,
-      warehouseWard: dto.warehouseWard,
-      warehousePhone: dto.warehousePhone,
+      ...(selfShips
+        ? {
+            warehouseAddress: dto.warehouseAddress,
+            warehouseCity: dto.warehouseCity,
+            warehouseDistrict: dto.warehouseDistrict,
+            warehouseWard: dto.warehouseWard,
+            warehousePhone: dto.warehousePhone,
+          }
+        : {}),
       avatarUrl: dto.avatarUrl,
       coverUrl: dto.coverUrl,
+      ...(dto.shippingFee !== undefined ? { shippingFee: dto.shippingFee } : {}),
+      ...(dto.freeShipFrom !== undefined ? { freeShipFrom: dto.freeShipFrom } : {}),
     };
+    // Chuỗi rỗng = xoá (ví dụ gỡ tài khoản nhận đối soát), không lưu ''. Tên gian hàng là cột bắt buộc: không xoá được.
+    for (const [key, v] of Object.entries(updateData)) {
+      if (key !== 'title' && typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
+    }
 
     if (dto.isPublished !== undefined) {
       updateData.isPublished = dto.isPublished;
@@ -264,7 +417,7 @@ export class MerchantService {
       // với-subdomain, cho phép CTV chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
       // docs/2026-09-08-review-progress.md), từ đó lộ/giả mạo gian hàng qua các truy vấn OR
       // ở tầng đọc (vd bank-transfer.service.ts tra QR ngân hàng theo storefrontSlug).
-      await assertIdentifierAvailable(this.prisma, cleanSub, store.id);
+      await assertIdentifierAvailable(this.prisma, cleanSub, store.id, cooldownDays);
       updateData.subdomain = cleanSub;
     }
 
@@ -275,15 +428,31 @@ export class MerchantService {
         // Trước đây KHÔNG có validate/kiểm trùng nào cho customDomain — ghi thẳng chuỗi bất kỳ,
         // kể cả trùng subdomain/slug của gian hàng khác (P0-1).
         const cleanDomain = normalizeCustomDomain(dto.customDomain);
-        await assertIdentifierAvailable(this.prisma, cleanDomain, store.id);
+        await assertIdentifierAvailable(this.prisma, cleanDomain, store.id, cooldownDays);
         updateData.customDomain = cleanDomain;
       }
     }
 
-    return this.prisma.storefront.update({
-      where: { id: store.id },
-      data: updateData,
-    });
+    await recordReleasedIdentifiers(
+      this.prisma,
+      store.id,
+      [store.subdomain, store.customDomain],
+      [
+        updateData.subdomain === undefined ? store.subdomain : (updateData.subdomain as string | null),
+        updateData.customDomain === undefined ? store.customDomain : (updateData.customDomain as string | null),
+      ],
+    );
+
+    const newTitle = typeof updateData.title === 'string' ? updateData.title : null;
+    if (!newTitle || newTitle === store.title) {
+      return this.prisma.storefront.update({ where: { id: store.id }, data: updateData });
+    }
+    // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.storefront.update({ where: { id: store.id }, data: updateData }),
+      this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
+    ]);
+    return updated;
   }
 
   async publishStore(userId: string, isPublished: boolean) {
@@ -294,25 +463,55 @@ export class MerchantService {
     });
   }
 
+  /**
+   * "Tạm nghỉ" (R2-MERCHANT-13): hàng tự giao của gian hàng không đặt được tới khi đối tác tắt; hàng "Tubu giao hộ" vẫn bán vì
+   * kho Tubu giao. Khác "Xuất bản gian hàng" (chỉ ẩn trang gian hàng).
+   */
+  async setOrdersPaused(userId: string, paused: boolean) {
+    const store = await this.assertCanSellOwnProducts(userId);
+    return this.prisma.storefront.update({
+      where: { id: store.id },
+      data: { ordersPausedAt: paused ? (store.ordersPausedAt ?? new Date()) : null },
+    });
+  }
+
   async createProduct(userId: string, dto: CreateMerchantProductDto) {
-    const store = await this.getOrCreateStore(userId);
+    const store = await this.assertCanSellOwnProducts(userId);
+    if (dto.salePrice != null && dto.salePrice > dto.basePrice) {
+      throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
+    }
+    // "Tubu giao hộ": giá và tồn theo biến thể Pancake; admin duyệt mới chuyển biến thể đó sang sản phẩm này.
+    let link: LinkablePancakeVariation | null = null;
+    if (dto.tubuFulfils) {
+      if (!dto.pancakeCode?.trim()) throw new BadRequestException('Nhập mã biến thể Pancake để chọn "Tubu giao hộ".');
+      link = await findLinkablePancakeVariation(this.prisma, dto.pancakeCode);
+      if (!link) {
+        throw new BadRequestException(
+          'Mã biến thể Pancake không có trong danh mục của Tubu Tree hoặc đã được gian hàng khác liên kết. Bỏ chọn "Tubu giao hộ" để tự giao hàng.',
+        );
+      }
+    }
 
     const baseSlug = slugify(dto.name);
     const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
-    const syntheticPancakeId = `MCH_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const sku = `MCH-${Date.now().toString(36).toUpperCase()}`;
+    const retailPrice = link ? link.retailPrice : dto.basePrice;
+    const salePrice = link ? link.salePrice : (dto.salePrice ?? null);
 
-    // Tạo sản phẩm với trạng thái PENDING_REVIEW (chờ Admin kiểm duyệt)
+    // PENDING_REVIEW: chưa bán được cho tới khi admin duyệt. Sản phẩm đối tác không mang mã Pancake nào (D4): hàng tự giao đi
+    // hàng chờ của đối tác; hàng "Tubu giao hộ" nhận biến thể Pancake thật lúc duyệt.
     const product = await this.prisma.product.create({
       data: {
         name: dto.name,
         slug: uniqueSlug,
-        pancakeId: syntheticPancakeId,
+        pancakeId: null,
+        fulfilment: 'MERCHANT',
+        pancakeLinkCode: link?.pancakeId ?? null,
         brand: store.title,
         description: dto.description,
         shortDesc: dto.shortDesc,
-        basePrice: dto.basePrice,
-        salePrice: dto.salePrice ?? null,
+        basePrice: retailPrice,
+        salePrice,
         images: dto.images ?? [],
         thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
         categoryIds: dto.categoryIds ?? [],
@@ -325,13 +524,13 @@ export class MerchantService {
         isActive: true,
         variations: {
           create: {
-            pancakeId: `${syntheticPancakeId}_VAR`,
+            pancakeId: null,
             sku,
             name: 'Mặc định',
             attributes: {},
-            retailPrice: dto.basePrice,
-            salePrice: dto.salePrice ?? null,
-            stock: dto.stock ?? 100,
+            retailPrice,
+            salePrice,
+            stock: link ? 0 : (dto.stock ?? 0),
             isActive: true,
           },
         },
@@ -340,6 +539,15 @@ export class MerchantService {
         variations: true,
       },
     });
+
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      {
+        template: 'OPS_MERCHANT_PRODUCT_PENDING',
+        subject: `sản phẩm đối tác ${product.id} chờ duyệt`,
+        data: () => ({ store: store.title, product_name: product.name, mode: linkModeLabel(link) }),
+      },
+    ).catch((e) => this.logger.warn(`Báo admin sản phẩm đối tác ${product.id} lỗi: ${(e as Error).message}`));
 
     // Tự động gắn vào bộ sưu tập đầu tiên của gian hàng
     const defaultCollection = store.collections[0];
@@ -355,6 +563,173 @@ export class MerchantService {
     }
 
     return product;
+  }
+
+  /**
+   * Sửa sản phẩm tự đăng. Giá, tồn kho, ngừng/mở bán có hiệu lực ngay. Đổi tên, mô tả, ảnh của sản phẩm ĐANG BÁN lưu thành bản
+   * sửa chờ duyệt (`ProductEditDraft`): trang bán, giỏ khách và mã Pancake giữ nguyên nội dung đã duyệt cho tới khi admin duyệt
+   * bản mới (R3-MERCHANT-4). Sản phẩm chưa bán được (chờ duyệt, bị từ chối, vừa gỡ liên kết) sửa thẳng và về/ở lại chờ duyệt.
+   * Sản phẩm "Tubu giao hộ" lấy giá và tồn theo Pancake.
+   */
+  async updateProduct(userId: string, productId: string, dto: UpdateMerchantProductDto) {
+    const store = await this.assertCanSellOwnProducts(userId);
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, storefrontId: store.id },
+      include: { variations: { orderBy: { id: 'asc' } }, editDraft: true },
+    });
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm của gian hàng bạn.');
+    const tubuFulfilled = product.fulfilment === 'TUBU';
+    const { codeChange, codeChanged, codeLink } = await this.resolvePancakeCodeChange(product, dto.pancakeCode);
+    // Sản phẩm xin "Tubu giao hộ" chưa (hoặc không còn) liên kết: chờ admin duyệt để nhận biến thể Pancake. Bỏ mã (chuyển sang
+    // tự giao) trong cùng lần sửa thì không còn chờ liên kết nên giá và tồn kho sửa được ngay.
+    const effectiveCode = codeChange === undefined ? product.pancakeLinkCode : codeChange;
+    const awaitingLink = !tubuFulfilled && !!effectiveCode;
+    if ((tubuFulfilled || awaitingLink) && (dto.basePrice !== undefined || dto.salePrice !== undefined || dto.stock !== undefined)) {
+      throw new BadRequestException('Sản phẩm Tubu giao hộ lấy giá và tồn kho theo kho Tubu (Pancake), không sửa tại đây.');
+    }
+    // Xin mã Pancake mới thì giá theo biến thể Pancake của mã đó, như lúc đăng (R5-PARTNER-2): thẻ duyệt của admin và danh sách
+    // của đối tác không còn hiện giá của mã cũ cho tới khi duyệt.
+    const pancakePrice = codeChanged && codeLink ? { base: codeLink.retailPrice, sale: codeLink.salePrice } : null;
+    const basePrice = pancakePrice ? pancakePrice.base : (dto.basePrice ?? product.basePrice);
+    // Bỏ mã Pancake (tự giao) kèm giá mới: giá khuyến mãi mang từ Pancake sang không còn giá trị, giá đối tác nhập là giá bán duy nhất.
+    // Giữ nó thì khách bị tính giá khuyến mãi cũ trong khi danh sách của đối tác hiện giá mới, hoặc gặp 400 mà form không có ô sửa.
+    const dropsPancakeSale = codeChange === null && dto.basePrice !== undefined && dto.salePrice === undefined;
+    const salePrice = pancakePrice ? pancakePrice.sale : dto.salePrice === undefined ? (dropsPancakeSale ? null : product.salePrice) : dto.salePrice;
+    if (!pancakePrice && salePrice != null && salePrice > basePrice) {
+      throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
+    }
+    // Nội dung so sánh là bản sửa đang chờ (nếu có): sửa tiếp thì gộp vào bản chờ chứ không bắt đầu lại từ nội dung đang bán.
+    const draft = product.editDraft;
+    const baseline = contentOf(draft ?? product);
+    const merged: ProductContent = {
+      name: dto.name ?? baseline.name,
+      description: dto.description ?? baseline.description,
+      shortDesc: dto.shortDesc === undefined ? baseline.shortDesc : dto.shortDesc,
+      images: dto.images ?? baseline.images,
+      thumbnail: dto.thumbnail === undefined ? baseline.thumbnail : dto.thumbnail,
+    };
+    const contentChanged = !sameContent(merged, baseline);
+    // Mở bán lại sản phẩm đã gỡ liên kết, hoặc xin mã Pancake khác, thì admin duyệt lại để liên kết biến thể Pancake. Bỏ mã (tự
+    // giao) giữ nguyên trạng thái duyệt: nội dung đã được duyệt, giá và tồn do gian hàng tự đặt như mọi sản phẩm tự giao.
+    const requestsLink = awaitingLink && codeChanged && !!codeChange;
+    // Duyệt xong là sản phẩm Tubu giao hộ nhận biến thể Pancake (và sản phẩm gốc có thể bị tắt): để sản phẩm còn ẩn từ lúc gỡ liên
+    // kết thì SKU không còn bán ở đâu, nên xin mã mới đồng thời là mở bán lại (sản phẩm vẫn ẩn với khách cho tới khi được duyệt).
+    if (requestsLink && dto.isActive === false) {
+      throw new BadRequestException('Không thể vừa ngừng bán vừa xin mã Pancake mới: đổi mã sẽ gửi sản phẩm đi duyệt và mở bán lại.');
+    }
+    const relink = awaitingLink && product.approvalStatus === 'APPROVED' && (dto.isActive === true || requestsLink);
+    const liveEdit = product.approvalStatus === 'APPROVED' && !relink;
+    const revertsToLive = liveEdit && contentChanged && sameContent(merged, contentOf(product));
+    const startsDraft = liveEdit && contentChanged && !revertsToLive && !draft;
+    const reReview = !liveEdit && (contentChanged || relink || codeChanged) && product.approvalStatus !== 'PENDING_REVIEW';
+
+    await this.prisma.$transaction(async (tx) => {
+      if (codeChanged) {
+        // Đổi mã có điều kiện theo mã đã đọc và chưa liên kết: admin duyệt (liên kết) cùng lúc thì không ghi đè mã lên sản phẩm
+        // đã nhận biến thể Pancake khác.
+        const swapped = await tx.product.updateMany({
+          where: { id: product.id, fulfilment: { not: 'TUBU' }, pancakeLinkCode: product.pancakeLinkCode },
+          data: { pancakeLinkCode: codeChange },
+        });
+        if (swapped.count === 0) throw new ConflictException('Sản phẩm vừa được duyệt hoặc đổi mã ở nơi khác. Tải lại rồi thử lại.');
+      }
+      // Ngừng bán sản phẩm đã liên kết: trả biến thể Pancake về sản phẩm gốc (R2-MERCHANT-1).
+      if (tubuFulfilled && dto.isActive === false) {
+        await unlinkTubuFulfilledVariation(tx, product.id, {
+          actorId: userId,
+          reason: 'Đối tác ngừng bán',
+          deactivate: true,
+        });
+      }
+      if (liveEdit && contentChanged) {
+        if (revertsToLive) await tx.productEditDraft.deleteMany({ where: { productId: product.id } });
+        else await tx.productEditDraft.upsert({ where: { productId: product.id }, create: { productId: product.id, ...merged }, update: { ...merged } });
+      } else if (!liveEdit && draft) {
+        await tx.productEditDraft.deleteMany({ where: { productId: product.id } });
+      }
+      // Ghi có điều kiện theo trạng thái duyệt đã đọc: admin duyệt giữa lúc đối tác đọc và ghi thì nội dung mới không được ghi thẳng
+      // lên sản phẩm đã lên sàn mà chưa ai xem (R5-PARTNER-1) — đối tác tải lại rồi sửa, bản sửa khi đó vào bản chờ duyệt.
+      try {
+        await tx.product.update({
+          where: { id: product.id, approvalStatus: product.approvalStatus },
+          data: {
+            isActive: requestsLink ? true : dto.isActive,
+            ...(tubuFulfilled ? {} : { basePrice, salePrice }),
+            // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
+            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
+            ...(reReview ? { approvalStatus: 'PENDING_REVIEW' as const, rejectReason: null } : {}),
+          },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+          throw new ConflictException('Sản phẩm vừa được duyệt hoặc đổi trạng thái ở nơi khác. Tải lại rồi sửa lại.');
+        }
+        throw err;
+      }
+      const first = product.variations[0];
+      if (!tubuFulfilled && first) {
+        await tx.variation.update({
+          where: { id: first.id },
+          data: {
+            retailPrice: basePrice,
+            salePrice,
+            ...(dto.stock !== undefined ? { stock: dto.stock } : {}),
+            ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          },
+        });
+      }
+    });
+    if (reReview || startsDraft) {
+      await notifyAdmins(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        {
+          template: startsDraft ? 'OPS_MERCHANT_PRODUCT_EDIT_PENDING' : 'OPS_MERCHANT_PRODUCT_PENDING',
+          subject: `sản phẩm đối tác ${product.id} sửa nội dung`,
+          data: () => ({
+            store: store.title,
+            product_name: merged.name,
+            mode: tubuFulfilled || awaitingLink ? 'Tubu giao hộ' : 'Đối tác tự giao',
+          }),
+        },
+      ).catch((e) => this.logger.warn(`Báo admin sản phẩm đối tác ${product.id} lỗi: ${(e as Error).message}`));
+    }
+    return withPendingEdit(
+      await this.prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true } }),
+    );
+  }
+
+  /**
+   * Đổi hoặc bỏ mã Pancake của sản phẩm chưa liên kết (đã gỡ liên kết, chờ duyệt hoặc bị từ chối vì mã đã có chủ): trước đây mã chỉ
+   * đặt được lúc đăng nên sản phẩm kẹt ở "chờ liên kết" mãi. `codeChange`: undefined = không đụng tới mã, null = bỏ mã (tự giao),
+   * chuỗi = mã mới đã kiểm còn liên kết được. Sản phẩm đang liên kết phải ngừng bán (gỡ liên kết) trước. Sản phẩm tự giao chưa có
+   * mã không đổi sang giao hộ bằng cách thêm mã: duyệt liên kết sẽ xoá biến thể của sản phẩm, mà biến thể đó có thể đã có đơn.
+   */
+  private async resolvePancakeCodeChange(
+    product: { id: string; fulfilment: string; pancakeLinkCode: string | null },
+    requested: string | null | undefined,
+  ): Promise<{ codeChange: string | null | undefined; codeChanged: boolean; codeLink: LinkablePancakeVariation | null }> {
+    if (requested === undefined) return { codeChange: undefined, codeChanged: false, codeLink: null };
+    const wanted = requested?.trim() || null;
+    if (wanted === (product.pancakeLinkCode ?? null)) return { codeChange: undefined, codeChanged: false, codeLink: null };
+    if (product.fulfilment === 'TUBU') {
+      throw new BadRequestException('Sản phẩm đang được Tubu giao hộ. Ngừng bán sản phẩm để gỡ liên kết trước khi đổi hoặc bỏ mã Pancake.');
+    }
+    if (wanted === null) return { codeChange: null, codeChanged: true, codeLink: null };
+    if (!product.pancakeLinkCode) {
+      throw new BadRequestException('Sản phẩm tự giao không đổi sang Tubu giao hộ được. Đăng sản phẩm mới và chọn "Tubu giao hộ" kèm mã Pancake.');
+    }
+    const link = await findLinkablePancakeVariation(this.prisma, wanted, product.id);
+    if (!link) {
+      throw new BadRequestException(
+        'Mã biến thể Pancake không có trong danh mục của Tubu Tree hoặc đã được gian hàng khác liên kết. Bỏ mã để chuyển sang tự giao hàng.',
+      );
+    }
+    return { codeChange: link.pancakeId, codeChanged: link.pancakeId !== product.pancakeLinkCode, codeLink: link };
+  }
+
+  /** Ngừng bán (không xoá: đơn cũ, đánh giá, đối soát vẫn trỏ tới sản phẩm). */
+  async stopSellingProduct(userId: string, productId: string) {
+    return this.updateProduct(userId, productId, { isActive: false });
   }
 
   // Bug 3: trước đây không có take/skip — merchant đăng quá `limit` mặc định của DB không bao
@@ -377,7 +752,7 @@ export class MerchantService {
       this.prisma.product.findMany({
         where: ownWhere,
         orderBy: { createdAt: 'desc' },
-        include: { variations: true },
+        include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true },
         skip,
         take,
       }),
@@ -386,7 +761,7 @@ export class MerchantService {
         where: resellWhere,
         include: {
           product: {
-            include: { variations: true },
+            include: { variations: { orderBy: VARIATION_ORDER_BY } },
           },
         },
         skip,
@@ -395,6 +770,13 @@ export class MerchantService {
     ]);
 
     const resellProducts = resellItems.map((item) => item.product);
+    const held = await this.heldForUnshipped(store.id, ownProducts.flatMap((p) => p.variations.map((v) => v.id)));
+    const ownShaped = ownProducts.map((p) => ({
+      ...withPendingEdit(p),
+      // Ô "Tồn kho" là số còn bán được: đơn tự giao chưa gửi đã trừ khỏi đó (R2-MERCHANT-9).
+      heldQty: p.variations.reduce((sum, v) => sum + (held.get(v.id) ?? 0), 0),
+      linkState: p.fulfilment === 'TUBU' && p.pancakeLinkCode ? 'LINKED' : p.pancakeLinkCode ? 'AWAITING' : null,
+    }));
     // P0 A5-05 (docs/audit-2026-09): đăng ký CTV (AFFILIATE) chỉ 1 chạm, không duyệt — không được
     // đọc dealerPrices (giá sỉ theo bậc đại lý) hay affiliateRate (%) của BẤT KỲ sản phẩm nào.
     // DEALER (hồ sơ admin duyệt) và ADMIN vẫn cần các trường này (đại lý xem giá sỉ là tính năng
@@ -402,10 +784,28 @@ export class MerchantService {
     const shouldHidePricingInternals = role === 'AFFILIATE';
 
     return {
-      ownProducts: shouldHidePricingInternals ? this.stripPricingInternals(ownProducts) : ownProducts,
+      ownProducts: shouldHidePricingInternals ? this.stripPricingInternals(ownShaped) : ownShaped,
       resellProducts: shouldHidePricingInternals ? this.stripPricingInternals(resellProducts) : resellProducts,
       meta: { page, limit, ownTotal, resellTotal },
     };
+  }
+
+  /** Số đơn vị của đơn gian hàng tự giao đã đặt mà chưa gửi đi, theo biến thể. */
+  private async heldForUnshipped(storefrontId: string, variationIds: string[]): Promise<Map<string, number>> {
+    if (variationIds.length === 0) return new Map();
+    const rows = await this.prisma.orderItem.groupBy({
+      by: ['variationId'],
+      where: {
+        variationId: { in: variationIds },
+        order: {
+          fulfiller: 'MERCHANT',
+          fulfillerStorefrontId: storefrontId,
+          status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] },
+        },
+      },
+      _sum: { quantity: true },
+    });
+    return new Map(rows.map((r) => [r.variationId, r._sum.quantity ?? 0]));
   }
 
   /** Bỏ hẳn key dealerPrices/affiliateRate (không chỉ set null) khỏi variations — xem A5-05. */
@@ -464,50 +864,56 @@ export class MerchantService {
     return { ok: true };
   }
 
-  // Bug 4: logic xác định đơn nào thuộc quyền quản lý của merchant (theo storefrontSlug/
-  // subdomain HOẶC theo variationId sản phẩm của gian hàng) trước đây bị copy-paste y hệt giữa
-  // listMerchantOrders và updateMerchantOrderStatus — đây là biến kiểm soát truy cập, sửa 1 chỗ
-  // quên chỗ kia sẽ rò rỉ/quyền truy cập lệch nhau. Gom về 1 hàm dùng chung cho cả 2 nơi.
-  //
-  // orConditions rỗng (gian hàng chưa có slug lẫn sản phẩm nào) → trả `OR: []`, Prisma coi mảng
-  // OR rỗng là điều kiện LUÔN SAI (ngược với AND rỗng luôn ĐÚNG) nên count/findMany/findFirst
-  // ghép thêm where này đều tự nhiên ra rỗng — nơi gọi không cần biết chi tiết cách dựng OR.
-  private async resolveMerchantOrderFilter(userId: string): Promise<Prisma.OrderWhereInput> {
+  private async merchantOrderScope(userId: string): Promise<MerchantOrderScope> {
     const store = await this.getOrCreateStore(userId);
+    const [variations, links] = await Promise.all([
+      this.prisma.variation.findMany({ where: { product: { storefrontId: store.id } }, select: { id: true } }),
+      this.prisma.merchantPancakeLink.findMany({
+        where: { storefrontId: store.id },
+        select: { variationId: true, linkedAt: true, unlinkedAt: true },
+      }),
+    ]);
+    const linked = new Set(links.map((l) => l.variationId));
+    return {
+      storeId: store.id,
+      isPartner: isPartnerStore(store),
+      ownVariationIds: variations.map((v) => v.id).filter((id) => !linked.has(id)),
+      links,
+    };
+  }
 
-    const storeProducts = await this.prisma.product.findMany({
-      where: { storefrontId: store.id },
-      select: { variations: { select: { id: true } } },
-    });
-    const merchantVariationIds = storeProducts.flatMap((p) => p.variations.map((v) => v.id));
-
-    const slugs = [store.slug, store.subdomain].filter(Boolean) as string[];
-    const orConditions: Prisma.OrderWhereInput[] = [];
-    if (slugs.length > 0) {
-      orConditions.push({ storefrontSlug: { in: slugs } });
-    }
-    if (merchantVariationIds.length > 0) {
-      orConditions.push({
-        items: {
-          some: {
-            variationId: { in: merchantVariationIds },
-          },
-        },
+  /**
+   * Bug 4: một hàm dùng chung cho listMerchantOrders và updateMerchantOrderStatus (biến kiểm soát truy cập).
+   *
+   * Gian hàng đối tác (MERCHANT) chỉ thấy đơn có dòng hàng của mình: biến thể tự tạo, hoặc biến thể Pancake "Tubu giao hộ"
+   * trong khoảng [linkedAt, unlinkedAt) — đơn của SKU đó trước khi liên kết là đơn của Tubu/nhãn cũ (R2-MERCHANT-5). Gian hàng
+   * CTV giữ cách cũ: đơn khách đặt qua gian hàng (khoá ngoại chốt lúc đặt, SELLER-5) để CTV theo dõi hoa hồng.
+   *
+   * OR rỗng = điều kiện luôn sai trong Prisma, nên gian hàng chưa có gì tự nhiên ra danh sách rỗng.
+   */
+  private orderWhereOf(scope: MerchantOrderScope): Prisma.OrderWhereInput {
+    const or: Prisma.OrderWhereInput[] = [];
+    if (!scope.isPartner) or.push({ storefrontId: scope.storeId });
+    if (scope.ownVariationIds.length > 0) or.push({ items: { some: { variationId: { in: scope.ownVariationIds } } } });
+    for (const l of scope.links) {
+      or.push({
+        createdAt: { gte: l.linkedAt, ...(l.unlinkedAt ? { lt: l.unlinkedAt } : {}) },
+        items: { some: { variationId: l.variationId } },
       });
     }
+    return { OR: or };
+  }
 
-    return { OR: orConditions };
+  private async resolveMerchantOrderFilter(userId: string): Promise<Prisma.OrderWhereInput> {
+    return this.orderWhereOf(await this.merchantOrderScope(userId));
   }
 
   // Bug 3: `take: 50` không kèm `skip` — merchant có trên 50 đơn không bao giờ xem được đơn cũ
   // hơn. Nay phân trang thật kèm meta {total, page, limit}.
   async listMerchantOrders(userId: string, status?: string, page = 1, limit = 20) {
-    const [filter, role] = await Promise.all([
-      this.resolveMerchantOrderFilter(userId),
-      this.getCallerRole(userId),
-    ]);
+    const [scope, role] = await Promise.all([this.merchantOrderScope(userId), this.getCallerRole(userId)]);
     const where: Prisma.OrderWhereInput = {
-      ...filter,
+      ...this.orderWhereOf(scope),
       ...(status ? { status: status as never } : {}),
     };
 
@@ -521,18 +927,39 @@ export class MerchantService {
       }),
     ]);
 
+    // Gian hàng đối tác: chỉ dòng hàng của mình, không tổng đơn hay dòng của nhãn khác — trừ đơn chính gian hàng tự giao
+    // (cả đơn là hàng của gian hàng). `selfFulfilled` để màn hình chỉ sang tab Đơn cần giao thay vì ghi "Do kho Tubu xử lý".
+    const scoped = data.map(({ fulfiller, fulfillerStorefrontId, ...order }) => {
+      const selfFulfilled = fulfiller === 'MERCHANT' && fulfillerStorefrontId === scope.storeId;
+      if (!scope.isPartner || selfFulfilled) {
+        return { ...order, items: order.items.map(({ variationId: _v, ...it }) => it), selfFulfilled, partial: false };
+      }
+      const own = order.items.filter((it) => ownsLine(scope, it, order.createdAt));
+      return {
+        ...order,
+        subtotal: null,
+        discount: null,
+        shippingFee: null,
+        total: null,
+        ownTotal: own.reduce((sum, it) => sum + it.total, 0),
+        items: own.map(({ variationId: _v, ...it }) => it),
+        selfFulfilled,
+        partial: own.length < order.items.length,
+      };
+    });
+
     // P0 A5-04 = A6-36 (docs/audit-2026-09): chỉ ADMIN mới thấy tên/SĐT/địa chỉ đầy đủ của khách —
-    // xem lý do đầy đủ ở maskShippingAddress() và updateMerchantOrderStatus() (không có tín hiệu
-    // nào trong schema hiện tại phân biệt "đối tác tự giao hàng thật" khỏi "CTV referral, kho Tubu
-    // giao" — A5-34). DEALER/AFFILIATE đều bị che như nhau.
-    const shaped =
+    // xem lý do đầy đủ ở maskShippingAddress(). DEALER/AFFILIATE đều bị che như nhau. Gian hàng đối tác (MERCHANT) không nhận
+    // tài khoản người mua dưới bất kỳ dạng nào: người nhận cần để giao hàng nằm ở tab Đơn cần giao (R5-PARTNER-6).
+    type ScopedOrder = (typeof scoped)[number];
+    const shaped: Array<Omit<ScopedOrder, 'user'> & { user?: ScopedOrder['user'] }> =
       role === 'ADMIN'
-        ? data
-        : data.map((order) => ({
+        ? scoped
+        : scoped.map(({ user, ...order }) => ({
             ...order,
-            user: order.user
-              ? { ...order.user, fullName: maskFullName(order.user.fullName), phone: maskPhoneNumber(order.user.phone) }
-              : order.user,
+            ...(scope.isPartner
+              ? {}
+              : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneNumber(user.phone) } : user }),
             shippingAddress: maskShippingAddress(order.shippingAddress),
           }));
 
@@ -554,6 +981,12 @@ export class MerchantService {
     // Storefront hoặc Brand) rồi thay điều kiện dưới đây bằng kiểm tra cờ đó.
     const role = await this.getCallerRole(userId);
     if (role !== 'ADMIN') {
+      // Đơn không thuộc gian hàng của người gọi (kể cả đơn tự giao của gian hàng khác) thì không được biết nó có tồn tại.
+      const own = await this.prisma.order.findFirst({
+        where: { id: orderId, ...(await this.resolveMerchantOrderFilter(userId)) },
+        select: { id: true },
+      });
+      if (!own) throw new NotFoundException('Không tìm thấy đơn của gian hàng bạn.');
       throw new ForbiddenException(
         'Đơn hàng do kho Tubu Tree xử lý giao nhận; đối tác không thể tự chuyển trạng thái tại đây.',
       );

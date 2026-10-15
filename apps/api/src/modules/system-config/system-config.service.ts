@@ -1,7 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PICKUP_PHONE_PATTERN } from '../../common/phone';
 import { spinPrizeProblem } from './spin-prizes';
+import { bannedKeywordsProblem } from '../feed/content-filter';
+import { commissionPctOf, freezeDefaultCommissionChange, MERCHANT_COMMISSION_KEY } from '../merchant/merchant-terms-history';
+import { parseConsignmentSettleFrom } from '../merchant/merchant-config';
+
+const DISPLAY_NAME_MAX = 100;
+
+/** Chuỗi hiển thị bắt buộc (tên ngân hàng, tên chủ tài khoản): có chữ, không quá DISPLAY_NAME_MAX ký tự. */
+function displayNameProblem(value: unknown, what: string): string | null {
+  if (typeof value !== 'string' || !value.trim()) return `không được để trống — nhập ${what}`;
+  if (value.length > DISPLAY_NAME_MAX) return `tối đa ${DISPLAY_NAME_MAX} ký tự`;
+  return null;
+}
 
 /**
  * Đọc/ghi tham số nghiệp vụ từ bảng SystemConfig (Build Spec Section 15).
@@ -63,16 +76,21 @@ export class SystemConfigService {
     // ngay lúc cộng, số quá lớn làm điểm không bao giờ hết hạn; số lẻ bị các nguồn cộng điểm cắt bỏ phần thập phân.
     'loyalty.point_expire_months': { min: 1, max: 120, note: 'số tháng nguyên (12 = điểm hết hạn sau 12 tháng)', integer: true },
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
+    'wishlist.price_drop_min_pct': { min: 0, max: 1, note: 'phân số (0.05 = 5%)' },
+    'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
+    'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
+    'flashsale.max_discount_pct': { min: 0.01, max: 1, note: 'phân số (0.9 = giá flash ≥ 10% giá đang bán; 1 = không chặn)' },
+    'flashsale.max_duration_days': { min: 1, max: 366, note: 'số ngày tối đa của một đợt flash sale', integer: true },
     'dealer.max_discount_pct': { min: 0, max: 1, note: 'phân số (0.45 = 45%)' },
     'cashback.merchant_user_share': { min: 0, max: 1, note: 'phân số (0.7 = 70%)' },
-    'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)' },
-    'cashback.hold_days': { min: 0, max: 365, note: 'số ngày' },
-    'affiliate.hold_days': { min: 0, max: 365, note: 'số ngày' },
+    'groupbuy.discount_pct': { min: 0, max: 100, note: 'phần trăm nguyên (15 = 15%)', integer: true },
+    'cashback.hold_days': { min: 0, max: 365, note: 'số ngày', integer: true },
+    'affiliate.hold_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     // Khoá code THẬT SỰ đọc (orders.service requestReturn, affiliate.service hold) — trước đây RANGES/seed
     // ghi 'return.window_days' (không ai đọc) nên giới hạn này chưa bao giờ áp vào khoá thật.
-    'returns.window_days': { min: 0, max: 365, note: 'số ngày' },
-    'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày' },
+    'returns.window_days': { min: 0, max: 365, note: 'số ngày', integer: true },
+    'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày', integer: true },
     // ETA giao hàng trên trang đặt hàng thành công (buy-flow 4a): số nguyên ngày, gõ nhầm (vd 300) sẽ
     // bị từ chối lúc ghi thay vì âm thầm ẩn dòng ETA (toShippingEta bỏ giá trị ngoài 0–60).
     'shipping.eta_min_days': { min: 0, max: 60, note: 'số ngày' },
@@ -94,10 +112,95 @@ export class SystemConfigService {
     'community.best_answer_reward_points': { min: 0, max: 20, note: 'Điểm Xanh (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.tree_points_price': { min: 1, max: 500, note: 'Điểm Xanh mỗi lượt góp quỹ (1 điểm = 1.000đ), không phải xu', integer: true },
     'game.spin_buy_cost_points': { min: 1, max: 1000, note: 'Điểm Xanh mỗi lượt quay', integer: true },
+    'game.spin_voucher_min_order_multiplier': { min: 1, max: 50, note: 'hệ số nguyên (6 = voucher 20.000đ cho đơn từ 120.000đ)', integer: true },
+    // ADMINOPS-3: các khoá tiền/điểm đọc thẳng vào checkout, ví, rút tiền. Phí âm làm tổng đơn nhỏ hơn tiền hàng;
+    // 1đ = 1 điểm là tích điểm gấp 10.000 lần. Chặn ngay lúc ghi.
+    'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
+    'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
+    'loyalty.vnd_per_point': { min: 1000, max: 1_000_000, note: 'đồng chi tiêu cho 1 Điểm Xanh (10000 = 10.000đ/điểm)', integer: true },
+    'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
+    'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
+    'affiliate.min_withdraw_bank': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
+    'referral.min_order_amount': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
+    'groupbuy.max_open_per_user': { min: 1, max: 100, note: 'số nhóm', integer: true },
+    'game.max_plots': { min: 1, max: 50, note: 'số lô đất', integer: true },
     // OQ-11: lô Điểm Xanh quy đổi từ xu là tiền khách trả trước theo giá 1 điểm = 1.000đ; đổi tỉ giá là
     // làm lô đó mất hoặc tăng giá trị cho mọi khách.
     'loyalty.vnd_per_point_redeem': { min: 1000, max: 1000, note: 'đồng/điểm, khoá cứng từ PD-3 (lô quy đổi)' },
+    // p8-seller: phí giao/phí sàn đối tác đọc thẳng vào checkout và đối soát; hạn SLA và thời gian chờ đọc vào cron.
+    'merchant.default_shipping_fee': { min: 0, max: 500000, note: 'đồng', integer: true },
+    'merchant.commission_pct': { min: 0, max: 0.5, note: 'phân số (0.15 = 15%)' },
+    'merchant.settlement_hold_days': { min: 0, max: 60, note: 'số ngày', integer: true },
+    'merchant.negative_payout_due_days': { min: 1, max: 60, note: 'số ngày', integer: true },
+    'merchant.confirm_sla_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
+    'ops.alert_unsynced_minutes': { min: 15, max: 1440, note: 'số phút', integer: true },
+    'ops.alert_stuck_orders': { min: 1, max: 1000, note: 'số đơn', integer: true },
+    'ops.alert_webhook_failed': { min: 1, max: 10000, note: 'số webhook', integer: true },
+    'ops.alert_queue_failed_1h': { min: 1, max: 10000, note: 'số job', integer: true },
+    'ops.alert_repeat_hours': { min: 1, max: 168, note: 'số giờ', integer: true },
+    'ops.alert_gomdon_backlog_minutes': { min: 5, max: 1440, note: 'số phút', integer: true },
+    'merchant.ship_sla_hours': { min: 1, max: 336, note: 'số giờ', integer: true },
+    'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
+    'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
+    'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
+    'affiliate.pit_withhold_pct': { min: 0, max: 0.35, note: 'phân số (0.1 = 10%)' },
+    'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
+    // ADMINOPS-3 (vòng 2): tiền phạt đi trễ đi thẳng vào bảng lương (âm = cộng tiền), giá/thưởng 💧 âm đảo chiều ví game.
+    'attendance.late_fine': { min: 0, max: 500_000, note: 'đồng mỗi lần đi trễ', integer: true },
+    'refill.seeds_per_bottle': { min: 0, max: 10_000, note: '💧 mỗi vỏ chai', integer: true },
+    'game.streak_repair_cost': { min: 1, max: 100_000, note: '💧 hồi sinh chuỗi', integer: true },
+    'game.streak_freeze_cost': { min: 1, max: 100_000, note: '💧 mỗi vé giữ lửa', integer: true },
+    'game.dew_seeds': { min: 0, max: 10_000, note: '💧 giọt sương mỗi ngày', integer: true },
+    'game.daily_login_seeds': { min: 0, max: 10_000, note: '💧 mỗi lần check-in', integer: true },
+    'game.harvest_coupon_min_order': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
+    'groupbuy.target_size': { min: 2, max: 50, note: 'số người', integer: true },
+    'referral.window_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    'affiliate.attribution_days': { min: 1, max: 365, note: 'số ngày', integer: true },
+    'flashsale.default_per_user_limit': { min: 1, max: 1000, note: 'số sản phẩm mỗi người', integer: true },
+    // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
+    // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
+    // config-numeric-ranges.spec.ts buộc mọi khoá số được seed phải có luật ở đây hoặc ở admin-config-rules.
+    'loyalty.point_expiry_reminder_days': { min: 0, max: 90, note: 'số ngày báo trước điểm sắp hết hạn (0 = không nhắc)', integer: true },
+    'loyalty.tier_grace_days': { min: 0, max: 365, note: 'số ngày giữ hạng khi rớt mốc (0 = rớt hạng ngay)', integer: true },
+    'cashback.click_rate_limit_seconds': { min: 0, max: 3600, note: 'số giây giữa hai lần bấm cùng sàn (0 = không giới hạn)', integer: true },
+    'cashback.reconcile_lookback_days': { min: 1, max: 365, note: 'số ngày kéo lại giao dịch đối soát', integer: true },
+    'community.daily_post_reward_cap': { min: 0, max: 100, note: 'số bài được thưởng mỗi ngày/người (0 = không thưởng)', integer: true },
+    'community.daily_answer_reward_cap': { min: 0, max: 100, note: 'số câu trả lời được thưởng mỗi ngày/người (0 = không thưởng)', integer: true },
+    'community.daily_best_answer_cap': { min: 0, max: 100, note: 'số lần được thưởng câu trả lời hay nhất mỗi ngày/người (0 = không thưởng)', integer: true },
+    'game.spin_buy_daily_limit': { min: 0, max: 100, note: 'số lượt mua mỗi ngày (0 = khoá mua lượt quay)', integer: true },
+    'game.quiz_daily_count': { min: 1, max: 50, note: 'số câu hỏi mỗi ngày', integer: true },
+    'game.tank_capacity': { min: 1, max: 100_000, note: '💧 sức chứa bình nước', integer: true },
+    'game.tree_default_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây mặc định', integer: true },
+    'game.harvest_coupon_daily_cap': { min: 0, max: 100, note: 'số coupon thu hoạch mỗi ngày/người (0 = không phát)', integer: true },
+    'game.streak_repair_window_hours': { min: 1, max: 720, note: 'số giờ được hồi sinh chuỗi sau khi mất', integer: true },
+    'game.streak_repair_cooldown_days': { min: 0, max: 365, note: 'số ngày giữa hai lần hồi sinh chuỗi (0 = không chờ)', integer: true },
+    'game.plot_unlock_seed_base': { min: 1, max: 100_000, note: '💧 mở lô đất (giá = số này × số thứ tự lô)', integer: true },
+    'game.plot_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây ở lô phụ', integer: true },
+    'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },
+    'groupbuy.window_hours': { min: 1, max: 720, note: 'số giờ nhóm mua chung mở', integer: true },
+    'refill.monthly_cap_bottles': { min: 0, max: 1000, note: 'số vỏ chai được thưởng mỗi tháng/người (0 = không thưởng)', integer: true },
+    'remarketing.cart_abandon_min_hours': { min: 1, max: 720, note: 'số giờ giỏ bỏ quên trước khi nhắc', integer: true },
+    'remarketing.cart_abandon_max_hours': { min: 1, max: 720, note: 'số giờ tối đa còn nhắc giỏ bỏ quên', integer: true },
+    'remarketing.voucher_expiry_days': { min: 1, max: 60, note: 'số ngày báo trước voucher sắp hết hạn', integer: true },
+    'reorder.default_cycle_days': { min: 1, max: 365, note: 'số ngày chu kỳ mua lại mặc định', integer: true },
+    'reorder.remind_ratio': { min: 0.1, max: 1, note: 'phân số chu kỳ (0.8 = nhắc khi đã qua 80% chu kỳ)' },
+    'attendance.radius_m': { min: 10, max: 5000, note: 'mét bán kính GPS được chấm công', integer: true },
+    'attendance.late_grace_min': { min: 0, max: 240, note: 'số phút trễ được bỏ qua trước khi phạt', integer: true },
+    'attendance.checkin_early_min': { min: 0, max: 720, note: 'số phút được chấm công sớm trước giờ vào ca', integer: true },
+    'attendance.cancel_notice_days': { min: 0, max: 30, note: 'số ngày báo trước khi huỷ ca', integer: true },
+    'attendance.emergency_cap_month': { min: 0, max: 31, note: 'số lần huỷ đột xuất miễn phạt mỗi tháng', integer: true },
+    'attendance.heartbeat_stale_min': { min: 1, max: 240, note: 'số phút coi tín hiệu vị trí là cũ', integer: true },
+    'attendance.out_of_range_max_count': { min: 1, max: 100, note: 'số nhịp ngoài vùng liên tiếp trước khi tự checkout', integer: true },
+    'attendance.out_of_range_max_min': { min: 1, max: 1440, note: 'số phút ngoài vùng trước khi tự checkout', integer: true },
+    // data-retention vẫn kẹp xuống sàn minDays (RETENTION_POLICY) khi đọc: ghi dưới sàn là "đã lưu" mà hệ thống giữ lâu hơn.
+    'retention.analytics_events_days': { min: 90, max: 3650, note: 'số ngày giữ sự kiện phân tích (tối thiểu 90)', integer: true },
+    'retention.notification_logs_days': { min: 30, max: 3650, note: 'số ngày giữ nhật ký thông báo (tối thiểu 30)', integer: true },
+    'retention.webhook_events_days': { min: 14, max: 3650, note: 'số ngày giữ webhook (tối thiểu 14)', integer: true },
+    'retention.refresh_sessions_days': { min: 7, max: 3650, note: 'số ngày giữ phiên đăng nhập đã hết hạn (tối thiểu 7)', integer: true },
   };
+
+  /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
+  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days']);
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ (bản xu cũ tối đa 30.000 xu = 30 điểm). */
   private static readonly SEASONPASS_POINTS_MAX = 100;
@@ -109,6 +212,35 @@ export class SystemConfigService {
    * PD-3: chặn ghi dạng xu cũ ({bonus} / type 'XU') hay giá trị xu dưới tên điểm.
    */
   private static readonly JSON_RULES: Record<string, (value: unknown) => string | null> = {
+    // VietQR dựng từ hai khoá này: sai một ký tự là tiền khách chuyển vào tài khoản khác hoặc QR không quét được.
+    'payment.bank_account_no': (value) =>
+      typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
+    'refill.pickup_phone': (value) =>
+      value === '' || (typeof value === 'string' && PICKUP_PHONE_PATTERN.test(value))
+        ? null
+        : 'phải để trống (ẩn) hoặc là SĐT 10 số bắt đầu bằng 0 hoặc +84',
+    'payment.bank_bin': (value) =>
+      typeof value === 'string' && /^\d{6}$/.test(value) ? null : 'phải là mã BIN Napas gồm đúng 6 chữ số (vd "970407")',
+    // Trang chuyển khoản của khách và phiếu chi trả đối tác in nguyên hai dòng này: để trống là "Ngân hàng: " trống trơn.
+    'payment.bank_name': (value) => displayNameProblem(value, 'tên ngân hàng, vd "Techcombank"'),
+    'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
+    'shipping.tier_freeship_overrides': (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
+      for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {
+        if (!Number.isInteger(threshold) || (threshold as number) < 0 || (threshold as number) > 50_000_000) {
+          return `ngưỡng của hạng ${tier} phải là số đồng nguyên 0–50.000.000`;
+        }
+      }
+      return null;
+    },
+    'subscribe.discount_tiers': (value) => {
+      if (!Array.isArray(value)) return 'phải là mảng bậc [{ minActive, pct }]';
+      for (const t of value as Record<string, unknown>[]) {
+        if (!Number.isInteger(t?.minActive) || (t.minActive as number) < 1) return 'mỗi bậc cần minActive là số nguyên ≥ 1';
+        if (typeof t.pct !== 'number' || !(t.pct >= 0 && t.pct <= 1)) return 'mỗi bậc cần pct là phân số 0–1 (0.12 = 12%)';
+      }
+      return null;
+    },
     'referral.milestones_points': (value) => {
       if (!Array.isArray(value)) return 'phải là mảng [{ count, bonusPoints }]';
       const max = SystemConfigService.REFERRAL_MILESTONE_POINTS_MAX;
@@ -135,6 +267,12 @@ export class SystemConfigService {
       }
       return null;
     },
+    'community.banned_keywords': bannedKeywordsProblem,
+    // Bảng kê đối soát giao hộ lọc đơn theo mốc này: mốc không có thật thì bảng kê tạm bỏ giới hạn, nên chặn ngay lúc ghi.
+    'merchant.consignment_settle_from': (value) =>
+      parseConsignmentSettleFrom(value)
+        ? null
+        : 'phải là thời điểm ISO 8601 có thật, vd "2026-10-14T00:00:00Z" (không ghi múi giờ thì hiểu là UTC)',
     'seasonpass.tiers': (value) => {
       if (!Array.isArray(value)) return 'phải là mảng bậc [{ xp, free, premium }]';
       const max = SystemConfigService.SEASONPASS_POINTS_MAX;
@@ -150,6 +288,11 @@ export class SystemConfigService {
       return null;
     },
   };
+
+  /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
+  static hasWriteRule(key: string): boolean {
+    return key in SystemConfigService.RANGES || key in SystemConfigService.JSON_RULES;
+  }
 
   private assertInRange(key: string, value: unknown): void {
     const jsonRule = SystemConfigService.JSON_RULES[key];
@@ -173,11 +316,13 @@ export class SystemConfigService {
     }
   }
 
-  async set(key: string, value: object | string | number | boolean, changedBy: string): Promise<void> {
-    if (value === null || value === undefined) {
+  async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
+    const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
+    if ((value === null && !unset) || value === undefined) {
       throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
     }
-    this.assertInRange(key, value);
+    if (!unset) this.assertInRange(key, value);
+    const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');
     const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
     await this.prisma.$transaction(async (tx) => {
@@ -191,7 +336,7 @@ export class SystemConfigService {
         const wasUnset = existing.value === null;
         const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
         const newType = Array.isArray(value) ? 'array' : typeof value;
-        if (!wasUnset && oldType !== newType) {
+        if (!wasUnset && !unset && oldType !== newType) {
           throw new BadRequestException(
             `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
               'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
@@ -201,16 +346,20 @@ export class SystemConfigService {
           data: {
             key,
             oldValue: wasUnset ? Prisma.JsonNull : (existing.value as object),
-            newValue: value as object,
+            newValue: stored,
             changedBy,
           },
         });
       }
       await tx.systemConfig.upsert({
         where: { key },
-        update: { value: value as object, updatedBy: changedBy },
-        create: { key, value: value as object, category, updatedBy: changedBy },
+        update: { value: stored, updatedBy: changedBy },
+        create: { key, value: stored, category, updatedBy: changedBy },
       });
+      // Hàng "Tubu giao hộ" chốt phí sàn theo lúc đặt: gian hàng đang theo mặc định cần dòng lịch sử cho mức mới.
+      if (key === MERCHANT_COMMISSION_KEY && typeof value === 'number') {
+        await freezeDefaultCommissionChange(tx, commissionPctOf(existing?.value), value, new Date(), changedBy);
+      }
     });
     this.cache.delete(key);
   }

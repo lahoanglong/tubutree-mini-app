@@ -42,6 +42,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
 
   async function customerWithRequest(data: Parameters<typeof createUser>[1] = {}) {
     const user = await createUser(prisma, {
+      personalTaxId: '079201001234',
       phone: randomPhone(),
       zaloId: `zalo-${randCode(8)}`,
       zaloAccessToken: 'enc-access',
@@ -68,7 +69,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
         district: 'Cầu Giấy',
         ward: 'Dịch Vọng',
         street: '12 Ngõ Thật',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '005',
         wardCode: '00160',
         isDefault: true,
@@ -141,6 +142,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
       zaloRefreshToken: null,
       avatarUrl: null,
       dob: null,
+      personalTaxId: null,
       isBlocked: true,
     });
     expect(after.metadata).toMatchObject({ deletionRequestId: request.id });

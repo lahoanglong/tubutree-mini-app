@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsBoolean } from 'class-validator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
@@ -34,6 +35,33 @@ export class ReviewsController {
   @Get('products/:slug/reviews')
   list(@Param('slug') slug: string) {
     return this.reviews.listByProduct(slug);
+  }
+
+  /**
+   * Ảnh base64 của đánh giá (danh sách trả đường dẫn này thay vì nhúng nguyên văn). Nội dung gắn với mã băm `v` trong URL
+   * nên cache vĩnh viễn được. helmet đặt Cross-Origin-Resource-Policy: same-origin mặc định; miniapp (khác origin) nạp ảnh
+   * bằng thẻ img nên route này phải mở cross-origin.
+   */
+  @Public()
+  @Get('reviews/:id/images/:index')
+  async image(
+    @Param('id') id: string,
+    @Param('index', ParseIntPipe) index: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { mime, data } = await this.reviews.getImage(id, index);
+    res.set({
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(data, { type: mime });
+  }
+
+  /** Đánh giá của chính mình, nguyên nội dung, để điền sẵn form sửa (cần đăng nhập — không @Public). */
+  @Get('reviews/:id')
+  findOwn(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.reviews.findOwn(userId, id);
   }
 
   @Delete('reviews/:id')

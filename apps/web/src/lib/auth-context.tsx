@@ -8,7 +8,9 @@ import {
   hasSessionMarker,
   setSessionMarker,
   clearSessionMarker,
+  restoreSession,
 } from './client-api';
+import { clearSavedInvoices } from './saved-invoice';
 
 export interface WebUser {
   id: string;
@@ -41,6 +43,18 @@ interface AuthState {
    * server không đọc được localStorage (lệch hydrate).
    */
   initialized: boolean;
+  /**
+   * true khi cờ phiên còn nhưng lượt khôi phục phiên hết lần thử vì mất mạng/API tạm lỗi (không phải phiên chết).
+   * Khách vẫn đang đăng nhập: trang phải nói "không kết nối được" kèm nút thử lại, không hiện lời mời đăng nhập.
+   */
+  sessionUnavailable: boolean;
+  /** Thử khôi phục phiên lại ngay (nút "Thử lại"); ngoài ra tự thử khi có mạng/quay lại tab. */
+  retrySession: () => Promise<void>;
+  /**
+   * false khi bản build này không có NEXT_PUBLIC_ZALO_APP_ID: nút "Đăng nhập với Zalo" không thể hoạt động,
+   * trang đăng nhập phải nói thẳng thay vì để khách bấm rồi gặp lỗi kỹ thuật.
+   */
+  zaloLoginConfigured: boolean;
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
   logout: () => Promise<void>;
@@ -76,9 +90,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<WebUser | null>(null);
   const [status, setStatus] = useState<AuthState['status']>('idle');
   const [initialized, setInitialized] = useState(false);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
 
   // Khôi phục phiên từ cookie refresh (HttpOnly, do BE set). Cờ `tubu_web_session` trong
   // localStorage chỉ để biết CÓ ĐÁNG gọi hay không — khách vãng lai không tốn một lượt 401.
+  // Lỗi tạm (mất mạng, API khởi động lại, 429) được thử lại vài lần và KHÔNG xoá cờ; chỉ 400/401/403
+  // mới coi là phiên chết (client-api.ts xoá cờ). Lỗi tạm đánh dấu `sessionUnavailable` để trang không
+  // coi khách đang đăng nhập là khách vãng lai.
+  const restore = useCallback(async () => {
+    const out = await restoreSession();
+    if (out.kind === 'ok') {
+      setUser((out.data as LoginResponse).user);
+      setStatus('authenticated');
+      setSessionUnavailable(false);
+    } else {
+      setStatus('idle');
+      setSessionUnavailable(out.kind === 'transient');
+    }
+  }, []);
+
+  const retrySession = useCallback(async () => {
+    if (!hasSessionMarker()) {
+      setSessionUnavailable(false);
+      return;
+    }
+    await restore();
+  }, [restore]);
+
   useEffect(() => {
     if (!hasSessionMarker()) {
       setStatus('idle');
@@ -86,20 +124,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setStatus('loading');
-    apiFetch<LoginResponse>('/auth/refresh', { method: 'POST', body: {}, auth: false })
-      .then((res) => {
-        setAccessToken(res.accessToken);
-        setSessionMarker();
-        setUser(res.user);
-        setStatus('authenticated');
-      })
-      .catch(() => {
-        // BE đã tự xoá cookie khi token chết; xoá nốt cờ phía client.
-        clearSessionMarker();
-        setStatus('idle');
-      })
-      .finally(() => setInitialized(true));
-  }, []);
+    void restore().finally(() => setInitialized(true));
+  }, [restore]);
+
+  // Mở trang lúc mất mạng: cờ phiên còn nhưng chưa vào được — có mạng lại hoặc quay lại tab thì thử tiếp.
+  useEffect(() => {
+    if (!initialized || status !== 'idle' || user) return;
+    const retry = () => {
+      if (document.visibilityState === 'visible' && hasSessionMarker()) void restore();
+    };
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', retry);
+    return () => {
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', retry);
+    };
+  }, [initialized, status, user, restore]);
 
   const startZaloLogin = useCallback(async () => {
     if (!ZALO_APP_ID) {
@@ -137,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionMarker();
       setUser(res.user);
       setStatus('authenticated');
+      setSessionUnavailable(false);
     } catch (e) {
       // Không để `status` kẹt ở 'loading' khi trao đổi code thất bại — các trang khác
       // (giỏ hàng, thanh toán, admin) coi 'loading' là "đang kiểm tra phiên" nên sẽ
@@ -156,11 +197,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSessionMarker();
     setUser(null);
     setStatus('idle');
+    setSessionUnavailable(false);
     qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
+    clearSavedInvoices();
   }, [qc]);
 
   return (
-    <AuthContext.Provider value={{ user, status, initialized, startZaloLogin, handleCallback, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        status,
+        initialized,
+        sessionUnavailable,
+        retrySession,
+        zaloLoginConfigured: !!ZALO_APP_ID,
+        startZaloLogin,
+        handleCallback,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -3,12 +3,28 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
-import { normalizeSubdomain, assertIdentifierAvailable } from './identifier-validation';
+import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
+import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
+import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { MIN_COMBO_PRODUCTS } from './combo.service';
+import { isPartnerStore } from '../merchant/partner-store';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
 const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
+
+/** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
+export function buyerHiddenReason(item: {
+  isHidden: boolean;
+  product: { isActive: boolean; affiliateBlocked: boolean; approvalStatus: string | null };
+}): string | null {
+  if (item.isHidden) return 'Bạn đang ẩn món này';
+  if (item.product.approvalStatus && item.product.approvalStatus !== 'APPROVED') return 'Sản phẩm chưa được duyệt bán';
+  if (!item.product.isActive) return 'Sản phẩm đã ngừng bán';
+  if (item.product.affiliateBlocked) return 'Sản phẩm không còn cho CTV bán';
+  return null;
+}
 
 @Injectable()
 export class StorefrontService {
@@ -88,6 +104,7 @@ export class StorefrontService {
                     reviewCount: true,
                     isActive: true,
                     affiliateBlocked: true,
+                    approvalStatus: true,
                   },
                 },
               },
@@ -97,7 +114,14 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
-    return sf;
+    // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
+    return {
+      ...sf,
+      collections: sf.collections.map((c) => ({
+        ...c,
+        items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
+      })),
+    };
   }
 
   async updateMine(
@@ -130,13 +154,17 @@ export class StorefrontService {
       await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
+    // Chỉ gian hàng đối tác tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
     // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
     // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
     // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
     const data: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(dto)) {
-      if (v === undefined) continue;
-      data[k] = typeof v === 'string' && v.trim() === '' ? null : v;
+      if (v === undefined || (!isPartnerStore(sf) && k.startsWith('warehouse'))) continue;
+      data[k] = k !== 'title' && typeof v === 'string' && v.trim() === '' ? null : v;
+    }
+    if (dto.subdomain && dto.subdomain !== sf.subdomain) {
+      await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);
     }
     return this.prisma.storefront.update({ where: { id: sf.id }, data });
   }
@@ -162,6 +190,8 @@ export class StorefrontService {
       where: {
         isActive: true,
         affiliateBlocked: false,
+        // SELLER-15: sản phẩm đối tác chờ duyệt/bị từ chối gắn vào gian hàng thì khách không thấy — không mời CTV chọn.
+        approvalStatus: 'APPROVED',
         ...(q.search ? { name: { contains: q.search, mode: 'insensitive' } } : {}),
       },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
@@ -200,6 +230,7 @@ export class StorefrontService {
         isPublished: true,
       },
       include: {
+        owner: { select: { referralCode: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -210,7 +241,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
-                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true,
+                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true, storefrontId: true,
                     // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
                     // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
                     variations: { where: { isActive: true }, select: { stock: true } },
@@ -231,36 +262,45 @@ export class StorefrontService {
     return {
       id: sf.id,
       slug: sf.slug,
+      // SELLER-4: mã giới thiệu lấy từ chủ gian hàng, không suy từ slug/subdomain trên URL (subdomain riêng không phải mã).
+      referralCode: sf.type === 'CTV' ? (sf.owner?.referralCode ?? null) : null,
       ownerTier,
       subdomain: sf.subdomain,
       customDomain: sf.customDomain,
       type: sf.type,
+      isPartner: isPartnerStore(sf),
       title: sf.title,
       headerNote: sf.headerNote,
       avatarUrl: sf.avatarUrl,
       coverUrl: sf.coverUrl,
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
-      bankName: sf.bankName,
-      bankBin: sf.bankBin,
-      bankAccountNo: sf.bankAccountNo,
-      bankAccountName: sf.bankAccountName,
-      warehouseAddress: sf.warehouseAddress,
-      warehouseCity: sf.warehouseCity,
-      warehouseDistrict: sf.warehouseDistrict,
-      warehouseWard: sf.warehouseWard,
-      warehousePhone: sf.warehousePhone,
-      collections: sf.collections.map((c) => ({
-        id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: c.comboDiscountPct,
-        items: c.items
-          .filter(
-            (i) =>
-              !i.isHidden &&
-              i.product.isActive &&
-              !i.product.affiliateBlocked &&
-              (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED'),
-          )
-          .map((i) => ({
+      // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
+      ...(isPartnerStore(sf)
+        ? {
+            warehouseAddress: sf.warehouseAddress,
+            warehouseCity: sf.warehouseCity,
+            warehouseDistrict: sf.warehouseDistrict,
+            warehouseWard: sf.warehouseWard,
+            warehousePhone: sf.warehousePhone,
+          }
+        : {}),
+      collections: sf.collections.map((c) => {
+        const items = c.items.filter(
+          (i) =>
+            !i.isHidden &&
+            i.product.isActive &&
+            !i.product.affiliateBlocked &&
+            (!i.product.approvalStatus || i.product.approvalStatus === 'APPROVED') &&
+            // Hàng của gian hàng đối tác không được giảm combo (combo.service.ts) nên không hiện như một phần của combo.
+            !(c.kind === 'COMBO' && isPartnerOwnedProduct(i.product)),
+        );
+        // Combo còn dưới MIN_COMBO_PRODUCTS sản phẩm khác nhau thì checkout không giảm (allocateComboDiscounts): không trả mức
+        // giảm để trang gian hàng không hứa "Combo −X%".
+        const comboLive = c.kind !== 'COMBO' || new Set(items.map((i) => i.product.id)).size >= MIN_COMBO_PRODUCTS;
+        return {
+          id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: comboLive ? c.comboDiscountPct : null,
+          items: items.map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
               id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
@@ -270,7 +310,8 @@ export class StorefrontService {
               inStock: (i.product.variations ?? []).some((v) => v.stock > 0),
             },
           })),
-      })),
+        };
+      }),
     };
   }
 
@@ -325,11 +366,10 @@ export class StorefrontService {
     const sf = await this.assertOwnedStorefront(userId);
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [orders, commission30dAgg] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
-        select: { createdAt: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
-      }),
+    const [sales30d, sales7d, byProduct, commission30dAgg] = await Promise.all([
+      storefrontSalesByStore(this.prisma, userId, [sf.slug], since30d),
+      storefrontSalesByStore(this.prisma, userId, [sf.slug], since7d),
+      storefrontSalesByProduct(this.prisma, userId, sf.slug, since30d),
       this.prisma.commission.aggregate({
         where: {
           affiliateUserId: userId,
@@ -341,32 +381,12 @@ export class StorefrontService {
       }),
     ]);
 
-    const byProduct = new Map<string, { productSlug: string; productName: string; qty: number; revenue: number }>();
-    let orders30d = 0;
-    let orders7d = 0;
-    let revenue30d = 0;
-    for (const o of orders) {
-      const in30d = o.createdAt >= since30d;
-      const in7d = o.createdAt >= since7d;
-      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); }
-      if (in7d) orders7d += 1;
-      for (const item of o.items) {
-        // Đơn cũ trước migration OrderItem.productSlug có thể null — gộp vào key riêng thay vì
-        // vỡ thống kê hoặc lẫn với sản phẩm khác.
-        const key = item.productSlug ?? `__unknown:${item.productName}`;
-        const row = byProduct.get(key) ?? { productSlug: item.productSlug ?? '', productName: item.productName, qty: 0, revenue: 0 };
-        row.qty += item.quantity;
-        row.revenue += item.total;
-        byProduct.set(key, row);
-      }
-    }
-
     return {
-      orders7d,
-      orders30d,
-      revenue30d,
+      orders7d: sales7d.get(sf.slug)?.orders ?? 0,
+      orders30d: sales30d.get(sf.slug)?.orders ?? 0,
+      revenue30d: Math.max(0, sales30d.get(sf.slug)?.revenue ?? 0),
       commission30d: commission30dAgg._sum.amount ?? 0,
-      byProduct: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue),
+      byProduct: byProduct.sort((a, b) => b.revenue - a.revenue),
     };
   }
 
@@ -511,14 +531,15 @@ export class StorefrontService {
     collectionId: string,
     dto: { productId: string; variationId?: string; note?: string },
   ) {
-    await this.assertOwnedCollection(userId, collectionId);
+    const collection = await this.assertOwnedCollection(userId, collectionId);
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
-      select: { id: true, isActive: true, affiliateBlocked: true },
+      select: { id: true, name: true, isActive: true, affiliateBlocked: true, approvalStatus: true, storefrontId: true },
     });
-    if (!product || !product.isActive || product.affiliateBlocked) {
+    if (!product || !product.isActive || product.affiliateBlocked || product.approvalStatus !== 'APPROVED') {
       throw new BadRequestException('Sản phẩm không khả dụng để thêm vào gian hàng.');
     }
+    if (collection.kind === 'COMBO' && isPartnerOwnedProduct(product)) throw partnerGoodsError('COMBO', product.name);
     if (dto.variationId) {
       const variation = await this.prisma.variation.findUnique({
         where: { id: dto.variationId },

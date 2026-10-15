@@ -7,13 +7,17 @@ describe('classifyOrderError', () => {
   it('message === PRICE_CHANGED → PRICE_CHANGED', () => {
     expect(classifyOrderError('PRICE_CHANGED')).toBe('PRICE_CHANGED');
   });
+  it('tổng đơn tăng lúc đặt (TOTAL_CHANGED) → PRICE_CHANGED; địa chỉ sai địa giới → ADDRESS_INVALID', () => {
+    expect(classifyOrderError('Tổng tiền đơn vừa thay đổi từ 90đ thành 100đ do giá hoặc phí giao vừa cập nhật.')).toBe('PRICE_CHANGED');
+    expect(classifyOrderError('Phường/xã không thuộc tỉnh/thành đã chọn. Vui lòng chọn lại địa chỉ.')).toBe('ADDRESS_INVALID');
+  });
   it('message chứa "Địa chỉ giao hàng" → ADDRESS_INVALID', () => {
     expect(classifyOrderError('Địa chỉ giao hàng không hợp lệ.')).toBe('ADDRESS_INVALID');
   });
   it('message chứa "Số dư"/"Điểm Xanh"/"COD" → BALANCE', () => {
     expect(classifyOrderError('Số dư Ví Tubu không đủ.')).toBe('BALANCE');
     expect(classifyOrderError('Số điểm Xanh không đủ (hiện có 10 điểm).')).toBe('BALANCE');
-    expect(classifyOrderError('Đơn vượt hạn mức COD, vui lòng chọn phương thức khác.')).toBe('BALANCE');
+    expect(classifyOrderError('Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.')).toBe('BALANCE');
   });
   it('message chứa "Idempotency" → VALIDATION', () => {
     expect(classifyOrderError('Idempotency-Key không hợp lệ.')).toBe('VALIDATION');

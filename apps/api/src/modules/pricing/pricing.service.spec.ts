@@ -1,4 +1,4 @@
-import { PricingService } from './pricing.service';
+import { freeShipThreshold, PricingService } from './pricing.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 /** Stub SystemConfig với map giá trị cố định. */
@@ -135,5 +135,20 @@ describe('PricingService', () => {
     it('discountPct âm (misconfig) → không giảm (không cộng ngược tiền vào đơn)', () => {
       expect(svc.calcTierDiscount(300000, -0.05)).toBe(0);
     });
+  });
+});
+
+describe('freeShipThreshold (R2-ENGAGE-16: giỏ và checkout cùng một ngưỡng freeship)', () => {
+  const config = makeConfig(DEFAULTS);
+  it('không hạng / hạng không có override → ngưỡng toàn cục', async () => {
+    expect(await freeShipThreshold(config, null)).toBe(200000);
+    expect(await freeShipThreshold(config, 'MAM_NON')).toBe(200000);
+  });
+  it('hạng có override → ngưỡng của hạng (Lộc Biếc 99k, Cổ Thụ 0)', async () => {
+    expect(await freeShipThreshold(config, 'LOC_BIEC')).toBe(99000);
+    expect(await freeShipThreshold(config, 'CO_THU')).toBe(0);
+  });
+  it('override null (admin lỡ lưu) → ngưỡng toàn cục', async () => {
+    expect(await freeShipThreshold(makeConfig({ ...DEFAULTS, 'shipping.tier_freeship_overrides': null }), 'LOC_BIEC')).toBe(200000);
   });
 });

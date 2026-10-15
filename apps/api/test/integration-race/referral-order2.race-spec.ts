@@ -388,10 +388,11 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
     const { referrer, referee } = await pair();
     const o1 = await deliveredOrder(referee.id, 9);
     const o2 = await deliveredOrder(referee.id, 4);
-    const results = await runQueuedOnRefereeLock(referee.id, [
+    const results = await runWithFirstHoldingRefereeLock(
+      pauseAfterReversal,
       () => orderStatus.setStatus(o1.id, 'RETURNED'),
       () => affiliate.grantReferralReward(o2.id),
-    ]);
+    );
     expect(summarize(results).errors).toEqual([]);
     const rows = await prisma.pointsTransaction.findMany({ where: { userId: referrer.id }, select: { reason: true } });
     expect(rows).toEqual([]);
@@ -402,10 +403,11 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
     const { referrer, referee } = await pair();
     const o1 = await deliveredOrder(referee.id, 9);
     const o2 = await deliveredOrder(referee.id, 4);
-    const results = await runQueuedOnRefereeLock(referee.id, [
+    const results = await runWithFirstHoldingRefereeLock(
+      pauseAfterReferralGrant,
       () => affiliate.grantReferralReward(o2.id),
       () => orderStatus.setStatus(o1.id, 'RETURNED'),
-    ]);
+    );
     expect(summarize(results).errors).toEqual([]);
     const reasons = (
       await prisma.pointsTransaction.findMany({ where: { userId: referrer.id }, select: { reason: true } })
@@ -433,35 +435,55 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
   });
 
   /**
-   * Một tx test giữ khoá dòng users của người được mời; chạy lần lượt từng thao tác và đợi tới khi
-   * nó thật sự xếp hàng chờ khoá đó rồi mới chạy thao tác sau. Postgres trao khoá dòng cho người
-   * chờ đầu tiên trước, nên thứ tự xếp hàng = thứ tự giành khoá.
+   * Thao tác đầu chạy tới khi đã giữ khoá dòng users của người được mời và dừng lại ngay sau `hold` (vẫn trong tx của nó);
+   * thao tác sau chạy và phải thật sự xếp hàng chờ khoá đó rồi thao tác đầu mới được commit. Không dùng một tx giữ khoá hộ:
+   * tx trả hàng đã giữ KEY SHARE trên dòng users (chèn lịch sử trạng thái trỏ tới user) nên Postgres không xếp nó vào hàng
+   * chờ khoá dòng theo thứ tự đến, và thứ tự giành khoá giữa hai thao tác thành ngẫu nhiên.
    */
-  async function runQueuedOnRefereeLock(refereeId: string, ops: (() => Promise<unknown>)[]) {
+  async function runWithFirstHoldingRefereeLock(
+    hold: (paused: () => Promise<void>) => jest.SpyInstance,
+    first: () => Promise<unknown>,
+    second: () => Promise<unknown>,
+  ) {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
-    let markLocked!: () => void;
-    const locked = new Promise<void>((r) => (markLocked = r));
-    const holder = prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR UPDATE`;
-        markLocked();
-        await gate;
-      },
-      { timeout: 30_000 },
-    );
-    await locked;
-    const running: Promise<unknown>[] = [];
+    let markHeld!: () => void;
+    const held = new Promise<void>((r) => (markHeld = r));
+    const spy = hold(async () => {
+      markHeld();
+      await gate;
+    });
+    const running = [first()];
     try {
-      for (const [i, op] of ops.entries()) {
-        running.push(op());
-        await waitForLockWaiters(i + 1);
-      }
+      await Promise.race([held, running[0]]);
+      running.push(second());
+      await waitForLockWaiters(1);
     } finally {
       release();
-      await holder;
     }
-    return Promise.allSettled(running);
+    const results = await Promise.allSettled(running);
+    spy.mockRestore();
+    return results;
+  }
+
+  function pauseAfterReversal(paused: () => Promise<void>) {
+    const reversal = moduleRef.get(OrderReversalService);
+    const original = reversal.reverseFinancials.bind(reversal);
+    return jest.spyOn(reversal, 'reverseFinancials').mockImplementation(async (...args) => {
+      const out = await original(...args);
+      await paused();
+      return out;
+    });
+  }
+
+  function pauseAfterReferralGrant(paused: () => Promise<void>) {
+    const rewards = moduleRef.get(RewardPointsService);
+    const original = rewards.grant.bind(rewards);
+    return jest.spyOn(rewards, 'grant').mockImplementation(async (...args) => {
+      const out = await original(...args);
+      await paused();
+      return out;
+    });
   }
 
   async function waitForLockWaiters(n: number) {
@@ -478,8 +500,8 @@ describe('Thưởng giới thiệu theo đơn thứ 2 (real Postgres)', () => {
 
 /**
  * Gộp phiên khách (mergeGuestInto) chuyển đơn của khách sang tài khoản đích nhưng dòng thưởng
- * REFERRAL_ORDER2:<guestId> vẫn mang id khách. Thu hồi và chặn thưởng trùng phải theo ĐƠN, không
- * theo chủ đơn hiện tại.
+ * REFERRAL_ORDER2:<guestId> vẫn mang id khách. Chặn thưởng trùng theo ĐƠN; còn thu hồi thì tách khỏi đơn đã chuyển
+ * (G6): trả đơn cũ của khách sau gộp không thu hồi thưởng của người mời khách.
  */
 describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -563,7 +585,7 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
     return { referrer, guest, target, o1, o2 };
   }
 
-  it('(g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại cặp O1:O2; trả O1+O2 thu hồi đủ', async () => {
+  it('(g1) T cùng người mời R: đơn mới của T giao xong không thưởng lại cặp O1:O2; trả O1+O2 sau gộp không thu hồi', async () => {
     const { referrer, guest, target, o1, o2 } = await rewardedGuestMergedInto('SAME');
     await deliver(target.id, 1);
     expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
@@ -571,17 +593,17 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
 
     await orderStatus.setStatus(o1.id, 'RETURNED');
     await orderStatus.setStatus(o2.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
-    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`]);
   });
 
-  it('(g2) T không có người mời: trả O1 sau gộp vẫn thu hồi thưởng của G; trả O2 không trừ thêm', async () => {
+  it('(g2) T không có người mời: trả O1 rồi O2 sau gộp không thu hồi thưởng của G', async () => {
     const { referrer, guest, o1, o2 } = await rewardedGuestMergedInto(null);
     await orderStatus.setStatus(o1.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
     await orderStatus.setStatus(o2.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
-    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`, `REFERRAL_ORDER2_REVOKE:${guest.id}`]);
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
+    expect(await reasonsOf(referrer.id)).toEqual([`REFERRAL_ORDER2:${guest.id}`]);
   });
 
   it('(g3) T có người mời khác R2: R2 chỉ được thưởng từ 2 đơn chưa dùng của T, không từ O1:O2', async () => {
@@ -598,9 +620,9 @@ describe('Thưởng giới thiệu sau khi gộp phiên khách (real Postgres)',
     expect(grant.refId?.split(':')).toContain(o4.id);
     expect(grant.refId?.split(':')).not.toContain(o1.id);
 
-    // Trả O1 chỉ đụng thưởng của G (người mời R), không đụng thưởng của T.
+    // Trả O1 sau gộp không đụng thưởng của G (người mời R) lẫn thưởng của T.
     await orderStatus.setStatus(o1.id, 'RETURNED');
-    expect(await pointsOf(referrer.id)).toEqual({ balance: 0, ledger: 0 });
+    expect(await pointsOf(referrer.id)).toEqual({ balance: REWARD, ledger: REWARD });
     expect(await pointsOf(r2.id)).toEqual({ balance: REWARD, ledger: REWARD });
   });
 

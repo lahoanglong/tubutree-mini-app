@@ -21,17 +21,26 @@ describe('allocateComboDiscounts (thuần)', () => {
   });
 
   it('floor khi giảm lẻ', () => {
-    const out = allocateComboDiscounts([{ pct: 10, productIds: ['p1'] }], [{ variationId: 'v1', productId: 'p1', total: 99 }]);
+    const out = allocateComboDiscounts(
+      [{ pct: 10, productIds: ['p1', 'p2'] }],
+      [
+        { variationId: 'v1', productId: 'p1', total: 99 },
+        { variationId: 'v2', productId: 'p2', total: 100 },
+      ],
+    );
     expect(out.perLine.v1).toBe(9); // floor(9.9)
-    expect(out.total).toBe(9);
+    expect(out.total).toBe(19);
   });
 
   it('dòng khớp nhiều combo → lấy pct cao nhất', () => {
     const combos = [
-      { pct: 10, productIds: ['p1'] },
-      { pct: 25, productIds: ['p1'] },
+      { pct: 10, productIds: ['p1', 'p2'] },
+      { pct: 25, productIds: ['p1', 'p2'] },
     ];
-    const out = allocateComboDiscounts(combos, [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    const out = allocateComboDiscounts(combos, [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+    ]);
     expect(out.perLine.v1).toBe(25);
   });
 
@@ -44,20 +53,33 @@ describe('allocateComboDiscounts (thuần)', () => {
   });
 
   it('kẹp pct tối đa 100% (không giảm quá giá)', () => {
-    const out = allocateComboDiscounts([{ pct: 150, productIds: ['p1'] }], [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    const out = allocateComboDiscounts(
+      [{ pct: 150, productIds: ['p1', 'p2'] }],
+      [
+        { variationId: 'v1', productId: 'p1', total: 100 },
+        { variationId: 'v2', productId: 'p2', total: 100 },
+      ],
+    );
     expect(out.perLine.v1).toBe(100);
   });
 
   it('nhiều biến thể cùng productId đều được giảm', () => {
     const out = allocateComboDiscounts(
-      [{ pct: 10, productIds: ['p1'] }],
+      [{ pct: 10, productIds: ['p1', 'p2'] }],
       [
         { variationId: 'v1', productId: 'p1', total: 100 },
         { variationId: 'v2', productId: 'p1', total: 50 },
+        { variationId: 'v3', productId: 'p2', total: 10 },
       ],
     );
-    expect(out.perLine).toEqual({ v1: 10, v2: 5 });
-    expect(out.total).toBe(15);
+    expect(out.perLine).toEqual({ v1: 10, v2: 5, v3: 1 });
+    expect(out.total).toBe(16);
+  });
+
+  it('MONEY-5: "combo" chỉ 1 sản phẩm (hoặc 2 dòng trùng 1 sản phẩm) → không phải combo, không giảm', () => {
+    const lines = [{ variationId: 'v1', productId: 'p1', total: 345000 }];
+    expect(allocateComboDiscounts([{ pct: 30, productIds: ['p1'] }], lines).total).toBe(0);
+    expect(allocateComboDiscounts([{ pct: 30, productIds: ['p1', 'p1'] }], lines).total).toBe(0);
   });
 });
 
@@ -115,21 +137,103 @@ describe('ComboService.computeForStorefront', () => {
   // vẫn PHẢI tự clamp theo config hiện hành, không tin nguyên giá trị lưu trong DB.
   it('comboDiscountPct trong DB vượt trần cấu hình → clamp lại khi tính (defense in depth)', async () => {
     const prisma = makePrisma([
-      { comboDiscountPct: 100, items: [{ productId: 'p1', isHidden: false }] },
+      { comboDiscountPct: 100, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: false }] },
     ]);
     const cappedConfig = { get: async (k: string, fb?: unknown) => (k === 'storefront.max_combo_pct' ? 20 : fb) } as any;
     const svc = new ComboService(prisma, cappedConfig);
-    const out = await svc.computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    const out = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+    ]);
     expect(out.perLine.v1).toBe(20); // KHÔNG phải 100
   });
 
   it('item ẩn bị loại khỏi điều kiện combo', async () => {
     const prisma = makePrisma([
-      { comboDiscountPct: 10, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: true }] },
+      {
+        comboDiscountPct: 10,
+        items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: true }, { productId: 'p3', isHidden: false }],
+      },
     ]);
     const svc = new ComboService(prisma, config);
-    // combo giờ chỉ cần p1 (p2 ẩn) → giỏ có p1 là đủ
-    const out = await svc.computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    // combo giờ chỉ cần p1 + p3 (p2 ẩn)
+    const out = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v3', productId: 'p3', total: 100 },
+    ]);
     expect(out.perLine.v1).toBe(10);
+  });
+
+  it('item ẩn làm combo chỉ còn 1 sản phẩm hiện → không còn là combo', async () => {
+    const prisma = makePrisma([
+      { comboDiscountPct: 10, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: true }] },
+    ]);
+    const out = await new ComboService(prisma, config).computeForStorefront('linh-shop', [{ variationId: 'v1', productId: 'p1', total: 100 }]);
+    expect(out.total).toBe(0);
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác trong combo không được giảm và không tính vào điều kiện combo', async () => {
+    const prisma = makePrisma([
+      {
+        comboDiscountPct: 10,
+        items: [
+          { productId: 'p1', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p2', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p3', isHidden: false, product: { storefrontId: 'sf-doi-tac' } },
+        ],
+      },
+    ]);
+    const svc = new ComboService(prisma, config);
+    const out = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+      { variationId: 'v3', productId: 'p3', total: 100 },
+    ]);
+    expect(out).toEqual({ total: 20, perLine: { v1: 10, v2: 10 } });
+    const withoutPartner = await svc.computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+    ]);
+    expect(withoutPartner.total).toBe(20);
+    expect((prisma.storefront.findFirst as jest.Mock).mock.calls[0][0].select.collections.select.items.select).toEqual({
+      productId: true,
+      isHidden: true,
+      product: { select: { storefrontId: true } },
+    });
+  });
+
+  it('Q8 S2: combo một sản phẩm Tubu + một hàng đối tác chỉ còn một sản phẩm → không còn là combo', async () => {
+    const prisma = makePrisma([
+      {
+        comboDiscountPct: 15,
+        items: [
+          { productId: 'p1', isHidden: false, product: { storefrontId: null } },
+          { productId: 'p3', isHidden: false, product: { storefrontId: 'sf-doi-tac' } },
+        ],
+      },
+    ]);
+    const out = await new ComboService(prisma, config).computeForStorefront('linh-shop', [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v3', productId: 'p3', total: 100 },
+    ]);
+    expect(out).toEqual({ total: 0, perLine: {} });
+  });
+
+  it('MONEY-5: chủ gian hàng tự mua qua gian hàng của mình → không có giảm combo', async () => {
+    const prisma = {
+      storefront: {
+        findFirst: jest.fn().mockResolvedValue({
+          ownerUserId: 'ctv1',
+          collections: [{ comboDiscountPct: 30, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: false }] }],
+        }),
+      },
+    } as any;
+    const lines = [
+      { variationId: 'v1', productId: 'p1', total: 100 },
+      { variationId: 'v2', productId: 'p2', total: 100 },
+    ];
+    const svc = new ComboService(prisma, config);
+    expect((await svc.computeForStorefront('ctv-shop', lines, 'ctv1')).total).toBe(0);
+    expect((await svc.computeForStorefront('ctv-shop', lines, 'buyer2')).total).toBe(60);
   });
 });

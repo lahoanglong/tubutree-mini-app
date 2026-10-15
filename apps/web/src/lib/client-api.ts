@@ -13,10 +13,17 @@
 const BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
 
+/**
+ * Ảnh do chính API phục vụ (ảnh minh chứng đổi/trả, ảnh đánh giá base64 → "/returns/:id/images/0?v=…") được trả dạng
+ * đường dẫn tương đối API để JSON nhẹ; ghép với gốc API cho thẻ img.
+ */
+export function apiMediaUrl(path: string): string {
+  return `${BASE.replace(/\/+$/, '')}${path}`;
+}
+
 const SESSION_MARKER = 'tubu_web_session';
 
 let accessToken: string | null = null;
-let refreshPromise: Promise<string | null> | null = null;
 
 export function setAccessToken(t: string | null): void {
   accessToken = t;
@@ -44,7 +51,7 @@ export function setSessionMarker(): void {
   }
 }
 
-/** Xoá cờ khi phiên chết (refresh 401) hoặc đăng xuất — chặn vòng lặp thử lại vô hạn. */
+/** Xoá cờ khi phiên chết (refresh 400/401/403) hoặc đăng xuất — chặn vòng lặp thử lại vô hạn. */
 export function clearSessionMarker(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -57,48 +64,155 @@ export function clearSessionMarker(): void {
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */
 const WEB_CLIENT_HEADER = { 'x-client': 'web' } as const;
 
-async function rawRefresh(): Promise<string | null> {
-  if (!hasSessionMarker()) return null;
+/** Kết quả một lượt refresh: 'dead' = phiên chết thật (đã xoá cờ); 'transient' = lỗi tạm, cờ còn nguyên. */
+export type RefreshOutcome =
+  | { kind: 'ok'; data: { accessToken: string; user?: unknown } }
+  | { kind: 'dead' }
+  | { kind: 'transient' };
+
+// Khoá Web Locks dùng chung mọi tab cùng origin: các tab mở cùng lúc (khôi phục trình duyệt, mở nhiều
+// sản phẩm ở tab mới) refresh lần lượt, tab sau gửi cookie tab trước vừa xoay thay vì cùng một token.
+const REFRESH_LOCK = 'tubu_web_refresh';
+
+function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  if (!locks || typeof locks.request !== 'function') return fn();
+  return locks.request(REFRESH_LOCK, fn) as Promise<T>;
+}
+
+async function doRefresh(): Promise<RefreshOutcome> {
+  let reply: Reply;
   try {
-    const res = await fetch(`${BASE}/auth/refresh`, {
+    reply = await exchange(`${BASE}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...WEB_CLIENT_HEADER },
       body: '{}',
     });
-    if (!res.ok) throw new Error('refresh failed');
-    const data = (await res.json()) as { accessToken: string };
-    accessToken = data.accessToken;
-    setSessionMarker();
-    return data.accessToken;
   } catch {
+    // Mất mạng/quá hạn (NetworkError) hoặc thân 2xx hỏng: không nói lên gì về phiên, giữ cờ.
+    return { kind: 'transient' };
+  }
+  // 400 = không còn cookie (BE đã xoá), 401/403 = token chết/bị thu hồi/tài khoản bị khoá. Mất mạng, 5xx,
+  // 429 thì cookie vẫn có thể còn sống: giữ cờ để lần sau còn khôi phục được.
+  if (reply.status === 400 || reply.status === 401 || reply.status === 403) {
     accessToken = null;
     clearSessionMarker();
-    return null;
+    return { kind: 'dead' };
   }
+  const data = reply.body as { accessToken?: string; user?: unknown } | undefined;
+  if (!reply.ok || typeof data?.accessToken !== 'string') return { kind: 'transient' };
+  accessToken = data.accessToken;
+  setSessionMarker();
+  return { kind: 'ok', data: { accessToken: data.accessToken, user: data.user } };
+}
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/** Một lượt refresh bằng cookie, gộp các lời gọi trùng trong tab và xếp hàng giữa các tab. */
+export function refreshSession(): Promise<RefreshOutcome> {
+  if (!hasSessionMarker()) return Promise.resolve({ kind: 'dead' });
+  refreshInFlight ??= withRefreshLock(doRefresh).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Khôi phục phiên lúc mở trang: lỗi tạm thời thì thử lại sau từng khoảng trong `retryDelays`. */
+export async function restoreSession(
+  retryDelays: readonly number[] = [1000, 3000],
+  sleep: (ms: number) => Promise<void> = sleepMs,
+): Promise<RefreshOutcome> {
+  for (let attempt = 0; ; attempt++) {
+    const out = await refreshSession();
+    if (out.kind !== 'transient' || attempt >= retryDelays.length) return out;
+    await sleep(retryDelays[attempt]!);
+  }
+}
+
+async function rawRefresh(): Promise<string | null> {
+  const out = await refreshSession();
+  return out.kind === 'ok' ? out.data.accessToken : null;
 }
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Mã lỗi nghiệp vụ ổn định trong body (vd TOTAL_CHANGED, ADDRESS_OUTDATED); null nếu API không gửi. */
+  code: string | null;
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
-async function parseError(res: Response): Promise<string> {
-  try {
-    const data = (await res.json()) as { message?: string | string[] };
-    const m = Array.isArray(data.message) ? data.message[0] : data.message;
-    return m ?? 'Có lỗi xảy ra. Vui lòng thử lại.';
-  } catch {
-    return 'Có lỗi xảy ra. Vui lòng thử lại.';
+/** Không nhận được phản hồi nào (mất mạng, DNS, hết thời gian chờ). Cố ý KHÔNG kế thừa ApiError: không có status HTTP. */
+export class NetworkError extends Error {
+  readonly timedOut: boolean;
+  constructor(timedOut: boolean) {
+    super(timedOut ? TIMEOUT_MESSAGE : OFFLINE_MESSAGE);
+    this.name = 'NetworkError';
+    this.timedOut = timedOut;
   }
+}
+
+/** Quá hạn thì thôi chờ: mạng yếu/máy chủ treo không được giữ nút "Đang đặt hàng…" mãi. */
+export const REQUEST_TIMEOUT_MS = 20_000;
+const OFFLINE_MESSAGE = 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.';
+const TIMEOUT_MESSAGE = 'Máy chủ phản hồi quá lâu. Vui lòng thử lại.';
+const GENERIC_ERROR = 'Có lỗi xảy ra. Vui lòng thử lại.';
+
+interface Reply {
+  status: number;
+  ok: boolean;
+  body: unknown;
+}
+
+/**
+ * Một lượt gọi + đọc thân phản hồi, giới hạn REQUEST_TIMEOUT_MS cho cả hai. Lỗi tầng mạng (fetch ném TypeError,
+ * hoặc bị ngắt vì quá hạn) đổi thành NetworkError với câu tiếng Việt thay vì "Failed to fetch" thô.
+ */
+async function exchange(url: string, init: RequestInit): Promise<Reply> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    let body: unknown;
+    if (res.status !== 204) {
+      try {
+        body = await res.json();
+      } catch (e) {
+        // Thân hỏng/không phải JSON: phản hồi lỗi vẫn có status để báo; phản hồi thành công thì ném như trước.
+        if (res.ok || ctrl.signal.aborted) throw e;
+      }
+    }
+    return { status: res.status, ok: res.ok, body };
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new NetworkError(true);
+    if (e instanceof TypeError) throw new NetworkError(false);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseError(body: unknown): { message: string; code: string | null } {
+  const data = (body ?? {}) as { message?: string | string[]; code?: unknown };
+  const m = Array.isArray(data.message) ? data.message[0] : data.message;
+  return { message: m ?? GENERIC_ERROR, code: typeof data.code === 'string' ? data.code : null };
 }
 
 export async function apiFetch<T>(
   path: string,
-  opts: { method?: string; body?: unknown; auth?: boolean; headers?: Record<string, string> } = {},
+  opts: {
+    method?: string;
+    body?: unknown;
+    auth?: boolean;
+    headers?: Record<string, string>;
+    cache?: RequestCache;
+  } = {},
   _retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = { ...opts.headers };
@@ -113,11 +227,12 @@ export async function apiFetch<T>(
   // request là thêm một lượt OPTIONS cho từng lần gọi API.
   if (path.startsWith('/auth/')) Object.assign(headers, WEB_CLIENT_HEADER);
 
-  const res = await fetch(`${BASE}${path}`, {
+  const reply = await exchange(`${BASE}${path}`, {
     method: opts.method ?? 'GET',
     headers,
     // Cookie refresh giới hạn Path=/api/auth nên chỉ thực sự được gửi ở các route auth.
     credentials: 'include',
+    ...(opts.cache ? { cache: opts.cache } : {}),
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
 
@@ -125,15 +240,60 @@ export async function apiFetch<T>(
   // bỏ qua guard này thì một 401 từ chính /auth/refresh hay /auth/zalo-oauth (vd code đã
   // dùng, hết hạn) sẽ vô tình refresh + retry bằng phiên khác đang lưu trong cookie, âm thầm
   // đổi session hiện tại thay vì trả lỗi 401 gốc.
-  if (res.status === 401 && !_retried && opts.auth !== false && hasSessionMarker()) {
-    refreshPromise ??= rawRefresh().finally(() => {
-      refreshPromise = null;
-    });
-    const newToken = await refreshPromise;
+  if (reply.status === 401 && !_retried && opts.auth !== false && hasSessionMarker()) {
+    const newToken = await rawRefresh();
     if (newToken) return apiFetch<T>(path, opts, true);
   }
 
-  if (!res.ok) throw new ApiError(await parseError(res), res.status);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  if (!reply.ok) {
+    const { message, code } = parseError(reply.body);
+    throw new ApiError(message, reply.status, code);
+  }
+  if (reply.status === 204) return undefined as T;
+  return reply.body as T;
+}
+
+/** Xuất toàn bộ dữ liệu có thể lâu hơn hạn chờ thường của apiFetch (API ghi dần từng lô). */
+export const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Tải một tệp do API sinh (CSV xuất dữ liệu) bằng phiên hiện tại rồi mở hộp lưu tệp của trình duyệt. Thẻ <a href> trần
+ * không gửi được Authorization nên phải tải qua fetch; 401 thì làm mới phiên và thử lại một lần như apiFetch.
+ */
+export async function apiDownload(path: string, fallbackName: string, _retried = false): Promise<{ filename: string; bytes: number }> {
+  const headers: Record<string, string> = { 'X-Client-Platform': 'web' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), DOWNLOAD_TIMEOUT_MS);
+  let res: Response;
+  let blob: Blob;
+  try {
+    res = await fetch(`${BASE}${path}`, { headers, credentials: 'include', signal: ctrl.signal });
+    if (res.status === 401 && !_retried && hasSessionMarker() && (await rawRefresh())) {
+      return apiDownload(path, fallbackName, true);
+    }
+    if (!res.ok) {
+      const body: unknown = await res.json().catch(() => undefined);
+      const { message, code } = parseError(body);
+      throw new ApiError(message, res.status, code);
+    }
+    blob = await res.blob();
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new NetworkError(true);
+    if (e instanceof TypeError) throw new NetworkError(false);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { filename, bytes: blob.size };
 }

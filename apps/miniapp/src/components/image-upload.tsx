@@ -1,5 +1,4 @@
 import { useRef, useState, type CSSProperties } from 'react';
-import { Input } from 'zmp-ui';
 import { Camera, Loader2, RefreshCw, Video, X } from 'lucide-react';
 import { haptic } from '../utils/haptic';
 import { Text } from './ui/text';
@@ -204,7 +203,8 @@ export function ImageUpload({
 }
 
 /**
- * Upload 1 video review lên Cloudinary → fallback dán URL nếu chưa cấu hình.
+ * Upload 1 video review lên Cloudinary. Chưa cấu hình thì ẩn: máy chủ chỉ nhận video đã tải lên Cloudinary (URL dán tay
+ * bị từ chối), nên ô dán URL chỉ dẫn khách tới lỗi.
  */
 export function VideoUpload({
   value,
@@ -255,13 +255,7 @@ export function VideoUpload({
     }
   };
 
-  if (!CONFIGURED) {
-    return (
-      <div style={{ marginTop: 8 }}>
-        <Input label="Video review (không bắt buộc)" placeholder="Dán URL video" value={value} onChange={(e) => onChange(e.target.value)} />
-      </div>
-    );
-  }
+  if (!CONFIGURED) return null;
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -467,14 +461,14 @@ export function MultiImageUpload({
               justifyContent: 'center',
               cursor: 'pointer',
               gap: 2,
-              padding: 0,
+              padding: '0 6px',
               font: 'inherit',
               color: 'inherit',
             }}
           >
             <Camera size={22} color="var(--color-text-brand)" strokeWidth={1.8} />
-            <Text variant="label" tone="brand" as="span">
-              {uploading ? 'Đang tải…' : 'Chạm để tải'}
+            <Text variant="label" tone="brand" as="span" style={{ whiteSpace: 'nowrap' }}>
+              {uploading ? 'Đang tải…' : 'Thêm ảnh'}
             </Text>
           </button>
         )}

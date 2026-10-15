@@ -1,29 +1,34 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
+import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
 
-class CreatePostDto {
+/** Khớp MultiImageUpload ở Mini App (max=6). */
+const MAX_POST_IMAGES = 6;
+
+export class CreatePostDto {
   @IsOptional() @IsIn(KINDS as unknown as string[]) kind?: (typeof KINDS)[number];
   @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
-  @IsOptional() @IsArray() @IsString({ each: true }) productSlugs?: string[];
-  @IsOptional() @IsArray() @IsString({ each: true }) tagSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) productSlugs?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
 }
-class EditPostDto {
-  @IsOptional() @IsString() @MaxLength(160) title?: string;
-  @IsOptional() @IsString() @MaxLength(5000) body?: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+export class EditPostDto {
+  @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @IsString() @MaxLength(5000) body?: string;
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
 }
 class CommentDto {
   @IsString() @MinLength(1) @MaxLength(500) body!: string;
@@ -33,18 +38,21 @@ class ReportDto {
   @IsOptional() @IsString() targetId?: string;
   @IsString() @MaxLength(500) reason!: string;
 }
+class RejectPostDto {
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
+}
 class PinDto {
   @IsOptional() @IsBoolean() pinned?: boolean;
 }
 export class CreateEventDto {
   @IsString() @MaxLength(160) title!: string;
-  @IsOptional() @IsString() @MaxLength(2000) description?: string;
-  @IsOptional() @IsString() coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(2000) description?: string;
+  @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
   // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
   // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @IsOptional() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -113,6 +121,19 @@ export class CommunityFeedController {
       endAt: new Date(dto.endAt),
       rewardPoints: dto.rewardPoints,
     } as CreateEventInput);
+  }
+
+  // Quản trị: sự kiện đang mở/đã đóng (kèm người thắng) và người dự thi để chọn người thắng. Literal path khai TRƯỚC @Get(':id').
+  @Roles('ADMIN')
+  @Get('admin/events')
+  adminEvents(@Query('status') status?: string) {
+    return this.feed.adminEvents(status === 'CLOSED' ? 'CLOSED' : 'OPEN');
+  }
+
+  @Roles('ADMIN')
+  @Get('admin/events/:id/participants')
+  adminEventParticipants(@Param('id') id: string) {
+    return this.feed.adminEventParticipants(id);
   }
 
   @Roles('ADMIN')
@@ -205,8 +226,8 @@ export class CommunityFeedController {
 
   @Roles('ADMIN')
   @Post('admin/:id/reject')
-  reject(@Param('id') id: string) {
-    return this.feed.rejectPost(id);
+  reject(@Param('id') id: string, @Body() dto: RejectPostDto) {
+    return this.feed.rejectPost(id, dto?.reason);
   }
 
   @Roles('ADMIN')

@@ -23,14 +23,17 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   /** Giữ phản hồi của applyCoupon/checkoutQuote cho tới khi test cho chạy, để quan sát trạng thái "đang tính". */
   gate: null as Promise<void> | null,
+  /** Server giữ mã nhưng chưa áp cho đơn (MONEY-3). */
+  couponNotice: null as string | null,
 }));
 const SUBTOTAL = 300000;
-const discountOf = () => (state.couponCode ? 90000 : 0);
+const discountOf = () => (state.couponCode && !state.couponNotice ? 90000 : 0);
 const cartNow = () => ({
   items: [
     { id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết', variationName: '500ml', slug: 'dau-goi', thumbnail: null, unitPrice: 150000, quantity: 2, stock: 5, total: SUBTOTAL },
   ],
   couponCode: state.couponCode,
+  couponNotice: state.couponNotice,
   subtotal: SUBTOTAL,
   discount: discountOf(),
   freeship: false,
@@ -70,7 +73,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       };
     }
     return {
-      subtotal: SUBTOTAL, discount: discountOf(), pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
+      subtotal: SUBTOTAL, discount: discountOf(), couponNotice: state.couponNotice, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000,
       total: SUBTOTAL - discountOf() + 30000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
     };
   },
@@ -93,6 +96,7 @@ const mount = async () => {
 };
 const btn = (c: HTMLElement, text: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined;
+const voucher = (c: HTMLElement, code: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="Dùng mã ${code}"]`);
 const input = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="coupon-code"]');
 const COUPON = { code: 'WELCOME30', type: 'PERCENT', value: 30, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
 
@@ -108,6 +112,7 @@ beforeEach(() => {
   state.zeroQuote = false;
   state.coupons = [COUPON];
   state.gate = null;
+  state.couponNotice = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -120,7 +125,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     const field = input(container);
     expect(field).not.toBeNull();
     expect(container.querySelector(`label[for="${field!.id}"]`)?.textContent).toBe('Mã giảm giá');
-    expect(btn(container, 'WELCOME30')).toBeDefined();
+    expect(voucher(container, 'WELCOME30')).not.toBeNull();
     expect(btn(container, 'Áp dụng')!.disabled).toBe(true);
   });
 
@@ -128,7 +133,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     const { container } = await mount();
     const before = state.quoteCalls;
     expect(container.textContent).toContain('330.000đ');
-    click(btn(container, 'WELCOME30')!);
+    click(voucher(container, 'WELCOME30'));
     await flush(8);
     expect(state.applied).toEqual(['WELCOME30']);
     expect(state.quoteCalls).toBeGreaterThan(before);
@@ -173,12 +178,20 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(input(container)).not.toBeNull();
   });
 
+  it('MONEY-3: giỏ giữ mã nhưng chưa áp cho đơn → hiện câu giải thích của server dưới mã, không có dòng giảm giá', async () => {
+    state.couponCode = 'UAT50K';
+    state.couponNotice = 'Mã chưa được áp dụng cho đơn này (hàng giờ vàng không được tính vào điều kiện của mã): Đơn tối thiểu 150.000đ để dùng mã này.';
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="coupon-notice"]')?.textContent).toBe(state.couponNotice);
+    expect(container.textContent).not.toContain('Giảm giá (');
+  });
+
   it('mã đòi đơn tối thiểu cao hơn tạm tính bị khoá và nói rõ lý do', async () => {
     state.coupons = [{ ...COUPON, code: 'BIGSPEND', minOrder: 500000 }];
     const { container } = await mount();
-    const chip = btn(container, 'BIGSPEND')!;
+    const chip = voucher(container, 'BIGSPEND')!;
     expect(chip.disabled).toBe(true);
-    expect(chip.title).toBe('Cần đơn tối thiểu 500.000đ');
+    expect(chip.closest('li')!.textContent).toContain('Cần đơn tối thiểu 500.000đ');
   });
 
   it('đang tính lại báo giá sau khi đổi mã thì chưa cho đặt hàng (tránh đặt khi con số trên màn hình đã cũ)', async () => {
@@ -188,7 +201,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     state.gate = new Promise<void>((r) => {
       release = r;
     });
-    click(btn(container, 'WELCOME30')!);
+    click(voucher(container, 'WELCOME30'));
     await flush(3);
     // Mã chưa áp xong rồi tới báo giá mới chưa về: nút đặt hàng phải khoá.
     expect(btn(container, 'Đặt hàng')!.disabled).toBe(true);
@@ -235,7 +248,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(container.textContent).toContain('Đặt hàng thành công');
   });
 
-  it('đang đặt hàng thì chip mã trong ví và nút Áp dụng bị khoá', async () => {
+  it('đang đặt hàng thì mã trong ví và nút Áp dụng bị khoá', async () => {
     const { container } = await mount();
     typeInto(input(container), 'WELCOME30');
     expect(btn(container, 'Áp dụng')!.disabled).toBe(false);
@@ -246,7 +259,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     click(btn(container, 'Đặt hàng')!);
     await flush(3);
     expect(btn(container, 'Áp dụng')!.disabled).toBe(true);
-    expect(btn(container, 'WELCOME30')!.disabled).toBe(true);
+    expect(voucher(container, 'WELCOME30')!.disabled).toBe(true);
     release();
     await flush(4);
   });

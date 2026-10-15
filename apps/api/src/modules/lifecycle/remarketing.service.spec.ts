@@ -125,6 +125,24 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     expect(where.updatedAt.gte).toEqual(new Date('2026-07-02T00:00:00Z')); // now - 72h
   });
 
+  // R4-ADMIN-8: dữ liệu cũ có min ≥ max (trước khi chặn lúc ghi) → khoảng rỗng, cron không nhắc giỏ nào mà không ai biết.
+  it('min ≥ max trong SystemConfig → không truy vấn, ghi cảnh báo nêu hai khoá cần sửa', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { cart: { findMany, updateMany: jest.fn() } } as unknown as PrismaService;
+    const notifications = { notify: jest.fn() } as unknown as NotificationsService;
+    const config = makeConfig({
+      'remarketing.cart_abandon_min_hours': 72,
+      'remarketing.cart_abandon_max_hours': 6,
+    });
+    const svc = new RemarketingService(prisma, config, notifications);
+    const warn = jest.spyOn((svc as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+
+    await svc.sendCartAbandonReminders();
+
+    expect(findMany).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/cart_abandon_min_hours.*cart_abandon_max_hours/));
+  });
+
   it('claim rồi gửi lỗi thật (không phải ZNS graceful-fail) → trả cờ về null để lượt sau thử lại', async () => {
     // Claim (updateMany) xảy ra TRƯỚC notify — nếu notify ném lỗi thật (không phải ZNS fail
     // graceful, cái đó notify() đã tự nuốt và luôn resolve) mà không trả cờ lại thì

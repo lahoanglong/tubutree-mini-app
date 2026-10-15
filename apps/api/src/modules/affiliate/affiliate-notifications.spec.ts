@@ -137,13 +137,34 @@ describe('AffiliateService.markPayoutPaid (C-029: đã rút)', () => {
     id: 'p1', userId: 'ctv1', amount: 480_000, bankRef: 'FT2610', ...over,
   });
   function prismaForPayout(count: number, row = payoutRow()) {
-    return {
+    const p = {
       payout: {
         updateMany: jest.fn().mockResolvedValue({ count }),
         findUniqueOrThrow: jest.fn().mockResolvedValue(row),
       },
+      commission: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
+      $transaction: jest.fn(),
     };
+    p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
+    return p;
   }
+
+  it('SELLER-10: hoa hồng trong lệnh rút chỉ thành PAID khi admin xác nhận đã chuyển, trong cùng transaction', async () => {
+    const p = prismaForPayout(1);
+    const { svc } = build(p);
+    await svc.markPayoutPaid('admin1', 'p1', { bankRef: 'FT2610' });
+    expect(p.commission.updateMany).toHaveBeenCalledWith({
+      where: { payoutBatchId: 'p1', status: 'APPROVED' },
+      data: { status: 'PAID', paidAt: expect.any(Date) },
+    });
+  });
+
+  it('SELLER-10: lệnh đã bị xử lý (count=0) → không đụng hoa hồng', async () => {
+    const p = prismaForPayout(0);
+    const { svc } = build(p);
+    await expect(svc.markPayoutPaid('admin1', 'p1')).rejects.toThrow();
+    expect(p.commission.updateMany).not.toHaveBeenCalled();
+  });
 
   it('chuyển khoản xong → báo CTV số tiền thực nhận kèm mã giao dịch', async () => {
     const { svc, notify } = build(prismaForPayout(1));

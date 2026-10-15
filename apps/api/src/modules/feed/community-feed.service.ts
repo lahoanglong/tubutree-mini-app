@@ -7,6 +7,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { startOfVnDay } from '../../common/vn-time';
+import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
 const LEVEL_NAMES: Record<number, string> = {
@@ -47,69 +48,15 @@ export function slugifyTag(label: string): string {
     .replace(/-+/g, '-');
 }
 
-/** Domain được PHÉP chèn link ngoài trong bài/bình luận — khác domain này đều bị coi là link lạ. */
-const LINK_WHITELIST_DOMAINS = ['tubutree.com', 'zalo.me', 'zaloapp.com'];
+export { containsBannedContent } from './content-filter';
 
-/**
- * Từ/cụm từ cấm cơ bản — spam/lừa đảo/cờ bạc/vay nóng phổ biến, đã chuẩn hoá bỏ dấu + thường
- * (so khớp qua stripDiacritics nên cả bản có dấu lẫn không dấu đều dính). Đây là rào chắn SƠ
- * BỘ, không thay thế kiểm duyệt người — mục đích chỉ để hạ auto-PUBLISHED xuống PENDING.
- */
-const BANNED_KEYWORDS = [
-  'lua dao',
-  'lua tien',
-  'ca do',
-  'ca cuoc',
-  'casino',
-  'vay nong',
-  'vay lai',
-  'tin dung den',
-  'co bac',
-  'da cap',
-  'rua tien',
-  'hang gia',
-  'hang nhai',
-  'khieu dam',
-  'sex',
-  'ma tuy',
-  'vu khi',
-  'lam bang gia',
-  'chiem doat tai san',
-  'trung thuong',
-];
+const DEFAULT_REJECT_REASON = 'nội dung chưa phù hợp với nội quy cộng đồng';
+const REJECT_TITLE_PREVIEW = 40;
 
-/** Bỏ dấu tiếng Việt + hạ thường, dùng để so khớp BANNED_KEYWORDS không phân biệt dấu. */
-function stripDiacritics(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
-}
-
-/**
- * Lọc nội dung đơn giản (§6.14 moderation gap): kiểm tra text có chứa từ cấm cơ bản HOẶC link
- * ngoài domain không nằm trong whitelist hay không. KHÔNG chặn hẳn — chỉ dùng để hạ cờ, ép bài
- * viết/bình luận vào hàng chờ PENDING dù tác giả isTrusted, vì rào cản "đã mua 1 lần" quá thấp:
- * một tài khoản mua hàng 1 lần vẫn có thể chèn link ngoài/nội dung vi phạm và trước đây được
- * đăng PUBLISHED ngay lập tức, không qua bất kỳ bộ lọc nào.
- */
-export function containsBannedContent(text: string): boolean {
-  if (!text) return false;
-  const normalized = stripDiacritics(text);
-  if (BANNED_KEYWORDS.some((kw) => normalized.includes(kw))) return true;
-
-  const urlRegex = /https?:\/\/([^\s/"'<>]+)/gi;
-  let match: RegExpExecArray | null;
-  while ((match = urlRegex.exec(text)) !== null) {
-    const host = match[1]!.split(/[/:?#]/)[0]!.toLowerCase();
-    const whitelisted = LINK_WHITELIST_DOMAINS.some(
-      (domain) => host === domain || host.endsWith(`.${domain}`),
-    );
-    if (!whitelisted) return true;
-  }
-  return false;
+/** Tên bài trong thông báo: tiêu đề, bài không tiêu đề thì lấy đầu nội dung. */
+function previewTitle(title: string | null, body: string): string {
+  const raw = (title?.trim() || body.trim()).replace(/\s+/g, ' ');
+  return raw.length > REJECT_TITLE_PREVIEW ? `${raw.slice(0, REJECT_TITLE_PREVIEW)}…` : raw;
 }
 
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
@@ -179,6 +126,11 @@ export class CommunityFeedService {
     // Optional: thông báo trả lời/best-answer/duyệt bài — không chặn hành động chính nếu thiếu/lỗi.
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
+
+  /** Từ cấm do admin chỉnh ở SystemConfig `community.banned_keywords`; chưa đặt hoặc sai kiểu thì dùng danh sách mặc định. */
+  private async bannedKeywords(): Promise<readonly string[]> {
+    return parseBannedKeywords(await this.config.get<unknown>('community.banned_keywords', DEFAULT_BANNED_KEYWORDS));
+  }
 
   /**
    * Cộng điểm reputation (§6.14 Pha 4) + cập nhật hạng — NON-FATAL: tự try/catch,
@@ -368,7 +320,7 @@ export class CommunityFeedService {
     const page = hasMore ? posts.slice(0, take) : posts;
     const counts = await this.countsForPage(page.map((p) => p.id));
     return {
-      posts: page.map((p) => this.toItem(p, userId, counts)),
+      posts: page.map((p) => this.toItem(p, userId, counts, { coverOnly: true })),
       nextCursor: hasMore ? page[page.length - 1]!.id : null,
     };
   }
@@ -424,14 +376,20 @@ export class CommunityFeedService {
     });
   }
 
-  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts) {
+  /**
+   * `coverOnly` cho danh sách: ảnh bài là base64 nội tuyến (~300KB/ảnh khi chưa có Cloudinary) mà thẻ trong
+   * feed chỉ vẽ ảnh đầu, nên danh sách trả ảnh bìa + `imageCount`, màn chi tiết mới trả đủ.
+   */
+  private toItem(p: FeedPostRow, userId: string, counts: FeedCounts, opts: { coverOnly?: boolean } = {}) {
+    const images = p.images ?? [];
     return {
       id: p.id,
       kind: p.kind,
       status: p.status,
       title: p.title ?? null,
       body: p.body,
-      images: p.images ?? [],
+      images: opts.coverOnly ? images.slice(0, 1) : images,
+      imageCount: images.length,
       meta: p.meta,
       createdAt: p.createdAt,
       author: p.user.fullName ?? 'Bạn Tubu',
@@ -496,7 +454,7 @@ export class CommunityFeedService {
     // lọc — rào cản "đã mua 1 lần" đủ thấp để một tài khoản mua hàng 1 lần chèn link ngoài/nội
     // dung vi phạm vào bài đăng công khai ngay lập tức. Match từ cấm/link lạ → ép PENDING (bỏ
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
-    const flagged = containsBannedContent(`${title ?? ''}\n${body}`);
+    const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
 
     const post = await this.prisma.feedPost.create({
@@ -592,15 +550,26 @@ export class CommunityFeedService {
     return { ok: true };
   }
 
-  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED. */
-  async rejectPost(postId: string) {
-    const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
+  /** Từ chối bài PENDING (hoặc bất kỳ) → xoá mềm REMOVED và báo tác giả (kèm lý do) để họ biết bài đi đâu. */
+  async rejectPost(postId: string, reason?: string) {
+    const post = await this.prisma.feedPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, title: true, body: true },
+    });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     // Endpoint này nhận cả bài ĐÃ PUBLISHED (đã cộng điểm uy tín + Điểm Xanh thưởng), nên phải đảo điểm y như
     // deletePost — nếu không, kiểm duyệt gỡ bài vi phạm mà tác giả vẫn giữ nguyên hạng.
     await this.reverseReputationForPost(post.userId, postId);
     await this.revokeTrust(post.userId);
     await this.prisma.feedPost.update({ where: { id: postId }, data: { status: 'REMOVED' } });
+    try {
+      await this.notifications?.notify(post.userId, 'COMMUNITY_POST_REJECTED', {
+        title: previewTitle(post.title, post.body),
+        reason: reason?.trim() || DEFAULT_REJECT_REASON,
+      });
+    } catch (err) {
+      this.logger.warn(`notify(reject) failed ${post.id}: ${(err as Error).message}`);
+    }
     return { ok: true };
   }
 
@@ -859,7 +828,7 @@ export class CommunityFeedService {
     if (contentChanged && post.status === 'PUBLISHED') {
       const mergedTitle = data.title !== undefined ? (data.title as string | null) : post.title;
       const mergedBody = data.body !== undefined ? (data.body as string) : post.body;
-      const flagged = containsBannedContent(`${mergedTitle ?? ''}\n${mergedBody}`);
+      const flagged = containsBannedContent(`${mergedTitle ?? ''}\n${mergedBody}`, await this.bannedKeywords());
       const trusted = await this.isTrusted(userId, role);
       if (flagged || !trusted) {
         data.status = 'PENDING';
@@ -1082,9 +1051,62 @@ export class CommunityFeedService {
     const posts = hasMore ? rows.slice(0, limit) : rows;
     const counts = await this.countsForPage(posts.map((p) => p.id));
     return {
-      posts: posts.map((p) => this.toItem(p, viewerId, counts)),
+      posts: posts.map((p) => this.toItem(p, viewerId, counts, { coverOnly: true })),
       nextCursor: hasMore ? posts[posts.length - 1]!.id : null,
     };
+  }
+
+  /**
+   * Danh sách sự kiện cho quản trị: mặc định đang mở; "CLOSED" cho sự kiện đã đóng (kèm người thắng) để còn xem lại lịch
+   * sử, vì listEvents công khai chỉ trả OPEN nên chốt người thắng xong sự kiện biến khỏi mọi màn.
+   */
+  async adminEvents(status: 'OPEN' | 'CLOSED' = 'OPEN', take = 50) {
+    const closed = status === 'CLOSED';
+    const events = await this.prisma.communityEvent.findMany({
+      where: { status: closed ? 'CLOSED' : 'OPEN' },
+      orderBy: { endAt: closed ? 'desc' : 'asc' },
+      take,
+    });
+    const winnerIds = [...new Set(events.map((e) => e.winnerUserId).filter((id): id is string => !!id))];
+    const winners = winnerIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: winnerIds } }, select: { id: true, fullName: true, avatarUrl: true } })
+      : [];
+    const byId = new Map(winners.map((u) => [u.id, u]));
+    return events.map((e) => {
+      const w = e.winnerUserId ? byId.get(e.winnerUserId) : undefined;
+      return { ...e, winner: w ? { id: w.id, name: w.fullName ?? 'Bạn Tubu', avatar: w.avatarUrl } : null };
+    });
+  }
+
+  /**
+   * Người dự thi của một sự kiện (quản trị chọn người thắng từ đây, không phải dán userId): mỗi người một dòng với bài
+   * mới nhất và số bài đã đăng. Chỉ bài PUBLISHED vì bài chờ duyệt/bị từ chối chưa được công nhận là dự thi.
+   */
+  async adminEventParticipants(eventId: string) {
+    const posts = await this.prisma.feedPost.findMany({
+      where: { status: 'PUBLISHED', meta: { path: ['eventId'], equals: eventId } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 500,
+      select: { id: true, userId: true, title: true, body: true, createdAt: true, user: { select: { fullName: true, avatarUrl: true } } },
+    });
+    const byUser = new Map<string, { userId: string; name: string; avatar: string | null; postId: string; postTitle: string; postedAt: Date; postCount: number }>();
+    for (const p of posts) {
+      const seen = byUser.get(p.userId);
+      if (seen) {
+        seen.postCount += 1;
+        continue;
+      }
+      byUser.set(p.userId, {
+        userId: p.userId,
+        name: p.user.fullName ?? 'Bạn Tubu',
+        avatar: p.user.avatarUrl,
+        postId: p.id,
+        postTitle: previewTitle(p.title, p.body),
+        postedAt: p.createdAt,
+        postCount: 1,
+      });
+    }
+    return [...byUser.values()];
   }
 
   /** Tạo sự kiện mới (admin). */
@@ -1115,7 +1137,7 @@ export class CommunityFeedService {
   async pickWinner(eventId: string, userId: string) {
     const event = await this.prisma.communityEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, status: true, rewardPoints: true },
+      select: { id: true, title: true, status: true, rewardPoints: true },
     });
     if (!event) throw new NotFoundException('Sự kiện không tồn tại.');
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
@@ -1131,6 +1153,13 @@ export class CommunityFeedService {
     } catch (err) {
       this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
     }
+    // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); lỗi thông báo không đảo việc đã chốt.
+    await this.notifications
+      ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
+        title: event.title,
+        reward: event.rewardPoints > 0 ? ` Bạn được thưởng ${event.rewardPoints} Điểm Xanh.` : '',
+      })
+      .catch((e: unknown) => this.logger.warn(`Không báo được người thắng sự kiện ${eventId}/${userId}: ${(e as Error).message}`));
     return { ok: true };
   }
 }

@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
@@ -49,11 +50,26 @@ export interface ProductDetail {
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
   sold?: number;
   variations: VariationDetail[];
+  /** Ai giao (D4): gian hàng tự giao có phí giao/ngưỡng miễn phí riêng. API cũ chưa trả → coi như Tubu giao. */
+  fulfiller?: ProductFulfiller;
+  /** Hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ): chỉ bán giá lẻ, không định kỳ/mua chung. API cũ chưa trả → hàng Tubu. */
+  partnerOwned?: boolean;
+}
+
+export interface ProductFulfiller {
+  /** UNAVAILABLE: gian hàng tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (xem `reason`). */
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
 }
 
 export interface CartLine {
   id: string;
   variationId: string;
+  /** API cũ chưa trả. */
+  productId?: string;
   productName: string;
   variationName: string;
   slug: string;
@@ -68,6 +84,39 @@ export interface CartLine {
   flashSaleItemId?: string | null;
   flashEndAt?: string | null;
   soldPct?: number | null;
+  /** Có khi số lượng vượt suất giờ vàng khách còn mua được: dòng đang tính giá thường, đây là lý do. */
+  flashLimitNotice?: string | null;
+  /** Nơi giao dòng này (D4): kho Tubu, gian hàng đối tác tự giao, hoặc không giao được. API cũ chưa trả. */
+  fulfiller?: LineFulfiller;
+}
+
+export interface LineFulfiller {
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  storefrontId: string | null;
+  name: string;
+  /** Chỉ có ở UNAVAILABLE: gian hàng tạm nghỉ nhận đơn, hoặc gian hàng đã ngừng bán (chủ bị khoá/hết quyền đối tác). */
+  reason?: 'STORE_PAUSED' | 'STORE_CLOSED';
+}
+/** Một kiện của lần đặt: mỗi nơi giao thành một đơn riêng với phí giao và tổng riêng. */
+export interface QuoteShipment {
+  key: string;
+  fulfiller: LineFulfiller;
+  itemIds: string[];
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  total: number;
+}
+/** Đơn cùng lần đặt bị tách theo nơi giao (kể cả chính đơn này). */
+export interface SplitOrderDTO {
+  id: string;
+  code: string;
+  total: number;
+  /** Điểm Xanh đơn này sẽ tích (API cũ chưa trả). */
+  pointsEarned?: number;
+  status: string;
+  fulfiller: 'TUBU' | 'MERCHANT';
+  fulfillerName: string;
 }
 
 /** Dòng giỏ có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
@@ -86,6 +135,8 @@ export interface CartSummary {
   /** API cũ chưa có trường này → coi như rỗng. */
   unavailableItems?: UnavailableCartLine[];
   couponCode: string | null;
+  /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại (vd hàng giờ vàng không tính vào điều kiện). */
+  couponNotice?: string | null;
   subtotal: number;
   discount: number;
   freeship: boolean;
@@ -97,7 +148,11 @@ export interface CartSummary {
 export interface CheckoutQuote {
   subtotal: number;
   discount: number;
+  /** Mã trong giỏ chưa được áp cho đơn này (không giảm, không tiêu lượt) — câu giải thích cho khách. */
+  couponNotice?: string | null;
   comboDiscount: number;
+  /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
+  tierDiscount?: number;
   pointsUsed: number;
   /** Phần của `pointsUsed` lấy từ lô quy đổi (không hết hạn). Optional: API cũ chưa trả. */
   pointsUsedConverted?: number;
@@ -106,6 +161,15 @@ export interface CheckoutQuote {
   total: number;
   pointsEarned: number;
   pointsBalance: number;
+  /** Số Điểm Xanh tối đa dùng được cho lần đặt này (chỉ trên hàng Tubu). API cũ chưa trả. */
+  pointsMax?: number;
+  /** Câu giải thích khi giỏ có hàng của gian hàng đối tác (Điểm Xanh không trả cho hàng đó); null = không có. */
+  pointsPartnerNote?: string | null;
+  /** Số điểm khách chọn bị kẹp vì hàng của gian hàng đối tác. */
+  pointsNotice?: string | null;
+  shipments?: QuoteShipment[];
+  /** Phương thức không dùng được cho giỏ này → câu giải thích (ví dụ có hàng đối tác tự giao). */
+  blockedPaymentMethods?: Record<string, string>;
 }
 
 export interface AddressDTO {
@@ -135,6 +199,8 @@ export interface PublicConfig {
   affiliateWalletMultiplier: number;
   /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
   affiliateMinWithdrawBank: number;
+  /** Thuế TNCN khấu trừ khi rút hoa hồng: `pct` (phân số) áp cho lần rút từ `threshold`; thiếu khi API cũ. */
+  affiliatePitWithhold?: { pct: number; threshold: number };
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;
   /**
@@ -144,9 +210,25 @@ export interface PublicConfig {
   recyclingEnabled?: boolean;
   /** Khoảng ngày giao dự kiến — null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) → ẩn. */
   shippingEta?: ShippingEta | null;
+  /** Mức giảm (% nguyên) và quy mô nhóm mua chung — thiếu khi API cũ → UI không hứa con số. */
+  groupBuy?: { discountPct: number; targetSize: number };
+  /** Số ngày được gửi yêu cầu đổi/trả kể từ khi giao (returns.window_days). */
+  returnWindowDays?: number;
+  /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
+  support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
 }
 export const getPublicConfig = () =>
   api.get<PublicConfig>('/config/public').then((r) => r.data);
+/**
+ * Giá và trạng thái HIỆN HÀNH theo slug (dải "Đã xem gần đây" không lưu giá). Sản phẩm đã ẩn hoặc chưa duyệt không có trong kết
+ * quả; tối đa 20 slug một lần.
+ */
+export const fetchProductsBySlugs = async (slugs: string[]): Promise<ProductCard[]> => {
+  const unique = [...new Set(slugs)].slice(0, 20);
+  if (unique.length === 0) return [];
+  const res = await api.get<PageResponse<ProductCard>>('/products', { params: { slugs: unique.join(','), limit: unique.length } });
+  return res.data.data;
+};
 export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
   const homeSlot = homeProductSlot(params);
   if (homeSlot) {
@@ -303,6 +385,7 @@ export interface FlashSaleActiveItem {
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;
+  salePrice?: number | null;
   soldCount: number;
   quota: number;
   endAt: string;
@@ -318,6 +401,7 @@ export interface UpcomingFlashItem {
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;
+  salePrice?: number | null;
   startAt: string;
   reminded: boolean;
 }
@@ -365,6 +449,8 @@ export const placeOrder = (
     pointsToUse?: number;
     /** Khách đã thấy đơn 0đ (FE ẩn chọn phương thức): BE từ chối nếu lúc đặt tổng > 0. */
     quotedZeroTotal?: boolean;
+    /** Tổng khách đang thấy (từ báo giá): lúc đặt mà tổng cao hơn thì BE trả TOTAL_CHANGED. */
+    expectedTotal?: number;
     note?: string;
     invoiceRequest?: InvoiceRequest;
     referralCode?: string;
@@ -376,7 +462,7 @@ export const placeOrder = (
   idempotencyKey: string,
 ) =>
   api
-    .post<OrderDTO>('/checkout/place-order', body, {
+    .post<PlacedOrder>('/checkout/place-order', body, {
       headers: { 'Idempotency-Key': idempotencyKey },
     })
     .then((r) => r.data);
@@ -403,39 +489,70 @@ export interface ReviewSummary {
 export const fetchReviews = (slug: string) =>
   api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
 
-/** Đánh giá hiện có của chính người dùng cho sản phẩm (Q-30: mua lại thì sửa đánh giá này). */
+/** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
+export interface MyReviewRef {
+  id: string;
+  orderId: string;
+  orderCode: string | null;
+  rating: number;
+  createdAt: string;
+  isVisible: boolean;
+}
+/** Lần mua (đơn đã nhận) còn viết được đánh giá; đơn nhận sớm nhất trước. */
+export interface ReviewableOrder {
+  orderId: string;
+  code: string;
+  deliveredAt: string | null;
+}
+/**
+ * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. Mỗi lần mua một đánh
+ * giá: `canReview` là còn đơn để viết đánh giá MỚI (`reviewableOrders`), `ALL_REVIEWED` là mọi lần mua đã có đánh giá
+ * (vẫn sửa được qua `myReviews`). `rewardAvailable`: đánh giá mới lúc này có được cộng Điểm Xanh không (chỉ đánh giá đầu
+ * tiên của sản phẩm); chỉ để nói đúng về điểm, máy chủ vẫn quyết định thưởng lúc tạo.
+ */
+export interface CanReview {
+  canReview: boolean;
+  reason: 'NOT_PURCHASED' | 'ALL_REVIEWED' | null;
+  rewardAvailable?: boolean;
+  purchaseCount?: number;
+  reviewableOrders?: ReviewableOrder[];
+  myReviews?: MyReviewRef[];
+}
+export const canReviewProduct = (slug: string) =>
+  api.get<CanReview>(`/products/${slug}/reviews/can-review`).then((r) => r.data);
+
+/** Nguyên nội dung một đánh giá của chính mình (ảnh base64 không đổi thành đường dẫn) để điền sẵn form sửa. */
 export interface MyReview {
   id: string;
+  orderId: string;
   rating: number;
   comment: string | null;
   images: string[];
   videoUrl: string | null;
+  isVisible: boolean;
 }
-/**
- * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối.
- * `rewardAvailable` (optional, API cũ không trả): false khi khách đã nhận thưởng sản phẩm này hoặc đang có đánh giá;
- * chỉ để ẩn câu gợi ý điểm, máy chủ vẫn quyết định thưởng lúc tạo.
- */
-export const canReviewProduct = (slug: string) =>
-  api
-    .get<{ canReview: boolean; reason: 'NOT_PURCHASED' | null; myReview?: MyReview | null; rewardAvailable?: boolean }>(
-      `/products/${slug}/reviews/can-review`,
-    )
-    .then((r) => r.data);
+export const fetchMyReview = (id: string) => api.get<MyReview>(`/reviews/${id}`).then((r) => r.data);
+
 /**
  * POST /products/:slug/reviews trả nguyên dòng Review (không có author/avatar như mục của danh sách công khai) kèm
  * `updated`. Hai trường dưới là optional để chịu được API cũ chưa trả.
- * - `updated`: true khi đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
- * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách còn giữ phần thưởng cũ của sản phẩm này
- *   (xoá rồi tạo lại). Khi `updated` là true nó là phần thưởng của lần tạo gốc, không phải của lần gọi này.
+ * - `updated`: true khi đơn đó đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
+ * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách đã nhận thưởng cho đánh giá đầu tiên của
+ *   sản phẩm này. Khi `updated` là true nó là phần thưởng của lần tạo gốc, không phải của lần gọi này.
  */
 export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'images' | 'videoUrl' | 'createdAt'> & {
   pointsEarned?: number;
   updated?: boolean;
+  /** false khi admin đang ẩn đánh giá này: lưu/sửa không làm nó hiện lại. Thiếu (API cũ) coi là đang hiện. */
+  isVisible?: boolean;
 };
+/**
+ * `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn
+ * (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
+ */
 export const createReview = (
   slug: string,
-  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },
+  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
 ) => api.post<CreatedReview>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders
@@ -447,7 +564,23 @@ export interface OrderItemMedia {
   currentPrice?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
-export type OrderView = Omit<OrderDTO, 'items'> & { items: OrderItemView[] };
+export type OrderView = Omit<OrderDTO, 'items'> & {
+  items: OrderItemView[];
+  /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
+  couponCode?: string | null;
+  /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */
+  groupCouponCode?: string | null;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
+  /** Ai giao đơn này (D4). API cũ chưa trả. */
+  fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
+  /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
+  siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
+};
+/** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
+export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };
 
 export type OrderStatusGroup = 'processing' | 'closed';
 export interface OrderListFilter {
@@ -503,8 +636,13 @@ export interface PurchasedItemsPage {
 export const fetchPurchasedItems = async (params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
   (await takePurchasedItems(params)) ?? api.get<PurchasedItemsPage>('/me/purchased-items', { params }).then((r) => r.data);
 
-export const cancelOrder = (code: string) =>
-  api.post<OrderDTO>(`/orders/${code}/cancel`).then((r) => r.data);
+/** Nơi nhận tiền hoàn (D2). Không gửi = Ví Tubu (như bản cũ). */
+export type RefundDestinationBody =
+  | { refundMethod: 'WALLET' }
+  | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
+
+export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
+  api.post<OrderDTO>(`/orders/${code}/cancel`, destination ?? {}).then((r) => r.data);
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {
@@ -537,15 +675,55 @@ export const repurchaseOrder = (
   api
     .post<CartSummary & { cart?: CartSummary; results?: RepurchaseLineResult[] }>(`/orders/${code}/repurchase`, body)
     .then((r) => normalizeRepurchaseResponse(r.data));
-export const requestReturn = (code: string, reason: string, images?: string[]) =>
-  api.post(`/orders/${code}/return-request`, { reason, images }).then((r) => r.data);
+export interface ReturnRequestBody {
+  reasonCode: ReturnReasonCode;
+  reason?: string;
+  images?: string[];
+  items: { orderItemId: string; quantity: number }[];
+}
+export const requestReturn = (code: string, body: ReturnRequestBody & Partial<RefundDestinationBody>) =>
+  api.post<ReturnRequestDTO>(`/orders/${code}/return-request`, body).then((r) => r.data);
+/** Số tiền dự kiến hoàn cho các dòng khách đang chọn (cùng cách tính lúc Tubu duyệt). */
+export interface ReturnEstimateDTO {
+  isFull: boolean;
+  goods: number;
+  shipping: number;
+  refund: number;
+  moneyRefundable: boolean;
+  pointsUsedBack: number;
+  lines: { orderItemId: string; quantity: number; refundAmount: number }[];
+}
+export const estimateReturn = (code: string, body: { reasonCode?: ReturnReasonCode; items: { orderItemId: string; quantity: number }[] }) =>
+  api.post<ReturnEstimateDTO>(`/orders/${code}/return-estimate`, body).then((r) => r.data);
 export interface ReturnRequestDTO {
   id: string;
   orderId: string;
   reason: string;
+  reasonCode?: string | null;
   status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
   adminNote: string | null;
+  refundMethod?: 'WALLET' | 'BANK';
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  /** Tiền hàng + phí ship hoàn khi duyệt (null khi chưa duyệt). */
+  refundAmount?: number | null;
+  shippingRefund?: number;
+  pointsRefunded?: number;
+  /** Điểm Xanh đã cộng từ đơn mà phiếu này thu lại khi duyệt. */
+  pointsReversed?: number;
+  fullReturn?: boolean;
+  receivedAt?: string | null;
+  items?: { orderItemId: string; quantity: number; refundAmount: number }[];
   createdAt: string;
 }
 export const fetchMyReturns = () =>
   api.get<ReturnRequestDTO[]>('/orders/me/returns').then((r) => r.data);
+
+/** Các khoản hoàn tiền của khách (chuyển khoản chờ xử lý, tiền về muộn) cho một đơn. */
+export const fetchMyRefunds = (orderId: string) =>
+  api.get<MyRefund[]>('/orders/me/refunds', { params: { orderId } }).then((r) => r.data);
+/** Tài khoản ngân hàng khách dùng gần nhất — điền sẵn khi chọn hoàn về ngân hàng. */
+export const fetchRefundBank = () =>
+  api.get<{ bank: RefundBankInput | null }>('/orders/me/refund-bank').then((r) => r.data.bank);
+export const chooseRefundDestination = (refundId: string, body: RefundDestinationBody) =>
+  api.post<MyRefund>(`/orders/me/refunds/${refundId}/destination`, body).then((r) => r.data);

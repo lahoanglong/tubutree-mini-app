@@ -8,6 +8,7 @@ import {
   skipSubscriptionCycle,
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
+import { subscriptionCycleView } from '../utils/subscription-price';
 import { getAddresses } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -174,6 +175,7 @@ function SubscriptionCard({
   onToggle: () => void;
   onCancel: () => void;
 }) {
+  const cycle = subscriptionCycleView(s);
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', gap: 12 }}>
@@ -196,9 +198,19 @@ function SubscriptionCard({
           <Text variant="caption" tone="tertiary" as="div">
             {s.variationName} · SL {s.quantity}
           </Text>
-          <Text variant="caption" tone="brand" as="div">
-            {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(s.unitPrice * s.quantity))}
+          <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
+            {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(cycle.goods))}
           </Text>
+          {cycle.discount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+              <Text variant="caption" tone="tertiary" as="s">
+                {formatVnd(cycle.subtotal)}
+              </Text>
+              <Badge tone="success" size="sm">
+                {vi.subscriptions.savePill(cycle.savePct)}
+              </Badge>
+            </div>
+          )}
           <Text variant="caption" tone="tertiary" as="div">
             {vi.subscriptions.payLine(vi.subscriptions.payShort[s.paymentMethod ?? 'COD'])}
           </Text>
@@ -219,14 +231,14 @@ function SubscriptionCard({
             : vi.subscriptions.scheduling
           : vi.subscriptions.pausedLine}
       </Text>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        <Button variant="secondary" disabled={busy} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {vi.subscriptions.edit}
         </Button>
-        <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: 1, minWidth: 0 }}>
+        <Button variant="secondary" disabled={busy} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {s.status === 'ACTIVE' ? vi.subscriptions.pause : vi.subscriptions.resume}
         </Button>
-        <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: 1, minWidth: 0, color: 'var(--color-text-danger)' }}>
+        <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: '1 1 auto', minWidth: 'max-content', color: 'var(--color-text-danger)' }}>
           {vi.subscriptions.cancel}
         </Button>
       </div>

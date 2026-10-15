@@ -128,6 +128,12 @@ export class SeasonPassService {
       if (!premiumEligible) throw new BadRequestException('Cần đăng ký định kỳ để mở Premium.');
     }
 
+    // Config đọc TRƯỚC tx: cache nguội mà đọc trong tx thì mỗi tx giữ 1 kết nối và xin thêm 1 nữa (cạn pool).
+    const [tankCap, expiresAt] = await Promise.all([
+      reward.type === 'SEEDS' ? this.config.get<number>('game.tank_capacity', 500) : Promise.resolve(0),
+      reward.type === 'POINTS' && reward.amount > 0 ? this.rewards.expiresAt() : Promise.resolve(undefined),
+    ]);
+
     await this.prisma.$transaction(async (tx) => {
       // Guard double-claim ATOMIC bằng updateMany + filter mảng "chưa có tier" (Postgres list
       // filter `has`) — thay cho đọc-rồi-kiểm-tra-rồi-push cũ: 2 request claim() song song đều
@@ -141,7 +147,7 @@ export class SeasonPassService {
       if (guard.count === 0) throw new BadRequestException('Đã nhận rồi.');
 
       if (reward.type === 'SEEDS') {
-        const cap = await this.config.get<number>('game.tank_capacity', 500);
+        const cap = tankCap;
         // Cộng totalSeeds ATOMIC (increment) + clamp cap guarded trong CÙNG tx — chống
         // lost-update khi user vừa claim vừa spin/checkin/quiz/gift khác đổi totalSeeds cùng lúc.
         const gp = await tx.gameProfile.upsert({
@@ -158,7 +164,7 @@ export class SeasonPassService {
       } else if (reward.amount > 0) {
         // Cấp TRÊN tx của claim: grant ném (vd vượt trần 2.000 điểm) thì việc đánh dấu đã nhận
         // rollback cùng, khách nhận lại được sau khi sửa cấu hình.
-        await this.rewards.grant(userId, reward.amount, `SEASONPASS:${season.id}:${tier}:${track}`, 'SEASONPASS', season.id, tx);
+        await this.rewards.grant(userId, reward.amount, `SEASONPASS:${season.id}:${tier}:${track}`, 'SEASONPASS', season.id, tx, expiresAt);
       }
     });
 

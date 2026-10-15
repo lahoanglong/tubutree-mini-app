@@ -11,12 +11,15 @@ import {
   assertVariationsSellable,
   isSellableVariation,
   productDiscontinuedError,
-  SELLABLE_VARIATION_WHERE,
+  SELLABLE_PANCAKE_VARIATION_WHERE,
 } from '../cart/sellable';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { resolveDealerRecipient } from './dealer-recipient';
+import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
+import { forBuyer } from '../orders/buyer-order-fields';
 
 interface BonusTier {
   min: number;
@@ -114,7 +117,16 @@ export class DealerService {
     });
     if (pending) throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
     try {
-      return await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+      const created = await this.prisma.dealerApplication.create({ data: { ...dto, userId } });
+      await notifyAdmins(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        {
+          template: 'OPS_DEALER_APPLICATION_PENDING',
+          subject: `hồ sơ đại lý ${created.id}`,
+          data: () => ({ business: created.businessName, owner: created.ownerName, phone: created.phone }),
+        },
+      ).catch((e) => this.logger.warn(`Báo admin hồ sơ đại lý ${created.id} lỗi: ${(e as Error).message}`));
+      return created;
     } catch (err) {
       // TOCTOU: findFirst rồi create không transaction — 2 request apply() đồng thời có thể cùng
       // qua check "chưa có đơn PENDING" trước khi request đầu commit. Partial unique index
@@ -145,6 +157,9 @@ export class DealerService {
     return {
       isDealer: user.role === 'DEALER',
       status: application?.status ?? 'NONE',
+      // SELLER-12: hồ sơ bị từ chối phải cho người đăng ký biết vì sao để bổ sung rồi nộp lại.
+      rejectionReason: application?.status === 'REJECTED' ? (application.rejectionReason ?? null) : null,
+      reviewedAt: application?.reviewedAt ?? null,
       tier: tier ? { id: tier.id, name: tier.name, creditLimit: tier.creditLimit } : null,
       currentDebt: creditAgg._sum.delta ?? 0,
     };
@@ -155,8 +170,9 @@ export class DealerService {
     const { discountPct, tier } = await this.dealerContext(userId);
     // Cùng điều kiện với placeOrder: FE cho đặt trước cả hàng tồn 0, nên một dòng không bán được mà vẫn
     // lên bảng giá sẽ làm cả đơn bị PRODUCT_DISCONTINUED.
+    // Hàng của gian hàng đối tác chỉ bán giá lẻ (partner-goods.ts), không lên bảng giá đại lý.
     const variations = await this.prisma.variation.findMany({
-      where: SELLABLE_VARIATION_WHERE,
+      where: { AND: [SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] },
       include: { product: { select: { name: true, brand: true } } },
     });
     return variations.map((v) => {
@@ -183,16 +199,14 @@ export class DealerService {
     // Double-tap/retry cùng key → trả lại đơn đã tạo, KHÔNG tạo đơn/ghi công nợ lần 2.
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-      if (existing && existing.userId === userId) {
-        return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
-      }
+      if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
     }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
 
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: dto.items.map((i) => i.variationId) } },
-      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true } } },
+      include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true, storefrontId: true } } },
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
@@ -203,6 +217,7 @@ export class DealerService {
       const v = vmap.get(line.variationId);
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
       if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
+      if (isPartnerOwnedVariation(v)) throw partnerGoodsError('DEALER', v.product.name);
       const unitPrice = this.unitPrice(v, tier?.id, discountPct);
       const total = unitPrice * line.quantity;
       subtotal += total;
@@ -220,6 +235,16 @@ export class DealerService {
     if (subtotal > DEALER_ORDER_TOTAL_MAX) {
       throw new BadRequestException(
         `Tổng đơn ${vnd(subtotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — vui lòng tách thành nhiều đơn.`,
+      );
+    }
+
+    // Kho Pancake cần tên, SĐT, địa chỉ người nhận — trước đây đơn đại lý chỉ có ghi chú "giao theo hợp đồng".
+    const shippingAddress = await resolveDealerRecipient(this.prisma, userId, dto.addressId);
+    if (!shippingAddress) {
+      throw new BadRequestException(
+        dto.addressId
+          ? 'Không tìm thấy địa chỉ nhận hàng đã chọn.'
+          : 'Chưa có địa chỉ nhận hàng. Vui lòng thêm địa chỉ trong sổ địa chỉ trước khi đặt đơn đại lý.',
       );
     }
 
@@ -258,7 +283,7 @@ export class DealerService {
           // khi hàng về (xem DealerBackorderService). Huỷ/trả đơn vẫn phải chỉ hoàn đúng phần
           // ĐÃ giữ (`quantity - backorderedQty`) — xem OrderReversalService.
           // SP có thể bị gỡ giữa lúc dựng giá và lúc ghi đơn — kiểm lại trong tx.
-          await assertVariationsSellable(tx, items);
+          await assertVariationsSellable(tx, items, { pancakeOnly: true });
           let hasBackorder = false;
           const itemsWithBackorder = [];
           for (const line of items) {
@@ -279,7 +304,7 @@ export class DealerService {
               total: subtotal,
               paymentMethod: 'BANK_TRANSFER',
               paymentStatus: 'UNPAID',
-              shippingAddress: { note: 'Giao theo hợp đồng đại lý' },
+              shippingAddress: { ...shippingAddress },
               note: dto.note,
               idempotencyKey: key ?? null,
               items: { create: itemsWithBackorder },
@@ -303,7 +328,7 @@ export class DealerService {
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.prisma.order.findUniqueOrThrow({ where: { id: existing.id }, include: { items: true } });
+        if (existing) return this.orderForDealer(existing.id);
       }
       throw err;
     }
@@ -327,16 +352,21 @@ export class DealerService {
     } else {
       this.logger.warn(`PancakeOrderService chưa wiring — đơn đại lý ${order.id} KHÔNG được đẩy sang kho.`);
     }
-    return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+    return this.orderForDealer(order.id);
   }
 
-  listOrders(userId: string) {
-    return this.prisma.order.findMany({
+  private async orderForDealer(id: string) {
+    return forBuyer(await this.prisma.order.findUniqueOrThrow({ where: { id }, include: { items: true } }));
+  }
+
+  async listOrders(userId: string) {
+    const orders = await this.prisma.order.findMany({
       where: { userId, type: 'DEALER' },
       orderBy: { createdAt: 'desc' },
       include: { items: true },
       take: 100,
     });
+    return orders.map(forBuyer);
   }
 
   async creditLedger(userId: string) {
@@ -1127,6 +1157,10 @@ export class DealerService {
       `Admin ${adminId} xác nhận thanh toán đơn đại lý ${order.code} (${vnd(order.total)}): UNPAID → PAID, ${order.status} → ${toStatus}` +
         (bankRef ? `, mã GD ${bankRef}` : ''),
     );
+    // Đơn đã lên kho kèm "CHỜ CHUYỂN KHOẢN": báo Pancake đã thanh toán (chưa lên thì đẩy luôn).
+    await this.pancakeOrder
+      ?.enqueuePayment(order.id)
+      .catch((e) => this.logger.error(`Xếp cập nhật thanh toán Pancake lỗi cho đơn ${order.code}: ${(e as Error).message}`));
     if (this.notifications) {
       await this.notifications
         .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })

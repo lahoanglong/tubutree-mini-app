@@ -23,6 +23,7 @@ async function orderCreditExpiry(months: unknown): Promise<Date> {
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }),
       aggregate: jest.fn().mockResolvedValue({ _sum: { total: 0 } }),
     },
+    returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
     pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null), create, findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }) },
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null }), update: jest.fn().mockReturnValue({}) },
     membershipTier: { findMany: jest.fn().mockResolvedValue([]) },

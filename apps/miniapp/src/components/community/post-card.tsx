@@ -127,7 +127,14 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
         </div>
       )}
       {post.images[0] && (
-        <img src={post.images[0]} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
+        <>
+          <img src={post.images[0]} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
+          {(post.imageCount ?? 1) > 1 && (
+            <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
+              {`+${(post.imageCount ?? 1) - 1} ảnh nữa`}
+            </Text>
+          )}
+        </>
       )}
       {post.productTags.length > 0 && (
         // Cả hàng nổi trên lớp phủ (không riêng từng thẻ) để vuốt ngang bắt đầu ở khoảng trống giữa hai thẻ vẫn cuộn được hàng.

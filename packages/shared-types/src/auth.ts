@@ -7,6 +7,8 @@ export interface JwtPayload {
   zaloId?: string;
   affiliateEnabled?: boolean;
   dealerEnabled?: boolean;
+  /** Nhóm việc của STAFF (CSKH, KHO) — JwtStrategy đọc từ DB mỗi request, không ký vào token. */
+  staffPermissions?: string[];
 }
 
 /** Hồ sơ user trả về client sau khi đăng nhập. */

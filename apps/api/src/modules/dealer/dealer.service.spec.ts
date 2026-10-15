@@ -1,7 +1,8 @@
 import { DealerService } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
-import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
+import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
+import { TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -63,7 +64,14 @@ describe('DealerService.pricelist', () => {
     );
     await new DealerService(prisma, makeConfig()).pricelist('d1');
     const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
-    expect(findMany.mock.calls[0]![0].where).toEqual(SELLABLE_VARIATION_WHERE);
+    expect(findMany.mock.calls[0]![0].where).toEqual({ AND: [SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] });
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác (tự giao hoặc Tubu giao hộ) không lên bảng giá đại lý', async () => {
+    const prisma = prismaForPricelist({ id: 'd1', role: 'DEALER', metadata: null }, null, []);
+    await new DealerService(prisma, makeConfig()).pricelist('d1');
+    const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
+    expect(findMany.mock.calls[0]![0].where.AND).toContainEqual({ product: { storefrontId: null } });
   });
 });
 
@@ -263,6 +271,27 @@ function fullReserveQueryRaw() {
   });
 }
 
+const DEALER_ADDRESS = {
+  id: 'addr1',
+  recipient: 'Đại lý Hoa Mai',
+  phone: '0911111111',
+  street: '5 Trần Phú',
+  ward: 'Phường Hải Châu',
+  district: '',
+  province: 'Đà Nẵng',
+  provinceCode: '84_VN48',
+  districtCode: '',
+  wardCode: '84_VN4820',
+};
+
+/** Sổ địa chỉ của đại lý: kho Pancake cần tên/SĐT/địa chỉ người nhận cho đơn đại lý (SELLER-2). */
+function dealerAddressBook(address: typeof DEALER_ADDRESS | null = DEALER_ADDRESS, application: Record<string, unknown> | null = null) {
+  return {
+    address: { findFirst: jest.fn().mockResolvedValue(address) },
+    dealerApplication: { findFirst: jest.fn().mockResolvedValue(application) },
+  };
+}
+
 describe('DealerService.placeOrder idempotency (chống double-submit đơn CREDIT)', () => {
   function prismaForOrder() {
     const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
@@ -276,6 +305,7 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
+      ...dealerAddressBook(),
     };
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — $queryRaw trả số giữ được.
     const queryRaw = fullReserveQueryRaw();
@@ -294,6 +324,24 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
       'idem-key-1',
     );
     expect((r as { id: string }).id).toBe('o-existing');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('Q8 S2: đặt hàng của gian hàng đối tác theo giá đại lý → PARTNER_GOODS_NOT_ELIGIBLE, không giữ kho, không tạo đơn', async () => {
+    const { prisma, orderCreate, queryRaw } = prismaForOrder();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { id: 'v1', isActive: true, retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'Mật ong rừng', isActive: true, approvalStatus: 'APPROVED', storefrontId: 'sf-doi-tac' } },
+    ]);
+    await expect(
+      new DealerService(prisma, makeConfig()).placeOrder('d1', { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không bán theo giá đại lý. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect((prisma.variation.findMany as jest.Mock).mock.calls[0]![0].include.product.select.storefrontId).toBe(true);
+    expect(queryRaw).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
@@ -316,6 +364,31 @@ describe('DealerService.placeOrder idempotency (chống double-submit đơn CRED
       ).rejects.toMatchObject({ response: { code: 'PRODUCT_DISCONTINUED' } });
       expect(queryRaw).not.toHaveBeenCalled();
       expect(orderCreate).not.toHaveBeenCalled();
+    }
+  });
+
+  it('đơn trả cho đại lý (đặt mới, đặt lại cùng key, danh sách) không kèm cột nội bộ: mốc thôi tự huỷ, ghi chú vận hành Pancake, cột tìm kiếm', async () => {
+    const internal = {
+      idempotencyKey: 'idem-3',
+      pancakeOrderId: 'pk-1',
+      pancakeAttention: 'Đơn CHƯA thanh toán — hệ thống thôi tự huỷ vì đã bàn giao vận chuyển.',
+      pancakeAttentionAt: new Date(),
+      autoCancelBlockedAt: new Date(),
+      recipientSearch: 'dai ly it 1 duong it',
+    };
+    const row = { id: 'o1', code: 'TUBU1', total: 100000, items: [], ...internal };
+    const { prisma } = prismaForOrder();
+    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue(row);
+    (prisma.order as unknown as { findMany: jest.Mock }).findMany = jest.fn().mockResolvedValue([row]);
+    const svc = new DealerService(prisma, makeConfig());
+    const dto = { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never;
+    const created = await svc.placeOrder('d1', dto, 'idem-3');
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'o1', userId: 'd1' });
+    const replayed = await svc.placeOrder('d1', dto, 'idem-3');
+    const [listed] = await svc.listOrders('d1');
+    for (const res of [created, replayed, listed]) {
+      expect(res).toMatchObject({ id: 'o1', code: 'TUBU1', total: 100000 });
+      for (const k of Object.keys(internal)) expect(res).not.toHaveProperty(k);
     }
   });
 
@@ -447,6 +520,7 @@ describe('DealerService.placeOrder — tồn kho', () => {
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
       $queryRaw: queryRaw,
+      ...dealerAddressBook(),
     };
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
     return { prisma: base as unknown as PrismaService, orderCreate, queryRaw };
@@ -538,6 +612,7 @@ describe('DealerService.placeOrder — hạn mức công nợ (C-008)', () => {
       },
       dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: currentDebt } }), create: ledgerCreate },
       $queryRaw: fullReserveQueryRaw(),
+      ...dealerAddressBook(),
     };
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
     return { prisma: base as unknown as PrismaService, orderCreate, ledgerCreate };
@@ -574,5 +649,68 @@ describe('DealerService.placeOrder — hạn mức công nợ (C-008)', () => {
     } as never);
     expect(orderCreate).toHaveBeenCalled();
     expect(ledgerCreate).toHaveBeenCalled();
+  });
+});
+
+describe('DealerService.placeOrder — người nhận cho kho (SELLER-2)', () => {
+  function prismaWith(book: ReturnType<typeof dealerAddressBook>) {
+    const orderCreate = jest.fn().mockResolvedValue({ id: 'o1' });
+    const base: Record<string, unknown> = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', isActive: true, retailPrice: 100000, dealerPrices: null, name: '500ml', product: { name: 'SP', isActive: true, approvalStatus: 'APPROVED' } }]) },
+      order: {
+        create: orderCreate,
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }),
+      },
+      dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: fullReserveQueryRaw(),
+      ...book,
+    };
+    base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
+    return { prisma: base as unknown as PrismaService, orderCreate };
+  }
+  const dto = { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'PREPAID' } as never;
+
+  it('lưu tên/SĐT/địa chỉ từ sổ địa chỉ vào đơn (thay vì chỉ ghi chú "giao theo hợp đồng")', async () => {
+    const { prisma, orderCreate } = prismaWith(dealerAddressBook());
+    await new DealerService(prisma, makeConfig()).placeOrder('d1', dto);
+    expect(orderCreate.mock.calls[0][0].data.shippingAddress).toMatchObject({
+      recipient: 'Đại lý Hoa Mai',
+      phone: '0911111111',
+      street: '5 Trần Phú',
+      provinceCode: '84_VN48',
+      wardCode: '84_VN4820',
+      note: 'Giao theo hợp đồng đại lý',
+    });
+  });
+
+  it('sổ địa chỉ trống → dùng địa chỉ trong hồ sơ đại lý đã duyệt', async () => {
+    const app = { businessName: 'Cty Hoa Mai', ownerName: 'Lê C', phone: '0922222222', address: '9 Lý Thường Kiệt, Huế' };
+    const { prisma, orderCreate } = prismaWith(dealerAddressBook(null, app));
+    await new DealerService(prisma, makeConfig()).placeOrder('d1', dto);
+    expect(orderCreate.mock.calls[0][0].data.shippingAddress).toMatchObject({
+      recipient: 'Lê C (Cty Hoa Mai)',
+      phone: '0922222222',
+      street: '9 Lý Thường Kiệt, Huế',
+    });
+  });
+
+  it('không có địa chỉ nào → từ chối, không tạo đơn', async () => {
+    const { prisma, orderCreate } = prismaWith(dealerAddressBook(null, null));
+    await expect(new DealerService(prisma, makeConfig()).placeOrder('d1', dto)).rejects.toThrow('Chưa có địa chỉ nhận hàng');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('addressId không thuộc đại lý → từ chối (không lấy địa chỉ của người khác)', async () => {
+    const { prisma, orderCreate } = prismaWith(dealerAddressBook(null, null));
+    await expect(
+      new DealerService(prisma, makeConfig()).placeOrder('d1', { ...(dto as object), addressId: 'addr-of-other' } as never),
+    ).rejects.toThrow('Không tìm thấy địa chỉ nhận hàng đã chọn.');
+    expect((prisma as unknown as { address: { findFirst: jest.Mock } }).address.findFirst).toHaveBeenCalledWith({
+      where: { id: 'addr-of-other', userId: 'd1' },
+    });
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 });

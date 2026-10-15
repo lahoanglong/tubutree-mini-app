@@ -80,7 +80,15 @@ describe('StorefrontService.getMine', () => {
     const sfWithChildren = {
       id: 's1', ownerUserId: 'u1', type: 'CTV',
       collections: [
-        { id: 'c1', sortOrder: 0, items: [{ id: 'i1', isHidden: true }, { id: 'i2', isHidden: false }] },
+        {
+          id: 'c1',
+          sortOrder: 0,
+          items: [
+            { id: 'i1', isHidden: true, product: { isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' } },
+            { id: 'i2', isHidden: false, product: { isActive: true, affiliateBlocked: false, approvalStatus: 'PENDING_REVIEW' } },
+            { id: 'i3', isHidden: false, product: { isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' } },
+          ],
+        },
       ],
     };
     const prisma = makePrisma();
@@ -89,10 +97,16 @@ describe('StorefrontService.getMine', () => {
     const sf = await svc.getMine('u1');
 
     // verify behavior: trả đúng cây dữ liệu, item ẩn vẫn còn (để CTV sửa)
-    expect(sf).toBe(sfWithChildren);
+    expect(sf.id).toBe('s1');
     const col0 = sf.collections[0]!;
-    expect(col0.items).toHaveLength(2);
+    expect(col0.items).toHaveLength(3);
     expect(col0.items.some((i: any) => i.isHidden === true)).toBe(true);
+    // SELLER-15: builder biết món nào khách không thấy và vì sao.
+    expect(col0.items.map((i: any) => i.hiddenReason)).toEqual([
+      'Bạn đang ẩn món này',
+      'Sản phẩm chưa được duyệt bán',
+      null,
+    ]);
     // include đúng: có collections.orderBy sortOrder + items
     const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
     expect(arg.where).toEqual({ ownerUserId: 'u1', type: 'CTV' });
@@ -360,7 +374,7 @@ describe('StorefrontService items', () => {
   it('addItem gắn vào collection của tôi', async () => {
     const prisma = makePrisma({
       storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
-      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' }) },
       storefrontItem: { count: jest.fn().mockResolvedValue(1), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
     });
     const svc = new StorefrontService(prisma, config, affiliate);
@@ -376,7 +390,7 @@ describe('StorefrontService items', () => {
   it('addItem: race sortOrder đụng Serializable (P2034) → báo thân thiện, không phải lỗi thô', async () => {
     const prisma = makePrisma({
       storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', storefront: { ownerUserId: 'u1' } }) },
-      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' }) },
       $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
     });
     const svc = new StorefrontService(prisma, config, affiliate);
@@ -405,6 +419,36 @@ describe('StorefrontService items', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.storefrontItem.create).not.toHaveBeenCalled();
+  });
+
+  it('Q8 S2: không thêm hàng của gian hàng đối tác vào combo (báo rõ lý do); bộ sưu tập thường vẫn thêm được', async () => {
+    const partner = { id: 'p9', name: 'Mật ong rừng', isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED', storefrontId: 'sf-doi-tac' };
+    const combo = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', kind: 'COMBO', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue(partner) },
+      storefrontItem: { count: jest.fn(), create: jest.fn() },
+    });
+    await expect(new StorefrontService(combo, config, affiliate).addItem('u1', 'c1', { productId: 'p9' })).rejects.toMatchObject({
+      response: {
+        code: 'PARTNER_GOODS_NOT_ELIGIBLE',
+        message: 'Sản phẩm "Mật ong rừng" là hàng của gian hàng đối tác, không thêm vào combo được. Hàng của gian hàng đối tác chỉ bán theo giá lẻ niêm yết.',
+      },
+    });
+    expect(combo.storefrontItem.create).not.toHaveBeenCalled();
+
+    const normal = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c2', kind: 'NORMAL', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue(partner) },
+      storefrontItem: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i1', ...data })) },
+    });
+    expect((await new StorefrontService(normal, config, affiliate).addItem('u1', 'c2', { productId: 'p9' })).productId).toBe('p9');
+
+    const tubu = makePrisma({
+      storefrontCollection: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', kind: 'COMBO', storefront: { ownerUserId: 'u1' } }) },
+      product: { findUnique: jest.fn().mockResolvedValue({ ...partner, id: 'p1', storefrontId: null }) },
+      storefrontItem: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockImplementation(({ data }) => ({ id: 'i2', ...data })) },
+    });
+    expect((await new StorefrontService(tubu, config, affiliate).addItem('u1', 'c1', { productId: 'p1' })).productId).toBe('p1');
   });
 
   it('addItem chặn productId không tồn tại', async () => {
@@ -473,6 +517,8 @@ describe('StorefrontService.pickerProducts', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.pickerProducts('u1', { search: 'dầu' });
     expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0].where.affiliateBlocked).toBe(false);
+    // SELLER-15: SP đối tác chưa duyệt không vào picker.
+    expect((prisma.product.findMany as jest.Mock).mock.calls[0]?.[0].where.approvalStatus).toBe('APPROVED');
     const first = r[0]!;
     expect(first.maxAffiliateRate).toBe(10);
     expect(first.name).toBe('Dầu gội');
@@ -483,57 +529,38 @@ describe('StorefrontService.pickerProducts', () => {
 });
 
 describe('StorefrontService.getStats', () => {
-  it('gộp doanh thu/số lượng theo productSlug, loại đơn CANCELLED/RETURNED', async () => {
-    const now = new Date();
-    const oldDate = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000);
+  it('đọc doanh thu/đơn/sản phẩm từ SQL gộp (không nạp đơn về Node), hoa hồng từ bảng Commission', async () => {
+    const queryRaw = jest.fn()
+      .mockResolvedValueOnce([{ slug: 'linh', orders: 3n, revenue: 360000n }])
+      .mockResolvedValueOnce([{ slug: 'linh', orders: 2n, revenue: 100000n }])
+      .mockResolvedValueOnce([
+        { productSlug: 'p1', productName: 'P1', qty: 1n, revenue: 100000n },
+        { productSlug: 'p2', productName: 'P2', qty: 6n, revenue: 550000n },
+      ]);
     const prisma = makePrisma({
       storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', slug: 'linh', ownerUserId: 'u1' }) },
-      order: { findMany: jest.fn().mockResolvedValue([
-        { createdAt: now, items: [
-          { productSlug: 'p1', productName: 'P1', quantity: 2, total: 200000 },
-          { productSlug: 'p2', productName: 'P2', quantity: 1, total: 50000 },
-        ] },
-        { createdAt: now, items: [
-          { productSlug: 'p1', productName: 'P1', quantity: 1, total: 100000 },
-        ] },
-        // Đơn cũ hơn 30 ngày — vẫn gộp vào byProduct (tổng lịch sử) nhưng KHÔNG tính vào revenue30d.
-        { createdAt: oldDate, items: [
-          { productSlug: 'p2', productName: 'P2', quantity: 5, total: 500000 },
-        ] },
-        // Đơn productSlug null (dữ liệu cũ trước migration) — không được vỡ hoặc lẫn với SP khác.
-        { createdAt: now, items: [
-          { productSlug: null, productName: 'P cũ', quantity: 1, total: 10000 },
-        ] },
-      ]) },
+      order: { findMany: jest.fn() },
       commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 8000 } }) },
+      $queryRaw: queryRaw,
     });
     const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.getStats('u1');
 
-    expect((prisma.order.findMany as jest.Mock).mock.calls[0]?.[0].where).toEqual({
-      storefrontSlug: 'linh', status: { notIn: ['CANCELLED', 'RETURNED'] },
-    });
-    // Hoa hồng đọc từ bảng Commission (affiliateUserId + order.storefrontSlug + trong 30 ngày,
-    // loại REJECTED) — KHÔNG phải cột Order.commission (cột chết, không ai ghi giá trị).
+    expect(prisma.order.findMany).not.toHaveBeenCalled();
     expect((prisma.commission.aggregate as jest.Mock).mock.calls[0]?.[0].where).toEqual({
       affiliateUserId: 'u1', order: { storefrontSlug: 'linh' },
       createdAt: { gte: expect.any(Date) }, status: { not: 'REJECTED' },
     });
-    expect(r.orders30d).toBe(3); // đơn oldDate (40 ngày) không tính
-    expect(r.orders7d).toBe(3);
-    expect(r.revenue30d).toBe(360000); // 200000+50000+100000+10000
-    expect(r.commission30d).toBe(8000); // từ commission.aggregate mock
-
-    const p1 = r.byProduct.find((p) => p.productSlug === 'p1')!;
-    expect(p1.qty).toBe(3);
-    expect(p1.revenue).toBe(300000);
-    const p2 = r.byProduct.find((p) => p.productSlug === 'p2')!;
-    expect(p2.qty).toBe(6); // gộp cả đơn 40 ngày trước (1) + đơn trong 30 ngày (5)
-    expect(p2.revenue).toBe(550000);
-    // Sắp theo doanh thu giảm dần
-    expect(r.byProduct[0]!.productSlug).toBe('p2');
-    // Sản phẩm productSlug null không vỡ, không lẫn vào p1/p2
-    expect(r.byProduct).toHaveLength(3);
+    expect(r).toEqual({
+      orders7d: 2,
+      orders30d: 3,
+      revenue30d: 360000,
+      commission30d: 8000,
+      byProduct: [
+        { productSlug: 'p2', productName: 'P2', qty: 6, revenue: 550000 },
+        { productSlug: 'p1', productName: 'P1', qty: 1, revenue: 100000 },
+      ],
+    });
   });
 
   it('404 nếu chưa có gian hàng', async () => {
@@ -560,6 +587,140 @@ describe('StorefrontService.getPublicList', () => {
 });
 
 describe('StorefrontService.getPublicBySlug', () => {
+  // SELLER-4: khách vào qua subdomain riêng (khác mã giới thiệu) thì web phải lấy mã từ API, không suy từ URL.
+  it('gian hàng CTV trả mã giới thiệu của chủ; gian hàng khác không trả', async () => {
+    const row = { id: 's1', slug: 'abcd1234', subdomain: 'lan-xanh', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' } };
+    const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...row, type: 'CTV', ownerUserId: 'u9' }) } });
+    const affiliateTier = { getPublicTier: jest.fn().mockResolvedValue(null) } as never;
+    expect((await new StorefrontService(ctv, config, affiliateTier).getPublicBySlug('lan-xanh')).referralCode).toBe('ABCD1234');
+    const brand = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...row, type: 'MERCHANT' }) } });
+    expect((await new StorefrontService(brand, config, affiliateTier).getPublicBySlug('lan-xanh')).referralCode).toBeNull();
+  });
+
+  // SELLER-9: route @Public, ai cũng gọi được — STK và họ tên chủ TK của CTV là dữ liệu cá nhân, không
+  // trang công khai nào dùng (thanh toán luôn vào TK Tubu, xem bank-transfer.service).
+  it('không trả thông tin ngân hàng của chủ gian hàng', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctvone1', title: 'Shop', isPublished: true, type: 'MERCHANT', collections: [],
+        bankName: 'Vietcombank', bankBin: '970436', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN CTV MOT',
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctvone1');
+    const json = JSON.stringify(r);
+    for (const leak of ['bankName', 'bankBin', 'bankAccountNo', 'bankAccountName', '0123456789', 'NGUYEN CTV MOT']) {
+      expect(json).not.toContain(leak);
+    }
+  });
+
+  it('SELLER-8: gian hàng CTV không tự giao nên không trả kho/SĐT kho (dữ liệu cũ còn lưu cũng không lộ); gian hàng đối tác vẫn trả', async () => {
+    const base = {
+      id: 's1', slug: 'ctvone', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' },
+      warehouseAddress: '1 Lê Lợi', warehouseCity: 'HCM', warehouseDistrict: 'Q1', warehouseWard: 'P1', warehousePhone: '0955555555',
+    };
+    const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, type: 'CTV', ownerUserId: 'u9' }) } });
+    const r = await new StorefrontService(ctv, config, affiliate).getPublicBySlug('ctvone');
+    expect(JSON.stringify(r)).not.toContain('0955555555');
+    expect(JSON.stringify(r)).not.toContain('1 Lê Lợi');
+    const merchant = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, type: 'MERCHANT' }) } });
+    expect((await new StorefrontService(merchant, config, affiliate).getPublicBySlug('ctvone')).warehousePhone).toBe('0955555555');
+  });
+
+  it('SELLER-8: CTV sửa gian hàng → không lưu kho/SĐT kho', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', type: 'CTV', subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u9', { title: 'Mới', warehousePhone: '0955555555', warehouseAddress: 'x' });
+    expect(update.mock.calls[0][0].data).toEqual({ title: 'Mới' });
+  });
+
+  it('SELLER-8: gian hàng MERCHANT sửa qua updateMine → vẫn lưu kho và hotline', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's2', type: 'MERCHANT', subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u8', {
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: '',
+    });
+    expect(update.mock.calls[0][0].data).toEqual({
+      title: 'Shop', warehousePhone: '0955555555', warehouseAddress: '1 Lê Lợi', warehouseCity: null,
+    });
+  });
+
+  it('hợp đồng: trang công khai luôn có isPartner (boolean) và giữ nguyên type; CTV của đại lý có cờ vẫn trả kho và mã giới thiệu', async () => {
+    const base = {
+      id: 's1', slug: 'ctvone', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' }, ownerUserId: 'u9',
+      warehouseAddress: '1 Lê Lợi', warehousePhone: '0955555555',
+    };
+    const read = async (row: Record<string, unknown>) =>
+      new StorefrontService(makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...base, ...row }) } }), config, affiliate).getPublicBySlug('ctvone');
+    const plain = await read({ type: 'CTV', isPartner: false });
+    expect(plain).toMatchObject({ type: 'CTV', isPartner: false, referralCode: 'ABCD1234' });
+    const dealerCtv = await read({ type: 'CTV', isPartner: true });
+    expect(dealerCtv).toMatchObject({ type: 'CTV', isPartner: true, referralCode: 'ABCD1234', warehousePhone: '0955555555' });
+    expect(await read({ type: 'MERCHANT', isPartner: false })).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    expect(await read({ type: 'BRAND', isPartner: false })).toMatchObject({ type: 'BRAND', isPartner: false });
+    expect(typeof (await read({ type: 'CTV' })).isPartner).toBe('boolean');
+  });
+
+  it('PATCH /storefront/me: gian hàng CTV của đại lý (isPartner) lưu kho/hotline như updateStore của Cổng người bán', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's3', type: 'CTV', isPartner: true, subdomain: null }), update },
+    });
+    await new StorefrontService(prisma, config, affiliate).updateMine('u7', { title: 'Mới', warehousePhone: '0955555555' });
+    expect(update.mock.calls[0][0].data).toEqual({ title: 'Mới', warehousePhone: '0955555555' });
+  });
+
+  it('Q8 S2: hàng của gian hàng đối tác đã nằm trong combo thì không hiện trong combo (không được giảm); bộ sưu tập thường vẫn hiện', async () => {
+    const item = (id: string, storefrontId: string | null) => ({
+      id: `i-${id}`, note: null, variationId: null, isHidden: false,
+      product: {
+        id, name: `SP ${id}`, slug: id, thumbnail: null, brand: 'B', basePrice: 100_000, salePrice: null, ratingAvg: 0, reviewCount: 0,
+        isActive: true, affiliateBlocked: false, soldExternal: 0, soldApp: 0, approvalStatus: 'APPROVED', storefrontId, variations: [{ stock: 1 }],
+      },
+    });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctv', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', owner: { referralCode: 'ABCD1234' },
+        collections: [
+          { id: 'c1', title: 'Combo', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, items: [item('p1', null), item('p2', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c2', title: 'Gợi ý', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, items: [item('p9', 'sf-doi-tac')] },
+        ],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctv');
+    expect(r.collections.map((c) => c.items.map((i) => i.product.id))).toEqual([['p1', 'p2'], ['p9']]);
+    expect(JSON.stringify(r)).not.toContain('sf-doi-tac');
+  });
+
+  it('Q8 review vòng 3 S4: combo còn dưới 2 sản phẩm được giảm (bỏ hàng của gian hàng đối tác) → không còn mức giảm combo để hiện; combo đủ 2 sản phẩm vẫn giữ', async () => {
+    const item = (id: string, storefrontId: string | null) => ({
+      id: `i-${id}`, note: null, variationId: null, isHidden: false,
+      product: {
+        id, name: `SP ${id}`, slug: id, thumbnail: null, brand: 'B', basePrice: 100_000, salePrice: null, ratingAvg: 0, reviewCount: 0,
+        isActive: true, affiliateBlocked: false, soldExternal: 0, soldApp: 0, approvalStatus: 'APPROVED', storefrontId, variations: [{ stock: 1 }],
+      },
+    });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'ctv', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', owner: { referralCode: 'ABCD1234' },
+        collections: [
+          { id: 'c1', title: 'Combo 1 Tubu + 1 đối tác', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, items: [item('p1', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c2', title: 'Combo 2 Tubu', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 15, items: [item('p1', null), item('p2', null), item('p9', 'sf-doi-tac')] },
+          { id: 'c3', title: 'Combo 1 sản phẩm 2 biến thể', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 12, items: [item('p3', null), { ...item('p3', null), id: 'i-p3b' }] },
+        ],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('ctv');
+    expect(r.collections.map((c) => [c.id, c.kind, c.comboDiscountPct, c.items.length])).toEqual([
+      ['c1', 'COMBO', null, 1],
+      ['c2', 'COMBO', 15, 2],
+      ['c3', 'COMBO', null, 2],
+    ]);
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);

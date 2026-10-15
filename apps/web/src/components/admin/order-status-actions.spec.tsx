@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -160,6 +160,175 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(api.calls[0]!.url).toContain('/admin/orders/o1/status');
     expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'CANCELLED' });
     expect(native).not.toHaveBeenCalled();
+  });
+
+  describe('"Hủy đơn" nêu đúng nơi tiền/điểm hoàn về', () => {
+    const cancelText = async (o: AdminOrder) => {
+      const { container } = mount(<OrderStatusActions order={o} />);
+      click(byText(container, 'button', 'Hủy đơn'));
+      await flush();
+      const text = confirmDialog()?.textContent ?? '';
+      answerConfirm(false);
+      await flush();
+      return text;
+    };
+    const paid = (over: Partial<AdminOrder> = {}) =>
+      order({ paymentStatus: 'PAID', status: 'CONFIRMED', canConfirmPayment: false, allowedTransitions: ['CANCELLED'], ...over });
+
+    it('đơn thường đã trả trước: hoàn vào Ví Tubu của khách', async () => {
+      const text = await cancelText(paid());
+      expect(text).toMatch(/Hoàn 450\.000.*vào Ví Tubu của khách ngay khi huỷ/);
+    });
+
+    it('đơn CTV lên hộ: hoàn cho khách cuối (ví nếu có tài khoản, không thì hàng đợi Hoàn tiền khách), không hứa vào Ví của CTV', async () => {
+      const text = await cancelText(paid({ placedForCustomer: true }));
+      expect(text).toMatch(/Hoàn 450\.000.*khách cuối/);
+      expect(text).toMatch(/hàng đợi "Hoàn tiền khách"/);
+      expect(text).not.toMatch(/vào Ví Tubu của khách ngay khi huỷ/);
+    });
+
+    it('đơn trả bằng xu cũ: không hoàn tiền, trả lại Điểm Xanh', async () => {
+      const text = await cancelText(paid({ paymentMethod: 'XU' }));
+      expect(text).toMatch(/xu cũ — không hoàn tiền/);
+      expect(text).toMatch(/Điểm Xanh/);
+      expect(text).not.toMatch(/Ví Tubu/);
+      expect(text).not.toMatch(/450\.000/);
+    });
+
+    it('đơn chưa trả tiền: không có khoản hoàn', async () => {
+      const text = await cancelText(order({ placedForCustomer: true }));
+      expect(text).toMatch(/Khách chưa trả tiền — không có khoản hoàn tiền/);
+    });
+  });
+
+  it('đơn chuyển khoản đã huỷ mà tiền về muộn: nút "Ghi nhận tiền về muộn" → hỏi xác nhận rồi POST confirm-payment, hiện câu của API (R2-ADMINOPS-3)', async () => {
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, latePayment: true, message: 'Đã ghi khoản hoàn 450.000đ tiền về muộn, xem mục Hoàn tiền khách.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    expect(buttonLabels(container)).not.toContain('Đã nhận tiền');
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    expect(confirmDialog()?.textContent).toMatch(/hàng đợi Hoàn tiền khách/);
+    answerConfirm(true);
+    await flush();
+    expect(api.calls[0]!.url).toContain('/admin/orders/o1/confirm-payment');
+    expect(container.textContent).toContain('xem mục Hoàn tiền khách');
+  });
+
+  it('R3-MONEY-3: "Ghi nhận tiền về muộn" có ô số tiền thực nhận (mặc định tổng đơn); khách chuyển thiếu thì ghi đúng số đó', async () => {
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, latePayment: true, message: 'Đã ghi khoản hoàn 50.000đ tiền về muộn.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    const amount = container.querySelector('input[name="receivedAmount"]') as HTMLInputElement;
+    expect(amount.value).toBe('450.000');
+    expect(amount.className).toContain('min-h-[44px]');
+    typeInto(amount, '50000');
+    expect(amount.value).toBe('50.000');
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    const text = confirmDialog()?.textContent ?? '';
+    expect(text).toMatch(/đã nhận 50\.000\s?đ chuyển khoản/);
+    expect(text).toMatch(/khoản hoàn 50\.000\s?đ/);
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ amount: 50_000 });
+  });
+
+  it.each([
+    ['0', 'lớn hơn 0'],
+    ['', 'lớn hơn 0'],
+    ['450001', 'không vượt quá tổng đơn 450.000'],
+  ])('R3-MONEY-3: số tiền thực nhận "%s" → báo lỗi ngay, không hỏi xác nhận, không gọi API', async (typed, msg) => {
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })}
+      />,
+    );
+    typeInto(container.querySelector('input[name="receivedAmount"]') as HTMLInputElement, typed);
+    click(byText(container, 'button', 'Ghi nhận tiền về muộn'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(msg);
+    expect(api.calls).toHaveLength(0);
+  });
+
+  it('"Đã nhận tiền" đơn còn sống: không có ô số tiền (phải nhận đủ), body không kèm amount', async () => {
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'ok' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    expect(container.querySelector('input[name="receivedAmount"]')).toBeNull();
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({});
+  });
+
+  it('R3-MONEY-7: "Hủy đơn" có ô lý do (khách đọc trong thông báo); nhập thì PUT kèm note', async () => {
+    const api = mockFetch({ '/status': { body: { id: 'o1', status: 'CANCELLED' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order({ canConfirmPayment: false })} />);
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('khách sẽ đọc trong thông báo huỷ đơn');
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, '  Hết hàng nhà cung cấp ');
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'CANCELLED', note: 'Hết hàng nhà cung cấp' });
+  });
+
+  it('nhân viên (canConfirmPayment=false ở cấp trang) không thấy nút ghi nhận tiền về muộn', () => {
+    const { container } = mount(
+      <OrderStatusActions order={order({ status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, canRecordLatePayment: true })} canConfirmPayment={false} />,
+    );
+    expect(buttonLabels(container)).not.toContain('Ghi nhận tiền về muộn');
+  });
+
+  it('"Hủy đơn" đơn đã trả trước: hộp thoại nêu số tiền hoàn và nơi nhận (Ví Tubu của khách), điểm đã dùng được trả lại', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 300_000, pointsUsed: 50, canConfirmPayment: false })}
+      />,
+    );
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    const text = confirmDialog()!.textContent ?? '';
+    expect(text).toMatch(/Hoàn 300\.000\s?đ vào Ví Tubu của khách/);
+    expect(text).toMatch(/50 Điểm Xanh/);
+    answerConfirm(false);
+    await flush();
+  });
+
+  it('"Hủy đơn" đơn chưa thu tiền: hộp thoại nói rõ không có khoản hoàn tiền; đơn Pancake nhắc sẽ huỷ cả bên kho', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
+    const { container } = mount(
+      <OrderStatusActions
+        order={order({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', pancakeOrderId: 'pk-9', canConfirmPayment: false })}
+      />,
+    );
+    click(byText(container, 'button', 'Hủy đơn'));
+    await flush();
+    const text = confirmDialog()!.textContent ?? '';
+    expect(text).toMatch(/Khách chưa trả tiền — không có khoản hoàn/);
+    expect(text).toMatch(/huỷ cả đơn trên kho Pancake/);
+    answerConfirm(false);
+    await flush();
   });
 
   it('"Đã giao hàng": hộp thoại nhắc điểm Xanh + hoa hồng sẽ kích hoạt; đồng ý mới PUT DELIVERED', async () => {

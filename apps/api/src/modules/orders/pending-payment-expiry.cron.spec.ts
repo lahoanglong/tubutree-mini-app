@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
 import {
+  DEALER_PENDING_PAYMENT_TTL_KEY,
+  DEFAULT_DEALER_PENDING_PAYMENT_TTL_HOURS,
   DEFAULT_PENDING_PAYMENT_TTL_HOURS,
   PENDING_PAYMENT_TTL_KEY,
   PendingPaymentExpiryCron,
@@ -12,7 +14,7 @@ import type { OrderStatusService } from './order-status.service';
 const NOW = new Date('2026-10-10T05:00:00.000Z');
 const HOUR = 3_600_000;
 
-type StaleRow = { id: string; code: string; paymentMethod?: string; _count?: { paymentAttempts: number } };
+type StaleRow = { id: string; code: string; type?: string; paymentMethod?: string; _count?: { paymentAttempts: number } };
 
 function make(opts: { ttl?: unknown; locked?: boolean; orders?: StaleRow[] } = {}) {
   const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
@@ -40,19 +42,32 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(meta).toMatchObject({ timeZone: 'Asia/Ho_Chi_Minh' });
   });
 
-  it('chỉ quét đơn lẻ/CTV trả trước còn UNPAID ở PENDING_PAYMENT quá TTL (mặc định 24 giờ), không quét đơn đại lý', async () => {
+  it('quét đơn lẻ/CTV trả trước còn UNPAID ở PENDING_PAYMENT quá TTL (mặc định 24 giờ)', async () => {
     const { cron, prisma, systemConfig } = make();
     await cron.expireStale(NOW);
     expect(systemConfig.get).toHaveBeenCalledWith(PENDING_PAYMENT_TTL_KEY, DEFAULT_PENDING_PAYMENT_TTL_HOURS);
     const where = prisma.order.findMany.mock.calls[0][0].where;
-    expect(where).toMatchObject({
-      type: 'RETAIL',
-      status: 'PENDING_PAYMENT',
-      paymentStatus: 'UNPAID',
-      createdAt: { lt: new Date(NOW.getTime() - 24 * HOUR) },
-    });
+    expect(where).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
+    expect(where.OR).toContainEqual({ type: 'RETAIL', createdAt: { lt: new Date(NOW.getTime() - 24 * HOUR) } });
     expect(where.paymentMethod.in).toEqual(expect.arrayContaining(['BANK_TRANSFER', 'ZALOPAY', 'VNPAY']));
     expect(where.paymentMethod.in).not.toContain('COD');
+  });
+
+  // SELLER-7: đơn đại lý "Trả trước" không ai trả từng giữ tồn kho mãi mãi. Đơn "Ghi công nợ" CONFIRMED ngay nên không lọt vào.
+  it('SELLER-7: đơn đại lý trả trước cũng tự huỷ, theo hạn riêng (mặc định 72 giờ)', async () => {
+    const { cron, prisma, systemConfig, orderStatus } = make({
+      orders: [{ id: 'd1', code: 'DL1', paymentMethod: 'BANK_TRANSFER', type: 'DEALER' }],
+    });
+    await cron.expireStale(NOW);
+    expect(systemConfig.get).toHaveBeenCalledWith(DEALER_PENDING_PAYMENT_TTL_KEY, DEFAULT_DEALER_PENDING_PAYMENT_TTL_HOURS);
+    const where = prisma.order.findMany.mock.calls[0][0].where;
+    expect(where.status).toBe('PENDING_PAYMENT');
+    expect(where.OR).toContainEqual({ type: 'DEALER', createdAt: { lt: new Date(NOW.getTime() - 72 * HOUR) } });
+    expect(orderStatus.setStatus).toHaveBeenCalledWith(
+      'd1',
+      'CANCELLED',
+      expect.objectContaining({ onlyIfUnpaid: true, expectedStatus: 'PENDING_PAYMENT', note: expect.stringContaining('72 giờ') }),
+    );
   });
 
   // Không có API tra trạng thái ZaloPay: callback mất mà khách đã trả thì đơn vẫn bị huỷ — để lại dấu trong
@@ -93,6 +108,18 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(res).toMatchObject({ scanned: 2, cancelled: 2, failed: 0 });
   });
 
+  it('bỏ qua đơn hệ thống đã thôi tự huỷ vì đã bàn giao vận chuyển — không thử huỷ lại mỗi 10 phút (R4-SYNC-5)', async () => {
+    const { cron, prisma } = make();
+    await cron.expireStale(NOW);
+    expect(prisma.order.findMany.mock.calls[0][0].where).toMatchObject({ autoCancelBlockedAt: null });
+  });
+
+  it('đơn chuyển khoản chờ tiền có thể đã lên Pancake → huỷ qua cổng Pancake (D1, PANCAKE-2)', async () => {
+    const { cron, orderStatus } = make({ ttl: 6, orders: [{ id: 'o1', code: 'A' }] });
+    await cron.expireStale(NOW);
+    expect(orderStatus.setStatus).toHaveBeenCalledWith('o1', 'CANCELLED', expect.objectContaining({ pancakeGate: true }));
+  });
+
   it('đơn được trả tiền chen giữa (setStatus trả về đơn không bị huỷ) → không đếm là đã huỷ', async () => {
     const { cron, orderStatus } = make({ orders: [{ id: 'o1', code: 'A' }] });
     orderStatus.setStatus.mockResolvedValueOnce({ id: 'o1', status: 'CONFIRMED' });
@@ -117,7 +144,10 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
   ])('TTL cấu hình %p → dùng %p giờ (không để cấu hình sai huỷ hàng loạt đơn đang chờ chuyển khoản)', async (ttl, hours) => {
     const { cron, prisma } = make({ ttl });
     await cron.expireStale(NOW);
-    expect(prisma.order.findMany.mock.calls[0][0].where.createdAt).toEqual({ lt: new Date(NOW.getTime() - (hours as number) * HOUR) });
+    expect(prisma.order.findMany.mock.calls[0][0].where.OR).toContainEqual({
+      type: 'RETAIL',
+      createdAt: { lt: new Date(NOW.getTime() - (hours as number) * HOUR) },
+    });
   });
 
   it('instance khác đang giữ khoá advisory → bỏ lượt, không quét', async () => {

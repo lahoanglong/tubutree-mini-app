@@ -168,7 +168,15 @@ const DETAIL = {
 };
 
 const REFILLS = [
-  { id: 'r1', quantity: 3, seedsAwarded: 30, status: 'PENDING', createdAt: '2026-03-10T03:00:00.000Z', user: { id: 'k1', fullName: 'Hoa', phone: '0900000001' } },
+  {
+    id: 'r1',
+    quantity: 3,
+    seedsAwarded: 30,
+    status: 'PENDING',
+    createdAt: '2026-03-10T03:00:00.000Z',
+    user: { id: 'k1', fullName: 'Hoa', phone: '0900000001' },
+    pickupLocation: { id: 'l2', name: 'Kho Thủ Đức', address: '5 Võ Văn Ngân' },
+  },
   { id: 'r2', quantity: 1, seedsAwarded: 10, status: 'PENDING', createdAt: '2026-03-10T04:00:00.000Z', user: { id: 'k2', fullName: '=Độc', phone: '0900000002' } },
 ];
 
@@ -694,6 +702,12 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(screen.getByText('=Độc')).toBeInTheDocument();
     });
 
+    it('mỗi yêu cầu hiện điểm khách sẽ mang vỏ tới; yêu cầu cũ chưa chọn điểm thì không có dòng đó', async () => {
+      await openRefill();
+      expect(screen.getByText('Mang tới: Kho Thủ Đức · 5 Võ Văn Ngân')).toBeInTheDocument();
+      expect(screen.getAllByText(/^Mang tới: /)).toHaveLength(1);
+    });
+
     it('lọc theo tên hoặc SĐT; nút xoá từ khoá có tên; không khớp thì báo; trống thì báo khác', async () => {
       await openRefill();
       const search = screen.getByRole('searchbox', { name: 'Tìm theo tên hoặc SĐT' });
@@ -718,11 +732,29 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     it('Duyệt gọi API đúng yêu cầu, báo thành công; Từ chối báo kiểu info', async () => {
       await openRefill();
       fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
-      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1'));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 3));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' }));
       fireEvent.click(screen.getByRole('button', { name: 'Từ chối · =Độc' }));
       await waitFor(() => expect(mocks.rejectRefillReturn).toHaveBeenCalledWith('r2'));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã từ chối yêu cầu.', type: 'info' }));
+    });
+
+    it('nhân viên đếm thiếu vỏ: giảm "Vỏ thực nhận" rồi Duyệt gửi đúng số đếm, giọt nước xem trước theo số đó', async () => {
+      await openRefill();
+      expect(screen.getByText('Đếm tại điểm nhận · +30 giọt nước')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
+      expect(screen.getByText('Đếm tại điểm nhận · +20 giọt nước')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 2));
+    });
+
+    it('không cho nhập quá số khách khai; yêu cầu chỉ 1 vỏ thì không có bộ chọn và duyệt đúng 1', async () => {
+      await openRefill();
+      const plus = screen.getByRole('button', { name: 'Tăng số lượng' });
+      expect(plus).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getAllByRole('button', { name: 'Giảm số lượng' })).toHaveLength(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · =Độc' }));
+      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r2', 1));
     });
 
     it('đang duyệt một yêu cầu thì nút Từ chối của yêu cầu khác bị khoá', async () => {
@@ -743,10 +775,22 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(links).toHaveLength(1);
       expect(links[0]!.getAttribute('download')).toMatch(/^bao_cao_doi_vo_chai_\d+\.csv$/);
       const csv = decodeURI(links[0]!.getAttribute('href')!);
-      expect(csv).toContain('ID,Khách hàng,SĐT,Số vỏ chai,Số nước,Thời gian');
+      expect(csv).toContain('ID,Khách hàng,SĐT,Số vỏ chai,Số nước,Thời gian,Điểm nhận');
       expect(csv).toContain('r2,"\'=Độc","0900000002",1,10,');
       expect(csv).not.toContain('\nr1,');
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xuất file báo cáo CSV!', type: 'success' }));
+    });
+
+    it('Xuất CSV có cột Điểm nhận (để trống ở yêu cầu cũ)', async () => {
+      const links: HTMLAnchorElement[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        links.push(this);
+      });
+      await openRefill();
+      fireEvent.click(screen.getByRole('button', { name: 'Xuất CSV' }));
+      const csv = decodeURI(links[0]!.getAttribute('href')!);
+      expect(csv).toMatch(/\nr1,"Hoa","0900000001",3,30,"[^"]*","Kho Thủ Đức"/);
+      expect(csv).toMatch(/\nr2,"'=Độc","0900000002",1,10,"[^"]*",""/);
     });
 
     it('Xuất CSV khi không có dòng nào: báo không có dữ liệu', async () => {

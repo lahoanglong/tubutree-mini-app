@@ -1,14 +1,46 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
+import { VARIATION_ORDER_BY, sortVariationsByPrice } from './variation-order';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
+import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
+import { isPartnerStore } from '../merchant/partner-store';
+import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
+import { isPartnerOwnedProduct } from '../cart/partner-goods';
+
+/**
+ * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
+ * hàng (giống lúc checkout), không theo luật freeship của Tubu, và không đặt định kỳ/mua chung được. UNAVAILABLE: gian hàng đang
+ * tạm nghỉ hoặc đã ngừng bán nên chưa nhận đơn (R3-MERCHANT-3) — trang vẫn hiện, nút mua tắt.
+ */
+export interface ProductFulfiller {
+  kind: 'TUBU' | 'MERCHANT' | 'UNAVAILABLE';
+  name: string;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+  reason?: UnavailableReason;
+}
+
+type FulfillerStore = {
+  title: string;
+  type: string;
+  isPartner?: boolean;
+  shippingFee: number | null;
+  freeShipFrom: number | null;
+  ordersPausedAt: Date | null;
+  owner: { role: string; isBlocked: boolean } | null;
+};
 
 /** Trần số id trả về từ SQL tìm không dấu — catalog hiện vài trăm SP; chặn trường hợp từ khoá quá chung. */
 const TEXT_MATCH_LIMIT = 2000;
+/** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
+const MAX_LIST_SLUGS = 20;
 
 /** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
 export const SUGGEST_MIN_CHARS = 2;
@@ -82,16 +114,19 @@ export class CatalogService {
     weight: true,
   } satisfies Prisma.VariationSelect;
 
+  // Không có images: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh, app đọc đánh giá qua GET /products/:slug/reviews.
   private readonly publicReviewSelect = {
     rating: true,
     comment: true,
-    images: true,
     videoUrl: true,
     isVerified: true,
     createdAt: true,
   } satisfies Prisma.ReviewSelect;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: SystemConfigService,
+  ) {}
 
   async list(query: ProductQuery) {
     const { page, limit, sort } = query;
@@ -104,7 +139,7 @@ export class CatalogService {
         // tự giữa hai lần query → cuộn vô hạn ở Browse hiện trùng hoặc sót SP giữa các trang.
         orderBy: [this.orderBy(sort), { id: 'asc' }],
         ...skipTake(page, limit),
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -132,7 +167,7 @@ export class CatalogService {
     if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: pageIds } }] },
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
     const items = pageIds
@@ -150,9 +185,13 @@ export class CatalogService {
    * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
    */
   private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
-    const { brand, category, segment, minPrice, maxPrice, inStock, minRating } = query;
-    const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED' };
+    const { brand, category, segment, minPrice, maxPrice, inStock, minRating, slugs } = query;
+    const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
+    // Có tham số `slugs` mà rỗng thì không trả gì (không rơi về cả catalog).
+    if (slugs !== undefined) {
+      where.slug = { in: slugs.split(',').map((x) => x.trim()).filter(Boolean).slice(0, MAX_LIST_SLUGS) };
+    }
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (brandList.length === 1) {
@@ -196,7 +235,9 @@ export class CatalogService {
     const product = await this.prisma.product.findUnique({
       where: { slug },
       include: {
-        variations: { where: { isActive: true }, select: this.publicVariationSelect },
+        variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: this.publicVariationSelect },
+        // Chỉ slug + cờ công khai của nhãn (không kéo cả bản ghi Brand: có ownerUserId): để tên nhãn ở PDP dẫn sang /brand/:slug.
+        brandRef: { select: { slug: true, isPublished: true } },
         // take:20 — trang chi tiết không phân trang review; sản phẩm nhiều review sẽ load hết
         // nếu không giới hạn. FE cần xem thêm thì gọi endpoint /products/:slug/reviews riêng.
         reviews: {
@@ -205,27 +246,65 @@ export class CatalogService {
           take: 20,
           select: this.publicReviewSelect,
         },
+        // ordersPausedAt + owner chỉ để suy ra "gian hàng chưa nhận đơn" (R3-MERCHANT-3); cả storefront bị bỏ khỏi phản hồi.
+        storefront: {
+          select: {
+            title: true,
+            type: true,
+            shippingFee: true,
+            freeShipFrom: true,
+            ordersPausedAt: true,
+            isPartner: true,
+            owner: { select: { role: true, isBlocked: true } },
+          },
+        },
       },
     });
     // P0 A2-03=A5-06=A6-04: SP chưa duyệt (PENDING_REVIEW) hoặc bị từ chối (REJECTED, kể cả từng
     // APPROVED rồi bị duyệt lại thành từ chối) không được lộ qua PDP công khai.
-    if (!product || !product.isActive || product.approvalStatus !== 'APPROVED') {
+    if (!product || !isPublicProduct(product)) {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
     // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
-    // khai cần; admin dùng endpoint admin riêng. include trả mọi cột scalar nên phải bỏ tại đây
-    // (variations đã loại qua publicVariationSelect).
-    const { pancakeId: _pancakeId, ...publicProduct } = product;
-    return { ...publicProduct, sold: product.soldExternal + product.soldApp };
+    // khai cần; admin dùng endpoint admin riêng. rejectReason là lời nhắn của admin cho đối tác (sản phẩm đang bán vẫn mang lý
+    // do từ chối bản sửa gần nhất). include trả mọi cột scalar nên phải bỏ tại đây (variations đã loại qua publicVariationSelect).
+    const { pancakeId: _pancakeId, rejectReason: _rejectReason, brandRef, storefront, ...publicProduct } = product;
+    // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
+    const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
+    return {
+      ...publicProduct,
+      variations: sortVariationsByPrice(publicProduct.variations),
+      brandSlug,
+      sold: product.soldExternal + product.soldApp,
+      fulfiller: await this.fulfillerOf(product.fulfilment, storefront),
+      // Hàng của gian hàng đối tác chỉ bán giá lẻ: trang chi tiết ẩn đặt định kỳ và mua chung (partner-goods.ts).
+      partnerOwned: isPartnerOwnedProduct(product),
+    };
+  }
+
+  private async fulfillerOf(fulfilment: string, store: FulfillerStore | null): Promise<ProductFulfiller> {
+    if (fulfilment !== 'MERCHANT') return { kind: 'TUBU', name: TUBU_FULFILLER_NAME, shippingFee: null, freeShipFrom: null };
+    const partner = store ? isPartnerStore(store) : false;
+    const reason = store && partner ? merchantStoreUnavailableReason(store) : null;
+    if (store && reason) return { kind: 'UNAVAILABLE', reason, name: store.title, shippingFee: null, freeShipFrom: null };
+    const defaultFee =
+      (await this.config?.get<number>('merchant.default_shipping_fee', DEFAULT_MERCHANT_SHIPPING_FEE)) ??
+      DEFAULT_MERCHANT_SHIPPING_FEE;
+    return {
+      kind: 'MERCHANT',
+      name: store && partner ? store.title : 'Gian hàng đối tác',
+      shippingFee: store?.shippingFee ?? defaultFee,
+      freeShipFrom: store?.freeShipFrom ?? null,
+    };
   }
 
   async related(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const items = await this.prisma.product.findMany({
-      where: { isActive: true, approvalStatus: 'APPROVED', brand: product.brand, id: { not: product.id } },
+      where: { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } },
       take: 8,
-      include: { variations: { where: { isActive: true } } },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
     return items.map((p) => this.toCard(p));
@@ -255,8 +334,8 @@ export class CatalogService {
     if (rows.length === 0) return [];
     const ids = rows.map((r) => r.productId);
     const products = await this.prisma.product.findMany({
-      where: { id: { in: ids }, isActive: true, approvalStatus: 'APPROVED' },
-      include: { variations: { where: { isActive: true } } },
+      where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
     return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
@@ -309,21 +388,21 @@ export class CatalogService {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
       if (followedBrandIds.length > 0) or.push({ brandId: { in: followedBrandIds } });
-      const where: Prisma.ProductWhereInput = { isActive: true, approvalStatus: 'APPROVED', OR: or };
+      const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE, OR: or };
       items = await this.prisma.product.findMany({
         where,
         // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
         // trong JS; catalog càng lớn càng nặng. 200 ứng viên là đủ dư để sort lấy top 10.
         take: 200,
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       });
     }
 
     if (items.length === 0) {
       items = await this.prisma.product.findMany({
-        where: { isActive: true, approvalStatus: 'APPROVED', isFeatured: true },
+        where: { ...PUBLIC_PRODUCT_WHERE, isFeatured: true },
         take: 200,
-        include: { variations: { where: { isActive: true } } },
+        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
       });
     }
 
@@ -343,10 +422,16 @@ export class CatalogService {
     }
     const rows = await this.prisma.product.groupBy({
       by: ['brand'],
-      where: { isActive: true },
+      where: PUBLIC_PRODUCT_WHERE,
       _count: { _all: true },
     });
-    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all }));
+    // Slug của nhãn đã công khai (khớp theo tên) để trang chủ dẫn tới /brand/:slug; nhãn chưa có trang thì null.
+    const published = await this.prisma.brand.findMany({
+      where: { isPublished: true, name: { in: rows.map((r) => r.brand) } },
+      select: { name: true, slug: true },
+    });
+    const slugByName = new Map(published.map((b) => [b.name, b.slug]));
+    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all, slug: slugByName.get(r.brand) ?? null }));
     this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }
@@ -363,7 +448,7 @@ export class CatalogService {
     const [rows, products] = await Promise.all([
       this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
       this.prisma.product.findMany({
-        where: { isActive: true, approvalStatus: 'APPROVED' },
+        where: PUBLIC_PRODUCT_WHERE,
         select: { categoryIds: true },
       }),
     ]);
@@ -381,7 +466,7 @@ export class CatalogService {
     const text = await this.textWhere(q);
     if (!text) return [];
     return this.prisma.product.findMany({
-      where: { isActive: true, approvalStatus: 'APPROVED', AND: [text] },
+      where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
       select: { slug: true, name: true, thumbnail: true, basePrice: true },
     });

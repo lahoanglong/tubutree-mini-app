@@ -1,26 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, vnDateParts, vnMonthKey } from '../../common/vn-time';
-
-/**
- * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
- * `guest_<deviceId>` (cả dòng guest đã gộp `guest_..._merged_...`) — tạo vô hạn chỉ bằng deviceId
- * mới nên không được nhận voucher chào mừng/sinh nhật/winback. SĐT chỉ được ghi từ phoneToken Zalo
- * (auth.service) nên có SĐT = đã xác thực, kể cả khi dòng vẫn mang zaloId guest.
- */
-const REAL_USER_WHERE: Prisma.UserWhereInput = {
-  OR: [
-    { phone: { not: null } },
-    { AND: [{ zaloId: { not: null } }, { NOT: { zaloId: { startsWith: 'guest_' } } }] },
-  ],
-};
-/** Bản SQL của REAL_USER_WHERE, bảng users phải có alias `u`. `left()` thay LIKE vì `_` là ký tự đại diện. */
-const REAL_USER_SQL = Prisma.sql`(u.phone IS NOT NULL OR (u."zaloId" IS NOT NULL AND left(u."zaloId", 6) <> 'guest_'))`;
+import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 
 export type CronBatchResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { granted: number; scanned: number };
 
@@ -263,11 +248,20 @@ export class VouchersService {
       const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
       const nowVn = new Date(Date.now() + VN_OFFSET_MS);
       const since = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), 1) - VN_OFFSET_MS);
+      // Chi tiêu RÒNG: đơn đã giao nhưng được trả MỘT PHẦN vẫn ở DELIVERED với nguyên `total`, nên trừ tiền hàng + ship đã
+      // hoàn của các yêu cầu APPROVED (fullReturn=false, cùng định nghĩa LoyaltyService.partialReturnsByOrder), kẹp ở 0.
+      // Voucher mốc đã cấp từ trước KHÔNG thu hồi: coupon đã phát cho khách, chỉ lượt cấp sau mới tính theo số ròng.
       const rows = await this.prisma.$queryRaw<{ userId: string; spent: bigint }[]>`
-        SELECT "userId", SUM("total") AS spent
-        FROM orders
-        WHERE status::text = 'DELIVERED' AND "createdAt" >= ${since}
-        GROUP BY "userId"
+        SELECT o."userId", GREATEST(SUM(o."total") - COALESCE(SUM(rr."refunded"), 0), 0) AS spent
+        FROM orders o
+        LEFT JOIN (
+          SELECT "orderId", SUM(COALESCE("refundAmount", 0) + "shippingRefund") AS refunded
+          FROM return_requests
+          WHERE status::text = 'APPROVED' AND "fullReturn" = false
+          GROUP BY "orderId"
+        ) rr ON rr."orderId" = o.id
+        WHERE o.status::text = 'DELIVERED' AND o."createdAt" >= ${since}
+        GROUP BY o."userId"
         LIMIT 1000`;
       const period = nowVn.toISOString().slice(0, 7); // yyyy-mm theo giờ VN
       let granted = 0;

@@ -3,7 +3,8 @@ import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
-import { useAuthStore } from '../store/auth';
+import { AuthGate } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PageHeader } from '../components/ui/page-header';
@@ -21,13 +22,13 @@ import { SubscriptionsPanel } from '../components/subscriptions-panel';
 const PAGE_LIMIT = 20;
 
 /**
- * Tab gốc "Đơn hàng" (spec 4a.1/4a.2): kệ Mua lại → tab trạng thái (+ Định kỳ) → thẻ đơn có ảnh,
- * số món, nút Mua lại. Trang gốc: không nút back, đệm đáy cho tab bar.
+ * Tab gốc "Đơn hàng" (spec 4a.1/4a.2): tab trạng thái (+ Định kỳ) → thẻ đơn có ảnh, số món, nút Mua lại → kệ Mua lại
+ * (chỉ tab "Tất cả"). Trang gốc: không nút back, đệm đáy cho tab bar.
  */
 export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const authStatus = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const [tab, setTab] = useState<OrdersTabKey>(() => parseOrdersTab(location.search));
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
@@ -44,77 +45,79 @@ export default function OrdersPage() {
       const { page, limit, total } = lastPage.meta;
       return page * limit < total ? page + 1 : undefined;
     },
-    enabled: authStatus === 'authenticated' && !isSubscriptions,
+    enabled: phase === 'authenticated' && !isSubscriptions,
   });
   const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
       <PageHeader title={vi.orders.tabTitle} back={false} />
-      <div style={{ paddingTop: 8 }}>
-        <PurchasedRail source="orders_tab" />
-      </div>
 
-      <div style={{ padding: '0 12px 8px' }}>
-        <SegmentedTabs
-          items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
-          value={tab}
-          onChange={(key) => {
-            haptic('light');
-            setTab(key as OrdersTabKey);
-          }}
-          scroll
-        />
-      </div>
-
-      {isSubscriptions ? (
-        <SubscriptionsPanel />
-      ) : orders.isLoading || authStatus === 'loading' ? (
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-        </div>
-      ) : orders.isError ? (
-        <ErrorState message={getErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
-      ) : list.length === 0 ? (
-        tab === 'all' ? (
-          <EmptyState
-            art="box"
-            heading={vi.orders.emptyHeading}
-            body={vi.orders.emptyBody}
-            ctaLabel={vi.orders.emptyCta}
-            onCta={() => navigate('/browse')}
+      <AuthGate>
+        <div style={{ padding: '8px 12px' }}>
+          <SegmentedTabs
+            items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
+            value={tab}
+            onChange={(key) => {
+              haptic('light');
+              setTab(key as OrdersTabKey);
+            }}
+            scroll
           />
-        ) : (
-          <EmptyState variant="inline" art="box" heading={vi.orders.emptyTabHeading} />
-        )
-      ) : (
-        <>
+        </div>
+
+        {isSubscriptions ? (
+          <SubscriptionsPanel />
+        ) : orders.isLoading ? (
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {list.map((o) => (
-              <OrderCard
-                key={o.id}
-                order={o}
-                onOpen={() => navigate(`/order/${o.code}`)}
-                onReorder={() => setReorderTarget(orderReorderTarget(o))}
-              />
-            ))}
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+            <LineItemSkeleton />
           </div>
-          {orders.hasNextPage && (
-            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 16 }}>
-              <Button
-                variant="secondary"
-                loading={orders.isFetchingNextPage}
-                onPress={() => void orders.fetchNextPage()}
-                style={{ minWidth: 160 }}
-              >
-                {vi.orders.loadMore}
-              </Button>
+        ) : orders.isError && list.length === 0 ? (
+          <ErrorState message={getErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
+        ) : list.length === 0 ? (
+          tab === 'all' ? (
+            <EmptyState
+              art="box"
+              heading={vi.orders.emptyHeading}
+              body={vi.orders.emptyBody}
+              ctaLabel={vi.orders.emptyCta}
+              onCta={() => navigate('/browse')}
+            />
+          ) : (
+            <EmptyState variant="inline" art="box" heading={vi.orders.emptyTabHeading} />
+          )
+        ) : (
+          <>
+            <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {list.map((o) => (
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  onOpen={() => navigate(`/order/${o.code}`)}
+                  onReorder={() => setReorderTarget(orderReorderTarget(o))}
+                />
+              ))}
             </div>
-          )}
-        </>
-      )}
+            {orders.hasNextPage && (
+              <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 16 }}>
+                <Button
+                  variant="secondary"
+                  loading={orders.isFetchingNextPage}
+                  onPress={() => void orders.fetchNextPage()}
+                  style={{ minWidth: 160 }}
+                >
+                  {vi.orders.loadMore}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Khách vào tab này chủ yếu để xem đơn đang giao: kệ Mua lại đứng sau danh sách, chỉ ở "Tất cả". */}
+        {tab === 'all' && !orders.isLoading && !orders.isError && <PurchasedRail source="orders_tab" />}
+      </AuthGate>
 
       <ReorderSheet target={reorderTarget} source="order_card" navigateToCart onClose={() => setReorderTarget(null)} />
     </Page>

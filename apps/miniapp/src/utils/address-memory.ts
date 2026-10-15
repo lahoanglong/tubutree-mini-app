@@ -12,9 +12,16 @@ function scopedKey(base: string, userId?: string | null): string {
   return userId ? `${base}:${userId}` : base;
 }
 
-// Địa chỉ cũ lưu mã '00' (trước khi dùng danh mục Pancake): mã đó không gửi được khi đặt đơn nên không đáng nhớ.
+/**
+ * Địa chỉ lưu theo địa giới cũ: mã '00' (trước khi dùng danh mục Pancake) hoặc mã tỉnh hệ 3 cấp (trước sắp xếp
+ * 2025). Mã đó không gửi được khi đặt đơn (API trả ADDRESS_OUTDATED) nên phải chọn lại tỉnh/phường.
+ */
+export function isLegacyGeo(g: { provinceCode?: string | null; wardCode?: string | null }): boolean {
+  return !g.provinceCode?.startsWith('84_VN') || !g.wardCode || g.wardCode === '00';
+}
+
 function hasRealCodes(g: { provinceCode?: string | null; wardCode?: string | null }): boolean {
-  return !!g.provinceCode && g.provinceCode !== '00' && !!g.wardCode && g.wardCode !== '00';
+  return !isLegacyGeo(g);
 }
 
 function pickGeo(g: GeoValue): GeoValue {

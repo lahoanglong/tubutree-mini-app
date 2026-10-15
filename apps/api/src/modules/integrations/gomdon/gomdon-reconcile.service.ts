@@ -6,7 +6,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { QUEUE_GOMDON_EVENTS } from '../../../jobs/queues';
 import { GomdonOrderService } from './gomdon-order.service';
 import { GOMDON_JOB_EVENT, addGomdonJob } from './gomdon-queue';
-import { GOMDON_STATE } from './gomdon-status';
+import { GOMDON_CANCEL, GOMDON_STATE } from './gomdon-status';
+import { GomdonClient } from './gomdon.client';
 import { GOMDON_EVENT_STATUS } from './gomdon-webhook.service';
 import { CRON_TZ } from '../../../common/cron-tz';
 
@@ -14,13 +15,20 @@ import { CRON_TZ } from '../../../common/cron-tz';
  * Lưới an toàn cho tích hợp Gomdon — KHÔNG phụ thuộc Pancake đã cấu hình hay chưa (trước đây phần
  * cứu hộ Gomdon nằm sau `if (!pancake.isConfigured()) return` của PancakePushReconcileService).
  *
- *  1. Webhook event kẹt RECEIVED/FAILED (enqueue lỗi, hết lượt retry) → enqueue lại (giới hạn số lần).
+ *  1. Webhook event kẹt RECEIVED/FAILED (enqueue lỗi, hết lượt retry) → enqueue lại (giới hạn số lần), trừ event
+ *     người vận hành đã bấm "Đã xử lý".
  *  2. Đơn thu gom chưa từng tạo vận đơn (gomdonStatus null — enqueue lúc checkout lỗi), hoặc đã PAID mà
  *     còn AWAITING_PAYMENT (enqueue lúc xác nhận thanh toán lỗi) → enqueue tạo vận đơn (có claim, an toàn).
  *  3. CREATING quá lâu (tiến trình chết giữa lúc gọi Gomdon) của đơn còn hiệu lực → NEEDS_MANUAL_CHECK +
  *     đẩy Pancake + báo CSKH.
  *  4. Đơn đã huỷ còn vận đơn chưa xử lý huỷ (enqueue huỷ lỗi) → enqueue huỷ. Vận đơn chỉ có mã BestExpress
- *     (thiếu id số) cũng tính là có vận đơn.
+ *     (thiếu id số) cũng tính là có vận đơn. Huỷ đã FAILED vì lỗi tạm (gomdonCancelRetrySince) mà vận đơn
+ *     còn huỷ được qua API → thử lại thưa thớt trong CANCEL_RETRY_WINDOW_HOURS (vận đơn sống của đơn đã huỷ
+ *     = bưu tá tới lấy hàng, thu COD).
+ *  5. Gomdon đang từ chối tài khoản → thử đăng nhập lại thưa thớt để lựa chọn thu gom tự bật lại.
+ *
+ * Tạo vận đơn lỗi tạm: job hết lượt mà còn trong cửa sổ (GomdonOrderService.TRANSIENT_PUSH_WINDOW_MS) thì
+ * gomdonStatus vẫn null → bước 2 xếp lại.
  */
 @Injectable()
 export class GomdonReconcileService {
@@ -30,12 +38,17 @@ export class GomdonReconcileService {
   static readonly PUSH_STALE_MINUTES = 15;
   static readonly CREATING_STALE_MINUTES = 30;
   static readonly CANCEL_STALE_MINUTES = 10;
+  /** Huỷ FAILED vì lỗi tạm: thử lại tối đa chừng này giờ, mỗi lượt cách nhau ít nhất CANCEL_RETRY_GAP_MINUTES. */
+  static readonly CANCEL_RETRY_WINDOW_HOURS = 6;
+  static readonly CANCEL_RETRY_GAP_MINUTES = 30;
+  static readonly LOGIN_PROBE_MINUTES = 30;
   static readonly BATCH_SIZE = 50;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly gomdonOrder: GomdonOrderService,
     @InjectQueue(QUEUE_GOMDON_EVENTS) private readonly eventsQueue: Queue,
+    private readonly gomdonClient: GomdonClient,
   ) {}
 
   // Mỗi bước bọc try/catch riêng: @Cron không tự bắt lỗi (unhandledRejection làm sập process), và
@@ -47,6 +60,7 @@ export class GomdonReconcileService {
       ['push', () => this.redrivePushes()],
       ['creating', () => this.escalateStuckCreating()],
       ['cancel', () => this.redriveCancels()],
+      ['login', () => this.gomdonClient.probeRejectedLogin(GomdonReconcileService.LOGIN_PROBE_MINUTES * 60_000)],
     ] as const) {
       try {
         await step();
@@ -66,6 +80,7 @@ export class GomdonReconcileService {
         status: { in: [GOMDON_EVENT_STATUS.RECEIVED, GOMDON_EVENT_STATUS.FAILED] },
         receivedAt: { lt: this.minutesAgo(GomdonReconcileService.EVENT_STALE_MINUTES) },
         attempts: { lt: GomdonReconcileService.MAX_EVENT_ATTEMPTS },
+        dismissedAt: null,
       },
       select: { id: true },
       orderBy: { receivedAt: 'asc' },
@@ -156,7 +171,23 @@ export class GomdonReconcileService {
       select: { id: true, code: true },
       take: GomdonReconcileService.BATCH_SIZE,
     });
-    for (const o of orders) {
+    const failedRetries = await this.prisma.order.findMany({
+      where: {
+        hasRecyclingPickup: true,
+        status: 'CANCELLED',
+        gomdonCancelStatus: GOMDON_CANCEL.FAILED,
+        gomdonCancelRetrySince: { gt: this.minutesAgo(GomdonReconcileService.CANCEL_RETRY_WINDOW_HOURS * 60) },
+        // Lần thử trước (job 8 lần) đã kết thúc ít nhất một khoảng — không dồn gọi Gomdon liên tục.
+        updatedAt: { lt: this.minutesAgo(GomdonReconcileService.CANCEL_RETRY_GAP_MINUTES) },
+        gomdonOrderId: { not: null },
+        // Chỉ vận đơn còn huỷ được qua API (chưa lấy hàng); đã lấy hàng thì cancelOnGomdon chốt TOO_LATE.
+        gomdonStatus: { in: ['1', '10'] },
+      },
+      select: { id: true, code: true },
+      orderBy: { updatedAt: 'asc' },
+      take: GomdonReconcileService.BATCH_SIZE,
+    });
+    for (const o of [...orders, ...failedRetries]) {
       try {
         await this.gomdonOrder.enqueueCancel(o.id);
       } catch (err) {

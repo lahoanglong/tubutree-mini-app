@@ -25,6 +25,7 @@ import { loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler, en
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
 import { useAuthStore, setLogoutCleanup } from './auth';
+import { vi as copy } from '../i18n/vi';
 
 const mockedGetStorage = vi.mocked(getStorage);
 const mockedSetStorage = vi.mocked(setStorage);
@@ -149,6 +150,66 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u4');
+  });
+});
+
+describe('useAuthStore — mất mạng lúc khôi phục phiên (R5-BUYER-1)', () => {
+  function offlineEverything(): void {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
+    mockedRefresh.mockRejectedValue({ isAxiosError: true, message: 'Network Error', response: undefined });
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockRejectedValue(new Error('Network Error'));
+  }
+
+  it('restore() hết cách (refresh, Zalo, khách đều lỗi mạng) → status error kèm câu tiếng Việt, không lộ "Network Error"', async () => {
+    offlineEverything();
+
+    await useAuthStore.getState().restore();
+
+    const s = useAuthStore.getState();
+    expect(s.status).toBe('error');
+    expect(s.error).toBe(copy.errors.sessionUnavailable);
+    expect(s.error).not.toMatch(/network/i);
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+  });
+
+  it('login() hết cách → status error kèm câu tiếng Việt, không lộ message thô của axios', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+
+    await useAuthStore.getState().login();
+
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionUnavailable);
+  });
+
+  it('có mạng lại rồi restore() lần nữa → vào lại được, xoá câu lỗi cũ', async () => {
+    offlineEverything();
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('error');
+
+    mockedRefresh.mockResolvedValue(loginResponse('u-back'));
+    await useAuthStore.getState().restore();
+
+    const s = useAuthStore.getState();
+    expect(s.status).toBe('authenticated');
+    expect(s.user?.id).toBe('u-back');
+    expect(s.error).toBeUndefined();
+  });
+
+  it('đã đăng nhập mà làm mới phiên (vd sau khi đặt hàng) gặp lỗi mạng → giữ nguyên phiên, không nháy loading, không rơi sang error', async () => {
+    useAuthStore.setState({ user: loginResponse('u-keep').user, status: 'authenticated', error: undefined });
+    offlineEverything();
+    const seen: string[] = [];
+    const unsub = useAuthStore.subscribe((s) => seen.push(s.status));
+
+    await useAuthStore.getState().restore();
+    unsub();
+
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('u-keep');
+    expect(seen).not.toContain('loading');
+    expect(seen).not.toContain('error');
   });
 });
 

@@ -70,6 +70,22 @@ const REQUIRED_CODES = [
 describe('seed mẫu thông báo', () => {
   const templates = seededTemplates();
   const byCode = new Map(templates.map((t) => [t.code, t]));
+  const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
+
+  /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
+  function bodiesAfterMigrations(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const dir of readdirSync(MIGRATIONS_DIR).filter((d) => statSync(join(MIGRATIONS_DIR, d)).isDirectory()).sort()) {
+      const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf-8');
+      for (const m of sql.matchAll(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)) {
+        if (!out.has(m[1]!)) out.set(m[1]!, m[2]!);
+      }
+      for (const m of sql.matchAll(/UPDATE "notification_templates"\s+SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'/g)) {
+        out.set(m[2]!, m[1]!);
+      }
+    }
+    return out;
+  }
 
   it('có đủ mọi mã mà finding A1-019 liệt kê và các mã code gọi gián tiếp', () => {
     expect(REQUIRED_CODES.filter((c) => !byCode.has(c))).toEqual([]);
@@ -108,7 +124,10 @@ describe('seed mẫu thông báo', () => {
 
     it('chèn đủ tám mã A1-019 và lời tin trùng từng chữ với seed (nếu lệch thì prod và dev nói hai câu khác nhau)', () => {
       expect(inserted.map((t) => t.code).sort()).toEqual(REQUIRED_CODES.slice(0, 8).sort());
-      for (const t of inserted) expect(byCode.get(t.code)).toMatchObject({ id: t.id, channel: t.channel, bodyTemplate: t.bodyTemplate });
+      const after = bodiesAfterMigrations();
+      for (const t of inserted) {
+        expect(byCode.get(t.code)).toMatchObject({ id: t.id, channel: t.channel, bodyTemplate: after.get(t.code) });
+      }
     });
 
     it('POINTS_EXPIRING viết "Điểm Xanh" hoa đúng thuật ngữ Q-26, cả seed lẫn migration', () => {
@@ -120,7 +139,6 @@ describe('seed mẫu thông báo', () => {
   });
 
   describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
-    const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
     const CODES = [
       'SUBSCRIPTION_PAUSED',
       'SUBSCRIPTION_ORDER_AWAITING_PAYMENT',
@@ -133,22 +151,25 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_BEST_ANSWER',
       // PD-3 OQ-10: mẫu báo khách xu đã thành Điểm Xanh (migration chèn cùng lời với seed).
       'XU_CONVERTED',
+      // P9: tin đơn định kỳ thất bại đổi lời hứa thử lại; các mã mới/đổi chữ phải đến được prod qua migration.
+      'SUBSCRIPTION_ORDER_FAILED',
+      'PRICE_DROP_ALERT',
+      'COMMUNITY_POST_REJECTED',
+      'REFILL_APPROVED',
+      'REFILL_REJECTED',
+      // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
+      'ORDER_AWAITING_PAYMENT',
+      'ORDER_PAYMENT_EXPIRED',
+      'ORDER_CANCELLED',
+      'RETURN_APPROVED_DETAIL',
+      'RETURN_REJECTED',
+      'RETURN_RECEIVED',
+      'REFUND_BANK_REQUESTED',
+      'REFUND_BANK_COMPLETED',
+      'REFUND_LATE_PAYMENT',
+      'REFUND_WALLET_CREDITED',
+      'OPS_REFUND_ALERT',
     ];
-
-    /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
-    function bodiesAfterMigrations(): Map<string, string> {
-      const out = new Map<string, string>();
-      for (const dir of readdirSync(MIGRATIONS_DIR).filter((d) => statSync(join(MIGRATIONS_DIR, d)).isDirectory()).sort()) {
-        const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf-8');
-        for (const m of sql.matchAll(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)) {
-          if (!out.has(m[1]!)) out.set(m[1]!, m[2]!);
-        }
-        for (const m of sql.matchAll(/UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'/g)) {
-          out.set(m[2]!, m[1]!);
-        }
-      }
-      return out;
-    }
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {
       expect(bodiesAfterMigrations().get(code)).toBe(byCode.get(code)!.bodyTemplate);

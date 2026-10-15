@@ -29,6 +29,30 @@ export async function createUser(
   });
 }
 
+/** Đại lý kèm địa chỉ mặc định — đơn đại lý cần người nhận cho kho Pancake (DealerService.placeOrder). */
+export async function createDealer(
+  prisma: PrismaService,
+  data: Partial<Prisma.UserUncheckedCreateInput> = {},
+) {
+  const user = await createUser(prisma, { role: 'DEALER', ...data });
+  await prisma.address.create({
+    data: {
+      userId: user.id,
+      recipient: 'Dai ly IT',
+      phone: '0911000000',
+      street: '2 Duong IT',
+      ward: 'Phuong IT',
+      district: '',
+      province: 'Ha Noi',
+      provinceCode: '84_VN01',
+      districtCode: '',
+      wardCode: '00001',
+      isDefault: true,
+    },
+  });
+  return user;
+}
+
 /** Upsert SystemConfig trực tiếp (trước khi service đọc — SystemConfigService cache 60s). */
 export async function setConfig(prisma: PrismaService, key: string, value: Prisma.InputJsonValue) {
   const category = key.includes('.') ? key.slice(0, key.indexOf('.')) : 'misc';
@@ -60,7 +84,7 @@ export async function createOrder(
         ward: 'Phuong IT',
         district: '',
         province: 'Ha Noi',
-        provinceCode: '01',
+        provinceCode: '84_VN01',
         districtCode: '',
         wardCode: '00001',
       },
