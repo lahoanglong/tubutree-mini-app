@@ -107,6 +107,9 @@ export class RewardPointsService {
       );
       throw new InternalServerErrorException('Thưởng Điểm Xanh không hợp lệ, đã báo quản trị viên.');
     }
+    if (tx && !expiresAtOverride) {
+      throw new Error('RewardPointsService.grant(tx): thiếu expiresAtOverride — đọc hạn bằng expiresAt() TRƯỚC khi mở transaction.');
+    }
     const expiresAt = expiresAtOverride ?? (await this.expiresAt());
     const run = async (db: Prisma.TransactionClient): Promise<boolean> => {
       if (await this.legacyCoinEntryExists(db, userId, reason, refType)) {
@@ -143,7 +146,7 @@ export class RewardPointsService {
   }
 
   /** Hạn cho điểm thưởng mới — cùng quy tắc loyalty.point_expire_months như điểm danh / điểm đơn. */
-  private async expiresAt(): Promise<Date> {
+  async expiresAt(): Promise<Date> {
     const months = await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS);
     return pointsExpiryFrom(new Date(), months);
   }

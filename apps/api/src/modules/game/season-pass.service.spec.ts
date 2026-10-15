@@ -47,10 +47,12 @@ function makePrisma(over: Record<string, unknown> = {}) {
   return db as unknown as PrismaService;
 }
 
+const EXPIRES = new Date('2027-10-15T00:00:00Z');
+
 function svcWith(
   prisma: PrismaService,
   cfg = makeConfig({ 'seasonpass.tiers': TIERS }),
-  rewards: { grant: jest.Mock } = { grant: jest.fn().mockResolvedValue(true) },
+  rewards: { grant: jest.Mock; expiresAt: jest.Mock } = { grant: jest.fn().mockResolvedValue(true), expiresAt: jest.fn().mockResolvedValue(EXPIRES) },
 ) {
   return { svc: new SeasonPassService(prisma, cfg, rewards as unknown as RewardPointsService), prisma, rewards };
 }
@@ -216,7 +218,7 @@ describe('SeasonPassService.claim', () => {
     const r = await svc.claim('u1', 0, 'premium');
     expect(r).toEqual({ claimed: true, reward: { type: 'POINTS', amount: 5 } });
     // Cấp TRÊN tx của claim (không mở transaction riêng) để rollback cùng việc đánh dấu đã nhận.
-    expect(rewards.grant).toHaveBeenCalledWith('u1', 5, 'SEASONPASS:s1:0:premium', 'SEASONPASS', 's1', p);
+    expect(rewards.grant).toHaveBeenCalledWith('u1', 5, 'SEASONPASS:s1:0:premium', 'SEASONPASS', 's1', p, EXPIRES);
     const pAny = p as unknown as { coinTransaction: { create: jest.Mock }; user: { update: jest.Mock } };
     expect(pAny.coinTransaction.create).not.toHaveBeenCalled();
     expect(pAny.user.update).not.toHaveBeenCalled();
@@ -243,7 +245,7 @@ describe('SeasonPassService.claim', () => {
 
   it('grant ném (vd số điểm vượt trần 2.000) → claim ném, lỗi lan ra khỏi tx để rollback đánh dấu', async () => {
     const p = premiumReady();
-    const rewards = { grant: jest.fn().mockRejectedValue(new Error('Thưởng Điểm Xanh không hợp lệ')) };
+    const rewards = { grant: jest.fn().mockRejectedValue(new Error('Thưởng Điểm Xanh không hợp lệ')), expiresAt: jest.fn().mockResolvedValue(EXPIRES) };
     const tiers = [{ xp: 1, free: { type: 'SEEDS', amount: 1 }, premium: { type: 'POINTS', amount: 5000 } }];
     const { svc } = svcWith(p, makeConfig({ 'seasonpass.tiers': tiers }), rewards);
     await expect(svc.claim('u1', 0, 'premium')).rejects.toThrow('Thưởng Điểm Xanh không hợp lệ');

@@ -1380,6 +1380,7 @@ export class AffiliateService {
       throw new BadRequestException('Chỉ nhận được thưởng mốc của tháng này hoặc tháng trước.');
     }
     const reason = `CTV_MILESTONE:${milestone.id}:${month.key}`;
+    const expiresAt = await this.rewards.expiresAt();
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -1402,7 +1403,7 @@ export class AffiliateService {
             revenue,
           },
         });
-        await this.rewards.grant(userId, milestone.rewardPoints, reason, 'AFFILIATE_MILESTONE', claim.id, tx);
+        await this.rewards.grant(userId, milestone.rewardPoints, reason, 'AFFILIATE_MILESTONE', claim.id, tx, expiresAt);
 
         return {
           success: true,
