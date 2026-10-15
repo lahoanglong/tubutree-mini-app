@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pointsDebtAmount, pointsReasonDetail, pointsReasonLabel, walletTxLabel } from './ledger-labels';
+import { pointsDebtAmount, pointsReasonDetail, pointsReasonLabel, walletTxLabel, walletTxTitle } from './ledger-labels';
 
 describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng tiếng Việt', () => {
   it.each([
@@ -126,6 +126,19 @@ describe('R6-ADMIN-1 — mỗi loại dòng giới thiệu một nhãn riêng, n
     expect(pointsDebtAmount('REFERRAL_ORDER2_DEBT:u1')).toBeNull();
     expect(pointsDebtAmount('REFERRAL_ORDER2_REVOKE:u1:5')).toBeNull();
     expect(pointsDebtAmount('MERGED:g1:REFERRAL_MILESTONE_DEBT:u1:3#0:7')).toBe(7);
+  });
+});
+
+describe('R6-BUYER-13 — tiêu đề sao kê Ví theo nguồn khoản hoàn', () => {
+  it.each([
+    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền trả hàng đơn TUBU1' }, 'Hoàn tiền trả hàng'],
+    [{ type: 'ORDER_REFUND', reason: 'Hoàn tiền đơn TUBU1' }, 'Hoàn tiền huỷ đơn'],
+    [{ type: 'ORDER_REFUND', reason: null }, 'Hoàn tiền huỷ đơn'],
+    [{ type: 'ORDER_PAY', reason: 'Thanh toán đơn TUBU1' }, 'Thanh toán đơn'],
+    [{ type: 'WITHDRAW', reason: null }, 'Rút về ngân hàng'],
+    [{ type: 'NEW_TYPE', reason: null }, 'Biến động ví'],
+  ])('%j → %s', (tx, title) => {
+    expect(walletTxTitle(tx)).toBe(title);
   });
 });
 

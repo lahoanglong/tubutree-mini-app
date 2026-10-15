@@ -141,6 +141,16 @@ const WALLET_TX_LABELS: Record<string, string> = {
   ADJUST: 'Điều chỉnh',
 };
 
+/**
+ * Tiêu đề dòng sao kê Ví: mọi khoản hoàn đều là ORDER_REFUND nên tách theo nguồn từ `reason` API ghi ("Hoàn tiền trả hàng đơn …"
+ * cho phiếu trả, "Hoàn tiền đơn …" cho huỷ đơn/tiền về muộn) để khách quét lịch sử biết khoản nào là khoản nào.
+ */
+export function walletTxTitle(tx: { type: string; reason?: string | null }): string {
+  if (tx.type === 'ORDER_REFUND') return /trả hàng/i.test(tx.reason ?? '') ? 'Hoàn tiền trả hàng' : 'Hoàn tiền huỷ đơn';
+  if (tx.type === 'ORDER_PAY') return 'Thanh toán đơn';
+  return walletTxLabel(tx.type);
+}
+
 /** Nhãn dòng sao kê Ví theo loại biến động; loại API mới thêm mà web chưa biết vẫn hiện được. */
 export function walletTxLabel(type: string): string {
   return WALLET_TX_LABELS[type] ?? 'Biến động ví';
