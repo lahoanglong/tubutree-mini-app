@@ -68,8 +68,11 @@ export function orderStamp(o: { status: string; createdAt: string; deliveredAt?:
  * Dòng Điểm Xanh của đơn theo trạng thái: chưa giao thì "sẽ nhận", đã giao thì "đã cộng", đã hoàn thì đã thu hồi.
  * Chỉ nói "khi giao thành công" ở đơn chưa giao.
  */
-export function orderPointsNote(status: string, pointsEarned: number): { text: string; tone: 'success' | 'muted' } | null {
+export function orderPointsNote(status: string, pointsEarned: number, pointsReversed = 0): { text: string; tone: 'success' | 'muted' } | null {
   if (pointsEarned <= 0 || status === 'CANCELLED') return null;
+  if (status === 'DELIVERED' && pointsReversed > 0) {
+    return { text: vi.orders.pointsCreditedPartlyReversed(formatNumber(pointsEarned), formatNumber(pointsReversed)), tone: 'muted' };
+  }
   if (status === 'DELIVERED') return { text: vi.orders.pointsCredited(formatNumber(pointsEarned)), tone: 'success' };
   if (status === 'RETURNED') return { text: vi.orders.pointsReversed, tone: 'muted' };
   return { text: vi.checkout.pointsEarn(pointsEarned), tone: 'success' };

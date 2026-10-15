@@ -261,12 +261,13 @@ export default function OrderDetailPage() {
   const stamp = orderStamp(o);
   const timelineSteps = timelineStepsFor(o.paymentMethod);
   const discounts = discountRows(o);
-  const pointsNote = orderPointsNote(o.status, o.pointsEarned);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const returnWindow = returnWindowState(o, returnDays);
   const refundMode = cancelRefundMode(o);
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
   const orderReturns = (myReturns.data ?? []).filter((r) => r.orderId === o.id);
+  const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
+  const pointsNote = orderPointsNote(o.status, o.pointsEarned, pointsReversed);
   const remaining = remainingByLine(o.items, orderReturns);
   const canRequestMore =
     o.status === 'DELIVERED' && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);

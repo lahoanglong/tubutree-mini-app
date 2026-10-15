@@ -709,6 +709,8 @@ export interface ReturnRequestDTO {
   refundAmount?: number | null;
   shippingRefund?: number;
   pointsRefunded?: number;
+  /** Điểm Xanh đã cộng từ đơn mà phiếu này thu lại khi duyệt. */
+  pointsReversed?: number;
   fullReturn?: boolean;
   receivedAt?: string | null;
   items?: { orderItemId: string; quantity: number; refundAmount: number }[];
