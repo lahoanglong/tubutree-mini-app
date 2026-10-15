@@ -198,5 +198,31 @@ describe('AffiliateService.productCommissionBreakdown partial returns (real Post
       await prisma.variation.update({ where: { id: a.v.id }, data: { affiliateRate: nowRate } });
       expect(await sumOf(ctv.id)).toBe(30_000);
     });
+
+    it.each([
+      ['sản phẩm bị chặn affiliate', async (a: { v: { id: string; productId: string } }) => { await prisma.product.update({ where: { id: a.v.productId }, data: { affiliateBlocked: true } }); }],
+      ['mức % biến thể bị gỡ (null)', async (a: { v: { id: string; productId: string } }) => { await prisma.variation.update({ where: { id: a.v.id }, data: { affiliateRate: null } }); }],
+    ])('hoa hồng cũ không có lineAmounts, mọi dòng hiện về 0 (%s): vẫn hiện đủ Commission.amount', async (_name, zeroOut) => {
+      const { ctv, o } = await order(100_000);
+      const a = await line(o.id, 'A', 10, 100_000);
+      await prisma.commission.create({
+        data: { affiliateUserId: ctv.id, orderId: o.id, orderTotal: 100_000, commissionableTotal: 100_000, rate: 10, amount: 10_000, status: 'APPROVED' },
+      });
+      await zeroOut(a);
+      const rows = await affiliate.productCommissionBreakdown(ctv.id);
+      expect(rows.map((r) => [r.productName.split(' ')[0], r.commission])).toEqual([['A', 10_000]]);
+      expect(await sumOf(ctv.id)).toBe(10_000);
+    });
+
+    it('hoa hồng cũ không có lineAmounts, dòng A bị chặn còn dòng B có mức: tổng vẫn bằng Commission.amount', async () => {
+      const { ctv, o } = await order(300_000);
+      const a = await line(o.id, 'A', 10, 100_000);
+      await line(o.id, 'B', 10, 200_000);
+      await prisma.commission.create({
+        data: { affiliateUserId: ctv.id, orderId: o.id, orderTotal: 300_000, commissionableTotal: 300_000, rate: 10, amount: 30_000, status: 'APPROVED' },
+      });
+      await prisma.product.update({ where: { id: a.v.productId }, data: { affiliateBlocked: true } });
+      expect(await sumOf(ctv.id)).toBe(30_000);
+    });
   });
 });

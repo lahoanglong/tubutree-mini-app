@@ -1273,6 +1273,12 @@ export class AffiliateService {
           const r = rate.get(it.variationId) ?? 0;
           if (r > 0) originals.set(it.id, Math.floor(((paid[idx] ?? 0) * r) / 100));
         }
+        // Mọi dòng hiện có mức 0 (gỡ mức % hoặc SP bị chặn sau khi đặt): hoa hồng đã phát sinh không được biến mất, chia theo số đã trả
+        // như order-reversal.commissionByLine.
+        if (originals.size === 0 && items.length > 0) {
+          const split = distributeByWeight(c.amount, paid);
+          items.forEach((it, idx) => originals.set(it.id, split[idx] ?? 0));
+        }
       }
       let budget = Math.max(0, [...originals.values()].reduce((a, v) => a + v, 0) - c.amount);
       const cutOf = new Map<string, number>();
