@@ -13,7 +13,7 @@ import {
 } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { formatDateTime } from '@/lib/format-date';
-import { pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
+import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_PRIMARY, Notice, ToneBadge } from './ui';
@@ -175,9 +175,15 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
                     {p.expiresAt && ` · hết hạn ${formatDateTime(p.expiresAt)}`}
                   </span>
                 </span>
-                <span className={`shrink-0 ${p.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}`}>
-                  {p.delta > 0 ? '+' : ''}
-                  {p.delta}
+                <span className={`shrink-0 ${p.delta < 0 || pointsDebtAmount(p.reason) !== null ? 'text-danger-fg' : 'text-success-fg'}`}>
+                  {pointsDebtAmount(p.reason) !== null ? (
+                    `nợ ${pointsDebtAmount(p.reason)}`
+                  ) : (
+                    <>
+                      {p.delta > 0 ? '+' : ''}
+                      {p.delta}
+                    </>
+                  )}
                 </span>
               </li>
             ))}

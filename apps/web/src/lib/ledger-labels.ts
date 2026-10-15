@@ -16,7 +16,10 @@ const REFUND_RETURN_POINTS: ReasonRule = { label: 'Hoàn lại điểm đã dùn
 // Đơn bị hoàn trọn (ORDER_REVERSED) và từng phiếu trả một phần (RETURN_REVERSED) cùng là thu lại điểm đã cộng: một nhãn.
 const RETURN_REVERSED_POINTS: ReasonRule = { label: 'Thu hồi điểm của đơn trả hàng', ref: 'order' };
 const REFERRAL_REWARD: ReasonRule = { label: 'Thưởng giới thiệu bạn bè' };
-const REFERRAL_REVOKED: ReasonRule = { label: 'Thu hồi thưởng giới thiệu' };
+const REFERRAL_MILESTONE_REWARD: ReasonRule = { label: 'Thưởng mốc giới thiệu' };
+const REFERRAL_REVOKED: ReasonRule = { label: 'Thu hồi toàn bộ thưởng giới thiệu' };
+const REFERRAL_PARTIAL_REVOKED: ReasonRule = { label: 'Thu hồi một phần thưởng giới thiệu' };
+const REFERRAL_MILESTONE_REVOKED: ReasonRule = { label: 'Thu hồi thưởng mốc giới thiệu' };
 const REFERRAL_DEBT: ReasonRule = { label: 'Ghi nợ thu hồi thưởng giới thiệu' };
 const COMMUNITY_REWARD: ReasonRule = { label: 'Thưởng cộng đồng' };
 const GARDEN_REWARD: ReasonRule = { label: 'Phần thưởng Vườn Xanh' };
@@ -42,10 +45,12 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   POINTS_EXPIRED: { label: 'Điểm hết hạn' },
   XU_TO_POINTS: { label: 'Chuyển từ xu cũ sang Điểm Xanh' },
   REFERRAL_ORDER2: REFERRAL_REWARD,
-  REFERRAL_MILESTONE: REFERRAL_REWARD,
+  REFERRAL_MILESTONE: REFERRAL_MILESTONE_REWARD,
   REFERRAL_ORDER2_REVOKE: REFERRAL_REVOKED,
-  REFERRAL_MILESTONE_REVOKE: REFERRAL_REVOKED,
+  REFERRAL_ORDER2_PARTIAL_REVOKE: REFERRAL_PARTIAL_REVOKED,
+  REFERRAL_MILESTONE_REVOKE: REFERRAL_MILESTONE_REVOKED,
   REFERRAL_ORDER2_DEBT: REFERRAL_DEBT,
+  REFERRAL_ORDER2_PARTIAL_DEBT: REFERRAL_DEBT,
   REFERRAL_MILESTONE_DEBT: REFERRAL_DEBT,
   COMMUNITY_POST: COMMUNITY_REWARD,
   COMMUNITY_ANSWER: COMMUNITY_REWARD,
@@ -67,7 +72,11 @@ const FALLBACK_POINTS_LABEL = 'Điều chỉnh Điểm Xanh';
 function familyRule(code: string): ReasonRule | undefined {
   if (code.startsWith('REFERRAL')) {
     if (code.includes('DEBT')) return REFERRAL_DEBT;
-    return code.includes('REVOKE') ? REFERRAL_REVOKED : REFERRAL_REWARD;
+    if (code.includes('REVOKE')) {
+      if (code.includes('PARTIAL')) return REFERRAL_PARTIAL_REVOKED;
+      return code.includes('MILESTONE') ? REFERRAL_MILESTONE_REVOKED : REFERRAL_REVOKED;
+    }
+    return code.includes('MILESTONE') ? REFERRAL_MILESTONE_REWARD : REFERRAL_REWARD;
   }
   if (code.startsWith('COMMUNITY')) return COMMUNITY_REWARD;
   if (code.startsWith('GAME') || code.startsWith('SEASONPASS')) return GARDEN_REWARD;
@@ -89,6 +98,16 @@ export function pointsReasonLabel(reason: string): string {
   return parsePointsReason(reason).rule?.label ?? FALLBACK_POINTS_LABEL;
 }
 
+/** Dòng ghi nợ thu hồi (delta 0): API ghi số điểm còn thiếu ở đoạn cuối reason `MÃ:<tham chiếu>:<số điểm thiếu>`. */
+export function pointsDebtAmount(reason: string): number | null {
+  const { rule, ref } = parsePointsReason(reason);
+  if (rule !== REFERRAL_DEBT) return null;
+  const sep = ref.lastIndexOf(':');
+  if (sep < 0) return null;
+  const tail = ref.slice(sep + 1);
+  return /^\d{1,9}$/.test(tail) ? Number(tail) : null;
+}
+
 const ORDER_CODE = /^[A-Za-z0-9_-]{1,40}$/;
 
 /**
@@ -98,6 +117,8 @@ const ORDER_CODE = /^[A-Za-z0-9_-]{1,40}$/;
 export function pointsReasonDetail(reason: string): string {
   const { rule, ref } = parsePointsReason(reason);
   if (!rule) return FALLBACK_POINTS_LABEL;
+  const debt = pointsDebtAmount(reason);
+  if (debt !== null) return `${rule.label} · nợ ${debt} điểm`;
   if (rule.ref === 'order' && ORDER_CODE.test(ref)) return `${rule.label} · ${ref}`;
   if (rule.ref === 'day') {
     const day = /^DAY_(\d{1,3})$/.exec(ref);
