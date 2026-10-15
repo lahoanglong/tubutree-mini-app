@@ -330,7 +330,9 @@ describe('OrderReturnsService.listForAdmin TO_RECEIVE — đúng tập thẻ "H�
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
     await svc.listForAdmin('TO_RECEIVE', 1, 20);
     expect(orderFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['o1', 'o2'] }, fulfiller: 'MERCHANT' });
-    const where = { status: 'APPROVED', receivedAt: null, orderId: { notIn: ['o2'] } };
+    // Yêu cầu cũ trước P5 (đã cộng kho lúc duyệt) không có dòng hàng: không có gì để nhận về.
+    expect(findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', receivedAt: null, items: { some: {} } });
+    const where = { status: 'APPROVED', receivedAt: null, items: { some: {} }, orderId: { notIn: ['o2'] } };
     expect(findMany.mock.calls[1][0].where).toEqual(where);
     expect(count.mock.calls[0][0].where).toEqual(where);
     expect(findMany.mock.calls[1][0].orderBy).toEqual({ createdAt: 'asc' });

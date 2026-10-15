@@ -54,11 +54,13 @@ export class OpsInboxService {
       {
         key: 'returnsToReceive',
         audience: ['KHO'],
-        // Hàng trả của đơn gian hàng tự giao về kho đối tác, không về kho Tubu.
+        // Hàng trả của đơn gian hàng tự giao về kho đối tác, không về kho Tubu. Yêu cầu không có dòng hàng là yêu cầu cũ trước P5 (đã
+        // cộng kho lúc duyệt): không có gì để "nhận về".
         count: async () => {
           const [row] = await p.$queryRaw<{ n: number }[]>`
             SELECT count(*)::int AS "n" FROM "return_requests" rr JOIN "orders" o ON o."id" = rr."orderId"
-             WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL AND o."fulfiller" <> 'MERCHANT'`;
+             WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL AND o."fulfiller" <> 'MERCHANT'
+               AND EXISTS (SELECT 1 FROM "return_request_items" i WHERE i."returnRequestId" = rr."id")`;
           return row?.n ?? 0;
         },
       },
