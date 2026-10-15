@@ -5,7 +5,9 @@
  * thực trả `total − shippingFee` nhân tỉ lệ giá trị các đơn vị trả trên tổng `OrderItem.total`.
  *
  * Điểm Xanh đã dùng trả lại theo phần điểm của từng dòng (`OrderItem.pointsDiscount`; dòng hàng của gian hàng đối tác không
- * nhận điểm nên trả nó không hoàn điểm); đơn cũ chưa lưu thì theo tỉ lệ giá trị.
+ * nhận điểm nên trả nó không hoàn điểm); đơn cũ chưa lưu thì theo tỉ lệ giá trị. Điểm Xanh đã tích thu hồi theo phần tiền thực
+ * trả của các đơn vị trả trên tiền hàng thực trả, đúng cơ sở lúc cộng điểm (checkout: calcPointsEarned trên tiền hàng sau mọi
+ * khoản giảm); đơn cũ không có paidTotal thì theo tỉ lệ giá trị.
  *
  * Mỗi đại lượng (tiền hàng, điểm đã dùng, điểm lô quy đổi, điểm tích) tính theo kiểu "luỹ kế sau trừ luỹ kế trước":
  * phần của lần này = share(đã trả sau lần này) − share(đã trả trước đó). Nhờ vậy trả nhiều lần cộng lại đúng bằng
@@ -168,6 +170,7 @@ export function computeReturnShares(
   const lineIds = [...request.keys()].filter((id) => (request.get(id) ?? 0) > 0);
   let goods: number;
   let perLine: number[];
+  let pointsEarnedBack = delta(order.pointsEarned);
   if (linePaid) {
     const pb = returnedPaidByLine(order.items, linePaid, before);
     const pa = returnedPaidByLine(order.items, linePaid, after);
@@ -176,6 +179,11 @@ export function computeReturnShares(
       return k < 0 ? 0 : Math.max(0, pa[k]! - pb[k]!);
     });
     goods = perLine.reduce((s, v) => s + v, 0);
+    // Tỉ lệ giá gốc lệch khi giảm giá dồn vào dòng được giữ lại; trả hết thì cộng đúng goodsPaid nên tỉ lệ 1.
+    if (goodsPaid > 0) {
+      const paidRatio = (paid: number[]) => paid.reduce((s, v) => s + v, 0) / goodsPaid;
+      pointsEarnedBack = Math.max(0, shareOf(order.pointsEarned, paidRatio(pa)) - shareOf(order.pointsEarned, paidRatio(pb)));
+    }
   } else {
     goods = delta(goodsPaid);
     const weights = lineIds.map((id) => {
@@ -190,7 +198,7 @@ export function computeReturnShares(
     shipping,
     pointsUsedBack,
     convertedBack,
-    pointsEarnedBack: delta(order.pointsEarned),
+    pointsEarnedBack,
     ratioBefore: rb,
     ratioAfter: ra,
     lines: lineIds.map((id, idx) => ({ orderItemId: id, quantity: request.get(id) ?? 0, refundAmount: perLine[idx] ?? 0 })),

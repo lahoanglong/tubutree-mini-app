@@ -268,3 +268,56 @@ describe('điểm đã dùng trả lại không bao giờ quá số đã dùng (
     }
   });
 });
+
+describe('Điểm Xanh đã tích thu hồi theo tiền khách thực trả của các đơn vị trả (R5-CHECKOUT-7)', () => {
+  // Điểm tích cộng trên tiền hàng thực trả (checkout: calcPointsEarned(goodsAfterAll), 10.000đ = 1 điểm). Giảm điểm 100.000đ chỉ
+  // nằm ở dòng Tubu V được giữ lại; H và T là hàng ký gửi không nhận giảm. Tiền hàng thực trả 900.000 → 90 điểm tích.
+  const o = order({
+    total: 900_000,
+    shippingFee: 0,
+    pointsUsed: 100,
+    pointsUsedConverted: 0,
+    pointsEarned: 90,
+    items: [
+      { id: 'v', total: 300_000, quantity: 1, paidTotal: 200_000, pointsDiscount: 100_000 },
+      { id: 'h', total: 400_000, quantity: 1, paidTotal: 400_000, pointsDiscount: 0 },
+      { id: 't', total: 300_000, quantity: 2, paidTotal: 300_000, pointsDiscount: 0 },
+    ],
+  });
+  const none = { shopFault: false, priorShipping: 0 };
+
+  it('trả H×1 + T×1 (khách trả 550.000 cho phần này) thu 55 điểm, không phải 50 theo tỉ lệ giá gốc 550.000/1.000.000', () => {
+    const r = computeReturnShares(o, new Map(), new Map([['h', 1], ['t', 1]]), none);
+    expect(r.goods).toBe(550_000);
+    expect(r.pointsEarnedBack).toBe(55);
+    expect(r.pointsUsedBack).toBe(0);
+  });
+
+  it('trả nhiều lần: mỗi lần đúng phần tiền thực trả, cộng lại khép đúng số điểm đã tích', () => {
+    const a = computeReturnShares(o, new Map(), new Map([['h', 1], ['t', 1]]), none);
+    const b = computeReturnShares(o, new Map([['h', 1], ['t', 1]]), new Map([['t', 1]]), none);
+    const c = computeReturnShares(o, new Map([['h', 1], ['t', 2]]), new Map([['v', 1]]), none);
+    expect(c.isFull).toBe(true);
+    expect([a.pointsEarnedBack, b.pointsEarnedBack, c.pointsEarnedBack]).toEqual([55, 15, 20]);
+  });
+
+  it('dòng trả hết bằng điểm (khách trả 0đ) không thu điểm tích; trả dòng còn lại thu đủ', () => {
+    const allPoints = order({
+      total: 100_000,
+      shippingFee: 0,
+      pointsUsed: 100,
+      pointsEarned: 10,
+      items: [
+        { id: 'x', total: 100_000, quantity: 1, paidTotal: 0, pointsDiscount: 100_000 },
+        { id: 'y', total: 100_000, quantity: 1, paidTotal: 100_000, pointsDiscount: 0 },
+      ],
+    });
+    expect(computeReturnShares(allPoints, new Map(), new Map([['x', 1]]), none).pointsEarnedBack).toBe(0);
+    expect(computeReturnShares(allPoints, new Map(), new Map([['y', 1]]), none).pointsEarnedBack).toBe(10);
+  });
+
+  it('đơn cũ không có paidTotal → vẫn theo tỉ lệ giá trị dòng như trước', () => {
+    const legacy = order({ ...o, items: o.items.map(({ paidTotal: _p, ...i }) => i) });
+    expect(computeReturnShares(legacy, new Map(), new Map([['h', 1], ['t', 1]]), none).pointsEarnedBack).toBe(50);
+  });
+});
