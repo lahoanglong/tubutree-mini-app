@@ -400,7 +400,7 @@ export async function revokeReferralRewardPartially(
  * Trong các đơn ứng viên của cặp thưởng, các đơn đã trả hết phần có tiền qua các yêu cầu trả một phần ĐÃ DUYỆT (tiền hàng đã
  * trả luỹ kế >= tiền hàng của đơn, cùng returnedGoods như revokeReferralRewardForPriorReturns). Đơn như vậy còn DELIVERED chỉ vì
  * dòng quà 0đ chưa trả, nên bị loại khỏi cặp như đơn đã RETURNED. Gọi sau lockReferee: tx duyệt trả cũng lấy khoá đó trước khi
- * commit nên yêu cầu vừa duyệt không lọt. Hai truy vấn gộp cho mọi đơn ứng viên.
+ * commit nên yêu cầu vừa duyệt không lọt. Hai truy vấn gộp cho mọi đơn được truyền vào (caller truyền từng trang ứng viên).
  */
 export async function fullyReturnedOrderIds(tx: Db, orderIds: string[]): Promise<Set<string>> {
   const out = new Set<string>();

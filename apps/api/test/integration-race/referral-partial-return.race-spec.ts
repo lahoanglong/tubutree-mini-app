@@ -527,23 +527,34 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const gate = new Promise<void>((resolve) => (release = resolve));
     let locked!: () => void;
     const held = new Promise<void>((resolve) => (locked = resolve));
+    let pid = 0;
     const done = prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${refereeId} FOR NO KEY UPDATE`;
+        [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
         locked();
         await gate;
       },
       { timeout: 30_000 },
     );
     await held;
-    return { release, done };
+    return { release, done, pid };
   }
 
-  /** Chờ tới khi đúng `n` phiên của DB test đang đứng chờ khoá (tx duyệt/cấp đã tới chỗ cần dòng người được mời). */
-  async function waitLockWaiters(n: number) {
+  /**
+   * Chờ tới khi có `n` phiên đứng chờ (trực tiếp hoặc xếp hàng sau phiên đang chờ) khoá do tx `holderPid` giữ — tức tx
+   * duyệt/cấp đã tới chỗ cần dòng người được mời. Chỉ đếm cây chờ của tx giữ khoá, không đếm phiên chờ khoá của spec khác
+   * chạy song song trên cùng DB. Phiên chờ thứ hai thường bị chặn bởi phiên chờ thứ nhất (khoá tuple), nên đi đệ quy.
+   */
+  async function waitLockWaiters(holderPid: number, n: number) {
     for (let i = 0; i < 200; i++) {
       const [row] = await prisma.$queryRaw<{ n: number }[]>`
-        SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'`;
+        WITH RECURSIVE "w" AS (
+          SELECT "pid" FROM pg_stat_activity WHERE ${holderPid}::int = ANY(pg_blocking_pids("pid"))
+          UNION
+          SELECT a."pid" FROM pg_stat_activity a JOIN "w" ON "w"."pid" = ANY(pg_blocking_pids(a."pid"))
+        )
+        SELECT count(*)::int AS "n" FROM "w"`;
       if ((row?.n ?? 0) >= n) return;
       await sleep(25);
     }
@@ -561,9 +572,9 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     const grant = () => rewards.grantReferralOrderReward(referee.id);
     const lock = await holdReferee(referee.id);
     const p1 = (first === 'APPROVE' ? approve : grant)();
-    await waitLockWaiters(1);
+    await waitLockWaiters(lock.pid, 1);
     const p2 = (first === 'APPROVE' ? grant : approve)();
-    await waitLockWaiters(2);
+    await waitLockWaiters(lock.pid, 2);
     lock.release();
     await lock.done;
     const s = summarize(await Promise.allSettled([p1, p2]));
@@ -664,6 +675,86 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(r.partial).toEqual([expect.objectContaining({ refId: a.id, delta: -66 })]);
     expect(r.full).toHaveLength(0);
     expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
+  });
+
+  type FindManyLog = { model: 'order' | 'returnRequest'; args: { where?: { userId?: string }; take?: number }; rows: number };
+
+  /** Chạy `fn` với mọi tx interactive của prisma bị bọc để ghi lại từng order.findMany / returnRequest.findMany (args + số dòng). */
+  async function withFindManyLog<T>(fn: () => Promise<T>): Promise<{ result: T; log: FindManyLog[] }> {
+    const log: FindManyLog[] = [];
+    const wrapDelegate = (model: FindManyLog['model'], delegate: object) =>
+      new Proxy(delegate, {
+        get(target, prop) {
+          const v = Reflect.get(target, prop) as unknown;
+          if (prop === 'findMany') {
+            return async (args: FindManyLog['args']) => {
+              const rows = await (v as (a: unknown) => Promise<unknown[]>).call(target, args);
+              log.push({ model, args, rows: rows.length });
+              return rows;
+            };
+          }
+          return typeof v === 'function' ? v.bind(target) : v;
+        },
+      });
+    const wrapTx = (tx: object) =>
+      new Proxy(tx, {
+        get(target, prop) {
+          const v = Reflect.get(target, prop) as unknown;
+          if (prop === 'order' || prop === 'returnRequest') return wrapDelegate(prop, v as object);
+          return typeof v === 'function' ? v.bind(target) : v;
+        },
+      });
+    const original = prisma.$transaction.bind(prisma) as (...a: unknown[]) => Promise<unknown>;
+    const spy = jest.spyOn(prisma, '$transaction').mockImplementation(((arg: unknown, opts?: unknown) =>
+      typeof arg === 'function'
+        ? original((tx: object) => (arg as (t: object) => unknown)(wrapTx(tx)), opts)
+        : original(arg, opts)) as never);
+    try {
+      return { result: await fn(), log };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  const candidateReads = (log: FindManyLog[], refereeId: string) => log.filter((l) => l.model === 'order' && l.args.where?.userId === refereeId);
+
+  it('(q) 23 đơn đầu đã trả hết phần có tiền, 2 đơn kế là cặp, còn 10 đơn mới hơn → đúng cặp, đọc ứng viên theo trang có chặn trên', async () => {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const base = Date.now() - 200 * 864e5;
+    for (let i = 0; i < 23; i++) {
+      const o = await giftOrder(referee.id, new Date(base + i * 864e5));
+      await returnLines(referee.id, o.code, [{ orderItemId: o.paid.id, quantity: 3 }]);
+    }
+    const first = await deliveredOrder(referee.id, 3, new Date(Date.now() - 40 * 864e5));
+    const second = await deliveredOrder(referee.id, 3, new Date(Date.now() - 35 * 864e5));
+    for (let i = 0; i < 10; i++) await deliveredOrder(referee.id, 3, new Date(Date.now() - (20 - i) * 864e5));
+
+    const { result, log } = await withFindManyLog(() => rewards.grantReferralOrderReward(referee.id));
+    expect(result).toBe(true);
+    const grant = await prisma.pointsTransaction.findFirstOrThrow({ where: { userId: referrer.id, reason: `REFERRAL_ORDER2:${referee.id}` } });
+    expect(grant.refId).toBe(`${first.id}:${second.id}`);
+    expect(await balanceOf(referrer.id)).toBe(REWARD);
+
+    const reads = candidateReads(log, referee.id);
+    expect(reads.map((r) => r.args.take)).toEqual([10, 10, 10]);
+    expect(reads.reduce((s, r) => s + r.rows, 0)).toBe(30);
+    // Không đọc yêu cầu trả của các đơn ngoài 3 trang đã duyệt (35 đơn đủ điều kiện, chỉ 30 được xét).
+    const reqRows = log.filter((l) => l.model === 'returnRequest').reduce((s, r) => s + r.rows, 0);
+    expect(reqRows).toBeLessThanOrEqual(23);
+  });
+
+  it('(q2) 25 đơn đủ điều kiện nhưng hai đơn đầu cách nhau quá referral.window_days → không cấp, chỉ đọc một trang ứng viên', async () => {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const base = Date.now() - 26 * 40 * 864e5;
+    for (let i = 0; i < 25; i++) await deliveredOrder(referee.id, 3, new Date(base + i * 40 * 864e5));
+
+    const { result, log } = await withFindManyLog(() => rewards.grantReferralOrderReward(referee.id));
+    expect(result).toBe(false);
+    const reads = candidateReads(log, referee.id);
+    expect(reads.map((r) => [r.args.take, r.rows])).toEqual([[10, 10]]);
+    expect(await balanceOf(referrer.id)).toBe(0);
   });
 
   it('(o) cấp thưởng song song cho hai người được mời của cùng người mời, một người đã trả một phần trước → không deadlock, cả hai được cấp', async () => {
