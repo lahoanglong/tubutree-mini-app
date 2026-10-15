@@ -393,7 +393,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     const stale = admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, seenOn(shown));
     await expect(stale).rejects.toBeInstanceOf(ConflictException);
     await expect(stale).rejects.toMatchObject({
-      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại') }),
+      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Hãy xem lại') }),
     });
     await nothingMoved();
     // Màn duyệt mở lúc dòng chưa có mã ('' = không có mã) mà đối tác đã thêm mã sau đó: vẫn 409, không duyệt mã admin chưa xem.

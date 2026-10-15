@@ -303,7 +303,8 @@ describe('Merchant fulfilment races (real Postgres)', () => {
     console.log('[b2] fulfilled=%d rejected=%d status=%s errors=%j', s.fulfilled.length, s.rejected.length, after.approvalStatus, s.errors);
 
     expect(s.fulfilled).toHaveLength(1);
-    expect(s.rejected[0]!.reason).toBeInstanceOf(BadRequestException);
+    expect(s.rejected[0]!.reason).toBeInstanceOf(ConflictException);
+    expect((s.rejected[0]!.reason as ConflictException).getResponse()).toMatchObject({ code: 'MERCHANT_PRODUCT_EDIT_STALE' });
     expect(after.approvalStatus).toBe('APPROVED');
     expect(after.name).toBe(`${p.name} (mới)`);
     expect(after.editDraft).toBeNull();

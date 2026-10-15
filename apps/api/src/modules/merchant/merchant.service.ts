@@ -938,7 +938,8 @@ export class MerchantService {
     // P0 A5-04 = A6-36 (docs/audit-2026-09): chỉ ADMIN mới thấy tên/SĐT/địa chỉ đầy đủ của khách —
     // xem lý do đầy đủ ở maskShippingAddress(). DEALER/AFFILIATE đều bị che như nhau. Gian hàng đối tác (MERCHANT) không nhận
     // tài khoản người mua dưới bất kỳ dạng nào: người nhận cần để giao hàng nằm ở tab Đơn cần giao (R5-PARTNER-6).
-    const shaped =
+    type ScopedOrder = (typeof scoped)[number];
+    const shaped: Array<Omit<ScopedOrder, 'user'> & { user?: ScopedOrder['user'] }> =
       role === 'ADMIN'
         ? scoped
         : scoped.map(({ user, ...order }) => ({
