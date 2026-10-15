@@ -15,6 +15,7 @@ import {
   milestoneGrantReason,
   readMilestoneState,
   REFERRAL_ORDER2_PREFIX,
+  revokeReferralRewardForPriorReturns,
 } from './referral-reward';
 
 /**
@@ -223,7 +224,10 @@ export class RewardPointsService {
       if (!first || !second) return false;
       if (second.createdAt.getTime() - first.createdAt.getTime() > windowDays * 864e5) return false;
 
-      return this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx);
+      const ok = await this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx);
+      // Phần đơn đã duyệt trả một phần trước lúc cấp: thu theo tỷ lệ ngay trong tx này (revokeReferralRewardForPriorReturns).
+      if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
+      return ok;
     });
     if (granted) await this.awardReferralMilestones(referrerId);
     return granted;

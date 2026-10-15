@@ -82,6 +82,19 @@ const ORDER_RULE: ReversalRule = {
   reversedLotKey: (t) => (t.refType === 'ORDER' && t.refId && startsWith(t.reason, 'ORDER_REVERSED:') ? orderLotKey(t.refId) : null),
 };
 
+/**
+ * Trả MỘT PHẦN (OrderReversalService.reversePartialReturn): RETURN_REVERSED:<mã> thu hồi điểm tích của phần trả từ lô
+ * ORDER_DELIVERED:<mã> của cùng đơn. Dòng này mang refType RETURN_REQUEST và refId = id yêu cầu trả (không phải id đơn) nên
+ * ghép theo mã đơn trong reason; mã đơn là duy nhất. Lô ORDER_DELIVERED vì vậy mang hai khoá (theo id đơn và theo mã đơn), và
+ * ORDER_REVERSED của lần trả nốt sau đó chỉ còn ăn được phần lô chưa bị trả một phần lấy. Dòng RETURN_REVERSED không tìm thấy
+ * lô cùng mã (dòng cộng cũ) thì FIFO như trước.
+ */
+const ORDER_PARTIAL_RETURN_RULE: ReversalRule = {
+  lotKey: (t) => (startsWith(t.reason, 'ORDER_DELIVERED:') ? `ORDER_CODE:${t.reason.slice('ORDER_DELIVERED:'.length)}` : null),
+  reversedLotKey: (t) =>
+    t.refType === 'RETURN_REQUEST' && startsWith(t.reason, 'RETURN_REVERSED:') ? `ORDER_CODE:${t.reason.slice('RETURN_REVERSED:'.length)}` : null,
+};
+
 /** Xoá đánh giá (ReviewsService.remove): mọi dòng refType REVIEW mang refId = id đánh giá thuộc cùng một cặp. */
 const REVIEW_RULE: ReversalRule = {
   lotKey: (t) => (t.refType === 'REVIEW' && t.refId ? reviewLotKey(t.refId) : null),
@@ -128,7 +141,13 @@ const REFERRAL_MILESTONE_RULE: ReversalRule = {
     t.refType === 'REFERRAL' && startsWith(t.reason, MILESTONE_REVOKE_PREFIX) ? milestoneKey(t.reason.slice(MILESTONE_REVOKE_PREFIX.length)) : null,
 };
 
-const REVERSAL_RULES: readonly ReversalRule[] = [ORDER_RULE, REVIEW_RULE, REFERRAL_ORDER2_RULE, REFERRAL_MILESTONE_RULE];
+const REVERSAL_RULES: readonly ReversalRule[] = [
+  ORDER_RULE,
+  ORDER_PARTIAL_RETURN_RULE,
+  REVIEW_RULE,
+  REFERRAL_ORDER2_RULE,
+  REFERRAL_MILESTONE_RULE,
+];
 
 function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpiryTxn) => string | null): string | null {
   for (const rule of REVERSAL_RULES) {
@@ -136,6 +155,11 @@ function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpi
     if (key) return key;
   }
   return null;
+}
+
+/** Mọi khoá lô mà dòng dương này tạo ra (một lô có thể bị thu hồi theo nhiều quy tắc, vd ORDER_RULE và trả một phần). */
+function lotKeys(t: PointExpiryTxn): string[] {
+  return REVERSAL_RULES.map((rule) => rule.lotKey(t)).filter((k): k is string => Boolean(k));
 }
 
 interface ExpiryLot {
@@ -147,8 +171,8 @@ interface ExpiryLot {
    */
   lost: number;
   expiresAt: Date | null;
-  /** Khoá cặp của khoản cộng đã tạo lô (xem ReversalRule); null nếu khoản cộng không thể bị thu hồi. */
-  key: string | null;
+  /** Khoá cặp của khoản cộng đã tạo lô (xem ReversalRule); rỗng nếu khoản cộng không thể bị thu hồi. */
+  keys: string[];
 }
 
 /** Trừ `amount` từ các lô theo thứ tự mảng; trả phần chưa trừ được. `asLost`: phần trừ được ghi vào `lost` của lô. */
@@ -179,7 +203,7 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
   const lots: ExpiryLot[] = [];
   for (const t of sorted) {
     if (t.delta > 0) {
-      lots.push({ initial: t.delta, remaining: t.delta, lost: 0, expiresAt: t.expiresAt, key: firstKey(t, (rule) => rule.lotKey) });
+      lots.push({ initial: t.delta, remaining: t.delta, lost: 0, expiresAt: t.expiresAt, keys: lotKeys(t) });
     } else if (t.delta < 0) {
       let toConsume = -t.delta;
       if (t.reason === EXPIRY_REASON) {
@@ -187,7 +211,7 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
         toConsume = consumeFifo(expiredAtThatTime, toConsume, true);
       } else {
         const reversed = firstKey(t, (rule) => rule.reversedLotKey);
-        if (reversed) toConsume = consumeFifo(lots.filter((l) => l.key === reversed), toConsume, true);
+        if (reversed) toConsume = consumeFifo(lots.filter((l) => l.keys.includes(reversed)), toConsume, true);
       }
       // Nếu còn dư (toConsume>0): lô đã cạn — bất biến vỡ, bỏ qua (không tạo remaining âm).
       consumeFifo(lots, toConsume);
@@ -211,7 +235,7 @@ function replayLots(txns: PointExpiryTxn[]): ExpiryLot[] {
  * ORDER_REVERSED hụt phần đã tiêu đó); khi số dư thấp hơn thì thu hồi ít đi thay vì làm số dư âm.
  */
 export function lotRecoverable(txns: PointExpiryTxn[], key: string): number | null {
-  const matching = replayLots(txns).filter((l) => l.key === key);
+  const matching = replayLots(txns).filter((l) => l.keys.includes(key));
   return matching.length === 0 ? null : matching.reduce((sum, l) => sum + l.initial - l.lost, 0);
 }
 

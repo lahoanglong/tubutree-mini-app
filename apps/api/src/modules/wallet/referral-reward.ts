@@ -1,4 +1,6 @@
 import type { PointsLot, Prisma } from '@prisma/client';
+import { returnedGoods } from '../orders/refund-allocation';
+import { partialReturnTotals } from '../orders/return-ledger';
 
 /**
  * Chương trình giới thiệu duy nhất (Q-05): người mời (users.referredById của người được mời) nhận
@@ -16,12 +18,14 @@ import type { PointsLot, Prisma } from '@prisma/client';
  * mời đã thưởng bằng xu sẽ được thưởng lại bằng điểm (index points không thấy dòng coin).
  *
  * Trả MỘT PHẦN (chốt 2026-10-15): trả một phần một trong hai đơn đã dùng để thưởng thu hồi thưởng THEO TỶ LỆ tiền hàng đã
- * trả luỹ kế của chính đơn đó (revokeReferralRewardPartially). Mục tiêu luỹ kế của đơn = làm tròn XUỐNG (tỷ lệ × thưởng, theo
- * đơn vị của sổ cấp; thưởng xu cũ đổi bằng legacyXuToPoints); mỗi yêu cầu trả thu (mục tiêu − phần đã thu cho đơn đó), kẹp
+ * trả luỹ kế của chính đơn đó (revokeReferralRewardPartially). Mục tiêu luỹ kế của đơn = làm tròn XUỐNG (tỷ lệ × số điểm của
+ * thưởng; thưởng xu cũ quy ra điểm bằng legacyXuToPoints trước); mỗi yêu cầu trả thu (mục tiêu − phần đã thu cho đơn đó), kẹp
  * để tổng thu hồi của cả hai đơn không vượt thưởng. Lần trả CẢ ĐƠN sau đó (revokeReferralRewardForOrder) chỉ thu phần còn
  * lại (thưởng − đã thu từng phần, kể cả phần ghi nợ); trả một phần sau khi đã thu hồi cả thì không làm gì.
- * Thu hồi từng phần KHÔNG làm giảm số lượt giới thiệu hợp lệ và KHÔNG đụng mốc thưởng thêm: countReferralSuccesses chỉ trừ
- * dòng REFERRAL_ORDER2_REVOKE (thu hồi hoàn toàn) và revokeLostMilestones chỉ chạy ở đường trả cả đơn.
+ * Thu hồi từng phần CHƯA đủ cả khoản KHÔNG làm giảm số lượt giới thiệu hợp lệ và KHÔNG đụng mốc thưởng thêm:
+ * countReferralSuccesses chỉ trừ dòng REFERRAL_ORDER2_REVOKE (thu hồi hoàn toàn). Thu hồi HOÀN TOÀN = tổng đã thu (điểm đã trừ
+ * + nợ) >= thưởng, dù đạt bằng trả cả đơn hay qua nhiều lần trả một phần (vd 2/3 mỗi đơn, hay trả hết dòng có tiền còn dòng
+ * quà 0đ): lúc đó ghi dòng REFERRAL_ORDER2_REVOKE delta 0 và chạy revokeLostMilestones như đường trả cả đơn.
  * Dòng thu hồi từng phần: refType REFERRAL, reason REFERRAL_ORDER2_PARTIAL_REVOKE:<refereeId>:<yêu cầu trả> (duy nhất theo yêu
  * cầu trả dưới cùng partial unique index theo reason ⇒ chạy lại cùng yêu cầu không trừ lần hai), refId = đơn bị trả; phần
  * thiếu ghi REFERRAL_DEBT reason REFERRAL_ORDER2_PARTIAL_DEBT:<refereeId>:<yêu cầu trả>:<số điểm thiếu>.
@@ -68,18 +72,16 @@ export function referralGrantDue(grant: ReferralGrant): number {
 }
 
 /**
- * Mục tiêu thu hồi LUỸ KẾ (Điểm Xanh) cho một đơn đã trả một phần: floor(thưởng × tiền hàng đã trả luỹ kế / tiền hàng của
- * đơn), tính theo đơn vị của sổ cấp rồi mới đổi (thưởng xu cũ: legacyXuToPoints). Trả hết tiền hàng = cả khoản. Đơn không có
+ * Mục tiêu thu hồi LUỸ KẾ (Điểm Xanh) cho một đơn đã trả một phần: floor(số điểm của thưởng × tiền hàng đã trả luỹ kế / tiền
+ * hàng của đơn). Thưởng xu cũ quy ra điểm (referralGrantDue = legacyXuToPoints) TRƯỚC rồi mới làm tròn xuống theo điểm: làm
+ * tròn theo xu rồi ceil sang điểm sẽ thu dư tới 1 điểm mỗi đơn. Trả hết tiền hàng = đúng referralGrantDue. Đơn không có
  * tiền hàng thì không có tỷ lệ để thu từng phần (đường trả cả đơn vẫn thu hết). Số nguyên < 2^53 nên phép chia rồi floor
  * không lệch: thương không nguyên cách số nguyên gần nhất ít nhất 1/tiền hàng, lớn hơn sai số làm tròn của double.
  */
 export function partialRevokeTarget(grant: ReferralGrant, returnedGoods: number, orderGoods: number): number {
-  const amount = Math.max(grant.amount, 0);
-  let units = 0;
-  if (orderGoods > 0 && returnedGoods > 0) {
-    units = returnedGoods >= orderGoods ? amount : Math.floor((amount * returnedGoods) / orderGoods);
-  }
-  return grant.ledger === 'COIN' ? legacyXuToPoints(units) : units;
+  const due = referralGrantDue(grant);
+  if (!(orderGoods > 0) || !(returnedGoods > 0)) return 0;
+  return returnedGoods >= orderGoods ? due : Math.floor((due * returnedGoods) / orderGoods);
 }
 
 /**
@@ -346,22 +348,72 @@ export async function revokeReferralRewardPartially(
     const reason = `${REFERRAL_ORDER2_PARTIAL_REVOKE_PREFIX}${refereeId}:${input.requestId}`;
     if (await hasReferralEntry(tx, [reason])) continue;
     const prior = await readPartialRevocations(tx, referrerId, refereeId);
+    const grantDue = referralGrantDue(grant);
     const due = partialRevokeDue({
-      grantDue: referralGrantDue(grant),
+      grantDue,
       target: partialRevokeTarget(grant, input.returnedGoods, input.orderGoods),
       revokedForOrder: prior.byOrder.get(order.id) ?? 0,
       revokedTotal: prior.total,
     });
-    if (due <= 0) continue;
-    const res = await debitReferralReward(
-      tx,
-      referrerId,
-      grant,
-      reason,
-      order.id,
-      `${REFERRAL_ORDER2_PARTIAL_DEBT_PREFIX}${refereeId}:${input.requestId}`,
-      due,
-    );
+    if (due > 0) {
+      const res = await debitReferralReward(
+        tx,
+        referrerId,
+        grant,
+        reason,
+        order.id,
+        `${REFERRAL_ORDER2_PARTIAL_DEBT_PREFIX}${refereeId}:${input.requestId}`,
+        due,
+      );
+      if (!res) continue;
+      anyRevoked = true;
+      total.revoked += res.revoked;
+      total.shortfall += res.shortfall;
+    }
+    // Các lần trả một phần đã thu đủ cả khoản (điểm đã trừ + nợ): đó là thu hồi HOÀN TOÀN. Ghi dòng REVOKE delta 0 (cùng
+    // reason với đường trả cả đơn nên lần trả cả đơn sau đó thấy và không ghi/thu thêm) để số lượt giới thiệu giảm, rồi thu
+    // các mốc thưởng thêm không còn đủ lượt.
+    if (grantDue > 0 && prior.total + due >= grantDue) {
+      const closed = await debitReferralReward(
+        tx,
+        referrerId,
+        grant,
+        `${REFERRAL_ORDER2_REVOKE_PREFIX}${refereeId}`,
+        order.id,
+        `REFERRAL_ORDER2_DEBT:${refereeId}`,
+        0,
+      );
+      if (closed) {
+        const milestones = await revokeLostMilestones(tx, referrerId, order.id);
+        anyRevoked = true;
+        total.revoked += milestones.revoked;
+        total.shortfall += milestones.shortfall;
+      }
+    }
+  }
+  return anyRevoked ? total : null;
+}
+
+/**
+ * Ngay sau khi CẤP thưởng (cùng tx, đã khoá người được mời): đơn trong cặp có thể đã được duyệt trả một phần TRƯỚC lúc cấp —
+ * lần duyệt đó chạy revokeReferralRewardPartially khi chưa có dòng thưởng nên không thu gì. Thu theo tỷ lệ tiền hàng đã trả
+ * luỹ kế của các yêu cầu trả một phần đã duyệt, mỗi đơn một requestId tất định `GRANT-<id đơn>` (reason không trùng giữa hai
+ * đơn; chạy lại không trừ lần hai). Lần duyệt trả song song: tx duyệt lấy lockReferee trước khi đọc dòng thưởng, tx cấp lấy
+ * nó trước khi đọc yêu cầu đã duyệt, nên bên commit sau luôn thấy bên kia và đúng một bên thu.
+ */
+export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: string[]): Promise<{ revoked: number; shortfall: number } | null> {
+  const total = { revoked: 0, shortfall: 0 };
+  let anyRevoked = false;
+  for (const orderId of orderIds) {
+    const prior = await partialReturnTotals(tx, orderId);
+    if (prior.approvedQty.size === 0) continue;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    const goods = returnedGoods(order, prior.approvedQty);
+    const res = await revokeReferralRewardPartially(tx, order, {
+      requestId: `GRANT-${orderId}`,
+      returnedGoods: goods.returned,
+      orderGoods: goods.goods,
+    });
     if (!res) continue;
     anyRevoked = true;
     total.revoked += res.revoked;
