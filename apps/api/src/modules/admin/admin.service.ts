@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -339,7 +340,7 @@ export class AdminService {
         thumbnail: true,
         isActive: true,
         variations: {
-          orderBy: { retailPrice: 'asc' },
+          orderBy: VARIATION_ORDER_BY,
           select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true },
         },
       },
@@ -1451,7 +1452,7 @@ export class AdminService {
           storefront: {
             select: { id: true, title: true, subdomain: true, ownerUserId: true },
           },
-          variations: true,
+          variations: { orderBy: VARIATION_ORDER_BY },
           editDraft: true,
         },
         // Bản sửa mới của sản phẩm cũ phải nổi lên đầu như sản phẩm mới đăng.

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName } from '../../common/mask-name';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -690,7 +691,7 @@ export class MerchantService {
       ).catch((e) => this.logger.warn(`Báo admin sản phẩm đối tác ${product.id} lỗi: ${(e as Error).message}`));
     }
     return withPendingEdit(
-      await this.prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: true, editDraft: true } }),
+      await this.prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true } }),
     );
   }
 
@@ -748,7 +749,7 @@ export class MerchantService {
       this.prisma.product.findMany({
         where: ownWhere,
         orderBy: { createdAt: 'desc' },
-        include: { variations: true, editDraft: true },
+        include: { variations: { orderBy: VARIATION_ORDER_BY }, editDraft: true },
         skip,
         take,
       }),
@@ -757,7 +758,7 @@ export class MerchantService {
         where: resellWhere,
         include: {
           product: {
-            include: { variations: true },
+            include: { variations: { orderBy: VARIATION_ORDER_BY } },
           },
         },
         skip,
