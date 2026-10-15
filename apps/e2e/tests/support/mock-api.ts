@@ -460,6 +460,7 @@ export function makeOrder(over: Partial<OrderDTO> & Pick<OrderDTO, 'code'>): Ord
     gomdonPartnerCode: null,
     gomdonStatus: null,
     gomdonCancelStatus: null,
+    manualHandling: false,
     items: [
       {
         id: `item-${over.code}`,

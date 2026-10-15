@@ -119,10 +119,15 @@ export default function OrderDetailPage() {
         </span>
         <span className="text-sm text-stone-600">Đặt lúc {formatDateTime(o.createdAt)}</span>
       </div>
-      {!canPayAgain(o) && showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
-        <p className="mt-2 text-sm font-medium text-warning-fg">
-          Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
-        </p>
+      {o.manualHandling ? (
+        <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
+      ) : (
+        !canPayAgain(o) &&
+        showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
+          <p className="mt-2 text-sm font-medium text-warning-fg">
+            Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
+          </p>
+        )
       )}
 
       {o.fulfilment?.kind === 'MERCHANT' && (

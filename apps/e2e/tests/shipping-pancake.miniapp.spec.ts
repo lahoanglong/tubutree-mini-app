@@ -55,12 +55,37 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     shippingHistory: [],
   });
 
+  /** Chờ chuyển khoản mà kho Pancake đã gửi hàng: hệ thống thôi tự huỷ, Tubu xử lý tay (R5-SYNC-1). */
+  const ORDER_HANDED_OVER_UNPAID = makeOrder({
+    code: 'TUBU20260919003',
+    status: 'PENDING_PAYMENT',
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    paymentDeadline: null,
+    canCancel: false,
+    manualHandling: true,
+  });
+
   test.beforeEach(async ({ api }) => {
     mockSession(api, makeUser({ id: 'user-e2e', fullName: 'Nguyễn Khách Hàng', pointsBalance: 100 }));
     api.get('/orders/:code', ({ params }) =>
-      [ORDER_SHIPPING, ORDER_PENDING].find((o) => o.code === params.code) ??
+      [ORDER_SHIPPING, ORDER_PENDING, ORDER_HANDED_OVER_UNPAID].find((o) => o.code === params.code) ??
       reply(404, { message: 'Không tìm thấy đơn hàng' }),
     );
+  });
+
+  test('R5-SYNC-1: chờ chuyển khoản mà kho đã gửi hàng — câu trung tính, không hạn "tự huỷ", không nút huỷ hay trả tiền', async ({
+    page,
+    api,
+  }, testInfo) => {
+    await page.goto(`/order/${ORDER_HANDED_OVER_UNPAID.code}`);
+    await expect(page.getByText('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/quá hạn đơn sẽ tự huỷ/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Hủy đơn' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Thanh toán ngay' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Xem tất cả đơn' })).toBeVisible();
+    expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(0);
+    await page.screenshot({ path: testInfo.outputPath('order-handed-over-unpaid.png'), fullPage: true });
   });
 
   test('Hiển thị đầy đủ thông tin vận chuyển Pancake: Đơn vị VC, Mã vận đơn, Trạng thái & Hành trình', async ({

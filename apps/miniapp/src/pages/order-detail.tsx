@@ -244,7 +244,9 @@ export default function OrderDetailPage() {
   // Đơn chuyển khoản chưa trả tiền: trước đây màn QR (/bank-payment/:code) CHỈ tới được đúng
   // một lần ngay sau khi đặt hàng (checkout.tsx). Rời khỏi đó là mất luôn mã QR/số tài khoản —
   // khách muốn trả tiền cũng không có đường quay lại, chỉ còn cách huỷ đơn rồi đặt lại.
-  const canPayNow = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
+  // Hàng đã bàn giao vận chuyển mà chưa nhận tiền: CSKH thống nhất với khách cách trả (chuyển khoản hay hãng thu hộ) — không
+  // mời trả tiền thêm ở đây để khách không trả hai lần (R5-SYNC-1).
+  const canPayNow = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER' && !o.manualHandling;
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
   const stamp = orderStamp(o);
   const timelineSteps = timelineStepsFor(o.paymentMethod);
@@ -273,10 +275,16 @@ export default function OrderDetailPage() {
         <Text.Title size="small" style={{ color: color.fg }}>
           {buyerStatusLabel(o)}
         </Text.Title>
-        {showsPaymentDeadline(o) && (
+        {o.manualHandling ? (
           <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
-            Thanh toán trước <b>{formatDateTime(o.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+            {vi.orders.manualHandling}
           </Text>
+        ) : (
+          showsPaymentDeadline(o) && (
+            <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
+              Thanh toán trước <b>{formatDateTime(o.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+            </Text>
+          )
         )}
       </Box>
 

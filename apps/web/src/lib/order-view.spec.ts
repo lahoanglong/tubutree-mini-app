@@ -60,6 +60,11 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
     expect(canPayAgain({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' })).toBe(false);
   });
 
+  it('R5-SYNC-1: hàng đã bàn giao vận chuyển mà chưa nhận tiền (manualHandling) → không mời trả lại bằng QR', () => {
+    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: true })).toBe(false);
+    expect(canPayAgain({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', manualHandling: false })).toBe(true);
+  });
+
   it('addressLine bỏ phần rỗng, không để dấu phẩy thừa', () => {
     expect(addressLine({ street: '1 Xuân Thuỷ', ward: 'Cầu Giấy', district: '', province: 'Hà Nội' })).toBe('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
     expect(addressLine({})).toBe('');

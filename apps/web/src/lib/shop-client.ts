@@ -121,6 +121,11 @@ export interface OrderDTO {
     /** Ảnh nhỏ của dòng (API ghép theo biến thể); thiếu → hiện biểu tượng lá. */
     thumbnail?: string | null;
   }[];
+  /**
+   * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (hệ thống thôi tự huỷ): Tubu xử lý với khách — không ghi hạn, không QR,
+   * không nút hủy, chỉ câu "Tubu đang xử lý đơn này". API cũ chưa trả.
+   */
+  manualHandling?: boolean;
   /** Thu gom vật liệu tái chế (vận đơn đổi hàng Gomdon/BestExpress) — xem lib/recycling.ts. */
   hasRecyclingPickup?: boolean;
   recyclingNote?: string | null;
