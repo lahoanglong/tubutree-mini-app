@@ -35,6 +35,25 @@ describe('evaluateRedis', () => {
       expect(status(patch({ maxmemoryPolicy: p }), 'redis.policy')).toBe('FAIL');
     });
     it('không đọc được thì WARN', () => expect(status(patch({ maxmemoryPolicy: null }), 'redis.policy')).toBe('WARN'));
+
+    describe('theo giai đoạn', () => {
+      const phased = (p: string | null, phase: 'pre-deploy' | 'post-deploy') => byId(evaluateRedis(patch({ maxmemoryPolicy: p }), phase), 'redis.policy');
+      it('trước deploy: allkeys-lru của compose cũ chỉ là WARN, hint nêu cách đổi', () => {
+        const r = phased('allkeys-lru', 'pre-deploy');
+        expect(r.status).toBe('WARN');
+        expect(r.hint).toContain('config set maxmemory-policy noeviction');
+      });
+      it('sau deploy: allkeys-lru vẫn là FAIL', () => expect(phased('allkeys-lru', 'post-deploy').status).toBe('FAIL'));
+      it('không truyền giai đoạn thì coi như sau deploy', () => expect(status(patch({ maxmemoryPolicy: 'allkeys-lru' }), 'redis.policy')).toBe('FAIL'));
+      it('noeviction PASS ở cả hai giai đoạn', () => {
+        expect(phased('noeviction', 'pre-deploy').status).toBe('PASS');
+        expect(phased('noeviction', 'post-deploy').status).toBe('PASS');
+      });
+      it('không đọc được vẫn WARN ở cả hai giai đoạn', () => {
+        expect(phased(null, 'pre-deploy').status).toBe('WARN');
+        expect(phased(null, 'post-deploy').status).toBe('WARN');
+      });
+    });
   });
 
   describe('trần bộ nhớ', () => {

@@ -55,6 +55,7 @@ describe('collectDbSnapshot', () => {
     expect(snap.unfinishedMigrations).toEqual(['m2']);
     expect(snap.expectedMigrations).toEqual(['m1', 'm2']);
     expect(snap.orderCount).toBe(321);
+    expect(snap.refill.tableExists).toBe(true);
     expect(snap.adminCount).toBe(2);
     expect(snap.pendingAdminGrants).toBe(1);
     expect(snap.configs).toEqual({ 'merchant.commission_pct': 0.15 });
@@ -65,7 +66,7 @@ describe('collectDbSnapshot', () => {
   it('DB trước khi áp migration mới: bảng chưa có thì bỏ qua, không truy vấn', async () => {
     const { prisma, sql, tx } = fakePrisma({ tables: ['_prisma_migrations', 'orders', 'users', 'system_configs'], counts: { orders: 10 } });
     const snap = await collectDbSnapshot(prisma, ['m1']);
-    expect(snap.refill).toEqual({ totalRows: 0, activeRows: 0 });
+    expect(snap.refill).toEqual({ totalRows: 0, activeRows: 0, tableExists: false });
     expect(snap.pendingAdminGrants).toBe(0);
     expect(snap.znsTemplates).toEqual([]);
     expect(sql.some((q) => q.includes('FROM "refill_pickup_locations"'))).toBe(false);

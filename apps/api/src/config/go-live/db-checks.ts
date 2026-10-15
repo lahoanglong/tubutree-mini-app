@@ -13,21 +13,34 @@ export const REQUIRED_MIGRATIONS = [
 ] as const;
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
 
+/**
+ * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ ba migration của đợt). `ordersLock`: viết
+ * lại bảng orders hoặc dựng chỉ mục trên đó. Chưa đo riêng từng cái: ước theo migration r6.
+ */
+export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean }> = [
+  { name: '20261012110000_pd3_xu_to_points', ordersLock: false },
+  { name: '20261012130000_pd3_freeze_coins', ordersLock: false },
+  { name: '20261014003644_p1_pancake_outbound_sync_state', ordersLock: true },
+  { name: '20261014003831_p8_seller_merchant_fulfilment', ordersLock: true },
+  { name: '20261014150000_p4_admin_ops_search', ordersLock: true },
+  { name: ORDERS_LOCK_MIGRATION, ordersLock: true },
+];
+
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
 const ORDERS_LOCK_SMALL = 50_000;
 const ORDERS_LOCK_MIN_SECONDS = 2;
 const ORDERS_WINDOW_FACTOR = 5;
 const ORDERS_WINDOW_MIN_SECONDS = 120;
 
-/** ~2 giây dưới 50 nghìn đơn, ~14 giây cho mỗi 300 nghìn đơn (đo ở UAT). */
-export function estimateOrdersLockSeconds(orderCount: number): number {
-  if (orderCount < ORDERS_LOCK_SMALL) return ORDERS_LOCK_MIN_SECONDS;
-  return Math.ceil((orderCount * ORDERS_LOCK_SECONDS_PER_300K) / 300_000);
+/** ~2 giây dưới 50 nghìn đơn, ~14 giây cho mỗi 300 nghìn đơn (đo ở UAT, chỉ cho migration r6); nhân theo số migration nặng trên orders. */
+export function estimateOrdersLockSeconds(orderCount: number, heavyCount = 1): number {
+  const one = orderCount < ORDERS_LOCK_SMALL ? ORDERS_LOCK_MIN_SECONDS : Math.ceil((orderCount * ORDERS_LOCK_SECONDS_PER_300K) / 300_000);
+  return one * Math.max(1, heavyCount);
 }
 
 /** Cửa sổ bảo trì nên xin: gấp 5 lần ước tính, tối thiểu 2 phút (còn phải dừng api, backup, khởi động lại). */
-export function recommendedWindowSeconds(orderCount: number): number {
-  return Math.max(ORDERS_WINDOW_MIN_SECONDS, estimateOrdersLockSeconds(orderCount) * ORDERS_WINDOW_FACTOR);
+export function recommendedWindowSeconds(orderCount: number, heavyCount = 1): number {
+  return Math.max(ORDERS_WINDOW_MIN_SECONDS, estimateOrdersLockSeconds(orderCount, heavyCount) * ORDERS_WINDOW_FACTOR);
 }
 
 export interface ZnsTemplateRow {
@@ -45,7 +58,8 @@ export interface DbSnapshot {
   /** Tên migration trong thư mục prisma/migrations của image đang chạy. */
   expectedMigrations: string[];
   orderCount: number;
-  refill: { totalRows: number; activeRows: number };
+  /** `tableExists`: bảng refill_pickup_locations (migration 20261015070000) đã có chưa; chưa có thì hai số đếm là 0 vì bảng vắng, không vì rỗng. */
+  refill: { totalRows: number; activeRows: number; tableExists: boolean };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
   adminCount: number;
@@ -114,6 +128,24 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
     );
   }
 
+  if (phase === 'pre-deploy' && pending.length > 0) {
+    const required: readonly string[] = REQUIRED_MIGRATIONS;
+    const extra = pending.filter((m) => !required.includes(m));
+    const heavy = HEAVY_MIGRATIONS.filter((h) => pending.includes(h.name)).map((h) => h.name);
+    const scopeTitle = 'Phạm vi migration sẽ áp';
+    out.push(
+      extra.length === 0
+        ? pass(G_DB, 'db.pending_scope', scopeTitle, `chỉ ba migration của đợt: quay lại bằng image cũ (runbook 7.2) hợp lệ`)
+        : warn(
+            G_DB,
+            'db.pending_scope',
+            scopeTitle,
+            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài ba migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
+            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ ba migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách dài hơn ba: chỉ còn khôi phục bản backup (runbook 7.3).',
+          ),
+    );
+  }
+
   const ahead = s.appliedMigrations.filter((m) => !expected.has(m));
   out.push(
     ahead.length === 0
@@ -144,19 +176,32 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
 
 function ordersLockCheck(s: DbSnapshot): CheckResult {
   const title = 'Số đơn và thời gian khoá bảng orders';
-  if (s.appliedMigrations.includes(ORDERS_LOCK_MIGRATION)) {
+  const applied = new Set(s.appliedMigrations);
+  if (applied.has(ORDERS_LOCK_MIGRATION)) {
     return pass(G_DB, 'db.orders_lock', title, `${s.orderCount.toLocaleString('vi-VN')} đơn; migration khoá bảng đã áp xong, không còn rủi ro này`);
   }
-  const seconds = estimateOrdersLockSeconds(s.orderCount);
-  const window = Math.ceil(recommendedWindowSeconds(s.orderCount) / 60);
-  const detail = `${s.orderCount.toLocaleString('vi-VN')} đơn, ước tính khoá orders ~${seconds} giây, cửa sổ nên xin ≥ ${window} phút`;
+  const expected = new Set(s.expectedMigrations);
+  const heavy = HEAVY_MIGRATIONS.filter((h) => h.ordersLock && expected.has(h.name) && !applied.has(h.name)).map((h) => h.name);
+  const seconds = estimateOrdersLockSeconds(s.orderCount, heavy.length);
+  const window = Math.ceil(recommendedWindowSeconds(s.orderCount, heavy.length) / 60);
+  const many = heavy.length > 1 ? ` (${heavy.length} migration nặng trên orders chờ áp, mỗi cái tính ngang migration r6: ${listNames(heavy, 6)})` : '';
+  const detail = `${s.orderCount.toLocaleString('vi-VN')} đơn, ước tính khoá orders ~${seconds} giây${many}, cửa sổ nên xin ≥ ${window} phút`;
   if (s.orderCount < ORDERS_LOCK_SMALL) return pass(G_DB, 'db.orders_lock', title, detail);
-  return warn(G_DB, 'db.orders_lock', title, detail, 'Đặt hàng và webhook bị chặn suốt lúc khoá: chọn giờ vắng nhất, báo trước, xin cửa sổ theo số trên (runbook mục 4).');
+  return warn(G_DB, 'db.orders_lock', title, detail, 'Đặt hàng và webhook bị chặn suốt lúc khoá: chọn giờ vắng nhất, báo trước, xin cửa sổ theo số trên (runbook mục 3).');
 }
 
-function refillCheck(s: DbSnapshot): CheckResult {
+function refillCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Điểm nhận vỏ chai (Refill)';
   const legacy = typeof s.configs['refill.pickup_address'] === 'string' ? (s.configs['refill.pickup_address'] as string).trim() : '';
+  if (phase === 'pre-deploy' && !s.refill.tableExists) {
+    return warn(
+      G_DB,
+      'db.refill_location',
+      title,
+      legacy ? 'bảng điểm nhận vỏ chưa có (migration 20261015070000 chưa áp); địa chỉ cũ refill.pickup_address sẽ thành điểm đầu tiên' : 'bảng điểm nhận vỏ chưa có (migration 20261015070000 chưa áp) và chưa có địa chỉ cũ refill.pickup_address',
+      'Bình thường trước khi deploy. Sau deploy (--phase=post-deploy) phải có ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ.',
+    );
+  }
   if (s.refill.activeRows > 0) return pass(G_DB, 'db.refill_location', title, `${s.refill.activeRows} điểm đang bật trên ${s.refill.totalRows}`);
   if (s.refill.totalRows === 0 && legacy) {
     return warn(G_DB, 'db.refill_location', title, 'chỉ có địa chỉ cũ refill.pickup_address, chưa có điểm nào trong bảng', 'Thêm điểm ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ; địa chỉ cũ chỉ là dự phòng.');
@@ -345,7 +390,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
   return [
     ...migrationChecks(s, ctx.phase),
     ordersLockCheck(s),
-    refillCheck(s),
+    refillCheck(s, ctx.phase),
     opsThresholdCheck(s),
     shippingRateCheck(s),
     commissionCheck(s),

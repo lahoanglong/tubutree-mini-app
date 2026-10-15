@@ -1,4 +1,4 @@
-import { GOOD_BACKUP, GOOD_DB, GOOD_ENV, GOOD_REDIS, byId } from './go-live.fixtures';
+import { GOOD_BACKUP, GOOD_DB, GOOD_ENV, GOOD_REDIS, REQUIRED, byId } from './go-live.fixtures';
 import { exitCodeFor } from './report';
 import { parseEnvFile, parsePhase, runGoLiveCheck } from './run';
 import type { Collectors } from './run';
@@ -51,6 +51,25 @@ describe('runGoLiveCheck', () => {
     const c = { ...good, db: async () => pending };
     expect(byId(await runGoLiveCheck({ env: GOOD_ENV, phase: 'post-deploy' }, c), 'db.migrations_pending').status).toBe('FAIL');
     expect(byId(await runGoLiveCheck({ env: GOOD_ENV, phase: 'pre-deploy' }, c), 'db.migrations_pending').status).toBe('WARN');
+  });
+
+  it('trạng thái đã ghi trong runbook (PROD cũ, bản mới chưa áp): bước 4 pre-deploy thoát 0, chỉ WARN', async () => {
+    const required: readonly string[] = REQUIRED;
+    const oldProd = {
+      ...GOOD_DB,
+      appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !required.includes(m)),
+      orderCount: 300_000,
+      refill: { totalRows: 0, activeRows: 0, tableExists: false },
+      configs: Object.fromEntries(Object.entries(GOOD_DB.configs).filter(([k]) => k !== 'refill.pickup_address')),
+    };
+    const c = { ...good, db: async () => oldProd, redis: async () => ({ ...GOOD_REDIS, maxmemoryPolicy: 'allkeys-lru' }) };
+    const pre = await runGoLiveCheck({ env: GOOD_ENV, phase: 'pre-deploy' }, c);
+    expect(pre.filter((x) => x.status === 'FAIL')).toEqual([]);
+    expect(exitCodeFor(pre)).toBe(0);
+    expect(byId(pre, 'db.refill_location').status).toBe('WARN');
+    expect(byId(pre, 'redis.policy').status).toBe('WARN');
+    const post = await runGoLiveCheck({ env: GOOD_ENV, phase: 'post-deploy' }, c);
+    expect(post.filter((x) => x.status === 'FAIL').map((x) => x.id).sort()).toEqual(['db.migrations_pending', 'db.refill_location', 'db.required_migrations', 'redis.policy']);
   });
 
   it('DB không kết nối được: một dòng FAIL, các nhóm khác vẫn chạy, không lộ thông điệp lỗi', async () => {

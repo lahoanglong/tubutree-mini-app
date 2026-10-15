@@ -1,4 +1,6 @@
-import { estimateOrdersLockSeconds, evaluateDb, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
+import { estimateOrdersLockSeconds, evaluateDb, HEAVY_MIGRATIONS, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { GOOD_DB, GOOD_ENV, byId, dbWith, envWith } from './go-live.fixtures';
 import type { DbSnapshot } from './db-checks';
 import type { Env, GoLivePhase } from './types';
@@ -13,7 +15,7 @@ describe('evaluateDb', () => {
   });
 
   it('mọi WARN/FAIL đều có cách sửa, PASS thì không', () => {
-    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], refill: { totalRows: 0, activeRows: 0 }, znsTemplates: [] });
+    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], refill: { totalRows: 0, activeRows: 0, tableExists: true }, znsTemplates: [] });
     for (const r of run(worst)) {
       if (r.status === 'PASS') expect(r.hint).toBe('');
       else expect(r.hint.length).toBeGreaterThan(10);
@@ -101,20 +103,124 @@ describe('evaluateDb', () => {
     });
   });
 
+  describe('PROD cũ hơn: nhiều migration chờ áp', () => {
+    const [R6] = REQUIRED_MIGRATIONS;
+    const P1 = '20261014003644_p1_pancake_outbound_sync_state';
+    const P4 = '20261014150000_p4_admin_ops_search';
+    const P8 = '20261014003831_p8_seller_merchant_fulfilment';
+    const PD3 = '20261012110000_pd3_xu_to_points';
+    const required: readonly string[] = REQUIRED_MIGRATIONS;
+    const behind = (orderCount: number, extra: string[]) => {
+      const expectedMigrations = [...extra, ...GOOD_DB.expectedMigrations];
+      const appliedMigrations = GOOD_DB.appliedMigrations.filter((m) => !required.includes(m));
+      return dbWith({ orderCount, expectedMigrations, appliedMigrations });
+    };
+
+    it('mọi tên migration nặng đều có thật trong thư mục prisma/migrations', () => {
+      const dirs = new Set(readdirSync(join(__dirname, '../../../prisma/migrations')));
+      for (const h of HEAVY_MIGRATIONS) expect(dirs.has(h.name)).toBe(true);
+    });
+
+    it('ước tính nhân theo số migration nặng trên orders', () => {
+      expect(estimateOrdersLockSeconds(300_000, 1)).toBe(14);
+      expect(estimateOrdersLockSeconds(300_000, 4)).toBe(56);
+      expect(estimateOrdersLockSeconds(300_000, 0)).toBe(14);
+      expect(recommendedWindowSeconds(300_000, 4)).toBe(280);
+    });
+
+    it('chỉ ba migration của đợt chờ áp: db.pending_scope PASS, ước tính như cũ', () => {
+      const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !required.includes(m)), orderCount: 300_000 });
+      expect(status(s, 'db.pending_scope', 'pre-deploy')).toBe('PASS');
+      expect(byId(run(s, 'pre-deploy'), 'db.orders_lock').detail).toContain('~14 giây');
+    });
+
+    it('thêm p1, p4, p8, pd3: db.pending_scope WARN, nêu tên migration nặng và chỉ đường 7.3', () => {
+      const s = behind(300_000, [PD3, P1, P8, P4]);
+      const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('7 migration chờ áp, 4 cái nằm ngoài');
+      for (const n of [PD3, P1, P8, P4, R6]) expect(r.detail).toContain(n);
+      expect(r.hint).toContain('7.3');
+    });
+
+    it('thêm migration không nặng: WARN, không nêu danh sách nặng thừa', () => {
+      const extra = '20261013172011_p6_promo_abuse_coupon_active_code';
+      const s = dbWith({ orderCount: 1_000, expectedMigrations: [extra, ...GOOD_DB.expectedMigrations] });
+      const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('1 migration chờ áp, 1 cái nằm ngoài');
+      expect(r.detail).not.toContain('nặng:');
+    });
+
+    it('db.orders_lock cộng các migration nặng trên orders, không cộng pd3', () => {
+      const s = behind(300_000, [PD3, P1, P8, P4]);
+      const r = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('~56 giây');
+      expect(r.detail).toContain('4 migration nặng trên orders');
+      expect(r.detail).not.toContain(PD3);
+      expect(r.detail).toContain('≥ 5 phút');
+    });
+
+    it('sau deploy không có dòng db.pending_scope', () => {
+      expect(run(GOOD_DB).some((r) => r.id === 'db.pending_scope')).toBe(false);
+      expect(run(behind(1_000, [P1]), 'post-deploy').some((r) => r.id === 'db.pending_scope')).toBe(false);
+    });
+  });
+
   describe('điểm nhận vỏ chai', () => {
     it('có điểm đang bật thì PASS', () => expect(status(GOOD_DB, 'db.refill_location')).toBe('PASS'));
     it('chỉ có địa chỉ cũ, bảng chưa có dòng nào thì WARN', () => {
-      const s = dbWith({ refill: { totalRows: 0, activeRows: 0 }, configs: { 'refill.pickup_address': '12 Đường X, Quận 1' } });
+      const s = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '12 Đường X, Quận 1' } });
       expect(status(s, 'db.refill_location')).toBe('WARN');
     });
     it('bảng có điểm nhưng tắt hết thì FAIL dù còn địa chỉ cũ', () => {
-      const s = dbWith({ refill: { totalRows: 2, activeRows: 0 }, configs: { 'refill.pickup_address': '12 Đường X' } });
+      const s = dbWith({ refill: { totalRows: 2, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '12 Đường X' } });
       expect(status(s, 'db.refill_location')).toBe('FAIL');
     });
     it('không có gì thì FAIL', () => {
-      expect(status(dbWith({ refill: { totalRows: 0, activeRows: 0 } }), 'db.refill_location')).toBe('FAIL');
-      const blank = dbWith({ refill: { totalRows: 0, activeRows: 0 }, configs: { 'refill.pickup_address': '   ' } });
+      expect(status(dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true } }), 'db.refill_location')).toBe('FAIL');
+      const blank = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '   ' } });
       expect(status(blank, 'db.refill_location')).toBe('FAIL');
+    });
+
+    describe('DB cũ, bảng refill_pickup_locations chưa có (migration 20261015070000 chưa áp)', () => {
+      const noTable = (configs: Record<string, unknown> = {}, dropConfigs: string[] = []) =>
+        dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: false }, configs, dropConfigs });
+
+      it('trước deploy: WARN dù không có khoá refill.pickup_address', () => {
+        const r = byId(run(noTable({}, ['refill.pickup_address']), 'pre-deploy'), 'db.refill_location');
+        expect(r.status).toBe('WARN');
+        expect(r.detail).toContain('chưa có địa chỉ cũ');
+        expect(r.hint.length).toBeGreaterThan(10);
+      });
+      it('trước deploy: WARN khi khoá có nhưng rỗng (migration p9 tạo sẵn giá trị rỗng)', () => {
+        expect(status(noTable({ 'refill.pickup_address': '' }), 'db.refill_location', 'pre-deploy')).toBe('WARN');
+      });
+      it('trước deploy: WARN và nói địa chỉ cũ sẽ thành điểm đầu tiên khi có địa chỉ', () => {
+        const r = byId(run(noTable({ 'refill.pickup_address': '12 Đường X, Quận 1' }), 'pre-deploy'), 'db.refill_location');
+        expect(r.status).toBe('WARN');
+        expect(r.detail).toContain('điểm đầu tiên');
+      });
+      it('sau deploy: bảng vẫn chưa có và không có địa chỉ thì FAIL (migration không chạy là lỗi thật)', () => {
+        expect(status(noTable({}, ['refill.pickup_address']), 'db.refill_location', 'post-deploy')).toBe('FAIL');
+        expect(status(noTable({}, ['refill.pickup_address']), 'db.refill_location')).toBe('FAIL');
+      });
+      it('sau deploy: chỉ có địa chỉ cũ thì WARN như trước', () => {
+        expect(status(noTable({ 'refill.pickup_address': '12 Đường X' }), 'db.refill_location', 'post-deploy')).toBe('WARN');
+      });
+    });
+
+    describe('bảng đã có', () => {
+      const empty = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, dropConfigs: ['refill.pickup_address'] });
+      it('rỗng thì FAIL ở cả hai giai đoạn (admin thêm được điểm trước khi mở bán)', () => {
+        expect(status(empty, 'db.refill_location', 'pre-deploy')).toBe('FAIL');
+        expect(status(empty, 'db.refill_location', 'post-deploy')).toBe('FAIL');
+      });
+      it('có điểm đang bật thì PASS ở cả hai giai đoạn', () => {
+        expect(status(GOOD_DB, 'db.refill_location', 'pre-deploy')).toBe('PASS');
+        expect(status(GOOD_DB, 'db.refill_location', 'post-deploy')).toBe('PASS');
+      });
     });
   });
 
