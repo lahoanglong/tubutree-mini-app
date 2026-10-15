@@ -117,6 +117,28 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
 
 // R4-ADMIN-1: danh sách đơn admin và CSV từng ghi "Đã hoàn tiền" khi khoản chuyển khoản trả khách còn Chờ/Đang chuyển, trong
 // khi khách thấy "Đang hoàn tiền". Một hàm quyết định cho cả hai phía.
+describe('R6-ADMIN-2 — đơn huỷ có khoản tiền về muộn đang chờ hoàn', () => {
+  const lateOrder = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
+
+  it('UNPAID + LATE_PAYMENT/OVERPAYMENT chờ hoặc đang chuyển là Đang hoàn tiền ở danh sách và chi tiết', () => {
+    for (const kind of ['LATE_PAYMENT', 'OVERPAYMENT']) {
+      for (const status of ['PENDING', 'PROCESSING']) {
+        const refunds = [{ kind, method: 'MANUAL_TRANSFER', status }];
+        expect(isRefundInProgress(lateOrder, refunds)).toBe(true);
+        expect(orderPaymentStatusShort(lateOrder, refunds)).toBe('Đang hoàn tiền');
+        expect(orderPaymentStatusLabel(lateOrder, refunds)).toBe('Đang hoàn tiền');
+      }
+    }
+  });
+
+  it('khoản đã xong, chờ đối soát hoặc đơn không có khoản nào thì giữ nhãn cũ', () => {
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Chưa TT');
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe('Chưa TT');
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'CANCEL', method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Chưa TT');
+    expect(orderPaymentStatusShort(lateOrder, [])).toBe('Chưa TT');
+  });
+});
+
 describe('isRefundInProgress — một luật "Đang hoàn tiền" cho khách và admin', () => {
   const cancelled = { status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' };
 

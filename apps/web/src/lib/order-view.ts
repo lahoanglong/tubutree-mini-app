@@ -106,6 +106,7 @@ const codCollected = (o: PaymentView): boolean =>
 export interface RefundFacts {
   method: string;
   status: string;
+  kind?: string;
 }
 
 /** Khoản Tubu nợ khách hoặc đã trả; chờ đối soát (UNVERIFIED) và đã bỏ qua (DISMISSED) chưa/không phải tiền hoàn. */
@@ -114,10 +115,13 @@ const counted = (r: RefundFacts) => r.status === 'PENDING' || r.status === 'PROC
 /**
  * Đơn đã lật REFUNDED (lật ngay khi huỷ/trả) mà còn khoản chuyển khoản Tubu Chờ/Đang chuyển: tiền chưa tới tay khách. Một
  * luật cho chi tiết đơn của khách, danh sách/chi tiết đơn admin và CSV (API admin-export, BANK_REFUND_IN_PROGRESS).
+ * Tiền về muộn/chuyển dư (LATE_PAYMENT, OVERPAYMENT) đang chờ hoàn thì đơn vẫn giữ UNPAID nhưng khách đã chuyển tiền: cũng là đang hoàn.
  */
-export const isRefundInProgress = (o: PaymentView, refunds?: readonly RefundFacts[] | null): boolean =>
-  o.paymentStatus === 'REFUNDED' &&
-  !!refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && (r.status === 'PENDING' || r.status === 'PROCESSING'));
+export const isRefundInProgress = (o: PaymentView, refunds?: readonly RefundFacts[] | null): boolean => {
+  const open = (r: RefundFacts) => r.status === 'PENDING' || r.status === 'PROCESSING';
+  if (refunds?.some((r) => (r.kind === 'LATE_PAYMENT' || r.kind === 'OVERPAYMENT') && open(r))) return true;
+  return o.paymentStatus === 'REFUNDED' && !!refunds?.some((r) => r.method === 'MANUAL_TRANSFER' && open(r));
+};
 
 /**
  * Tình trạng thanh toán hiển thị cho khách. Đơn đã lật REFUNDED nhưng còn khoản chuyển khoản Tubu chưa chuyển xong thì là
