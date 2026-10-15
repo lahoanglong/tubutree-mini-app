@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
@@ -363,11 +364,10 @@ export class StorefrontService {
     const sf = await this.assertOwnedStorefront(userId);
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [orders, commission30dAgg] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { storefrontSlug: sf.slug, status: { notIn: ['CANCELLED', 'RETURNED'] } },
-        select: { createdAt: true, items: { select: { productSlug: true, productName: true, quantity: true, total: true } } },
-      }),
+    const [sales30d, sales7d, byProduct, commission30dAgg] = await Promise.all([
+      storefrontSalesByStore(this.prisma, userId, [sf.slug], since30d),
+      storefrontSalesByStore(this.prisma, userId, [sf.slug], since7d),
+      storefrontSalesByProduct(this.prisma, userId, sf.slug, since30d),
       this.prisma.commission.aggregate({
         where: {
           affiliateUserId: userId,
@@ -379,32 +379,12 @@ export class StorefrontService {
       }),
     ]);
 
-    const byProduct = new Map<string, { productSlug: string; productName: string; qty: number; revenue: number }>();
-    let orders30d = 0;
-    let orders7d = 0;
-    let revenue30d = 0;
-    for (const o of orders) {
-      const in30d = o.createdAt >= since30d;
-      const in7d = o.createdAt >= since7d;
-      if (in30d) { orders30d += 1; revenue30d += o.items.reduce((s, i) => s + i.total, 0); }
-      if (in7d) orders7d += 1;
-      for (const item of o.items) {
-        // Đơn cũ trước migration OrderItem.productSlug có thể null — gộp vào key riêng thay vì
-        // vỡ thống kê hoặc lẫn với sản phẩm khác.
-        const key = item.productSlug ?? `__unknown:${item.productName}`;
-        const row = byProduct.get(key) ?? { productSlug: item.productSlug ?? '', productName: item.productName, qty: 0, revenue: 0 };
-        row.qty += item.quantity;
-        row.revenue += item.total;
-        byProduct.set(key, row);
-      }
-    }
-
     return {
-      orders7d,
-      orders30d,
-      revenue30d,
+      orders7d: sales7d.get(sf.slug)?.orders ?? 0,
+      orders30d: sales30d.get(sf.slug)?.orders ?? 0,
+      revenue30d: Math.max(0, sales30d.get(sf.slug)?.revenue ?? 0),
       commission30d: commission30dAgg._sum.amount ?? 0,
-      byProduct: [...byProduct.values()].sort((a, b) => b.revenue - a.revenue),
+      byProduct: byProduct.sort((a, b) => b.revenue - a.revenue),
     };
   }
 

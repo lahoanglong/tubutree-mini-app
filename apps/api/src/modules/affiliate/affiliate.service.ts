@@ -37,13 +37,11 @@ import { paidLineTotals } from './commission-base';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from '../checkout/total-changed';
 
+import { storefrontSalesByStore } from './storefront-sales';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
-/** Đơn không phải bán thật — cùng định nghĩa BrandService.getOwnedSales. */
-const SALES_ORDER_STATUS_EXCLUDED = ['PENDING_PAYMENT', 'CANCELLED', 'RETURNED'] as const;
-const SALES_ORDER_PAYMENT_EXCLUDED = ['REFUNDED', 'FAILED'] as const;
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 /**
@@ -1198,25 +1196,7 @@ export class AffiliateService {
       where: { ownerUserId: userId }, select: { slug: true, title: true },
     });
     const out = [] as Array<{ slug: string; title?: string; orders: number; revenue: number; commission: number }>;
-    // Tổng hợp ngay trong DB: CTV nhiều chục nghìn đơn không được nạp về Node, cũng không được gửi
-    // `orderId IN (...)` (giới hạn ~32.766 tham số bind). LATERAL gom tiền đã hoàn theo từng đơn nên
-    // một đơn có nhiều yêu cầu trả không bị nhân dòng; kẹp ≥ 0 vẫn làm ở mức gian hàng (bên dưới).
-    const revenueRows = myStores.length
-      ? await this.prisma.$queryRaw<{ slug: string; revenue: bigint | number | string | null }[]>(Prisma.sql`
-          SELECT o."storefrontSlug" AS slug, SUM(o."total" - COALESCE(r.refunded, 0)) AS revenue
-          FROM "orders" o
-          LEFT JOIN LATERAL (
-            SELECT SUM(COALESCE(rr."refundAmount", 0) + rr."shippingRefund") AS refunded
-            FROM "return_requests" rr
-            WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
-          ) r ON true
-          WHERE o."storefrontSlug" = ANY(${myStores.map((s) => s.slug)}::text[])
-            AND o."referrerUserId" = ${userId}
-            AND NOT (o."status"::text = ANY(${[...SALES_ORDER_STATUS_EXCLUDED]}::text[]))
-            AND NOT (o."paymentStatus"::text = ANY(${[...SALES_ORDER_PAYMENT_EXCLUDED]}::text[]))
-          GROUP BY o."storefrontSlug"`)
-      : [];
-    const revenueOf = new Map(revenueRows.map((r) => [r.slug, Number(r.revenue ?? 0)]));
+    const revenueOf = await storefrontSalesByStore(this.prisma, userId, myStores.map((s) => s.slug));
     for (const s of myStores) {
       const [orderAgg, commAgg] = await Promise.all([
         this.prisma.order.aggregate({
@@ -1232,7 +1212,7 @@ export class AffiliateService {
       ]);
       out.push({
         slug: s.slug, title: s.title,
-        orders: orderAgg._count._all, revenue: Math.max(0, revenueOf.get(s.slug) ?? 0),
+        orders: orderAgg._count._all, revenue: Math.max(0, revenueOf.get(s.slug)?.revenue ?? 0),
         commission: commAgg._sum.amount ?? 0,
       });
     }
