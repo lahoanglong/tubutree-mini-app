@@ -1,0 +1,279 @@
+import { PrismaService } from '../../src/prisma/prisma.service';
+import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
+import { OpsEmailService } from '../../src/modules/ops/ops-email.service';
+import { createOrder, createUser, setConfig } from './helpers';
+
+/**
+ * r8-email-alerts trên Postgres THẬT: email là kênh thứ hai của báo động vận hành, gửi đúng những lần webhook gửi (cùng trí
+ * nhớ chống báo lặp), hai kênh độc lập (SMTP lỗi không chặn webhook/cron, webhook lỗi không làm email gửi lại), lỗi SMTP
+ * lộ ra ở ảnh chụp sức khoẻ mà không kèm bí mật. Hàng đợi, thông báo in-app, webhook và SMTP đều là bản giả: không có kết
+ * nối hay email thật nào.
+ */
+describe('r8 email báo động vận hành (real Postgres)', () => {
+  let prisma: PrismaService;
+  let health: OpsHealthService;
+  const notify = jest.fn().mockResolvedValue(undefined);
+  const fetchMock = jest.fn();
+  const sendMail = jest.fn();
+  const close = jest.fn();
+  let transportFactory: () => { sendMail: typeof sendMail; close: typeof close };
+  const queueFailures: Record<string, number> = {};
+  // Hàng đợi giả tính "lỗi trong 1 giờ qua" theo đồng hồ của lượt kiểm, không theo giờ thật (các lượt cách nhau tới nhiều giờ).
+  let clockMs = Date.now();
+  const fakeQueue = (name: string): OpsQueue => ({
+    name,
+    getJobCounts: async () => ({ waiting: 0, active: 0, delayed: 0, failed: queueFailures[name] ?? 0 }),
+    getFailed: async () => Array.from({ length: queueFailures[name] ?? 0 }, () => ({ finishedOn: clockMs - 60_000 })),
+  });
+  const EMAIL_ENV = {
+    OPS_ALERT_EMAIL_TO: 'ops@tubutree.test; ceo@tubutree.test',
+    SMTP_HOST: 'smtp.invalid',
+    SMTP_PORT: '587',
+    SMTP_USER: 'mailer-user',
+    SMTP_PASS: 'hunter2-pass',
+    SMTP_FROM: 'Tubu Tree <alerts@tubutree.test>',
+    NODE_ENV: 'test',
+  };
+  const env: Record<string, string> = {};
+  const created: string[] = [];
+  const HOOK = 'https://hooks.slack.com/services/T0/B0/XXX';
+  const t0 = new Date();
+  const at = (minutes: number) => new Date(t0.getTime() + minutes * 60_000);
+  const check = (minutes: number) => {
+    clockMs = at(minutes).getTime();
+    return health.checkAndAlert(at(minutes));
+  };
+  const snapshotAt = (minutes: number) => {
+    clockMs = at(minutes).getTime();
+    return health.snapshot(at(minutes));
+  };
+
+  beforeAll(async () => {
+    prisma = new PrismaService();
+    await prisma.$connect();
+    const sysConfig = {
+      get: async <T,>(key: string, fallback: T): Promise<T> => {
+        const row = await prisma.systemConfig.findUnique({ where: { key } });
+        return (row?.value as T) ?? fallback;
+      },
+    };
+    // Pancake/Gomdon chưa cấu hình: dữ liệu đơn còn lại của spec khác trong DB dùng chung không thành sự cố, chỉ hàng đợi giả quyết định.
+    const gomdon = { getConfig: async () => null, getHealth: () => null };
+    const config = { get: (k: string) => env[k] ?? '' };
+    const email = new OpsEmailService(config as never, prisma, (() => transportFactory()) as never);
+    health = new OpsHealthService(
+      prisma,
+      config as never,
+      [fakeQueue('pancake-push'), fakeQueue('notifications')],
+      sysConfig as never,
+      gomdon as never,
+      { notify } as never,
+      fetchMock as never,
+      email,
+    );
+    await setConfig(prisma, 'ops.alert_webhook_failed', 1);
+    await setConfig(prisma, 'ops.alert_repeat_hours', 6);
+    await setConfig(prisma, 'ops.alert_queue_failed_1h', 5);
+    await createUser(prisma, { role: 'ADMIN' });
+  });
+
+  afterAll(async () => {
+    await prisma.order.updateMany({ where: { id: { in: created } }, data: { status: 'CANCELLED', pancakeAttention: null, pancakeAttentionAt: null } });
+    await prisma?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    notify.mockClear();
+    fetchMock.mockReset().mockResolvedValue({ ok: true, status: 200 });
+    sendMail.mockReset().mockResolvedValue({});
+    close.mockReset();
+    transportFactory = () => ({ sendMail, close });
+    for (const k of Object.keys(queueFailures)) delete queueFailures[k];
+    for (const k of Object.keys(env)) delete env[k];
+    Object.assign(env, EMAIL_ENV, { OPS_ALERT_WEBHOOK_URL: HOOK });
+    await prisma.opsHealthState.deleteMany({});
+    await prisma.pancakeWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
+    await prisma.gomdonWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
+    await prisma.order.updateMany({ where: { id: { in: created } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+  });
+
+  const subjects = () => sendMail.mock.calls.map((c) => String((c[0] as { subject: string }).subject));
+  const alertState = async () => (await prisma.opsHealthState.findUniqueOrThrow({ where: { key: 'alert' } })).detail as Record<string, unknown>;
+
+  it('email gửi đúng những lần webhook gửi: mở sự cố, đổi bộ sự cố, nhắc lại sau 6 giờ, báo đã ổn — không lần nào nhiều hơn', async () => {
+    const same = () => expect(sendMail).toHaveBeenCalledTimes(fetchMock.mock.calls.length);
+
+    queueFailures['notifications'] = 9;
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    same();
+    expect(subjects()[0]).toBe('[Tubu Tree · test] Sự cố vận hành: 1 vấn đề cần xử lý');
+    const first = sendMail.mock.calls[0][0] as { to: string[]; from: unknown; text: string; html: string };
+    expect(first.to).toEqual(['ops@tubutree.test', 'ceo@tubutree.test']);
+    expect(first.from).toEqual({ name: 'Tubu Tree', address: 'alerts@tubutree.test' });
+    expect(first.text).toContain('notifications');
+    expect(first.html).toContain('notifications');
+    expect(close).toHaveBeenCalledTimes(1);
+    // Số người nhận in-app là tối đa MAX_ADMINS admin đầu bảng (DB dùng chung có thể nhiều admin): đếm theo một lần báo.
+    const perSend = notify.mock.calls.length;
+    expect(perSend).toBeGreaterThan(0);
+
+    await expect(check(5)).resolves.toMatchObject({ sent: null });
+    await expect(check(10)).resolves.toMatchObject({ sent: null });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    same();
+
+    queueFailures['pancake-push'] = 9;
+    await expect(check(15)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    same();
+    expect(subjects()[1]).toContain('2 vấn đề');
+
+    await expect(check(15 + 5 * 60)).resolves.toMatchObject({ sent: null });
+    await expect(check(15 + 6 * 60)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    same();
+
+    for (const k of Object.keys(queueFailures)) delete queueFailures[k];
+    await expect(check(15 + 6 * 60 + 5)).resolves.toMatchObject({ sent: 'RECOVERED' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    same();
+    expect(subjects()[3]).toBe('[Tubu Tree · test] Vận hành đã ổn trở lại');
+
+    await expect(check(15 + 6 * 60 + 10)).resolves.toMatchObject({ sent: null });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    same();
+    expect(notify).toHaveBeenCalledTimes(perSend * 4);
+  });
+
+  it('việc mới của hàng việc cho người trong giờ nhắc lại cũng làm cả hai kênh báo ngay', async () => {
+    Object.assign(env, { PANCAKE_API_KEY: 'k', PANCAKE_SHOP_ID: 's' });
+    await prisma.order.updateMany({ where: { pancakeAttentionAt: { not: null } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+    const u = await createUser(prisma, {});
+    const mk = async () => {
+      const o = await createOrder(prisma, { userId: u.id, pancakeAttention: 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', pancakeAttentionAt: new Date(0) });
+      created.push(o.id);
+      return o;
+    };
+    const a = await mk();
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(String((sendMail.mock.calls[0][0] as { text: string }).text)).toContain(a.code);
+    await expect(check(5)).resolves.toMatchObject({ sent: null });
+    const b = await mk();
+    await expect(check(10)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(String((sendMail.mock.calls[1][0] as { text: string }).text)).toContain(b.code);
+  });
+
+  it('chỉ đặt email (không webhook): vẫn nhận đúng các lần báo, không gọi webhook nào', async () => {
+    env.OPS_ALERT_WEBHOOK_URL = '';
+    queueFailures['notifications'] = 9;
+    await check(0);
+    await check(5);
+    queueFailures['pancake-push'] = 9;
+    await check(10);
+    for (const k of Object.keys(queueFailures)) delete queueFailures[k];
+    await check(15);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(subjects()).toEqual([
+      '[Tubu Tree · test] Sự cố vận hành: 1 vấn đề cần xử lý',
+      '[Tubu Tree · test] Sự cố vận hành: 2 vấn đề cần xử lý',
+      '[Tubu Tree · test] Vận hành đã ổn trở lại',
+    ]);
+  });
+
+  it('chỉ đặt webhook (không email): hành vi cũ nguyên vẹn, không tạo kết nối SMTP', async () => {
+    for (const k of Object.keys(EMAIL_ENV)) delete env[k];
+    queueFailures['notifications'] = 9;
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(await alertState()).not.toHaveProperty('emailPending');
+    const snap = await snapshotAt(0);
+    expect(snap.alertChannels.email).toEqual({ state: 'DISABLED', recipients: 0, issues: [], lastOkAt: null, lastErrorAt: null, lastError: null });
+  });
+
+  it('SMTP lỗi: cron không đổ, webhook và in-app vẫn gửi đúng một lần, lượt sau chỉ gửi lại email; lỗi hiện ở ảnh chụp mà không lộ bí mật', async () => {
+    queueFailures['notifications'] = 9;
+    sendMail.mockRejectedValueOnce(Object.assign(new Error('Invalid login mailer-user hunter2-pass: 535 5.7.8 rejected'), { code: 'EAUTH' }));
+
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls.length).toBeGreaterThan(0);
+    expect(await alertState()).toMatchObject({ emailPending: true });
+    expect(await alertState()).not.toHaveProperty('webhookPending');
+
+    const failed = (await snapshotAt(1)).alertChannels.email;
+    expect(failed).toMatchObject({ state: 'READY', recipients: 2, lastOkAt: null, lastErrorAt: expect.any(String) });
+    expect(failed.lastError).toContain('EAUTH');
+    expect(JSON.stringify(failed)).not.toContain('hunter2-pass');
+    expect(JSON.stringify(failed)).not.toContain('mailer-user');
+
+    notify.mockClear();
+    await expect(check(5)).resolves.toMatchObject({ sent: null });
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+    expect(await alertState()).not.toHaveProperty('emailPending');
+
+    await check(10);
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    const ok = (await snapshotAt(11)).alertChannels.email;
+    expect(ok.lastOkAt).not.toBeNull();
+    expect(new Date(ok.lastOkAt!).getTime()).toBeGreaterThanOrEqual(new Date(ok.lastErrorAt!).getTime());
+  });
+
+  it('SMTP vẫn lỗi ở lượt thử lại: tiếp tục chờ, không tạo thêm email, không báo in-app lại', async () => {
+    queueFailures['notifications'] = 9;
+    sendMail.mockRejectedValue(new Error('ECONNREFUSED'));
+    await check(0);
+    const perSend = notify.mock.calls.length;
+    await check(5);
+    await check(10);
+    expect(sendMail).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(perSend);
+    expect(await alertState()).toMatchObject({ emailPending: true });
+  });
+
+  it('tạo kết nối SMTP ném lỗi ngay (không phải lời hứa bị từ chối) cũng không làm đổ cron', async () => {
+    transportFactory = () => {
+      throw new Error('socket exploded');
+    };
+    queueFailures['notifications'] = 9;
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await alertState()).toMatchObject({ emailPending: true });
+  });
+
+  it('webhook lỗi, email được: lượt sau chỉ gửi lại webhook — email không bao giờ nhiều hơn webhook', async () => {
+    queueFailures['notifications'] = 9;
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+    await check(0);
+    expect(await alertState()).toMatchObject({ webhookPending: true });
+    expect(await alertState()).not.toHaveProperty('emailPending');
+    await check(5);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('cấu hình email dở dang lúc chạy: không gửi, không treo chờ gửi lại, màn Sức khoẻ nêu khoá còn thiếu; webhook không bị ảnh hưởng', async () => {
+    env.SMTP_HOST = '';
+    queueFailures['notifications'] = 9;
+    await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await alertState()).not.toHaveProperty('emailPending');
+    const ch = (await snapshotAt(1)).alertChannels.email;
+    expect(ch.state).toBe('MISCONFIGURED');
+    expect(ch.issues.join(' ')).toContain('SMTP_HOST');
+    expect(ch.lastError).toContain('SMTP_HOST');
+  });
+
+  it('không đưa email vào danh sách sự cố: kênh email hỏng không tự thành một báo động', async () => {
+    env.SMTP_HOST = '';
+    const snap = await snapshotAt(0);
+    expect(snap.problems).toEqual([]);
+  });
+});
