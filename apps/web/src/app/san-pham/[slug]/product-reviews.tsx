@@ -51,6 +51,18 @@ function Stars({ value, small = false }: { value: number; small?: boolean }) {
   );
 }
 
+/**
+ * Gỡ `?danh-gia=` khỏi URL sau khi đã dùng nó: còn giữ thì quay lại hay tải lại trang mở lại form (lúc đó đã thành form sửa
+ * của đánh giá vừa gửi). Thay mục lịch sử hiện tại bằng history.replaceState (Next đồng bộ useSearchParams theo) chứ không
+ * router.replace: đổi tham số qua router là một lần điều hướng của trang, có thể dựng lại khối này và đóng form vừa mở.
+ */
+function forgetOrderParam() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(REVIEW_ORDER_PARAM)) return;
+  url.searchParams.delete(REVIEW_ORDER_PARAM);
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 /** Khung chờ khi trang được dựng sẵn (ISR): tham số mở form chỉ đọc được ở trình duyệt. Giữ id để link #danh-gia cuộn tới. */
 export function ProductReviewsFallback() {
   return (
@@ -104,6 +116,7 @@ export function ProductReviews({ slug }: { slug: string }) {
     const mine = elig.myReviews?.find((r) => r.orderId === openForOrderId);
     if (order) setTarget(newTarget(order));
     else if (mine) setTarget(editTarget(mine));
+    forgetOrderParam();
   }, [openForOrderId, elig]);
 
   const returnTo = `/san-pham/${encodeURIComponent(slug)}${openForOrderId ? `?${REVIEW_ORDER_PARAM}=${encodeURIComponent(openForOrderId)}` : ''}`;

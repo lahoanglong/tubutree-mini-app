@@ -324,4 +324,55 @@ describe('ProductReviews (web) — mở từ chi tiết đơn (?danh-gia=<đơn>
     expect(form(c)).toBeNull();
     expect(button(c, 'Viết đánh giá')).not.toBeNull();
   });
+
+  // Còn giữ ?danh-gia= thì quay lại hay tải lại trang mở lại form (lúc đó đã thành form sửa của đánh giá vừa gửi).
+  describe('đã dùng tham số thì gỡ khỏi URL', () => {
+    const PAGE = '/san-pham/nuoc-rua-chen';
+    const visit = (search: string) => {
+      window.history.replaceState(null, '', `${PAGE}${search}#danh-gia`);
+      mocks.search = new URLSearchParams(search).toString();
+    };
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('mở form từ tham số → URL bỏ ?danh-gia= (giữ tham số khác và #danh-gia) bằng replaceState; tải lại trang không mở lại form', async () => {
+      visit('?utm_source=zalo&danh-gia=o2');
+      const lengthBefore = window.history.length;
+      const c = await mount();
+      expect(form(c)?.getAttribute('aria-label')).toBe('Viết đánh giá');
+      expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(`${PAGE}?utm_source=zalo#danh-gia`);
+      expect(window.history.length).toBe(lengthBefore);
+
+      click(button(c, 'Gửi đánh giá'));
+      await flush();
+      expect(mocks.saved[0]!.body.orderId).toBe('o2');
+
+      mounted.forEach((m) => m.unmount());
+      mounted = [];
+      mocks.search = window.location.search.slice(1);
+      mocks.elig = { ...structuredClone(ELIG_ALL), myReviews: [{ ...REF_B, id: 'new' }, REF_A] };
+      const again = await mount();
+      expect(form(again)).toBeNull();
+      expect(mocks.myCalls).toEqual([]);
+    });
+
+    it('mở sửa từ tham số cũng gỡ tham số; đơn không có trong can-review cũng gỡ (đã dùng xong)', async () => {
+      visit('?danh-gia=o1');
+      const c = await mount();
+      expect(form(c)?.getAttribute('aria-label')).toBe('Sửa đánh giá');
+      expect(window.location.search).toBe('');
+      mounted.forEach((m) => m.unmount());
+      mounted = [];
+
+      visit('?danh-gia=o9');
+      await mount();
+      expect(window.location.search).toBe('');
+    });
+
+    it('khách chưa đăng nhập: giữ tham số để đăng nhập xong quay lại đúng đơn', async () => {
+      mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
+      visit('?danh-gia=o2');
+      await mount();
+      expect(window.location.search).toBe('?danh-gia=o2');
+    });
+  });
 });
