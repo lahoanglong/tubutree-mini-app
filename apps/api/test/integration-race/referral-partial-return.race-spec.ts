@@ -314,19 +314,19 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await balanceOf(referrer.id)).toBe(REWARD);
   });
 
-  it('(i) thưởng cấp bằng xu cũ: tính theo xu rồi đổi ceil(xu/1000), trừ lô CONVERTED; tổng = ceil(5000/1000)', async () => {
+  it('(i) thưởng cấp bằng xu cũ: quy ra điểm ceil(xu/1000) rồi làm tròn xuống theo điểm, trừ lô CONVERTED; tổng = 5', async () => {
     const { referrer, referee, b } = await rewarded({ ledger: 'COIN' });
-    await returnUnits(referee.id, b, 1); // floor(5000/3) = 1666 xu → 2 điểm
-    await returnUnits(referee.id, b, 1); // floor(10000/3) = 3333 xu → 4 điểm luỹ kế → 2
+    await returnUnits(referee.id, b, 1); // floor(5 × 1/3) = 1
+    await returnUnits(referee.id, b, 1); // floor(5 × 2/3) = 3 luỹ kế → 2
     let r = await revocations(referrer.id);
     expect(r.partial.map((p) => [p.delta, p.lot])).toEqual([
-      [-2, 'CONVERTED'],
+      [-1, 'CONVERTED'],
       [-2, 'CONVERTED'],
     ]);
-    expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(1);
+    expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(2);
     await returnUnits(referee.id, b, 1);
     r = await revocations(referrer.id);
-    expect(r.full.map((p) => [p.delta, p.lot])).toEqual([[-1, 'CONVERTED']]);
+    expect(r.full.map((p) => [p.delta, p.lot])).toEqual([[-2, 'CONVERTED']]);
     expect(r.total).toBe(5);
     expect(await balanceOf(referrer.id, 'CONVERTED')).toBe(0);
   });

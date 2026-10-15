@@ -16,8 +16,8 @@ import type { PointsLot, Prisma } from '@prisma/client';
  * mời đã thưởng bằng xu sẽ được thưởng lại bằng điểm (index points không thấy dòng coin).
  *
  * Trả MỘT PHẦN (chốt 2026-10-15): trả một phần một trong hai đơn đã dùng để thưởng thu hồi thưởng THEO TỶ LỆ tiền hàng đã
- * trả luỹ kế của chính đơn đó (revokeReferralRewardPartially). Mục tiêu luỹ kế của đơn = làm tròn XUỐNG (tỷ lệ × thưởng, theo
- * đơn vị của sổ cấp; thưởng xu cũ đổi bằng legacyXuToPoints); mỗi yêu cầu trả thu (mục tiêu − phần đã thu cho đơn đó), kẹp
+ * trả luỹ kế của chính đơn đó (revokeReferralRewardPartially). Mục tiêu luỹ kế của đơn = làm tròn XUỐNG (tỷ lệ × số điểm của
+ * thưởng; thưởng xu cũ quy ra điểm bằng legacyXuToPoints trước); mỗi yêu cầu trả thu (mục tiêu − phần đã thu cho đơn đó), kẹp
  * để tổng thu hồi của cả hai đơn không vượt thưởng. Lần trả CẢ ĐƠN sau đó (revokeReferralRewardForOrder) chỉ thu phần còn
  * lại (thưởng − đã thu từng phần, kể cả phần ghi nợ); trả một phần sau khi đã thu hồi cả thì không làm gì.
  * Thu hồi từng phần KHÔNG làm giảm số lượt giới thiệu hợp lệ và KHÔNG đụng mốc thưởng thêm: countReferralSuccesses chỉ trừ
@@ -68,18 +68,16 @@ export function referralGrantDue(grant: ReferralGrant): number {
 }
 
 /**
- * Mục tiêu thu hồi LUỸ KẾ (Điểm Xanh) cho một đơn đã trả một phần: floor(thưởng × tiền hàng đã trả luỹ kế / tiền hàng của
- * đơn), tính theo đơn vị của sổ cấp rồi mới đổi (thưởng xu cũ: legacyXuToPoints). Trả hết tiền hàng = cả khoản. Đơn không có
+ * Mục tiêu thu hồi LUỸ KẾ (Điểm Xanh) cho một đơn đã trả một phần: floor(số điểm của thưởng × tiền hàng đã trả luỹ kế / tiền
+ * hàng của đơn). Thưởng xu cũ quy ra điểm (referralGrantDue = legacyXuToPoints) TRƯỚC rồi mới làm tròn xuống theo điểm: làm
+ * tròn theo xu rồi ceil sang điểm sẽ thu dư tới 1 điểm mỗi đơn. Trả hết tiền hàng = đúng referralGrantDue. Đơn không có
  * tiền hàng thì không có tỷ lệ để thu từng phần (đường trả cả đơn vẫn thu hết). Số nguyên < 2^53 nên phép chia rồi floor
  * không lệch: thương không nguyên cách số nguyên gần nhất ít nhất 1/tiền hàng, lớn hơn sai số làm tròn của double.
  */
 export function partialRevokeTarget(grant: ReferralGrant, returnedGoods: number, orderGoods: number): number {
-  const amount = Math.max(grant.amount, 0);
-  let units = 0;
-  if (orderGoods > 0 && returnedGoods > 0) {
-    units = returnedGoods >= orderGoods ? amount : Math.floor((amount * returnedGoods) / orderGoods);
-  }
-  return grant.ledger === 'COIN' ? legacyXuToPoints(units) : units;
+  const due = referralGrantDue(grant);
+  if (!(orderGoods > 0) || !(returnedGoods > 0)) return 0;
+  return returnedGoods >= orderGoods ? due : Math.floor((due * returnedGoods) / orderGoods);
 }
 
 /**
