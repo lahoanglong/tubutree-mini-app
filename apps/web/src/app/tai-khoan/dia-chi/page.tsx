@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +19,10 @@ export default function AddressBookPage() {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const deleteTriggers = useRef(new Map<string, HTMLButtonElement>());
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusFor = useRef<string | null>(null);
 
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
   const refresh = () => {
@@ -35,6 +39,22 @@ export default function AddressBookPage() {
     },
     onError: () => setConfirmId(null),
   });
+
+  // Hộp xác nhận xóa thay chính nút "Xóa" của dòng nên focus phải được dời theo: vào "Giữ lại" (lựa chọn an toàn) khi mở, khi đóng
+  // về nút "Xóa" của dòng đó. Xóa xong thì dòng biến mất sau khi tải lại danh sách, nên về nút "Thêm địa chỉ mới". Chờ hết
+  // `isPending` vì kết quả xóa đến sau lúc hộp đóng.
+  useEffect(() => {
+    if (confirmId === null) return;
+    restoreFocusFor.current = confirmId;
+    keepRef.current?.focus();
+  }, [confirmId]);
+  useEffect(() => {
+    const id = restoreFocusFor.current;
+    if (confirmId !== null || id === null || remove.isPending) return;
+    restoreFocusFor.current = null;
+    const trigger = remove.isSuccess ? undefined : deleteTriggers.current.get(id);
+    (trigger ?? addButtonRef.current)?.focus();
+  }, [confirmId, remove.isPending, remove.isSuccess, remove.isError]);
 
   if (phase === 'loading') {
     return (
@@ -122,13 +142,20 @@ export default function AddressBookPage() {
                   )}
 
                   {confirmId === a.id ? (
-                    <div role="alertdialog" aria-labelledby={`del-${a.id}`} className="mt-3 rounded-control border border-danger-fg bg-danger-bg p-3">
+                    <div
+                      role="alertdialog"
+                      aria-labelledby={`del-${a.id}`}
+                      aria-describedby={`del-note-${a.id}`}
+                      className="mt-3 rounded-control border border-danger-fg bg-danger-bg p-3"
+                    >
                       <p id={`del-${a.id}`} className="font-semibold text-stone-900">
                         Xóa địa chỉ này?
                       </p>
-                      <p className="mt-1 text-sm text-stone-700">Các đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.</p>
+                      <p id={`del-note-${a.id}`} className="mt-1 text-sm text-stone-700">
+                        Các đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.
+                      </p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setConfirmId(null)} disabled={remove.isPending} className={ui.btnPrimary}>
+                        <button ref={keepRef} type="button" onClick={() => setConfirmId(null)} disabled={remove.isPending} className={ui.btnPrimary}>
                           Giữ lại
                         </button>
                         <button
@@ -166,6 +193,10 @@ export default function AddressBookPage() {
                         </button>
                       )}
                       <button
+                        ref={(el) => {
+                          if (el) deleteTriggers.current.set(a.id, el);
+                          else deleteTriggers.current.delete(a.id);
+                        }}
                         type="button"
                         onClick={() => {
                           remove.reset();
@@ -201,6 +232,7 @@ export default function AddressBookPage() {
         ) : (
           addrQ.isSuccess && (
             <button
+              ref={addButtonRef}
               type="button"
               onClick={() => {
                 setEditingId(null);
