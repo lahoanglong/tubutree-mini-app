@@ -30,6 +30,7 @@ import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/form
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
+import { autoCouponName } from '../utils/coupon-name';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -369,7 +370,7 @@ export default function LoyaltyPage() {
                         {couponLabel(c)}
                       </Text>
                       <Text variant="caption" tone="secondary" as="div">
-                        Mã {c.code}
+                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
                         {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
                       </Text>
                     </div>

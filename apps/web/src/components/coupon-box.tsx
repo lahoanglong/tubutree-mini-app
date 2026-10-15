@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { applyCoupon, formatVnd, getMyCoupons, removeCoupon } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { couponExpiryLabel, couponValueLabel, isCouponEligible, sortCouponsForCart } from '@/lib/coupon-view';
+import { autoCouponName } from '@/lib/coupon-name';
 
 /** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
 const VISIBLE_COUPONS = 3;
@@ -120,7 +121,7 @@ export function CouponBox({
                       >
                         <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
                         <div className="min-w-0 flex-1">
-                          <div className="break-all text-sm font-bold text-promo-fg">{c.code}</div>
+                          <div className="break-all text-sm font-bold text-promo-fg">{autoCouponName(c.code) ?? c.code}</div>
                           <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
                           {c.minOrder != null && (
                             <div className={`text-xs ${eligible ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
@@ -135,7 +136,7 @@ export function CouponBox({
                           type="button"
                           disabled={!eligible || busy}
                           onClick={() => apply.mutate(c.code)}
-                          aria-label={`Dùng mã ${c.code}`}
+                          aria-label={`Dùng mã ${autoCouponName(c.code) ?? c.code}`}
                           className={`${ui.btnPrimary} flex-none px-3`}
                         >
                           {eligible ? 'Dùng mã' : 'Chưa đủ'}
