@@ -299,6 +299,51 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
     expect(sql).toContain('"reservedStock" = 0');
   });
 
+  describe('mốc tồn kho của lượt đồng bộ (R5-SYNC-3)', () => {
+    const T0 = new Date('2026-10-15T03:00:00.000Z');
+
+    /** Mỗi trang Pancake trả lời sau 5 giây — mốc phải là lúc BẮT ĐẦU đọc trang, không phải lúc nhận xong hay lúc ghi. */
+    function slowClient(pages: unknown[][]): PancakeClient {
+      let call = 0;
+      const filled = pages.filter((p) => p.length > 0);
+      return {
+        isConfigured: () => true,
+        fetchProducts: jest.fn(async () => {
+          const data = pages[call] ?? [];
+          call++;
+          jest.setSystemTime(Date.now() + 5_000);
+          return { success: true, data, total_pages: filled.length, total_entries: filled.flat().length };
+        }),
+      } as unknown as PancakeClient;
+    }
+
+    beforeEach(() => jest.useFakeTimers({ now: T0, doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] }));
+    afterEach(() => jest.useRealTimers());
+
+    it('áp tồn kho kèm mốc = lúc bắt đầu đọc trang chứa biến thể, có điều kiện không lùi mốc đã áp', async () => {
+      const prisma = existingProduct();
+      await new PancakeSyncService(prisma, slowClient([[prod('a')], [prod('b')]]), lifecycle).syncProducts('2026-10-15T02:45:00.000Z');
+      const stock = rawSql(prisma).filter((c) => c.sql.includes('"pancakeStock" ='));
+      expect(stock).toHaveLength(2);
+      expect(stock[0]!.args).toContain('v-a');
+      expect(stock[0]!.args).toContainEqual(T0);
+      expect(stock[1]!.args).toContain('v-b');
+      expect(stock[1]!.args).toContainEqual(new Date(T0.getTime() + 5_000));
+      for (const c of stock) {
+        expect(c.sql).toContain('"pancakeStockEventAt" = ?');
+        expect(c.sql).toContain('("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ?)');
+      }
+    });
+
+    it('forceStock cũng đẩy mốc lên lúc đọc (không lùi), để webhook cũ tới sau không ghi đè số admin vừa đặt lại', async () => {
+      const prisma = existingProduct();
+      await new PancakeSyncService(prisma, slowClient([[prod('a')], []]), lifecycle).syncProducts(undefined, { forceStock: true });
+      const [force] = rawSql(prisma).filter((c) => c.sql.includes('"reservedStock" = 0'));
+      expect(force!.sql).toContain('"pancakeStockEventAt" = GREATEST("pancakeStockEventAt", ?)');
+      expect(force!.args).toContainEqual(T0);
+    });
+  });
+
   it('không dừng phân trang theo giả định page size = 20 (Pancake đổi sang 10 là mất sạch trang sau)', async () => {
     const client = makeClient([[prod('a'), prod('b')], [prod('c')], []]);
     const n = await new PancakeSyncService(makePrisma(), client, lifecycle).syncProducts('2026-09-12T00:00:00.000Z');

@@ -193,6 +193,8 @@ export class PancakeSyncService implements OnModuleInit {
             `Đã cập nhật ${count} sản phẩm; không tắt sản phẩm nào, lượt sau sẽ đọc lại.`,
         );
       }
+      // Số tồn kho của trang này đúng tới lúc bắt đầu đọc: webhook tồn kho mang updated_at cũ hơn mốc này tới sau là số lỗi thời.
+      const stockReadAt = new Date();
       const res = await this.client.fetchProducts(page, updatedSince);
       noteExpected(expected, res);
       const products = res.data ?? res.products ?? [];
@@ -205,7 +207,7 @@ export class PancakeSyncService implements OnModuleInit {
         for (const v of p.variations ?? []) if (v.id) seen.variations.add(v.id);
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
-          await this.upsertProduct(p, opts);
+          await this.upsertProduct(p, { ...opts, stockReadAt });
           count++;
         } catch (err) {
           failed++;
@@ -332,7 +334,7 @@ export class PancakeSyncService implements OnModuleInit {
     return { prices: {}, noPrice: !prev || prev.retailPrice <= 0 || prev.pancakeHold === PANCAKE_HOLD.NO_PRICE };
   }
 
-  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean } = {}): Promise<void> {
+  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date } = {}): Promise<void> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
     const pancakeId = p.id ?? p.product_id;
     if (!pancakeId || !p.name) {
@@ -432,9 +434,11 @@ export class PancakeSyncService implements OnModuleInit {
       });
       // `remain_quantity` vắng mặt (null/undefined) = Pancake KHÔNG nói gì về tồn kho lần này.
       // Trước đây `?? 0` biến "không biết" thành "hết hàng" và xoá sạch tồn của variation đó.
+      // Kèm mốc lúc đọc: webhook mới hơn đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
       if (v.remain_quantity != null) {
-        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity);
-        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity);
+        const stockOpts = { eventAt: opts.stockReadAt };
+        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity, stockOpts);
+        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity, stockOpts);
       }
     }
 

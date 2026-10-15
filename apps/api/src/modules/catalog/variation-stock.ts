@@ -93,9 +93,10 @@ export async function releaseVariationStock(
  *   thuộc Pancake) không bao giờ bị ảnh hưởng vì không bao giờ được đồng bộ.
  * - Đã có mốc: nhả phần giảm khỏi `reservedStock` rồi đặt `stock = số mới − giữ chỗ còn lại`.
  *
- * `eventAt` (webhook tồn kho, giờ Pancake): số tuyệt đối mang mốc cũ hơn mốc đã áp là số đã lỗi thời — áp vào là lùi tồn kho
- * (R4-SYNC-2). Điều kiện so mốc nằm trong chính câu UPDATE nên hai sự kiện xử lý song song không cùng qua được rồi ghi đè nhau.
- * Trả `false` khi không dòng nào được ghi (không có biến thể, hoặc sự kiện cũ hơn).
+ * `eventAt` — số này đúng tới lúc nào: `updated_at` của webhook tồn kho, hoặc lúc lượt đồng bộ danh mục bắt đầu đọc trang Pancake.
+ * Số tuyệt đối mang mốc cũ hơn mốc đã áp là số đã lỗi thời — áp vào là lùi tồn kho (R4-SYNC-2, R5-SYNC-3). Điều kiện so mốc nằm
+ * trong chính câu UPDATE nên hai sự kiện xử lý song song không cùng qua được rồi ghi đè nhau. Trả `false` khi không dòng nào được
+ * ghi (không có biến thể, hoặc số cũ hơn số đã áp).
  */
 export async function applyPancakeStock(
   tx: StockExecutor,
@@ -141,12 +142,24 @@ export async function applyPancakeStock(
 /**
  * Lối thoát CÓ CHỦ ĐÍCH cho admin: tin tuyệt đối số Pancake, xoá mọi giữ chỗ.
  * Dùng khi tồn kho local đã lệch thật và cần đặt lại — không dùng trong luồng tự động.
+ * `eventAt` (lúc đọc số): mốc chỉ tiến, không lùi — webhook mang số cũ hơn lần đọc tới sau không ghi đè số vừa đặt lại.
  */
 export async function forcePancakeStock(
   tx: StockExecutor,
   pancakeVariationId: string,
   pancakeStock: number,
+  opts: { eventAt?: Date } = {},
 ): Promise<void> {
+  const { eventAt } = opts;
+  if (eventAt) {
+    await tx.$executeRaw`
+    UPDATE "variations"
+       SET "stock" = ${pancakeStock}, "reservedStock" = 0, "pancakeStock" = ${pancakeStock},
+           "pancakeStockEventAt" = GREATEST("pancakeStockEventAt", ${eventAt})
+     WHERE "pancakeId" = ${pancakeVariationId}
+  `;
+    return;
+  }
   await tx.$executeRaw`
     UPDATE "variations"
        SET "stock" = ${pancakeStock}, "reservedStock" = 0, "pancakeStock" = ${pancakeStock}
