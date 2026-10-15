@@ -87,6 +87,10 @@ export default function RefillPage() {
     pendingBottles += h.quantity;
     if (h.pickupLocation) pendingByLocation.set(h.pickupLocation.name, (pendingByLocation.get(h.pickupLocation.name) ?? 0) + h.quantity);
   }
+  const pendingPlaced = [...pendingByLocation.values()].reduce((sum, n) => sum + n, 0);
+  // Yêu cầu tạo trước khi có bảng điểm nhận không gắn điểm nào; từ hai điểm trở lên danh sách nằm ở ô chọn PHÍA TRÊN, không phải bên dưới.
+  const pendingUnplaced = locations.length > 1 ? pendingBottles - pendingPlaced : 0;
+  const pendingGroups = pendingByLocation.size + (pendingUnplaced > 0 ? 1 : 0);
   const pickup = data?.pickup;
   const hasPickup = Boolean(pickup?.address || pickup?.hours || pickup?.phone);
   const maxQty = Math.max(1, remaining);
@@ -165,14 +169,22 @@ export default function RefillPage() {
                 Bạn có {pendingBottles} vỏ chai đang chờ duyệt
               </Text>
               <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
-                Mang đúng số vỏ đã khai đến {pendingByLocation.size > 0 ? 'điểm nhận bạn đã chọn' : 'điểm nhận bên dưới'}, nhân viên đối chiếu số
+                Mang đúng số vỏ đã khai đến{' '}
+                {pendingByLocation.size > 0 ? 'điểm nhận bạn đã chọn' : locations.length > 1 ? 'điểm nhận' : 'điểm nhận bên dưới'}, nhân viên đối chiếu số
                 vỏ rồi duyệt — 💧 vào Vườn Xanh ngay sau khi duyệt.
               </Text>
               {[...pendingByLocation].map(([name, n]) => (
                 <Text key={name} variant="caption" as="div" style={{ marginTop: 4, fontWeight: 600 }}>
-                  {pendingByLocation.size > 1 ? `Mang đến: ${name} (${n} vỏ)` : `Mang đến: ${name}`}
+                  {pendingGroups > 1 ? `Mang đến: ${name} (${n} vỏ)` : `Mang đến: ${name}`}
                 </Text>
               ))}
+              {pendingUnplaced > 0 && (
+                <Text variant="caption" as="div" style={{ marginTop: 4, fontWeight: 600 }}>
+                  {pendingGroups > 1
+                    ? `Chưa chọn điểm — mang đến một trong các điểm nhận ở trên (${pendingUnplaced} vỏ)`
+                    : 'Chưa chọn điểm — mang đến một trong các điểm nhận ở trên'}
+                </Text>
+              )}
             </Card>
           )}
 

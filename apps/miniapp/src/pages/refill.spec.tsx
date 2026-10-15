@@ -544,6 +544,71 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(screen.getAllByText(/^Điểm nhận: /)).toHaveLength(1);
   });
 
+  it('từ hai điểm: yêu cầu chờ duyệt có điểm → giữ câu "điểm nhận bạn đã chọn", không nhắc "bên dưới" hay "chưa chọn"', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [{ id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: { id: 'l2', name: TD.name } }],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/Mang đúng số vỏ đã khai đến điểm nhận bạn đã chọn/)).toBeInTheDocument();
+    expect(screen.queryByText(/bên dưới/)).toBeNull();
+    expect(screen.queryByText(/Chưa chọn điểm/)).toBeNull();
+  });
+
+  it('từ hai điểm: yêu cầu chờ duyệt tạo trước khi có điểm (không gắn điểm) → chỉ về các điểm ở trên, không nói "bên dưới"', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [{ id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: null }],
+      }),
+    );
+    const { container } = renderPage();
+
+    expect(await screen.findByText(/Bạn có 2 vỏ chai đang chờ duyệt/)).toBeInTheDocument();
+    expect(screen.getByText('Chưa chọn điểm — mang đến một trong các điểm nhận ở trên')).toBeInTheDocument();
+    expect(pageText(container)).not.toContain('bên dưới');
+    expect(pageText(container)).not.toContain('điểm nhận bạn đã chọn');
+    expect(screen.queryByText(/^Mang đến: /)).toBeNull();
+    expect(screen.getByRole('radiogroup', { name: 'Chọn điểm nhận vỏ' })).toBeInTheDocument();
+  });
+
+  it('từ hai điểm: vừa có yêu cầu đã chọn điểm vừa có yêu cầu không điểm → mỗi nhóm một dòng kèm số vỏ', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [
+          { id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: { id: 'l2', name: TD.name } },
+          { id: 'h2', quantity: 1, seedsAwarded: 10, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: null },
+          { id: 'h3', quantity: 4, seedsAwarded: 40, status: 'APPROVED', createdAt: CREATED_AT, pickupLocation: null },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/Bạn có 3 vỏ chai đang chờ duyệt/)).toBeInTheDocument();
+    expect(screen.getByText(`Mang đến: ${TD.name} (2 vỏ)`)).toBeInTheDocument();
+    expect(screen.getByText('Chưa chọn điểm — mang đến một trong các điểm nhận ở trên (1 vỏ)')).toBeInTheDocument();
+    expect(screen.queryByText(/bên dưới/)).toBeNull();
+  });
+
+  it('chỉ một điểm hoặc điểm cũ dự phòng: yêu cầu không gắn điểm vẫn trỏ xuống thẻ "Điểm nhận vỏ" bên dưới, không có dòng "ở trên"', async () => {
+    const pending = [{ id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING' as const, createdAt: CREATED_AT, pickupLocation: null }];
+    mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickupLocations: [Q1], history: pending }));
+    const one = renderPage();
+    expect(await screen.findByText(/Mang đúng số vỏ đã khai đến điểm nhận bên dưới/)).toBeInTheDocument();
+    expect(screen.getByText('Điểm nhận vỏ')).toBeInTheDocument();
+    expect(screen.queryByText(/Chưa chọn điểm/)).toBeNull();
+    one.unmount();
+
+    mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickupLocations: [], pickup: { address: 'Kho Tubu', hours: null, phone: null }, history: pending }));
+    renderPage();
+    expect(await screen.findByText(/Mang đúng số vỏ đã khai đến điểm nhận bên dưới/)).toBeInTheDocument();
+    expect(screen.queryByText(/Chưa chọn điểm/)).toBeNull();
+  });
+
   it('không có nút/điều khiển lồng nhau và mọi lựa chọn có vùng chạm >= 44px', async () => {
     mocks.getRefillSummary.mockResolvedValue(SUMMARY({ pickupLocations: [Q1, TD, BT] }));
     const { container } = renderPage();

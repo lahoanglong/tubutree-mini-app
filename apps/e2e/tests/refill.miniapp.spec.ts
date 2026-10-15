@@ -96,4 +96,23 @@ test.describe('Đổi vỏ chai — nhiều điểm nhận', () => {
     await expect(page.getByText('Cửa hàng Quận 1')).toBeVisible();
     expect(loads).toBeGreaterThanOrEqual(2);
   });
+
+  test('yêu cầu chờ duyệt tạo trước khi có điểm nhận (không gắn điểm), từ hai điểm: nhắc chọn trong các điểm ở trên, không nói "bên dưới"', async ({ page, api }) => {
+    mockRefill(api, {
+      ...BASE,
+      history: [{ id: 'br-old', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: '2026-10-01T03:00:00.000Z', pickupLocation: null }],
+    });
+    await page.goto('/refill');
+
+    const note = page.getByText('Chưa chọn điểm — mang đến một trong các điểm nhận ở trên');
+    await expect(note).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Bạn có 2 vỏ chai đang chờ duyệt/)).toBeVisible();
+    await expect(page.getByText(/điểm nhận bên dưới/)).toHaveCount(0);
+    await expect(page.getByRole('radiogroup', { name: 'Chọn điểm nhận vỏ' })).toBeVisible();
+
+    const box = await note.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box && viewport && box.x >= 0 && box.x + box.width <= viewport.width).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
 });
