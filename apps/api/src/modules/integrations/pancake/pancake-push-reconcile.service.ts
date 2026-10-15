@@ -2,7 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
-import { awaitsGomdonWaybill, PANCAKE_CANCEL, PANCAKE_PUSH, PANCAKE_PUSHABLE_STATUSES, PancakeOrderService } from './pancake-order.service';
+import {
+  awaitsGomdonWaybill,
+  PANCAKE_CANCEL,
+  PANCAKE_CANCEL_REFUSED_PREFIX,
+  PANCAKE_PUSH,
+  PANCAKE_PUSHABLE_STATUSES,
+  PancakeOrderService,
+} from './pancake-order.service';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { ATTENTION_PUSH_FAILED, flagPancakeAttention } from './pancake-attention';
 import { TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
@@ -43,6 +50,14 @@ export class PancakePushReconcileService {
   static readonly FOLLOW_UP_WINDOW_HOURS = 72;
   /** Huỷ trên Pancake: thử lại với đơn đặt trong chừng này ngày (đơn chưa giao có thể nằm kho lâu hơn 72 giờ). */
   static readonly CANCEL_FOLLOW_UP_DAYS = 14;
+  /**
+   * Đơn đã bị đẩy lỗi từng này lượt (mỗi lượt claim cộng 1, nút "Đẩy lại" đặt về 0) thì cron chỉ thử lại mỗi
+   * SLOW_RETRY_MINUTES: Pancake từ chối dứt khoát (4xx) hay chập kéo dài không nên bị gõ cửa mỗi 15 phút suốt 72 giờ.
+   */
+  static readonly SLOW_RETRY_AFTER_ATTEMPTS = 20;
+  static readonly SLOW_RETRY_MINUTES = 60;
+  /** Pancake đã trả lời và từ chối lệnh huỷ (đơn chưa bàn giao): người đã được báo huỷ tay, cron chỉ hỏi lại thưa. */
+  static readonly CANCEL_REFUSED_RETRY_HOURS = 6;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -73,6 +88,7 @@ export class PancakePushReconcileService {
       const cutoff = new Date(Date.now() - PancakePushReconcileService.STALE_MINUTES * 60_000);
       const maxAge = new Date(Date.now() - PancakePushReconcileService.MAX_AGE_HOURS * 3_600_000);
       const giveUpCutoff = new Date(Date.now() - PancakePushReconcileService.GOMDON_GIVE_UP_MINUTES * 60_000);
+      const slowCutoff = new Date(Date.now() - PancakePushReconcileService.SLOW_RETRY_MINUTES * 60_000);
       const stale = await this.prisma.order.findMany({
         where: {
           pancakeOrderId: null,
@@ -87,6 +103,7 @@ export class PancakePushReconcileService {
             { NOT: DEALER_AWAITING_STOCK_WHERE },
             // Trả trước qua cổng chưa có tiền: chờ thanh toán (lật PAID tự xếp đẩy), không chiếm lô.
             { NOT: { paymentStatus: { not: 'PAID' }, paymentMethod: { in: GATEWAY_METHODS } } },
+            { OR: [{ pancakePushAttempts: { lt: PancakePushReconcileService.SLOW_RETRY_AFTER_ATTEMPTS } }, { pancakeLastAttemptAt: { lt: slowCutoff } }] },
           ],
         },
         select: {
@@ -108,6 +125,17 @@ export class PancakePushReconcileService {
       });
       if (stale.length === 0) return;
       this.logger.warn(`Phát hiện ${stale.length} đơn chưa đẩy Pancake sau ${PancakePushReconcileService.STALE_MINUTES} phút — re-enqueue.`);
+      // Đóng dấu "đã xét" cho cả lô: đơn thoát trước bước claim (thiếu người nhận, không có dòng hàng Pancake, còn chờ vận đơn
+      // Gomdon) không bao giờ có mốc thử nên luôn đứng đầu `nulls first` và chiếm hết lô, đơn thật cần thử lại bị bỏ đói. Bỏ qua đơn
+      // đang PUSHING: mốc đó là hạn thuê quyền đẩy, kéo dài nó làm tiến trình đã chết giữ đơn lâu hơn.
+      await this.prisma.order.updateMany({
+        where: {
+          id: { in: stale.map((o) => o.id) },
+          pancakeOrderId: null,
+          OR: [{ pancakePushStatus: null }, { pancakePushStatus: { not: PANCAKE_PUSH.PUSHING } }],
+        },
+        data: { pancakeLastAttemptAt: new Date() },
+      });
       for (const order of stale) {
         try {
           if (isDealerAwaitingStock(order)) continue;
@@ -200,14 +228,21 @@ export class PancakePushReconcileService {
   private async retryCancels(): Promise<void> {
     try {
       const now = Date.now();
+      const refusedQuiet = new Date(now - PancakePushReconcileService.CANCEL_REFUSED_RETRY_HOURS * 3_600_000);
+      const refused = { pancakeSyncError: { startsWith: PANCAKE_CANCEL_REFUSED_PREFIX } };
       const due = await this.prisma.order.findMany({
         where: {
           status: 'CANCELLED',
           ...TUBU_FULFILLED_ORDER_WHERE,
-          pancakeCancelStatus: { in: [PANCAKE_CANCEL.PENDING, PANCAKE_CANCEL.FAILED] },
-          // updatedAt đổi theo mỗi lần thử (ghi lỗi) nên chỉ dùng để chừa job đang chạy; cửa sổ tính từ ngày đặt.
+          // updatedAt đổi theo mỗi lần thử (ghi lỗi) nên dùng làm mốc "lần thử gần nhất"; cửa sổ tính từ ngày đặt.
           updatedAt: { lt: new Date(now - PancakePushReconcileService.STALE_MINUTES * 60_000) },
           createdAt: { gte: new Date(now - PancakePushReconcileService.CANCEL_FOLLOW_UP_DAYS * 86_400_000) },
+          OR: [
+            { pancakeCancelStatus: PANCAKE_CANCEL.PENDING },
+            // Mất kết nối/hết lượt: thử lại như trước. Pancake từ chối dứt khoát: hỏi lại thưa (người đã được báo huỷ tay).
+            { pancakeCancelStatus: PANCAKE_CANCEL.FAILED, OR: [{ pancakeSyncError: null }, { NOT: refused }] },
+            { pancakeCancelStatus: PANCAKE_CANCEL.FAILED, ...refused, updatedAt: { lt: refusedQuiet } },
+          ],
         },
         select: { id: true, code: true },
         take: PancakePushReconcileService.BATCH_SIZE,

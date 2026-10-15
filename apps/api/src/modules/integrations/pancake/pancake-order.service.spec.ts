@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { PANCAKE_CANCEL, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
+import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
-import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
+import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError } from './pancake-outbound';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -615,6 +615,23 @@ describe('PancakeOrderService.cancelOnPancake (PANCAKE-2, D1)', () => {
     await expect(t.svc.cancelOnPancake('o1', true)).rejects.toThrow('ECONNRESET');
     expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.FAILED);
     expect(t.row().pancakeAttention).toContain('HUỶ TAY');
+  });
+
+  it('SYNC-5: Pancake từ chối lệnh huỷ dứt khoát → FAILED + "HUỶ TAY" ngay lượt đầu, lý do mang dấu từ chối để cron hỏi lại thưa', async () => {
+    const getOrder = jest.fn().mockResolvedValue({ id: 'pk-1', status: 1 });
+    const updateOrder = jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 400 khi huỷ: đơn đã xuất kho', false));
+    const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' }, { client: { getOrder, updateOrder } });
+    await expect(t.svc.cancelOnPancake('o1', false)).rejects.toBeInstanceOf(PancakeCancelRefusedError);
+    expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.FAILED);
+    expect(t.row().pancakeSyncError).toMatch(new RegExp(`^${PANCAKE_CANCEL_REFUSED_PREFIX}`));
+    expect(t.row().pancakeAttention).toContain('HUỶ TAY');
+  });
+
+  it('SYNC-5: mất kết nối ở lượt chưa cuối → vẫn PENDING, lý do KHÔNG mang dấu từ chối (cron thử lại 15 phút một lần)', async () => {
+    const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' }, { client: { getOrder: jest.fn().mockRejectedValue(new PancakeApiError('ECONNRESET', true)) } });
+    await expect(t.svc.cancelOnPancake('o1', false)).rejects.toThrow('ECONNRESET');
+    expect(t.row().pancakeCancelStatus).not.toBe(PANCAKE_CANCEL.FAILED);
+    expect(t.row().pancakeSyncError).not.toContain(PANCAKE_CANCEL_REFUSED_PREFIX);
   });
 
   it('đã chốt (CANCELLED) → bỏ qua', async () => {
