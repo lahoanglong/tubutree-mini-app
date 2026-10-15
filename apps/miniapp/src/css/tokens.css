@@ -164,18 +164,6 @@ body.with-back-btn .page.page-bleed {
   transform: translate(-50%, -50%);
 }
 
-/* ── Ô chọn/radio ZaUI vẽ 24x24 và chỉ ô <input> trong suốt đó nhận chạm; hitArea() (form.tsx) chừa sẵn 44x44 nhưng
-   vùng thừa không bấm được. Nới <input> ra 10px mỗi phía: vùng chạm 44x44, hình và bố cục không đổi. ── */
-.zaui-checkbox-input,
-.zaui-radio-input {
-  top: -10px;
-  left: -10px;
-  right: auto;
-  bottom: auto;
-  width: calc(100% + 20px);
-  height: calc(100% + 20px);
-}
-
 /* ── Gợi ý cuộn ngang (ScrollRow / SegmentedTabs scroll): mờ mép phía còn nội dung bằng mask nên không
    cần biết màu nền. Thuộc tính data-fade-* do use-scroll-hints.ts bật theo vị trí cuộn. ── */
 .tubu-scroll-fade[data-fade-end] {
