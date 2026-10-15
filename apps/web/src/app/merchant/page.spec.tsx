@@ -391,6 +391,43 @@ describe('cổng đối tác — tạm nghỉ nhận đơn (R2-MERCHANT-13)', ()
   });
 });
 
+describe('cổng đối tác — đại lý giữ gian hàng CTV (isPartner)', () => {
+  const PARTNER_TABS = ['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng', 'Đơn cần giao', 'Đối soát', 'Giao hàng & liên hệ', 'Tài khoản nhận đối soát'];
+  const tabLabels = (root: ParentNode) => Array.from(root.querySelectorAll('[role="tab"]')).map((t) => (t.textContent ?? '').replace(/\d+$/, ''));
+
+  it('CTV + isPartner=true: đủ tab đối tác, đăng sản phẩm, tài khoản nhận đối soát và Tạm nghỉ nhận đơn', async () => {
+    mocks.store = { ...STORE, type: 'CTV', isPartner: true };
+    const root = await mount();
+    expect(tabLabels(root)).toEqual(expect.arrayContaining(PARTNER_TABS));
+    expect(root.textContent).toContain('Sản phẩm riêng');
+    expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).not.toBeNull();
+    await openTab('Sản phẩm');
+    expect(byText(root, 'button', 'Đăng sản phẩm mới')).not.toBeNull();
+    await openTab('Tài khoản nhận đối soát');
+    expect(root.querySelector('#merchant-bank-name')).not.toBeNull();
+  });
+
+  it('CTV + isPartner=false: chỉ ba tab của gian hàng CTV, không có nút tạm nghỉ', async () => {
+    mocks.auth = { user: { role: 'AFFILIATE' }, status: 'authenticated', initialized: true };
+    mocks.store = { ...STORE, type: 'CTV', isPartner: false };
+    const root = await mount();
+    expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
+    expect(byText(root, 'button', 'Tạm nghỉ nhận đơn')).toBeNull();
+  });
+
+  it('MERCHANT không có trường isPartner (phản hồi cũ): vẫn đủ tab đối tác', async () => {
+    mocks.store = { ...STORE, type: 'MERCHANT' };
+    const root = await mount();
+    expect(tabLabels(root)).toEqual(expect.arrayContaining(PARTNER_TABS));
+  });
+
+  it('BRAND không isPartner: không có tab đối tác', async () => {
+    mocks.store = { ...STORE, type: 'BRAND' };
+    const root = await mount();
+    expect(tabLabels(root)).toEqual(['Gian hàng & Subdomain', 'Sản phẩm', 'Đơn qua gian hàng']);
+  });
+});
+
 describe('cổng đối tác — tab Tài khoản nhận đối soát (SELLER-8)', () => {
   it('nói rõ khách trả tiền cho Tubu, không có mã VietQR mẫu; lưu gửi BIN theo ngân hàng chọn và tên viết hoa', async () => {
     const root = await mount();

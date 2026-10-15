@@ -230,6 +230,7 @@ export interface StorefrontDetail {
   subdomain?: string | null;
   customDomain?: string | null;
   type?: string | null;
+  isPartner?: boolean;
   title: string;
   headerNote?: string | null;
   avatarUrl?: string | null;

@@ -48,6 +48,7 @@ import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, ScrollRegion, TOUCH_H } from '@/components/admin/ui';
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from './theme-colors';
 import { formatDate } from '@/lib/format-date';
+import { isPartnerStore } from '@/lib/partner-store';
 import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
@@ -156,7 +157,7 @@ export default function MerchantPage() {
   const authed = status === 'authenticated';
   const storeQ = useQuery({ queryKey: ['merchant-store'], queryFn: getMerchantStore, enabled: authed });
   const store = storeQ.data;
-  const selfFulfils = store?.type === 'MERCHANT';
+  const selfFulfils = isPartnerStore(store);
   // Cùng queryKey/limit với trang 1 của ProductsTab → dùng chung cache. Số trên thẻ KPI đọc meta tổng
   // (ownTotal/resellTotal) — đếm `.length` của trang đầu thì không bao giờ vượt cỡ trang.
   const productsQ = useQuery({ queryKey: ['merchant-products', 1], queryFn: () => getMerchantProducts(1), enabled: authed });
@@ -584,12 +585,12 @@ function StoreSettingsTab({
           <label htmlFor="isPublished" className="cursor-pointer text-xs font-medium text-stone-700">
             <span className="block font-semibold text-stone-900">Xuất bản công khai gian hàng</span>
             Cho phép khách hàng truy cập gian hàng qua subdomain và đường dẫn công khai.
-            {store.type === 'MERCHANT' &&
+            {isPartnerStore(store) &&
               ' Ẩn gian hàng không dừng bán: sản phẩm vẫn hiện ở danh mục chung. Muốn ngừng nhận đơn tự giao, dùng Tạm nghỉ nhận đơn bên dưới.'}
           </label>
         </div>
 
-        {store.type === 'MERCHANT' && <OrdersPauseControl store={store} onUpdated={onUpdated} />}
+        {isPartnerStore(store) && <OrdersPauseControl store={store} onUpdated={onUpdated} />}
 
         {msg && (
           <div

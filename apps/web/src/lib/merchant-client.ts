@@ -6,6 +6,8 @@ import type { AdminOrderItem, Page } from './admin-client';
 export interface MerchantStore {
   id: string;
   type: string;
+  /** API quyết định gian hàng dùng cổng đối tác (MERCHANT, hoặc CTV của đại lý đã duyệt); thiếu = xét theo type. */
+  isPartner?: boolean;
   slug: string;
   subdomain?: string | null;
   customDomain?: string | null;
