@@ -677,7 +677,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
   });
 
-  type FindManyLog = { model: 'order' | 'returnRequest'; args: { where?: { userId?: string }; take?: number }; rows: number };
+  type FindManyLog = { model: 'order' | 'returnRequest'; args: { where?: { userId?: string; OR?: unknown[] }; take?: number }; rows: number; ids: string[] };
 
   /** Chạy `fn` với mọi tx interactive của prisma bị bọc để ghi lại từng order.findMany / returnRequest.findMany (args + số dòng). */
   async function withFindManyLog<T>(fn: () => Promise<T>): Promise<{ result: T; log: FindManyLog[] }> {
@@ -689,7 +689,7 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
           if (prop === 'findMany') {
             return async (args: FindManyLog['args']) => {
               const rows = await (v as (a: unknown) => Promise<unknown[]>).call(target, args);
-              log.push({ model, args, rows: rows.length });
+              log.push({ model, args, rows: rows.length, ids: rows.map((r) => (r as { id?: string }).id ?? '') });
               return rows;
             };
           }
@@ -742,6 +742,35 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     // Không đọc yêu cầu trả của các đơn ngoài 3 trang đã duyệt (35 đơn đủ điều kiện, chỉ 30 được xét).
     const reqRows = log.filter((l) => l.model === 'returnRequest').reduce((s, r) => s + r.rows, 0);
     expect(reqRows).toBeLessThanOrEqual(23);
+  });
+
+  it('(q3) 12 đơn đủ điều kiện CÙNG createdAt, 10 đơn đầu theo id đã trả hết phần có tiền → cặp là hai đơn sau; không đơn nào bị đọc hai lần, nhánh keyset createdAt = x AND id > y chạy thật', async () => {
+    const referrer = await createUser(prisma, { role: 'CUSTOMER' });
+    const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    const sameTime = new Date(Date.now() - 30 * 864e5);
+    const created = [];
+    for (let i = 0; i < 12; i++) created.push(await giftOrder(referee.id, sameTime));
+    await prisma.$executeRaw`UPDATE "orders" SET "createdAt" = ${sameTime.toISOString()}::timestamp WHERE "userId" = ${referee.id}`;
+    const byId = [...created].sort((x, y) => (x.id < y.id ? -1 : 1));
+    for (const o of byId.slice(0, 10)) await returnLines(referee.id, o.code, [{ orderItemId: o.paid.id, quantity: 3 }]);
+
+    const { result, log } = await withFindManyLog(() => rewards.grantReferralOrderReward(referee.id));
+    expect(result).toBe(true);
+    const grant = await prisma.pointsTransaction.findFirstOrThrow({ where: { userId: referrer.id, reason: `REFERRAL_ORDER2:${referee.id}` } });
+    expect(grant.refId).toBe(`${byId[10]!.id}:${byId[11]!.id}`);
+    expect(await balanceOf(referrer.id)).toBe(REWARD);
+
+    const reads = candidateReads(log, referee.id);
+    expect(reads.map((r) => [r.args.take, r.rows])).toEqual([[10, 10], [10, 2]]);
+    // Trang đầu không có điều kiện keyset; trang hai chạy nhánh bằng-createdAt-và-id-lớn-hơn trên đúng đơn cuối trang đầu.
+    expect(reads[0]!.args.where?.OR).toBeUndefined();
+    expect(reads[1]!.args.where?.OR).toEqual([
+      { createdAt: { gt: sameTime } },
+      { createdAt: sameTime, id: { gt: reads[0]!.ids[9] } },
+    ]);
+    const seen = reads.flatMap((r) => r.ids);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen).toEqual(byId.map((o) => o.id));
   });
 
   it('(q2) 25 đơn đủ điều kiện nhưng hai đơn đầu cách nhau quá referral.window_days → không cấp, chỉ đọc một trang ứng viên', async () => {

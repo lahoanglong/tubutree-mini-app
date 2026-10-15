@@ -601,7 +601,7 @@ export class BrandService {
       row.revenue += lineRevenue;
       byProduct.set(product.id, row);
     }
-    const returned = await this.partialReturnAdjustments(orderWhere, hasBrandLine, variationIds, from);
+    const returned = await this.partialReturnAdjustments(brand.id, from, to);
     let deliveredRevenue = deliveredLines._sum.total ?? 0;
     for (const r of returned) {
       const product = productOf.get(r.variationId);
@@ -630,39 +630,42 @@ export class BrandService {
   }
 
   /**
-   * Phần đã trả một phần (đơn vị + giá trị theo `OrderItem.total`) của các dòng thuộc biến thể của nhãn, trong các đơn đã lọt
-   * `orderWhere`. Hai truy vấn gộp cho mọi đơn: yêu cầu trả đã duyệt (chỉ lấy từ `from` vì yêu cầu không thể có trước đơn) rồi
-   * các đơn tương ứng kèm dòng hàng.
+   * Phần đã trả một phần (đơn vị + giá trị theo `OrderItem.total`) của các dòng thuộc nhãn, trong các đơn nằm trong kỳ
+   * [from, to] và không thuộc trạng thái bị loại (cùng bộ lọc `orderWhere` của getOwnedSales). Một truy vấn gom trong DB:
+   * yêu cầu trả đã duyệt (chỉ từ `from` vì yêu cầu không thể có trước đơn) JOIN dòng trả → dòng đơn → biến thể → SP của nhãn,
+   * nên không kéo yêu cầu của nhãn khác và không gửi `IN` danh sách id lớn. `ReturnRequest*` không có quan hệ Prisma tới
+   * Order/OrderItem nên dùng $queryRaw (tham số hoá). Số đơn vị đã trả cộng dồn theo dòng đơn, kẹp ở số lượng dòng.
    */
   private async partialReturnAdjustments(
-    orderWhere: Prisma.OrderWhereInput,
-    hasBrandLine: Prisma.OrderItemListRelationFilter,
-    variationIds: string[],
+    brandId: string,
     from: Date,
+    to: Date,
   ): Promise<{ variationId: string; quantity: number; revenue: number; delivered: boolean }[]> {
-    const requests = await this.prisma.returnRequest.findMany({
-      where: { status: 'APPROVED', fullReturn: false, createdAt: { gte: from } },
-      select: { orderId: true, items: { select: { orderItemId: true, quantity: true } } },
-    });
-    if (requests.length === 0) return [];
-    const qtyByItem = new Map<string, number>();
-    for (const r of requests) {
-      for (const it of r.items) qtyByItem.set(it.orderItemId, (qtyByItem.get(it.orderItemId) ?? 0) + it.quantity);
-    }
-    const orders = await this.prisma.order.findMany({
-      where: { ...orderWhere, id: { in: [...new Set(requests.map((r) => r.orderId))] }, items: hasBrandLine },
-      select: { status: true, items: { select: { id: true, variationId: true, quantity: true, total: true } } },
-    });
-    const brandVariations = new Set(variationIds);
+    // Date → chuỗi ISO UTC rồi ép ::timestamp: cột timestamp(3) lưu UTC, không phụ thuộc múi giờ phiên DB.
+    const rows = await this.prisma.$queryRaw<
+      { variationId: string; quantity: number; total: number; status: string; returned: bigint | number }[]
+    >(Prisma.sql`
+      SELECT oi."variationId" AS "variationId", oi."quantity" AS "quantity", oi."total" AS "total",
+             o."status"::text AS "status", SUM(ri."quantity") AS "returned"
+      FROM "return_requests" rr
+      JOIN "return_request_items" ri ON ri."returnRequestId" = rr."id"
+      JOIN "order_items" oi ON oi."id" = ri."orderItemId" AND oi."orderId" = rr."orderId"
+      JOIN "orders" o ON o."id" = oi."orderId"
+      JOIN "variations" v ON v."id" = oi."variationId"
+      JOIN "products" p ON p."id" = v."productId"
+      WHERE rr."status" = 'APPROVED' AND rr."fullReturn" = false
+        AND rr."createdAt" >= ${from.toISOString()}::timestamp
+        AND p."brandId" = ${brandId}
+        AND o."createdAt" >= ${from.toISOString()}::timestamp AND o."createdAt" <= ${to.toISOString()}::timestamp
+        AND NOT (o."status"::text = ANY(${[...SALES_ORDER_STATUS_EXCLUDED]}::text[]))
+        AND NOT (o."paymentStatus"::text = ANY(${[...SALES_ORDER_PAYMENT_EXCLUDED]}::text[]))
+      GROUP BY oi."id", oi."variationId", oi."quantity", oi."total", o."status"`);
     const out: { variationId: string; quantity: number; revenue: number; delivered: boolean }[] = [];
-    for (const order of orders) {
-      for (const it of order.items) {
-        if (!brandVariations.has(it.variationId)) continue;
-        const q = Math.min(qtyByItem.get(it.id) ?? 0, it.quantity);
-        if (q <= 0 || it.quantity <= 0) continue;
-        const revenue = q >= it.quantity ? it.total : Math.round((it.total * q) / it.quantity);
-        out.push({ variationId: it.variationId, quantity: q, revenue, delivered: order.status === 'DELIVERED' });
-      }
+    for (const r of rows) {
+      const q = Math.min(Number(r.returned), r.quantity);
+      if (q <= 0 || r.quantity <= 0) continue;
+      const revenue = q >= r.quantity ? r.total : Math.round((r.total * q) / r.quantity);
+      out.push({ variationId: r.variationId, quantity: q, revenue, delivered: r.status === 'DELIVERED' });
     }
     return out;
   }

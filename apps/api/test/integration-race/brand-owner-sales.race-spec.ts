@@ -177,6 +177,71 @@ describe('BrandService.getOwnedSales (real Postgres)', () => {
       expect(out.topProducts[0]).toMatchObject({ quantity: 0, revenue: 0 });
     });
 
+    it('yêu cầu trả APPROVED của đơn NGOÀI kỳ, đơn CANCELLED/RETURNED, đơn chỉ có hàng NHÃN KHÁC → số của nhãn KHÔNG đổi', async () => {
+      const { owner, p, items, ret } = await scenario();
+      await ret([{ id: items[0]!.id, quantity: 1 }]);
+      const asOf = new Date(Date.now() + 60_000);
+      const before = await brands.getOwnedSales(owner.id, '30d', asOf);
+      expect(before).toMatchObject({ unitsSold: 3, revenue: 300_000 });
+
+      const customer = await createUser(prisma);
+      const other = await product(null, 'SP nhan khac', 1);
+      const noisy = async (status: OrderStatus, paymentStatus: PaymentStatus, v: { id: string }, createdAt?: Date) => {
+        const o = await createOrder(prisma, {
+          userId: customer.id, status, paymentStatus, total: 300_000, createdAt,
+          items: { create: [line(v, 'Nhieu', 3, 300_000)] },
+        });
+        const it = await prisma.orderItem.findFirstOrThrow({ where: { orderId: o.id } });
+        await prisma.returnRequest.create({
+          data: { orderId: o.id, userId: customer.id, reason: 'IT', status: 'APPROVED', fullReturn: false, items: { create: [{ orderItemId: it.id, quantity: 2 }] } },
+        });
+      };
+      const mine = p.variations[0]!;
+      await noisy('DELIVERED', 'PAID', mine, new Date(Date.now() - 40 * DAY));
+      await noisy('CANCELLED', 'UNPAID', mine);
+      await noisy('RETURNED', 'PAID', mine);
+      await noisy('PENDING_PAYMENT', 'UNPAID', mine);
+      await noisy('DELIVERED', 'REFUNDED', mine);
+      await noisy('DELIVERED', 'PAID', other.variations[0]!);
+
+      expect(await brands.getOwnedSales(owner.id, '30d', asOf)).toEqual(before);
+    });
+
+    it('nhãn có yêu cầu trả của hàng chục nghìn đơn nhãn khác: không đọc/IN theo cả nền tảng, số của nhãn đúng', async () => {
+      const { owner, items, ret } = await scenario();
+      await ret([{ id: items[0]!.id, quantity: 1 }]);
+      const customer = await createUser(prisma);
+      const other = await product(null, 'SP nen tang', 1);
+      const N = 33_000;
+      const pre = `itbo-${randCode(6)}-`;
+      try {
+        await prisma.$executeRaw`
+          INSERT INTO "orders" ("id", "code", "userId", "type", "status", "subtotal", "total", "paymentMethod", "paymentStatus", "shippingAddress", "updatedAt")
+          SELECT ${pre} || g, ${`ITO${randCode(6)}-`} || g, ${customer.id}, 'RETAIL', 'DELIVERED', 1000, 1000, 'COD', 'PAID', '{}'::jsonb, now()
+          FROM generate_series(1, ${N}) AS g`;
+        await prisma.$executeRaw`
+          INSERT INTO "order_items" ("id", "orderId", "variationId", "productName", "variationName", "unitPrice", "quantity", "total")
+          SELECT ${pre} || 'i' || g, ${pre} || g, ${other.variations[0]!.id}, 'x', 'x', 500, 2, 1000 FROM generate_series(1, ${N}) AS g`;
+        await prisma.$executeRaw`
+          INSERT INTO "return_requests" ("id", "orderId", "userId", "reason", "status", "fullReturn")
+          SELECT ${pre} || 'r' || g, ${pre} || g, ${customer.id}, 'IT', 'APPROVED', false FROM generate_series(1, ${N}) AS g`;
+        await prisma.$executeRaw`
+          INSERT INTO "return_request_items" ("id", "returnRequestId", "orderItemId", "quantity")
+          SELECT ${pre} || 'q' || g, ${pre} || 'r' || g, ${pre} || 'i' || g, 1 FROM generate_series(1, ${N}) AS g`;
+        const findMany = jest.spyOn(prisma.returnRequest, 'findMany');
+        try {
+          const out = await brands.getOwnedSales(owner.id, '30d');
+          expect(out).toMatchObject({ unitsSold: 3, revenue: 300_000, orderCount: 1 });
+          expect(findMany).not.toHaveBeenCalled();
+        } finally {
+          findMany.mockRestore();
+        }
+      } finally {
+        await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "userId" = ${customer.id}`;
+        await prisma.$executeRaw`DELETE FROM "orders" WHERE "userId" = ${customer.id}`;
+      }
+    });
+
     it('yêu cầu chưa duyệt / bị từ chối / trả nốt (fullReturn) không bị trừ ở đây', async () => {
       const { owner, items, ret } = await scenario();
       await ret([{ id: items[0]!.id, quantity: 1 }], { status: 'REQUESTED' });
