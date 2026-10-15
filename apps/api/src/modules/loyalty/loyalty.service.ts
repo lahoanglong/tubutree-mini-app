@@ -281,16 +281,25 @@ export class LoyaltyService {
     // đã trừ vào orders.total nên phần đó tự không tính hạng (spec PD-3 2.6). Lật config
     // loyalty.earn_points_on_xu=true thì đơn XU cũ lại được tính vào hạng.
     const earnOnXu = (await this.config.get<boolean>('loyalty.earn_points_on_xu', false)) === true;
-    const spentAgg = await this.prisma.order.aggregate({
-      where: {
-        userId,
-        status: 'DELIVERED',
-        createdAt: { gte: since },
-        ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
-      },
-      _sum: { total: true },
-    });
-    const spent12m = spentAgg._sum.total ?? 0;
+    const spendWhere: Prisma.OrderWhereInput = {
+      userId,
+      status: 'DELIVERED',
+      createdAt: { gte: since },
+      ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
+    };
+    const spentAgg = await this.prisma.order.aggregate({ where: spendWhere, _sum: { total: true } });
+    // Đơn đã giao chỉ trả một phần vẫn DELIVERED với nguyên tổng tiền: trừ phần đã hoàn. Đơn sau đó trả nốt thành RETURNED nên
+    // không còn trong spendWhere, và các lần trả trước của nó không bị trừ khỏi đơn khác.
+    const partialReturns = await this.partialReturnsByOrder(userId, since);
+    let spent12m = spentAgg._sum.total ?? 0;
+    if (partialReturns.size > 0) {
+      const partiallyReturned = await this.prisma.order.findMany({
+        where: { ...spendWhere, id: { in: [...partialReturns.keys()] } },
+        select: { id: true, total: true },
+      });
+      for (const o of partiallyReturned) spent12m -= Math.min(o.total, partialReturns.get(o.id)?.refunded ?? 0);
+      spent12m = Math.max(0, spent12m);
+    }
 
     // Hạng xét theo điểm ĐÃ TÍCH trong 12 tháng, KHÔNG phải số dư còn lại. Trước đây dùng
     // `user.pointsBalance`: tiêu điểm lúc thanh toán (hoặc điểm hết hạn) kéo số dư xuống dưới
@@ -299,7 +308,7 @@ export class LoyaltyService {
     // (P2, docs/2026-09-08-review-progress.md). Cùng cửa sổ 12 tháng với tiêu chí chi tiêu nên
     // hạng vẫn phản ánh mức độ hoạt động gần đây, không thành hạng vĩnh viễn.
     // CHỈ điểm từ đơn đã giao (trừ phần đơn đó bị trả/huỷ) — xem tierPoints.
-    const earned12m = await this.tierPoints(userId, since);
+    const earned12m = await this.tierPoints(userId, since, partialReturns);
 
     let qualified = tiers[0];
     for (const t of tiers) {
@@ -379,8 +388,13 @@ export class LoyaltyService {
    *
    * Chỉ khớp ORDER_REVERSED theo đơn có dòng giao TRONG cửa sổ: đơn giao trước cửa sổ (điểm giao
    * không còn được tính) bị trả trong cửa sổ không trừ lần nữa.
+   *
+   * Đơn chỉ trả MỘT PHẦN (D3) vẫn DELIVERED với nguyên dòng ORDER_DELIVERED: trừ phần điểm tích đã thu hồi theo các lần trả
+   * (ReturnRequest.pointsReversed, không phải delta của dòng RETURN_REVERSED: dòng đó bị chặn bởi số dư nên khách đã tiêu hết
+   * điểm thì không có dòng nào, mà phần hàng đã trả vẫn không thuộc hạng). Đơn đã có ORDER_REVERSED bị bỏ nguyên, nên các lần
+   * trả trước của nó không bị trừ thêm lần nữa.
    */
-  private async tierPoints(userId: string, since: Date): Promise<number> {
+  private async tierPoints(userId: string, since: Date, partialReturns?: Map<string, PartialReturnSum>): Promise<number> {
     const delivered = await this.prisma.pointsTransaction.findMany({
       where: {
         userId,
@@ -402,7 +416,36 @@ export class LoyaltyService {
     // chỉ thu hồi phần còn lại của lô (điểm đã hết hạn hay đã tiêu thì delta nhỏ hơn, có khi 0) nhưng đơn đã trả thì
     // chi tiêu của nó không còn thuộc hạng.
     const reversedOrders = new Set(reversed.map((r) => r.refId));
-    return delivered.reduce((sum, r) => (r.refId && reversedOrders.has(r.refId) ? sum : sum + r.delta), 0);
+    let kept = 0;
+    const keptByOrder = new Map<string, number>();
+    for (const r of delivered) {
+      if (!r.refId) kept += r.delta;
+      else if (!reversedOrders.has(r.refId)) keptByOrder.set(r.refId, (keptByOrder.get(r.refId) ?? 0) + r.delta);
+    }
+    if (keptByOrder.size === 0) return kept;
+    const returned = partialReturns ?? (await this.partialReturnsByOrder(userId, since));
+    for (const [orderId, points] of keptByOrder) kept += Math.max(0, points - (returned.get(orderId)?.pointsReversed ?? 0));
+    return kept;
+  }
+
+  /**
+   * Phần đã hoàn của các lần trả MỘT PHẦN đã duyệt (D3), cộng theo đơn: tiền hàng + phí ship, và Điểm Xanh tích đã thu hồi.
+   * Yêu cầu fullReturn không tính (đơn đó đã RETURNED và tự loại khỏi hạng); cùng bộ lọc với partialReturnTotals. Người gửi
+   * yêu cầu luôn là chủ đơn (OrderReturnsService.request).
+   */
+  private async partialReturnsByOrder(userId: string, since: Date): Promise<Map<string, PartialReturnSum>> {
+    const rows = await this.prisma.returnRequest.findMany({
+      where: { userId, status: 'APPROVED', fullReturn: false, createdAt: { gte: since } },
+      select: { orderId: true, refundAmount: true, shippingRefund: true, pointsReversed: true },
+    });
+    const byOrder = new Map<string, PartialReturnSum>();
+    for (const r of rows) {
+      const sum = byOrder.get(r.orderId) ?? { refunded: 0, pointsReversed: 0 };
+      sum.refunded += (r.refundAmount ?? 0) + r.shippingRefund;
+      sum.pointsReversed += r.pointsReversed;
+      byOrder.set(r.orderId, sum);
+    }
+    return byOrder;
   }
 
   /**
@@ -1272,6 +1315,12 @@ export class LoyaltyService {
 }
 
 // ───────────────────────── Hằng số & helper thuần ─────────────────────────
+
+/** Tổng phần đã hoàn của các lần trả một phần của một đơn (xem LoyaltyService.partialReturnsByOrder). */
+interface PartialReturnSum {
+  refunded: number;
+  pointsReversed: number;
+}
 
 const DAY_MS = 864e5;
 
