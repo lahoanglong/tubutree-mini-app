@@ -401,7 +401,7 @@ export class MerchantFulfilmentService {
   private async merchantStore(userId: string) {
     const store = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId },
-      select: { id: true, type: true, title: true, ownerUserId: true, owner: { select: { role: true } } },
+      select: { id: true, type: true, isPartner: true, title: true, ownerUserId: true },
     });
     if (!store || !isPartnerStore(store)) {
       throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có đơn cần giao.');
@@ -994,8 +994,7 @@ export class MerchantFulfilmentService {
     const store = await this.prisma.storefront.findUnique({
       where: { id: storefrontId },
       select: {
-        id: true, type: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true,
-        owner: { select: { role: true } },
+        id: true, type: true, isPartner: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true,
       },
     });
     if (!store || !isPartnerStore(store)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
@@ -1292,7 +1291,7 @@ export class MerchantFulfilmentService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${termsLockKey(storefrontId)}))`;
       const before = await tx.storefront.findUnique({
         where: { id: storefrontId },
-        select: { type: true, owner: { select: { role: true } }, commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
+        select: { type: true, isPartner: true, commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
       });
       if (!before || !isPartnerStore(before)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
       const defaultPct = await defaultCommissionPctIn(tx);

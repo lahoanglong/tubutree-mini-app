@@ -896,7 +896,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const res = await svc.adminOverview(NOW);
     expect(prisma.storefront.findMany.mock.calls[0][0].where).toEqual({
       AND: [
-        { OR: [{ type: 'MERCHANT' }, { type: 'CTV', owner: { role: 'DEALER' } }] },
+        { OR: [{ type: 'MERCHANT' }, { isPartner: true }] },
         { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }] },
       ],
     });

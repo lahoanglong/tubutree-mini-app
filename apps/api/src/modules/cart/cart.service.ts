@@ -62,6 +62,7 @@ export class CartService {
                         ownerUserId: true,
                         type: true,
                         ordersPausedAt: true,
+                        isPartner: true,
                         owner: { select: { role: true, isBlocked: true } },
                       },
                     },
@@ -201,7 +202,7 @@ export class CartService {
             name: true,
             fulfilment: true,
             storefront: {
-              select: { title: true, type: true, ordersPausedAt: true, owner: { select: { role: true, isBlocked: true } } },
+              select: { title: true, type: true, ordersPausedAt: true, isPartner: true, owner: { select: { role: true, isBlocked: true } } },
             },
           },
         },

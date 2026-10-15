@@ -320,6 +320,10 @@ export class CheckoutService {
       }
     }
     const storefrontSlug = storefront?.slug ?? null;
+    // Chủ gian hàng đối tác không hưởng hoa hồng giới thiệu trên đơn con do chính gian hàng của mình giao (mua hàng của anh ta qua
+    // slug CTV của anh ta); đơn con hàng của người bán khác vẫn ghi hoa hồng như cũ.
+    const referrerFor = (fulfiller: { ownerUserId: string | null }) =>
+      referrerUserId && fulfiller.ownerUserId === referrerUserId ? null : referrerUserId;
 
     const { cart, user, address, computed } = await this.compute(
       userId,
@@ -454,7 +458,7 @@ export class CheckoutService {
                 paymentMethod,
                 paymentStatus: paid ? 'PAID' : 'UNPAID',
                 shippingAddress: this.addressSnapshot(address),
-                referrerUserId,
+                referrerUserId: referrerFor(shipment.fulfiller),
                 storefrontSlug,
                 storefrontId: storefront?.id ?? null,
                 fulfiller: shipment.fulfiller.kind === 'MERCHANT' ? 'MERCHANT' : 'TUBU',
@@ -621,7 +625,7 @@ export class CheckoutService {
               props: { orderId: order.id, method: paymentMethod, amount: order.total, secsFromPlaced: 0 },
             });
           }
-          if (referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
+          if (order.referrerUserId) await this.affiliate.createCommissionForOrder(order.id, tx);
         }
         // Dọn giỏ cùng tx với đơn (vẫn dưới khoá giỏ). Checkout TẬP CON: chỉ xoá món ĐÃ mua, giữ phần còn lại và mã giảm giá.
         if (Array.isArray(dto.itemIds) && dto.itemIds.length > 0) {
@@ -710,7 +714,7 @@ export class CheckoutService {
         this.logger.error(`Gửi thông báo lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
       }
       // CTV nhận tin có đơn mới từ link của mình — gửi sau commit vì hoa hồng được tạo trong tx của đơn.
-      if (referrerUserId) {
+      if (order.referrerUserId) {
         try {
           await this.affiliate.notifyCommissionCreated(order.id);
         } catch (err) {

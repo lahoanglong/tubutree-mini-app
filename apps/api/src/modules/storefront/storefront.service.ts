@@ -154,13 +154,13 @@ export class StorefrontService {
       await assertIdentifierAvailable(this.prisma, sub, sf.id);
       dto.subdomain = sub;
     }
-    // Chỉ gian hàng MERCHANT tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
+    // Chỉ gian hàng đối tác tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
     // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
     // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
     // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
     const data: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(dto)) {
-      if (v === undefined || (sf.type !== 'MERCHANT' && k.startsWith('warehouse'))) continue;
+      if (v === undefined || (!isPartnerStore(sf) && k.startsWith('warehouse'))) continue;
       data[k] = k !== 'title' && typeof v === 'string' && v.trim() === '' ? null : v;
     }
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
@@ -230,7 +230,7 @@ export class StorefrontService {
         isPublished: true,
       },
       include: {
-        owner: { select: { referralCode: true, role: true } },
+        owner: { select: { referralCode: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -268,6 +268,7 @@ export class StorefrontService {
       subdomain: sf.subdomain,
       customDomain: sf.customDomain,
       type: sf.type,
+      isPartner: isPartnerStore(sf),
       title: sf.title,
       headerNote: sf.headerNote,
       avatarUrl: sf.avatarUrl,

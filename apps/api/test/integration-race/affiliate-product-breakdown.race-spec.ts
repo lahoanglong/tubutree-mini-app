@@ -140,4 +140,63 @@ describe('AffiliateService.productCommissionBreakdown partial returns (real Post
     expect(await read()).toEqual({ honey: 78_000 });
     expect(await total()).toBe(78_000);
   });
+
+  describe('tổng các dòng luôn bằng Commission.amount', () => {
+    async function line(orderId: string, name: string, rate: number | null, total: number, blocked = false) {
+      const v = await variation(rate ?? 0);
+      if (blocked) await prisma.product.update({ where: { id: v.productId }, data: { affiliateBlocked: true } });
+      const item = await prisma.orderItem.create({
+        data: { orderId, variationId: v.id, productName: `${name} ${orderId}`, variationName: 'v', unitPrice: total, quantity: 1, total },
+      });
+      return { v, item };
+    }
+
+    async function order(total: number) {
+      const ctv = await createUser(prisma, { role: 'AFFILIATE' });
+      const buyer = await createUser(prisma);
+      const o = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', paymentStatus: 'PAID', total, referrerUserId: ctv.id });
+      return { ctv, o };
+    }
+
+    const sumOf = async (ctvId: string) => (await affiliate.productCommissionBreakdown(ctvId)).reduce((a, r) => a + r.commission, 0);
+
+    it('(a) dòng bị chặn affiliate không có khoá trong lineAmounts: không hiện hoa hồng ma dù biến thể còn mức 10%', async () => {
+      const { ctv, o } = await order(300_000);
+      const ok = await line(o.id, 'OK', 10, 100_000);
+      await line(o.id, 'BLOCKED', 10, 200_000, true);
+      await prisma.commission.create({
+        data: { affiliateUserId: ctv.id, orderId: o.id, orderTotal: 300_000, commissionableTotal: 100_000, rate: 5, amount: 10_000, status: 'LOCKED', lineAmounts: { [ok.item.id]: 10_000 } },
+      });
+      const rows = await affiliate.productCommissionBreakdown(ctv.id);
+      expect(rows.map((r) => [r.productName.split(' ')[0], r.commission])).toEqual([['OK', 10_000]]);
+      expect(await sumOf(ctv.id)).toBe(10_000);
+    });
+
+    it('(b) mức % của biến thể bị gỡ sau khi đặt: vẫn hiện đúng hoa hồng đã lưu', async () => {
+      const { ctv, o } = await order(100_000);
+      const ok = await line(o.id, 'OK', 10, 100_000);
+      await prisma.commission.create({
+        data: { affiliateUserId: ctv.id, orderId: o.id, orderTotal: 100_000, commissionableTotal: 100_000, rate: 10, amount: 10_000, status: 'PENDING', lineAmounts: { [ok.item.id]: 10_000 } },
+      });
+      await prisma.variation.update({ where: { id: ok.v.id }, data: { affiliateRate: null } });
+      const rows = await affiliate.productCommissionBreakdown(ctv.id);
+      expect(rows.map((r) => r.commission)).toEqual([10_000]);
+      expect(await sumOf(ctv.id)).toBe(10_000);
+    });
+
+    it.each([
+      ['mức % hiện tại thấp hơn lúc đặt', 5, 100_000],
+      ['mức % hiện tại cao hơn lúc đặt', 20, 100_000],
+      ['mức % đã bị gỡ (hiện tại 0) nhưng còn dòng khác có mức', 0, 100_000],
+    ])('hoa hồng cũ không có lineAmounts, %s: tổng vẫn bằng Commission.amount', async (_name, nowRate) => {
+      const { ctv, o } = await order(300_000);
+      const a = await line(o.id, 'A', 10, 100_000);
+      await line(o.id, 'B', 10, 200_000);
+      await prisma.commission.create({
+        data: { affiliateUserId: ctv.id, orderId: o.id, orderTotal: 300_000, commissionableTotal: 300_000, rate: 10, amount: 30_000, status: 'APPROVED' },
+      });
+      await prisma.variation.update({ where: { id: a.v.id }, data: { affiliateRate: nowRate } });
+      expect(await sumOf(ctv.id)).toBe(30_000);
+    });
+  });
 });

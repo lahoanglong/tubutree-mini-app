@@ -536,7 +536,7 @@ export class OrderReturnsService {
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
     const owner = await this.prisma.order.findUnique({
       where: { id: req.orderId },
-      select: { fulfiller: true, fulfillerStorefront: { select: { ownerUserId: true, type: true, owner: { select: { role: true } }, title: true } } },
+      select: { fulfiller: true, fulfillerStorefront: { select: { ownerUserId: true, type: true, isPartner: true, title: true } } },
     });
     const merchantOrder = owner?.fulfiller === 'MERCHANT';
     if (actor.kind === 'ADMIN' && merchantOrder) {

@@ -832,11 +832,25 @@ describe('MerchantService', () => {
     });
 
     it('đại lý còn gian hàng loại CTV: lưu được kho gửi hàng, không đổi loại gian hàng', async () => {
-      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: true, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
       await svc.updateStore('u1', { warehousePhone: '0955555555' } as never);
       const data = storefrontUpdate.mock.calls[0][0].data;
       expect(data).toHaveProperty('warehousePhone', '0955555555');
       expect(data).not.toHaveProperty('type');
+    });
+
+    it('đại lý có gian hàng CTV chưa có cờ: lần vào Cổng đầu tiên bật isPartner, không đổi loại', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: false, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
+      await svc.updateStore('u1', { warehousePhone: '0955555555' } as never);
+      expect(storefrontUpdate.mock.calls[0][0]).toEqual({ where: { id: 'sf-c' }, data: { isPartner: true } });
+      expect(storefrontUpdate.mock.calls[1][0].data).toHaveProperty('warehousePhone', '0955555555');
+      expect(storefrontUpdate.mock.calls.every(([a]) => !('type' in a.data))).toBe(true);
+    });
+
+    it('CTV thường (không phải đại lý) không được bật cờ', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', isPartner: false, ownerUserId: 'u1', title: 'CTV', collections: [] }, 'AFFILIATE');
+      await svc.updateStore('u1', { title: 'Mới' });
+      expect(storefrontUpdate.mock.calls.every(([a]) => !('isPartner' in a.data))).toBe(true);
     });
   });
 

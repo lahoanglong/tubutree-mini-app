@@ -30,6 +30,7 @@ export interface ProductFulfiller {
 type FulfillerStore = {
   title: string;
   type: string;
+  isPartner?: boolean;
   shippingFee: number | null;
   freeShipFrom: number | null;
   ordersPausedAt: Date | null;
@@ -253,6 +254,7 @@ export class CatalogService {
             shippingFee: true,
             freeShipFrom: true,
             ordersPausedAt: true,
+            isPartner: true,
             owner: { select: { role: true, isBlocked: true } },
           },
         },

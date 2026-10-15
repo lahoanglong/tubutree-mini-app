@@ -1,4 +1,6 @@
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -26,6 +28,8 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
+import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
+import { freezeDefaultCommissionChange } from '../../src/modules/merchant/merchant-terms-history';
 import { createUser, randCode, setConfig, warmPool } from './helpers';
 
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000);
@@ -44,6 +48,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
   let fulfilment: MerchantFulfilmentService;
   let storefrontSvc: StorefrontService;
   let admin: AdminService;
+  let returns: OrderReturnsService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -61,6 +66,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
         CashbackService,
         OrderReversalService,
         OrderStatusService,
+        OrderReturnsService,
         MerchantFulfilmentService,
         MerchantService,
         StorefrontService,
@@ -91,6 +97,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
     merchant = moduleRef.get(MerchantService);
     fulfilment = moduleRef.get(MerchantFulfilmentService);
     storefrontSvc = moduleRef.get(StorefrontService);
+    returns = moduleRef.get(OrderReturnsService);
     const none = {} as never;
     admin = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, none, none, none);
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
@@ -159,12 +166,15 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
 
     const after = await prisma.storefront.findUniqueOrThrow({ where: { id: store.id }, include: { collections: true } });
     expect(after.type).toBe('CTV');
+    expect(after.isPartner).toBe(true);
     expect(after.slug).toBe(store.slug);
     expect(after.collections).toHaveLength(1);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe('DEALER');
 
     const publicPage = await storefrontSvc.getPublicBySlug(store.slug);
     expect(publicPage.referralCode).toBe(user.referralCode);
+    expect(publicPage).toMatchObject({ type: 'CTV', isPartner: true });
+    expect(await merchant.getOrCreateStore(user.id)).toMatchObject({ type: 'CTV', isPartner: true });
 
     await expect(checkOwnProducts(merchant, user.id)).rejects.toBeInstanceOf(NotFoundException);
     const product = await merchant.createProduct(user.id, { name: `Cây IT ${tag}`, description: 'IT', basePrice: 100_000, stock: 10 });
@@ -234,5 +244,126 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
 
     expect(got.id).toBe(store.id);
     expect((await prisma.storefront.findUniqueOrThrow({ where: { id: store.id } })).type).toBe('CTV');
+  });
+  async function dealerWithDeliveredOrder() {
+    const { user, store, tag } = await ctvWithStore();
+    await approveAsDealer(user.id, tag);
+    const own = await merchant.createProduct(user.id, { name: `Cây IT ${tag}`, description: 'IT', basePrice: 100_000, stock: 50 });
+    await prisma.product.update({ where: { id: own.id }, data: { approvalStatus: 'APPROVED' } });
+    const ownVar = own.variations[0]!;
+    const b = await buyer();
+    await cart.addItem(b.u.id, { variationId: ownVar.id, quantity: 2 });
+    const [order] = await place(b.u.id, b.addr.id);
+    expect(order).toMatchObject({ fulfiller: 'MERCHANT', fulfillerStorefrontId: store.id });
+    await fulfilment.accept(user.id, order!.id);
+    await fulfilment.pack(user.id, order!.id);
+    await fulfilment.ship(user.id, order!.id, { carrier: 'GHN', trackingCode: `IT${randCode(6)}` });
+    await fulfilment.deliver(user.id, order!.id);
+    await prisma.order.update({ where: { id: order!.id }, data: { deliveredAt: ago(10) } });
+    const req = await prisma.returnRequest.create({
+      data: { orderId: order!.id, userId: b.u.id, reason: 'IT', status: 'APPROVED', refundAmount: 100_000, fullReturn: false, reviewedAt: new Date() },
+    });
+    await prisma.returnRequestItem.create({ data: { returnRequestId: req.id, orderItemId: order!.items[0]!.id, quantity: 1, refundAmount: 100_000 } });
+    return { user, store, tag, order: order!, ownVar, returnId: req.id };
+  }
+
+  it('đối tác bền: đại lý bị đổi vai trò (AFFILIATE rồi ADMIN) vẫn xử lý đơn, nhận hàng trả, đối soát, hiện ở tổng quan admin, hàng vẫn giao được, phí sàn mặc định vẫn đóng băng', async () => {
+    const { user, store, order, ownVar, returnId } = await dealerWithDeliveredOrder();
+    const adminUser = await createUser(prisma, { role: 'ADMIN' });
+
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'AFFILIATE' } });
+    expect((await fulfilment.listOrders(user.id, undefined)).data.map((o) => o.id)).toContain(order.id);
+    expect((await fulfilment.adminOverview()).stores.map((x) => x.storefrontId)).toContain(store.id);
+    await expect(returns.markReceivedByMerchant(user.id, returnId)).resolves.toMatchObject({ id: returnId });
+
+    const b2 = await buyer();
+    await cart.addItem(b2.u.id, { variationId: ownVar.id, quantity: 1 });
+    const [order2] = await place(b2.u.id, b2.addr.id);
+    expect(order2).toMatchObject({ fulfiller: 'MERCHANT', fulfillerStorefrontId: store.id });
+
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
+    expect((await fulfilment.listOrders(user.id, undefined)).data.length).toBeGreaterThan(0);
+    expect((await fulfilment.adminOverview()).stores.map((x) => x.storefrontId)).toContain(store.id);
+    const frozen = await prisma.$transaction((tx) => freezeDefaultCommissionChange(tx, 0.1, 0.2, new Date(), adminUser.id));
+    expect(frozen).toBeGreaterThanOrEqual(1);
+    expect(await prisma.storefrontTermsHistory.count({ where: { storefrontId: store.id } })).toBeGreaterThanOrEqual(1);
+    const payout = await fulfilment.createPayout(adminUser.id, store.id);
+    expect(payout.lines.length).toBeGreaterThan(0);
+
+    const after = await prisma.storefront.findUniqueOrThrow({ where: { id: store.id } });
+    expect(after).toMatchObject({ type: 'CTV', isPartner: true });
+  });
+
+  it('CTV thường (cờ tắt) vẫn 403 dù có gian hàng; đại lý đã bị đổi vai trò khỏi DEALER không tự tắt cờ', async () => {
+    const { user, store } = await ctvWithStore();
+    expect(store.isPartner).toBe(false);
+    await expect(fulfilment.listOrders(user.id, undefined)).rejects.toMatchObject({ status: 403 });
+    await expect(merchant.createProduct(user.id, { name: 'x', description: 'x', basePrice: 1000, stock: 1 })).rejects.toMatchObject({ status: 403 });
+    expect(await merchant.getOrCreateStore(user.id)).toMatchObject({ type: 'CTV', isPartner: false });
+
+    const d = await ctvWithStore();
+    await prisma.user.update({ where: { id: d.user.id }, data: { role: 'DEALER' } });
+    await merchant.getOrCreateStore(d.user.id);
+    await prisma.user.update({ where: { id: d.user.id }, data: { role: 'AFFILIATE' } });
+    expect(await merchant.getOrCreateStore(d.user.id)).toMatchObject({ type: 'CTV', isPartner: true });
+  });
+
+  it('hợp đồng GET /merchant/store: isPartner theo loại và vai trò, type giữ nguyên', async () => {
+    const fresh = await createUser(prisma, { role: 'DEALER' });
+    expect(await merchant.getOrCreateStore(fresh.id)).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    const aff = await createUser(prisma, { role: 'AFFILIATE' });
+    expect(await merchant.getOrCreateStore(aff.id)).toMatchObject({ type: 'CTV', isPartner: false });
+    const { user, store } = await ctvWithStore();
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'DEALER' } });
+    const got = await merchant.getOrCreateStore(user.id);
+    expect(got).toMatchObject({ id: store.id, type: 'CTV', isPartner: true });
+    expect(await storefrontSvc.getMine(user.id)).toMatchObject({ type: 'CTV', isPartner: true });
+    expect(await storefrontSvc.getPublicBySlug(store.slug)).toMatchObject({ type: 'CTV', isPartner: true });
+  });
+
+  it('migration 20261015190000: thêm cột và điền cờ (MERCHANT, CTV của đại lý = true; CTV của affiliate, BRAND của đại lý = false), chạy lại không đổi', async () => {
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261015190000_r10_storefront_is_partner/migration.sql'), 'utf8');
+    expect(sql).toMatch(/ALTER TABLE "storefronts" ADD COLUMN "isPartner" BOOLEAN NOT NULL DEFAULT false;/);
+    const backfill = sql.slice(sql.indexOf('UPDATE')).trim();
+    const mk = async (role: 'DEALER' | 'AFFILIATE', type: 'CTV' | 'BRAND' | 'MERCHANT') => {
+      const u = await createUser(prisma, { role });
+      const tag = randCode(8).toLowerCase();
+      const s = await prisma.storefront.create({ data: { type, slug: `itmig-${tag}`, ownerUserId: u.id, title: 'IT', isPartner: false } });
+      return s.id;
+    };
+    const ids = {
+      merchant: await mk('DEALER', 'MERCHANT'),
+      ctvDealer: await mk('DEALER', 'CTV'),
+      ctvAffiliate: await mk('AFFILIATE', 'CTV'),
+      brandDealer: await mk('DEALER', 'BRAND'),
+    };
+    const flags = async () =>
+      Object.fromEntries(
+        await Promise.all(Object.entries(ids).map(async ([k, id]) => [k, (await prisma.storefront.findUniqueOrThrow({ where: { id } })).isPartner] as const)),
+      );
+    await prisma.$executeRawUnsafe(backfill);
+    const expected = { merchant: true, ctvDealer: true, ctvAffiliate: false, brandDealer: false };
+    expect(await flags()).toEqual(expected);
+    await prisma.$executeRawUnsafe(backfill);
+    expect(await flags()).toEqual(expected);
+  });
+
+  it('mua hàng của chính đại lý qua slug CTV của anh ta: đơn con của anh ta không có người giới thiệu/hoa hồng; đơn con hàng Tubu cùng lần đặt vẫn ghi hoa hồng', async () => {
+    const { user, store, tag } = await ctvWithStore();
+    await approveAsDealer(user.id, tag);
+    const own = await merchant.createProduct(user.id, { name: `Cây IT ${tag}`, description: 'IT', basePrice: 100_000, stock: 10 });
+    await prisma.product.update({ where: { id: own.id }, data: { approvalStatus: 'APPROVED' } });
+    const tubuVar = await tubuVariation();
+
+    const b = await buyer();
+    await cart.addItem(b.u.id, { variationId: own.variations[0]!.id, quantity: 1 });
+    await cart.addItem(b.u.id, { variationId: tubuVar.id, quantity: 1 });
+    const orders = await place(b.u.id, b.addr.id, store.slug);
+    const merchantOrder = orders.find((o) => o.fulfiller === 'MERCHANT')!;
+    const tubuOrder = orders.find((o) => o.fulfiller === 'TUBU')!;
+    expect(merchantOrder).toMatchObject({ referrerUserId: null, storefrontSlug: store.slug });
+    expect(await prisma.commission.count({ where: { orderId: merchantOrder.id } })).toBe(0);
+    expect(tubuOrder.referrerUserId).toBe(user.id);
+    expect(await prisma.commission.count({ where: { orderId: tubuOrder.id, affiliateUserId: user.id } })).toBe(1);
   });
 });

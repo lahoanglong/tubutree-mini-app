@@ -110,11 +110,13 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
+  const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       $executeRaw: executeRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
+      storefront: { updateMany: storefrontUpdateMany },
       user: {
         update: userUpdate,
         findUnique: jest.fn().mockResolvedValue({ role: opts.applicantRole ?? 'CUSTOMER' }),
@@ -122,7 +124,7 @@ function makeApproveTx(opts: {
       },
     }),
   );
-  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount };
+  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount, storefrontUpdateMany };
 }
 
 describe('AdminService.reviewDealerApplication', () => {
@@ -182,7 +184,7 @@ describe('AdminService.reviewDealerApplication', () => {
   });
 
   it('duyệt hợp lệ → MERGE metadata, KHÔNG xoá segments/onboardedAt (regression)', async () => {
-    const { $transaction, dealerAppUpdateMany, userUpdate } = makeApproveTx({});
+    const { $transaction, dealerAppUpdateMany, userUpdate, storefrontUpdateMany } = makeApproveTx({});
     const prisma = makePrisma({
       dealerApplication: {
         findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }),
@@ -201,6 +203,8 @@ describe('AdminService.reviewDealerApplication', () => {
     const meta = (userUpdate.mock.calls[0][0] as { data: { metadata: Record<string, unknown>; role: string } }).data;
     expect(meta.role).toBe('DEALER');
     expect(meta.metadata).toEqual({ segments: ['mom_baby'], onboardedAt: '2026-01-01', dealerTierId: 't1' });
+    // Gian hàng sẵn có (mọi loại trừ BRAND) được đánh dấu đối tác trong cùng transaction, không đổi loại.
+    expect(storefrontUpdateMany).toHaveBeenCalledWith({ where: { ownerUserId: 'u1', type: { not: 'BRAND' } }, data: { isPartner: true } });
   });
 
   // R4-ADMIN-6: duyệt đổi vai trò người nộp sang DEALER — người nộp là admin thì đây là một lần hạ quyền admin.
