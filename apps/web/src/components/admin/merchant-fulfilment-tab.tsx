@@ -23,6 +23,14 @@ import { useNarrowScreen } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
 
 const SLA_LABEL = { CONFIRM_OVERDUE: 'Quá hạn xác nhận', SHIP_OVERDUE: 'Quá hạn gửi hàng', DELIVER_OVERDUE: 'Quá hạn giao' } as const;
+
+/**
+ * Đơn quá hạn xác nhận vẫn ở CONFIRMED (Tubu đã nhận đơn, gian hàng chưa nhận): nhãn trạng thái chung "Đã xác nhận" đứng cạnh
+ * "Quá hạn xác nhận" nghe như tự mâu thuẫn và không chỉ ra đơn đang kẹt ở gian hàng.
+ */
+export function overdueStatusText(d: { status: string; sla: { state: string | null } }): string {
+  return d.sla.state === 'CONFIRM_OVERDUE' ? 'Chờ gian hàng xác nhận' : (ORDER_STATUS_LABELS[d.status] ?? d.status);
+}
 const signed = (n: number) => (n < 0 ? `−${formatVnd(-n)}` : formatVnd(n));
 
 type OverviewStore = MerchantFulfilmentOverview['stores'][number];
@@ -184,7 +192,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm }: { onOpenCons
               <li key={d.id} className="flex flex-wrap items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
                 <span className="font-semibold text-stone-900">{d.code}</span>
                 {d.sla.state && <ToneBadge tone="danger">{SLA_LABEL[d.sla.state]}</ToneBadge>}
-                <span className="text-stone-600">{ORDER_STATUS_LABELS[d.status] ?? d.status}</span>
+                <span className="text-stone-600">{overdueStatusText(d)}</span>
                 <span className="text-stone-600">
                   {d.fulfillerStorefront?.title}
                   {d.fulfillerStorefront?.owner?.phone ? ` · ${d.fulfillerStorefront.owner.phone}` : ''}
