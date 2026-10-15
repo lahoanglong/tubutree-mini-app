@@ -20,8 +20,10 @@ import type { PointsLot, Prisma } from '@prisma/client';
  * thưởng; thưởng xu cũ quy ra điểm bằng legacyXuToPoints trước); mỗi yêu cầu trả thu (mục tiêu − phần đã thu cho đơn đó), kẹp
  * để tổng thu hồi của cả hai đơn không vượt thưởng. Lần trả CẢ ĐƠN sau đó (revokeReferralRewardForOrder) chỉ thu phần còn
  * lại (thưởng − đã thu từng phần, kể cả phần ghi nợ); trả một phần sau khi đã thu hồi cả thì không làm gì.
- * Thu hồi từng phần KHÔNG làm giảm số lượt giới thiệu hợp lệ và KHÔNG đụng mốc thưởng thêm: countReferralSuccesses chỉ trừ
- * dòng REFERRAL_ORDER2_REVOKE (thu hồi hoàn toàn) và revokeLostMilestones chỉ chạy ở đường trả cả đơn.
+ * Thu hồi từng phần CHƯA đủ cả khoản KHÔNG làm giảm số lượt giới thiệu hợp lệ và KHÔNG đụng mốc thưởng thêm:
+ * countReferralSuccesses chỉ trừ dòng REFERRAL_ORDER2_REVOKE (thu hồi hoàn toàn). Thu hồi HOÀN TOÀN = tổng đã thu (điểm đã trừ
+ * + nợ) >= thưởng, dù đạt bằng trả cả đơn hay qua nhiều lần trả một phần (vd 2/3 mỗi đơn, hay trả hết dòng có tiền còn dòng
+ * quà 0đ): lúc đó ghi dòng REFERRAL_ORDER2_REVOKE delta 0 và chạy revokeLostMilestones như đường trả cả đơn.
  * Dòng thu hồi từng phần: refType REFERRAL, reason REFERRAL_ORDER2_PARTIAL_REVOKE:<refereeId>:<yêu cầu trả> (duy nhất theo yêu
  * cầu trả dưới cùng partial unique index theo reason ⇒ chạy lại cùng yêu cầu không trừ lần hai), refId = đơn bị trả; phần
  * thiếu ghi REFERRAL_DEBT reason REFERRAL_ORDER2_PARTIAL_DEBT:<refereeId>:<yêu cầu trả>:<số điểm thiếu>.
@@ -344,26 +346,48 @@ export async function revokeReferralRewardPartially(
     const reason = `${REFERRAL_ORDER2_PARTIAL_REVOKE_PREFIX}${refereeId}:${input.requestId}`;
     if (await hasReferralEntry(tx, [reason])) continue;
     const prior = await readPartialRevocations(tx, referrerId, refereeId);
+    const grantDue = referralGrantDue(grant);
     const due = partialRevokeDue({
-      grantDue: referralGrantDue(grant),
+      grantDue,
       target: partialRevokeTarget(grant, input.returnedGoods, input.orderGoods),
       revokedForOrder: prior.byOrder.get(order.id) ?? 0,
       revokedTotal: prior.total,
     });
-    if (due <= 0) continue;
-    const res = await debitReferralReward(
-      tx,
-      referrerId,
-      grant,
-      reason,
-      order.id,
-      `${REFERRAL_ORDER2_PARTIAL_DEBT_PREFIX}${refereeId}:${input.requestId}`,
-      due,
-    );
-    if (!res) continue;
-    anyRevoked = true;
-    total.revoked += res.revoked;
-    total.shortfall += res.shortfall;
+    if (due > 0) {
+      const res = await debitReferralReward(
+        tx,
+        referrerId,
+        grant,
+        reason,
+        order.id,
+        `${REFERRAL_ORDER2_PARTIAL_DEBT_PREFIX}${refereeId}:${input.requestId}`,
+        due,
+      );
+      if (!res) continue;
+      anyRevoked = true;
+      total.revoked += res.revoked;
+      total.shortfall += res.shortfall;
+    }
+    // Các lần trả một phần đã thu đủ cả khoản (điểm đã trừ + nợ): đó là thu hồi HOÀN TOÀN. Ghi dòng REVOKE delta 0 (cùng
+    // reason với đường trả cả đơn nên lần trả cả đơn sau đó thấy và không ghi/thu thêm) để số lượt giới thiệu giảm, rồi thu
+    // các mốc thưởng thêm không còn đủ lượt.
+    if (grantDue > 0 && prior.total + due >= grantDue) {
+      const closed = await debitReferralReward(
+        tx,
+        referrerId,
+        grant,
+        `${REFERRAL_ORDER2_REVOKE_PREFIX}${refereeId}`,
+        order.id,
+        `REFERRAL_ORDER2_DEBT:${refereeId}`,
+        0,
+      );
+      if (closed) {
+        const milestones = await revokeLostMilestones(tx, referrerId, order.id);
+        anyRevoked = true;
+        total.revoked += milestones.revoked;
+        total.shortfall += milestones.shortfall;
+      }
+    }
   }
   return anyRevoked ? total : null;
 }

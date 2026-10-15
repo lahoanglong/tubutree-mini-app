@@ -14,13 +14,14 @@ import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
 import { partialReturnTotals } from '../../src/modules/orders/return-ledger';
 import { WALLET_DESTINATION } from '../../src/modules/orders/refund-destination';
-import { countReferralSuccesses } from '../../src/modules/wallet/referral-reward';
+import { countReferralSuccesses, milestoneGrantReason } from '../../src/modules/wallet/referral-reward';
 import { createOrder, createUser, randCode, summarize, warmPool, setConfig } from './helpers';
 
 /** Thưởng 100 điểm để thấy rõ phần làm tròn; sổ xu cũ: 5.000 xu = 5 điểm lô quy đổi. */
 const REWARD = 100;
 const LEGACY_REWARD_XU = 5000;
 const UNIT = 50_000;
+const MILESTONE = 20;
 
 /**
  * T1 (chốt 2026-10-15): trả MỘT PHẦN một trong hai đơn đã dùng để thưởng giới thiệu thì thu hồi thưởng của người mời THEO
@@ -201,21 +202,118 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(await balanceOf(referrer.id)).toBe(REWARD - 66);
   });
 
-  it('(d) trả 2/3 cả hai đơn → 66 + 34, tổng không vượt thưởng; trả nốt cả đơn sau đó thu 0 và mới giảm lượt', async () => {
+  /** Mốc thưởng thêm 1 lượt = 20 điểm đang giữ (đời 0). */
+  async function milestoneHeld(referrerId: string) {
+    await prisma.$transaction((tx) =>
+      applyPointsDelta(tx, {
+        userId: referrerId,
+        delta: MILESTONE,
+        lot: 'STANDARD',
+        reason: milestoneGrantReason(referrerId, 1, 0),
+        refType: 'REFERRAL',
+        refId: referrerId,
+      }),
+    );
+  }
+
+  const milestoneRevokes = (referrerId: string) =>
+    prisma.pointsTransaction.findMany({
+      where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: `REFERRAL_MILESTONE_REVOKE:${referrerId}:` } },
+      select: { reason: true, delta: true },
+    });
+
+  it('(d) trả 2/3 cả hai đơn → 66 + 34 = thưởng: thu hồi HOÀN TOÀN nên giảm lượt và thu mốc; trả nốt cả đơn không ghi trùng', async () => {
     const { referrer, referee, a, b } = await rewarded();
+    await milestoneHeld(referrer.id);
     await returnUnits(referee.id, a, 2);
+    expect(await successes(referrer.id)).toBe(1);
     await returnUnits(referee.id, b, 2);
     let r = await revocations(referrer.id);
     expect(r.partial.map((p) => p.delta)).toEqual([-66, -34]);
+    expect(r.full).toEqual([expect.objectContaining({ reason: `REFERRAL_ORDER2_REVOKE:${referee.id}`, delta: 0, refId: b.id })]);
     expect(r.total).toBe(REWARD);
+    expect(await successes(referrer.id)).toBe(0);
+    expect(await milestoneRevokes(referrer.id)).toEqual([{ reason: `REFERRAL_MILESTONE_REVOKE:${referrer.id}:1#0`, delta: -MILESTONE }]);
     expect(await balanceOf(referrer.id)).toBe(0);
-    expect(await successes(referrer.id)).toBe(1);
 
     await returnUnits(referee.id, b, 1);
     r = await revocations(referrer.id);
-    expect(r.full).toEqual([expect.objectContaining({ reason: `REFERRAL_ORDER2_REVOKE:${referee.id}`, delta: 0 })]);
+    expect(r.full).toHaveLength(1);
     expect(r.total).toBe(REWARD);
     expect(await successes(referrer.id)).toBe(0);
+    expect(await milestoneRevokes(referrer.id)).toHaveLength(1);
+  });
+
+  it('(k) đơn có dòng quà 0đ: trả hết dòng có tiền (chưa phải cả đơn) → thu đủ thưởng, giảm lượt, thu mốc; trả nốt dòng quà không thu thêm', async () => {
+    const { referrer, referee } = await rewarded();
+    const first = await deliveredOrder(referee.id, 2, new Date(Date.now() - 20 * 864e5));
+    const v = await variation();
+    const gift = await variation();
+    const second = await createOrder(prisma, {
+      userId: referee.id,
+      status: 'DELIVERED',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      subtotal: 3 * UNIT,
+      shippingFee: 0,
+      total: 3 * UNIT,
+      createdAt: new Date(Date.now() - 15 * 864e5),
+      deliveredAt: new Date(),
+      items: {
+        create: [
+          { variationId: v.id, productName: 'Nước giặt', variationName: 'Chai', unitPrice: UNIT, quantity: 3, total: 3 * UNIT, paidTotal: 3 * UNIT },
+          { variationId: gift.id, productName: 'Quà tặng', variationName: 'Túi', unitPrice: 0, quantity: 1, total: 0, paidTotal: 0 },
+        ],
+      },
+    });
+    // Người được mời thứ hai của cùng người mời, thưởng bằng cặp (first, second).
+    const other = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
+    await prisma.order.updateMany({ where: { id: { in: [first.id, second.id] } }, data: { userId: other.id } });
+    await prisma.$transaction((tx) =>
+      applyPointsDelta(tx, {
+        userId: referrer.id,
+        delta: REWARD,
+        lot: 'STANDARD',
+        reason: `REFERRAL_ORDER2:${other.id}`,
+        refType: 'REFERRAL',
+        refId: `${first.id}:${second.id}`,
+      }),
+    );
+    await prisma.$transaction((tx) =>
+      applyPointsDelta(tx, { userId: referrer.id, delta: MILESTONE, lot: 'STANDARD', reason: milestoneGrantReason(referrer.id, 2, 0), refType: 'REFERRAL', refId: referrer.id }),
+    );
+    expect(await successes(referrer.id)).toBe(2);
+    const items = await prisma.orderItem.findMany({ where: { orderId: second.id } });
+    const paidLine = items.find((i) => i.total > 0)!;
+    const giftLine = items.find((i) => i.total === 0)!;
+
+    const req = await returns.request(other.id, second.code, {
+      reasonCode: 'OTHER',
+      reason: 'Không còn nhu cầu dùng nữa',
+      items: [{ orderItemId: paidLine.id, quantity: 3 }],
+    });
+    await returns.review(admin.id, req.id, { approve: true });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: second.id } })).status).toBe('DELIVERED');
+    const fullRows = async () =>
+      prisma.pointsTransaction.findMany({ where: { userId: referrer.id, refType: 'REFERRAL', reason: `REFERRAL_ORDER2_REVOKE:${other.id}` } });
+    const partialRows = () =>
+      prisma.pointsTransaction.findMany({ where: { userId: referrer.id, refType: 'REFERRAL', reason: { startsWith: `REFERRAL_ORDER2_PARTIAL_REVOKE:${other.id}:` } } });
+    expect((await partialRows()).map((p) => p.delta)).toEqual([-REWARD]);
+    expect((await fullRows()).map((p) => p.delta)).toEqual([0]);
+    expect(await successes(referrer.id)).toBe(1);
+    expect((await milestoneRevokes(referrer.id)).map((m) => m.reason)).toEqual([`REFERRAL_MILESTONE_REVOKE:${referrer.id}:2#0`]);
+
+    const rest = await returns.request(other.id, second.code, {
+      reasonCode: 'OTHER',
+      reason: 'Không còn nhu cầu dùng nữa',
+      items: [{ orderItemId: giftLine.id, quantity: 1 }],
+    });
+    await returns.review(admin.id, rest.id, { approve: true });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: second.id } })).status).toBe('RETURNED');
+    expect((await fullRows()).map((p) => p.delta)).toEqual([0]);
+    expect((await partialRows()).map((p) => p.delta)).toEqual([-REWARD]);
+    expect(await successes(referrer.id)).toBe(1);
+    expect(await balanceOf(referrer.id)).toBe(REWARD);
   });
 
   it('(e) trả 1/3 rồi trả nốt cả đơn → lần cả đơn chỉ thu 67, tổng = thưởng', async () => {
@@ -347,8 +445,10 @@ describe('Thu hồi thưởng giới thiệu theo tỷ lệ khi trả một ph�
     expect(s.errors).toEqual([]);
     const r = await revocations(referrer.id);
     expect(r.partial.map((p) => p.delta).sort((x, y) => x - y)).toEqual([-66, -34]);
+    expect(r.full.map((p) => p.delta)).toEqual([0]);
     expect(r.total).toBe(REWARD);
     expect(await balanceOf(referrer.id)).toBe(0);
+    expect(await successes(referrer.id)).toBe(0);
   });
 
   it('(j2) song song: trả cả đơn đầu + trả một phần đơn thứ hai → không deadlock, tổng thu hồi đúng bằng thưởng', async () => {
