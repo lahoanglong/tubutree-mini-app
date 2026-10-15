@@ -98,9 +98,39 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     expect(r.container.textContent).toContain('05/01/2026 – 31/12/2099');
     typeInto(r.container.querySelector<HTMLInputElement>('input[type="date"]'), '2027-01-05');
     await flush();
+    click(byText(r.container, 'button', 'Lưu hạn'));
+    await flush();
     const patch = api.calls.find((c) => c.init?.method === 'PATCH');
     expect(JSON.parse(String(patch?.init?.body))).toEqual({ endAt: '2027-01-05T16:59:59.000Z' });
     expect(r.container.textContent).toContain('Đã đổi hạn mã SUMMER10 đến hết 05/01/2027.');
+  });
+
+  it('gõ ngày dở dang không gửi gì: chỉ gửi một lần, với ngày cuối cùng, khi bấm "Lưu hạn"', async () => {
+    const api = mockFetch({
+      '/admin/coupons/c1': { body: coupon({ endAt: '2027-01-05T16:59:59.000Z' }) },
+      '/admin/coupons': { body: { data: [coupon()], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const input = r.container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    const save = byText(r.container, 'button', 'Lưu hạn') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    for (const partial of ['0002-01-05', '0020-01-05', '0202-01-05', '2027-01-05']) {
+      typeInto(input, partial);
+      await flush();
+    }
+    expect(input.value).toBe('2027-01-05');
+    expect(api.calls.some((c) => c.init?.method === 'PATCH')).toBe(false);
+    expect(save.disabled).toBe(false);
+
+    click(save);
+    await flush();
+    const patches = api.calls.filter((c) => c.init?.method === 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(JSON.parse(String(patches[0]!.init?.body))).toEqual({ endAt: '2027-01-05T16:59:59.000Z' });
+    expect(input.value).toBe('');
   });
 
   it('lỗi từ server khi đổi hạn (ngày kết thúc trước ngày bắt đầu) hiện nguyên văn tiếng Việt', async () => {
@@ -113,6 +143,8 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     mounted.push(r);
     await flush();
     typeInto(r.container.querySelector<HTMLInputElement>('input[type="date"]'), '2025-01-01');
+    await flush();
+    click(byText(r.container, 'button', 'Lưu hạn'));
     await flush();
     expect(r.container.textContent).toContain('Ngày kết thúc phải sau ngày bắt đầu.');
   });

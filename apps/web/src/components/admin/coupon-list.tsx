@@ -32,6 +32,46 @@ function couponState(c: AdminCoupon, now: number): { label: string; tone: 'succe
 }
 
 /**
+ * Đổi hạn dùng: ngày chọn nằm trong state cục bộ và chỉ gửi khi bấm "Lưu hạn" (hoặc Enter). Ô ngày của trình duyệt báo thay đổi
+ * sau từng chữ số khi gõ tay, nên gửi theo onChange sẽ ghi một hạn nửa chừng (vd năm 0002) vào mã đang chạy.
+ */
+function EndDateForm({
+  coupon: c,
+  pending,
+  onCommit,
+}: {
+  coupon: AdminCoupon;
+  pending: boolean;
+  onCommit: (c: AdminCoupon, dayKey: string, onDone: () => void) => void;
+}) {
+  const [day, setDay] = useState('');
+  return (
+    <form
+      className="flex flex-wrap items-center gap-1 text-xs text-stone-600"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!pending) onCommit(c, day, () => setDay(''));
+      }}
+    >
+      <label className="flex items-center gap-1">
+        Đổi hạn đến
+        <input
+          type="date"
+          aria-label={`Đổi ngày hết hạn mã ${c.code}`}
+          className={FIELD_XS}
+          value={day}
+          disabled={pending}
+          onChange={(e) => setDay(e.target.value)}
+        />
+      </label>
+      <button type="submit" className={BTN_XS_SECONDARY} disabled={pending || !day}>
+        Lưu hạn
+      </button>
+    </form>
+  );
+}
+
+/**
  * Danh sách mã đã tạo (ADMINOPS-8): xem lượt đã dùng, tắt/bật mã bị lộ hay đặt nhầm, gia hạn ngày kết thúc.
  * Voucher cá nhân sinh tự động (chào mừng, sinh nhật, mua chung...) không hiện trừ khi tìm đúng mã.
  */
@@ -69,11 +109,11 @@ export function CouponList() {
     patch.mutate({ id: c.id, body: { isActive: !c.isActive }, done: c.isActive ? `Đã tắt mã ${c.code}.` : `Đã bật lại mã ${c.code}.` });
   };
 
-  const extend = (c: AdminCoupon, dayKey: string) => {
+  const extend = (c: AdminCoupon, dayKey: string, onDone: () => void) => {
     if (!dayKey) return;
     setMsg(null);
     const endAt = new Date(`${dayKey}T23:59:59+07:00`).toISOString();
-    patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${formatDate(endAt)}.` });
+    patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${formatDate(endAt)}.` }, { onSuccess: onDone });
   };
 
   const total = q.data?.meta.total ?? 0;
@@ -137,16 +177,7 @@ export function CouponList() {
                 <button type="button" className={BTN_XS_SECONDARY} disabled={patch.isPending} onClick={() => void toggle(c)}>
                   {c.isActive ? 'Tắt mã' : 'Bật lại'}
                 </button>
-                <label className="flex items-center gap-1 text-xs text-stone-600">
-                  Đổi hạn đến
-                  <input
-                    type="date"
-                    aria-label={`Đổi ngày hết hạn mã ${c.code}`}
-                    className={FIELD_XS}
-                    disabled={patch.isPending}
-                    onChange={(e) => extend(c, e.target.value)}
-                  />
-                </label>
+                <EndDateForm coupon={c} pending={patch.isPending} onCommit={extend} />
               </div>
             </li>
           );
