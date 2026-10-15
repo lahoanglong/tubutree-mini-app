@@ -426,7 +426,7 @@ export class OrdersService {
     await this.notifications
       .notify(userId, 'ORDER_CANCELLED', {
         order_code: code,
-        refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack),
+        refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack, !!order.placedForCustomer),
       })
       .catch(() => undefined);
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {

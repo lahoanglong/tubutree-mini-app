@@ -1493,8 +1493,9 @@ model OrderCustomerRefund {
   /// Khoá chống tạo trùng trong cùng (đơn, loại): id yêu cầu trả hàng (RETURN), kênh + mã giao dịch
   /// (LATE_PAYMENT, OVERPAYMENT), rỗng cho loại chỉ có một lần mỗi đơn (END_CUSTOMER, CANCEL).
   refKey          String               @default("")
-  /// Chủ đơn — khách thấy khoản này ở chi tiết đơn và tự chọn nơi nhận. Null với END_CUSTOMER (khách cuối có
-  /// thể không có tài khoản).
+  /// Chủ đơn — khách thấy khoản này ở chi tiết đơn và tự chọn nơi nhận. Null với mọi khoản của đơn CTV lên hộ
+  /// (END_CUSTOMER, và trả hàng / tiền về muộn / trả dư của đơn đó): tiền là của khách cuối, CTV không thấy và
+  /// không chọn nơi nhận; SĐT + tên người nhận nằm ở phone / recipientName.
   userId          String?
   amount          Int
   phone           String? // SĐT khách cuối dạng nội địa 0xxxxxxxxx (endCustomerKey / snapshot)

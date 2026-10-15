@@ -59,8 +59,11 @@ export const CUSTOMER_REFUND_KINDS: { kind: AdminCustomerRefundKind | ''; label:
 
 export const refundKindLabel = (kind: AdminCustomerRefundKind) => CUSTOMER_REFUND_KINDS.find((k) => k.kind === kind)?.label ?? kind;
 
-/** Khoản của khách có tài khoản phải chuyển về tài khoản ngân hàng; khoản khách cuối đơn CTV chuyển theo SĐT. */
-export const needsBankAccount = (r: Pick<AdminCustomerRefund, 'kind'>) => r.kind !== 'END_CUSTOMER';
+/**
+ * Khoản của khách có tài khoản phải chuyển về tài khoản ngân hàng; khoản khách cuối đơn CTV chuyển theo SĐT. Khách cuối của đơn
+ * hộ không có chủ tài khoản (userId null) kể cả khi khoản là trả hàng, tiền về muộn hay trả dư — cùng luật với API.
+ */
+export const needsBankAccount = (r: Pick<AdminCustomerRefund, 'kind' | 'userId'>) => r.kind !== 'END_CUSTOMER' && r.userId !== null;
 
 const REASON_LABEL: Record<string, string> = {
   CANCELLED: 'Đơn bị huỷ',
