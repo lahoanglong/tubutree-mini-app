@@ -11,8 +11,18 @@ export interface RefillHistoryItem {
   /** Có khi nhân viên ghi nhận ít vỏ hơn khách khai: số khách khai ban đầu (`quantity` lúc này là số thực nhận). */
   declaredQuantity?: number | null;
   rejectionReason?: string | null;
-  /** Điểm khách đã chọn lúc gửi; null/thiếu ở yêu cầu cũ hoặc API cũ. */
-  pickupLocation?: { id: string; name: string } | null;
+  /** Điểm khách đã chọn lúc gửi; null/thiếu ở yêu cầu cũ. Các trường sau tên chỉ có ở API mới (kể cả điểm admin đã tắt). */
+  pickupLocation?: RefillHistoryLocation | null;
+}
+
+/** Điểm gắn với một yêu cầu trong lịch sử. `isActive=false`: admin đã tắt điểm sau khi khách gửi (không còn trong danh sách chọn). */
+export interface RefillHistoryLocation {
+  id: string;
+  name: string;
+  address?: string | null;
+  hours?: string | null;
+  phone?: string | null;
+  isActive?: boolean;
 }
 
 /** Điểm nhận vỏ do admin điền ở Cấu hình hệ thống; trường nào trống thì null. */

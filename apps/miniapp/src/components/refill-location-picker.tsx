@@ -9,19 +9,26 @@ interface CallProps {
   onCall: (phone: string) => void | Promise<void>;
 }
 
-/** Tên, địa chỉ, giờ của một điểm. Toàn <span> để dùng được cả trong nút chọn (nút chỉ chứa nội dung dạng chữ). */
-function LocationLines({ location }: { location: RefillLocation }) {
+/** Phần thông tin hiện được của một điểm; trường nào trống thì không vẽ. */
+type LocationInfoFields = { name: string; address?: string | null; hours?: string | null; phone?: string | null };
+
+/** Tên (tuỳ chọn), địa chỉ, giờ của một điểm. Toàn <span> để dùng được cả trong nút chọn (nút chỉ chứa nội dung dạng chữ). */
+function LocationLines({ location, showName = true }: { location: LocationInfoFields; showName?: boolean }) {
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
-      <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: 'block' }}>
-        {location.name}
-      </Text>
-      <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <Icon icon={MapPin} size="sm" tone="brand" />
-        <Text variant="body-sm" as="span" style={{ minWidth: 0 }}>
-          {location.address}
+      {showName && (
+        <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: 'block' }}>
+          {location.name}
         </Text>
-      </span>
+      )}
+      {location.address && (
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon icon={MapPin} size="sm" tone="brand" />
+          <Text variant="body-sm" as="span" style={{ minWidth: 0 }}>
+            {location.address}
+          </Text>
+        </span>
+      )}
       {location.hours && (
         <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <Icon icon={Clock} size="sm" tone="brand" />
@@ -39,6 +46,24 @@ function CallButton({ phone, onCall }: { phone: string } & CallProps) {
     <Button variant="secondary" icon={Phone} onPress={() => void onCall(phone)}>
       {`Gọi ${phone}`}
     </Button>
+  );
+}
+
+/**
+ * Địa chỉ, giờ và nút gọi của một điểm KHÔNG kèm tên (tên đã có ở dòng tiêu đề bên trên) — dùng cho yêu cầu đang chờ gắn với
+ * điểm không còn trong danh sách chọn. Trường nào trống thì ẩn; không có gì để hiện thì không vẽ gì.
+ */
+export function RefillLocationDetails({ location, onCall }: { location: LocationInfoFields } & CallProps) {
+  if (!location.address && !location.hours && !location.phone) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+      <LocationLines location={location} showName={false} />
+      {location.phone && (
+        <div>
+          <CallButton phone={location.phone} onCall={onCall} />
+        </div>
+      )}
+    </div>
   );
 }
 
