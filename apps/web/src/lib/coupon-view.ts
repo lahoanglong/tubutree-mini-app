@@ -17,14 +17,12 @@ export const isFreeshipRedundant = (c: Pick<CouponDTO, 'type'>, shippingFee?: nu
   c.type === 'FREESHIP' && shippingFee === 0;
 
 /**
- * Dòng "Giảm X cho đơn này" tính từ số khách đang thấy: % trên tạm tính (kẹp mức tối đa), tiền cố định không quá tạm tính, freeship
- * khi đã biết phí vận chuyển. Chưa biết số (giỏ hàng chưa có phí ship, mã đã dùng hết) thì không nói gì thay vì đoán.
+ * Dòng "Giảm X cho đơn này" tính từ số khách đang thấy: % trên tạm tính (kẹp mức tối đa), tiền cố định không quá tạm tính.
+ * Mã freeship (chỉ miễn kiện Tubu) và mã chỉ áp cho vài sản phẩm (API tính trên các dòng đó, web không có tiền từng dòng)
+ * thì không nói số thay vì đoán.
  */
-export function couponSavingLabel(
-  c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>,
-  subtotal: number,
-  shippingFee?: number | null,
-): string | null {
+export function couponSavingLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount' | 'products'>, subtotal: number): string | null {
+  if (c.products?.length) return null;
   let saving: number;
   let capped = false;
   if (c.type === 'PERCENT') {
@@ -33,8 +31,6 @@ export function couponSavingLabel(
     saving = capped ? c.maxDiscount! : raw;
   } else if (c.type === 'AMOUNT') {
     saving = Math.min(c.value, subtotal);
-  } else if (shippingFee != null && shippingFee > 0) {
-    saving = c.value > 0 ? Math.min(c.value, shippingFee) : shippingFee;
   } else {
     return null;
   }

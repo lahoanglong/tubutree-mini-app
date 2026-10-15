@@ -96,7 +96,15 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ cho đơn này');
   });
 
-  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì nói tiết kiệm bao nhiêu', async () => {
+  it('R6-BUYER-12: mã chỉ áp cho vài sản phẩm không nói số tiền giảm (API tính trên các dòng đó, không phải cả giỏ)', async () => {
+    state.coupons = [
+      c('GBUY', { type: 'AMOUNT', value: 17250, maxDiscount: null, products: [{ id: 'p1', name: 'Hạt chia' }] }),
+    ];
+    const box = card(await mount(438000), 'GBUY');
+    expect(box.textContent).not.toContain('cho đơn này');
+  });
+
+  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì vẫn dùng được và không đoán số tiền', async () => {
     state.coupons = [c('SHIP', { type: 'FREESHIP', value: 0, maxDiscount: null })];
     const free = card(await mount(438000, 0), 'SHIP');
     expect(free.querySelector('button')!.disabled).toBe(true);
@@ -107,7 +115,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
 
     const paid = card(await mount(438000, 30000), 'SHIP');
     expect(paid.querySelector('button')!.disabled).toBe(false);
-    expect(paid.textContent).toContain('Giảm 30.000đ cho đơn này');
+    expect(paid.textContent).not.toContain('cho đơn này');
   });
 
   it('mã dùng được xếp trước mã chưa đủ điều kiện; bấm Dùng mã áp đúng mã', async () => {

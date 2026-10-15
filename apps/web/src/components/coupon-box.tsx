@@ -124,7 +124,7 @@ export function CouponBox({
                     const redundant = isFreeshipRedundant(c, shippingFee);
                     const meetsMin = isCouponEligible(c, subtotal);
                     const eligible = meetsMin && !redundant;
-                    const saving = eligible ? couponSavingLabel(c, subtotal, shippingFee) : null;
+                    const saving = eligible ? couponSavingLabel(c, subtotal) : null;
                     return (
                       <li
                         key={c.code}
