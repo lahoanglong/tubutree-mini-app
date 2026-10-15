@@ -65,7 +65,7 @@ function reviewConflict(code: string, message: string) {
 function staleEditReview() {
   return reviewConflict(
     MERCHANT_PRODUCT_EDIT_STALE,
-    'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.',
+    'Bản sửa này vừa được xử lý hoặc đối tác vừa sửa tiếp nên không còn là bản bạn đang xem.',
   );
 }
 
@@ -100,7 +100,7 @@ function pancakeCodeChanged(current: string | null) {
     statusCode: 409,
     error: 'Conflict',
     code: PANCAKE_CODE_CHANGED,
-    message: `Đối tác vừa đổi mã Pancake của sản phẩm này${current ? ` sang ${current}` : ''}, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.`,
+    message: `Đối tác vừa đổi mã Pancake của sản phẩm này${current ? ` sang ${current}` : ''}, khác với mã bạn đang xem. Hãy xem lại sản phẩm sẽ bị chuyển rồi mới duyệt.`,
   });
 }
 

@@ -192,7 +192,7 @@ export async function linkTubuFulfilledVariation(
       statusCode: 409,
       error: 'Conflict',
       code: PANCAKE_TAKEOVER_CHANGED,
-      message: `Mã ${target.pancakeId} giờ thuộc sản phẩm đang bán "${target.productName}", không phải sản phẩm bạn đã xác nhận chuyển. Tải lại danh sách để xem lại rồi mới duyệt.`,
+      message: `Mã ${target.pancakeId} giờ thuộc sản phẩm đang bán "${target.productName}", không phải sản phẩm bạn đã xác nhận chuyển. Hãy xem lại rồi mới duyệt.`,
     });
   }
 

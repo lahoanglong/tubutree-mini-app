@@ -1416,7 +1416,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const res = mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-A', takeoverProductId: 'tubu-x' });
       await expect(res).rejects.toBeInstanceOf(ConflictException);
       await expect(res).rejects.toMatchObject({
-        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại danh sách') }),
+        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Hãy xem lại') }),
       });
       expect(updateMany).not.toHaveBeenCalled();
       expect(variationUpdateMany).not.toHaveBeenCalled();
