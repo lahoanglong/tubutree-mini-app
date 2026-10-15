@@ -978,6 +978,12 @@ export class MerchantService {
     // Storefront hoặc Brand) rồi thay điều kiện dưới đây bằng kiểm tra cờ đó.
     const role = await this.getCallerRole(userId);
     if (role !== 'ADMIN') {
+      // Đơn không thuộc gian hàng của người gọi (kể cả đơn tự giao của gian hàng khác) thì không được biết nó có tồn tại.
+      const own = await this.prisma.order.findFirst({
+        where: { id: orderId, ...(await this.resolveMerchantOrderFilter(userId)) },
+        select: { id: true },
+      });
+      if (!own) throw new NotFoundException('Không tìm thấy đơn của gian hàng bạn.');
       throw new ForbiddenException(
         'Đơn hàng do kho Tubu Tree xử lý giao nhận; đối tác không thể tự chuyển trạng thái tại đây.',
       );

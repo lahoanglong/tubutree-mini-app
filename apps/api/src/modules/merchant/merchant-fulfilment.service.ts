@@ -523,6 +523,7 @@ export class MerchantFulfilmentService {
   /** Đối tác huỷ trước khi giao cho đơn vị vận chuyển (cùng mốc D1: chưa SHIPPING). */
   async cancel(userId: string, orderId: string, reason: string) {
     const { store, order } = await this.ownOrder(userId, orderId);
+    if (order.status === 'CANCELLED') throw new ConflictException('Đơn này đã được huỷ.');
     if (order.status !== 'CONFIRMED' && order.status !== 'PACKED') {
       throw new BadRequestException('Đơn đã gửi đi thì không huỷ được; nếu khách không nhận, chọn "Giao không thành công".');
     }
