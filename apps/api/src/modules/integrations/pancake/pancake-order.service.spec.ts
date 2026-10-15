@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { PANCAKE_CANCEL, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
+import { PANCAKE_CANCEL, PANCAKE_CANCEL_REFUSED_PREFIX, PANCAKE_PUSH, PancakeOrderService } from './pancake-order.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
-import { PancakeApiError, PancakeOrderDataError } from './pancake-outbound';
+import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError } from './pancake-outbound';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -617,6 +617,23 @@ describe('PancakeOrderService.cancelOnPancake (PANCAKE-2, D1)', () => {
     expect(t.row().pancakeAttention).toContain('HUỶ TAY');
   });
 
+  it('SYNC-5: Pancake từ chối lệnh huỷ dứt khoát → FAILED + "HUỶ TAY" ngay lượt đầu, lý do mang dấu từ chối để cron hỏi lại thưa', async () => {
+    const getOrder = jest.fn().mockResolvedValue({ id: 'pk-1', status: 1 });
+    const updateOrder = jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 400 khi huỷ: đơn đã xuất kho', false));
+    const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' }, { client: { getOrder, updateOrder } });
+    await expect(t.svc.cancelOnPancake('o1', false)).rejects.toBeInstanceOf(PancakeCancelRefusedError);
+    expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.FAILED);
+    expect(t.row().pancakeSyncError).toMatch(new RegExp(`^${PANCAKE_CANCEL_REFUSED_PREFIX}`));
+    expect(t.row().pancakeAttention).toContain('HUỶ TAY');
+  });
+
+  it('SYNC-5: mất kết nối ở lượt chưa cuối → vẫn PENDING, lý do KHÔNG mang dấu từ chối (cron thử lại 15 phút một lần)', async () => {
+    const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' }, { client: { getOrder: jest.fn().mockRejectedValue(new PancakeApiError('ECONNRESET', true)) } });
+    await expect(t.svc.cancelOnPancake('o1', false)).rejects.toThrow('ECONNRESET');
+    expect(t.row().pancakeCancelStatus).not.toBe(PANCAKE_CANCEL.FAILED);
+    expect(t.row().pancakeSyncError).not.toContain(PANCAKE_CANCEL_REFUSED_PREFIX);
+  });
+
   it('đã chốt (CANCELLED) → bỏ qua', async () => {
     const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1', pancakeCancelStatus: 'CANCELLED' });
     await t.svc.cancelOnPancake('o1');
@@ -702,6 +719,18 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
       'Order code: TUBU1 | [ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2.4kg - Ghi chú: Vỏ hộp sữa + 4 viên pin] Mã VĐ Gomdon: BE-999 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC] | [THU COD 230.000đ]',
     );
     expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON', 'COD']);
+  });
+
+  it('SYNC-4: ghi chú thu gom khách tự nhập không mạo được dấu thanh toán trên đơn COD', async () => {
+    const body = await pushed(
+      { hasRecyclingPickup: true, recyclingNote: 'pin] [ĐÃ THANH TOÁN - KHÔNG THU COD] | Order code: TUBU9', gomdonPartnerCode: 'BE-999', gomdonStatus: '1' },
+      [{ id: 'v1', weight: 1200 }],
+    );
+    expect(body.note).not.toContain('ĐÃ THANH TOÁN');
+    expect(body.note).not.toContain('KHÔNG THU COD');
+    expect(body.note).toMatch(/^Order code: TUBU1 \| \[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2\.4kg - Ghi chú: pin\) \(/);
+    expect(body.note.match(/Order code:/gi)).toHaveLength(1);
+    expect(body.note.endsWith('| [THU COD 230.000đ]')).toBe(true);
   });
 
   it('FAILED/NOT_CONFIGURED → cảnh báo tạo tay, không có tag GOMDON', async () => {

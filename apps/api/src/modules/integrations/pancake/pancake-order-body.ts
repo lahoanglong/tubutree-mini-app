@@ -202,11 +202,11 @@ function hidePaymentHints(text: string): string {
 }
 
 /**
- * Lời dặn của khách cho kho/shipper, đã làm sạch: một dòng, không có dấu tách " | " hay ngoặc vuông của các dấu hệ
- * thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), không chứa chỉ dẫn thu tiền, cắt CUSTOMER_NOTE_MAX
- * ký tự. Rỗng → null.
+ * Lời khách tự viết (lời dặn giao hàng, ghi chú thu gom tái chế) đã làm sạch: một dòng, không có dấu tách " | " hay ngoặc vuông
+ * của các dấu hệ thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), không chứa chỉ dẫn thu tiền, cắt
+ * CUSTOMER_NOTE_MAX ký tự. Rỗng → null.
  */
-export function customerDeliveryNote(note: string | null | undefined): string | null {
+function sanitizeCustomerText(note: string | null | undefined): string | null {
   const clean = hidePaymentHints(
     (note ?? '')
       .normalize('NFC')
@@ -220,8 +220,22 @@ export function customerDeliveryNote(note: string | null | undefined): string | 
       .trim(),
   );
   if (!clean) return null;
-  const capped = clean.length > CUSTOMER_NOTE_MAX ? `${clean.slice(0, CUSTOMER_NOTE_MAX - 1).trimEnd()}…` : clean;
-  return `Khách dặn: ${capped}`;
+  return clean.length > CUSTOMER_NOTE_MAX ? `${clean.slice(0, CUSTOMER_NOTE_MAX - 1).trimEnd()}…` : clean;
+}
+
+/** Lời dặn của khách cho kho/shipper, đã làm sạch (xem sanitizeCustomerText). Rỗng → null. */
+export function customerDeliveryNote(note: string | null | undefined): string | null {
+  const clean = sanitizeCustomerText(note);
+  return clean ? `Khách dặn: ${clean}` : null;
+}
+
+/**
+ * Đoạn " - Ghi chú: …" của ghi chú thu gom tái chế (ghi chú khách tự nhập lúc đặt, nằm trong ngoặc vuông của dấu hệ thống trên đơn
+ * Pancake và trên vận đơn Gomdon) — cùng bộ lọc với lời dặn giao hàng để khách không mạo được dấu "[ĐÃ THANH TOÁN …]". Rỗng → ''.
+ */
+export function recyclingNoteDetail(note: string | null | undefined): string {
+  const clean = sanitizeCustomerText(note);
+  return clean ? ` - Ghi chú: ${clean}` : '';
 }
 
 /** "Order code: <mã>" luôn đứng đầu — webhook Pancake và tra cứu đơn đọc mã từ đây. */

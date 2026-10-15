@@ -82,6 +82,8 @@ export class LifecycleService {
       const ratio = await this.config.get<number>('reorder.remind_ratio', 0.8);
       const threshold = new Date(Date.now() - cycleDays * ratio * 864e5);
 
+      // Chỉ đơn bán lẻ khách tự mua: đơn CTV lên hộ mang userId của CTV (người dùng SP là khách của họ) và đơn đại lý là hàng buôn,
+      // người nhận "mua lại" không phải người dùng SP (cùng lọc với ReviewInviteService).
       // Đơn DELIVERED cuối của mỗi (user, variation) đã cũ hơn ngưỡng, CHƯA từng nhắc cho chu kỳ
       // này. Trước đây việc loại cặp đã nhắc chỉ làm ở JS SAU KHI fetch (dưới), nên LIMIT 500
       // (không ORDER BY) có thể toàn bộ là cặp cũ đã nhắc — lãng phí cả lô, cặp mới ngoài 500 dòng
@@ -100,6 +102,8 @@ export class LifecycleService {
         LEFT JOIN reorder_reminders rr
           ON rr."userId" = o."userId" AND rr."variationId" = oi."variationId"
         WHERE o.status::text = 'DELIVERED'
+          AND o.type::text = 'RETAIL'
+          AND o."placedForCustomer" = false
         GROUP BY o."userId", oi."variationId"
         HAVING MAX(o."createdAt") <= ${threshold}
            AND (MAX(rr."remindedAt") IS NULL OR MAX(rr."remindedAt") < MAX(o."createdAt"))

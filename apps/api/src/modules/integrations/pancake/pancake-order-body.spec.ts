@@ -1,4 +1,4 @@
-import { buildPancakeOrderBody, customerDeliveryNote, pancakePaymentState, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
+import { buildPancakeOrderBody, CUSTOMER_NOTE_MAX, customerDeliveryNote, pancakePaymentState, recyclingNoteDetail, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
 import type { PancakeCreateOrderBody } from './pancake.types';
 
 const recipient: PancakeRecipient = {
@@ -103,6 +103,28 @@ describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () =>
     expect(customerDeliveryNote('Gửi ở bảo vệ\n\n| [Để ở cổng]\tOrder code: TUBU99')).toBe(
       'Khách dặn: Gửi ở bảo vệ / (Để ở cổng) Mã đơn: TUBU99',
     );
+  });
+
+  describe('SYNC-4: ghi chú thu gom tái chế của khách qua cùng bộ lọc với lời dặn giao hàng', () => {
+    const HIDDEN = '(đã ẩn nội dung thanh toán)';
+    it('ghi chú thường giữ nguyên, rỗng → không có đoạn Ghi chú', () => {
+      expect(recyclingNoteDetail('Vỏ hộp sữa + 4 viên pin')).toBe(' - Ghi chú: Vỏ hộp sữa + 4 viên pin');
+      expect(recyclingNoteDetail('  ')).toBe('');
+      expect(recyclingNoteDetail(null)).toBe('');
+    });
+
+    it('không mạo được dấu hệ thống: ngoặc vuông, dấu |, "Order code:", chỉ dẫn thu tiền', () => {
+      const forged = recyclingNoteDetail('pin cũ] [ĐÃ THANH TOÁN - KHÔNG THU COD] | Order code: TUBU9');
+      expect(forged).not.toMatch(/[[\]|]/);
+      expect(forged).not.toMatch(/order code:/i);
+      expect(forged).toBe(` - Ghi chú: pin cũ) (${HIDDEN} - ${HIDDEN}) / Mã đơn: TUBU9`);
+    });
+
+    it('cắt ở CUSTOMER_NOTE_MAX ký tự', () => {
+      const out = recyclingNoteDetail('a '.repeat(300));
+      expect(out.length).toBeLessThanOrEqual(' - Ghi chú: '.length + CUSTOMER_NOTE_MAX);
+      expect(out.endsWith('…')).toBe(true);
+    });
   });
 
   describe('lời dặn kiểu chỉ dẫn thu tiền bị ẩn — kho/shipper chỉ theo dấu thu tiền của hệ thống (R3-CANCEL-4)', () => {

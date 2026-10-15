@@ -19,6 +19,7 @@ import {
   buildPancakeOrderBody,
   isPancakePrepaid,
   pancakePaymentState,
+  recyclingNoteDetail,
   type PancakeLinePredicate,
   type PancakeRecipient,
 } from './pancake-order-body';
@@ -66,6 +67,9 @@ export const PANCAKE_CANCEL = {
   TOO_LATE: 'TOO_LATE',
   FAILED: 'FAILED',
 } as const;
+
+/** Mở đầu pancakeSyncError khi Pancake trả lời và từ chối lệnh huỷ (khác mất kết nối): cron thử lại thưa hơn. */
+export const PANCAKE_CANCEL_REFUSED_PREFIX = 'Pancake từ chối lệnh huỷ: ';
 
 /** Trạng thái đơn Tubu còn được tự đẩy sang kho: chưa rời kho, chưa kết thúc. */
 export const PANCAKE_PUSHABLE_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] as const;
@@ -514,11 +518,17 @@ export class PancakeOrderService {
       await this.setCancelStatus(order.id, outcome.kind === 'NOT_FOUND' ? PANCAKE_CANCEL.NOT_FOUND : PANCAKE_CANCEL.CANCELLED);
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_SETTLED_BY_CANCEL);
     } catch (err) {
+      // Pancake đã trả lời và từ chối lệnh huỷ đơn chưa bàn giao: thử lại ngay không đổi được kết quả → chốt luôn, báo huỷ tay.
+      const refused = err instanceof PancakeCancelRefusedError;
+      const terminal = final || refused;
       await this.prisma.order.update({
         where: { id: order.id },
-        data: { pancakeSyncError: pancakeErrorText(err), ...(final ? { pancakeCancelStatus: PANCAKE_CANCEL.FAILED } : {}) },
+        data: {
+          pancakeSyncError: refused ? `${PANCAKE_CANCEL_REFUSED_PREFIX}${pancakeErrorText(err)}` : pancakeErrorText(err),
+          ...(terminal ? { pancakeCancelStatus: PANCAKE_CANCEL.FAILED } : {}),
+        },
       });
-      if (final) {
+      if (terminal) {
         await flagPancakeAttention(
           this.prisma,
           this.alerts,
@@ -692,7 +702,7 @@ export class PancakeOrderService {
     });
     const fallback = await this.recyclingWeightFallback();
     const { maxKg } = recyclingWeight(order.items, new Map(variations.map((v) => [v.id, v.weight])), fallback);
-    const noteDetail = order.recyclingNote?.trim() ? ` - Ghi chú: ${order.recyclingNote.trim()}` : '';
+    const noteDetail = recyclingNoteDetail(order.recyclingNote);
     const recyclingTag = `[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA ${maxKg}kg${noteDetail}]`;
 
     if (order.gomdonPartnerCode) {

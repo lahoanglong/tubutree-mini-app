@@ -581,7 +581,10 @@ export class MerchantService {
     // của đối tác không còn hiện giá của mã cũ cho tới khi duyệt.
     const pancakePrice = codeChanged && codeLink ? { base: codeLink.retailPrice, sale: codeLink.salePrice } : null;
     const basePrice = pancakePrice ? pancakePrice.base : (dto.basePrice ?? product.basePrice);
-    const salePrice = pancakePrice ? pancakePrice.sale : dto.salePrice === undefined ? product.salePrice : dto.salePrice;
+    // Bỏ mã Pancake (tự giao) kèm giá mới: giá khuyến mãi mang từ Pancake sang không còn giá trị, giá đối tác nhập là giá bán duy nhất.
+    // Giữ nó thì khách bị tính giá khuyến mãi cũ trong khi danh sách của đối tác hiện giá mới, hoặc gặp 400 mà form không có ô sửa.
+    const dropsPancakeSale = codeChange === null && dto.basePrice !== undefined && dto.salePrice === undefined;
+    const salePrice = pancakePrice ? pancakePrice.sale : dto.salePrice === undefined ? (dropsPancakeSale ? null : product.salePrice) : dto.salePrice;
     if (!pancakePrice && salePrice != null && salePrice > basePrice) {
       throw new BadRequestException('Giá khuyến mãi không được cao hơn giá gốc.');
     }

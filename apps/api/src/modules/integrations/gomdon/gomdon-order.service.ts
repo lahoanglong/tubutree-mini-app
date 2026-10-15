@@ -13,6 +13,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { GomdonClient } from './gomdon.client';
 import type { GomdonCreateOrderBody, GomdonCreateOrderResponse } from './gomdon.types';
 import { PancakeOrderService, waybillNoteAlert } from '../pancake/pancake-order.service';
+import { recyclingNoteDetail } from '../pancake/pancake-order-body';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
 import { GomdonDuplicateOrderError, GomdonRejectedError, isTransientGomdonRejection } from './gomdon.errors';
@@ -968,7 +969,7 @@ export class GomdonOrderService {
       .map((it) => `${it.productName} (${it.variationName}) x${it.quantity}`)
       .join(', ')
       .slice(0, 250);
-    const recyclingDetail = order.recyclingNote?.trim() ? ` - Ghi chú: ${order.recyclingNote.trim()}` : '';
+    const recyclingDetail = recyclingNoteDetail(order.recyclingNote);
 
     return {
       type: 3, // 3: Đơn đổi hàng (BestExpress)

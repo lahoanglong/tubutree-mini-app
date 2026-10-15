@@ -310,7 +310,7 @@ export class OrderReturnsService {
 
   /** Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. */
   private async toReceiveWhere(): Promise<Prisma.ReturnRequestWhereInput> {
-    const base = { status: 'APPROVED' as const, receivedAt: null };
+    const base = { status: 'APPROVED' as const, receivedAt: null, items: { some: {} } };
     const pending = await this.prisma.returnRequest.findMany({ where: base, select: { orderId: true } });
     const merchant = await this.prisma.order.findMany({
       where: { id: { in: [...new Set(pending.map((r) => r.orderId))] }, fulfiller: 'MERCHANT' },

@@ -137,7 +137,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     const u = await createUser(prisma, {});
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', pancakeAttention: 'Pancake báo hoàn', pancakeAttentionAt: new Date() });
     await prisma.returnRequest.create({ data: { orderId: o.id, userId: u.id, reason: 'hỏng' } });
-    await prisma.returnRequest.create({ data: { orderId: o.id, userId: u.id, reason: 'thiếu', status: 'APPROVED' } });
+    await prisma.returnRequest.create({ data: { orderId: o.id, userId: u.id, reason: 'thiếu', status: 'APPROVED', items: { create: { orderItemId: `it-${o.id}`, quantity: 1 } } } });
     await prisma.bottleReturn.create({ data: { userId: u.id, quantity: 2, seedsAwarded: 0 } });
     const after = await inbox.counts(admin);
     const delta = (k: string) => (after.items.find((i) => i.key === k)?.count ?? 0) - (before.items.find((i) => i.key === k)?.count ?? 0);
