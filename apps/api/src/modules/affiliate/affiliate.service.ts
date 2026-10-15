@@ -1235,30 +1235,65 @@ export class AffiliateService {
       where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true },
     });
     const rate = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
-    // Hoa hồng còn chờ (PENDING/LOCKED) bị cắt theo dòng khi trả một phần (OrderReversalService.reversePartialReturn); đã duyệt/đã
-    // chi thì không đụng. Phần cắt tính lại đúng công thức đó: hoa hồng gốc của dòng (lineAmounts lúc đặt) − shareOf(gốc, đã trả/số lượng).
-    const pendingOrderIds = [...new Set(commissions.filter((c) => c.status === 'PENDING' || c.status === 'LOCKED').map((c) => c.orderId))];
-    const returnedRows = pendingOrderIds.length
+    // reversePartialReturn chỉ cắt Commission.amount khi hoa hồng còn PENDING/LOCKED, mà cron duyệt đổi LOCKED→APPROVED chỉ bằng
+    // status nên amount giữ nguyên số đã cắt; trả duyệt sau đó thì không cắt. Trạng thái hiện tại vì vậy không cho biết lần trả nào
+    // đã cắt: dựng lại phần cắt theo công thức của reversePartialReturn rồi phân bổ theo thứ tự duyệt, tối đa bằng
+    // (tổng gốc − amount) — tổng các dòng luôn khớp Commission.amount.
+    const orderIds = [...new Set(commissions.map((c) => c.orderId))];
+    const returnRows = orderIds.length
       ? await this.prisma.returnRequestItem.findMany({
-          where: { returnRequest: { orderId: { in: pendingOrderIds }, status: 'APPROVED', fullReturn: false } },
-          select: { orderItemId: true, quantity: true },
+          where: { returnRequest: { orderId: { in: orderIds }, status: 'APPROVED', fullReturn: false } },
+          select: { orderItemId: true, quantity: true, returnRequest: { select: { id: true, orderId: true, reviewedAt: true, createdAt: true } } },
         })
       : [];
-    const returnedQty = new Map<string, number>();
-    for (const r of returnedRows) returnedQty.set(r.orderItemId, (returnedQty.get(r.orderItemId) ?? 0) + r.quantity);
+    const returnsByOrder = new Map<string, typeof returnRows>();
+    for (const r of returnRows) {
+      const list = returnsByOrder.get(r.returnRequest.orderId) ?? [];
+      list.push(r);
+      returnsByOrder.set(r.returnRequest.orderId, list);
+    }
+    const originalOf = (c: (typeof commissions)[number], paid: number[], idx: number, itemId: string, itemRate: number) => {
+      const stored = c.lineAmounts && typeof c.lineAmounts === 'object' && !Array.isArray(c.lineAmounts) ? (c.lineAmounts as Record<string, unknown>)[itemId] : undefined;
+      return Number.isFinite(Number(stored)) && stored != null ? Math.floor(Number(stored)) : Math.floor(((paid[idx] ?? 0) * itemRate) / 100);
+    };
     // Đếm đơn theo orderId riêng biệt (Set) — 1 đơn có 2 item cùng SP vẫn tính 1 đơn.
     const acc = new Map<string, { productName: string; commission: number; orderIds: Set<string> }>();
     for (const c of commissions) {
       const items = c.order?.items ?? [];
       const paid = c.order ? paidLineTotals(c.order, items) : [];
+      const originals = new Map<string, number>();
       for (const [idx, it] of items.entries()) {
         const r = rate.get(it.variationId) ?? 0;
-        if (r <= 0) continue;
-        const stored = c.lineAmounts && typeof c.lineAmounts === 'object' && !Array.isArray(c.lineAmounts) ? (c.lineAmounts as Record<string, unknown>)[it.id] : undefined;
-        const original = Number.isFinite(Number(stored)) && stored != null ? Math.floor(Number(stored)) : Math.floor(((paid[idx] ?? 0) * r) / 100);
-        const returned = c.status === 'PENDING' || c.status === 'LOCKED' ? Math.min(it.quantity, returnedQty.get(it.id) ?? 0) : 0;
-        const amount = returned > 0 ? Math.max(0, original - shareOf(original, returned / it.quantity)) : original;
-        if (returned >= it.quantity) continue;
+        if (r > 0) originals.set(it.id, originalOf(c, paid, idx, it.id, r));
+      }
+      let budget = Math.max(0, [...originals.values()].reduce((a, v) => a + v, 0) - c.amount);
+      const cutOf = new Map<string, number>();
+      const qtyOf = new Map<string, number>();
+      const reqs = new Map<string, { at: number; rows: { orderItemId: string; quantity: number }[] }>();
+      for (const r of returnsByOrder.get(c.orderId) ?? []) {
+        const q = reqs.get(r.returnRequest.id) ?? { at: (r.returnRequest.reviewedAt ?? r.returnRequest.createdAt).getTime(), rows: [] };
+        q.rows.push(r);
+        reqs.set(r.returnRequest.id, q);
+      }
+      const ordered = [...reqs.entries()].sort((x, y) => x[1].at - y[1].at || (x[0] < y[0] ? -1 : 1));
+      for (const [, req] of ordered) {
+        for (const row of req.rows) {
+          const it = items.find((i) => i.id === row.orderItemId);
+          const original = originals.get(row.orderItemId);
+          if (!it || it.quantity <= 0 || !original) continue;
+          const before = Math.min(it.quantity, qtyOf.get(it.id) ?? 0);
+          const after = Math.min(it.quantity, before + row.quantity);
+          qtyOf.set(it.id, after);
+          const take = Math.min(budget, Math.max(0, shareOf(original, after / it.quantity) - shareOf(original, before / it.quantity)));
+          budget -= take;
+          cutOf.set(it.id, (cutOf.get(it.id) ?? 0) + take);
+        }
+      }
+      for (const it of items) {
+        const original = originals.get(it.id);
+        if (original === undefined) continue;
+        const amount = Math.max(0, original - Math.min(original, cutOf.get(it.id) ?? 0));
+        if ((qtyOf.get(it.id) ?? 0) >= it.quantity && amount === 0) continue;
         const cur =
           acc.get(it.productName) ?? { productName: it.productName, commission: 0, orderIds: new Set<string>() };
         cur.commission += amount;
