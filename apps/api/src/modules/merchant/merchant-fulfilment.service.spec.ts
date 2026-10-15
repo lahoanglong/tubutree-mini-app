@@ -895,8 +895,10 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     const spy = jest.spyOn(svc, 'statementFor').mockResolvedValue({ lines: [{ orderItemId: 'x', netAmount: 5 }], total: 5 } as never);
     const res = await svc.adminOverview(NOW);
     expect(prisma.storefront.findMany.mock.calls[0][0].where).toEqual({
-      type: 'MERCHANT',
-      OR: [{ fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }],
+      AND: [
+        { OR: [{ type: 'MERCHANT' }, { type: 'CTV', owner: { role: 'DEALER' } }] },
+        { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: ['sf-c'] } }] },
+      ],
     });
     expect(spy.mock.calls.map((c) => c[0])).toEqual(['sf-d']);
     expect(prisma.order.groupBy).toHaveBeenCalledTimes(1);

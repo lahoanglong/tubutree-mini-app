@@ -1,5 +1,6 @@
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { MERCHANT_PORTAL_ROLES } from '../merchant/merchant-config';
+import { isPartnerStore } from '../merchant/partner-store';
 
 /**
  * Tách một lần đặt thành một đơn cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3). Hàm thuần —
@@ -57,7 +58,7 @@ export function merchantStoreUnavailableReason(store: {
 export function fulfillerOf(v: FulfilmentSource): LineFulfiller {
   if (v.product.fulfilment === 'MERCHANT') {
     const store = v.product.storefront;
-    if (v.product.storefrontId && store?.type === 'MERCHANT') {
+    if (v.product.storefrontId && store && isPartnerStore(store)) {
       const reason = merchantStoreUnavailableReason(store);
       if (reason) return { kind: 'UNAVAILABLE', storefrontId: null, name: store.title, ownerUserId: null, reason };
       return {

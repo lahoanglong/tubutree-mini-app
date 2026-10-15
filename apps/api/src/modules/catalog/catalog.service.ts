@@ -10,6 +10,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
+import { isPartnerStore } from '../merchant/partner-store';
 import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 
@@ -281,14 +282,15 @@ export class CatalogService {
 
   private async fulfillerOf(fulfilment: string, store: FulfillerStore | null): Promise<ProductFulfiller> {
     if (fulfilment !== 'MERCHANT') return { kind: 'TUBU', name: TUBU_FULFILLER_NAME, shippingFee: null, freeShipFrom: null };
-    const reason = store?.type === 'MERCHANT' ? merchantStoreUnavailableReason(store) : null;
+    const partner = store ? isPartnerStore(store) : false;
+    const reason = store && partner ? merchantStoreUnavailableReason(store) : null;
     if (store && reason) return { kind: 'UNAVAILABLE', reason, name: store.title, shippingFee: null, freeShipFrom: null };
     const defaultFee =
       (await this.config?.get<number>('merchant.default_shipping_fee', DEFAULT_MERCHANT_SHIPPING_FEE)) ??
       DEFAULT_MERCHANT_SHIPPING_FEE;
     return {
       kind: 'MERCHANT',
-      name: store?.type === 'MERCHANT' ? store.title : 'Gian hàng đối tác',
+      name: store && partner ? store.title : 'Gian hàng đối tác',
       shippingFee: store?.shippingFee ?? defaultFee,
       freeShipFrom: store?.freeShipFrom ?? null,
     };

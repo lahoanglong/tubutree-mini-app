@@ -50,7 +50,7 @@ describe('fulfillerOf', () => {
       expect(
         fulfillerOf({
           pancakeId: null,
-          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type, ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } } },
+          product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type, ordersPausedAt: null, owner: { role: 'AFFILIATE', isBlocked: false } } },
         }).kind,
       ).toBe('UNAVAILABLE');
     }
@@ -59,7 +59,15 @@ describe('fulfillerOf', () => {
     );
   });
 
-  const merchantLine = (store: Record<string, unknown>) => ({
+  it('hàng tự giao của đại lý còn gian hàng loại CTV vẫn do chủ gian hàng giao', () => {
+    const f = fulfillerOf({
+      pancakeId: null,
+      product: { fulfilment: 'MERCHANT', storefrontId: 'sf-c', storefront: { title: 'Shop C', ownerUserId: 'u-c', type: 'CTV', ordersPausedAt: null, owner: { role: 'DEALER', isBlocked: false } } },
+    });
+    expect(f).toMatchObject({ kind: 'MERCHANT', storefrontId: 'sf-c', ownerUserId: 'u-c' });
+  });
+
+  const merchantLine =(store: Record<string, unknown>) => ({
     pancakeId: null,
     product: {
       fulfilment: 'MERCHANT',

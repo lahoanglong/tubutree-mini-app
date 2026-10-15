@@ -33,10 +33,10 @@ export async function freezeDefaultCommissionChange(
   if (oldPct === newPct) return 0;
   await tx.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtext('merchant-terms:' || s.id))
-      FROM (SELECT id FROM storefronts WHERE type = 'MERCHANT' AND "commissionPct" IS NULL ORDER BY id) s`;
+      FROM (SELECT id FROM storefronts WHERE (type = 'MERCHANT' OR (type = 'CTV' AND "ownerUserId" IN (SELECT id FROM users WHERE role = 'DEALER'))) AND "commissionPct" IS NULL ORDER BY id) s`;
   const stores = await tx.$queryRaw<{ id: string; consignmentFeePct: Prisma.Decimal | number; consignmentFeeFixed: number }[]>`
     SELECT id, "consignmentFeePct", "consignmentFeeFixed" FROM storefronts
-     WHERE type = 'MERCHANT' AND "commissionPct" IS NULL ORDER BY id FOR UPDATE`;
+     WHERE (type = 'MERCHANT' OR (type = 'CTV' AND "ownerUserId" IN (SELECT id FROM users WHERE role = 'DEALER'))) AND "commissionPct" IS NULL ORDER BY id FOR UPDATE`;
   if (stores.length === 0) return 0;
   const ids = stores.map((s) => s.id);
   const withHistory = new Set(

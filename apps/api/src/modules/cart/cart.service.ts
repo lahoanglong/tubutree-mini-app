@@ -18,6 +18,7 @@ import {
   couponRejectedWithFlash,
 } from '../coupons/coupon-notice';
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
+import { isPartnerStore } from '../merchant/partner-store';
 
 /** Dòng tính mã giảm giá: loại flash (giá flash là giá cuối, không cộng dồn mã). */
 function couponLinesOf(lines: { productId: string; total: number; isFlash: boolean }[]) {
@@ -215,7 +216,7 @@ export class CartService {
     }
     // Gian hàng tạm nghỉ/ngừng bán: báo ngay thay vì để khách bỏ hàng vào giỏ rồi mới bị chặn lúc đặt (R3-MERCHANT-3).
     const store = variation.product.fulfilment === 'MERCHANT' ? variation.product.storefront : null;
-    const storeReason = store?.type === 'MERCHANT' ? merchantStoreUnavailableReason(store) : null;
+    const storeReason = store && isPartnerStore(store) ? merchantStoreUnavailableReason(store) : null;
     if (store && storeReason) {
       throw new BadRequestException(storeUnavailableOnAddMessage(variation.product.name, store.title, storeReason));
     }

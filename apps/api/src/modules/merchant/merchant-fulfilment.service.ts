@@ -39,6 +39,7 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
+import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 
@@ -400,9 +401,9 @@ export class MerchantFulfilmentService {
   private async merchantStore(userId: string) {
     const store = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId },
-      select: { id: true, type: true, title: true, ownerUserId: true },
+      select: { id: true, type: true, title: true, ownerUserId: true, owner: { select: { role: true } } },
     });
-    if (!store || store.type !== 'MERCHANT') {
+    if (!store || !isPartnerStore(store)) {
       throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có đơn cần giao.');
     }
     return store;
@@ -992,9 +993,12 @@ export class MerchantFulfilmentService {
   async createPayout(adminId: string, storefrontId: string, note?: string, expectedTotal?: number) {
     const store = await this.prisma.storefront.findUnique({
       where: { id: storefrontId },
-      select: { id: true, type: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true },
+      select: {
+        id: true, type: true, title: true, ownerUserId: true, bankName: true, bankAccountNo: true, bankAccountName: true,
+        owner: { select: { role: true } },
+      },
     });
-    if (!store || store.type !== 'MERCHANT') throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+    if (!store || !isPartnerStore(store)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
     const cfg = await this.settlementConfig();
     let payout;
     try {
@@ -1219,7 +1223,9 @@ export class MerchantFulfilmentService {
       this.storesWithPending(),
     ]);
     const stores = await this.prisma.storefront.findMany({
-      where: { type: 'MERCHANT', OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] },
+      where: {
+        AND: [PARTNER_STORE_WHERE, { OR: [{ fulfilledOrders: { some: {} } }, { id: { in: linked.map((l) => l.storefrontId) } }] }],
+      },
       select: {
         id: true,
         title: true,
@@ -1286,9 +1292,9 @@ export class MerchantFulfilmentService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${termsLockKey(storefrontId)}))`;
       const before = await tx.storefront.findUnique({
         where: { id: storefrontId },
-        select: { type: true, commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
+        select: { type: true, owner: { select: { role: true } }, commissionPct: true, consignmentFeePct: true, consignmentFeeFixed: true },
       });
-      if (!before || before.type !== 'MERCHANT') throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
+      if (!before || !isPartnerStore(before)) throw new NotFoundException('Không tìm thấy gian hàng đối tác.');
       const defaultPct = await defaultCommissionPctIn(tx);
       if ((await tx.storefrontTermsHistory.count({ where: { storefrontId } })) === 0) {
         await tx.storefrontTermsHistory.create({
