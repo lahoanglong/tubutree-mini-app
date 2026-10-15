@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   payouts: 0,
   refundsPending: 0,
   returnsArgs: [] as unknown[][],
+  dealerArgs: [] as unknown[][],
   orders: [] as unknown[],
   users: [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -158,7 +159,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       mocks.listOrders(...args);
       return { data: mocks.orders, meta: { total: 60, page: 1, limit: 20 } };
     },
-    listDealerApps: async () => ({
+    listDealerApps: async (...args: unknown[]) => (mocks.dealerArgs.push(args), {
       data: [
         {
           id: 'd1',
@@ -266,6 +267,7 @@ beforeEach(() => {
   mocks.payouts = 0;
   mocks.refundsPending = 0;
   mocks.returnsArgs = [];
+  mocks.dealerArgs = [];
   mocks.orders = [];
   mocks.users = [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -632,6 +634,29 @@ describe('admin/page — tab Đại lý', () => {
     expect(notice.className).toContain('bg-warning-bg');
     const more = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tải thêm')!;
     expect(more.className).toContain('min-h-[44px]');
+  });
+
+  it('R5-ADMIN-2: bộ lọc và hàng hồ sơ ghi trạng thái bằng tiếng Việt, không in mã PENDING/APPROVED/REJECTED', async () => {
+    const { container } = await openDealers();
+    const filter = container.querySelector<HTMLSelectElement>('select[aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
+    expect([...filter.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['PENDING', 'Chờ duyệt'],
+      ['APPROVED', 'Đã duyệt'],
+      ['REJECTED', 'Đã từ chối'],
+      ['', 'Tất cả trạng thái'],
+    ]);
+    const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
+    expect(card.textContent).toContain('Chờ duyệt');
+    expect(container.textContent).not.toMatch(/PENDING|APPROVED|REJECTED/);
+  });
+
+  it('R5-ADMIN-2: đổi bộ lọc vẫn gửi giá trị API (APPROVED), chữ hiển thị chỉ là nhãn', async () => {
+    const { container } = await openDealers();
+    const filter = container.querySelector<HTMLSelectElement>('select[aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
+    selectValue(filter, 'APPROVED');
+    await flush();
+    expect(mocks.dealerArgs.at(-1)![0]).toBe('APPROVED');
+    expect(filter.selectedOptions[0]!.textContent).toBe('Đã duyệt');
   });
 
   it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD có viền token', async () => {
@@ -2249,7 +2274,7 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
       total: 1,
     },
     wallet: [{ id: 'w1', delta: 50000, balanceAfter: 50000, type: 'REFUND', refType: null, refId: null, reason: 'Hoàn đơn TT0', createdAt: '2026-10-02T00:00:00.000Z' }],
-    points: [{ id: 'p1', delta: 12, reason: 'Tích điểm đơn TT1', refType: null, refId: null, lot: 'STANDARD', expiresAt: null, createdAt: '2026-10-02T00:00:00.000Z' }],
+    points: [{ id: 'p1', delta: 12, reason: 'ORDER_DELIVERED:TT1', refType: null, refId: null, lot: 'STANDARD', expiresAt: null, createdAt: '2026-10-02T00:00:00.000Z' }],
     roleHistory: [{ id: 'e1', kind: 'ROLE', fromValue: 'CUSTOMER', toValue: 'STAFF', reason: null, actorId: 'a1', actorName: 'Chủ shop', createdAt: '2026-10-03T00:00:00.000Z' }],
     blockHistory: [{ id: 'e2', kind: 'BLOCK', fromValue: null, toValue: null, reason: 'bom hàng', actorId: 'a1', actorName: 'Chủ shop', createdAt: '2026-10-04T00:00:00.000Z' }],
     grants: [],
@@ -2266,7 +2291,7 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
     const text = dialog.textContent ?? '';
     expect(text).toContain('TT1');
     expect(text).toContain('Hoàn đơn TT0');
-    expect(text).toContain('Tích điểm đơn TT1');
+    expect(text).toContain('Tích điểm từ đơn hàng · TT1');
     expect(text).toContain('Vai trò Khách hàng → Nhân viên');
     expect(text).toContain('Khoá tài khoản');
     expect(text).toContain('bom hàng');

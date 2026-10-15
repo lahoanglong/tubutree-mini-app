@@ -143,6 +143,7 @@ import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
+import { DEALER_APP_FILTERS, dealerAppStatusLabel } from '@/lib/dealer-applications';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
@@ -511,8 +512,8 @@ function DealersTab() {
           onChange={(e) => setFilter(e.target.value)}
           className={`${FIELD_CLASS} ${TOUCH_H}`}
         >
-          {['PENDING', 'APPROVED', 'REJECTED', ''].map((s) => (
-            <option key={s} value={s}>{s || 'Tất cả'}</option>
+          {DEALER_APP_FILTERS.map((f) => (
+            <option key={f.value} value={f.value}>{f.label}</option>
           ))}
         </select>
         {q.data && (
@@ -576,7 +577,7 @@ function DealerRow({ app: a }: { app: DealerApp }) {
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <div className="flex justify-between gap-2">
         <span className="min-w-0 break-words font-medium text-stone-900">{a.businessName}</span>
-        <span className="shrink-0 text-xs text-stone-500">{a.status}</span>
+        <span className="shrink-0 text-xs text-stone-500">{dealerAppStatusLabel(a.status)}</span>
       </div>
       <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
       <div className="break-words text-sm text-stone-600">{a.address}</div>
