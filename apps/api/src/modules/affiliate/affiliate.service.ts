@@ -787,7 +787,8 @@ export class AffiliateService {
     let weightedRate = 0;
     // Nền doanh số bậc/mốc: chỉ dòng CÓ hưởng hoa hồng (loại hàng bị chặn/rate 0 + phí ship).
     let commissionableTotal = 0;
-    // Trả một phần cắt hoa hồng theo đúng dòng trả (order-reversal.reversePartialReturn) — giữ phần của từng dòng.
+    // Trả một phần cắt hoa hồng và nền doanh số theo đúng dòng trả (order-reversal.reversePartialReturn) — giữ phần của từng
+    // dòng có hoa hồng, kể cả dòng nhỏ tới mức hoa hồng làm tròn về 0 (nền của nó vẫn nằm trong commissionableTotal).
     const lineAmounts: Record<string, number> = {};
     const paid = paidLineTotals(order, order.items);
     order.items.forEach((item, idx) => {
@@ -795,7 +796,7 @@ export class AffiliateService {
       const base = paid[idx] ?? 0;
       const lineAmount = Math.floor((base * rate) / 100);
       amount += lineAmount;
-      if (lineAmount > 0) lineAmounts[item.id] = (lineAmounts[item.id] ?? 0) + lineAmount;
+      if (rate > 0) lineAmounts[item.id] = (lineAmounts[item.id] ?? 0) + lineAmount;
       weightedRate += rate;
       if (rate > 0) commissionableTotal += base;
     });

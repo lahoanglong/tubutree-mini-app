@@ -387,27 +387,43 @@ export class OrderReversalService {
     // trả món 10% thì cắt hoa hồng món đó, trả món 0% thì không cắt gì. Mỗi dòng tính luỹ kế sau trừ luỹ kế trước nên trả
     // nốt một dòng cắt đúng bằng hoa hồng của dòng. Đã duyệt/đã chi thì không đụng — giống lần đảo cả đơn
     // (reverseCommissionsForOrder chỉ huỷ PENDING/LOCKED).
+    // Nền doanh số bậc/mốc (commissionableTotal) giảm cùng lúc, đúng phần tiền khách thực trả của các đơn vị trả trên những
+    // dòng có hoa hồng — cùng nền createCommissionForOrder cộng lúc đặt; nếu không, đơn 80tr chỉ còn một món rẻ sau khi trả
+    // vẫn tính đủ 80tr vào mốc thưởng tháng khi hoa hồng được duyệt.
     const rows = await tx.commission.findMany({
       where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED'] } },
-      select: { id: true, amount: true, lineAmounts: true },
+      select: { id: true, amount: true, commissionableTotal: true, lineAmounts: true },
     });
     const itemById = new Map(order.items.map((i) => [i.id, i]));
+    const paid = paidLineTotals(order, order.items);
+    const paidById = new Map(order.items.map((it, idx) => [it.id, paid[idx] ?? 0]));
     for (const row of rows) {
       const perLine = await this.commissionByLine(tx, order, row, input.prior.commissionReversed);
+      const commissionable = this.commissionableLineIds(row, perLine);
       let cut = 0;
+      let baseCut = 0;
       for (const line of shares.lines) {
         const item = itemById.get(line.orderItemId);
-        const lineCommission = perLine.get(line.orderItemId) ?? 0;
-        if (!item || item.quantity <= 0 || lineCommission <= 0 || line.quantity <= 0) continue;
-        const before = Math.min(item.quantity, input.prior.approvedQty.get(item.id) ?? 0);
-        const after = Math.min(item.quantity, before + line.quantity);
-        cut += Math.max(0, shareOf(lineCommission, after / item.quantity) - shareOf(lineCommission, before / item.quantity));
+        if (!item || item.quantity <= 0 || line.quantity <= 0 || !commissionable.has(item.id)) continue;
+        const approvedQty = Math.min(item.quantity, input.prior.approvedQty.get(item.id) ?? 0);
+        const before = approvedQty / item.quantity;
+        const after = Math.min(item.quantity, approvedQty + line.quantity) / item.quantity;
+        const lineCommission = perLine.get(item.id) ?? 0;
+        cut += Math.max(0, shareOf(lineCommission, after) - shareOf(lineCommission, before));
+        const base = paidById.get(item.id) ?? 0;
+        baseCut += Math.max(0, shareOf(base, after) - shareOf(base, before));
       }
       cut = Math.min(row.amount, cut);
-      if (cut <= 0) continue;
+      baseCut = Math.min(row.commissionableTotal, baseCut);
+      if (cut <= 0 && baseCut <= 0) continue;
       const res = await tx.commission.updateMany({
-        where: { id: row.id, amount: row.amount, status: { in: ['PENDING', 'LOCKED'] } },
-        data: { amount: { decrement: cut } },
+        where: {
+          id: row.id,
+          amount: row.amount,
+          commissionableTotal: row.commissionableTotal,
+          status: { in: ['PENDING', 'LOCKED'] },
+        },
+        data: { amount: { decrement: cut }, commissionableTotal: { decrement: baseCut } },
       });
       if (res.count === 1) result.commissionCut += cut;
     }
@@ -420,6 +436,17 @@ export class OrderReversalService {
       }
     }
     return result;
+  }
+
+  /**
+   * Các dòng có hoa hồng (mức % > 0 lúc đặt) — tập dòng mà nền doanh số commissionableTotal cộng lúc tạo. Hoa hồng tạo từ khi
+   * lineAmounts ghi mọi dòng có mức % > 0 (kể cả dòng hoa hồng làm tròn về 0) thì lấy đúng tập đó; hoa hồng cũ chỉ có các dòng
+   * hoa hồng > 0 nên lấy theo phần chia đã tính.
+   */
+  private commissionableLineIds(row: { lineAmounts: Prisma.JsonValue | null }, perLine: Map<string, number>): Set<string> {
+    const stored = row.lineAmounts;
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return new Set(Object.keys(stored));
+    return new Set([...perLine].filter(([, amount]) => amount > 0).map(([id]) => id));
   }
 
   /**

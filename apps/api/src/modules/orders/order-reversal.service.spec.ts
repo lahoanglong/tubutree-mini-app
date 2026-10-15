@@ -4,6 +4,8 @@ import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { NO_PARTIAL_RETURNS } from './return-ledger';
+import { WALLET_DESTINATION } from './refund-destination';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
 // test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
@@ -886,5 +888,227 @@ describe('OrderReversalService — nơi nhận tiền hoàn và phần đã tr�
     const tx = makeTx(order);
     await service.reverseFinancials(tx as never, order, { restock: false });
     expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền doanh số mốc (MONEY-2)', () => {
+  let service: OrderReversalService;
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+  });
+
+  /** i1: 3 × (100.000 thực trả, 10%); i2: 2 × (95.000, 5%); i3: 1 × 15.000 không hoa hồng. Hoa hồng 10.000 + 4.750, nền 195.000. */
+  const order = (items?: unknown[]) =>
+    ({
+      id: 'o1',
+      code: 'TUBU1',
+      userId: 'buyer',
+      total: 210_000,
+      shippingFee: 0,
+      paymentMethod: 'XU',
+      paymentStatus: 'PAID',
+      status: 'DELIVERED',
+      items: items ?? [
+        { id: 'i1', variationId: 'v1', quantity: 3, total: 105_000, paidTotal: 100_000, flashSaleItemId: null, backorderedQty: 0 },
+        { id: 'i2', variationId: 'v2', quantity: 2, total: 100_000, paidTotal: 95_000, flashSaleItemId: null, backorderedQty: 0 },
+        { id: 'i3', variationId: 'v3', quantity: 1, total: 20_000, paidTotal: 15_000, flashSaleItemId: null, backorderedQty: 0 },
+      ],
+    }) as never;
+
+  type Row = { amount: number; commissionableTotal: number; lineAmounts: unknown; status: string };
+  const newRow = (over: Partial<Row> = {}): Row => ({
+    amount: 14_750,
+    commissionableTotal: 195_000,
+    lineAmounts: { i1: 10_000, i2: 4_750 },
+    status: 'LOCKED',
+    ...over,
+  });
+
+  /** tx giả giữ một dòng commission; updateMany chỉ ghi khi guard (id, amount, commissionableTotal, status) còn khớp như Postgres. */
+  function commissionTx(row: Row) {
+    return {
+      row,
+      commission: {
+        findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
+          where.status.in.includes(row.status)
+            ? [{ id: 'c1', amount: row.amount, commissionableTotal: row.commissionableTotal, lineAmounts: row.lineAmounts }]
+            : [],
+        ),
+        updateMany: jest.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { amount: number; commissionableTotal: number; status: { in: string[] } };
+            data: { amount: { decrement: number }; commissionableTotal: { decrement: number } };
+          }) => {
+            if (where.amount !== row.amount || where.commissionableTotal !== row.commissionableTotal || !where.status.in.includes(row.status)) {
+              return { count: 0 };
+            }
+            row.amount -= data.amount.decrement;
+            row.commissionableTotal -= data.commissionableTotal.decrement;
+            return { count: 1 };
+          },
+        ),
+      },
+    };
+  }
+
+  /** Một lần trả một phần: `qty` là số đơn vị trả lần này theo dòng, `done` số đã duyệt trước đó. */
+  async function partial(tx: ReturnType<typeof commissionTx>, qty: Record<string, number>, done: Record<string, number>, o = order()) {
+    const shares = {
+      isFull: false,
+      goods: 0,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      ratioBefore: 0,
+      ratioAfter: 0,
+      lines: Object.entries(qty).map(([orderItemId, quantity]) => ({ orderItemId, quantity, refundAmount: 0 })),
+    };
+    const prior = { ...NO_PARTIAL_RETURNS, approvedQty: new Map(Object.entries(done)) };
+    return service.reversePartialReturn(tx as never, o, {
+      requestId: 'r1',
+      shares,
+      destination: WALLET_DESTINATION,
+      prior,
+      standardPointsExpiresAt: null,
+    });
+  }
+
+  it('trả 1/3 dòng 10%: giảm hoa hồng 3.333 và nền doanh số 33.333 trong CÙNG một updateMany có guard', async () => {
+    const tx = commissionTx(newRow());
+    const res = await partial(tx, { i1: 1 }, {});
+    expect(res.commissionCut).toBe(3_333);
+    expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
+    expect(tx.commission.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.commission.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', amount: 14_750, commissionableTotal: 195_000, status: { in: ['PENDING', 'LOCKED'] } },
+      data: { amount: { decrement: 3_333 }, commissionableTotal: { decrement: 33_333 } },
+    });
+  });
+
+  it('chỉ đọc commission PENDING/LOCKED: đã duyệt/đã chi thì không đụng gì (giống lần đảo cả đơn)', async () => {
+    for (const status of ['APPROVED', 'PAID', 'REJECTED']) {
+      const tx = commissionTx(newRow({ status }));
+      const res = await partial(tx, { i1: 1 }, {});
+      expect(res.commissionCut).toBe(0);
+      expect(tx.commission.updateMany).not.toHaveBeenCalled();
+      expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+    }
+  });
+
+  it('trả món không hoa hồng (0%) → không đổi hoa hồng, không đổi nền doanh số', async () => {
+    const tx = commissionTx(newRow());
+    const res = await partial(tx, { i3: 1 }, {});
+    expect(res.commissionCut).toBe(0);
+    expect(tx.commission.updateMany).not.toHaveBeenCalled();
+    expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+  });
+
+  it('trả nhiều lần (1/3, rồi thêm 1/3 + nửa dòng 5%, rồi phần còn lại của hai dòng có hoa hồng): từng bước đúng, cuối cùng về đúng 0 / 0', async () => {
+    const tx = commissionTx(newRow());
+    await partial(tx, { i1: 1 }, {});
+    expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
+
+    await partial(tx, { i1: 1, i2: 1 }, { i1: 1 });
+    // Còn lại: 1 đơn vị i1 (33.333 / hoa hồng 3.333) + 1 đơn vị i2 (47.500 / hoa hồng 2.375).
+    expect(tx.row).toMatchObject({ amount: 5_708, commissionableTotal: 80_833 });
+
+    // i3 (0%) còn lại nên đây chưa phải lần trả nốt cả đơn.
+    const last = await partial(tx, { i1: 1, i2: 1 }, { i1: 2, i2: 1 });
+    expect(last.commissionCut).toBe(5_708);
+    expect(tx.row).toMatchObject({ amount: 0, commissionableTotal: 0 });
+    const decrements = tx.commission.updateMany.mock.calls.map((c) => c[0].data.commissionableTotal.decrement);
+    expect(decrements.reduce((s, v) => s + v, 0)).toBe(195_000);
+  });
+
+  it('thứ tự các lần trả không đổi tổng: trả hết i1 một lần rồi i2 hai lần = 195.000 / 14.750', async () => {
+    const tx = commissionTx(newRow());
+    await partial(tx, { i1: 3 }, {});
+    expect(tx.row).toMatchObject({ amount: 4_750, commissionableTotal: 95_000 });
+    await partial(tx, { i2: 1 }, { i1: 3 });
+    await partial(tx, { i2: 1 }, { i1: 3, i2: 1 });
+    expect(tx.row).toMatchObject({ amount: 0, commissionableTotal: 0 });
+  });
+
+  it('nền doanh số không bao giờ âm: commissionableTotal hiện có nhỏ hơn phần tính ra (số cũ lệch) → chỉ giảm tối đa số hiện có', async () => {
+    const tx = commissionTx(newRow({ commissionableTotal: 20_000 }));
+    await partial(tx, { i1: 1 }, {});
+    expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 0 });
+    expect(tx.commission.updateMany.mock.calls[0]![0].data.commissionableTotal).toEqual({ decrement: 20_000 });
+  });
+
+  it('commissionableTotal = 0 (hoa hồng cũ chưa có nền) → chỉ giảm hoa hồng, không ghi giá trị âm', async () => {
+    const tx = commissionTx(newRow({ commissionableTotal: 0 }));
+    await partial(tx, { i1: 1 }, {});
+    expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 0 });
+  });
+
+  it('hoa hồng cắt tròn về 0 nhưng nền doanh số vẫn giảm: vẫn ghi (không bỏ qua bước vì cut hoa hồng = 0)', async () => {
+    // 40 × 25 = 1.000 thực trả, 1%: hoa hồng 10 → trả 1/40 = 0,25 → làm tròn 0; nền 1.000 × 1/40 = 25.
+    const items = [{ id: 'i1', variationId: 'v1', quantity: 40, total: 1_000, paidTotal: 1_000, flashSaleItemId: null, backorderedQty: 0 }];
+    const o = { ...(order(items) as object), total: 1_000 } as never;
+    const tx = commissionTx(newRow({ amount: 10, commissionableTotal: 1_000, lineAmounts: { i1: 10 } }));
+    const res = await partial(tx, { i1: 1 }, {}, o);
+    expect(res.commissionCut).toBe(0);
+    expect(tx.row).toMatchObject({ amount: 10, commissionableTotal: 975 });
+  });
+
+  it('dòng có mức % nhưng hoa hồng làm tròn về 0 (lineAmounts ghi 0): trả nó vẫn giảm nền doanh số, hoa hồng giữ nguyên; trả hết thì nền về đúng 0', async () => {
+    // i1: 40 × 25 = 1.000 thực trả, 1% → 10; i2: 1 × 50 thực trả, 1% → 0. Nền 1.050.
+    const items = [
+      { id: 'i1', variationId: 'v1', quantity: 40, total: 1_000, paidTotal: 1_000, flashSaleItemId: null, backorderedQty: 0 },
+      { id: 'i2', variationId: 'v2', quantity: 1, total: 50, paidTotal: 50, flashSaleItemId: null, backorderedQty: 0 },
+      { id: 'i3', variationId: 'v3', quantity: 1, total: 20, paidTotal: 20, flashSaleItemId: null, backorderedQty: 0 },
+    ];
+    const o = { ...(order(items) as object), total: 1_070 } as never;
+    const tx = commissionTx(newRow({ amount: 10, commissionableTotal: 1_050, lineAmounts: { i1: 10, i2: 0 } }));
+    const res = await partial(tx, { i2: 1 }, {}, o);
+    expect(res.commissionCut).toBe(0);
+    expect(tx.row).toMatchObject({ amount: 10, commissionableTotal: 1_000 });
+    await partial(tx, { i1: 40 }, {}, o);
+    expect(tx.row).toMatchObject({ amount: 0, commissionableTotal: 0 });
+  });
+
+  it('guard thua (hoa hồng vừa được duyệt/đổi giữa lúc đọc và ghi) → không ghi gì, không báo đã cắt', async () => {
+    const tx = commissionTx(newRow());
+    tx.commission.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await partial(tx, { i1: 1 }, {});
+    expect(res.commissionCut).toBe(0);
+    expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+  });
+
+  it('đơn cũ không có paidTotal: nền theo giá trị dòng nhân tỉ lệ thực trả (không tính phí ship)', async () => {
+    // tiền hàng thực trả 90.000 trên 100.000 giá trị: dòng 60.000 → 54.000 thực trả.
+    const items = [
+      { id: 'i1', variationId: 'v1', quantity: 2, total: 60_000, paidTotal: null, flashSaleItemId: null, backorderedQty: 0 },
+      { id: 'i2', variationId: 'v2', quantity: 1, total: 40_000, paidTotal: null, flashSaleItemId: null, backorderedQty: 0 },
+    ];
+    const o = { ...(order(items) as object), total: 100_000, shippingFee: 10_000 } as never;
+    const tx = commissionTx(newRow({ amount: 5_400, commissionableTotal: 54_000, lineAmounts: { i1: 5_400 } }));
+    await partial(tx, { i1: 1 }, {}, o);
+    expect(tx.row).toMatchObject({ amount: 2_700, commissionableTotal: 27_000 });
+  });
+
+  it('hoa hồng cũ chưa có lineAmounts: nền cắt theo các dòng có hoa hồng tính lại theo mức % hiện tại của biến thể', async () => {
+    const tx = commissionTx(newRow({ lineAmounts: null }));
+    (tx as unknown as { variation: unknown }).variation = {
+      findMany: jest.fn().mockResolvedValue([
+        { id: 'v1', affiliateRate: 10, product: { affiliateBlocked: false } },
+        { id: 'v2', affiliateRate: 5, product: { affiliateBlocked: false } },
+        { id: 'v3', affiliateRate: null, product: { affiliateBlocked: false } },
+      ]),
+    };
+    await partial(tx, { i1: 1, i3: 1 }, {});
+    expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
   });
 });

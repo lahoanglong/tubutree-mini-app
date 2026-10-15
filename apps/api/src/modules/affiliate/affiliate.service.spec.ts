@@ -157,6 +157,33 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 });
 
+describe('AffiliateService.createCommissionForOrder — lineAmounts cho trả một phần (MONEY-2)', () => {
+  it('lineAmounts ghi mọi dòng có mức % > 0 (kể cả hoa hồng làm tròn về 0) và bỏ dòng rate 0 / bị chặn; commissionableTotal cộng đúng các dòng đó', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const order = {
+      id: 'o1',
+      userId: 'buyer',
+      referrerUserId: 'ctv',
+      total: 1_000_100,
+      items: [
+        { id: 'a', variationId: 'va', total: 1_000_000 }, // 5% → 50.000
+        { id: 'b', variationId: 'vb', total: 50 }, // 1% → 0,5 → 0 nhưng nền 50 vẫn thuộc doanh số
+        { id: 'c', variationId: 'vc', total: 50 }, // rate 0
+      ],
+    };
+    const prisma = prismaWith(order, [
+      { id: 'va', affiliateRate: 5, product: { affiliateBlocked: false } },
+      { id: 'vb', affiliateRate: 1, product: { affiliateBlocked: false } },
+      { id: 'vc', affiliateRate: 0, product: { affiliateBlocked: false } },
+    ], create);
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    const data = create.mock.calls[0][0].data;
+    expect(data.amount).toBe(50_000);
+    expect(data.commissionableTotal).toBe(1_000_050);
+    expect(data.lineAmounts).toEqual({ a: 50_000, b: 0 });
+  });
+});
+
 describe('AffiliateService.createCommissionForOrder — tính trên giá khách thực trả (SELLER-6)', () => {
   it('mã giảm/điểm/giảm hạng nằm ở Order.discount được phân bổ xuống dòng: 10% của 387.000, không phải của 430.000', async () => {
     const create = jest.fn().mockResolvedValue({});
