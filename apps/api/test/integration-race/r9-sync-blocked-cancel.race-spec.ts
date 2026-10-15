@@ -93,6 +93,8 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
   /** Báo động "Cần xử lý Pancake" in-app tới admin của spec này (mỗi admin một tin; DB có thể có admin của spec khác). */
   const opsAlerts = (code: string) =>
     notify.mock.calls.filter((c) => c[0] === adminId && c[1] === 'OPS_PANCAKE_ALERT' && c[2]?.order_code === code).length;
+  /** Số lần hỏi Pancake cho đúng đơn này: lượt cron còn quét cả đơn chờ quá hạn mà spec khác để lại trong DB. */
+  const prechecks = (id: string) => precheckCancel.mock.calls.filter((c) => c[0]?.id === id).length;
 
   it('cron chặn tự huỷ → admin "Đã xử lý" → khách: không hạn, không nút huỷ; bấm huỷ 3 lần bị từ chối, không hỏi Pancake, không quay lại hàng đợi', async () => {
     const createdAt = new Date('2001-03-01T00:00:00.000Z');
@@ -102,7 +104,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
     expect(blocked.status).toBe('PENDING_PAYMENT');
     expect(blocked.autoCancelBlockedAt).not.toBeNull();
     expect(blocked.pancakeAttention).toContain('Hệ thống không tự huỷ được đơn');
-    expect(precheckCancel).toHaveBeenCalledTimes(1);
+    expect(prechecks(order.id)).toBe(1);
     expect(opsAlerts(order.code)).toBe(1);
     await adminResolves(order.id);
 
@@ -115,7 +117,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as Error).message).toContain('Tubu đang xử lý');
     }
-    expect(precheckCancel).toHaveBeenCalledTimes(1);
+    expect(prechecks(order.id)).toBe(1);
     const after = await read(order.id);
     expect(after).toMatchObject({ status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', pancakeAttention: null });
     expect(opsAlerts(order.code)).toBe(1);
@@ -127,7 +129,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
 
     // Cron các lượt sau không thử lại, không nhắc lại.
     await cron.expireStale(new Date('2001-03-02T01:10:00.000Z'));
-    expect(precheckCancel).toHaveBeenCalledTimes(1);
+    expect(prechecks(order.id)).toBe(1);
     expect((await read(order.id)).pancakeAttention).toBeNull();
   });
 
@@ -149,7 +151,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
     expect((again as Error).message).toContain('Tubu đang xử lý');
     await cron.expireStale(new Date('2001-04-02T01:00:00.000Z'));
 
-    expect(precheckCancel).toHaveBeenCalledTimes(1);
+    expect(prechecks(order.id)).toBe(1);
     expect(await read(order.id)).toMatchObject({ status: 'PENDING_PAYMENT', pancakeAttention: null });
     expect(opsAlerts(order.code)).toBe(1);
     expect(await orders.detailView(user.id, order.code)).toMatchObject({ canCancel: false, paymentDeadline: null, manualHandling: true });
