@@ -1,14 +1,18 @@
+import { Logger } from '@nestjs/common';
 import { CommunityRewardService } from './community-reward.service';
 
+const EXP = new Date('2027-10-15T00:00:00Z');
+
 function deps(over: Record<string, unknown> = {}) {
-  const rewards = { grant: jest.fn().mockResolvedValue(true) };
+  const rewards = { grant: jest.fn().mockResolvedValue(true), expiresAt: jest.fn().mockResolvedValue(EXP) };
   const config = { get: jest.fn().mockImplementation(async (_k: string, f: unknown) => f) };
   // PD-3: trần/ngày đếm cả sổ xu cũ (thưởng trong ngày deploy) lẫn sổ điểm.
   const prisma: any = {
     coinTransaction: { count: jest.fn().mockResolvedValue(0) },
     pointsTransaction: { count: jest.fn().mockResolvedValue(0) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
-  // rewardPost/rewardAnswer chạy đếm-rồi-cấp TRONG $transaction(async tx => ..., {isolationLevel})
+  // rewardPost/rewardAnswer chạy đếm-rồi-cấp TRONG $transaction(async tx => ...) sau khi khoá dòng users
   // — tx nhận CHÍNH prisma mock này nên tx.*.count dùng chung mock ở trên.
   prisma.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
   return { rewards, config, prisma, ...over } as any;
@@ -22,7 +26,7 @@ describe('CommunityRewardService.rewardPost', () => {
   it('mặc định 1 Điểm Xanh (community.post_reward_points), reason COMMUNITY_POST + refType COMMUNITY', async () => {
     const d = deps();
     await make(d).rewardPost('u1', 'p1');
-    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 1, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma);
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 1, 'COMMUNITY_POST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
     expect(keys(d)).toContain('community.post_reward_points');
   });
 
@@ -50,10 +54,37 @@ describe('CommunityRewardService.rewardPost', () => {
     expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
-  it('race P2034 (2 bài đăng dồn dập đụng Serializable) → nuốt lỗi, KHÔNG throw (best-effort)', async () => {
+  it('xung đột tuần tự hoá P2034 một lần → thử lại và vẫn cấp thưởng', async () => {
     const d = deps();
+    const run = d.prisma.$transaction;
+    d.prisma.$transaction = jest.fn().mockRejectedValueOnce({ code: 'P2034', message: 'serialization failure' }).mockImplementation(run);
+    await make(d).rewardPost('u1', 'p1');
+    expect(d.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(d.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+
+  it('deadlock 40P01 (mã Postgres trong meta) cũng được thử lại', async () => {
+    const d = deps();
+    const run = d.prisma.$transaction;
+    d.prisma.$transaction = jest.fn().mockRejectedValueOnce({ code: 'P2010', meta: { code: '40P01' } }).mockImplementation(run);
+    await make(d).rewardPost('u1', 'p1');
+    expect(d.rewards.grant).toHaveBeenCalledTimes(1);
+  });
+
+  it('P2034 mãi → thử đúng 3 lần, log cảnh báo, KHÔNG throw (best-effort)', async () => {
+    const d = deps();
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     d.prisma.$transaction = jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' });
     await expect(make(d).rewardPost('u1', 'p1')).resolves.toBeUndefined();
+    expect(d.prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('COMMUNITY_POST:p1'));
+    warn.mockRestore();
+  });
+
+  it('hạn điểm đọc TRƯỚC khi mở transaction (không đọc config trong tx)', async () => {
+    const d = deps();
+    await make(d).rewardPost('u1', 'p1');
+    expect(d.rewards.expiresAt.mock.invocationCallOrder[0]).toBeLessThan(d.prisma.$transaction.mock.invocationCallOrder[0]);
   });
 
   it('lỗi khác P2034 → vẫn throw (không nuốt lỗi bất kỳ)', async () => {
@@ -84,7 +115,7 @@ describe('CommunityRewardService.rewardAnswer', () => {
     const d = deps();
     d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.answer_reward_points' ? 1 : f));
     await make(d).rewardAnswer('answerer', 'author', 'c1');
-    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_ANSWER:c1', 'COMMUNITY', 'c1', d.prisma);
+    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_ANSWER:c1', 'COMMUNITY', 'c1', d.prisma, EXP);
   });
 
   it('tự trả lời bài của mình → KHÔNG thưởng', async () => {
@@ -124,7 +155,7 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
     const d = deps();
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
     // tham số cuối là tx — best-answer cũng đếm-rồi-cấp trong transaction như rewardPost/rewardAnswer.
-    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma);
+    expect(d.rewards.grant).toHaveBeenCalledWith('answerer', 1, 'COMMUNITY_BEST:p1', 'COMMUNITY', 'p1', d.prisma, EXP);
     expect(keys(d)).not.toContain('community.best_answer_reward');
   });
 
@@ -154,7 +185,7 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
     expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 
-  it('đếm trần best-answer theo reason COMMUNITY_BEST của HÔM NAY ở cả hai sổ, trong transaction Serializable', async () => {
+  it('đếm trần best-answer theo reason COMMUNITY_BEST của HÔM NAY ở cả hai sổ, trong transaction đã khoá dòng người nhận', async () => {
     const d = deps();
     await make(d).rewardBestAnswer('answerer', 'author', 'p1');
     for (const m of [d.prisma.coinTransaction.count, d.prisma.pointsTransaction.count]) {
@@ -164,7 +195,8 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
         }),
       );
     }
-    expect(d.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+    expect(d.prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(d.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
   });
 });
 

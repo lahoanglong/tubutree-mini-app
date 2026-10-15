@@ -1,8 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { startOfVnDay } from '../../common/vn-time';
+
+const MAX_REWARD_ATTEMPTS = 3;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function isRetryableTxError(err: unknown): boolean {
+  const e = err as { code?: string; meta?: { code?: string } } | null;
+  return e?.code === 'P2034' || e?.code === '40001' || e?.code === '40P01' || e?.meta?.code === '40001' || e?.meta?.code === '40P01';
+}
 
 /**
  * Thưởng Điểm Xanh cho hoạt động cộng đồng (PD-3, trước đây là TubuXu). Idempotent qua reason +
@@ -14,6 +22,8 @@ import { startOfVnDay } from '../../common/vn-time';
  */
 @Injectable()
 export class CommunityRewardService {
+  private readonly logger = new Logger(CommunityRewardService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewards: RewardPointsService,
@@ -28,10 +38,13 @@ export class CommunityRewardService {
 
   /**
    * Đếm-rồi-cấp thưởng với trần số lần/ngày, dùng chung cho rewardPost/rewardAnswer/rewardBestAnswer.
-   * Đếm-rồi-quyết TRONG transaction Serializable: nhiều request dồn dập (vd đăng/trả lời
-   * liên tục) không thể cùng đọc chung 1 todayCount rồi cùng lọt qua trần — 1 trong các tx
-   * sẽ P2034, nuốt lỗi (bỏ qua thưởng lần đó) thay vì throw, vì thưởng cộng đồng là best-effort.
+   * Khoá dòng users của người nhận (FOR NO KEY UPDATE: không xung đột với KEY SHARE của dòng sổ có FK
+   * tới users, nên không deadlock với các tx đang chèn) rồi đếm + cấp ở READ COMMITTED: cùng một người
+   * bị tuần tự hoá nên không thể cùng đọc chung 1 todayCount rồi cùng lọt qua trần, còn NGƯỜI KHÁC NHAU
+   * không chặn nhau (Serializable trước đây ném P2034 chéo giữa các người dùng và việc nuốt lỗi làm mất
+   * thưởng của người không hề spam). Hạn điểm đọc TRƯỚC tx (đọc config trong tx xin thêm một kết nối pool).
    * Đếm cả sổ xu cũ: thưởng bằng xu trong ngày deploy vẫn tính vào trần ngày đó.
+   * Lỗi tạm (deadlock 40P01 / tuần tự hoá 40001/P2034) thì thử lại; hết lượt thử thì log cảnh báo.
    */
   private async rewardWithDailyCap(
     userId: string,
@@ -42,9 +55,10 @@ export class CommunityRewardService {
   ): Promise<void> {
     const since = startOfVnDay();
     const expiresAt = await this.rewards.expiresAt();
-    try {
-      await this.prisma.$transaction(
-        async (tx) => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
           const where = { userId, refType: 'COMMUNITY', reason: { startsWith: `${reasonPrefix}:` }, createdAt: { gte: since } };
           const [coinToday, pointsToday] = await Promise.all([
             tx.coinTransaction.count({ where }),
@@ -52,11 +66,16 @@ export class CommunityRewardService {
           ]);
           if (coinToday + pointsToday >= cap) return;
           await this.rewards.grant(userId, points, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx, expiresAt);
-        },
-        { isolationLevel: 'Serializable' },
-      );
-    } catch (err) {
-      if (!(typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034')) throw err;
+        });
+        return;
+      } catch (err) {
+        if (!isRetryableTxError(err)) throw err;
+        if (attempt >= MAX_REWARD_ATTEMPTS) {
+          this.logger.warn(`Bỏ thưởng ${reasonPrefix}:${refId} user=${userId} sau ${attempt} lần xung đột giao dịch: ${(err as Error).message}`);
+          return;
+        }
+        await sleep(20 * attempt + Math.random() * 40);
+      }
     }
   }
 
