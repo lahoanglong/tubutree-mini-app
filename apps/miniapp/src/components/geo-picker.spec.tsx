@@ -63,7 +63,7 @@ describe('GeoPicker: tìm phường/xã', () => {
     const options = within(screen.getByRole('listbox', { name: 'Phường/Xã' })).getAllByRole('option');
     expect(options.map((o) => o.textContent)).toEqual(['Phường Đống Đa']);
 
-    fireEvent.click(options[0]);
+    fireEvent.click(options[0]!);
     expect(onValue).toHaveBeenLastCalledWith({ province: 'Hà Nội', provinceCode: 'p1', ward: 'Phường Đống Đa', wardCode: 'w2' });
     await waitFor(() => expect(screen.queryByRole('listbox', { name: 'Phường/Xã' })).not.toBeInTheDocument());
   });

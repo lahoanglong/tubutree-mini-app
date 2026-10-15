@@ -195,7 +195,7 @@ function GeoSelect({
           value={query}
           onChange={setQuery}
           onSubmit={() => {
-            if (shown.length === 1) pick(shown[0].code);
+            if (shown.length === 1) pick(shown[0]!.code);
           }}
           label={`Tìm ${label.toLowerCase()}`}
           clearLabel="Xoá từ khoá"
