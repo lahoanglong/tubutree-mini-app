@@ -84,6 +84,9 @@ export class RewardPointsService {
    *
    * Số điểm ngoài 1..POINTS_GRANT_HARD_MAX hoặc không nguyên là lỗi cấu hình/lập trình: log + 500,
    * không ghi gì (trong tx của caller thì rollback cả thao tác).
+   *
+   * `expiresAt`: caller đang giữ khoá dòng trong tx thì đọc hạn (this.expiresAt) TRƯỚC khi mở tx rồi truyền vào — cache cấu
+   * hình hết hạn sẽ đọc qua this.prisma, tức xin kết nối pool thứ hai khi tx đang giữ một kết nối + khoá (cạn pool P2024).
    */
   async grant(
     userId: string,
@@ -92,6 +95,7 @@ export class RewardPointsService {
     refType: string,
     refId?: string | null,
     tx?: Prisma.TransactionClient,
+    expiresAtOverride?: Date,
   ): Promise<boolean> {
     if (!Number.isInteger(points) || points <= 0 || points > POINTS_GRANT_HARD_MAX) {
       this.logger.error(
@@ -100,7 +104,7 @@ export class RewardPointsService {
       );
       throw new InternalServerErrorException('Thưởng Điểm Xanh không hợp lệ, đã báo quản trị viên.');
     }
-    const expiresAt = await this.expiresAt();
+    const expiresAt = expiresAtOverride ?? (await this.expiresAt());
     const run = async (db: Prisma.TransactionClient): Promise<boolean> => {
       if (await this.legacyCoinEntryExists(db, userId, reason, refType)) {
         this.logger.debug(`grant bỏ qua: đã thưởng bằng xu trước gộp reason=${reason}`);
@@ -194,9 +198,10 @@ export class RewardPointsService {
     const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true } });
     if (!referrer || referrer.role === 'AFFILIATE') return false;
 
-    const [reward, { windowDays, minOrderAmount: minOrder }] = await Promise.all([
+    const [reward, { windowDays, minOrderAmount: minOrder }, expiresAt] = await Promise.all([
       this.config.get<number>('referral.referrer_reward_points', 5),
       this.referralOrderRules(),
+      this.expiresAt(),
     ]);
     if (!(reward > 0)) return false;
 
@@ -231,7 +236,7 @@ export class RewardPointsService {
       // Ghi trước rồi mới khoá (lúc thu hồi theo tỷ lệ ngay dưới) là nâng khoá: dòng sổ của lần cấp song song cho người được
       // mời khác giữ KEY SHARE trên người mời và chờ UPDATE của tx này ⇒ deadlock.
       await lockReferrer(tx, referrerId);
-      const ok = await this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx);
+      const ok = await this.grant(referrerId, reward, `${REFERRAL_ORDER2_PREFIX}${refereeId}`, 'REFERRAL', `${first.id}:${second.id}`, tx, expiresAt);
       // Phần đơn đã duyệt trả một phần trước lúc cấp: thu theo tỷ lệ ngay trong tx này (revokeReferralRewardForPriorReturns).
       if (ok) await revokeReferralRewardForPriorReturns(tx, [first.id, second.id]);
       return ok;
@@ -247,7 +252,7 @@ export class RewardPointsService {
    * không chạy chéo với lần thu hồi; reason duy nhất theo đời chặn cấp trùng.
    */
   private async awardReferralMilestones(referrerId: string): Promise<void> {
-    const milestones = await this.referralMilestones();
+    const [milestones, expiresAt] = await Promise.all([this.referralMilestones(), this.expiresAt()]);
     if (!milestones.length) return;
     await this.prisma.$transaction(async (tx) => {
       await lockReferrer(tx, referrerId);
@@ -258,7 +263,7 @@ export class RewardPointsService {
         const s = state.get(m.count);
         const gen = s?.grants.size ?? 0;
         if (gen > (s?.revokes ?? 0)) continue;
-        await this.grant(referrerId, m.bonusPoints, milestoneGrantReason(referrerId, m.count, gen), 'REFERRAL', referrerId, tx);
+        await this.grant(referrerId, m.bonusPoints, milestoneGrantReason(referrerId, m.count, gen), 'REFERRAL', referrerId, tx, expiresAt);
       }
     });
   }
