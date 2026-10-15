@@ -61,6 +61,14 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
     expect(daysAgo).toBeGreaterThanOrEqual(20); // vẫn đủ gần cửa sổ 30 ngày (không quá sớm/vô nghĩa)
   });
 
+  it('SYNC-8: truy vấn chỉ lấy đơn bán lẻ khách tự mua (loại đơn CTV lên hộ và đơn đại lý)', async () => {
+    const { svc, queryRaw } = setup([]);
+    await svc.sendReorderReminders();
+    const sql = (queryRaw.mock.calls[0]![0] as readonly string[]).join('?');
+    expect(sql).toContain(`o.type::text = 'RETAIL'`);
+    expect(sql).toContain('o."placedForCustomer" = false');
+  });
+
   it('đã nhắc sau đơn cuối (remindedAt >= lastOrderAt) → KHÔNG nhắc lại (chống spam)', async () => {
     const { svc, notify, create, updateMany } = setup([row({ lastOrderAt: new Date('2026-04-01') })], {
       remindedAt: new Date('2026-04-20'), // đã nhắc sau đơn cuối
