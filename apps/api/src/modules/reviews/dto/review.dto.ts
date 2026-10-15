@@ -13,4 +13,6 @@ export class CreateReviewDto {
   images?: string[];
   // Review video (UGC §6.14.9) — chỉ video khách tải lên Cloudinary qua ứng dụng; không có đường base64.
   @IsOptional() @IsUploadedMediaUrl({ message: 'Video đánh giá phải là video đã tải lên từ ứng dụng.' }) videoUrl?: string;
+  // Lần mua (đơn) được đánh giá: mỗi đơn đã nhận một đánh giá. Đơn đã có đánh giá thì lần gửi này sửa nó.
+  @IsOptional() @IsString() @MaxLength(64) orderId?: string;
 }

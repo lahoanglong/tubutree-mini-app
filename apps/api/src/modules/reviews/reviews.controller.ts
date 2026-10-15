@@ -58,6 +58,12 @@ export class ReviewsController {
     return new StreamableFile(data, { type: mime });
   }
 
+  /** Đánh giá của chính mình, nguyên nội dung, để điền sẵn form sửa (cần đăng nhập — không @Public). */
+  @Get('reviews/:id')
+  findOwn(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.reviews.findOwn(userId, id);
+  }
+
   @Delete('reviews/:id')
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.reviews.remove(user.sub, user.role, id);

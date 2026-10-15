@@ -73,3 +73,16 @@ describe('CreateReviewDto.images qua ValidationPipe toàn cục (ENGAGE-6)', () 
     await expect(asBody({ rating: 5, comment: 'Rất ổn' })).resolves.toBeDefined();
   });
 });
+
+describe('CreateReviewDto.orderId (mỗi lần mua một đánh giá)', () => {
+  it('không bắt buộc (app cũ không gửi); có thì giữ nguyên tới service', async () => {
+    await expect(asBody({ rating: 5 })).resolves.toBeDefined();
+    const dto = (await asBody({ rating: 5, orderId: 'cm1order0001' })) as CreateReviewDto;
+    expect(dto.orderId).toBe('cm1order0001');
+  });
+
+  it('không phải chuỗi hoặc dài bất thường → 400', async () => {
+    await expect(asBody({ rating: 5, orderId: 123 })).rejects.toThrow();
+    await expect(asBody({ rating: 5, orderId: 'x'.repeat(65) })).rejects.toThrow();
+  });
+});
