@@ -143,10 +143,12 @@ export default function CheckoutPage() {
   const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0);
 
   const pointsToUse = usePoints ? points.usable : 0;
+  // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.
+  const cartHasItems = (cart.data?.items.length ?? 0) > 0;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed && cartReady,
+    enabled: !!addressId && authed && cartReady && cartHasItems,
   });
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).

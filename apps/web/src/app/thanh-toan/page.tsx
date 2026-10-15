@@ -128,7 +128,8 @@ export default function CheckoutPage() {
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
-    enabled: !!addressId && phase === 'authenticated' && cartReady && !cartEmpty,
+    // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
+    enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty,
   });
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần

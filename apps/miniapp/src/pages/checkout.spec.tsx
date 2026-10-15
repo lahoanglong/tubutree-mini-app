@@ -996,3 +996,38 @@ describe('CheckoutPage — mất mạng khi bấm Đặt hàng (R4-BUYER-1)', ()
     expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
   });
 });
+
+// R5-BUYER-5: giỏ rỗng (hoặc giỏ chưa tải xong) mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
+describe('CheckoutPage — không báo giá khi chưa có hàng (R5-BUYER-5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('giỏ rỗng: hiện "Giỏ còn trống" và không gọi báo giá', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [], itemCount: 0, subtotal: 0 });
+    renderPage();
+    expect(await screen.findByText(viCopy.cart.emptyHeading)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalled());
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
+  });
+
+  it('địa chỉ về trước giỏ: chưa báo giá cho tới khi giỏ tải xong và có hàng', async () => {
+    let resolveCart!: (v: typeof CART) => void;
+    mocks.getCart.mockReturnValue(new Promise((r) => (resolveCart = r)));
+    renderPage();
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.checkoutQuote).not.toHaveBeenCalled();
+
+    resolveCart(CART);
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledTimes(1));
+  });
+});
