@@ -37,7 +37,7 @@ export class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
   // SELLER-10: rút ngân hàng bắt buộc đủ thông tin tài khoản; trước đây `{}` cũng qua và admin không biết chuyển vào đâu.
-  @ValidateIf((o: PayoutDto) => o.method === 'BANK')
+  @ValidateIf((o: PayoutDto) => o.method !== 'WALLET_BALANCE')
   @IsObject()
   @ValidateNested()
   @Type(() => PayoutBankInfoDto)

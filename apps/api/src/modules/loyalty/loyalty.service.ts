@@ -190,7 +190,7 @@ export class LoyaltyService {
 
         // pointsEarned CHỈ được cộng khi đơn DELIVERED (xem creditOrderPoints).
         // Nếu user hủy đơn CONFIRMED (chưa giao), điểm chưa cộng → KHÔNG trừ.
-        const wasCredited = earnedLeft > 0
+        const wasCredited = order.pointsEarned > 0
           ? Boolean(
               await tx.pointsTransaction.findFirst({
                 where: { userId: order.userId, reason: `ORDER_DELIVERED:${order.code}` },

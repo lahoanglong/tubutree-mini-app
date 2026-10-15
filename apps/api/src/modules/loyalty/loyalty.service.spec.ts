@@ -347,6 +347,26 @@ describe('LoyaltyService.reverseOrderPoints chỉ trừ pointsEarned khi đã DE
     expect(txn).toHaveBeenCalledTimes(1);
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('đơn RETURNED mà các lần trả một phần đã thu hồi hết điểm tích → vẫn ghi dấu ORDER_REVERSED delta 0, không trừ thêm', async () => {
+    const h = reverseHarness({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50, pointsUsed: 0, pointsUsedConverted: 0 });
+    const prisma = h.prisma as unknown as {
+      order: { findUniqueOrThrow: jest.Mock };
+      returnRequest: { findMany: jest.Mock };
+    };
+    prisma.order.findUniqueOrThrow = jest.fn().mockResolvedValue({
+      id: 'o1', code: 'C1', userId: 'u1', status: 'RETURNED', pointsEarned: 50, pointsUsed: 0, pointsUsedConverted: 0,
+    });
+    prisma.returnRequest = {
+      findMany: jest.fn().mockResolvedValue([
+        { refundAmount: 100_000, shippingRefund: 0, pointsRefunded: 0, convertedPointsRefunded: 0, pointsReversed: 50, commissionReversed: 0, items: [], receivedAt: null },
+      ]),
+    };
+    await new LoyaltyService(h.prisma, makeConfig()).reverseOrderPoints('o1');
+    expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.create.mock.calls[0][0].data).toMatchObject({ reason: 'ORDER_REVERSED:C1', delta: 0 });
+    expect(h.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 /**

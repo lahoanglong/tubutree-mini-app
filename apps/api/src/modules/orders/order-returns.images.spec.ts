@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { OrderReturnsService, RETURN_LIST_SELECT } from './order-returns.service';
+import { BUYER_RETURN_SELECT, OrderReturnsService, RETURN_LIST_SELECT } from './order-returns.service';
 import { returnImageRef } from './return-images';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -27,6 +27,19 @@ describe('RETURN_LIST_SELECT', () => {
   });
 });
 
+describe('BUYER_RETURN_SELECT', () => {
+  it('bằng RETURN_LIST_SELECT trừ hoa hồng CTV bị cắt và id người duyệt/nhận hàng', () => {
+    const expected = Object.keys(RETURN_LIST_SELECT)
+      .filter((f) => !['commissionReversed', 'reviewedBy', 'receivedBy'].includes(f))
+      .sort();
+    expect(Object.keys(BUYER_RETURN_SELECT).sort()).toEqual(expected);
+    expect(BUYER_RETURN_SELECT).toHaveProperty('refundAmount');
+    expect(BUYER_RETURN_SELECT).not.toHaveProperty('commissionReversed');
+    expect(BUYER_RETURN_SELECT).not.toHaveProperty('reviewedBy');
+    expect(BUYER_RETURN_SELECT).not.toHaveProperty('receivedBy');
+  });
+});
+
 describe('returnImageRef', () => {
   it('ảnh data URL → đường dẫn kèm mã md5 nội dung; ảnh https giữ nguyên', () => {
     expect(returnImageRef('r1', 2, HEAVY)).toBe(`/returns/r1/images/2?v=${v('r1', 2, HEAVY)}`);
@@ -39,7 +52,7 @@ describe('OrderReturnsService — ảnh minh chứng không nhúng base64 trong 
     const findMany = jest.fn().mockResolvedValue([row()]);
     const svc = build({ returnRequest: { findMany }, $queryRaw: jest.fn().mockResolvedValue(refRows) });
     const out = await svc.listMine('u1');
-    expect(findMany.mock.calls[0][0]).toMatchObject({ where: { userId: 'u1' }, take: 50, select: RETURN_LIST_SELECT });
+    expect(findMany.mock.calls[0][0]).toMatchObject({ where: { userId: 'u1' }, take: 50, select: BUYER_RETURN_SELECT });
     expect(findMany.mock.calls[0][0]).not.toHaveProperty('include');
     expect(out[0]!.images).toEqual([`/returns/r1/images/0?v=${v('r1', 0, HEAVY)}`, HTTPS]);
     expect(JSON.stringify(out)).not.toContain('base64');
@@ -97,7 +110,7 @@ describe('OrderReturnsService — ảnh minh chứng không nhúng base64 trong 
     );
     const out = await svc.request('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', images: [HEAVY, HTTPS], items: [{ orderItemId: 'a', quantity: 1 }] });
     expect(create.mock.calls[0]![0].data).toMatchObject({ images: [HEAVY, HTTPS] });
-    expect(create.mock.calls[0]![0]).toMatchObject({ select: RETURN_LIST_SELECT });
+    expect(create.mock.calls[0]![0]).toMatchObject({ select: BUYER_RETURN_SELECT });
     expect(out.images).toEqual([`/returns/r1/images/0?v=${v('r1', 0, HEAVY)}`, HTTPS]);
     expect(JSON.stringify(out)).not.toContain('base64');
   });

@@ -67,6 +67,16 @@ export const RETURN_LIST_SELECT = {
   items: true,
 } satisfies Prisma.ReturnRequestSelect;
 
+const BUYER_HIDDEN_RETURN_FIELDS = ['commissionReversed', 'reviewedBy', 'receivedBy'] as const;
+
+/**
+ * Phiếu trả hàng khách tự xem: bỏ hoa hồng CTV bị cắt và id nhân sự/gian hàng duyệt, nhận hàng (chỉ admin và gian hàng cần).
+ * `order-returns.images.spec.ts` giữ cho tập này luôn bằng RETURN_LIST_SELECT trừ các cột nội bộ.
+ */
+export const BUYER_RETURN_SELECT = Object.fromEntries(
+  Object.entries(RETURN_LIST_SELECT).filter(([field]) => !(BUYER_HIDDEN_RETURN_FIELDS as readonly string[]).includes(field)),
+) as Omit<typeof RETURN_LIST_SELECT, (typeof BUYER_HIDDEN_RETURN_FIELDS)[number]>;
+
 const PANCAKE_ALERT_TEMPLATE = 'OPS_PANCAKE_ALERT';
 
 export interface ReturnPreview {
@@ -198,7 +208,7 @@ export class OrderReturnsService {
     const destination = this.destinationFor(order, dto);
 
     const images = dto.images ?? [];
-    let req: Omit<ReturnRow, 'images'>;
+    let req: Omit<ReturnRow, 'images' | (typeof BUYER_HIDDEN_RETURN_FIELDS)[number]>;
     try {
       req = await this.prisma.returnRequest.create({
         data: {
@@ -217,7 +227,7 @@ export class OrderReturnsService {
             : {}),
           items: { create: [...lines].map(([orderItemId, quantity]) => ({ orderItemId, quantity })) },
         },
-        select: RETURN_LIST_SELECT,
+        select: BUYER_RETURN_SELECT,
       });
     } catch (err) {
       // Guard thật là unique index partial (orderId WHERE status='REQUESTED'): hai lần gửi song song chỉ một lần tạo.
@@ -265,7 +275,7 @@ export class OrderReturnsService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: RETURN_LIST_SELECT,
+      select: BUYER_RETURN_SELECT,
     });
     const refs = await this.imageRefsFor(rows.map((r) => r.id));
     return rows.map((r) => ({ ...r, images: refs.get(r.id) ?? [] }));

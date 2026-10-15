@@ -9,6 +9,21 @@ async function errors<T extends object>(cls: new () => T, plain: object) {
   return res.flatMap((e) => Object.values(e.constraints ?? {}));
 }
 
+describe('SELLER-10 DTO: rút hoa hồng cần tài khoản nhận trừ khi rút về ví', () => {
+  const BANK = { bankName: 'VCB', accountNumber: '0071000123456', accountName: 'NGUYEN VAN A' };
+
+  it('mọi phương thức khác WALLET_BALANCE (kể cả ZALOPAY cũ) phải kèm bankInfo hợp lệ', async () => {
+    for (const method of ['BANK', 'ZALOPAY']) {
+      expect(await errors(PayoutDto, { amount: 500_000, method })).not.toEqual([]);
+      expect(await errors(PayoutDto, { amount: 500_000, method, bankInfo: BANK })).toEqual([]);
+    }
+  });
+
+  it('rút về ví không cần bankInfo', async () => {
+    expect(await errors(PayoutDto, { amount: 500_000, method: 'WALLET_BALANCE' })).toEqual([]);
+  });
+});
+
 describe('SELLER-11 DTO: MST/CCCD, năm bảng kê, tháng báo cáo', () => {
   it('MST 10 số, MST 10-3, CCCD 12 số hợp lệ; số khác báo câu tiếng Việt', async () => {
     for (const taxId of ['0123456789', '0123456789-001', '079201001234']) {
