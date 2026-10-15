@@ -24,6 +24,7 @@ import { toPublicCart } from '../checkout/checkout-split';
 import { forBuyer, type BuyerHiddenOrderField } from './buyer-order-fields';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
 import { foldVietnamese } from '../catalog/search-text';
+import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -58,7 +59,8 @@ export interface SiblingOrderView {
 }
 
 export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & {
-  items: OrderItemView[];
+  /** Chỉ màn chi tiết (detailView) kèm trạng thái đánh giá từng dòng; danh sách đơn không có. */
+  items: (OrderItemView & Partial<OrderLineReview>)[];
   fulfilment?: OrderFulfilmentView;
   /** Các đơn khác cùng lần đặt bị tách theo nơi giao. */
   siblings?: SiblingOrderView[];
@@ -215,12 +217,13 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, paymentDeadline] = await Promise.all([
+    const [[view], fulfilment, paymentDeadline, reviewOf] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       this.paymentDeadline(order),
+      orderLineReviews(this.prisma, order),
     ]);
-    return { ...view!, ...fulfilment, paymentDeadline };
+    return { ...view!, items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })), ...fulfilment, paymentDeadline };
   }
 
   /** Hạn thanh toán của đơn trả trước đang chờ tiền — cùng TTL với cron tự huỷ (đơn đại lý hạn riêng). Null với đơn khác. */

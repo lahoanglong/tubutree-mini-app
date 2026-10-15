@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Leaf, ExternalLink } from 'lucide-react';
+import { Leaf, ExternalLink, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -23,6 +23,7 @@ import {
   safeHttpUrl,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { reviewHref } from '@/lib/reviews-client';
 import { RecyclingStatus } from '@/components/recycling-status';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
@@ -187,6 +188,16 @@ export default function OrderDetailPage() {
                 <div className="mt-0.5 text-xs text-stone-600">
                   {formatVnd(it.unitPrice)} × {it.quantity}
                 </div>
+                {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
+                {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
+                  <Link
+                    href={reviewHref(it.productSlug, o.id)}
+                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline"
+                  >
+                    <Star className="h-4 w-4" aria-hidden="true" />
+                    {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
+                  </Link>
+                )}
               </div>
               <div className="flex-none text-sm font-semibold text-stone-900">{formatVnd(it.total)}</div>
             </li>

@@ -353,7 +353,16 @@ export interface OrderDetailDTO extends OrderDTO {
   trackingLink?: string | null;
   /** Hạn chuyển khoản của đơn trả trước đang chờ tiền (ISO); quá hạn đơn tự huỷ. */
   paymentDeadline?: string | null;
-  items: (OrderDTO['items'][number] & { id?: string; thumbnail?: string | null })[];
+  items: (OrderDTO['items'][number] & {
+    id?: string;
+    thumbnail?: string | null;
+    /** Slug sản phẩm lúc mua (đơn cũ không có) — để mở trang sản phẩm từ đơn. */
+    productSlug?: string | null;
+    /** Đánh giá khách đã viết cho sản phẩm của dòng này ở chính đơn này (mỗi lần mua một đánh giá). */
+    reviewId?: string | null;
+    /** Dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
+    reviewable?: boolean;
+  })[];
 }
 export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);
 

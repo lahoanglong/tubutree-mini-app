@@ -5,13 +5,21 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 
 // BUYERWEB-17: trang chi tiết chỉ hiện đúng một ảnh. BUYERWEB-16: thiếu JSON-LD Product, canonical, og:image đủ.
 
-const api = vi.hoisted(() => ({ product: null as unknown, flash: [] as unknown[] }));
+const api = vi.hoisted(() => ({ product: null as unknown, flash: [] as unknown[], reviews: null as unknown }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
 vi.mock('@/components/add-to-cart', () => ({ default: () => null }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'idle', initialized: true, sessionUnavailable: false }) }));
+vi.mock('@/lib/reviews-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
+  fetchProductReviews: async () => api.reviews,
+  fetchCanReview: async () => {
+    throw new Error('khách chưa đăng nhập không hỏi can-review');
+  },
+}));
 
 import ProductPage, { generateMetadata } from './page';
 
@@ -32,9 +40,21 @@ const mount = async () => {
   return r.container;
 };
 
+const REVIEWS = {
+  average: 4.5,
+  count: 2,
+  videoCount: 0,
+  distribution: { '5': 1, '4': 1 },
+  items: [
+    { id: 'r1', rating: 5, comment: 'Gội êm', images: [], videoUrl: null, createdAt: '2026-09-01T00:00:00.000Z', author: 'Lan', avatar: null, verifiedPurchase: true },
+    { id: 'r2', rating: 4, comment: 'Thơm nhẹ', images: [], videoUrl: null, createdAt: '2026-08-01T00:00:00.000Z', author: 'Minh', avatar: null, verifiedPurchase: true },
+  ],
+};
+
 beforeEach(() => {
   api.product = PRODUCT;
   api.flash = [];
+  api.reviews = REVIEWS;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -116,6 +136,20 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
+  });
+});
+
+// R8: trang sản phẩm web có khối đánh giá (danh sách công khai và lối viết đánh giá) như Mini App.
+describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
+  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập được mời đăng nhập để đánh giá', async () => {
+    const c = await mount();
+    const section = c.querySelector('section#danh-gia')!;
+    expect(section.querySelector('h2')?.textContent).toBe('Đánh giá (2)');
+    expect(section.textContent).toContain('4.5');
+    expect(section.textContent).toContain('Gội êm');
+    expect(section.textContent).toContain('Thơm nhẹ');
+    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Đăng nhập để đánh giá')!;
+    expect(login.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi-bo-ket');
   });
 });
 

@@ -514,7 +514,7 @@ export class GameService {
    * không lệch định nghĩa "đạt điều kiện" (trước đây chỉ getMissions có logic này). */
   private missionRawProgress(
     code: string,
-    metrics: { streakDays: number; ordersCount: number; reviewsCount: number; referralsCount: number },
+    metrics: { streakDays: number; ordersCount: number; reviewedProductsCount: number; referralsCount: number },
   ): number {
     switch (code) {
       case 'CHECKIN_7':
@@ -522,7 +522,7 @@ export class GameService {
       case 'FIRST_ORDER':
         return metrics.ordersCount;
       case 'REVIEW_3':
-        return metrics.reviewsCount;
+        return metrics.reviewedProductsCount;
       case 'INVITE_3':
         return metrics.referralsCount;
       default:
@@ -533,21 +533,28 @@ export class GameService {
   /**
    * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách: đơn đặt rồi huỷ không còn giữ được thưởng. INVITE_3 dùng đúng
    * số lượt giới thiệu thành công của chương trình giới thiệu (bạn được mời mua thành công, trừ lượt bị thu hồi), không
-   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1). REVIEW_3 chỉ đếm đánh giá có ảnh,
-   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh").
+   * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1). REVIEW_3 chỉ tính đánh giá có ảnh,
+   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh"), và đếm theo SẢN PHẨM khác nhau: mỗi lần mua được một đánh giá
+   * nên đếm theo dòng thì mua cùng một sản phẩm ba lần là xong nhiệm vụ.
    */
   private async missionMetrics(userId: string) {
-    const [profile, ordersCount, reviewsCount, referralsCount] = await Promise.all([
+    const [profile, ordersCount, reviewedProducts, referralsCount] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.prisma.order.count({
         where: { userId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
       }),
-      this.prisma.review.count({
+      this.prisma.review.groupBy({
+        by: ['productId'],
         where: { userId, NOT: { images: { isEmpty: true } } },
       }),
       countReferralSuccesses(this.prisma, userId),
     ]);
-    return { streakDays: profile?.streakDays ?? 0, ordersCount, reviewsCount, referralsCount };
+    return {
+      streakDays: profile?.streakDays ?? 0,
+      ordersCount,
+      reviewedProductsCount: reviewedProducts.length,
+      referralsCount,
+    };
   }
 
   /** Nhiệm vụ không lặp lại: 1 chu kỳ duy nhất, cố định '0'. Nhiệm vụ lặp lại (isRepeatable, vd
@@ -575,10 +582,13 @@ export class GameService {
     return missions.map((m) => {
       const targetGoal = m.goal > 0 ? m.goal : 1;
       const raw = this.missionRawProgress(m.code, metrics);
-      const progress = Math.min(targetGoal, raw);
-      const completed = raw >= targetGoal;
       const cycleKey = this.missionCycleKey(m, raw, targetGoal);
       const claimed = m.isRepeatable ? claimedKeys.has(`${m.id}:${cycleKey}`) : claimedOnce.has(m.id);
+      // Nhiệm vụ không lặp lại đã nhận là đã xong: chỉ số thô có thể tụt sau lúc nhận (đơn trả, đánh giá xoá, REVIEW_3 đếm
+      // theo sản phẩm) mà thẻ không được quay về "1/3" kèm dấu đã nhận.
+      const done = !m.isRepeatable && claimed;
+      const progress = done ? targetGoal : Math.min(targetGoal, raw);
+      const completed = done || raw >= targetGoal;
 
       return {
         code: m.code,
@@ -609,14 +619,15 @@ export class GameService {
     const metrics = await this.missionMetrics(userId);
     const targetGoal = mission.goal > 0 ? mission.goal : 1;
     const raw = this.missionRawProgress(mission.code, metrics);
-    if (raw < targetGoal) {
-      throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
-    }
-    const cycleKey = this.missionCycleKey(mission, raw, targetGoal);
+    // Đã nhận thì báo đã nhận trước khi xét điều kiện, cùng lý do getMissions coi nhiệm vụ đã nhận là đã xong.
     if (!mission.isRepeatable) {
       const prior = await this.prisma.missionProgress.findFirst({ where: { userId, missionId: mission.id } });
       if (prior) throw new BadRequestException('Bạn đã nhận thưởng nhiệm vụ này rồi.');
     }
+    if (raw < targetGoal) {
+      throw new BadRequestException('Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.');
+    }
+    const cycleKey = this.missionCycleKey(mission, raw, targetGoal);
     // NGOÀI tx, cùng lý do như spin(); chỉ cần khi nhiệm vụ có thưởng điểm.
     const rewardExpiresAt = mission.rewardPoints > 0 ? await this.rewardPointsExpiresAt() : null;
 

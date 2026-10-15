@@ -487,45 +487,68 @@ export interface ReviewSummary {
 export const fetchReviews = (slug: string) =>
   api.get<ReviewSummary>(`/products/${slug}/reviews`).then((r) => r.data);
 
-/** Đánh giá hiện có của chính người dùng cho sản phẩm (Q-30: mua lại thì sửa đánh giá này). */
+/** Một đánh giá khách đã viết cho sản phẩm, gắn với lần mua (đơn) của nó — để gắn nút sửa đúng dòng. */
+export interface MyReviewRef {
+  id: string;
+  orderId: string;
+  orderCode: string | null;
+  rating: number;
+  createdAt: string;
+  isVisible: boolean;
+}
+/** Lần mua (đơn đã nhận) còn viết được đánh giá; đơn nhận sớm nhất trước. */
+export interface ReviewableOrder {
+  orderId: string;
+  code: string;
+  deliveredAt: string | null;
+}
+/**
+ * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. Mỗi lần mua một đánh
+ * giá: `canReview` là còn đơn để viết đánh giá MỚI (`reviewableOrders`), `ALL_REVIEWED` là mọi lần mua đã có đánh giá
+ * (vẫn sửa được qua `myReviews`). `rewardAvailable`: đánh giá mới lúc này có được cộng Điểm Xanh không (chỉ đánh giá đầu
+ * tiên của sản phẩm); chỉ để nói đúng về điểm, máy chủ vẫn quyết định thưởng lúc tạo.
+ */
+export interface CanReview {
+  canReview: boolean;
+  reason: 'NOT_PURCHASED' | 'ALL_REVIEWED' | null;
+  rewardAvailable?: boolean;
+  purchaseCount?: number;
+  reviewableOrders?: ReviewableOrder[];
+  myReviews?: MyReviewRef[];
+}
+export const canReviewProduct = (slug: string) =>
+  api.get<CanReview>(`/products/${slug}/reviews/can-review`).then((r) => r.data);
+
+/** Nguyên nội dung một đánh giá của chính mình (ảnh base64 không đổi thành đường dẫn) để điền sẵn form sửa. */
 export interface MyReview {
   id: string;
+  orderId: string;
   rating: number;
   comment: string | null;
   images: string[];
   videoUrl: string | null;
+  isVisible: boolean;
 }
-/**
- * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối.
- * `rewardAvailable` (optional, API cũ không trả): false khi khách đã nhận thưởng sản phẩm này hoặc đang có đánh giá;
- * chỉ để ẩn câu gợi ý điểm, máy chủ vẫn quyết định thưởng lúc tạo.
- */
-export const canReviewProduct = (slug: string) =>
-  api
-    .get<{
-      canReview: boolean;
-      reason: 'NOT_PURCHASED' | null;
-      myReview?: MyReview | null;
-      rewardAvailable?: boolean;
-      purchaseCount?: number;
-    }>(
-      `/products/${slug}/reviews/can-review`,
-    )
-    .then((r) => r.data);
+export const fetchMyReview = (id: string) => api.get<MyReview>(`/reviews/${id}`).then((r) => r.data);
+
 /**
  * POST /products/:slug/reviews trả nguyên dòng Review (không có author/avatar như mục của danh sách công khai) kèm
  * `updated`. Hai trường dưới là optional để chịu được API cũ chưa trả.
- * - `updated`: true khi đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
- * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách còn giữ phần thưởng cũ của sản phẩm này
- *   (xoá rồi tạo lại). Khi `updated` là true nó là phần thưởng của lần tạo gốc, không phải của lần gọi này.
+ * - `updated`: true khi đơn đó đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
+ * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách đã nhận thưởng cho đánh giá đầu tiên của
+ *   sản phẩm này. Khi `updated` là true nó là phần thưởng của lần tạo gốc, không phải của lần gọi này.
  */
 export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'images' | 'videoUrl' | 'createdAt'> & {
   pointsEarned?: number;
   updated?: boolean;
 };
+/**
+ * `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn
+ * (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
+ */
 export const createReview = (
   slug: string,
-  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string },
+  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
 ) => api.post<CreatedReview>(`/products/${slug}/reviews`, data).then((r) => r.data);
 
 // Orders

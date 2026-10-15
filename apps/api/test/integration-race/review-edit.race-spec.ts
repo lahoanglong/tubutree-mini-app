@@ -9,10 +9,10 @@ import { ReviewsService } from '../../src/modules/reviews/reviews.service';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
- * C-110 / Q-30: mỗi người một đánh giá cho mỗi sản phẩm; gọi tạo lại (mua lại) thì SỬA đánh giá cũ;
- * thưởng Điểm Xanh chỉ ở lần tạo đầu, kể cả khi nhiều request tạo chạy song song.
+ * C-110: mỗi lần mua (đơn) một đánh giá; gửi lại cho đơn đã có đánh giá thì SỬA đánh giá đó; thưởng Điểm Xanh chỉ ở đánh
+ * giá đầu tiên của sản phẩm, kể cả khi nhiều request tạo chạy song song. Đánh giá theo nhiều đơn: r8-multi-reviews.race-spec.
  */
-describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng đúng một lần (real Postgres)', () => {
+describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng đúng một lần (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let reviews: ReviewsService;
@@ -71,7 +71,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   it('2 request tạo đồng thời cùng người + sản phẩm → đúng 1 đánh giá, đúng 1 lần thưởng', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
-    const gate = barrierOnFirstCalls(prisma.review, 'findFirst', 2);
+    const gate = barrierOnFirstCalls(prisma.review, 'findUnique', 2);
 
     const res = summarize(
       await Promise.allSettled([
@@ -99,7 +99,7 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
   it('8 request tạo đồng thời → vẫn đúng 1 đánh giá, 1 lần thưởng, 7 request còn lại thành sửa', async () => {
     const { p, v } = await product();
     const { u } = await buyer(v.id);
-    const gate = barrierOnFirstCalls(prisma.review, 'findFirst', 8);
+    const gate = barrierOnFirstCalls(prisma.review, 'findUnique', 8);
 
     const res = summarize(
       await Promise.allSettled(Array.from({ length: 8 }, (_, i) => reviews.create(u.id, p.slug, { rating: (i % 5) + 1, comment: `lần ${i}` }))),
@@ -116,20 +116,20 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
     expect(rows[0]!.pointsEarned).toBe(5);
   });
 
-  it('mua lại: tạo lần hai sửa sao/nội dung/ảnh/video, không đổi số điểm, không thêm giao dịch điểm', async () => {
+  it('gửi lại cho đơn đã đánh giá: sửa sao/nội dung/ảnh/video, không đổi số điểm, không thêm giao dịch điểm', async () => {
     const { p, v } = await product();
     const { u, o } = await buyer(v.id);
     const first = await reviews.create(u.id, p.slug, { rating: 5, comment: 'Lần đầu' });
     expect(first).toMatchObject({ updated: false, pointsEarned: 5 });
 
-    // mua lại: thêm một đơn DELIVERED nữa
+    // mua lại: thêm một đơn DELIVERED nữa, nhưng lần gửi này chọn lại đơn cũ nên là sửa
     await createOrder(prisma, {
       userId: u.id,
       status: 'DELIVERED',
       items: { create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
     });
     const video = 'https://res.cloudinary.com/x/video/upload/v1/rv.mp4';
-    const second = await reviews.create(u.id, p.slug, { rating: 2, comment: 'Dùng lâu thấy khác', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/2.jpg'], videoUrl: video });
+    const second = await reviews.create(u.id, p.slug, { orderId: o.id, rating: 2, comment: 'Dùng lâu thấy khác', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/2.jpg'], videoUrl: video });
     expect(second).toMatchObject({ id: first.id, updated: true });
 
     const { balance, txs, rows } = await ledger(u.id);
@@ -207,29 +207,39 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
     expect(row).toMatchObject({ rating: 5, comment: 'Giữ' });
   });
 
-  it('can-review: có đánh giá rồi vẫn được, trả đánh giá hiện có; chưa mua thì NOT_PURCHASED', async () => {
+  it('can-review: đánh giá xong đơn duy nhất thì hết đơn để viết mới (ALL_REVIEWED) và trả đánh giá để sửa; chưa mua thì NOT_PURCHASED', async () => {
     const { p, v } = await product();
-    const { u } = await buyer(v.id);
+    const { u, o } = await buyer(v.id);
     expect(await reviews.canReview(u.id, p.slug)).toEqual({
       canReview: true,
       reason: null,
-      myReview: null,
       rewardAvailable: true,
       purchaseCount: 1,
+      reviewableOrders: [{ orderId: o.id, code: o.code, deliveredAt: null }],
+      myReviews: [],
     });
     const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });
     expect(await reviews.canReview(u.id, p.slug)).toEqual({
-      canReview: true,
-      reason: null,
-      myReview: { id: first.id, rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'], videoUrl: null },
+      canReview: false,
+      reason: 'ALL_REVIEWED',
       rewardAvailable: false,
       purchaseCount: 1,
+      reviewableOrders: [],
+      myReviews: [{ id: first.id, orderId: o.id, orderCode: o.code, rating: 4, createdAt: first.createdAt, isVisible: true }],
+    });
+    expect(await reviews.findOwn(u.id, first.id)).toMatchObject({
+      id: first.id,
+      orderId: o.id,
+      rating: 4,
+      comment: 'Ổn',
+      images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'],
+      videoUrl: null,
     });
     const stranger = await createUser(prisma);
     expect(await reviews.canReview(stranger.id, p.slug)).toEqual({ canReview: false, reason: 'NOT_PURCHASED' });
   });
 
-  it('purchaseCount (ENGAGE-23): chỉ đếm đơn DELIVERED của đúng khách và đúng sản phẩm; mua lại vẫn một đánh giá, thưởng một lần', async () => {
+  it('purchaseCount (ENGAGE-23): chỉ đếm đơn DELIVERED của đúng khách và đúng sản phẩm; mua lại thì viết thêm đánh giá, thưởng một lần', async () => {
     const a = await product();
     const b = await product();
     const { u } = await buyer(a.v.id);
@@ -247,9 +257,15 @@ describe('Review: một đánh giá/sản phẩm, sửa khi mua lại, thưởng
 
     const first = await reviews.create(u.id, a.p.slug, { rating: 5, comment: 'Lần 1' });
     const again = await reviews.create(u.id, a.p.slug, { rating: 3, comment: 'Mua lần 2' });
-    expect(again).toMatchObject({ id: first.id, updated: true });
+    expect(again).toMatchObject({ updated: false, pointsEarned: 0 });
+    expect(again.id).not.toBe(first.id);
+    expect(again.orderId).not.toBe(first.orderId);
     expect((await ledger(u.id)).balance).toBe(5);
     expect((await reviews.canReview(u.id, a.p.slug)).purchaseCount).toBe(2);
+    // Hai lần mua đều đã có đánh giá: không gửi đơn thì là sửa đánh giá mới nhất, không tạo thứ ba.
+    const third = await reviews.create(u.id, a.p.slug, { rating: 4, comment: 'Sửa lần 2' });
+    expect(third).toMatchObject({ id: again.id, updated: true });
+    expect((await ledger(u.id)).rows).toHaveLength(2);
   });
 
   // PG-4: cờ rewardAvailable phải khớp với điều createFirst làm thật trên sổ điểm.

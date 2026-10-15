@@ -852,6 +852,66 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
   });
 
+  // Mỗi lần mua một đánh giá: màn chi tiết đơn cần biết từng dòng đã có đánh giá của đơn này chưa để nói "Viết đánh giá"
+  // hay "Sửa đánh giá", cùng luật với can-review (chỉ đơn đã nhận mua lẻ cho chính mình).
+  describe('trạng thái đánh giá từng dòng ở chi tiết đơn', () => {
+    const delivered = { ...baseOrder, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false };
+    function reviewService(order: Record<string, unknown>, reviews: { id: string; productId: string }[] = []) {
+      const variationFindMany = jest.fn(async (args: { select: Record<string, unknown> }) =>
+        args.select.productId
+          ? [{ id: 'v1', productId: 'p1' }, { id: 'v1b', productId: 'p1' }, { id: 'v2', productId: 'p2' }]
+          : [v('v1'), v('v1b'), v('v2')],
+      );
+      const reviewFindMany = jest.fn().mockResolvedValue(reviews);
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([order]), count: jest.fn().mockResolvedValue(1) },
+        variation: { findMany: variationFindMany },
+        review: { findMany: reviewFindMany },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+      } as unknown as PrismaService;
+      return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany };
+    }
+
+    it('đơn đã nhận: dòng có đánh giá của đơn này → reviewId, không viết mới; dòng chưa có → viết được; hai biến thể cùng sản phẩm chung một đánh giá', async () => {
+      const { svc, reviewFindMany } = reviewService(
+        { ...delivered, items: [line('i1', 'v1'), line('i2', 'v2'), line('i3', 'v1b')] },
+        [{ id: 'r-p1', productId: 'p1' }],
+      );
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view.items.map((it) => [it.id, it.reviewId, it.reviewable])).toEqual([
+        ['i1', 'r-p1', false],
+        ['i2', null, true],
+        ['i3', 'r-p1', false],
+      ]);
+      expect(reviewFindMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', orderId: 'o1', productId: { in: ['p1', 'p2'] } },
+        select: { id: true, productId: true },
+      });
+    });
+
+    it('biến thể đã bị xoá (không biết sản phẩm) → không viết được, không có đánh giá', async () => {
+      const { svc } = reviewService({ ...delivered, items: [line('i1', 'gone')] });
+      expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: null, reviewable: false });
+    });
+
+    it.each([
+      ['chưa giao xong', { status: 'SHIPPING' }],
+      ['đơn CTV lên hộ khách', { placedForCustomer: true }],
+      ['đơn đại lý', { type: 'DEALER' }],
+    ])('%s → mọi dòng không viết được, không tra đánh giá', async (_n, over) => {
+      const { svc, reviewFindMany } = reviewService({ ...delivered, ...over, items: [line('i1', 'v1')] }, [{ id: 'r-p1', productId: 'p1' }]);
+      expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: null, reviewable: false });
+      expect(reviewFindMany).not.toHaveBeenCalled();
+    });
+
+    it('danh sách đơn không tra đánh giá (chỉ màn chi tiết cần)', async () => {
+      const { svc, reviewFindMany } = reviewService({ ...delivered, items: [line('i1', 'v1')] });
+      const page = await svc.list('u1', {}, 1, 20);
+      expect(reviewFindMany).not.toHaveBeenCalled();
+      expect(page.data[0]!.items[0]).not.toHaveProperty('reviewable');
+    });
+  });
+
   it('D4: đơn Tubu không tách → nơi giao Tubu Tree, không truy vấn đơn cùng lần đặt', async () => {
     const withItems = makeMediaService([{ ...baseOrder, items: [] }], []);
     const view = await withItems.svc.detailView('u1', 'TUBU1');

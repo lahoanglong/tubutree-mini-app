@@ -92,12 +92,44 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
     mocks.fetchMyReturns.mockResolvedValue([]);
   });
 
-  it('đơn đã giao: lối vào "Đánh giá" có vùng chạm 44px và mở trang sản phẩm', async () => {
+  it('đơn đã giao: lối vào "Viết đánh giá" có vùng chạm 44px và mở trang sản phẩm kèm đúng đơn để viết cho lần mua này', async () => {
     renderPage();
-    const link = await screen.findByText(/Đánh giá/);
+    const link = await screen.findByText(/Viết đánh giá/);
     expect(link.className).toContain('tubu-hit-44');
     fireEvent.click(link);
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+  });
+});
+
+// R8: mỗi lần mua một đánh giá; API trả trạng thái đánh giá của từng dòng ở chính đơn này.
+describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  const withItem = (extra: Record<string, unknown>) => ({ ...ORDER, items: [{ ...ORDER.items[0], ...extra }] });
+
+  it('dòng đã đánh giá ở đơn này → "Sửa đánh giá", mở trang sản phẩm kèm đơn để sửa đúng đánh giá đó', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: 'r1', reviewable: false }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Sửa đánh giá'));
+    expect(screen.queryByText('Viết đánh giá')).toBeNull();
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+  });
+
+  it('dòng còn viết được → "Viết đánh giá"', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: true }));
+    renderPage();
+    expect(await screen.findByText('Viết đánh giá')).toBeInTheDocument();
+    expect(screen.queryByText('Sửa đánh giá')).toBeNull();
+  });
+
+  it('đơn không tính để đánh giá (vd. CTV đặt hộ) → không có lối vào đánh giá', async () => {
+    mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: false }));
+    renderPage();
+    expect((await screen.findAllByText(/Xà bông thảo mộc/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Viết đánh giá|Sửa đánh giá/)).toBeNull();
   });
 });
 
@@ -295,7 +327,7 @@ describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {
 
   it('lối vào đánh giá và dòng điểm Xanh (đơn đã giao) có icon SVG, không có emoji; chữ giữ nguyên', async () => {
     const { container } = renderPage();
-    const review = await screen.findByText(/Đánh giá sản phẩm này/);
+    const review = await screen.findByText(/Viết đánh giá/);
     expect(review.querySelector('svg')).not.toBeNull();
     expect(review.className).toContain('tubu-hit-44');
     const points = screen.getByText(/Đã cộng \+120 Điểm Xanh vào tài khoản/);

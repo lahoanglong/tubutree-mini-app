@@ -351,3 +351,44 @@ describe('/tai-khoan/don-hang/[code] — đơn tách theo nơi giao (D4)', () =>
     expect(container.querySelector('section[aria-label="Đơn cùng lần đặt"]')).toBeNull();
   });
 });
+
+// R8: mỗi lần mua một đánh giá; API trả trạng thái đánh giá của từng dòng ở chính đơn này.
+describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đơn (R8)', () => {
+  const delivered = (item: Record<string, unknown>) => ({
+    ...structuredClone(ORDER),
+    id: 'ord-1',
+    status: 'DELIVERED',
+    paymentMethod: 'COD',
+    paymentStatus: 'PAID',
+    items: [{ ...ORDER.items[0], productSlug: 'dau-goi-bo-ket', ...item }],
+  });
+  const reviewLinks = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('a')).filter((a) => /^(Viết|Sửa) đánh giá$/.test(a.textContent ?? ''));
+
+  it('dòng còn viết được → "Viết đánh giá" mở trang sản phẩm, cuộn tới khối đánh giá và chọn sẵn đơn này', async () => {
+    mocks.order = delivered({ reviewId: null, reviewable: true });
+    const { container } = await mount();
+    const links = reviewLinks(container);
+    expect(links.map((a) => a.textContent)).toEqual(['Viết đánh giá']);
+    expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
+    expect(links[0]!.className).toContain('min-h-11');
+  });
+
+  it('dòng đã đánh giá ở đơn này → "Sửa đánh giá" (cùng đường dẫn, trang sản phẩm mở sửa đúng đánh giá)', async () => {
+    mocks.order = delivered({ reviewId: 'rv-1', reviewable: false });
+    const { container } = await mount();
+    const links = reviewLinks(container);
+    expect(links.map((a) => a.textContent)).toEqual(['Sửa đánh giá']);
+    expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
+  });
+
+  it.each([
+    ['đơn không tính để đánh giá (CTV đặt hộ)', { reviewId: null, reviewable: false }, 'DELIVERED'],
+    ['đơn chưa giao', { reviewable: true }, 'SHIPPING'],
+    ['đơn cũ không có slug', { productSlug: null, reviewable: true }, 'DELIVERED'],
+  ])('%s → không có lối vào đánh giá', async (_n, item, status) => {
+    mocks.order = { ...delivered(item), status };
+    const { container } = await mount();
+    expect(reviewLinks(container)).toEqual([]);
+  });
+});

@@ -2634,7 +2634,8 @@ model Review {
   isVisible    Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  @@unique([userId, productId])
+  // Một đánh giá cho mỗi lần mua (đơn) của sản phẩm. Thứ tự cột để các truy vấn theo (khách, sản phẩm) vẫn dùng tiền tố chỉ mục.
+  @@unique([userId, productId, orderId])
   @@index([productId])
   @@map("reviews")
 }
