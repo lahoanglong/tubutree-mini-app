@@ -113,7 +113,6 @@ const FULFIL = (id: string, status: string, extra: Record<string, unknown> = {})
   merchantAcceptedAt: null,
   createdAt: '2026-10-13T03:00:00.000Z',
   items: [{ id: `fi${id}`, productName: 'Mật ong rừng', variationName: 'Mặc định', unitPrice: 200000, quantity: 1, total: 200000 }],
-  user: { fullName: 'Hà My', phone: '0900000003' },
   sla: { state: null, dueAt: '2026-10-14T03:00:00.000Z' },
   ...extra,
 });
@@ -459,6 +458,21 @@ describe('cổng đối tác — tab Đơn cần giao (D4)', () => {
     click(byText(second, 'button', 'Xác nhận đã gửi hàng'));
     await flush();
     expect(mocks.fulfilAction).toHaveBeenLastCalledWith('ship', '2', { carrier: 'GHN', trackingCode: 'GHN999', trackingUrl: undefined });
+  });
+
+  it('R5-PARTNER-6: không có địa chỉ người nhận thì ghi "Khách mua", không bao giờ hiện họ tên hay SĐT tài khoản người mua (kể cả khi API cũ còn trả)', async () => {
+    mocks.listFulfil = vi.fn(async () => ({
+      data: [FULFIL('9', 'CONFIRMED', { shippingAddress: null, user: { fullName: 'Chủ Tài Khoản Mua', phone: '0944444444' } })],
+      meta: { page: 1, limit: 20, total: 1 },
+      counts: { CONFIRMED: 1 },
+      slaConfig: { confirmHours: 24, shipHours: 48, deliverDays: 7 },
+    }));
+    const root = await mount();
+    await openTab('Đơn cần giao');
+    const card = root.querySelector('article[aria-label="Đơn TF9"]')!;
+    expect(card.textContent).toContain('Khách mua');
+    expect(card.textContent).not.toContain('Chủ Tài Khoản Mua');
+    expect(card.textContent).not.toContain('0944444444');
   });
 
   it('R2-MERCHANT-12: ô link tra cứu không dùng kiểm tra URL của trình duyệt (báo lỗi tiếng Anh), gõ thiếu https:// vẫn gửi được', async () => {
@@ -1104,6 +1118,25 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       expect(byText(overlay, 'label', 'Đổi sang mã Pancake khác')).toBeNull();
       expect(overlay.querySelector('#merchant-edit-price')).not.toBeNull();
     });
+  });
+
+  it('R5-PARTNER-8: sản phẩm đã duyệt nhưng ngừng bán ghi "Đã duyệt (Đang ẩn)", không ghi "Đang hiển thị"; sản phẩm đang bán vẫn ghi "Đang hiển thị"', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('v', 'APPROVED', { isActive: true }), PRODUCT('h', 'APPROVED', { isActive: false })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 2, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const rows = Array.from(root.querySelectorAll('tbody tr'));
+    const visible = rows.find((r) => r.textContent?.includes('SP v'))!;
+    const hidden = rows.find((r) => r.textContent?.includes('SP h'))!;
+    expect(visible.textContent).toContain('Đã duyệt (Đang hiển thị)');
+    expect(visible.textContent).not.toContain('Đã ngừng bán');
+    expect(hidden.textContent).toContain('Đã duyệt (Đang ẩn)');
+    expect(hidden.textContent).not.toContain('Đang hiển thị');
+    expect(hidden.textContent).toContain('Đã ngừng bán');
+    expect(byText(hidden, 'button', 'Mở bán lại')).not.toBeNull();
   });
 
   it('R3-MERCHANT-4: sản phẩm đang bán có bản sửa chờ duyệt vẫn hiện nội dung đang bán kèm huy hiệu "Bản sửa chờ duyệt"; mở Sửa tiếp tục từ bản chờ', async () => {

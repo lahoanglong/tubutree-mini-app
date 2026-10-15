@@ -953,6 +953,8 @@ export interface AdminPendingProduct {
   isEdit?: boolean;
   /** Lần sửa gần nhất của bản chờ mà dòng này đang hiện; gửi lại khi duyệt/từ chối để chỉ xử lý đúng bản admin đã xem. */
   editVersion?: string | null;
+  /** Lần sửa gần nhất của sản phẩm chờ duyệt lần đầu; gửi lại khi duyệt/từ chối để API chặn nếu đối tác sửa tiếp. API cũ chưa trả. */
+  updatedAt?: string;
   /** Nội dung đang bán để đối chiếu với bản sửa (null/thiếu: sản phẩm chờ duyệt lần đầu). */
   live?: { name: string; description: string; shortDesc: string | null; thumbnail: string | null } | null;
   /** Mã biến thể Pancake xin "Tubu giao hộ"; duyệt thì biến thể đó chuyển sang sản phẩm này. */
@@ -1032,13 +1034,15 @@ export const listPendingMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_S
 
 /**
  * Những gì dòng chờ duyệt đang hiện lúc admin bấm: API chỉ duyệt khi sản phẩm vẫn đúng như vậy (đối tác đổi mã → 409). Màn admin
- * luôn gửi: API coi null hoặc bỏ trống là "chưa xem mã nào" nên duyệt theo mã đang có.
+ * luôn gửi: API coi null hoặc bỏ trống là "chưa xem mã/phiên bản nào" nên duyệt theo nội dung đang có (kèm cảnh báo trong nhật ký).
  */
 export interface MerchantReviewSeen {
   /** Mã đang hiện trên dòng; chuỗi rỗng khi dòng không có mã (không dùng null). */
   pancakeCode: string;
   /** Sản phẩm đang bán admin đã tích xác nhận chuyển (`pancakeLink.origin.id`). */
   takeoverProductId?: string | null;
+  /** `updatedAt` của dòng chờ duyệt lần đầu: đối tác sửa sau đó (hoặc admin khác đã xử lý) thì API trả 409 thay vì duyệt nội dung chưa xem. */
+  updatedAt?: string | null;
 }
 
 export const reviewMerchantProduct = (
@@ -1060,6 +1064,7 @@ export const reviewMerchantProduct = (
         ...(editVersion ? { editVersion } : {}),
         ...(seen ? { expectedPancakeCode: seen.pancakeCode } : {}),
         ...(seen?.takeoverProductId ? { expectedTakeoverProductId: seen.takeoverProductId } : {}),
+        ...(seen?.updatedAt ? { expectedUpdatedAt: seen.updatedAt } : {}),
       },
     },
   );

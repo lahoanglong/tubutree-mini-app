@@ -141,6 +141,29 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(scrollRegionProblems(root)).toEqual([]);
   });
 
+  it('R5-PARTNER-7: đơn quá hạn xác nhận ghi "Chờ gian hàng xác nhận", không ghi "Đã xác nhận" cạnh "Quá hạn xác nhận"; đơn quá hạn gửi hàng giữ nhãn trạng thái chung', async () => {
+    const shipLate = {
+      ...OVERVIEW.overdue[0]!,
+      id: 'o10',
+      code: 'TF10',
+      status: 'PACKED',
+      sla: { state: 'SHIP_OVERDUE', dueAt: '2026-10-12T03:00:00.000Z' },
+    };
+    setup({ '/admin/merchant-fulfilment/overview': { body: { ...OVERVIEW, overdue: [OVERVIEW.overdue[0]!, shipLate] } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const rows = Array.from(r.container.querySelectorAll('section ul li')).filter((li) => li.textContent?.includes('TF9') || li.textContent?.includes('TF10'));
+    const confirmLate = rows.find((li) => li.textContent?.includes('TF9'))!;
+    const shipLateRow = rows.find((li) => li.textContent?.includes('TF10'))!;
+    expect(confirmLate.textContent).toContain('Quá hạn xác nhận');
+    expect(confirmLate.textContent).toContain('Chờ gian hàng xác nhận');
+    expect(confirmLate.textContent).not.toContain('Đã xác nhận');
+    expect(shipLateRow.textContent).toContain('Quá hạn gửi hàng');
+    expect(shipLateRow.textContent).toContain('Đã đóng gói');
+    expect(shipLateRow.textContent).not.toContain('Chờ gian hàng xác nhận');
+  });
+
   it('Q8: gian hàng chỉ có hàng Tubu giao hộ cũng ở danh sách — số khoản giao hộ, mức phí; xem khoản trước khi lập phiếu', async () => {
     const api = setup();
     const r = render(<MerchantFulfilmentTab />);

@@ -32,6 +32,7 @@ const product = (over: Partial<AdminPendingProduct> = {}): AdminPendingProduct =
   ecoBadges: [],
   approvalStatus: 'PENDING_REVIEW',
   createdAt: '2026-09-20T00:00:00.000Z',
+  updatedAt: '2026-10-14T01:00:00.000Z',
   ...over,
 });
 
@@ -82,7 +83,7 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
     expect(call?.url).toContain('/admin/merchant-products/p1/review');
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, expectedPancakeCode: '' }));
+    expect(call?.init?.body).toBe(JSON.stringify({ approve: true, expectedPancakeCode: '', expectedUpdatedAt: '2026-10-14T01:00:00.000Z' }));
   });
 
   it('dòng không có mã Pancake: Duyệt luôn gửi expectedPancakeCode chuỗi rỗng (không bỏ trống, không null) để API không duyệt mã đối tác thêm sau đó', async () => {
@@ -110,7 +111,7 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
       '/admin/merchant-products/linked': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } },
       '/review': {
         status: 409,
-        body: { statusCode: 409, code: 'PANCAKE_CODE_CHANGED', message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-NEW-1, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.' },
+        body: { statusCode: 409, code: 'PANCAKE_CODE_CHANGED', message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-NEW-1, khác với mã bạn đang xem. Hãy xem lại sản phẩm sẽ bị chuyển rồi mới duyệt.' },
       },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -122,6 +123,8 @@ describe('MerchantProductsTab (P0 A6-07, docs/audit-2026-09/06-web.md)', () => {
     expect(listCalls).toBeGreaterThanOrEqual(2);
     const text = container.textContent ?? '';
     expect(text).toContain('Đối tác vừa đổi mã Pancake');
+    expect(text).toContain('Danh sách đã được tải lại — kiểm tra lại rồi mới duyệt');
+    expect(text).not.toContain('Tải lại danh sách');
     expect(text).toContain('mã Pancake seed-NEW-1');
   });
 
@@ -196,7 +199,9 @@ describe('MerchantProductsTab — DS v2', () => {
     click(confirmBtn);
     await flush();
     const call = api.calls.find((c) => c.url.includes('/review'));
-    expect(call?.init?.body).toBe(JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận', expectedPancakeCode: '' }));
+    expect(call?.init?.body).toBe(
+      JSON.stringify({ approve: false, rejectReason: 'Thiếu giấy chứng nhận', expectedPancakeCode: '', expectedUpdatedAt: '2026-10-14T01:00:00.000Z' }),
+    );
   });
 });
 
@@ -278,6 +283,7 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
         confirmTakeover: true,
         expectedPancakeCode: 'seed-BHN-PP-200',
         expectedTakeoverProductId: 'p-bhnong-pepper',
+        expectedUpdatedAt: '2026-10-14T01:00:00.000Z',
       }),
     );
   });
@@ -306,7 +312,7 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
         body: {
           statusCode: 409,
           code: 'PANCAKE_CODE_CHANGED',
-          message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-OTHER-200, khác với mã bạn đang xem. Tải lại danh sách để xem sản phẩm sẽ bị chuyển rồi mới duyệt.',
+          message: 'Đối tác vừa đổi mã Pancake của sản phẩm này sang seed-OTHER-200, khác với mã bạn đang xem. Hãy xem lại sản phẩm sẽ bị chuyển rồi mới duyệt.',
         },
       },
     });
@@ -594,5 +600,166 @@ describe('MerchantProductsTab — 390px (R3-MERCHANT-7)', () => {
     await flush();
     expect(container.textContent).not.toContain('Gian hàng Gian hàng');
     expect(container.textContent).not.toContain('gian hàng Gian hàng');
+  });
+});
+
+describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5-PARTNER-1/3/4)', () => {
+  const empty = { data: [], meta: { page: 1, limit: 100, total: 0 } };
+  const page = (...items: AdminPendingProduct[]) => ({ data: items, meta: { page: 1, limit: 100, total: items.length } });
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const alerts = (root: ParentNode) => Array.from(root.querySelectorAll<HTMLElement>('[role="alert"]'));
+
+  it('Từ chối dòng chờ duyệt lần đầu cũng gửi expectedUpdatedAt; dòng bản sửa không gửi (nó có editVersion riêng)', async () => {
+    const edit = product({ id: 'pe', isEdit: true, editVersion: '2026-10-14T03:00:00.000Z', approvalStatus: 'APPROVED' });
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: page(product(), edit) },
+      '/admin/merchant-products/linked': { body: empty },
+      '/review': { body: { id: 'p1', approvalStatus: 'REJECTED' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    const rejects = Array.from(container.querySelectorAll<HTMLElement>('button')).filter((b) => b.textContent?.includes('Từ chối'));
+    click(rejects[0]!);
+    click(byText(container, 'button', 'Xác nhận từ chối'));
+    await flush();
+    const first = JSON.parse(String(api.calls.find((c) => c.url.includes('/p1/review'))?.init?.body));
+    expect(first).toMatchObject({ approve: false, expectedUpdatedAt: '2026-10-14T01:00:00.000Z' });
+
+    const approveEdit = Array.from(container.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.includes('Duyệt bản sửa'));
+    click(approveEdit ?? null);
+    await flush();
+    const second = JSON.parse(String(api.calls.find((c) => c.url.includes('/pe/review'))?.init?.body));
+    expect(second).toMatchObject({ approve: true, editVersion: '2026-10-14T03:00:00.000Z' });
+    expect(second).not.toHaveProperty('expectedUpdatedAt');
+  });
+
+  it('admin khác đã xử lý (409 ALREADY_REVIEWED) → danh sách tải lại, dòng biến mất, lời báo còn lại ở đầu danh sách, đóng được, không nhắc đổi mã Pancake', async () => {
+    let listCalls = 0;
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: listCalls++ === 0 ? page(product()) : empty }),
+      '/admin/merchant-products/linked': { body: empty },
+      '/review': {
+        status: 409,
+        body: { statusCode: 409, code: 'MERCHANT_PRODUCT_ALREADY_REVIEWED', message: 'Sản phẩm này đã được admin khác duyệt xuất bản.' },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    expect(byText(container, 'button', 'Duyệt xuất bản')).toBeNull();
+    const [notice] = alerts(container);
+    expect(notice?.textContent).toContain('Tinh dầu sả chanh');
+    expect(notice?.textContent).toContain('đã được admin khác xử lý');
+    expect(notice?.textContent).toContain('Danh sách đã được tải lại');
+    expect(container.textContent).not.toContain('Tải lại danh sách');
+    expect(container.textContent).not.toContain('đổi mã Pancake');
+    click(byText(notice!, 'button', 'Đóng'));
+    expect(alerts(container)).toHaveLength(0);
+  });
+
+  it('đối tác sửa sau khi admin mở danh sách (409 CONTENT_CHANGED) → khoá nút trong lúc tải lại, lời báo nằm ngay dưới cụm nút (trước phần mô tả), cuộn tới đó, rồi duyệt lại gửi phiên bản mới', async () => {
+    const scroll = vi.fn();
+    (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView = scroll;
+    try {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      let listCalls = 0;
+      const calls: { url: string; init?: RequestInit }[] = [];
+      const before = product({ description: 'Mô tả cũ' });
+      const after = product({ name: 'Tinh dầu sả chanh (đã sửa)', description: 'Mô tả mới', updatedAt: '2026-10-14T02:30:00.000Z' });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          if (url.includes('/review')) {
+            const n = calls.filter((c) => c.url.includes('/review')).length;
+            return n === 1
+              ? json(409, { statusCode: 409, code: 'MERCHANT_PRODUCT_CONTENT_CHANGED', message: 'Đối tác vừa sửa sản phẩm này.' })
+              : json(200, { id: 'p1', approvalStatus: 'APPROVED' });
+          }
+          if (url.includes('/merchant-products/linked')) return json(200, empty);
+          if (url.includes('/merchant-products/pending')) {
+            listCalls += 1;
+            if (listCalls === 2) await gate;
+            return json(200, listCalls === 1 ? page(before) : page(after));
+          }
+          return json(500, { message: 'no mock' });
+        }),
+      );
+      const { container } = mount(<MerchantProductsTab />);
+      await flush();
+      click(byText(container, 'button', 'Duyệt xuất bản'));
+      await flush();
+      expect(listCalls).toBe(2);
+      expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
+      expect((byText(container, 'button', 'Từ chối') as HTMLButtonElement).disabled).toBe(true);
+
+      release();
+      await flush();
+      const approve = byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement;
+      expect(approve.disabled).toBe(false);
+      expect(container.textContent).toContain('Tinh dầu sả chanh (đã sửa)');
+      const [notice] = alerts(container);
+      expect(notice?.textContent).toContain('Đối tác vừa sửa sản phẩm này sau lúc bạn mở danh sách');
+      expect(notice?.textContent).toContain('Danh sách đã được tải lại');
+      expect(container.textContent).not.toContain('Tải lại danh sách');
+      expect(approve.compareDocumentPosition(notice!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const descr = byText(container, 'p', 'Mô tả mới');
+      expect(notice!.compareDocumentPosition(descr!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(scroll).toHaveBeenCalled();
+
+      click(approve);
+      await flush();
+      const bodies = calls.filter((c) => c.url.includes('/review')).map((c) => JSON.parse(String(c.init?.body)));
+      expect(bodies[0]).toMatchObject({ expectedUpdatedAt: '2026-10-14T01:00:00.000Z' });
+      expect(bodies[1]).toMatchObject({ expectedUpdatedAt: '2026-10-14T02:30:00.000Z' });
+      expect(alerts(container)).toHaveLength(0);
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it('bản sửa đã được xử lý (409 EDIT_STALE) → báo bằng lời của web, danh sách tải lại', async () => {
+    let listCalls = 0;
+    const edit = product({ isEdit: true, editVersion: '2026-10-14T03:00:00.000Z', approvalStatus: 'APPROVED' });
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: listCalls++ === 0 ? page(edit) : empty }),
+      '/admin/merchant-products/linked': { body: empty },
+      '/review': { status: 409, body: { statusCode: 409, code: 'MERCHANT_PRODUCT_EDIT_STALE', message: 'Bản sửa này vừa được xử lý.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt bản sửa'));
+    await flush();
+    await flush();
+    expect(listCalls).toBeGreaterThanOrEqual(2);
+    expect(alerts(container)[0]?.textContent).toContain('đã được xử lý hoặc đối tác vừa sửa tiếp');
+  });
+
+  it('lỗi không phải 409 → không tải lại danh sách, báo ngay dưới nút bằng thông báo lỗi và nút vẫn bấm lại được', async () => {
+    let listCalls = 0;
+    const api = mockFetch({
+      '/admin/merchant-products/pending': () => ({ body: (listCalls++, page(product())) }),
+      '/admin/merchant-products/linked': { body: empty },
+      '/review': { status: 400, body: { statusCode: 400, message: 'Mã Pancake không dùng được.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt xuất bản'));
+    await flush();
+    await flush();
+    expect(listCalls).toBe(1);
+    expect(alerts(container)[0]?.textContent).toBe('Mã Pancake không dùng được.');
+    expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(false);
   });
 });

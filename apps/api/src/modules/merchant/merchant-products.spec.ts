@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CTV_CANNOT_CREATE_PRODUCT, MerchantService } from './merchant.service';
 import {
   linkTubuFulfilledVariation,
@@ -614,6 +615,34 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
     });
 
+    it('R5-PARTNER-2: đổi sang mã khác → giá bán lấy theo biến thể Pancake của mã mới (như lúc đăng), cả sản phẩm lẫn biến thể chờ liên kết', async () => {
+      const { svc, productUpdate, variationUpdate } = buildEdit(
+        { ...UNLINKED, isActive: true, basePrice: 120_000, salePrice: 99_000 },
+        { ...PANCAKE_ROW, pancakeId: 'PK-NEW', retailPrice: 70_000, salePrice: null },
+      );
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 70_000, salePrice: null });
+      expect(variationUpdate).toHaveBeenCalledWith({ where: { id: 'v-a' }, data: { retailPrice: 70_000, salePrice: null } });
+    });
+
+    it('R5-PARTNER-2: mã mới có giá khuyến mãi của Pancake → giữ cả giá gốc lẫn giá khuyến mãi theo Pancake, không bị chặn bởi giá cũ', async () => {
+      const { svc, productUpdate } = buildEdit(
+        { ...UNLINKED, isActive: true, basePrice: 50_000, salePrice: null },
+        { ...PANCAKE_ROW, pancakeId: 'PK-NEW', retailPrice: 150_000, salePrice: 129_000 },
+      );
+      await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 150_000, salePrice: 129_000 });
+    });
+
+    it('R5-PARTNER-2: bỏ mã (tự giao) hoặc gửi lại đúng mã đang có thì không đụng tới giá', async () => {
+      const dropped = buildEdit({ ...UNLINKED, basePrice: 120_000, salePrice: 99_000 });
+      await dropped.svc.updateProduct('u1', 'prod-a', { pancakeCode: null });
+      expect(dropped.productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 120_000, salePrice: 99_000 });
+      const same = buildEdit({ ...UNLINKED, basePrice: 120_000, salePrice: 99_000 }, { ...PANCAKE_ROW, retailPrice: 70_000, salePrice: null });
+      await same.svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-OLD' });
+      expect(same.productUpdate.mock.calls[0]![0].data).toMatchObject({ basePrice: 120_000, salePrice: 99_000 });
+    });
+
     it('vừa ngừng bán vừa xin mã Pancake mới là yêu cầu mâu thuẫn → 400, không ghi gì', async () => {
       const { svc, productUpdate, productUpdateMany } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
       await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW', isActive: false })).rejects.toThrow('vừa ngừng bán vừa xin mã Pancake mới');
@@ -684,6 +713,29 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
       productUpdateMany.mockResolvedValue({ count: 0 });
       await expect(svc.updateProduct('u1', 'prod-a', { pancakeCode: null })).rejects.toThrow(ConflictException);
       expect(productUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('R5-PARTNER-1: bản sửa không ghi lên sản phẩm vừa được duyệt/đổi trạng thái giữa lúc đọc và lúc ghi', () => {
+    const p2025 = () => new Prisma.PrismaClientKnownRequestError('Record to update not found.', { code: 'P2025', clientVersion: 'test' });
+
+    it('ghi sản phẩm có điều kiện theo trạng thái duyệt đã đọc, để admin duyệt chen giữa thì lần ghi trượt', async () => {
+      const { svc, productUpdate } = buildEdit({ ...OWN, approvalStatus: 'PENDING_REVIEW' });
+      await svc.updateProduct('u1', 'prod-a', { name: 'Tên mới' });
+      expect(productUpdate.mock.calls[0]![0].where).toEqual({ id: 'prod-a', approvalStatus: 'PENDING_REVIEW' });
+    });
+
+    it('trượt (sản phẩm vừa được duyệt) → 409 tải lại rồi sửa lại, không báo admin', async () => {
+      const { svc, productUpdate, notify } = buildEdit({ ...OWN, approvalStatus: 'PENDING_REVIEW' });
+      productUpdate.mockRejectedValue(p2025());
+      await expect(svc.updateProduct('u1', 'prod-a', { name: 'Tên mới' })).rejects.toThrow(ConflictException);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('lỗi khác của DB vẫn nổi lên nguyên dạng, không bị đổi thành 409', async () => {
+      const { svc, productUpdate } = buildEdit({ ...OWN, approvalStatus: 'PENDING_REVIEW' });
+      productUpdate.mockRejectedValue(new Error('connection reset'));
+      await expect(svc.updateProduct('u1', 'prod-a', { name: 'Tên mới' })).rejects.toThrow('connection reset');
     });
   });
 

@@ -66,7 +66,11 @@ export function payoutView<P extends { id: string; amount: number; status: strin
   };
 }
 
-/** Đơn đối tác tự giao: đủ thông tin người nhận vì đối tác phải tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 5). */
+/**
+ * Đơn đối tác tự giao: đủ thông tin người nhận vì đối tác phải tự giao (docs/2026-10-14-merchant-fulfilment-design.md mục 5).
+ * Không có tài khoản người mua (họ tên, SĐT) và mã nhóm đặt hàng: đơn tặng hay đơn giao hộ người khác thì người nhận ở
+ * `shippingAddress` mới là người đối tác cần liên hệ.
+ */
 const FULFIL_ORDER_SELECT = {
   id: true,
   code: true,
@@ -86,11 +90,9 @@ const FULFIL_ORDER_SELECT = {
   shippedAt: true,
   deliveredAt: true,
   createdAt: true,
-  checkoutGroup: true,
   items: {
     select: { id: true, productName: true, variationName: true, unitPrice: true, quantity: true, total: true },
   },
-  user: { select: { fullName: true, phone: true } },
 } satisfies Prisma.OrderSelect;
 
 const REASON_REQUIRED = 'Cần nhập lý do để báo khách.';

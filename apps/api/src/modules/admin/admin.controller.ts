@@ -128,7 +128,8 @@ export class ReviewMerchantProductDto {
   expectedPancakeCode?: string | null;
   /**
    * Sản phẩm đang bán (`pancakeLink.origin.id`) mà admin đã xem khi tích xác nhận chuyển. Tuỳ chọn: gửi mà biến thể không còn nằm ở
-   * sản phẩm đó thì 409 PANCAKE_TAKEOVER_CHANGED; bỏ trống thì chuyển sản phẩm đang giữ mã (vẫn phải có `confirmTakeover`).
+   * sản phẩm đó thì 409 PANCAKE_TAKEOVER_CHANGED; bỏ trống (không gửi, null hoặc chuỗi rỗng) thì chuyển sản phẩm đang giữ mã (vẫn
+   * phải có `confirmTakeover`).
    */
   @ApiPropertyOptional({
     maxLength: 100,
@@ -140,6 +141,20 @@ export class ReviewMerchantProductDto {
   @IsString()
   @MaxLength(100)
   expectedTakeoverProductId?: string | null;
+  /**
+   * `updatedAt` của dòng chờ duyệt lần đầu lúc admin tải danh sách. Tuỳ chọn: gửi mà sản phẩm đã được sửa thêm (đối tác đổi tên,
+   * mô tả, ảnh, giá sau đó) thì 409 MERCHANT_PRODUCT_CONTENT_CHANGED; bỏ trống thì duyệt theo nội dung đang có và API ghi cảnh
+   * báo. Màn admin luôn gửi.
+   */
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'updatedAt của dòng chờ duyệt lần đầu lúc admin tải danh sách. Gửi mà sản phẩm đã đổi: 409 MERCHANT_PRODUCT_CONTENT_CHANGED. Bỏ trống: duyệt theo nội dung đang có và ghi cảnh báo.',
+  })
+  @Transform(({ value }) => (typeof value === 'string' && !value.trim() ? undefined : value))
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string | null;
 }
 export class UnlinkMerchantProductDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -615,6 +630,7 @@ export class AdminController {
     return this.admin.reviewMerchantProduct(adminId, productId, dto.approve, dto.rejectReason, dto.confirmTakeover, dto.editVersion, {
       pancakeCode: dto.expectedPancakeCode,
       takeoverProductId: dto.expectedTakeoverProductId,
+      updatedAt: dto.expectedUpdatedAt,
     });
   }
 

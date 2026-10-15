@@ -40,6 +40,10 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
   const view = mergeQueuePages(q.data?.pages, false);
+  const [conflict, setConflict] = useState<ReviewConflict | null>(null);
+  const refreshing = q.isFetching && !q.isFetchingNextPage;
+  // Dòng còn trên danh sách mới thì lời giải thích nằm ngay dưới nút của dòng đó; dòng đã biến mất (admin khác xử lý rồi) thì giữ lời giải thích ở đây.
+  const conflictRowGone = !!conflict && !view.items.some((i) => i.id === conflict.id);
 
   return (
     <div>
@@ -54,6 +58,20 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
           Làm mới
         </button>
       </div>
+      {conflict && conflictRowGone && (
+        <div className="mt-4">
+          <Notice tone="warning" role="alert">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0">
+                <strong>{conflict.name}</strong>: {conflict.message}
+              </span>
+              <button type="button" onClick={() => setConflict(null)} className={BTN_XS_SECONDARY}>
+                Đóng
+              </button>
+            </div>
+          </Notice>
+        </div>
+      )}
       <div className="mt-4 space-y-4">
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
         {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách sản phẩm đối tác.</p>}
@@ -63,7 +81,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
           </p>
         )}
         {view.items.map((p) => (
-          <MerchantProductRow key={p.id} item={p} />
+          <MerchantProductRow key={p.id} item={p} refreshing={refreshing} onConflict={setConflict} />
         ))}
       </div>
       {view.hasMore && (
@@ -331,8 +349,40 @@ function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
   );
 }
 
-export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
+/** Lời giải thích khi API trả 409: danh sách đã tự tải lại nên câu nào cũng chốt bằng việc kiểm tra lại rồi mới duyệt. */
+const REVIEW_CONFLICT_COPY: Record<string, string> = {
+  MERCHANT_PRODUCT_ALREADY_REVIEWED: 'Sản phẩm này đã được admin khác xử lý (duyệt hoặc từ chối). Danh sách đã được tải lại.',
+  MERCHANT_PRODUCT_CONTENT_CHANGED:
+    'Đối tác vừa sửa sản phẩm này sau lúc bạn mở danh sách. Danh sách đã được tải lại — xem lại nội dung mới rồi mới duyệt.',
+  MERCHANT_PRODUCT_EDIT_STALE:
+    'Bản sửa này đã được xử lý hoặc đối tác vừa sửa tiếp. Danh sách đã được tải lại — xem lại bản mới (nếu còn) rồi mới duyệt.',
+};
+
+export interface ReviewConflict {
+  id: string;
+  name: string;
+  message: string;
+}
+
+function reviewConflictMessage(e: ApiError): string {
+  const known = e.code ? REVIEW_CONFLICT_COPY[e.code] : undefined;
+  if (known) return known;
+  const detail = e.message.trim().replace(/[.!]$/, '');
+  return `${detail || 'Sản phẩm vừa thay đổi'}. Danh sách đã được tải lại — kiểm tra lại rồi mới duyệt.`;
+}
+
+export function MerchantProductRow({
+  item: p,
+  refreshing = false,
+  onConflict,
+}: {
+  item: AdminPendingProduct;
+  /** Danh sách đang tải lại (sau 409 hoặc bấm Làm mới): khoá nút để không duyệt trên dòng cũ. */
+  refreshing?: boolean;
+  onConflict?: (conflict: ReviewConflict | null) => void;
+}) {
   const qc = useQueryClient();
+  const errorRef = useRef<HTMLDivElement>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const link = p.pancakeLink ?? null;
@@ -354,8 +404,13 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
         p.isEdit ? p.editVersion : undefined,
         p.isEdit
           ? undefined
-          : { pancakeCode: p.pancakeLinkCode ?? '', takeoverProductId: approve && confirmTakeover ? originId : undefined },
+          : {
+              pancakeCode: p.pancakeLinkCode ?? '',
+              takeoverProductId: approve && confirmTakeover ? originId : undefined,
+              updatedAt: p.updatedAt,
+            },
       ),
+    onMutate: () => onConflict?.(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
       qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
@@ -363,9 +418,21 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
     onError: (e) => {
       if (e instanceof ApiError && e.status === 409) {
         qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
+        onConflict?.({ id: p.id, name: p.name, message: reviewConflictMessage(e) });
       }
     },
   });
+  const busy = reviewMut.isPending || refreshing;
+  const reviewError = reviewMut.error
+    ? reviewMut.error instanceof ApiError && reviewMut.error.status === 409
+      ? reviewConflictMessage(reviewMut.error)
+      : reviewMut.error.message
+    : null;
+  const reviewConflicted = reviewMut.error instanceof ApiError && reviewMut.error.status === 409;
+
+  useEffect(() => {
+    if (reviewMut.error) errorRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [reviewMut.error]);
 
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -418,7 +485,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
           )}
           <button
             onClick={() => reviewMut.mutate({ approve: true })}
-            disabled={reviewMut.isPending || approveBlocked}
+            disabled={busy || approveBlocked}
             className={`${TOUCH_H} inline-flex items-center justify-center gap-1 rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 shadow-card hover:bg-forest-700 disabled:opacity-50`}
           >
             {reviewMut.isPending ? (
@@ -432,7 +499,8 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
           {!showRejectInput ? (
             <button
               onClick={() => setShowRejectInput(true)}
-              className={`${BTN_XS_DANGER} inline-flex items-center justify-center gap-1`}
+              disabled={busy}
+              className={`${BTN_XS_DANGER} inline-flex items-center justify-center gap-1 disabled:opacity-50`}
             >
               <X className="h-3.5 w-3.5" aria-hidden /> Từ chối
             </button>
@@ -448,7 +516,7 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
               <div className="flex gap-1.5">
                 <button
                   onClick={() => reviewMut.mutate({ approve: false, reason: rejectReason.trim() || undefined })}
-                  disabled={reviewMut.isPending}
+                  disabled={busy}
                   className={`${TOUCH_H} rounded-control bg-danger-fg px-2.5 py-1 text-xs font-semibold text-stone-0 hover:brightness-90 disabled:opacity-50`}
                 >
                   Xác nhận từ chối
@@ -460,6 +528,13 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
             </div>
           )}
         </div>
+        {reviewError && (
+          <div ref={errorRef} className="w-full">
+            <Notice tone={reviewConflicted ? 'warning' : 'danger'} role="alert">
+              {reviewError}
+            </Notice>
+          </div>
+        )}
       </div>
 
       {p.isEdit && p.live && <EditComparison live={p.live} next={p} />}
@@ -482,9 +557,6 @@ export function MerchantProductRow({ item: p }: { item: AdminPendingProduct }) {
             <p className="mt-1 line-clamp-2 text-stone-500"><strong className="text-stone-700">Mô tả:</strong> {p.description}</p>
           )}
         </div>
-      )}
-      {reviewMut.isError && (
-        <p className="mt-2 text-xs text-danger-fg">{(reviewMut.error as Error).message}</p>
       )}
     </div>
   );

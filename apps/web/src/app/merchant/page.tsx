@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
+  EyeOff,
   RefreshCw,
   Sparkles,
   ShieldCheck,
@@ -1083,9 +1084,15 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                 q.data.ownProducts.map((p) => {
                   const badge =
                     p.approvalStatus === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
-                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang hiển thị)
-                      </span>
+                      p.isActive === false ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-700">
+                          <EyeOff className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang ẩn)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-fg">
+                          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Đã duyệt (Đang hiển thị)
+                        </span>
+                      )
                     ) : p.approvalStatus === 'REJECTED' ? (
                       <span className="inline-flex items-center gap-1 rounded bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger-fg" title={p.rejectReason ?? ''}>
                         <AlertCircle className="h-3 w-3" aria-hidden="true" /> Từ chối: {p.rejectReason}

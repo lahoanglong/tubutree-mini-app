@@ -41,6 +41,7 @@ function build(order: Record<string, unknown> | null = { id: 'o1', code: 'TUBU1'
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findMany: jest.fn().mockResolvedValue([]),
       groupBy: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     merchantPayout: {
       create: jest.fn(),
@@ -164,6 +165,24 @@ describe('MerchantFulfilmentService — đối tác xử lý đơn', () => {
     const { svc, prisma } = build();
     prisma.storefront.findFirst.mockResolvedValue({ ...STORE, type: 'CTV' });
     await expect(svc.listOrders('u1', undefined)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('R5-PARTNER-6: danh sách và mọi phản hồi sau thao tác chỉ chọn trường giao hàng, không có tài khoản người mua (user) hay mã nhóm đặt hàng', async () => {
+    const { svc, prisma } = build({ id: 'o1', code: 'TUBU1', status: 'CONFIRMED', merchantAcceptedAt: null });
+    await svc.listOrders('u1', undefined);
+    await svc.accept('u1', 'o1');
+    await svc.pack('u1', 'o1');
+    const selects = [
+      ...prisma.order.findMany.mock.calls.map((c) => c[0].select),
+      ...prisma.order.findUniqueOrThrow.mock.calls.map((c) => c[0].select),
+    ].filter(Boolean);
+    expect(selects.length).toBeGreaterThanOrEqual(3);
+    for (const select of selects) {
+      expect(select).not.toHaveProperty('user');
+      expect(select).not.toHaveProperty('userId');
+      expect(select).not.toHaveProperty('checkoutGroup');
+    }
+    expect(prisma.order.findMany.mock.calls[0]![0].select).toMatchObject({ shippingAddress: true, note: true });
   });
 
   it('chỉ thao tác được đơn do CHÍNH gian hàng mình giao', async () => {

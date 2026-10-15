@@ -533,6 +533,25 @@ describe('MerchantService', () => {
       expect(JSON.stringify(order)).not.toContain('12 Lê Lợi');
     });
 
+    it('R5-PARTNER-6: gian hàng đối tác (MERCHANT) không nhận tài khoản người mua dưới bất kỳ dạng nào, kể cả bản đã che', async () => {
+      const partnerStore = { ...store, type: 'MERCHANT' };
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(partnerStore) },
+        variation: { findMany: jest.fn().mockResolvedValue([]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
+        order: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([rawOrder]) },
+      });
+      const res = await new MerchantService(prisma, orderStatus).listMerchantOrders('u1');
+      const order = res.data[0] as unknown as Record<string, unknown>;
+      expect(order).not.toHaveProperty('user');
+      const json = JSON.stringify(res);
+      for (const leaked of ['0901234567', '090****567', 'Nguyễn Văn An', 'An***', 'cust-1', '12 Lê Lợi']) {
+        expect(json).not.toContain(leaked);
+      }
+      expect(order.shippingAddress).toEqual({ ward: 'Phường Bến Nghé', district: 'Quận 1', province: 'TP.HCM' });
+    });
+
     it('ADMIN: vẫn thấy đầy đủ tên/SĐT/địa chỉ để vận hành', async () => {
       const svc = new MerchantService(makeOrdersPrisma('ADMIN'), orderStatus);
       const res = await svc.listMerchantOrders('u1');

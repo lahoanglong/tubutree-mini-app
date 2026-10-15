@@ -152,8 +152,8 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(editRow).toMatchObject({ isEdit: true, pancakeLinkCode: tubu.code });
     await admin.reviewMerchantProduct('admin-it', p.id, false, 'Nhầm', false, editRow.editVersion!);
     for (const approve of [false, true]) {
-      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(BadRequestException);
-      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm', false, editRow.editVersion!)).rejects.toBeInstanceOf(ConflictException);
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, approve, 'Nhầm')).rejects.toBeInstanceOf(ConflictException);
     }
     const rejectedEdit = await prisma.product.findUniqueOrThrow({ where: { id: p.id }, include: { editDraft: true } });
     expect(rejectedEdit).toMatchObject({ approvalStatus: 'APPROVED', isActive: true, name: liveName, rejectReason: 'Nhầm' });
@@ -393,7 +393,7 @@ describe('Merchant Pancake link (real Postgres)', () => {
     const stale = admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, seenOn(shown));
     await expect(stale).rejects.toBeInstanceOf(ConflictException);
     await expect(stale).rejects.toMatchObject({
-      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại') }),
+      response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Hãy xem lại') }),
     });
     await nothingMoved();
     // Màn duyệt mở lúc dòng chưa có mã ('' = không có mã) mà đối tác đã thêm mã sau đó: vẫn 409, không duyệt mã admin chưa xem.
