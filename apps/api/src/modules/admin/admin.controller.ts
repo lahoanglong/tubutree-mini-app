@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
@@ -104,19 +105,41 @@ class ReviewDto {
   @IsOptional() @IsString() reason?: string;
 }
 export class ReviewMerchantProductDto {
-  @IsBoolean() approve!: boolean;
-  @IsOptional() @IsString() rejectReason?: string;
+  @ApiProperty() @IsBoolean() approve!: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() rejectReason?: string;
   /** Admin đã xem sản phẩm đang bán sẽ bị chuyển sang gian hàng ("Tubu giao hộ" lấy mã của sản phẩm đang bán). */
-  @IsOptional() @IsBoolean() confirmTakeover?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() confirmTakeover?: boolean;
   /** Dòng "Bản sửa chờ duyệt": lần sửa gần nhất admin đã xem (`editVersion` của hàng chờ duyệt). Có thì chỉ xử lý đúng bản đó. */
-  @IsOptional() @IsDateString() editVersion?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() editVersion?: string;
   /**
-   * Mã Pancake đang hiện trên dòng admin bấm (null: dòng không có mã). Bắt buộc khi duyệt sản phẩm có mã: đối tác đổi mã sau khi
-   * admin mở danh sách thì 409, không duyệt mã admin chưa xem.
+   * Mã Pancake đang hiện trên dòng admin bấm (chuỗi rỗng: dòng không có mã). Tuỳ chọn: gửi mà khác mã sản phẩm đang có (đối tác
+   * vừa đổi mã) thì 409 PANCAKE_CODE_CHANGED; bỏ trống (không gửi hoặc null) thì duyệt theo mã đang có và API ghi cảnh báo nêu
+   * admin, liên kết và mã đã duyệt. Màn admin luôn gửi.
    */
-  @IsOptional() @IsString() @MaxLength(100) expectedPancakeCode?: string | null;
-  /** Sản phẩm đang bán (`pancakeLink.origin.id`) mà admin đã xem khi tích xác nhận chuyển. */
-  @IsOptional() @IsString() @MaxLength(100) expectedTakeoverProductId?: string;
+  @ApiPropertyOptional({
+    maxLength: 100,
+    nullable: true,
+    description:
+      'Mã Pancake admin đang xem (chuỗi rỗng: dòng không có mã). Gửi mà khác mã hiện tại: 409 PANCAKE_CODE_CHANGED. Bỏ trống: duyệt theo mã đang có và ghi cảnh báo.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  expectedPancakeCode?: string | null;
+  /**
+   * Sản phẩm đang bán (`pancakeLink.origin.id`) mà admin đã xem khi tích xác nhận chuyển. Tuỳ chọn: gửi mà biến thể không còn nằm ở
+   * sản phẩm đó thì 409 PANCAKE_TAKEOVER_CHANGED; bỏ trống thì chuyển sản phẩm đang giữ mã (vẫn phải có `confirmTakeover`).
+   */
+  @ApiPropertyOptional({
+    maxLength: 100,
+    nullable: true,
+    description:
+      'Sản phẩm đang bán admin đã xác nhận chuyển. Gửi mà biến thể không còn ở sản phẩm đó: 409 PANCAKE_TAKEOVER_CHANGED. Bỏ trống: chuyển sản phẩm đang giữ mã (vẫn cần confirmTakeover).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  expectedTakeoverProductId?: string | null;
 }
 export class UnlinkMerchantProductDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

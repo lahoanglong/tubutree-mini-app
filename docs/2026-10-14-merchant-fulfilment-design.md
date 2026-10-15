@@ -312,6 +312,14 @@ net        = paid_i − commission − opsFee            (shippingFee = cod = 0,
   (ghi đè nội dung) hoặc từ chối (giữ nội dung cũ, lý do ở `rejectReason`). Hai admin duyệt cùng một bản sửa: xoá bản chờ có
   điều kiện theo `updatedAt` nên chỉ một bên thắng. Lần duyệt thấy biến thể đã thuộc chính sản phẩm này thì không chuyển gì nữa,
   chỉ báo trùng mã khi biến thể đang thuộc sản phẩm khác.
+- Duyệt đúng mã admin đã xem (`POST /admin/merchant-products/:id/review`): màn duyệt luôn gửi kèm mã Pancake đang hiện
+  (`expectedPancakeCode`, chuỗi rỗng khi dòng không có mã) và, khi admin tích xác nhận chuyển sản phẩm đang bán, sản phẩm đó
+  (`expectedTakeoverProductId`). Cả hai đều tuỳ chọn. Gửi mà khác dữ liệu hiện tại (đối tác đổi mã sau khi admin mở danh sách,
+  biến thể đã sang sản phẩm đang bán khác) thì 409 `PANCAKE_CODE_CHANGED` hoặc `PANCAKE_TAKEOVER_CHANGED`, không lật trạng thái
+  và màn duyệt tải lại danh sách. Bỏ trống (không gửi hoặc `null`, vd gọi thẳng API) thì duyệt theo mã và sản phẩm đang có,
+  không còn 409, và API ghi cảnh báo nêu admin, bản ghi liên kết và mã đã duyệt. Chuyển sản phẩm đang bán vẫn bắt buộc
+  `confirmTakeover` (409 `PANCAKE_TAKEOVER_UNCONFIRMED`) và lần lật trạng thái vẫn có điều kiện theo mã lúc đọc. Chủ quyết định
+  nới ngày 2026-10-15; trước đó (review đợt 7) bỏ trống mã bị 409.
 - Không tích "Tubu giao hộ" (hoặc không nhập mã): sản phẩm `MERCHANT`, không có `pancakeId`, đối tác tự khai và tự sửa tồn.
   Chỉ gian hàng loại `MERCHANT` được tạo sản phẩm (kể cả admin vào gian hàng CTV cũng không), vì chỉ loại này có tab giao đơn.
 - Migration `p8_seller_merchant_fulfilment`: `pancakeId` thành nullable; mọi `pancakeId LIKE 'MCH\_%'` (sản phẩm và biến thể) đổi

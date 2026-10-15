@@ -96,7 +96,7 @@ export const LINK_TAKEN_MESSAGE =
   'Mã biến thể Pancake này vừa được liên kết cho sản phẩm khác. Từ chối sản phẩm kèm lý do để đối tác nhập mã khác.';
 
 export const PANCAKE_TAKEOVER_UNCONFIRMED = 'PANCAKE_TAKEOVER_UNCONFIRMED';
-/** Mã Pancake của sản phẩm đã khác mã admin thấy trên màn duyệt (đối tác đổi mã sau khi admin mở danh sách). */
+/** Admin có gửi mã Pancake đã xem nhưng mã của sản phẩm giờ đã khác (đối tác đổi mã sau khi admin mở danh sách). Không gửi thì không có lỗi này. */
 export const PANCAKE_CODE_CHANGED = 'PANCAKE_CODE_CHANGED';
 /** Biến thể sẽ bị chuyển giờ nằm ở sản phẩm đang bán khác với sản phẩm admin đã xác nhận chuyển. */
 export const PANCAKE_TAKEOVER_CHANGED = 'PANCAKE_TAKEOVER_CHANGED';
@@ -114,9 +114,12 @@ export const CONSIGNMENT_PENDING_LINK_WHERE = {
 export const LEGACY_LINK_MESSAGE =
   'Liên kết này có từ trước khi hệ thống lưu sản phẩm gốc nên không tự trả biến thể về được. Liên hệ kỹ thuật để xử lý tay.';
 
-/** Những gì admin thấy trên dòng chờ duyệt lúc bấm Duyệt: chỉ duyệt khi sản phẩm vẫn đúng như vậy. */
+/**
+ * Những gì admin thấy trên dòng chờ duyệt lúc bấm Duyệt. Trường nào được gửi thì sản phẩm phải còn đúng như vậy, lệch là 409. Trường
+ * bỏ trống (undefined/null) thì duyệt theo mã/sản phẩm đang có và service ghi cảnh báo.
+ */
 export interface MerchantReviewSeen {
-  /** Mã Pancake đang hiện trên dòng (null: dòng không có mã). */
+  /** Mã Pancake đang hiện trên dòng; chuỗi rỗng: dòng không có mã. */
   pancakeCode?: string | null;
   /** Sản phẩm đang bán mà admin đã xác nhận chuyển sang gian hàng. */
   takeoverProductId?: string | null;
@@ -126,8 +129,17 @@ export interface LinkOptions {
   adminId: string;
   /** Admin đã xem và xác nhận chuyển sản phẩm đang bán sang gian hàng. */
   confirmTakeover?: boolean;
-  /** Sản phẩm đang bán mà admin đã xem trên màn duyệt khi tích xác nhận: chỉ chuyển biến thể khi nó vẫn nằm ở đúng sản phẩm này. */
+  /**
+   * Sản phẩm đang bán mà admin đã xem trên màn duyệt khi tích xác nhận: gửi thì chỉ chuyển biến thể khi nó vẫn nằm ở đúng sản phẩm
+   * này. Bỏ trống (undefined/null) thì chuyển sản phẩm đang giữ mã, `confirmTakeover` vẫn bắt buộc.
+   */
   takeoverProductId?: string | null;
+}
+
+export interface LinkedVariation {
+  linkId: string;
+  originProductId: string;
+  takeover: boolean;
 }
 
 /**
@@ -140,7 +152,7 @@ export async function linkTubuFulfilledVariation(
   tx: Prisma.TransactionClient,
   product: { id: string; storefrontId: string | null; pancakeLinkCode: string | null },
   opts: LinkOptions,
-): Promise<void> {
+): Promise<LinkedVariation | undefined> {
   if (!product.pancakeLinkCode || !product.storefrontId) return;
   const target = await findLinkablePancakeVariation(tx, product.pancakeLinkCode, product.id);
   // Biến thể đã thuộc chính sản phẩm này (duyệt lặp): không có gì để chuyển.
@@ -161,9 +173,9 @@ export async function linkTubuFulfilledVariation(
       message: `Mã ${target.pancakeId} đang thuộc sản phẩm đang bán "${target.productName}". Xem sản phẩm sẽ bị chuyển rồi tích xác nhận trước khi duyệt.`,
     });
   }
-  // Xác nhận chỉ có hiệu lực cho đúng sản phẩm admin đã xem; lệnh chuyển bên dưới có điều kiện `productId = target.productId`
-  // nên biến thể rời sản phẩm này sau lần đọc thì cũng trượt.
-  if (target.requiresAdminConfirm && opts.takeoverProductId !== target.productId) {
+  // Admin đã gửi sản phẩm mình xem thì xác nhận chỉ có hiệu lực cho đúng sản phẩm đó; lệnh chuyển bên dưới có điều kiện
+  // `productId = target.productId` nên biến thể rời sản phẩm này sau lần đọc thì cũng trượt.
+  if (target.requiresAdminConfirm && opts.takeoverProductId != null && opts.takeoverProductId !== target.productId) {
     throw new ConflictException({
       statusCode: 409,
       error: 'Conflict',
@@ -189,7 +201,7 @@ export async function linkTubuFulfilledVariation(
   ]);
   const deactivate = left === 0 && origin.isActive;
   if (deactivate) await tx.product.update({ where: { id: target.productId }, data: { isActive: false } });
-  await tx.merchantPancakeLink.create({
+  const link = await tx.merchantPancakeLink.create({
     data: {
       productId: product.id,
       storefrontId: product.storefrontId,
@@ -201,6 +213,7 @@ export async function linkTubuFulfilledVariation(
       linkedBy: opts.adminId,
     },
   });
+  return { linkId: link.id, originProductId: target.productId, takeover: target.requiresAdminConfirm };
 }
 
 export interface UnlinkOptions {

@@ -1030,9 +1030,13 @@ export const listPendingMerchantProducts = (page = 1, limit = ADMIN_QUEUE_PAGE_S
     `/admin/merchant-products/pending?page=${page}&limit=${limit}`,
   ).then((res) => asPage(res, page, limit));
 
-/** Những gì dòng chờ duyệt đang hiện lúc admin bấm: API chỉ duyệt khi sản phẩm vẫn đúng như vậy (đối tác đổi mã → 409). */
+/**
+ * Những gì dòng chờ duyệt đang hiện lúc admin bấm: API chỉ duyệt khi sản phẩm vẫn đúng như vậy (đối tác đổi mã → 409). Màn admin
+ * luôn gửi: API coi null hoặc bỏ trống là "chưa xem mã nào" nên duyệt theo mã đang có.
+ */
 export interface MerchantReviewSeen {
-  pancakeCode: string | null;
+  /** Mã đang hiện trên dòng; chuỗi rỗng khi dòng không có mã (không dùng null). */
+  pancakeCode: string;
   /** Sản phẩm đang bán admin đã tích xác nhận chuyển (`pancakeLink.origin.id`). */
   takeoverProductId?: string | null;
 }
