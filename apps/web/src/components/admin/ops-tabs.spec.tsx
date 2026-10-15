@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { AttendanceTab } from './attendance-tab';
 import { RefillTab } from './refill-tab';
-import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { scrollRegionProblems, smallTouchTargets } from '@/test-utils/a11y';
 
 let mounted: Rendered[] = [];
@@ -324,6 +324,256 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
     const { c } = await card({ email: email({ lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'x' }) });
     expect(scrollRegionProblems(c)).toEqual([]);
     expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+});
+
+describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (R8)', () => {
+  const READY = {
+    state: 'READY',
+    recipients: 2,
+    issues: [] as string[],
+    lastOkAt: null as string | null,
+    lastErrorAt: null as string | null,
+    lastError: null as string | null,
+    lastErrorKind: null as string | null,
+    lastErrorHint: null as string | null,
+  };
+  const AUTH_HINT = 'Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS. Hệ thống không tự gửi lại liên tục (tránh khoá tài khoản gửi): sửa cấu hình rồi bấm "Gửi email thử".';
+  const health = (email: Record<string, unknown>) => ({ ...HEALTH, alertChannels: { email } });
+  const TEST_URL = '/admin/ops/alert-email/test';
+  const cardOf = (c: HTMLElement) => c.querySelector('section[aria-label="Báo động qua email"]') as HTMLElement;
+  const testButton = (c: HTMLElement) => byText(cardOf(c), 'button', /Gửi email thử|Đang gửi/) as HTMLButtonElement | null;
+
+  afterEach(() => vi.restoreAllMocks());
+
+  describe('hiển thị lỗi', () => {
+    it('lỗi xác thực SMTP: nêu rõ "Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS", kèm lỗi kỹ thuật đã che bí mật', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          mockFetch({
+            '/admin/ops/health': {
+              body: health({
+                ...READY,
+                lastErrorAt: '2026-10-14T02:30:00.000Z',
+                lastError: 'EAUTH: Invalid login: 535 5.7.8 Username and Password not accepted',
+                lastErrorKind: 'AUTH',
+                lastErrorHint: AUTH_HINT,
+              }),
+            },
+          }).fn,
+        ),
+      );
+      const c = await mount(<OpsHealthTab />);
+      const card = cardOf(c);
+      expect(card.textContent).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
+      expect(card.textContent).toContain('Hệ thống không tự gửi lại liên tục');
+      expect(card.textContent).toContain('Lỗi gần nhất: EAUTH: Invalid login: 535 5.7.8');
+      expect(card.textContent).toContain('Lỗi 09:30 14/10/2026');
+      expect(card.querySelector('.text-danger-fg')).not.toBeNull();
+    });
+
+    it('máy chủ từ chối vĩnh viễn: hiện lời chỉ tới người nhận/địa chỉ gửi', async () => {
+      const hint = 'Máy chủ SMTP từ chối vĩnh viễn — kiểm tra OPS_ALERT_EMAIL_TO, SMTP_FROM và quyền gửi của tài khoản.';
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...READY, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EENVELOPE: 550 5.1.1 User unknown', lastErrorKind: 'PERMANENT', lastErrorHint: hint }) } }).fn),
+      );
+      const c = await mount(<OpsHealthTab />);
+      expect(cardOf(c).textContent).toContain('OPS_ALERT_EMAIL_TO, SMTP_FROM');
+    });
+
+    it('lỗi tạm thời: chỉ có dòng lỗi gần nhất, không có lời chỉ sửa cấu hình', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...READY, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'ETIMEDOUT', lastErrorKind: 'TRANSIENT' }) } }).fn),
+      );
+      const c = await mount(<OpsHealthTab />);
+      expect(cardOf(c).textContent).toContain('Lỗi gần nhất: ETIMEDOUT');
+      expect(cardOf(c).textContent).not.toContain('SMTP_USER/SMTP_PASS');
+    });
+
+    it('đã gửi lại được sau lỗi vĩnh viễn (gửi thử thành công): hết lời chỉ và dòng lỗi', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          mockFetch({
+            '/admin/ops/health': {
+              body: health({ ...READY, lastOkAt: '2026-10-14T03:00:00.000Z', lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EAUTH: 535', lastErrorKind: 'AUTH', lastErrorHint: AUTH_HINT }),
+            },
+          }).fn,
+        ),
+      );
+      const c = await mount(<OpsHealthTab />);
+      expect(cardOf(c).textContent).toContain('OK 10:00 14/10/2026');
+      expect(cardOf(c).textContent).not.toContain('Lỗi xác thực SMTP');
+      expect(cardOf(c).textContent).not.toContain('EAUTH');
+    });
+
+    it('API cũ chưa có lastErrorKind/lastErrorHint: vẫn hiện lỗi gần nhất như trước', async () => {
+      const { lastErrorKind: _k, lastErrorHint: _h, ...old } = READY;
+      vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...old, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EAUTH: 535' }) } }).fn));
+      const c = await mount(<OpsHealthTab />);
+      expect(cardOf(c).textContent).toContain('Lỗi gần nhất: EAUTH: 535');
+    });
+  });
+
+  describe('nút Gửi email thử', () => {
+    const mountReady = async (extra: Record<string, { status?: number; body: unknown }> = {}, props: { isAdmin?: boolean } = {}, email: Record<string, unknown> = READY) => {
+      const api = mockFetch({ '/admin/ops/health': { body: health(email) }, ...extra });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const c = await mount(<OpsHealthTab {...props} />);
+      return { api, c };
+    };
+    const testCalls = (api: ReturnType<typeof mockFetch>) => api.calls.filter((x) => x.url.includes(TEST_URL));
+
+    it('có nút trên thẻ khi kênh đang bật; bấm → hộp xác nhận trong trang (không dùng window.confirm), Huỷ thì không gọi API', async () => {
+      const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const { api, c } = await mountReady();
+      const btn = testButton(c);
+      expect(btn?.textContent).toBe('Gửi email thử');
+      expect(btn?.disabled).toBe(false);
+      click(btn);
+      await flush();
+      const dialog = confirmDialog();
+      expect(dialog?.textContent).toContain('Gửi email thử?');
+      expect(dialog?.textContent).toContain('2 địa chỉ nhận báo động');
+      answerConfirm(false);
+      await flush();
+      expect(testCalls(api)).toHaveLength(0);
+      expect(confirmDialog()).toBeNull();
+      expect(nativeConfirm).not.toHaveBeenCalled();
+    });
+
+    it('xác nhận → POST đúng endpoint, hiện lời xác nhận từ API ngay trên thẻ, tải lại sức khoẻ, nút dùng lại được', async () => {
+      const { api, c } = await mountReady({ [TEST_URL]: { body: { ok: true, message: 'Đã gửi email thử tới 2 địa chỉ nhận. Kiểm tra hộp thư (cả thư rác) để xác nhận.' } } });
+      const healthBefore = api.calls.filter((x) => x.url.includes('/admin/ops/health')).length;
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const calls = testCalls(api);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.init?.method).toBe('POST');
+      expect(calls[0]!.url.endsWith(TEST_URL)).toBe(true);
+      const status = cardOf(c).querySelector('[role="status"]');
+      expect(status?.textContent).toContain('Đã gửi email thử tới 2 địa chỉ nhận');
+      expect(api.calls.filter((x) => x.url.includes('/admin/ops/health')).length).toBeGreaterThan(healthBefore);
+      expect(testButton(c)?.disabled).toBe(false);
+      expect(testButton(c)?.textContent).toBe('Gửi email thử');
+    });
+
+    it('API từ chối (sai xác thực): hiện đúng lời API trả, dạng cảnh báo trên thẻ, không lộ gì thêm', async () => {
+      const message = `Gửi email thử lỗi — ${AUTH_HINT} Chi tiết: EAUTH: Invalid login: 535 5.7.8 Username and Password not accepted`;
+      const { c } = await mountReady({ [TEST_URL]: { status: 502, body: { message } } });
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const alert = cardOf(c).querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
+      expect(alert?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8');
+      expect(cardOf(c).querySelector('[role="status"]')).toBeNull();
+    });
+
+    it('chưa cấu hình/dở dang ở phía API (400): hiện lý do API trả', async () => {
+      const { c } = await mountReady({ [TEST_URL]: { status: 400, body: { message: 'Cấu hình email chưa đủ: SMTP_HOST còn trống.' } } });
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(cardOf(c).querySelector('[role="alert"]')?.textContent).toContain('SMTP_HOST còn trống');
+    });
+
+    it('bấm quá 5 lần/phút (429): báo bằng tiếng Việt, không in chữ Throttler thô', async () => {
+      const { c } = await mountReady({ [TEST_URL]: { status: 429, body: { message: 'ThrottlerException: Too Many Requests' } } });
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const alert = cardOf(c).querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain('quá nhiều lần');
+      expect(alert?.textContent).not.toContain('Throttler');
+    });
+
+    it('mất mạng: báo lỗi mạng, nút dùng lại được', async () => {
+      const api = mockFetch({ '/admin/ops/health': { body: health(READY) } });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url.includes(TEST_URL)) throw new TypeError('Failed to fetch');
+          return api.fn(url, init);
+        }),
+      );
+      const c = await mount(<OpsHealthTab />);
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(cardOf(c).querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
+      expect(testButton(c)?.disabled).toBe(false);
+    });
+
+    it('khoá nút và đổi chữ "Đang gửi…" trong lúc gửi; bấm thêm không gửi lần hai', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const api = mockFetch({ '/admin/ops/health': { body: health(READY) } });
+      let posts = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url.includes(TEST_URL)) {
+            posts += 1;
+            await gate;
+            return new Response(JSON.stringify({ ok: true, message: 'Đã gửi email thử tới 2 địa chỉ nhận.' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          return api.fn(url, init);
+        }),
+      );
+      const c = await mount(<OpsHealthTab />);
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const busy = testButton(c)!;
+      expect(busy.textContent).toBe('Đang gửi…');
+      expect(busy.disabled).toBe(true);
+      expect(busy.getAttribute('aria-busy')).toBe('true');
+      click(busy);
+      await flush();
+      expect(confirmDialog()).toBeNull();
+      expect(posts).toBe(1);
+      release();
+      await flush();
+      expect(posts).toBe(1);
+      expect(testButton(c)?.textContent).toBe('Gửi email thử');
+      expect(testButton(c)?.disabled).toBe(false);
+      expect(cardOf(c).querySelector('[role="status"]')?.textContent).toContain('Đã gửi email thử');
+    });
+
+    it('chỉ ADMIN: không có nút khi isAdmin=false (cùng luật với endpoint @Roles ADMIN)', async () => {
+      const { c } = await mountReady({}, { isAdmin: false });
+      expect(testButton(c)).toBeNull();
+      expect(cardOf(c).textContent).toContain('Đang bật');
+    });
+
+    it.each([
+      ['chưa bật', { ...READY, state: 'DISABLED', recipients: 0 }],
+      ['cấu hình dở dang', { ...READY, state: 'MISCONFIGURED', recipients: 0, issues: ['SMTP_HOST còn trống: đã đặt cấu hình email nhưng chưa có máy chủ SMTP.'] }],
+    ])('không có nút khi kênh %s (chưa có gì để thử)', async (_n, email) => {
+      const { c } = await mountReady({}, {}, email);
+      expect(testButton(c)).toBeNull();
+    });
+
+    it('nút và thông báo không thêm nút nhỏ hay vùng cuộn lỗi', async () => {
+      const { c } = await mountReady({ [TEST_URL]: { body: { ok: true, message: 'Đã gửi email thử tới 2 địa chỉ nhận.' } } });
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+      expect(scrollRegionProblems(c)).toEqual([]);
+    });
   });
 });
 

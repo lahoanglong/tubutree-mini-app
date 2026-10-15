@@ -469,7 +469,7 @@ export default function AdminPage() {
           {active === 'subscriptions' && <SubscriptionsTab />}
           {active === 'refill' && <RefillTab />}
           {active === 'config' && <ConfigTab />}
-          {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} />}
+          {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}

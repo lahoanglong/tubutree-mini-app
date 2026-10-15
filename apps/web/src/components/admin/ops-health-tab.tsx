@@ -10,10 +10,12 @@ import {
   resolveGomdonAlert,
   retryOpsWebhookEvent,
   runPancakeSync,
+  sendOpsTestEmail,
   type OpsEmailChannel,
   type OpsHealth,
   type OpsWebhookEvent,
 } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion } from './ui';
@@ -47,11 +49,12 @@ const OPEN_ORDER_BTN = 'min-h-[44px] text-xs font-medium text-forest-700 hover:u
 
 type Act = (run: () => Promise<{ message?: string } | unknown>, ok: string) => void;
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Card({ title, children, after }: { title: string; children: ReactNode; after?: ReactNode }) {
   return (
     <section aria-label={title} className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       <h3 className="font-display text-sm font-semibold text-stone-900">{title}</h3>
       <dl className="mt-2 space-y-1 text-sm">{children}</dl>
+      {after}
     </section>
   );
 }
@@ -69,7 +72,7 @@ function Row({ label, value, warn }: { label: string; value: ReactNode; warn?: b
  * Sức khoẻ vận hành (PLATFORM-5): Pancake, Gomdon, hàng đợi, đơn kẹt — cùng ngưỡng mà cron báo động dùng — kèm các nút
  * vận hành trước đây chỉ gọi được bằng API tay (đồng bộ danh mục Pancake, tính lại số đã bán).
  */
-export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => void }) {
+export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
@@ -169,6 +172,7 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
         <HealthBody
           h={q.data}
           onOpenOrder={onOpenOrder}
+          canTestEmail={isAdmin}
           busy={busy}
           onRetry={(e) => act(() => retryOpsWebhookEvent(e.source, e.id), 'Đã đưa sự kiện vào hàng đợi xử lý lại.')}
           onDismiss={(e) => void askDismiss(e)}
@@ -196,11 +200,74 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
 
 const EMAIL_STATE_LABELS = { DISABLED: 'Chưa bật', READY: 'Đang bật', MISCONFIGURED: 'Cấu hình chưa đủ' } as const;
 
-/** Email là kênh thứ hai của báo động vận hành; lỗi SMTP không thành "sự cố" mới nên chỉ lộ ra ở thẻ này. */
-function EmailChannelCard({ email }: { email: OpsEmailChannel }) {
+const TEST_EMAIL_THROTTLED = 'Đã bấm gửi thử quá nhiều lần. Chờ khoảng một phút rồi thử lại.';
+
+/**
+ * Email là kênh thứ hai của báo động vận hành; lỗi SMTP không thành "sự cố" mới nên chỉ lộ ra ở thẻ này. Nút "Gửi email thử"
+ * (ADMIN, như endpoint) chỉ có khi kênh đang bật: chưa bật hay cấu hình dở dang thì chưa có gì để thử, thẻ đã nêu cần đặt gì.
+ */
+function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest: boolean }) {
+  const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const failing = newer(email.lastErrorAt, email.lastOkAt);
+
+  const askTest = async () => {
+    if (sendingRef.current) return;
+    const ok = await confirm({
+      title: 'Gửi email thử?',
+      message: `Hệ thống sẽ gửi một email thử tới ${email.recipients} địa chỉ nhận báo động. Không ảnh hưởng báo động thật. Sau khi gửi, kiểm tra hộp thư (cả thư rác).`,
+      confirmLabel: 'Gửi email thử',
+    });
+    if (!ok || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setResult(null);
+    try {
+      const r = await sendOpsTestEmail();
+      setResult({ ok: true, text: r.message || 'Đã gửi email thử.' });
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof ApiError && e.status === 429 ? TEST_EMAIL_THROTTLED : e instanceof Error ? e.message : 'Gửi email thử lỗi.' });
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+      void qc.invalidateQueries({ queryKey: ['admin-ops-health'] });
+    }
+  };
+
   return (
-    <Card title="Báo động qua email">
+    <Card
+      title="Báo động qua email"
+      after={
+        <div className="mt-1 space-y-1">
+          {email.state === 'DISABLED' && (
+            <p className="text-xs text-stone-500">Đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM để nhận báo động qua email (docs/GO-LIVE-KEYS.md mục 8).</p>
+          )}
+          {email.issues.map((issue) => (
+            <p key={issue} className="break-words text-xs text-danger-fg">
+              {issue}
+            </p>
+          ))}
+          {failing && email.lastErrorHint && <p className="break-words text-xs font-medium text-danger-fg">{email.lastErrorHint}</p>}
+          {failing && email.lastError && <p className="break-words text-xs text-danger-fg">Lỗi gần nhất: {email.lastError}</p>}
+          {canTest && email.state === 'READY' && (
+            <div className="pt-1">
+              <button type="button" disabled={sending} aria-busy={sending} onClick={() => void askTest()} className={BTN_XS_SECONDARY}>
+                {sending ? 'Đang gửi…' : 'Gửi email thử'}
+              </button>
+            </div>
+          )}
+          {result && (
+            <Notice tone={result.ok ? 'success' : 'danger'} role={result.ok ? 'status' : 'alert'}>
+              {result.text}
+            </Notice>
+          )}
+          {dialog}
+        </div>
+      }
+    >
       <Row label="Trạng thái" value={EMAIL_STATE_LABELS[email.state]} warn={email.state === 'MISCONFIGURED'} />
       {email.state === 'READY' && <Row label="Người nhận" value={`${email.recipients} địa chỉ`} />}
       {email.state === 'READY' && (
@@ -210,15 +277,6 @@ function EmailChannelCard({ email }: { email: OpsEmailChannel }) {
           warn={failing}
         />
       )}
-      {email.state === 'DISABLED' && (
-        <p className="text-xs text-stone-500">Đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM để nhận báo động qua email (docs/GO-LIVE-KEYS.md mục 8).</p>
-      )}
-      {email.issues.map((issue) => (
-        <p key={issue} className="break-words text-xs text-danger-fg">
-          {issue}
-        </p>
-      ))}
-      {failing && email.lastError && <p className="break-words text-xs text-danger-fg">Lỗi gần nhất: {email.lastError}</p>}
     </Card>
   );
 }
@@ -235,6 +293,7 @@ function ListSection({ title, children }: { title: string; children: ReactNode }
 function HealthBody({
   h,
   onOpenOrder,
+  canTestEmail,
   busy,
   onRetry,
   onDismiss,
@@ -242,6 +301,7 @@ function HealthBody({
 }: {
   h: OpsHealth;
   onOpenOrder?: (code: string) => void;
+  canTestEmail: boolean;
   busy: boolean;
   onRetry: (e: OpsWebhookEvent) => void;
   onDismiss: (e: OpsWebhookEvent) => void;
@@ -322,7 +382,7 @@ function HealthBody({
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
           {h.gomdon.connection?.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
         </Card>
-        {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} />}
+        {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} canTest={canTestEmail} />}
       </div>
 
       <section aria-label="Hàng đợi" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
