@@ -37,7 +37,7 @@ import { paidLineTotals } from './commission-base';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from '../checkout/total-changed';
 
-import { shareOf } from '../orders/refund-allocation';
+import { distributeByWeight, shareOf } from '../orders/refund-allocation';
 import { storefrontSalesByStore } from './storefront-sales';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -1232,13 +1232,13 @@ export class AffiliateService {
       ...new Set(commissions.flatMap((c) => c.order?.items.map((i) => i.variationId) ?? [])),
     ];
     const variations = await this.prisma.variation.findMany({
-      where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true },
+      where: { id: { in: variationIds } }, select: { id: true, affiliateRate: true, product: { select: { affiliateBlocked: true } } },
     });
-    const rate = new Map(variations.map((v) => [v.id, v.affiliateRate ? Number(v.affiliateRate) : 0]));
+    const rate = new Map(variations.map((v) => [v.id, v.product?.affiliateBlocked ? 0 : v.affiliateRate ? Number(v.affiliateRate) : 0]));
     // reversePartialReturn chỉ cắt Commission.amount khi hoa hồng còn PENDING/LOCKED, mà cron duyệt đổi LOCKED→APPROVED chỉ bằng
     // status nên amount giữ nguyên số đã cắt; trả duyệt sau đó thì không cắt. Trạng thái hiện tại vì vậy không cho biết lần trả nào
     // đã cắt: dựng lại phần cắt theo công thức của reversePartialReturn rồi phân bổ theo thứ tự duyệt, tối đa bằng
-    // (tổng gốc − amount) — tổng các dòng luôn khớp Commission.amount.
+    // (tổng gốc − amount) — tổng các dòng luôn khớp Commission.amount (hoa hồng cũ thiếu lineAmounts được chia lại đúng bằng amount).
     const orderIds = [...new Set(commissions.map((c) => c.orderId))];
     const returnRows = orderIds.length
       ? await this.prisma.returnRequestItem.findMany({
@@ -1252,19 +1252,27 @@ export class AffiliateService {
       list.push(r);
       returnsByOrder.set(r.returnRequest.orderId, list);
     }
-    const originalOf = (c: (typeof commissions)[number], paid: number[], idx: number, itemId: string, itemRate: number) => {
-      const stored = c.lineAmounts && typeof c.lineAmounts === 'object' && !Array.isArray(c.lineAmounts) ? (c.lineAmounts as Record<string, unknown>)[itemId] : undefined;
-      return Number.isFinite(Number(stored)) && stored != null ? Math.floor(Number(stored)) : Math.floor(((paid[idx] ?? 0) * itemRate) / 100);
-    };
+    const storedLines = (c: (typeof commissions)[number]) =>
+      c.lineAmounts && typeof c.lineAmounts === 'object' && !Array.isArray(c.lineAmounts) ? (c.lineAmounts as Record<string, unknown>) : null;
     // Đếm đơn theo orderId riêng biệt (Set) — 1 đơn có 2 item cùng SP vẫn tính 1 đơn.
     const acc = new Map<string, { productName: string; commission: number; orderIds: Set<string> }>();
     for (const c of commissions) {
       const items = c.order?.items ?? [];
       const paid = c.order ? paidLineTotals(c.order, items) : [];
       const originals = new Map<string, number>();
-      for (const [idx, it] of items.entries()) {
-        const r = rate.get(it.variationId) ?? 0;
-        if (r > 0) originals.set(it.id, originalOf(c, paid, idx, it.id, r));
+      // lineAmounts lưu lúc đặt là nguồn duy nhất (dòng không có khoá = không có hoa hồng, như order-reversal.commissionableLineIds);
+      // chỉ hoa hồng cũ chưa có cột này mới tính lại theo mức % hiện tại.
+      const stored = storedLines(c);
+      if (stored) {
+        for (const it of items) {
+          const v = Number(stored[it.id]);
+          if (stored[it.id] != null && Number.isFinite(v)) originals.set(it.id, Math.max(0, Math.floor(v)));
+        }
+      } else {
+        for (const [idx, it] of items.entries()) {
+          const r = rate.get(it.variationId) ?? 0;
+          if (r > 0) originals.set(it.id, Math.floor(((paid[idx] ?? 0) * r) / 100));
+        }
       }
       let budget = Math.max(0, [...originals.values()].reduce((a, v) => a + v, 0) - c.amount);
       const cutOf = new Map<string, number>();
@@ -1289,10 +1297,19 @@ export class AffiliateService {
           cutOf.set(it.id, (cutOf.get(it.id) ?? 0) + take);
         }
       }
-      for (const it of items) {
+      const lines = items.flatMap((it) => {
         const original = originals.get(it.id);
-        if (original === undefined) continue;
-        const amount = Math.max(0, original - Math.min(original, cutOf.get(it.id) ?? 0));
+        return original === undefined ? [] : [{ it, amount: Math.max(0, original - Math.min(original, cutOf.get(it.id) ?? 0)) }];
+      });
+      // Hoa hồng cũ không có lineAmounts: mức % hiện tại có thể khác lúc đặt nên tổng tính lại lệch Commission.amount; chia lại
+      // đúng bằng amount theo tỷ lệ (không bao giờ hiện nhiều hay ít hơn số hoa hồng thật).
+      if (!stored && lines.length > 0 && lines.reduce((a, l) => a + l.amount, 0) !== c.amount) {
+        const split = distributeByWeight(c.amount, lines.map((l) => l.amount));
+        lines.forEach((l, i) => {
+          l.amount = split[i] ?? 0;
+        });
+      }
+      for (const { it, amount } of lines) {
         if ((qtyOf.get(it.id) ?? 0) >= it.quantity && amount === 0) continue;
         const cur =
           acc.get(it.productName) ?? { productName: it.productName, commission: 0, orderIds: new Set<string>() };
