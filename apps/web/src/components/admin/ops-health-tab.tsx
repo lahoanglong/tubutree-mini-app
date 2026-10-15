@@ -12,6 +12,7 @@ import {
   runPancakeSync,
   sendOpsTestEmail,
   type OpsEmailChannel,
+  type OpsWebhookChannel,
   type OpsHealth,
   type OpsWebhookEvent,
 } from '@/lib/admin-client';
@@ -331,6 +332,56 @@ function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest:
   );
 }
 
+const WEBHOOK_STATE_LABELS = { DISABLED: 'Chưa bật', READY: 'Đang bật' } as const;
+
+/** Câu tiếng Việt cho lần gửi webhook lỗi gần nhất; chuỗi gốc (HTTP 410, lỗi mạng) chỉ nằm ở "Chi tiết kỹ thuật". */
+function webhookErrorSummary(w: OpsWebhookChannel): string {
+  const hint = w.lastErrorHint?.trim();
+  if (hint) return hint;
+  if (w.lastErrorKind === 'PERMANENT') return 'Hook báo động bị từ chối hẳn. Kiểm tra OPS_ALERT_WEBHOOK_URL.';
+  return 'Hook báo động tạm thời chưa nhận được. Hệ thống tự gửi lại ở lượt kiểm sau (5 phút).';
+}
+
+/**
+ * Webhook là kênh báo động ngoài thứ hai (Slack/Zalo): hook bị thu hồi (410) chỉ ghi log máy chủ nên thẻ này là chỗ duy nhất admin
+ * biết báo động bên ngoài đã mất. Cùng luật "lỗi mới hơn lần gửi được" như thẻ email.
+ */
+function WebhookChannelCard({ webhook }: { webhook: OpsWebhookChannel }) {
+  const failing = newer(webhook.lastErrorAt, webhook.lastOkAt);
+  return (
+    <Card
+      title="Báo động qua webhook"
+      after={
+        <div className="mt-1 space-y-1">
+          {webhook.state === 'DISABLED' && (
+            <p className="text-xs text-stone-500">Đặt OPS_ALERT_WEBHOOK_URL (Slack hoặc Zalo) để nhận báo động qua webhook.</p>
+          )}
+          {failing && (
+            <div className="space-y-0.5">
+              <p className="break-words text-xs font-medium text-danger-fg">{webhookErrorSummary(webhook)}</p>
+              {webhook.lastError && (
+                <details className="text-xs text-stone-600">
+                  <summary className="flex min-h-[44px] cursor-pointer items-center hover:underline sm:min-h-0">Chi tiết kỹ thuật</summary>
+                  <p className="break-words pb-1 font-mono text-stone-600">{webhook.lastError}</p>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      }
+    >
+      <Row label="Trạng thái" value={WEBHOOK_STATE_LABELS[webhook.state]} />
+      {webhook.state === 'READY' && (
+        <Row
+          label="Lần gửi gần nhất"
+          value={failing ? `Lỗi ${ago(webhook.lastErrorAt)}` : webhook.lastOkAt ? `OK ${ago(webhook.lastOkAt)}` : 'chưa gửi'}
+          warn={failing}
+        />
+      )}
+    </Card>
+  );
+}
+
 function ListSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -433,6 +484,7 @@ function HealthBody({
           {h.gomdon.connection?.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
         </Card>
         {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} canTest={canTestEmail} />}
+        {h.alertChannels?.webhook && <WebhookChannelCard webhook={h.alertChannels.webhook} />}
       </div>
 
       <section aria-label="Hàng đợi" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">

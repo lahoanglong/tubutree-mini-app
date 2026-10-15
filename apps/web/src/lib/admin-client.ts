@@ -1592,6 +1592,17 @@ export interface OpsEmailChannel {
   /** Cách sửa cho lỗi AUTH/PERMANENT (vd "Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS"); không chứa giá trị cấu hình. */
   lastErrorHint?: string | null;
 }
+/** Webhook báo động vận hành (OPS_ALERT_WEBHOOK_URL): cùng dạng với kênh email, không bao giờ kèm URL hay token. */
+export interface OpsWebhookChannel {
+  state: 'DISABLED' | 'READY';
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  /** PERMANENT: hook bị từ chối hẳn (vd 410), hệ thống không tự gửi lại liên tục. TRANSIENT: tự gửi lại ở lượt kiểm sau. */
+  lastErrorKind?: 'PERMANENT' | 'TRANSIENT' | null;
+  /** Cách sửa cho lỗi PERMANENT. */
+  lastErrorHint?: string | null;
+}
 export interface OpsHealth {
   generatedAt: string;
   thresholds: {
@@ -1634,7 +1645,7 @@ export interface OpsHealth {
   };
   queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
   /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
-  alertChannels?: { email: OpsEmailChannel };
+  alertChannels?: { email: OpsEmailChannel; webhook?: OpsWebhookChannel };
   problems: { key: string; message: string }[];
 }
 export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
