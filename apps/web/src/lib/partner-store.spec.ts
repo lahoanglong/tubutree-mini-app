@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { isPartnerStore } from './partner-store';
 
 describe('isPartnerStore', () => {
-  it('ưu tiên isPartner do API trả', () => {
+  it('CTV theo isPartner', () => {
     expect(isPartnerStore({ type: 'CTV', isPartner: true })).toBe(true);
     expect(isPartnerStore({ type: 'CTV', isPartner: false })).toBe(false);
-    expect(isPartnerStore({ type: 'MERCHANT', isPartner: false })).toBe(false);
+    expect(isPartnerStore({ type: 'CTV' })).toBe(false);
   });
-  it('thiếu isPartner thì xét theo type như trước', () => {
+  it('MERCHANT luôn là đối tác dù isPartner=false (cột mặc định lúc triển khai cuốn chiếu)', () => {
+    expect(isPartnerStore({ type: 'MERCHANT', isPartner: false })).toBe(true);
+    expect(isPartnerStore({ type: 'BRAND', isPartner: false })).toBe(false);
+  });
+  it('thiếu isPartner thì xét theo type', () => {
     expect(isPartnerStore({ type: 'MERCHANT' })).toBe(true);
     expect(isPartnerStore({ type: 'CTV' })).toBe(false);
     expect(isPartnerStore({ type: 'BRAND' })).toBe(false);

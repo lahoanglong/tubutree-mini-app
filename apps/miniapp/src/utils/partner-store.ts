@@ -3,8 +3,8 @@ export interface PartnerStoreLike {
   isPartner?: boolean | null;
 }
 
-/** Gian hàng có quyền đối tác (đăng sản phẩm, tự giao, đối soát):`isPartner` do API quyết định; phản hồi cũ chưa có trường này thì xét theo type như trước. */
+/** Gian hàng có quyền đối tác (đăng sản phẩm, tự giao, đối soát):khớp API: type MERCHANT hoặc isPartner=true (MERCHANT tạo lúc triển khai cuốn chiếu có thể mang isPartner=false mặc định của cột). */
 export function isPartnerStore(store: PartnerStoreLike | null | undefined): boolean {
   if (!store) return false;
-  return store.isPartner ?? store.type === 'MERCHANT';
+  return store.type === 'MERCHANT' || store.isPartner === true;
 }
