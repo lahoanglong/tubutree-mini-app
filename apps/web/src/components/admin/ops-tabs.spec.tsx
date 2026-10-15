@@ -250,6 +250,83 @@ describe('OpsHealthTab — webhook tồn kho Pancake không chạy lại', () =>
   });
 });
 
+describe('OpsHealthTab — kênh email báo động (R8)', () => {
+  interface EmailChannel {
+    state: string;
+    recipients: number;
+    issues: string[];
+    lastOkAt: string | null;
+    lastErrorAt: string | null;
+    lastError: string | null;
+  }
+  const email = (over: Partial<EmailChannel> = {}): EmailChannel => ({
+    state: 'READY',
+    recipients: 2,
+    issues: [],
+    lastOkAt: null,
+    lastErrorAt: null,
+    lastError: null,
+    ...over,
+  });
+  const card = async (channels: unknown) => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, alertChannels: channels } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    return { c, section: c.querySelector('section[aria-label="Báo động qua email"]') as HTMLElement | null };
+  };
+
+  it('đang bật và gửi được: số người nhận và lần gửi gần nhất, không cảnh báo', async () => {
+    const { section } = await card({ email: email({ lastOkAt: '2026-10-14T02:30:00.000Z' }) });
+    expect(section?.textContent).toContain('Đang bật');
+    expect(section?.textContent).toContain('2 địa chỉ');
+    expect(section?.textContent).toContain('OK 09:30 14/10/2026');
+    expect(section?.querySelector('.text-danger-fg')).toBeNull();
+  });
+
+  it('lần gửi gần nhất lỗi: hiện lỗi (đã che bí mật ở API) và tô cảnh báo', async () => {
+    const { section } = await card({
+      email: email({ lastOkAt: '2026-10-14T01:00:00.000Z', lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EAUTH: Invalid login: 535 5.7.8 rejected' }),
+    });
+    expect(section?.textContent).toContain('Lỗi 09:30 14/10/2026');
+    expect(section?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8 rejected');
+    expect(section?.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
+  it('đã gửi lại được sau lỗi: coi là ổn, không còn dòng lỗi', async () => {
+    const { section } = await card({
+      email: email({ lastOkAt: '2026-10-14T02:30:00.000Z', lastErrorAt: '2026-10-14T01:00:00.000Z', lastError: 'ETIMEDOUT' }),
+    });
+    expect(section?.textContent).toContain('OK 09:30 14/10/2026');
+    expect(section?.textContent).not.toContain('ETIMEDOUT');
+  });
+
+  it('chưa bật: nói rõ và chỉ tới biến cần đặt', async () => {
+    const { section } = await card({ email: email({ state: 'DISABLED', recipients: 0 }) });
+    expect(section?.textContent).toContain('Chưa bật');
+    expect(section?.textContent).toContain('OPS_ALERT_EMAIL_TO');
+  });
+
+  it('cấu hình dở dang: liệt kê từng lỗi theo khoá, tô cảnh báo', async () => {
+    const { section } = await card({
+      email: email({ state: 'MISCONFIGURED', recipients: 0, issues: ['SMTP_HOST còn trống: đã đặt cấu hình email nhưng chưa có máy chủ SMTP.'] }),
+    });
+    expect(section?.textContent).toContain('Cấu hình chưa đủ');
+    expect(section?.textContent).toContain('SMTP_HOST còn trống');
+    expect(section?.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
+  it('API cũ chưa có alertChannels: không hiện thẻ, không lỗi', async () => {
+    const { c, section } = await card(undefined);
+    expect(section).toBeNull();
+    expect(c.textContent).toContain('Sức khoẻ hệ thống');
+  });
+
+  it('thẻ không thêm nút bấm nhỏ hay vùng cuộn lỗi', async () => {
+    const { c } = await card({ email: email({ lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'x' }) });
+    expect(scrollRegionProblems(c)).toEqual([]);
+    expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+});
+
 describe('AttendanceTab — Chốt ra ca (ADMINOPS-17)', () => {
   it('liệt kê người đang trong ca kèm tên; Chốt ra ca qua hộp xác nhận rồi gửi đúng phiên', async () => {
     const live = [

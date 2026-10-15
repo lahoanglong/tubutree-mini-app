@@ -10,6 +10,7 @@ import {
   resolveGomdonAlert,
   retryOpsWebhookEvent,
   runPancakeSync,
+  type OpsEmailChannel,
   type OpsHealth,
   type OpsWebhookEvent,
 } from '@/lib/admin-client';
@@ -193,6 +194,35 @@ export function OpsHealthTab({ onOpenOrder }: { onOpenOrder?: (code: string) => 
   );
 }
 
+const EMAIL_STATE_LABELS = { DISABLED: 'Chưa bật', READY: 'Đang bật', MISCONFIGURED: 'Cấu hình chưa đủ' } as const;
+
+/** Email là kênh thứ hai của báo động vận hành; lỗi SMTP không thành "sự cố" mới nên chỉ lộ ra ở thẻ này. */
+function EmailChannelCard({ email }: { email: OpsEmailChannel }) {
+  const failing = newer(email.lastErrorAt, email.lastOkAt);
+  return (
+    <Card title="Báo động qua email">
+      <Row label="Trạng thái" value={EMAIL_STATE_LABELS[email.state]} warn={email.state === 'MISCONFIGURED'} />
+      {email.state === 'READY' && <Row label="Người nhận" value={`${email.recipients} địa chỉ`} />}
+      {email.state === 'READY' && (
+        <Row
+          label="Lần gửi gần nhất"
+          value={failing ? `Lỗi ${ago(email.lastErrorAt)}` : email.lastOkAt ? `OK ${ago(email.lastOkAt)}` : 'chưa gửi'}
+          warn={failing}
+        />
+      )}
+      {email.state === 'DISABLED' && (
+        <p className="text-xs text-stone-500">Đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM để nhận báo động qua email (docs/GO-LIVE-KEYS.md mục 8).</p>
+      )}
+      {email.issues.map((issue) => (
+        <p key={issue} className="break-words text-xs text-danger-fg">
+          {issue}
+        </p>
+      ))}
+      {failing && email.lastError && <p className="break-words text-xs text-danger-fg">Lỗi gần nhất: {email.lastError}</p>}
+    </Card>
+  );
+}
+
 function ListSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -292,6 +322,7 @@ function HealthBody({
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
           {h.gomdon.connection?.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
         </Card>
+        {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} />}
       </div>
 
       <section aria-label="Hàng đợi" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">

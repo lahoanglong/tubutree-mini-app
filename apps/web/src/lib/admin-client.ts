@@ -1568,6 +1568,15 @@ export interface OpsBacklogOrder {
   gomdonStatus: string | null;
   paymentMethod: string;
 }
+/** Email báo động vận hành: trạng thái cấu hình và lần gửi gần nhất (lỗi đã được API che tài khoản/mật khẩu SMTP). */
+export interface OpsEmailChannel {
+  state: 'DISABLED' | 'READY' | 'MISCONFIGURED';
+  recipients: number;
+  issues: string[];
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+}
 export interface OpsHealth {
   generatedAt: string;
   thresholds: {
@@ -1609,6 +1618,8 @@ export interface OpsHealth {
     backlogOrders: OpsBacklogOrder[];
   };
   queues: { ok: true; items: OpsQueueRow[] } | { ok: false; error: string };
+  /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
+  alertChannels?: { email: OpsEmailChannel };
   problems: { key: string; message: string }[];
 }
 export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
