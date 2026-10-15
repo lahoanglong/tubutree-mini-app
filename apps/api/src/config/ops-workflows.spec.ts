@@ -100,7 +100,7 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
   const audit = wf.slice(wf.indexOf('audit)'), wf.indexOf('backup)'));
 
   it('ops.yml chuyển đủ bảy secret email qua SSH như OPS_ALERT_WEBHOOK_URL, set-env ghi được, audit in SET/EMPTY', () => {
-    const envs = /envs: ([^\n]*)/.exec(wf)?.[1].split(',') ?? [];
+    const envs = (/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',');
     for (const k of EMAIL_KEYS) {
       expect({ k, passed: wf.includes(`${k}: \${{ secrets.${k} }}`) }).toEqual({ k, passed: true });
       expect({ k, inEnvs: envs.includes(k) }).toEqual({ k, inEnvs: true });

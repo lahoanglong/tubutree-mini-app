@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Logger } from '@nestjs/common';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
 import { OpsController } from './ops.controller';
@@ -10,6 +10,11 @@ function controller(result: TestEmailResult) {
 }
 
 describe('OpsController — email thử báo động', () => {
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
   it('gửi được → báo số địa chỉ nhận', async () => {
     const { ctrl, email } = controller({ ok: true, recipients: 2 });
     await expect(ctrl.testAlertEmail('admin-1')).resolves.toEqual({ ok: true, message: expect.stringContaining('2 địa chỉ') });

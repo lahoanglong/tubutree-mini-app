@@ -12,7 +12,14 @@ type Ready = Extract<OpsEmailConfig, { state: 'ready' }>;
 
 /** Phần của nodemailer Transporter mà dịch vụ dùng — test thay bằng bản giả hoặc jsonTransport, không bao giờ nối SMTP thật. */
 export interface MailTransport {
-  sendMail(message: { from: string | { name: string; address: string }; to: string[]; subject: string; text: string; html: string }): Promise<unknown>;
+  sendMail(message: {
+    from: string | { name: string; address: string };
+    to: string[];
+    subject: string;
+    text: string;
+    html: string;
+    headers: Record<string, string>;
+  }): Promise<unknown>;
   close(): void;
 }
 export type MailTransportFactory = (smtp: Ready['smtp']) => MailTransport;
@@ -174,6 +181,8 @@ export class OpsEmailService {
           subject: content.subject,
           text: content.text,
           html: content.html,
+          // Thư máy gửi: báo cho hộp thư nhận đừng trả lời tự động (tránh vòng lặp auto-reply).
+          headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
         }),
         EMAIL_SEND_TIMEOUT_MS,
       );
