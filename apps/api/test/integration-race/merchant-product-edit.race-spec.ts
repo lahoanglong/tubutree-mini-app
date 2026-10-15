@@ -232,6 +232,29 @@ describe('Merchant product edit draft (real Postgres)', () => {
     await expectUntouched(product.id, 'Bản hai');
   });
 
+  it('(j) WEB-1: sản phẩm đã gỡ liên kết Pancake (còn giá khuyến mãi mang sang) bỏ mã kèm giá mới: giá khách trả ở biến thể và sản phẩm khớp giá danh sách, không còn giá khuyến mãi ẩn, giá thấp hơn khuyến mãi cũ không bị 400', async () => {
+    const { owner, product } = await liveProduct();
+    const code = `PK-IT-${randCode(8)}`;
+    await prisma.product.update({ where: { id: product.id }, data: { pancakeLinkCode: code, basePrice: 150_000, salePrice: 129_000, isActive: false } });
+    await prisma.variation.updateMany({ where: { productId: product.id }, data: { retailPrice: 150_000, salePrice: 129_000 } });
+    const price = async () => {
+      const p = await prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: true } });
+      const v = p.variations[0]!;
+      return { product: p.salePrice ?? p.basePrice, variation: v.salePrice ?? v.retailPrice };
+    };
+
+    // Không gửi giá: giữ cả hai giá như lúc gỡ liên kết, vẫn khớp nhau.
+    await merchant.updateProduct(owner.id, product.id, { pancakeCode: null });
+    expect(await price()).toEqual({ product: 129_000, variation: 129_000 });
+    await prisma.product.update({ where: { id: product.id }, data: { pancakeLinkCode: code } });
+
+    await merchant.updateProduct(owner.id, product.id, { pancakeCode: null, basePrice: 100_000 });
+    const after = await prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: { variations: true } });
+    expect(after).toMatchObject({ pancakeLinkCode: null, basePrice: 100_000, salePrice: null });
+    expect(after.variations[0]).toMatchObject({ retailPrice: 100_000, salePrice: null });
+    expect(await price()).toEqual({ product: 100_000, variation: 100_000 });
+  });
+
   it('(e) xoá sản phẩm kéo theo xoá bản chờ (cascade), không để bản mồ côi', async () => {
     const { owner, product } = await liveProduct();
     await merchant.updateProduct(owner.id, product.id, { name: 'Sẽ bị xoá' });
