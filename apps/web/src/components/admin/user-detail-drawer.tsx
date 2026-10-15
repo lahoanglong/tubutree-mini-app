@@ -143,12 +143,12 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
         ) : (
           <ul className="divide-y divide-stone-100">
             {d.wallet.map((w) => (
-              <li key={w.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
-                <span className="min-w-0 break-words">
+              <li key={w.id} className="flex justify-between gap-x-2 py-1.5">
+                <span className="min-w-0 flex-1 break-words">
                   {w.reason ?? walletTxLabel(w.type)}
                   <span className="block text-xs text-stone-500">{formatDateTime(w.createdAt)}</span>
                 </span>
-                <span className="text-right">
+                <span className="shrink-0 text-right">
                   <span className={w.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}>
                     {w.delta > 0 ? '+' : ''}
                     {formatVnd(w.delta)}
@@ -167,15 +167,15 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
         ) : (
           <ul className="divide-y divide-stone-100">
             {d.points.map((p) => (
-              <li key={p.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
-                <span className="min-w-0 break-words">
+              <li key={p.id} className="flex justify-between gap-x-2 py-1.5">
+                <span className="min-w-0 flex-1 break-words">
                   {pointsReasonDetail(p.reason)}
                   <span className="block text-xs text-stone-500">
                     {formatDateTime(p.createdAt)}
                     {p.expiresAt && ` · hết hạn ${formatDateTime(p.expiresAt)}`}
                   </span>
                 </span>
-                <span className={p.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}>
+                <span className={`shrink-0 ${p.delta < 0 ? 'text-danger-fg' : 'text-success-fg'}`}>
                   {p.delta > 0 ? '+' : ''}
                   {p.delta}
                 </span>

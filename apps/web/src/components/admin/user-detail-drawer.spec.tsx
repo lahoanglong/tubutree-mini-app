@@ -85,4 +85,17 @@ describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được b�
     expect(text).toContain('Rút về ngân hàng');
     expect(text).not.toContain('WITHDRAW');
   });
+
+  it('nhãn dài kèm mã đơn ngắt dòng trong ô của nó, số điểm/số tiền luôn nằm bên phải (không rớt xuống dòng dưới)', async () => {
+    const body = await open();
+    for (const title of ['Điểm Xanh', 'Sổ ví']) {
+      const rows = [...section(body, title).querySelectorAll('li')];
+      expect(rows.length).toBeGreaterThan(0);
+      for (const li of rows) {
+        expect(li.className).not.toContain('flex-wrap');
+        expect(li.children[0]!.className).toContain('min-w-0 flex-1 break-words');
+        expect(li.children[1]!.className).toContain('shrink-0');
+      }
+    }
+  });
 });
