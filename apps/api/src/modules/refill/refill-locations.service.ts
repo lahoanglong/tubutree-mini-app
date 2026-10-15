@@ -6,6 +6,13 @@ import { SystemConfigService } from '../system-config/system-config.service';
 /** Trần số điểm nhận (kể cả đang tắt): giữ danh sách khách thấy trong /refill/me gọn và chặn tạo hàng loạt nhầm. */
 export const MAX_REFILL_LOCATIONS = 50;
 
+/**
+ * Khoá advisory của việc tạo điểm: đếm trần + lấy sortOrder lớn nhất rồi ghi là đọc-rồi-ghi, ở Read Committed hai admin
+ * tạo cùng lúc đều đếm thấy 49 điểm (vượt trần) và cùng lấy max+1 (trùng sortOrder). Cùng quy ước pg_advisory_xact_lock(hashtext(...))
+ * với lockAdminRoster: nhả tự động khi transaction kết thúc, câu đọc sau khoá thấy dữ liệu người trước vừa commit.
+ */
+export const REFILL_LOCATIONS_CREATE_LOCK_KEY = 'refill-locations:create';
+
 const LOCATION_ORDER = [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }] as const;
 
 /** Dạng khách thấy: không lộ isActive/sortOrder (chỉ điểm đang bật mới được trả cho khách). */
@@ -100,6 +107,7 @@ export class RefillLocationsService {
 
   async create(adminId: string, input: RefillLocationInput & { name: string; address: string }) {
     const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${REFILL_LOCATIONS_CREATE_LOCK_KEY}))`;
       const agg = await tx.refillPickupLocation.aggregate({ _count: true, _max: { sortOrder: true } });
       if (agg._count >= MAX_REFILL_LOCATIONS) {
         throw new BadRequestException(`Tối đa ${MAX_REFILL_LOCATIONS} điểm nhận vỏ. Hãy tắt hoặc sửa điểm cũ thay vì thêm mới.`);

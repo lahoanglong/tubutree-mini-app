@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { RefillLocationsService, MAX_REFILL_LOCATIONS } from './refill-locations.service';
+import { RefillLocationsService, MAX_REFILL_LOCATIONS, REFILL_LOCATIONS_CREATE_LOCK_KEY } from './refill-locations.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -42,7 +42,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     update: jest.fn().mockImplementation(async ({ where, data }: { where: { id: string }; data: Partial<Row> }) => row({ id: where.id, ...data })),
     ...(over.refillPickupLocation as object),
   };
-  const base: Record<string, unknown> = { refillPickupLocation: location };
+  const base: Record<string, unknown> = { refillPickupLocation: location, $executeRaw: jest.fn().mockResolvedValue(1) };
   base.$transaction = jest.fn().mockImplementation(async (arg: unknown) => (typeof arg === 'function' ? (arg as (t: unknown) => unknown)(base) : arg));
   return { ...base, ...over, refillPickupLocation: location } as unknown as PrismaService & { refillPickupLocation: typeof location };
 }
@@ -122,6 +122,28 @@ describe('RefillLocationsService.create', () => {
     expect(prisma.refillPickupLocation.create).toHaveBeenCalledWith({
       data: { name: 'A', address: 'B', hours: null, phone: null, isActive: false, sortOrder: 0 },
     });
+  });
+
+  it('khoá advisory của việc tạo được lấy trong transaction, trước khi đếm trần và lấy sortOrder lớn nhất', async () => {
+    const prisma = makePrisma();
+    const order: string[] = [];
+    (prisma.$executeRaw as unknown as jest.Mock).mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      order.push(`lock:${strings.join('?')}:${values.join(',')}`);
+      return 1;
+    });
+    prisma.refillPickupLocation.aggregate.mockImplementation(async () => {
+      order.push('aggregate');
+      return { _count: 0, _max: { sortOrder: null } };
+    });
+    prisma.refillPickupLocation.create.mockImplementation(async ({ data }: { data: Partial<Row> }) => {
+      order.push('create');
+      return row({ id: 'new', ...data });
+    });
+    const svc = new RefillLocationsService(prisma, makeConfig());
+
+    await svc.create('admin1', { name: 'A', address: 'B' });
+
+    expect(order).toEqual([`lock:SELECT pg_advisory_xact_lock(hashtext(?)):${REFILL_LOCATIONS_CREATE_LOCK_KEY}`, 'aggregate', 'create']);
   });
 
   it(`quá ${MAX_REFILL_LOCATIONS} điểm → 400, không tạo`, async () => {
