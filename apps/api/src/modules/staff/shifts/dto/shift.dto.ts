@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { OptionalNotNull } from '../../../../common/decorators/optional-not-null.decorator';
 
 export class ShiftItemDto {
   @IsDateString()
@@ -39,11 +40,11 @@ export class CreateShiftsDto {
 }
 
 export class UpdateShiftDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsDateString()
   startAt?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsDateString()
   endAt?: string;
 }
@@ -119,28 +120,28 @@ export class ShiftTemplateDto {
 }
 
 export class UpdateShiftTemplateDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(60)
   name?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsInt()
   @Min(0)
   @Max(1440)
   startMin?: number;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsInt()
   @Min(0)
   @Max(1440)
   endMin?: number;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsBoolean()
   active?: boolean;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsInt()
   sortOrder?: number;
 }

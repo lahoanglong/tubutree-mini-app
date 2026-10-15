@@ -1,24 +1,25 @@
 import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, NotEquals } from 'class-validator';
 import { IsCalendarDate } from '../../../common/calendar-date';
 import { Trim } from '../../../common/decorators/trim.decorator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class UpdateBankDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(20)
   bankBin?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(30)
   bankAccountNo?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(120)
   bankAccountName?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   qrImageUrl?: string;
 }

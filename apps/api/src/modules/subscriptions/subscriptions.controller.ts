@@ -9,6 +9,7 @@ import {
   SubscriptionsService,
   type SubscriptionPaymentMethod,
 } from './subscriptions.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 class CreateSubDto {
   @IsString() variationId!: string;
@@ -20,9 +21,9 @@ class CreateSubDto {
   @IsOptional() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
 }
 class UpdateSubDto {
-  @IsOptional() @IsInt() @Min(1) @Max(MAX_SUBSCRIPTION_QUANTITY) quantity?: number;
-  @IsOptional() @IsString() addressId?: string;
-  @IsOptional() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
+  @OptionalNotNull() @IsInt() @Min(1) @Max(MAX_SUBSCRIPTION_QUANTITY) quantity?: number;
+  @OptionalNotNull() @IsString() addressId?: string;
+  @OptionalNotNull() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
 }
 class StatusDto {
   @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status!: 'ACTIVE' | 'PAUSED' | 'CANCELLED';

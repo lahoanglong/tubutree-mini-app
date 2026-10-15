@@ -7,6 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationQuery } from '../../common/pagination';
 import { MerchantFulfilmentService } from './merchant-fulfilment.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 export class CreateMerchantPayoutDto {
   @IsString() @IsNotEmpty() storefrontId!: string;
@@ -31,8 +32,8 @@ export class CancelMerchantPayoutDto {
 /** Cùng trần với khoá merchant.commission_pct (system-config): phí theo % là phân số 0–0,5. */
 export class MerchantStoreTermsDto {
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(0.5) commissionPct?: number | null;
-  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(0.5) consignmentFeePct?: number;
-  @IsOptional() @IsInt() @Min(0) @Max(1_000_000) consignmentFeeFixed?: number;
+  @OptionalNotNull() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(0.5) consignmentFeePct?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(1_000_000) consignmentFeeFixed?: number;
 }
 
 class MerchantPayoutListQuery extends PaginationQuery {

@@ -7,6 +7,7 @@ import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 const KINDS = ['MANUAL', 'QUESTION', 'SHOWCASE', 'TIP'] as const;
 const REPORT_TARGET_TYPES = ['POST', 'COMMENT'] as const;
@@ -25,9 +26,9 @@ export class CreatePostDto {
   @IsOptional() @IsString() eventId?: string;
 }
 export class EditPostDto {
-  @IsOptional() @IsString() @MaxLength(160) title?: string;
-  @IsOptional() @IsString() @MaxLength(5000) body?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
+  @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
+  @OptionalNotNull() @IsString() @MaxLength(5000) body?: string;
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
 }
 class CommentDto {
   @IsString() @MinLength(1) @MaxLength(500) body!: string;
@@ -45,13 +46,13 @@ class PinDto {
 }
 export class CreateEventDto {
   @IsString() @MaxLength(160) title!: string;
-  @IsOptional() @IsString() @MaxLength(2000) description?: string;
-  @IsOptional() @IsString() coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(2000) description?: string;
+  @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
   // Điểm Xanh (1 điểm = 1.000đ). Trần 1.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
   // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @IsOptional() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(1000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;

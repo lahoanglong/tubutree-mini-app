@@ -1,5 +1,6 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import type { ValidationError } from '@nestjs/common';
+import { NOT_NULL_CONSTRAINT } from './decorators/optional-not-null.decorator';
 
 /**
  * Nhãn tiếng Việt cho các trường khách/admin hay nhập; trường khác rơi về «tên-trường». Miniapp và web hiện nguyên văn
@@ -47,6 +48,7 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
   isNotEmptyObject: (s) => `${s} không được để trống.`,
   arrayNotEmpty: (s) => `${s} không được để trống.`,
   isDefined: (s) => `${s} là bắt buộc.`,
+  [NOT_NULL_CONSTRAINT]: (s) => `${s} không được để null; bỏ trường này nếu không muốn đổi.`,
   isInt: (s) => `${s} phải là số nguyên.`,
   isNumber: (s) => `${s} phải là số.`,
   isPositive: (s) => `${s} phải lớn hơn 0.`,
@@ -92,7 +94,10 @@ export function translateValidationErrors(errors: ValidationError[], parent: str
   const out: string[] = [];
   for (const e of errors) {
     const path = [...parent, e.property];
-    for (const [constraint, original] of Object.entries(e.constraints ?? {})) {
+    const constraints = e.constraints ?? {};
+    // null cũng trượt @IsString/@IsInt…: chỉ nói câu "không được để null", không kèm câu về kiểu dữ liệu.
+    const entries = NOT_NULL_CONSTRAINT in constraints ? [[NOT_NULL_CONSTRAINT, constraints[NOT_NULL_CONSTRAINT]!] as const] : Object.entries(constraints);
+    for (const [constraint, original] of entries) {
       out.push(translate(constraint, original, path));
     }
     if (e.children?.length) out.push(...translateValidationErrors(e.children, path));

@@ -1,11 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { NotificationsService } from './notifications.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 class UpdateNotificationPrefsDto {
-  @IsOptional() @IsBoolean() notifyPromo?: boolean;
-  @IsOptional() @IsBoolean() notifyGarden?: boolean;
+  @OptionalNotNull() @IsBoolean() notifyPromo?: boolean;
+  @OptionalNotNull() @IsBoolean() notifyGarden?: boolean;
 }
 
 @Controller('me/notifications')

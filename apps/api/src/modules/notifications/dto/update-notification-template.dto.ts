@@ -1,7 +1,8 @@
 import { IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class UpdateNotificationTemplateDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsIn(['INAPP', 'ZNS'], { message: 'Kênh chỉ nhận INAPP hoặc ZNS' })
   channel?: 'INAPP' | 'ZNS';
 
@@ -12,7 +13,7 @@ export class UpdateNotificationTemplateDto {
   @MaxLength(20)
   zaloTemplateId?: string | null;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(1000)
   bodyTemplate?: string;

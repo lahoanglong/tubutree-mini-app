@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminEngagementService } from './admin-engagement.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -11,9 +12,9 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 export const MISSION_REWARD_POINTS_MAX = 500;
 
 export class UpdateMissionDto {
-  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) title?: string;
-  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) description?: string;
-  @IsOptional() @IsInt() @Min(0) @Max(MISSION_REWARD_POINTS_MAX) rewardPoints?: number;
+  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) title?: string;
+  @OptionalNotNull() @Transform(trim) @IsString() @MaxLength(300) description?: string;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(MISSION_REWARD_POINTS_MAX) rewardPoints?: number;
 }
 
 @ApiTags('admin-engagement')

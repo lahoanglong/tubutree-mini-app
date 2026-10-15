@@ -1,4 +1,5 @@
 import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 // Trần độ dài cho MỌI trường text: body limit là 10MB còn cột Postgres là text không giới hạn.
 // Thiếu trần thì một tài khoản đã đăng nhập lưu được địa chỉ dài vài MB, và snapshot địa chỉ đó
@@ -26,14 +27,14 @@ export class CreateAddressDto {
 }
 
 export class UpdateAddressDto {
-  @IsOptional() @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient?: string;
-  @IsOptional() @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone?: string;
-  @IsOptional() @IsString() @MaxLength(120) province?: string;
-  @IsOptional() @IsString() @MaxLength(120) district?: string;
-  @IsOptional() @IsString() @MaxLength(120) ward?: string;
-  @IsOptional() @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street?: string;
-  @IsOptional() @IsString() @MaxLength(20) @Matches(NEW_GEO, GEO_MSG) provinceCode?: string;
-  @IsOptional() @IsString() @MaxLength(20) districtCode?: string;
-  @IsOptional() @IsString() @MaxLength(20) wardCode?: string;
-  @IsOptional() @IsBoolean() isDefault?: boolean;
+  @OptionalNotNull() @IsString() @MaxLength(120) @Matches(NO_HTML, NO_HTML_MSG) recipient?: string;
+  @OptionalNotNull() @IsString() @MaxLength(20) @Matches(VN_PHONE, PHONE_MSG) phone?: string;
+  @OptionalNotNull() @IsString() @MaxLength(120) province?: string;
+  @OptionalNotNull() @IsString() @MaxLength(120) district?: string;
+  @OptionalNotNull() @IsString() @MaxLength(120) ward?: string;
+  @OptionalNotNull() @IsString() @MaxLength(255) @Matches(NO_HTML, NO_HTML_MSG) street?: string;
+  @OptionalNotNull() @IsString() @MaxLength(20) @Matches(NEW_GEO, GEO_MSG) provinceCode?: string;
+  @OptionalNotNull() @IsString() @MaxLength(20) districtCode?: string;
+  @OptionalNotNull() @IsString() @MaxLength(20) wardCode?: string;
+  @OptionalNotNull() @IsBoolean() isDefault?: boolean;
 }

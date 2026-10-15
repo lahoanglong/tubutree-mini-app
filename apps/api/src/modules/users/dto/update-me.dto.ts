@@ -1,16 +1,17 @@
-import { IsEmail, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class UpdateMeDto {
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(120)
   fullName?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsEmail()
   email?: string;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsUrl({ require_protocol: true })
   @MaxLength(1000)
   avatarUrl?: string;
@@ -20,7 +21,7 @@ export class UpdateMeDto {
    * (không dùng @IsDateString vì nó chấp nhận cả datetime kèm offset; service ép
    * thẳng qua `new Date(dob)` nên offset lệch múi giờ có thể đổi ngày lưu xuống DB).
    */
-  @IsOptional()
+  @OptionalNotNull()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'dob phải theo định dạng YYYY-MM-DD.' })
   dob?: string;
 }
