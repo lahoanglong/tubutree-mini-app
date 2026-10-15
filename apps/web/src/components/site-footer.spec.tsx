@@ -23,6 +23,13 @@ describe('SiteFooter', () => {
     expect(out).toContain('tubutree@gmail.com');
   });
 
+  it('tổng đài cấu hình số liền 18001234: hiển thị "1800 1234", tel: vẫn là số gốc (R5-BUYER-5)', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '18001234', email: 'tubutree@gmail.com' });
+    const out = await html();
+    expect(out).toContain('href="tel:18001234"');
+    expect(out).toContain('Hotline: 1800 1234');
+  });
+
   it('là landmark contentinfo và không dẫn khách vào Kênh Đối Tác (/merchant)', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0899 149 229', email: 'tubutree@gmail.com' });
     const out = await html();

@@ -48,6 +48,16 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.locator('#checkout-recycling')).toHaveCount(0);
   });
 
+  // R5-BUYER-5: giỏ rỗng mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
+  test('Giỏ rỗng: báo giỏ trống và không gọi báo giá (POST /checkout/quote)', async ({ page, api }) => {
+    api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200_000, itemCount: 0, unavailableItems: [] });
+    await page.goto('/checkout');
+
+    await expect(page.getByText('Giỏ còn trống đấy')).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(500);
+    expect(api.callsTo('POST', '/checkout/quote')).toHaveLength(0);
+  });
+
   test('Điểm Xanh: gộp lô thường + lô quy đổi thành một số dùng được, ghi rõ phần không hết hạn', async ({ page }) => {
     await page.goto('/checkout');
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });

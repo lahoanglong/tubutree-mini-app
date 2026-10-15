@@ -461,14 +461,14 @@ export function MultiImageUpload({
               justifyContent: 'center',
               cursor: 'pointer',
               gap: 2,
-              padding: 0,
+              padding: '0 6px',
               font: 'inherit',
               color: 'inherit',
             }}
           >
             <Camera size={22} color="var(--color-text-brand)" strokeWidth={1.8} />
-            <Text variant="label" tone="brand" as="span">
-              {uploading ? 'Đang tải…' : 'Chạm để tải'}
+            <Text variant="label" tone="brand" as="span" style={{ whiteSpace: 'nowrap' }}>
+              {uploading ? 'Đang tải…' : 'Thêm ảnh'}
             </Text>
           </button>
         )}

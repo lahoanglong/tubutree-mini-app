@@ -81,12 +81,18 @@ export function OrderSuccess({
     else onContinue();
   };
 
+  // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn (D4): khách phải thấy đủ các mã và tổng thật phải trả,
+  // và sao chép được cả danh sách chứ không chỉ mã đơn đầu.
+  const split = order.splitOrders && order.splitOrders.length > 1 ? order.splitOrders : null;
+  const codes = split ? split.map((o) => o.code) : [order.code];
+  const codesText = codes.join(', ');
+
   const copyCode = () => {
-    void copyText(order.code).then((ok) =>
+    void copyText(codesText).then((ok) =>
       openSnackbar(
         ok
           ? { text: vi.success.copied, type: 'success' }
-          : { text: vi.success.copyFailed(order.code), type: 'info', duration: 4000 },
+          : { text: vi.success.copyFailed(codesText), type: 'info', duration: 4000 },
       ),
     );
   };
@@ -94,8 +100,6 @@ export function OrderSuccess({
   // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
   // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   const eta = cfg.isLoaded && cfg.shippingEta ? shippingEtaLabel(cfg.shippingEta) : null;
-  // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn (D4): khách phải thấy đủ các mã và tổng thật phải trả.
-  const split = order.splitOrders && order.splitOrders.length > 1 ? order.splitOrders : null;
   const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
   // Màn Thanh toán hứa điểm của cả lần đặt — màn này phải nói cùng con số, không chỉ điểm của đơn đầu.
   const pointsEarned = split && split.every((o) => o.pointsEarned != null)
@@ -129,9 +133,11 @@ export function OrderSuccess({
             <Text variant="caption" tone="tertiary" as="div">
               {vi.success.orderCode}
             </Text>
-            <Text variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
-              {order.code}
-            </Text>
+            {codes.map((c) => (
+              <Text key={c} variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
+                {c}
+              </Text>
+            ))}
           </div>
           <IconButton icon={Copy} label={vi.success.copyCode} onPress={copyCode} />
         </div>

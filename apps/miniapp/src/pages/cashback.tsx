@@ -13,7 +13,8 @@ import {
 import { getWallet } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { openAffiliateLink } from '../services/zmp-bridge';
-import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatVnd, formatRatePct } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge, type BadgeTone } from '../components/ui/badge';
@@ -39,7 +40,8 @@ export default function CashbackPage() {
   // /cashback/transactions & /me/wallet cần auth — fetch trước khi restore() xong sẽ 401 và kẹt
   // vĩnh viễn (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (như wallet.tsx).
   // /cashback/merchants là @Public() nên KHÔNG cần chờ authed.
-  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const cfg = usePublicConfig();
   const merchantsQ = useQuery({ queryKey: ['cashback-merchants'], queryFn: getMerchants });
   const txnQ = useQuery({ queryKey: ['cashback-txn'], queryFn: getCashbackTransactions, enabled: authed });
@@ -63,7 +65,10 @@ export default function CashbackPage() {
 
       {/* Số dư hoàn tiền đang chờ */}
       <div style={{ padding: 16 }}>
-        {walletQ.isError ? (
+        {phase !== 'authenticated' ? (
+          // Chưa vào được phiên (đang khôi phục / mất kết nối / khách): không vẽ số dư 0đ giả.
+          <AuthPhaseView phase={phase} loading={<Skeleton height={120} radius="var(--radius-card)" />} />
+        ) : walletQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải ví — tránh user nghĩ rằng tiền hoàn đã biến mất.
           <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
         ) : (
@@ -161,7 +166,9 @@ export default function CashbackPage() {
         <Text variant="body-lg" as="div" style={{ fontWeight: 600, marginBottom: 10 }}>
           Giao dịch hoàn tiền
         </Text>
-        {txnQ.isError ? (
+        {!authed ? null : txnQ.isLoading ? (
+          <Skeleton height={60} radius="var(--radius-card)" />
+        ) : txnQ.isError ? (
           // Tránh "Chưa có giao dịch hoàn tiền" khi thực ra là API lỗi — gây hiểu lầm mất tiền.
           <ErrorState message={getErrorMessage(txnQ.error)} onRetry={() => void txnQ.refetch()} />
         ) : txnQ.data && txnQ.data.length > 0 ? (

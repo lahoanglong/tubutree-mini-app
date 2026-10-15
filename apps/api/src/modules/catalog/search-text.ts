@@ -85,7 +85,12 @@ export function escapePrismaLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/** Mẫu "chứa" cho `... LIKE <mẫu> ESCAPE '!'`. */
+/**
+ * Mẫu "chứa" cho `... LIKE <mẫu> ESCAPE '!'`. Khoảng trắng giữa các từ của từ khoá khớp ĐÚNG MỘT ký tự bất kỳ (`_`) chứ không
+ * chỉ dấu cách: tên có dấu câu ("Mật ong BH.Nong", "Xà-phòng") thì khách gõ tự nhiên "bh nong" vẫn thấy. Cột `nameSearch` chỉ
+ * gấp dấu và khoảng trắng, không bỏ dấu câu, nên phía từ khoá phải tự nới chỗ này. Mẫu vẫn dùng được index trigram.
+ */
 export function likeContainsPattern(q: string): string {
-  return `%${escapeLike(foldVietnamese(q))}%`;
+  const words = foldVietnamese(q).split(' ').map(escapeLike);
+  return `%${words.join('_')}%`;
 }

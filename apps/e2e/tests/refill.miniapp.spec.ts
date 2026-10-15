@@ -40,7 +40,7 @@ test.describe('Đổi vỏ chai — nhiều điểm nhận', () => {
     await expect(group.getByRole('radio')).toHaveCount(2);
     await expect(group.getByText('12 Lê Lợi, Quận 1, TP.HCM')).toBeVisible();
     await expect(group.getByText('8h–20h hằng ngày')).toBeVisible();
-    await expect(group.getByRole('button', { name: 'Gọi 0912345678' })).toBeVisible();
+    await expect(group.getByRole('button', { name: 'Gọi 0912 345 678' })).toBeVisible();
 
     const submit = page.getByRole('button', { name: 'Chọn điểm nhận vỏ để gửi yêu cầu' });
     await expect(submit).toBeDisabled();
@@ -113,6 +113,24 @@ test.describe('Đổi vỏ chai — nhiều điểm nhận', () => {
     const box = await note.boundingBox();
     const viewport = page.viewportSize();
     expect(box && viewport && box.x >= 0 && box.x + box.width <= viewport.width).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  // R5-BUYER-4: admin tắt điểm sau khi khách gửi thì yêu cầu đang chờ vẫn phải nói mang đến đâu (tên, địa chỉ, giờ, số gọi).
+  test('yêu cầu chờ duyệt gắn với điểm đã tắt: vẫn hiện tên, địa chỉ, giờ, nút gọi và nói rõ điểm tạm ngưng nhận', async ({ page, api }) => {
+    const OFF = { id: 'loc-off', name: 'Kho Cũ', address: '9 Nguyễn Huệ, Quận 1', hours: '9h–17h', phone: '0907654321', isActive: false };
+    mockRefill(api, {
+      ...BASE,
+      history: [{ id: 'br-off', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: '2026-10-10T03:00:00.000Z', pickupLocation: OFF }],
+    });
+    await page.goto('/refill');
+
+    await expect(page.getByText('Mang đến: Kho Cũ')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.')).toBeVisible();
+    await expect(page.getByText('9 Nguyễn Huệ, Quận 1')).toBeVisible();
+    await expect(page.getByText('9h–17h')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Gọi 0907 654 321' })).toBeVisible();
+    await expect(page.getByText('Điểm nhận: Kho Cũ (đã tạm ngưng)')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });

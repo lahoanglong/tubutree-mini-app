@@ -59,6 +59,13 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
   });
 
+  it('tổng đài số liền 18001234: nút hiện "1800 1234" cho dễ đọc nhưng vẫn gọi đúng số gốc (R5-BUYER-5)', async () => {
+    mocks.fetchSupportContact.mockResolvedValue({ hotline: '18001234', email: null, zaloOaName: null });
+    renderBlock();
+    fireEvent.click(await screen.findByRole('button', { name: 'Gọi hotline 1800 1234' }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('18001234');
+  });
+
   it('có OA: nút nhắn Zalo OA kèm mã đơn, hotline vẫn hiện', async () => {
     mocks.hasOA = true;
     renderBlock();

@@ -1,5 +1,6 @@
 import { Mail, Phone } from 'lucide-react';
 import { getPublicSupport } from '@/lib/api';
+import { formatPhoneDisplay } from '@/lib/phone-display';
 
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -26,7 +27,7 @@ export default async function SiteFooter() {
             <li>
               <a href={`tel:${tel}`} className={LINK}>
                 <Phone className="h-4 w-4" aria-hidden="true" />
-                <span>Hotline: {hotline}</span>
+                <span>Hotline: {formatPhoneDisplay(hotline)}</span>
               </a>
             </li>
             <li>

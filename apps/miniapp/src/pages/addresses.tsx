@@ -14,20 +14,21 @@ import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
-import { useAuthStore } from '../store/auth';
+import { AuthGate } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { addressLine } from '../utils/format';
 import { AddressForm } from '../components/address-form';
 
 export default function AddressesPage() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const authStatus = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   // Guard auth: tránh gọi /me/addresses khi chưa silent-login xong (mở nhanh từ Hồ sơ ngay
   // lúc app vừa mở → 401 hiện lỗi trong khi chỉ cần chờ vài trăm ms là có phiên).
   const addrQ = useQuery({
     queryKey: ['addresses'],
     queryFn: getAddresses,
-    enabled: authStatus === 'authenticated',
+    enabled: phase === 'authenticated',
   });
 
   const [editing, setEditing] = useState<AddressDTO | 'new' | null>(null);
@@ -56,72 +57,81 @@ export default function AddressesPage() {
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Sổ địa chỉ" />
 
-      {authStatus === 'loading' || addrQ.isLoading ? (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
-          <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
-        </div>
-      ) : addrQ.isError ? (
-        <ErrorState message={getErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
-      ) : (
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {addrQ.data && addrQ.data.length === 0 && (
-            <EmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
-          )}
+      <AuthGate
+        loading={
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+            <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+          </div>
+        }
+      >
+        {addrQ.isLoading ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+            <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
+          </div>
+        ) : addrQ.isError && !addrQ.data ? (
+          <ErrorState message={getErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
+        ) : (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {addrQ.data && addrQ.data.length === 0 && (
+              <EmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
+            )}
 
-          {addrQ.data?.map((a) => (
-            <Card
-              key={a.id}
-              variant="outline"
-              style={a.isDefault ? { border: '1.5px solid var(--color-action-primary-bg)' } : undefined}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                  {a.recipient} · {a.phone}
+            {addrQ.data?.map((a) => (
+              <Card
+                key={a.id}
+                variant="outline"
+                style={a.isDefault ? { border: '1.5px solid var(--color-action-primary-bg)' } : undefined}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Text variant="body-sm" style={{ fontWeight: 600 }}>
+                    {a.recipient} · {a.phone}
+                  </Text>
+                  {a.isDefault && (
+                    <Badge tone="brand" size="sm">
+                      Mặc định
+                    </Badge>
+                  )}
+                </div>
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
+                  {addressLine(a)}
                 </Text>
-                {a.isDefault && (
-                  <Badge tone="brand" size="sm">
-                    Mặc định
-                  </Badge>
-                )}
-              </div>
-              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                {addressLine(a)}
-              </Text>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 4, marginLeft: -8 }}>
-                {!a.isDefault && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, marginLeft: -8 }}>
+                  {!a.isDefault && (
+                    <ActionLink
+                      label="Đặt mặc định"
+                      onClick={() => setDefaultMut.mutate(a.id)}
+                      disabled={setDefaultMut.isPending}
+                    />
+                  )}
+                  <ActionLink label="Sửa" onClick={() => setEditing(a)} />
                   <ActionLink
-                    label="Đặt mặc định"
-                    onClick={() => setDefaultMut.mutate(a.id)}
-                    disabled={setDefaultMut.isPending}
+                    label="Xóa"
+                    danger
+                    onClick={() => setConfirmDel(a)}
+                    disabled={deleteMut.isPending}
                   />
-                )}
-                <ActionLink label="Sửa" onClick={() => setEditing(a)} />
-                <ActionLink
-                  label="Xóa"
-                  danger
-                  onClick={() => setConfirmDel(a)}
-                  disabled={deleteMut.isPending}
-                />
-              </div>
-            </Card>
-          ))}
+                </div>
+              </Card>
+            ))}
 
-          <Button
-            fullWidth
-            variant="secondary"
-            icon={Plus}
-            style={{ marginTop: 6 }}
-            onPress={() => {
-              haptic('light');
-              setEditing('new');
-            }}
-          >
-            Thêm địa chỉ mới
-          </Button>
-        </div>
-      )}
+            <Button
+              fullWidth
+              variant="secondary"
+              icon={Plus}
+              style={{ marginTop: 6 }}
+              onPress={() => {
+                haptic('light');
+                setEditing('new');
+              }}
+            >
+              Thêm địa chỉ mới
+            </Button>
+          </div>
+        )}
+      </AuthGate>
 
       <BottomSheet
         open={editing != null}

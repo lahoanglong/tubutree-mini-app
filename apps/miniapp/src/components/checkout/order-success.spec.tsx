@@ -226,6 +226,25 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(screen.getByText('26 Điểm Xanh sẽ về tay khi đơn giao thành công')).toBeInTheDocument();
   });
 
+  it('lần đặt bị tách: khối Mã đơn hàng ở đầu liệt kê đủ mọi mã, nút sao chép chép cả danh sách, không chỉ mã đơn đầu (R5-BUYER-5)', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      total: 130000,
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+        { id: 'o3', code: 'TB3', total: 90000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Cô Lan' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    const block = screen.getByText('Mã đơn hàng').parentElement as HTMLElement;
+    for (const code of ['TB1', 'TB2', 'TB3']) expect(block).toHaveTextContent(code);
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TB1, TB2, TB3'));
+  });
+
   it('đơn không tách: không có danh sách đơn cùng lần đặt', () => {
     renderSuccess();
     expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();

@@ -33,7 +33,7 @@ export function BrandSalesTab() {
             <Skeleton height={84} radius="var(--radius-card)" />
             <Skeleton height={84} radius="var(--radius-card)" />
           </div>
-        ) : q.isError || !q.data ? (
+        ) : !q.data ? (
           <ErrorState variant="inline" message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
         ) : q.data.orderCount === 0 ? (
           <EmptyState

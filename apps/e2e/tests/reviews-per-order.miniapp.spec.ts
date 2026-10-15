@@ -179,6 +179,55 @@ test.describe('Zalo Mini App E2E - Đánh giá theo từng lần mua (R8)', () =
     expect((await posted).body).toMatchObject({ orderId: FIRST.id });
   });
 
+  // R5-BUYER-2: admin ẩn đánh giá (isVisible=false) thì nó biến khỏi danh sách công khai; khách phải được nói đang chờ Tubu xem xét.
+  test('đánh giá bị Tubu ẩn: nói rõ đang chờ xem xét, form sửa nhắc lại, lưu không báo "Đã cập nhật"', async ({ page, api }) => {
+    api.get('/products/:slug/reviews', { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
+    api.get('/products/:slug/reviews/can-review', {
+      canReview: false,
+      reason: 'ALL_REVIEWED',
+      rewardAvailable: false,
+      purchaseCount: 1,
+      reviewableOrders: [],
+      myReviews: [
+        { id: 'rv-1', orderId: FIRST.id, orderCode: FIRST.code, rating: 5, createdAt: '2026-09-02T08:00:00.000Z', isVisible: false },
+      ],
+    });
+    api.get('/reviews/:id', { ...MY_REVIEW, isVisible: false });
+    api.post('/products/:slug/reviews', { ...MY_REVIEW, updated: true, pointsEarned: 0, isVisible: false });
+
+    await page.goto(`/product/${PILOT_SLUG}`);
+    const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
+    await expect(
+      reviews.getByText(`Đánh giá cho đơn ${FIRST.code} của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.`),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await reviews.getByRole('button', { name: 'Sửa đánh giá của bạn' }).click();
+    await expect(page.getByText('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Lưu đánh giá' }).click();
+    await expect(page.getByText('Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Đã cập nhật đánh giá của bạn')).toHaveCount(0);
+  });
+
+  // R5-BUYER-3: can-review lỗi thì khách không thấy nút viết/sửa và không biết vì sao.
+  test('can-review lỗi: báo "Chưa kiểm tra được quyền đánh giá" kèm Thử lại; thử lại được thì có nút viết đánh giá', async ({ page, api }) => {
+    let failing = true;
+    api.get('/products/:slug/reviews/can-review', () =>
+      failing
+        ? reply(500, { message: 'Internal server error' })
+        : { canReview: true, reason: null, rewardAvailable: true, purchaseCount: 1, reviewableOrders: [{ orderId: SECOND.id, code: SECOND.code, deliveredAt: DELIVERED_AT }], myReviews: [] },
+    );
+
+    await page.goto(`/product/${PILOT_SLUG}`);
+    const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
+    await expect(reviews.getByText('Chưa kiểm tra được quyền đánh giá.')).toBeVisible({ timeout: 15_000 });
+    await expect(reviews.getByRole('button', { name: 'Viết đánh giá' })).toHaveCount(0);
+
+    failing = false;
+    await reviews.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(reviews.getByRole('button', { name: 'Viết đánh giá' })).toBeVisible({ timeout: 10_000 });
+    await expect(reviews.getByText('Chưa kiểm tra được quyền đánh giá.')).toHaveCount(0);
+  });
+
   test('trang sản phẩm: đánh giá của mình có nhãn "Của bạn", mã đơn và nút sửa riêng; đầu mục vẫn viết được cho đơn mới', async ({ page }) => {
     await page.goto(`/product/${PILOT_SLUG}`);
     const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });

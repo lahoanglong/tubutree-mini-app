@@ -125,7 +125,7 @@ function PendingSection() {
   });
 
   if (pendingQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (pendingQ.isError) return <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />;
+  if (pendingQ.isError && !pendingQ.data) return <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />;
   if (!pendingQ.data || pendingQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noPending} />;
   }
@@ -229,7 +229,7 @@ function ReportsSection() {
   });
 
   if (reportsQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (reportsQ.isError) return <ErrorState message={getErrorMessage(reportsQ.error)} onRetry={() => void reportsQ.refetch()} />;
+  if (reportsQ.isError && !reportsQ.data) return <ErrorState message={getErrorMessage(reportsQ.error)} onRetry={() => void reportsQ.refetch()} />;
   if (!reportsQ.data || reportsQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noReports} />;
   }

@@ -9,6 +9,8 @@ import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
+import { AuthPhaseView } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
@@ -53,8 +55,9 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const { user, status } = useAuthStore();
-  const authed = status === 'authenticated';
+  const { user } = useAuthStore();
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const sfCtx = useStorefrontContext();
   // Chỉ gian hàng CTV (kind='ctv') mới gắn storefrontSlug (combo + attribution).
   // Trang nhãn (kind='brand') KHÔNG gửi → tránh ô nhiễm analytics CTV; vẫn giữ referralCode.
@@ -140,10 +143,12 @@ export default function CheckoutPage() {
   const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0);
 
   const pointsToUse = usePoints ? points.usable : 0;
+  // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.
+  const cartHasItems = (cart.data?.items.length ?? 0) > 0;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
-    enabled: !!addressId && authed && cartReady,
+    enabled: !!addressId && authed && cartReady && cartHasItems,
   });
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
@@ -295,13 +300,25 @@ export default function CheckoutPage() {
     );
   }
 
+  // Chưa vào được phiên: không được rơi xuống "Giỏ còn trống" (giỏ có thật, chỉ là chưa tải được).
+  if (phase === 'loading') return <CheckoutSkeleton />;
+  if (phase !== 'authenticated') {
+    return (
+      <Shell>
+        <AuthPhaseView phase={phase} />
+      </Shell>
+    );
+  }
+
   if (cart.isLoading || addresses.isLoading) return <CheckoutSkeleton />;
 
-  if (cart.isError || addresses.isError) {
-    const err = cart.isError ? cart.error : addresses.error;
+  const cartFailed = cart.isError && !cart.data;
+  const addressesFailed = addresses.isError && !addresses.data;
+  if (cartFailed || addressesFailed) {
+    const err = cartFailed ? cart.error : addresses.error;
     const retry = () => {
-      if (cart.isError) void cart.refetch();
-      if (addresses.isError) void addresses.refetch();
+      if (cartFailed) void cart.refetch();
+      if (addressesFailed) void addresses.refetch();
     };
     return (
       <Shell>

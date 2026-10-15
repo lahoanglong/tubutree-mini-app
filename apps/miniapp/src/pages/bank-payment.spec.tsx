@@ -168,6 +168,25 @@ describe('Thanh toán chuyển khoản: mỗi trạng thái có đúng một h1 
   });
 });
 
+describe('Thanh toán chuyển khoản: lần dò nền lỗi không làm mất mã QR (R5-BUYER-1)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('đã có mã QR rồi mà bấm Kiểm tra gặp lỗi mạng: vẫn giữ nguyên QR và số tài khoản, chỉ báo lỗi bằng thông báo nhỏ', async () => {
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(new Error('Network Error'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({
+        text: 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        type: 'error',
+        position: 'top',
+      }),
+    );
+    expect(screen.queryByText('Không tải được thông tin thanh toán.')).toBeNull();
+    expect(screen.getByText('0123456789')).toBeInTheDocument();
+  });
+});
+
 describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => {
   beforeEach(() => vi.clearAllMocks());
 

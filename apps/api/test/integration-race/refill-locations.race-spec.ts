@@ -246,6 +246,26 @@ describe('Điểm nhận vỏ chai (real Postgres)', () => {
       expect(b.sortOrder).toBe(1);
     });
 
+    it('admin tắt điểm sau khi khách gửi: lịch sử vẫn trả đủ tên, địa chỉ, giờ, SĐT của điểm đó và cờ isActive=false, danh sách chọn thì không còn (R5-BUYER-4)', async () => {
+      await locations.create('admin', { name: 'Quận 1', address: '1 Lê Lợi' });
+      const b = await locations.create('admin', { name: 'Thủ Đức', address: '2 Võ Văn Ngân', hours: '9h–17h', phone: '0907654321' });
+      const user = await newUser();
+      const r = await refill.returnBottles(user.id, 3, `it-${randCode(8)}`, b.id);
+
+      await locations.update('admin', b.id, { isActive: false });
+
+      const summary = await refill.getSummary(user.id);
+      expect(summary.pickupLocations.map((l) => l.name)).toEqual(['Quận 1']);
+      expect(summary.history.find((h) => h.id === r.id)?.pickupLocation).toEqual({
+        id: b.id,
+        name: 'Thủ Đức',
+        address: '2 Võ Văn Ngân',
+        hours: '9h–17h',
+        phone: '0907654321',
+        isActive: false,
+      });
+    });
+
     it('điểm đã tắt hoặc không có thật → 400, không tạo yêu cầu, không trừ hạn mức', async () => {
       const off = await locations.create('admin', { name: 'Đóng', address: 'X', isActive: false });
       const user = await newUser();

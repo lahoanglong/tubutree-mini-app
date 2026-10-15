@@ -247,7 +247,7 @@ export default function ProductDetailPage() {
   });
 
   if (product.isLoading) return <PdpSkeleton />;
-  if (product.isError || !product.data) {
+  if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>

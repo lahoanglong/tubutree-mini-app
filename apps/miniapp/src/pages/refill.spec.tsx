@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   callPhone: vi.fn(),
   haptic: vi.fn(),
   keySeq: 0,
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
+  restore: vi.fn(),
+  login: vi.fn(),
+  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'idle' | 'error' },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -34,7 +36,7 @@ vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks.keySeq}` }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status };
+    const state = { status: mocks.auth.status, restore: mocks.restore, login: mocks.login };
     return sel ? sel(state) : state;
   },
 }));
@@ -101,13 +103,26 @@ describe('RefillPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(pageText(container)).toContain('Nhận 10💧 (10💧 / vỏ)');
   });
 
-  it('chỉ lấy dữ liệu khi đã đăng nhập', async () => {
-    mocks.auth.status = 'anonymous';
+  it('chưa đăng nhập (khách thật sự): mời đăng nhập, không gọi API và không vẽ bộ đổi vỏ với "hết lượt" giả', async () => {
+    mocks.auth.status = 'idle';
     const { container } = renderPage();
-    expect(await screen.findByText('Đăng nhập để đổi vỏ lấy nước.')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.getRefillSummary).not.toHaveBeenCalled();
-    expect(pageText(container)).toContain('Nhận 0💧 (0💧 / vỏ)');
-    expect(screen.getByRole('button', { name: 'Đã hết lượt đổi tháng này' })).toBeDisabled();
+    expect(pageText(container)).not.toContain('Đã hết lượt đổi tháng này');
+    expect(pageText(container)).not.toContain('Nhận 0💧');
+  });
+
+  it('mất kết nối lúc khôi phục phiên (R5-BUYER-1): nói mất kết nối + Thử lại gọi restore; không "Đã hết lượt đổi tháng này", không mời đăng nhập, không gọi API', async () => {
+    mocks.auth.status = 'error';
+    const { container } = renderPage();
+    expect(await screen.findByText('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.')).toBeInTheDocument();
+    expect(pageText(container)).not.toContain('Đã hết lượt đổi tháng này');
+    expect(pageText(container)).not.toContain('Đăng nhập để đổi vỏ');
+    expect(screen.queryByRole('button', { name: 'Tiếp tục với Zalo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(mocks.restore).toHaveBeenCalledTimes(1);
+    expect(mocks.getRefillSummary).not.toHaveBeenCalled();
   });
 
   it('tăng/giảm số vỏ trong khoảng 1..còn lại và nước nhận đổi theo', async () => {
@@ -397,7 +412,7 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(screen.getByText('5 Võ Văn Ngân, Thủ Đức')).toBeInTheDocument();
     expect(screen.getByText('9h–18h')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Gọi / })).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0912345678' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0912 345 678' }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0912345678');
     expect(screen.queryByText(/Chưa có địa chỉ điểm nhận/)).toBeNull();
   });
@@ -449,7 +464,7 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     expect(await screen.findByText('Cửa hàng Quận 1')).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.getByText('12 Lê Lợi, Quận 1')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0901234567' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0901 234 567' }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
     fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu đổi vỏ' }));
 
@@ -607,6 +622,61 @@ describe('RefillPage — nhiều điểm nhận vỏ (R8)', () => {
     renderPage();
     expect(await screen.findByText(/Mang đúng số vỏ đã khai đến điểm nhận bên dưới/)).toBeInTheDocument();
     expect(screen.queryByText(/Chưa chọn điểm/)).toBeNull();
+  });
+
+  it('yêu cầu đang chờ gắn với điểm đã tắt (R5-BUYER-4): vẫn hiện tên, địa chỉ, giờ, nút gọi và nói rõ điểm đã tạm ngưng nhận', async () => {
+    const OFF = { id: 'l9', name: 'Kho Cũ', address: '9 Nguyễn Huệ, Quận 1', hours: '9h–17h', phone: '0907654321', isActive: false };
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [{ id: 'h1', quantity: 4, seedsAwarded: 40, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: OFF }],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Mang đến: Kho Cũ')).toBeInTheDocument();
+    expect(screen.getByText('Điểm này đã tạm ngưng nhận vỏ. Vui lòng gọi điểm hoặc liên hệ Tubu trước khi mang vỏ đến.')).toBeInTheDocument();
+    expect(screen.getByText('9 Nguyễn Huệ, Quận 1')).toBeInTheDocument();
+    expect(screen.getByText('9h–17h')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0907 654 321' }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0907654321');
+    expect(screen.getByText('Điểm nhận: Kho Cũ (đã tạm ngưng)')).toBeInTheDocument();
+    expect(screen.getByTestId('support-contact')).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('điểm của yêu cầu đang chờ vẫn đang mở: không thêm cảnh báo hay thông tin lặp với danh sách chọn', async () => {
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [{ id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: { ...TD, isActive: true } }],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(`Mang đến: ${TD.name}`)).toBeInTheDocument();
+    expect(screen.queryByText(/đã tạm ngưng/)).toBeNull();
+    expect(screen.getAllByText(TD.address)).toHaveLength(1);
+    expect(screen.queryByTestId('support-contact')).toBeNull();
+  });
+
+  it('hai yêu cầu cùng một điểm đã tắt: gộp thành một nhóm kèm tổng số vỏ, thông tin điểm hiện một lần', async () => {
+    const OFF = { id: 'l9', name: 'Kho Cũ', address: '9 Nguyễn Huệ, Quận 1', hours: null, phone: null, isActive: false };
+    mocks.getRefillSummary.mockResolvedValue(
+      SUMMARY({
+        pickupLocations: [Q1, TD],
+        history: [
+          { id: 'h1', quantity: 2, seedsAwarded: 20, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: OFF },
+          { id: 'h2', quantity: 3, seedsAwarded: 30, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: OFF },
+          { id: 'h3', quantity: 1, seedsAwarded: 10, status: 'PENDING', createdAt: CREATED_AT, pickupLocation: { ...TD, isActive: true } },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Mang đến: Kho Cũ (5 vỏ)')).toBeInTheDocument();
+    expect(screen.getByText(`Mang đến: ${TD.name} (1 vỏ)`)).toBeInTheDocument();
+    expect(screen.getAllByText('9 Nguyễn Huệ, Quận 1')).toHaveLength(1);
   });
 
   it('không có nút/điều khiển lồng nhau và mọi lựa chọn có vùng chạm >= 44px', async () => {

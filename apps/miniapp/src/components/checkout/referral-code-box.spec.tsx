@@ -25,6 +25,14 @@ describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-0
     expect(input()).toBeInTheDocument();
   });
 
+  it('nhãn "Nhập mã" không xuống dòng ở màn hẹp: giữ nguyên kích thước, dòng mô tả bên trái co lại (R5-BUYER-5)', () => {
+    setup();
+    const label = screen.getByText('Nhập mã');
+    expect(label.style.whiteSpace).toBe('nowrap');
+    expect(label.parentElement!.style.flexShrink).toBe('0');
+    expect(screen.getByText('Mã giới thiệu').parentElement!.parentElement!.style.minWidth).toBe('0px');
+  });
+
   it('đã có mã từ link CTV/gian hàng → hiện cố định, KHÔNG cho nhập đè (tránh lệch slug gian hàng với người nhận hoa hồng)', () => {
     setup({ linkedCode: 'ab12cd34' });
     expect(screen.getByText('AB12CD34')).toBeInTheDocument();

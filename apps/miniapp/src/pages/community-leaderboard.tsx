@@ -4,6 +4,8 @@ import { Sprout } from 'lucide-react';
 import { getLeaderboard, type LeaderboardEntry } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { SessionUnavailable } from '../components/ui/auth-gate';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -19,9 +21,9 @@ const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 const PAGE_BG = { background: 'var(--color-bg-canvas)' } as const;
 
 export default function CommunityLeaderboardPage() {
-  const status = useAuthStore((s) => s.status);
+  const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
-  const authed = status === 'authenticated';
+  const authed = phase === 'authenticated';
 
   const board = useQuery({
     queryKey: ['community', 'leaderboard'],
@@ -30,11 +32,22 @@ export default function CommunityLeaderboardPage() {
   });
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
-  if (status === 'loading') {
+  if (phase === 'loading') {
     return (
       <Page style={PAGE_BG}>
         <PageHeader title={vi.community.leaderboard} />
         <BoardSkeleton />
+      </Page>
+    );
+  }
+
+
+  // Mất kết nối lúc khôi phục phiên: không phải khách — nói đúng vậy + Thử lại, không mời đăng nhập lại.
+  if (phase === 'unavailable') {
+    return (
+      <Page style={PAGE_BG}>
+        <PageHeader title={vi.community.leaderboard} />
+        <SessionUnavailable />
       </Page>
     );
   }

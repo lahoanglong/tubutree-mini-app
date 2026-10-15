@@ -132,7 +132,8 @@ export class RefillService {
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 10,
-        include: { pickupLocation: { select: { id: true, name: true } } },
+        // Đủ thông tin điểm kể cả khi admin đã tắt (isActive=false): yêu cầu đang chờ vẫn phải chỉ cho khách đường mang vỏ tới.
+        include: { pickupLocation: { select: { id: true, name: true, address: true, hours: true, phone: true, isActive: true } } },
       }),
       this.locations.publicView(),
     ]);

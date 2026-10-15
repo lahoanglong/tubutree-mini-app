@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AxiosError } from 'axios';
-import { MutationObserver, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryObserver, focusManager, onlineManager } from '@tanstack/react-query';
 import { createQueryClient } from './query-client';
 import { getErrorMessage } from './api';
 import { vi as copy } from '../i18n/vi';
 
 afterEach(() => {
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
   vi.unstubAllGlobals();
 });
 
@@ -47,5 +48,106 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
     expect(retry(0, err4xx)).toBe(false);
     expect(retry(0, new AxiosError('x', 'ERR_NETWORK'))).toBe(true);
     expect(retry(1, new AxiosError('x', 'ERR_NETWORK'))).toBe(false);
+  });
+});
+
+describe('createQueryClient — truy vấn lúc mất mạng (R5-BUYER-1)', () => {
+  const networkError = () => new AxiosError('Network Error', 'ERR_NETWORK');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('offline: truy vấn chưa có dữ liệu vẫn chạy và hạ xuống trạng thái lỗi ngay, không kẹt ở "tạm dừng" (trang đọc được isError thay vì vẽ màn trống)', async () => {
+    const client = createQueryClient();
+    onlineManager.setOnline(false);
+    vi.stubGlobal('navigator', { onLine: false });
+    const queryFn = vi.fn().mockRejectedValue(networkError());
+
+    const observer = new QueryObserver(client, { queryKey: ['orders'], queryFn });
+    const unsub = observer.subscribe(() => undefined);
+    await tick();
+    await tick();
+    unsub();
+
+    const r = observer.getCurrentResult();
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(r.fetchStatus).toBe('idle');
+    expect(r.isError).toBe(true);
+    expect(getErrorMessage(r.error)).toBe(copy.errors.offline);
+  });
+
+  it('có mạng lại: truy vấn đang lỗi tự tải lại, hết lỗi thì có dữ liệu', async () => {
+    const client = createQueryClient();
+    client.mount();
+    onlineManager.setOnline(false);
+    vi.stubGlobal('navigator', { onLine: false });
+    const queryFn = vi.fn().mockRejectedValueOnce(networkError()).mockResolvedValue(['đơn 1']);
+    const observer = new QueryObserver(client, { queryKey: ['orders'], queryFn });
+    const unsub = observer.subscribe(() => undefined);
+    await tick();
+    await tick();
+    expect(observer.getCurrentResult().isError).toBe(true);
+
+    vi.stubGlobal('navigator', { onLine: true });
+    onlineManager.setOnline(true);
+    await tick();
+    await tick();
+    unsub();
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(observer.getCurrentResult().data).toEqual(['đơn 1']);
+    expect(observer.getCurrentResult().isError).toBe(false);
+  });
+
+  it('quay lại app: truy vấn đang lỗi mạng/5xx tải lại, truy vấn đã có dữ liệu thì không tải thừa', async () => {
+    const client = createQueryClient();
+    client.mount();
+    const failing = vi.fn().mockRejectedValueOnce(networkError()).mockResolvedValue('ok');
+    const healthy = vi.fn().mockResolvedValue('có rồi');
+    const retryOff = { retry: false } as const;
+    const a = new QueryObserver(client, { queryKey: ['cart'], queryFn: failing, ...retryOff });
+    const b = new QueryObserver(client, { queryKey: ['wishlist'], queryFn: healthy, staleTime: 0, ...retryOff });
+    const unsubA = a.subscribe(() => undefined);
+    const unsubB = b.subscribe(() => undefined);
+    await tick();
+    await tick();
+    expect(a.getCurrentResult().isError).toBe(true);
+    expect(healthy).toHaveBeenCalledTimes(1);
+
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await tick();
+    await tick();
+    unsubA();
+    unsubB();
+
+    expect(failing).toHaveBeenCalledTimes(2);
+    expect(a.getCurrentResult().data).toBe('ok');
+    expect(healthy).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi 4xx nghiệp vụ (vd 404) không bị tải lại mỗi lần quay lại app', async () => {
+    const client = createQueryClient();
+    client.mount();
+    const notFound = new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as never);
+    const queryFn = vi.fn().mockRejectedValue(notFound);
+    const observer = new QueryObserver(client, { queryKey: ['order', 'x'], queryFn, retry: false });
+    const unsub = observer.subscribe(() => undefined);
+    await tick();
+    await tick();
+
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await tick();
+    unsub();
+
+    expect(queryFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('offline thì không retry (thử lại chỉ tốn thời gian chờ); có mạng mà lỗi mạng vẫn retry 1 lần', () => {
+    const client = createQueryClient();
+    const retry = client.getDefaultOptions().queries?.retry as (n: number, e: unknown) => boolean;
+    vi.stubGlobal('navigator', { onLine: false });
+    expect(retry(0, networkError())).toBe(false);
+    vi.stubGlobal('navigator', { onLine: true });
+    expect(retry(0, networkError())).toBe(true);
   });
 });

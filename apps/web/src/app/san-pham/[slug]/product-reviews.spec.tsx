@@ -33,6 +33,7 @@ vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   fetchProductReviews: async () => mocks.list,
   fetchCanReview: async () => {
     mocks.eligCalls += 1;
+    if (mocks.elig instanceof Error) throw mocks.elig;
     return mocks.elig;
   },
   fetchMyReview: async (id: string) => {
@@ -183,7 +184,7 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     const c = await mount();
     click(button(c, 'Viết đánh giá'));
     await flush();
-    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10 Điểm Xanh (chỉ chữ +5).');
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá được khi đã mua và nhận hàng.');
     click(button(c, 'Ảnh đánh giá (0)'));
     expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh!');
     click(star(c, 4));
@@ -298,6 +299,85 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     await flush();
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
+  });
+});
+
+// R5-BUYER-2: admin ẩn đánh giá của khách (isVisible=false). Đánh giá ẩn không nằm trong danh sách công khai nên khách phải
+// được nói thẳng là nó đang chờ Tubu xem xét, và lưu lại không được báo "Đã cập nhật" như thể đã đổi được gì.
+describe('ProductReviews (web) — đánh giá bị Tubu ẩn (R5-BUYER-2)', () => {
+  const HIDDEN_REF = { ...REF_A, isVisible: false };
+  const ELIG_HIDDEN = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 1, reviewableOrders: [], myReviews: [HIDDEN_REF] };
+  const HIDDEN_NOTICE = 'Đánh giá cho đơn TB0001 của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.';
+  const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+
+  beforeEach(() => {
+    mocks.list = { ...structuredClone(LIST), count: 2, items: LIST.items.filter((i) => i.id !== 'a') };
+    mocks.elig = structuredClone(ELIG_HIDDEN);
+    mocks.mine = { a: { ...structuredClone(MINE_A), isVisible: false } };
+    mocks.saveResult = { id: 'a', updated: true, pointsEarned: 0, isVisible: false };
+  });
+
+  it('có đánh giá đang ẩn: nói rõ đang chờ Tubu xem xét, kèm đơn; vẫn có nút sửa', async () => {
+    const c = await mount();
+    const notice = byText(c, 'p', HIDDEN_NOTICE);
+    expect(notice).not.toBeNull();
+    expect(notice!.getAttribute('role')).toBe('status');
+    expect(button(c, 'Sửa đánh giá của bạn')).not.toBeNull();
+  });
+
+  it('đánh giá đang hiện: không có câu nào về việc bị ẩn', async () => {
+    mocks.elig = structuredClone(ELIG_ALL);
+    const c = await mount();
+    expect(c.textContent).not.toContain('chưa hiện công khai');
+  });
+
+  it('form sửa đánh giá ẩn nhắc lại rằng lưu không làm nó hiện; lưu xong báo "đang chờ Tubu xem xét", không báo "Đã cập nhật"', async () => {
+    const c = await mount();
+    click(button(c, 'Sửa đánh giá của bạn'));
+    await flush();
+    expect(form(c)!.textContent).toContain('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.');
+    click(button(c, 'Lưu đánh giá'));
+    await flush();
+    const statuses = [...c.querySelectorAll('[role="status"]')].map((n) => n.textContent);
+    expect(statuses).toContain(SAVED_HIDDEN);
+    expect(c.textContent).not.toContain('Đã cập nhật đánh giá của bạn');
+  });
+
+  it('máy chủ báo isVisible=false trong phản hồi lưu (can-review chưa có cờ) cũng báo đang chờ xem xét', async () => {
+    mocks.elig = { ...structuredClone(ELIG_ALL), myReviews: [REF_A] };
+    const c = await mount();
+    click(button(c, 'Sửa đánh giá của bạn'));
+    await flush();
+    click(button(c, 'Lưu đánh giá'));
+    await flush();
+    expect(c.textContent).toContain(SAVED_HIDDEN);
+    expect(c.textContent).not.toContain('Đã cập nhật đánh giá của bạn');
+  });
+});
+
+// R5-BUYER-3: can-review lỗi thì khách không biết vì sao không có nút viết/sửa — phải nói và cho thử lại.
+describe('ProductReviews (web) — can-review lỗi (R5-BUYER-3)', () => {
+  it('báo "Chưa kiểm tra được quyền đánh giá" kèm Thử lại; thử lại được thì có nút viết đánh giá', async () => {
+    mocks.elig = new Error('500');
+    const c = await mount();
+    const alert = c.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain('Chưa kiểm tra được quyền đánh giá.');
+    expect(button(c, /Viết đánh giá|Sửa/)).toBeNull();
+
+    mocks.elig = structuredClone(ELIG_NEW);
+    click(button(c, 'Thử lại'));
+    await flush();
+    expect(button(c, 'Viết đánh giá')).not.toBeNull();
+    expect(c.textContent).not.toContain('Chưa kiểm tra được quyền đánh giá.');
+    expect(mocks.eligCalls).toBe(2);
+  });
+
+  it('khách chưa đăng nhập không hỏi can-review nên không có dòng lỗi', async () => {
+    mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
+    mocks.elig = new Error('500');
+    const c = await mount();
+    expect(c.textContent).not.toContain('Chưa kiểm tra được quyền đánh giá.');
+    expect(mocks.eligCalls).toBe(0);
   });
 });
 
