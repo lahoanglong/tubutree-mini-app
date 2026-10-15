@@ -132,6 +132,35 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
     }
   });
 
+  // R5-BUYER-5: tên thương hiệu có dấu chấm ("BH.Nong") mà khách gõ tự nhiên "bh nong" thì trước đây không ra gì.
+  it('khoảng trắng của từ khoá khớp cả dấu chấm/gạch trong tên: "bh nong" ra "BH.Nong", tìm và gợi ý đều vậy', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    try {
+      const tag = randCode(6).toLowerCase();
+      const p = await createProduct(`Mật ong rừng BH.Nong ${tag}`);
+      const ids = async (q: string) => (await catalog.list({ page: 1, limit: 50, brand: p.brand, q })).data.map((c) => c.id);
+      expect(await ids('bh.nong')).toEqual([p.id]);
+      expect(await ids('BH.Nong')).toEqual([p.id]);
+      expect(await ids('bh nong')).toEqual([p.id]);
+      expect(await ids('mat ong rung bh nong')).toEqual([p.id]);
+      expect(await ids('bh xnong')).toEqual([]);
+      expect(await ids('bhnong')).toEqual([]);
+      expect((await catalog.suggest(`bh nong ${tag}`)).map((s) => s.slug)).toEqual([p.slug]);
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes('Tìm không dấu lỗi'))).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('khoảng trắng của từ khoá không thành ký tự đại diện rộng hơn một ký tự: "bh  nong" (nhiều dấu cách) vẫn chỉ ra SP đúng', async () => {
+    const tag = randCode(6).toLowerCase();
+    const p = await createProduct(`Gạo lứt BH.Nong ${tag}`);
+    const other = await createProduct(`Gạo lứt BH..Nong ${tag}`);
+    const ids = async (q: string) => (await catalog.list({ page: 1, limit: 50, q: `${q} ${tag}` })).data.map((c) => c.id).sort();
+    expect(await ids('bh   nong')).toEqual([p.id]);
+    expect(await ids('bh nong')).not.toContain(other.id);
+  });
+
   it('suggest: từ khoá dưới 2 ký tự (sau gấp) → [] không chạm DB', async () => {
     const spy = jest.spyOn(prisma, '$queryRaw');
     try {

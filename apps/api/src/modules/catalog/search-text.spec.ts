@@ -110,8 +110,12 @@ describe('LIKE', () => {
     expect(escapePrismaLike('TUBU-2026!')).toBe('TUBU-2026!');
   });
 
-  it('likeContainsPattern = %<gấp dấu + escape>%', () => {
-    expect(likeContainsPattern('  Nước 50% ')).toBe('%nuoc 50!%%');
+  it('likeContainsPattern = %<gấp dấu + escape>%; khoảng trắng giữa các từ khớp đúng một ký tự bất kỳ để "bh nong" thấy "BH.Nong" (R5-BUYER-5)', () => {
+    expect(likeContainsPattern('  Nước 50% ')).toBe('%nuoc_50!%%');
+    expect(likeContainsPattern('bh nong')).toBe('%bh_nong%');
+    expect(likeContainsPattern('BH.Nong')).toBe('%bh.nong%');
+    expect(likeContainsPattern('mật  ong   rừng')).toBe('%mat_ong_rung%');
+    expect(likeContainsPattern('mật')).toBe('%mat%');
   });
 });
 

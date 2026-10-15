@@ -624,7 +624,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(sql).toContain('p.tags @> ARRAY[?]::text[]');
     expect(LIKE_ESCAPE).toBe('!');
     expect(sql).toContain("ESCAPE '!'");
-    expect(values).toEqual(expect.arrayContaining(['%nuoc rua%', 'nước rửa']));
+    expect(values).toEqual(expect.arrayContaining(['%nuoc_rua%', 'nước rửa']));
   });
 
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
@@ -633,7 +633,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     await svc.list({ page: 1, limit: 20, q: "x'; DROP TABLE products;--" });
     const { sql, values } = sqlOf(queryRaw);
     expect(sql).not.toContain('DROP');
-    expect(values).toContain('%x\'; drop table products;--%');
+    expect(values).toContain('%x\';_drop_table_products;--%');
   });
 
   it('% và _ trong từ khoá được escape (không thành ký tự đại diện)', async () => {
@@ -659,7 +659,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     const { svc } = setup(queryRaw);
     await svc.list({ page: 1, limit: 20, q: 'nước rửa' });
     const { values } = sqlOf(queryRaw);
-    expect(values).toContain('%nuoc rua%');
+    expect(values).toContain('%nuoc_rua%');
   });
 
   it('SQL gấp dấu lỗi → lùi về contains như trước (mất tìm không dấu nhưng không sập trang)', async () => {
