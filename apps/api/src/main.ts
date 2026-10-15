@@ -1,100 +1,15 @@
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import helmet from 'helmet';
-// Import trực tiếp — không phải qua @nestjs/platform-express — nên PHẢI là dependency trực
-// tiếp của package này (đã thêm ở package.json). Trước đây chỉ resolve được nhờ hoist tình cờ
-// khi cài đặt TOÀN BỘ monorepo (dev/CI); Docker build chỉ copy apps/api + packages nên hoist
-// khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
-import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
-import { CronLeaderService } from './common/cron-leader/cron-leader.service';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
-import { createValidationPipe } from './common/validation-pipe';
+import { bootstrap } from './bootstrap';
 
-async function bootstrap() {
-  const isProd = process.env.NODE_ENV === 'production';
-  const bootLogger = new Logger('Bootstrap');
+// Lưới an toàn cuối cùng: 'cron'/@nestjs/schedule KHÔNG tự catch lỗi trong @Cron() handler.
+// Node 20 mặc định unhandledRejection=throw → 1 lỗi Prisma/network thoáng qua trong BẤT KỲ
+// cron nào sẽ sập TOÀN BỘ API process, ảnh hưởng mọi user đang dùng app. Đây KHÔNG thay thế
+// try/catch riêng từng cron (đã bọc ở dealer/loyalty/groupbuy/cashback/flash-sale) — chỉ chặn
+// rơi sót ở nơi khác. Lỗi khởi động không đi qua đây: bootstrap tự thoát mã 1.
+process.on('unhandledRejection', (reason) => {
+  new Logger('UnhandledRejection').error(`Unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : reason}`);
+});
 
-  // CORS allowlist: đọc từ env CORS_ORIGINS (CSV). Dev rỗng → mở; prod rỗng → fallback domain chính.
-  // Env validation (env.validation.ts) fail-fast nếu prod thiếu CORS_ORIGINS — fallback chỉ
-  // chạy khi schema đã được nới lỏng, vẫn warn để ops thấy.
-  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter((o) => o.length > 0);
-  // Allowlist tĩnh từ env (prod rỗng → fallback domain chính thức).
-  const staticAllow = corsOrigins.length > 0 ? corsOrigins : ['https://tubutree.com', 'https://app.tubutree.com'];
-  if (isProd && corsOrigins.length === 0) {
-    bootLogger.warn('CORS_ORIGINS chưa cấu hình ở production — fallback về domain chính thức.');
-  }
-  // Origin webview Zalo Mini App — LUÔN cho phép (backend này phục vụ Mini App Zalo, không
-  // phụ thuộc env). Nếu thiếu → trình duyệt Zalo chặn MỌI response API: không load được sản phẩm,
-  // không login, Ví/Cá nhân trắng (đúng lỗi gặp trên thiết bị). Bao gồm h5.zdn.vn, *.zadn.vn, zalo.me.
-  const zaloOriginRe = /^https:\/\/([a-z0-9-]+\.)*(zdn\.vn|zadn\.vn|zalo\.me)$/i;
-  // Cho phép domain chính và TẤT CẢ subdomain đối tác (*.tubutree.com) phục vụ Multi-tenancy Storefront.
-  const tubuOriginRe = /^https?:\/\/([a-z0-9-]+\.)*tubutree\.com(:[0-9]+)?$/i;
-  const corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-    // Không có Origin (app native/WebView không gửi, health check, server-to-server, curl) → cho qua.
-    if (!origin) return cb(null, true);
-    if (zaloOriginRe.test(origin)) return cb(null, true);
-    if (tubuOriginRe.test(origin)) return cb(null, true);
-    if (staticAllow.includes(origin)) return cb(null, true);
-    if (!isProd) return cb(null, true); // dev: mở hết cho tiện test local
-    return cb(null, false); // prod + origin lạ → chặn (không set Allow-Origin)
-  };
-
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    // Retry-After không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
-    // (khác origin) không đọc được và phải đoán thời gian chờ khi bị 429.
-    cors: { origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After'] },
-  });
-
-  // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.
-  app.enableShutdownHooks();
-
-  // Trust proxy: ZaloPay/Nginx/Cloudflare phía trước → req.ip = IP proxy nếu KHÔNG set,
-  // mọi request share 1 counter trong ThrottlerGuard → 60req/min cho toàn site, dễ DOS lẫn nhau.
-  // Set trust proxy=1 để Express lấy IP thật từ X-Forwarded-For (1 hop = reverse proxy chuẩn).
-  app.set('trust proxy', 1);
-  // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser 10MB (body đã parse thì parser sau bỏ qua).
-  app.use('/api/events', json({ limit: '512kb' }));
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
-  app.use(helmet());
-  app.setGlobalPrefix('api');
-  app.useGlobalPipes(createValidationPipe());
-  // Map Prisma errors → HTTP status nhất quán (tránh 500 trần khi P2025/P2002/...).
-  app.useGlobalFilters(new PrismaExceptionFilter());
-
-  // Swagger chỉ bật ở non-production để tránh lộ schema/endpoint nội bộ.
-  if (!isProd) {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('Tubu Tree API')
-      .setDescription('REST API cho Zalo Mini App + Web Shop')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api/docs', app, document);
-  }
-
-  // Lưới an toàn cuối cùng: 'cron'/@nestjs/schedule KHÔNG tự catch lỗi trong @Cron() handler.
-  // Node 20 mặc định unhandledRejection=throw → 1 lỗi Prisma/network thoáng qua trong BẤT KỲ
-  // cron nào sẽ sập TOÀN BỘ API process, ảnh hưởng mọi user đang dùng app. Đây KHÔNG thay thế
-  // try/catch riêng từng cron (đã bọc ở dealer/loyalty/groupbuy/cashback/flash-sale) — chỉ chặn
-  // rơi sót ở nơi khác.
-  process.on('unhandledRejection', (reason) => {
-    new Logger('UnhandledRejection').error(`Unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : reason}`);
-  });
-
-  const port = Number(process.env.PORT ?? 3001);
-  await app.listen(port, '0.0.0.0');
-  // Sau listen thì ScheduleModule đã bật mọi cron job; chỉ instance giữ lease được chạy tiếp.
-  app.get(CronLeaderService).start();
-  Logger.log(`🌿 Tubu Tree API listening on http://localhost:${port}/api`, 'Bootstrap');
-}
-
-void bootstrap();
+void bootstrap(AppModule, { port: Number(process.env.PORT ?? 3001) });

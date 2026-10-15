@@ -1391,8 +1391,10 @@ describe('PancakeProcessor.process — sự kiện đã IGNORED (R4-SYNC-1)', ()
   });
 });
 
-describe('PancakeProcessor — variation.stock_changed tới không theo thứ tự (R4-SYNC-2)', () => {
-  function run(rawPayload: Record<string, unknown>, opts: { applied: number; lastEventAt?: Date | null } = { applied: 1 }) {
+describe('PancakeProcessor — variation.stock_changed tới không theo thứ tự (R4-SYNC-2) / sau lượt đồng bộ (R5-SYNC-3)', () => {
+  const RECEIVED_AT = new Date('2026-10-14T07:00:05.000Z');
+  type Current = { pancakeStockEventAt: Date | null; pancakeStockSyncReadAt: Date | null } | null;
+  function run(rawPayload: Record<string, unknown>, opts: { applied: number; current?: Current } = { applied: 1 }) {
     const ctx = setup(null);
     const prisma = ctx.prisma as unknown as {
       $executeRaw: jest.Mock;
@@ -1400,30 +1402,50 @@ describe('PancakeProcessor — variation.stock_changed tới không theo thứ t
       pancakeWebhookEvent: { findUnique: jest.Mock; update: jest.Mock };
     };
     prisma.$executeRaw.mockResolvedValue(opts.applied);
-    prisma.variation = {
-      findUnique: jest.fn().mockResolvedValue(opts.lastEventAt === undefined ? null : { pancakeStockEventAt: opts.lastEventAt }),
-    };
-    prisma.pancakeWebhookEvent.findUnique.mockResolvedValue({ id: 'e1', status: 'RECEIVED', eventType: 'variation.stock_changed', rawPayload });
+    prisma.variation = { findUnique: jest.fn().mockResolvedValue(opts.current ?? null) };
+    prisma.pancakeWebhookEvent.findUnique.mockResolvedValue({
+      id: 'e1',
+      status: 'RECEIVED',
+      eventType: 'variation.stock_changed',
+      rawPayload,
+      receivedAt: RECEIVED_AT,
+    });
     return { prisma, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
   }
   const saved = (p: { pancakeWebhookEvent: { update: jest.Mock } }) => p.pancakeWebhookEvent.update.mock.calls[0][0].data;
+  const stockSql = (p: { $executeRaw: jest.Mock }) => {
+    const [strings, ...values] = p.$executeRaw.mock.calls[0]! as [string[], ...Prisma.Sql[]];
+    return Prisma.sql(strings, ...values);
+  };
 
-  it('mang updated_at → áp kèm mốc đó (câu áp tự so mốc đã áp)', async () => {
+  it('mang updated_at → áp kèm mốc đó và lúc nhận webhook (câu áp tự so mốc đã áp và lúc đồng bộ đọc)', async () => {
     const { prisma, go } = run({ variation_id: 'LP-ARA-250', remain_quantity: 80, updated_at: '2026-10-14T07:00:02Z' });
     await go();
-    const call = prisma.$executeRaw.mock.calls[0]!;
-    expect((call[0] as string[]).join('?')).toContain('"pancakeStockEventAt" <= ?');
-    expect(call.slice(1)).toContainEqual(new Date('2026-10-14T07:00:02Z'));
+    const q = stockSql(prisma);
+    expect(q.sql).toContain('"pancakeStockEventAt" <= ?');
+    expect(q.sql).toContain('"pancakeStockSyncReadAt" < ?');
+    expect(q.values).toContainEqual(new Date('2026-10-14T07:00:02Z'));
+    expect(q.values).toContainEqual(RECEIVED_AT);
     expect(saved(prisma).status).toBe('PROCESSED');
   });
 
   it('cũ hơn số đã áp (90 lúc :01 tới sau 80 lúc :02) → không áp, sự kiện IGNORED kèm lý do', async () => {
     const { prisma, go } = run(
       { variation_id: 'LP-ARA-250', remain_quantity: 90, updated_at: '2026-10-14T07:00:01Z' },
-      { applied: 0, lastEventAt: new Date('2026-10-14T07:00:02Z') },
+      { applied: 0, current: { pancakeStockEventAt: new Date('2026-10-14T07:00:02Z'), pancakeStockSyncReadAt: null } },
     );
     await go();
     expect(saved(prisma)).toMatchObject({ status: 'IGNORED', error: expect.stringContaining('cũ hơn') });
+  });
+
+  it('nhận trước lúc lượt đồng bộ danh mục đọc Pancake → không áp, IGNORED nói rõ số đồng bộ mới hơn', async () => {
+    const { prisma, go } = run(
+      { variation_id: 'LP-ARA-250', remain_quantity: 55, updated_at: '2026-10-14T07:00:01Z' },
+      { applied: 0, current: { pancakeStockEventAt: null, pancakeStockSyncReadAt: new Date('2026-10-14T07:00:06.000Z') } },
+    );
+    await go();
+    expect(saved(prisma)).toMatchObject({ status: 'IGNORED', error: expect.stringContaining('đồng bộ danh mục') });
+    expect(saved(prisma).error).toContain(RECEIVED_AT.toISOString());
   });
 
   it('biến thể không có trên Tubu → bỏ qua êm như trước (PROCESSED)', async () => {
@@ -1432,10 +1454,13 @@ describe('PancakeProcessor — variation.stock_changed tới không theo thứ t
     expect(saved(prisma).status).toBe('PROCESSED');
   });
 
-  it('không có updated_at → áp như trước, không so mốc', async () => {
+  it('không có updated_at → không so mốc Pancake, vẫn so lúc nhận với lúc đồng bộ đọc', async () => {
     const { prisma, go } = run({ variation_id: 'LP-ARA-250', remain_quantity: 70 });
     await go();
-    expect((prisma.$executeRaw.mock.calls[0]![0] as string[]).join('?')).not.toContain('pancakeStockEventAt');
+    const q = stockSql(prisma);
+    expect(q.sql).not.toContain('pancakeStockEventAt');
+    expect(q.sql).toContain('"pancakeStockSyncReadAt" < ?');
+    expect(q.values).toContainEqual(RECEIVED_AT);
     expect(saved(prisma).status).toBe('PROCESSED');
   });
 });

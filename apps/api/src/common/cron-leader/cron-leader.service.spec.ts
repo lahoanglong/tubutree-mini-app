@@ -1,4 +1,4 @@
-import type { SchedulerRegistry } from '@nestjs/schedule';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { CronLeaderService } from './cron-leader.service';
 
@@ -80,5 +80,44 @@ describe('CronLeaderService', () => {
     });
     await expect(svc2.tick()).resolves.toBe(true);
     expect(jobs.every((j) => j.running)).toBe(true);
+  });
+
+  describe('job vừa đăng ký khi chưa giữ lease bị dừng ngay (R5-SYNC-2)', () => {
+    type Job = Parameters<SchedulerRegistry['addCronJob']>[1];
+    /** Như CronJob của ScheduleModule lúc mount: tạo xong là đã chạy. */
+    const job = () => {
+      const j = {
+        running: true,
+        fireOnTick: () => undefined,
+        start: () => {
+          j.running = true;
+        },
+        stop: () => {
+          j.running = false;
+        },
+      };
+      return j as unknown as Job;
+    };
+
+    it('ScheduleModule bật job lúc bootstrap (trước app.listen, trước khi hỏi lease) → job dừng ngay khi đăng ký', () => {
+      const registry = new SchedulerRegistry();
+      new CronLeaderService({ $executeRaw: jest.fn() } as unknown as PrismaService, registry, { renewMs: 1_000_000 });
+      const j = job();
+      registry.addCronJob('j', j);
+      expect(j.running).toBe(false);
+      expect(registry.getCronJob('j')).toBe(j);
+    });
+
+    it('đang giữ lease → job đăng ký sau vẫn chạy; mất lease thì dừng như mọi job', async () => {
+      const exec = jest.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      const registry = new SchedulerRegistry();
+      const svc = new CronLeaderService({ $executeRaw: exec } as unknown as PrismaService, registry, { renewMs: 1_000_000 });
+      await svc.tick();
+      const j = job();
+      registry.addCronJob('j', j);
+      expect(j.running).toBe(true);
+      await svc.tick();
+      expect(j.running).toBe(false);
+    });
   });
 });

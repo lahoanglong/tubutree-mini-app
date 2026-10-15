@@ -39,6 +39,8 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    /** Dấu "vận chuyển đã báo … — đẩy tay sau khi nhận tiền" (flagDroppedStatus). */
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
   const pancakeHooks = {
@@ -127,6 +129,65 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
       await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM', pancakeGate: true })).rejects.toThrow();
       expect(attention(prisma.order.updateMany)).toEqual([]);
       expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), 'OPS_PANCAKE_ALERT', expect.anything());
+    });
+  });
+
+  describe('người bấm huỷ đơn chờ chuyển khoản mà Pancake đã gửi hàng (R5-SYNC-1)', () => {
+    const unpaid = (over: Record<string, unknown> = {}) =>
+      makeOrder({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', ...over });
+    const handedOver = () => ({ precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)) });
+    const marker = { where: { id: 'o1', autoCancelBlockedAt: null }, data: { autoCancelBlockedAt: expect.any(Date) } };
+    const attention = (m: jest.Mock) =>
+      m.mock.calls.map((c) => c[0].data?.pancakeAttention).filter((a): a is string => typeof a === 'string');
+
+    it('khách bấm: chưa trả tiền nên không đồng bộ được → ghi mốc bàn giao (lần sau chặn sớm, cron thôi thử), nhắc "Cần xử lý" một lần', async () => {
+      const { svc, prisma, notifications } = make(unpaid(), handedOver());
+      await expect(svc.precheckPancakeCancel(unpaid() as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+      expect(prisma.order.updateMany).toHaveBeenCalledWith(marker);
+      const [reason] = attention(prisma.order.updateMany);
+      expect(reason).toContain('Khách bấm huỷ nhưng Pancake báo đã bàn giao vận chuyển (mã 2)');
+      expect(reason).toContain('"Đã nhận tiền"');
+      expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_PANCAKE_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
+    });
+
+    it('CSKH/admin bấm: cũng ghi mốc, lời báo cho người vận hành giữ nguyên', async () => {
+      const { svc, prisma } = make(unpaid(), handedOver());
+      const err = await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' }).catch((e: Error) => e);
+      expect((err as Error).message).toMatch(/Pancake báo đã gửi hàng \(mã 2\)/);
+      expect(prisma.order.updateMany).toHaveBeenCalledWith(marker);
+    });
+
+    it('đơn đã trả tiền: đồng bộ được về SHIPPING (trạng thái tự chặn huỷ) → không ghi mốc, không nhắc', async () => {
+      const { svc, prisma, notifications } = make(makeOrder({ status: 'PACKED' }), handedOver());
+      await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+      expect(prisma.order.updateMany).not.toHaveBeenCalledWith(marker);
+      expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), 'OPS_PANCAKE_ALERT', expect.anything());
+    });
+
+    it('đã có mốc (lượt trước đã nhắc, admin đã "Đã xử lý") → không nhắc lại', async () => {
+      const { svc, prisma, notifications } = make(unpaid(), handedOver());
+      prisma.order.updateMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => ({
+        count: 'autoCancelBlockedAt' in where ? 0 : 1,
+      }));
+      await expect(svc.precheckPancakeCancel(unpaid() as never, 'CUSTOMER')).rejects.toThrow();
+      expect(attention(prisma.order.updateMany)).toEqual([]);
+      expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), 'OPS_PANCAKE_ALERT', expect.anything());
+    });
+
+    it('Pancake báo lại "Đã gửi hàng" cho đơn đã có mốc thôi tự huỷ → không gắn lại dấu "đẩy tay sau khi nhận tiền" mà admin đã xử lý', async () => {
+      const blocked = unpaid({ autoCancelBlockedAt: new Date('2026-10-15T02:30:00Z') });
+      const { svc, prisma } = make(blocked);
+      await expect(svc.setStatus('o1', 'SHIPPING' as never, { actorType: 'PANCAKE' })).rejects.toThrow();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('chưa có mốc, hoặc hãng báo trạng thái mới (DELIVERED) → vẫn gắn dấu như trước', async () => {
+      const fresh = make(unpaid());
+      await expect(fresh.svc.setStatus('o1', 'SHIPPING' as never, { actorType: 'PANCAKE' })).rejects.toThrow();
+      expect(fresh.prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const delivered = make(unpaid({ status: 'SHIPPING', autoCancelBlockedAt: new Date() }));
+      await expect(delivered.svc.setStatus('o1', 'DELIVERED' as never, { actorType: 'PANCAKE' })).rejects.toThrow();
+      expect(delivered.prisma.$executeRaw).toHaveBeenCalledTimes(1);
     });
   });
 

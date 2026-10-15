@@ -86,6 +86,52 @@ export async function releaseVariationStock(
 }
 
 /**
+ * Số tồn kho Pancake này tới từ đâu — quyết định so với mốc nào trước khi áp.
+ *
+ * - `webhook`: `eventAt` = `updated_at` của Pancake (có thể vắng), `receivedAt` = lúc Tubu nhận webhook
+ *   (`PancakeWebhookEvent.receivedAt`, giờ máy chủ).
+ * - `sync`: `readAt` = lúc lượt đồng bộ danh mục bắt đầu đọc trang Pancake chứa biến thể (giờ máy chủ).
+ *
+ * Mỗi phép so chỉ so hai mốc cùng một đồng hồ: `updated_at` với `updated_at` (webhook với webhook), giờ máy chủ với giờ máy
+ * chủ (webhook với đồng bộ). `updated_at` của Pancake không mang múi giờ và Node đọc nó theo múi giờ của tiến trình (production
+ * đặt TZ=Asia/Ho_Chi_Minh), nên so nó với đồng hồ máy chủ lệch nhiều giờ: webhook mới hơn bị bỏ hoặc lượt đồng bộ bị chặn.
+ */
+export type PancakeStockOrigin =
+  | { kind: 'webhook'; receivedAt: Date; eventAt?: Date }
+  | { kind: 'sync'; readAt: Date };
+
+/**
+ * Phần SET thêm và điều kiện WHERE theo nguồn số — ghép vào CÙNG câu UPDATE áp tồn kho.
+ * Webhook nhận đúng mili giây lượt đồng bộ bắt đầu đọc thua lượt đồng bộ ở cả hai thứ tự xử lý: Pancake đọc số sau lúc yêu cầu
+ * đi, nên số đồng bộ không cũ hơn số webhook mang theo.
+ */
+function stockOriginSql(origin: PancakeStockOrigin | undefined): { set: Prisma.Sql; guard: Prisma.Sql } {
+  if (!origin) return { set: Prisma.empty, guard: Prisma.empty };
+  if (origin.kind === 'sync') {
+    const { readAt } = origin;
+    return {
+      set: Prisma.sql`, "pancakeStockSyncReadAt" = ${readAt}`,
+      guard: Prisma.sql`
+       AND ("pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ${readAt})
+       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" <= ${readAt})`,
+    };
+  }
+  const { receivedAt, eventAt } = origin;
+  return {
+    set: eventAt
+      ? Prisma.sql`, "pancakeStockEventAt" = ${eventAt},
+           "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`
+      : Prisma.sql`, "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`,
+    guard: eventAt
+      ? Prisma.sql`
+       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})
+       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})`
+      : Prisma.sql`
+       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})`,
+  };
+}
+
+/**
  * Áp số tồn kho Pancake vừa đọc được cho variation (theo `pancakeId`).
  *
  * - Chưa có mốc (`pancakeStock IS NULL`): CHỈ ghi mốc, không đụng `stock`. Nhờ vậy lần deploy
@@ -93,21 +139,26 @@ export async function releaseVariationStock(
  *   thuộc Pancake) không bao giờ bị ảnh hưởng vì không bao giờ được đồng bộ.
  * - Đã có mốc: nhả phần giảm khỏi `reservedStock` rồi đặt `stock = số mới − giữ chỗ còn lại`.
  *
- * `eventAt` (webhook tồn kho, giờ Pancake): số tuyệt đối mang mốc cũ hơn mốc đã áp là số đã lỗi thời — áp vào là lùi tồn kho
- * (R4-SYNC-2). Điều kiện so mốc nằm trong chính câu UPDATE nên hai sự kiện xử lý song song không cùng qua được rồi ghi đè nhau.
- * Trả `false` khi không dòng nào được ghi (không có biến thể, hoặc sự kiện cũ hơn).
+ * Số tuyệt đối cũ hơn số đã áp là số đã lỗi thời — áp vào là lùi tồn kho (R4-SYNC-2, R5-SYNC-3):
+ * - webhook mang `updated_at` cũ hơn webhook đã áp thì không áp;
+ * - webhook NHẬN trước lúc lượt đồng bộ đã áp bắt đầu đọc Pancake (hàng đợi chậm, Redis sập rồi xử lý sau) thì không áp;
+ * - lượt đồng bộ bắt đầu đọc trước lúc nhận một webhook đã áp thì không ghi đè (webhook có thể mới hơn số nó đọc).
+ * Webhook Pancake tự gửi muộn (nhận sau lần đọc nhưng `updated_at` cũ hơn) vẫn được áp: không có mốc cùng đồng hồ nào nói nó
+ * cũ hơn, và webhook mới hơn của cùng biến thể hoặc lượt đồng bộ sau sẽ kéo lại.
+ * Điều kiện so mốc nằm trong chính câu UPDATE nên hai sự kiện xử lý song song không cùng qua được rồi ghi đè nhau. Không kèm
+ * `origin` thì áp vô điều kiện, không đọc/ghi mốc. Trả `false` khi không dòng nào được ghi (không có biến thể, hoặc số cũ hơn số
+ * đã áp).
  */
 export async function applyPancakeStock(
   tx: StockExecutor,
   pancakeVariationId: string,
   pancakeStock: number,
-  opts: { eventAt?: Date } = {},
+  origin?: PancakeStockOrigin,
 ): Promise<boolean> {
   // Một câu duy nhất cho cả hai nhánh: mọi vế phải đọc giá trị CŨ của hàng nên phép tính nhất
   // quán, và không có khoảng hở giữa hai lệnh để một lượt checkout xen vào.
-  const { eventAt } = opts;
-  const affected = eventAt
-    ? await tx.$executeRaw`
+  const { set, guard } = stockOriginSql(origin);
+  const affected = await tx.$executeRaw`
     UPDATE "variations"
        SET "reservedStock" = CASE
              WHEN "pancakeStock" IS NULL THEN "reservedStock"
@@ -117,23 +168,8 @@ export async function applyPancakeStock(
              WHEN "pancakeStock" IS NULL THEN "stock"
              ELSE GREATEST(0, ${pancakeStock} - GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock})))
            END,
-           "pancakeStock" = ${pancakeStock},
-           "pancakeStockEventAt" = ${eventAt}
-     WHERE "pancakeId" = ${pancakeVariationId}
-       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})
-  `
-    : await tx.$executeRaw`
-    UPDATE "variations"
-       SET "reservedStock" = CASE
-             WHEN "pancakeStock" IS NULL THEN "reservedStock"
-             ELSE GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock}))
-           END,
-           "stock" = CASE
-             WHEN "pancakeStock" IS NULL THEN "stock"
-             ELSE GREATEST(0, ${pancakeStock} - GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock})))
-           END,
-           "pancakeStock" = ${pancakeStock}
-     WHERE "pancakeId" = ${pancakeVariationId}
+           "pancakeStock" = ${pancakeStock}${set}
+     WHERE "pancakeId" = ${pancakeVariationId}${guard}
   `;
   return affected > 0;
 }
@@ -141,12 +177,25 @@ export async function applyPancakeStock(
 /**
  * Lối thoát CÓ CHỦ ĐÍCH cho admin: tin tuyệt đối số Pancake, xoá mọi giữ chỗ.
  * Dùng khi tồn kho local đã lệch thật và cần đặt lại — không dùng trong luồng tự động.
+ * `readAt` (lúc bắt đầu đọc trang Pancake, giờ máy chủ): mốc đọc chỉ tiến, không lùi — webhook nhận trước lần đọc mà xử lý sau
+ * không ghi đè số vừa đặt lại.
  */
 export async function forcePancakeStock(
   tx: StockExecutor,
   pancakeVariationId: string,
   pancakeStock: number,
+  opts: { readAt?: Date } = {},
 ): Promise<void> {
+  const { readAt } = opts;
+  if (readAt) {
+    await tx.$executeRaw`
+    UPDATE "variations"
+       SET "stock" = ${pancakeStock}, "reservedStock" = 0, "pancakeStock" = ${pancakeStock},
+           "pancakeStockSyncReadAt" = GREATEST("pancakeStockSyncReadAt", ${readAt})
+     WHERE "pancakeId" = ${pancakeVariationId}
+  `;
+    return;
+  }
   await tx.$executeRaw`
     UPDATE "variations"
        SET "stock" = ${pancakeStock}, "reservedStock" = 0, "pancakeStock" = ${pancakeStock}

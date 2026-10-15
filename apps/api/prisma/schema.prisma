@@ -717,9 +717,17 @@ model Variation {
   /// tự trừ tồn khi ta tạo đơn (số giảm ⇒ nhả giữ chỗ) lẫn không tự trừ (số đứng yên ⇒ giữ chỗ
   /// còn nguyên). Xem docs/2026-09-11-P0-3-pancake-stock-decision-brief.md.
   reservedStock Int      @default(0)
-  /// `updated_at` (giờ Pancake) của webhook tồn kho gần nhất đã áp. Webhook cũ hơn mốc này tới sau (Pancake gửi không theo
-  /// thứ tự, BullMQ thử lại) thì không áp. NULL = chưa áp webhook nào có mốc giờ. Đồng bộ danh mục không đọc/ghi cột này.
+  /// `updated_at` (giờ Pancake) của webhook tồn kho gần nhất đã áp. Chỉ so webhook với webhook (Pancake gửi không theo thứ
+  /// tự, BullMQ thử lại): webhook cũ hơn mốc này tới sau thì không áp. NULL = chưa áp webhook nào có mốc giờ. Đồng bộ danh mục
+  /// không đọc/ghi cột này: `updated_at` không mang múi giờ, Node đọc theo múi giờ của tiến trình, nên không bao giờ so nó với
+  /// đồng hồ máy chủ — lượt đồng bộ đi bằng hai cột dưới.
   pancakeStockEventAt DateTime?
+  /// Lúc (giờ máy chủ Tubu) lượt đồng bộ danh mục bắt đầu đọc trang Pancake mang số tồn đang áp. Webhook tồn kho NHẬN trước
+  /// mốc này (hàng đợi chậm, Redis sập rồi xử lý sau) mang số cũ hơn lần đọc nên không áp. NULL = chưa lượt đồng bộ nào áp mốc.
+  pancakeStockSyncReadAt DateTime?
+  /// Lúc (giờ máy chủ Tubu, `PancakeWebhookEvent.receivedAt`) nhận webhook tồn kho muộn nhất đã áp. Lượt đồng bộ bắt đầu đọc
+  /// trước mốc này thì không ghi đè (webhook có thể mới hơn số nó đã đọc). NULL = chưa áp webhook nào kể từ khi có cột.
+  pancakeStockWebhookReceivedAt DateTime?
   isActive      Boolean  @default(true)
   /// Lý do đồng bộ Pancake tự tắt biến thể: REMOVED (Pancake xoá / không còn trong danh mục) | NO_PRICE
   /// (tạo mới mà thiếu giá). NULL = đồng bộ không giữ — isActive=false khi đó là do admin/merchant tắt,

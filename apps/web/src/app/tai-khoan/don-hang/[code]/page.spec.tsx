@@ -243,6 +243,17 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).not.toContain('Chưa thanh toán');
   });
 
+  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không QR, không hạn "tự huỷ", không nút hủy', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2026-10-02T03:00:00Z', canCancel: false, manualHandling: true };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.');
+    expect(mocks.qr.calls).toBe(0);
+    expect(container.textContent).not.toContain('quá hạn đơn sẽ tự huỷ');
+    expect(container.textContent).not.toContain('Thanh toán trước');
+    expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
+    expect(buttons(container).map((b) => b.textContent)).not.toContain('Hủy đơn');
+  });
+
   it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {
     mocks.order = { ...ORDER, status: 'CANCELLED' };
     const { container } = await mount();

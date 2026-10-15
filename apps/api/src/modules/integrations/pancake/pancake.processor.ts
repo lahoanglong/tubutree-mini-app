@@ -100,6 +100,10 @@ function blockedNeedsAttention(err: InvalidOrderTransitionError): boolean {
 /** Mã Pancake POS "Đã gửi hàng". */
 const PANCAKE_STATUS_SHIPPED = 2;
 
+/**
+ * `updated_at` của Pancake. Chuỗi không mang múi giờ nên Node đọc theo múi giờ của tiến trình: chỉ so với mốc cũng đọc bằng
+ * hàm này (Pancake với Pancake), không bao giờ so với đồng hồ máy chủ (R5-SYNC-3).
+ */
 function pancakeTime(v: unknown): Date | null {
   if (typeof v !== 'string' && typeof v !== 'number') return null;
   const d = new Date(v);
@@ -165,7 +169,7 @@ export class PancakeProcessor extends WorkerHost {
 
     try {
       const data = pancakeEventData(event.rawPayload);
-      const outcome = await this.handle(event.eventType, data);
+      const outcome = await this.handle(event.eventType, data, event.receivedAt);
       await this.prisma.pancakeWebhookEvent.update({
         where: { id: event.id },
         data:
@@ -188,7 +192,7 @@ export class PancakeProcessor extends WorkerHost {
     }
   }
 
-  private async handle(eventType: string, data: Record<string, unknown>): Promise<HandleOutcome> {
+  private async handle(eventType: string, data: Record<string, unknown>, receivedAt: Date): Promise<HandleOutcome> {
     if (ORDER_EVENTS.has(eventType)) {
       const match = await this.resolveOrder(data);
       if (match.foreign) {
@@ -219,7 +223,7 @@ export class PancakeProcessor extends WorkerHost {
         await this.onInvoiceIssued(data);
         break;
       case 'variation.stock_changed': {
-        const stale = await this.onStockChanged(data);
+        const stale = await this.onStockChanged(data, receivedAt);
         if (stale) return { ignored: stale };
         break;
       }
@@ -692,8 +696,11 @@ export class PancakeProcessor extends WorkerHost {
     await this.notifications.notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code });
   }
 
-  /** Trả lý do khi bỏ qua sự kiện cũ hơn số đã áp (để ghi IGNORED); undefined = đã áp hoặc không có gì để áp. */
-  private async onStockChanged(data: Record<string, unknown>): Promise<string | undefined> {
+  /**
+   * Trả lý do khi bỏ qua sự kiện cũ hơn số đã áp (để ghi IGNORED); undefined = đã áp hoặc không có gì để áp.
+   * `receivedAt` = lúc Tubu nhận webhook (giờ máy chủ) — mốc duy nhất được so với lượt đồng bộ danh mục.
+   */
+  private async onStockChanged(data: Record<string, unknown>, receivedAt: Date): Promise<string | undefined> {
     const variationId = data['variation_id'] ?? data['id'];
     const stock = data['remain_quantity'];
     if (variationId == null || stock == null) return;
@@ -708,16 +715,24 @@ export class PancakeProcessor extends WorkerHost {
     // giữ chỗ với sync — xem catalog/variation-stock.ts.
     //
     // Pancake không đảm bảo thứ tự giao webhook (và BullMQ thử lại làm lệch thêm): mang updated_at thì chỉ áp khi không cũ
-    // hơn sự kiện đã áp, không thì số cũ tới sau kéo tồn kho lùi lại tới lần đồng bộ danh mục sau (R4-SYNC-2).
+    // hơn sự kiện đã áp (R4-SYNC-2). Nhận trước lúc lượt đồng bộ danh mục đã áp bắt đầu đọc Pancake thì số đồng bộ mới hơn
+    // (R5-SYNC-3).
     const pancakeVariationId = String(variationId);
     const eventAt = pancakeTime(data['updated_at']) ?? undefined;
-    const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { eventAt });
-    if (applied || !eventAt) return;
+    const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { kind: 'webhook', eventAt, receivedAt });
+    if (applied) return;
     const current = await this.prisma.variation.findUnique({
       where: { pancakeId: pancakeVariationId },
-      select: { pancakeStockEventAt: true },
+      select: { pancakeStockEventAt: true, pancakeStockSyncReadAt: true },
     });
-    if (!current?.pancakeStockEventAt) return;
+    if (current?.pancakeStockSyncReadAt && current.pancakeStockSyncReadAt >= receivedAt) {
+      this.logger.warn(`Bỏ qua tồn kho của biến thể Pancake ${pancakeVariationId}: ${n}, nhận trước lượt đồng bộ danh mục.`);
+      return (
+        `Webhook tồn kho (${n}) nhận lúc ${receivedAt.toISOString()}, không sau lúc lượt đồng bộ danh mục bắt đầu đọc số Pancake (` +
+        `${current.pancakeStockSyncReadAt.toISOString()}) — số đồng bộ mới hơn, không áp để tồn kho không lùi.`
+      );
+    }
+    if (!eventAt || !current?.pancakeStockEventAt) return;
     this.logger.warn(`Bỏ qua tồn kho cũ của biến thể Pancake ${pancakeVariationId}: ${n} lúc ${data['updated_at']}.`);
     return (
       `Sự kiện tồn kho cũ hơn số đã áp (${n} lúc ${eventAt.toISOString()}, đã áp sự kiện lúc ` +

@@ -148,10 +148,11 @@ export const orderDetailHref = (code: string): string => `/tai-khoan/don-hang/${
 
 /**
  * Khớp điều kiện của miniapp (`canPayNow`) và của API: GET /payments/bank-qr từ chối đơn đã hủy/trả,
- * nên khung QR chỉ dựng cho đơn còn chờ thanh toán.
+ * nên khung QR chỉ dựng cho đơn còn chờ thanh toán. Hàng đã bàn giao vận chuyển mà chưa nhận tiền (`manualHandling`) thì CSKH
+ * thống nhất cách trả với khách — không mời trả thêm bằng QR để khách không trả hai lần (R5-SYNC-1).
  */
-export const canPayAgain = (o: { status: string; paymentMethod: string }): boolean =>
-  o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
+export const canPayAgain = (o: { status: string; paymentMethod: string; manualHandling?: boolean | null }): boolean =>
+  o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER' && !o.manualHandling;
 
 export function addressLine(
   a: { street?: string | null; ward?: string | null; district?: string | null; province?: string | null } | null | undefined,

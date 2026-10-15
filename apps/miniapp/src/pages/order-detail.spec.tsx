@@ -316,6 +316,26 @@ describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuy
     expect(await screen.findByText('Đã đặt đơn vị vận chuyển')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
   });
+
+  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không hạn "tự huỷ", không nút huỷ hay trả tiền', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      type: 'RETAIL',
+      status: 'PENDING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      paymentDeadline: '2026-10-02T03:00:00.000Z',
+      canCancel: false,
+      manualHandling: true,
+    });
+    renderPage();
+    expect(await screen.findByText('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.')).toBeInTheDocument();
+    expect(screen.queryByText(/quá hạn đơn sẽ tự huỷ/)).toBeNull();
+    expect(screen.queryByText(/Thanh toán trước/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Xem tất cả đơn' })).toBeInTheDocument();
+  });
 });
 
 describe('OrderDetailPage — không dùng emoji làm icon (C-113)', () => {

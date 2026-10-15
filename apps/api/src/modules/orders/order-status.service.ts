@@ -64,6 +64,13 @@ function unpaidExitHint(order: Pick<Order, 'paymentStatus'>): string {
   );
 }
 
+/** Ai hỏi huỷ khi Pancake báo đã bàn giao — mở đầu lý do "Cần xử lý Pancake". */
+const HANDOVER_ASKER: Record<'CUSTOMER' | 'STAFF' | 'SYSTEM', string> = {
+  SYSTEM: 'Hệ thống không tự huỷ được đơn:',
+  CUSTOMER: 'Khách bấm huỷ nhưng',
+  STAFF: 'Người vận hành bấm huỷ nhưng',
+};
+
 /**
  * PAID: lần gọi này lật thanh toán. ALREADY_PAID: đã PAID từ trước (bấm lặp / người khác thắng race).
  * CLOSED: đơn đã huỷ/trả khi CHƯA nhận tiền — tiền về muộn phải hoàn, không "hồi sinh" đơn. NOT_PAYABLE: đã
@@ -169,7 +176,10 @@ export class OrderStatusService {
       try {
         assertPaidBeforeFulfilment({ ...order, onCredit: await this.isOnDealerCredit(order.id) }, from, targetStatus);
       } catch (err) {
-        if (err instanceof UnpaidPrepaidTransitionError && !isHumanActor(opts.actorType)) {
+        // Đơn đã có mốc thôi tự huỷ thì lần nhắc đầu đã nói "hàng đã đi, chưa nhận tiền" — "Đã gửi hàng" báo lại không phải
+        // việc mới, không đưa đơn admin đã xử lý về hàng đợi (R5-SYNC-1). Trạng thái sau đó (đã giao…) vẫn nhắc.
+        const alreadyFlagged = targetStatus === 'SHIPPING' && !!order.autoCancelBlockedAt;
+        if (err instanceof UnpaidPrepaidTransitionError && !isHumanActor(opts.actorType) && !alreadyFlagged) {
           await this.flagDroppedStatus(order.id, order.code, targetStatus);
         }
         throw err;
@@ -488,18 +498,21 @@ export class OrderStatusService {
         });
       }
       if (!(err instanceof PancakeHandedOverError)) throw err;
-      await this.resyncFromPancake(order, err.pancakeStatus);
+      const synced = await this.resyncFromPancake(order, err.pancakeStatus);
+      // Đồng bộ được (đơn đã trả tiền → Đang giao) thì chính trạng thái chặn lần huỷ sau. Không đồng bộ được (đơn trả trước chưa
+      // nhận tiền không được đi tiếp) thì ghi mốc bàn giao: lần huỷ sau bị từ chối ngay mà không hỏi lại Pancake, cron thôi tự
+      // huỷ, và chỉ lần ghi mốc đầu nhắc "Cần xử lý Pancake" (R5-SYNC-1).
+      if (asker === 'SYSTEM' || !synced) {
+        await this.blockAutoCancel(
+          order,
+          `${HANDOVER_ASKER[asker]} Pancake báo đã bàn giao vận chuyển (mã ${err.pancakeStatus}). Kiểm tra thanh toán và giao hàng.` +
+            unpaidExitHint(order),
+        );
+      }
       if (asker === 'STAFF') {
         throw new BadRequestException(
           `Pancake báo đã gửi hàng (mã ${err.pancakeStatus}) — đơn ${order.code} không huỷ được nữa, đã đồng bộ về trạng thái theo Pancake. ` +
             'Liên hệ đơn vị vận chuyển để chặn giao/hoàn hàng; hàng hoàn về kho thì đơn tự huỷ và hoàn tiền, khách đã nhận thì xử lý bằng trả hàng/hoàn tiền.',
-        );
-      }
-      if (asker === 'SYSTEM') {
-        await this.blockAutoCancel(
-          order,
-          `Hệ thống không tự huỷ được đơn: Pancake báo đã bàn giao vận chuyển (mã ${err.pancakeStatus}). Kiểm tra thanh toán và giao hàng.` +
-            unpaidExitHint(order),
         );
       }
       throw new BadRequestException(err.message);
@@ -542,14 +555,20 @@ export class OrderStatusService {
     await this.pancakeHooks?.afterLocalCancel(orderId, decision);
   }
 
-  /** Áp trạng thái Pancake đang báo (vd Đã gửi hàng → SHIPPING) — best-effort, lỗi chuyển trạng thái chỉ log. */
-  private async resyncFromPancake(order: Order, pancakeStatus: number | string): Promise<void> {
+  /**
+   * Áp trạng thái Pancake đang báo (vd Đã gửi hàng → SHIPPING) — best-effort, lỗi chuyển trạng thái chỉ log. false = đơn chưa
+   * theo được Pancake (đơn trả trước chưa nhận tiền không được đi tiếp, mã Pancake không phải trạng thái đơn…).
+   */
+  private async resyncFromPancake(order: Order, pancakeStatus: number | string): Promise<boolean> {
     const action = resolvePancakeStatus(pancakeStatus);
-    if (action?.kind !== 'status' || action.status === order.status) return;
+    if (action?.kind !== 'status') return false;
+    if (action.status === order.status) return true;
     try {
       await this.setStatus(order.id, action.status, { actorType: 'PANCAKE', note: 'Đồng bộ trạng thái Pancake khi yêu cầu huỷ' });
+      return true;
     } catch (err) {
       this.logger.warn(`Không đồng bộ được trạng thái Pancake ${pancakeStatus} cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+      return false;
     }
   }
 
