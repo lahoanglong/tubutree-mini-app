@@ -476,11 +476,12 @@ function StoreSettingsTab({
     setMsg(null);
     mut.mutate({
       title: title.trim(),
-      headerNote: headerNote.trim() || undefined,
+      // Chuỗi rỗng = xoá giá trị đã lưu (API bỏ qua trường vắng mặt); subdomain thì để trống là không đổi.
+      headerNote: headerNote.trim(),
       subdomain: subdomain.trim() || undefined,
       themeColor,
-      coverUrl: coverUrl.trim() || undefined,
-      avatarUrl: avatarUrl.trim() || undefined,
+      coverUrl: coverUrl.trim(),
+      avatarUrl: avatarUrl.trim(),
       isPublished,
     });
   };

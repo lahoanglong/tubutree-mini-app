@@ -285,10 +285,24 @@ describe('cổng đối tác — tab Gian hàng & Subdomain', () => {
       headerNote: 'Sống xanh',
       subdomain: 'minhan',
       themeColor: '#16a34a',
-      coverUrl: undefined,
-      avatarUrl: undefined,
+      coverUrl: '',
+      avatarUrl: '',
       isPublished: true,
     });
+  });
+
+  it('xoá slogan, URL logo và URL ảnh bìa rồi lưu → gửi chuỗi rỗng để API xoá giá trị cũ (không bỏ trường)', async () => {
+    mocks.store = { ...STORE, avatarUrl: 'https://cdn.example/logo.png', coverUrl: 'https://cdn.example/cover.png' };
+    const root = await mount();
+    expect(inputByLabel(root, 'URL Logo thương hiệu').value).toBe('https://cdn.example/logo.png');
+    typeInto(inputByLabel(root, 'Thông điệp thương hiệu'), '  ');
+    typeInto(inputByLabel(root, 'URL Logo thương hiệu'), '');
+    typeInto(inputByLabel(root, 'URL Ảnh bìa'), '   ');
+    click(byText(root, 'button', 'Lưu cấu hình gian hàng'));
+    await flush();
+    const dto = mocks.updateStore.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(dto).toMatchObject({ headerNote: '', avatarUrl: '', coverUrl: '' });
+    expect(JSON.parse(JSON.stringify(dto))).toMatchObject({ headerNote: '', avatarUrl: '', coverUrl: '' });
   });
 
   it('chọn màu chủ đạo: nút đang chọn có aria-pressed và hex được lưu đúng giá trị dữ liệu', async () => {
