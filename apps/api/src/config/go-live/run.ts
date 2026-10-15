@@ -42,7 +42,7 @@ export async function runGoLiveCheck(opts: { env: Env; phase: GoLivePhase }, col
   }
 
   try {
-    results.push(...evaluateRedis(await collectors.redis()));
+    results.push(...evaluateRedis(await collectors.redis(), opts.phase));
   } catch (err) {
     results.push(fail('Redis', 'redis.connect', 'Đọc được Redis', `không đọc được (${describeError(err)})`, 'Kiểm REDIS_URL và container redis đang chạy.'));
   }

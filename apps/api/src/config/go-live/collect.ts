@@ -68,6 +68,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         refill: {
           totalRows: await count('refill_pickup_locations'),
           activeRows: await count('refill_pickup_locations', '"isActive" = true'),
+          tableExists: await exists('refill_pickup_locations'),
         },
         configs,
         adminCount: await count('users', `"role" = 'ADMIN'`),

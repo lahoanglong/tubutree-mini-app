@@ -6,7 +6,7 @@ import {
   QUEUE_PANCAKE_PUSH,
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
-import { fail, pass, warn, type CheckResult } from './types';
+import { fail, pass, warn, type CheckResult, type GoLivePhase } from './types';
 
 const G_REDIS = 'Redis';
 const G_QUEUE = 'Hàng đợi BullMQ';
@@ -42,7 +42,7 @@ const BACKLOG_WAITING = 50;
 
 const mb = (bytes: number) => `${Math.round(bytes / 1024 / 1024)}MB`;
 
-export function evaluateRedis(s: RedisSnapshot): CheckResult[] {
+export function evaluateRedis(s: RedisSnapshot, phase: GoLivePhase = 'post-deploy'): CheckResult[] {
   if (!s.reachable) {
     return [
       fail(G_REDIS, 'redis.reachable', 'Redis kết nối được', s.error ?? 'không kết nối được', 'Kiểm container redis đang chạy và REDIS_URL (compose: redis://redis:6379).'),
@@ -56,6 +56,16 @@ export function evaluateRedis(s: RedisSnapshot): CheckResult[] {
     out.push(warn(G_REDIS, 'redis.policy', policyTitle, 'không đọc được (lệnh CONFIG bị tắt?)', 'Chạy tay: `docker compose -f docker-compose.vietnix.yml exec redis redis-cli config get maxmemory-policy`.'));
   } else if (s.maxmemoryPolicy === 'noeviction') {
     out.push(pass(G_REDIS, 'redis.policy', policyTitle, 'noeviction'));
+  } else if (phase === 'pre-deploy') {
+    out.push(
+      warn(
+        G_REDIS,
+        'redis.policy',
+        policyTitle,
+        `đang là ${s.maxmemoryPolicy}`,
+        'Bình thường trước deploy khi compose cũ còn đặt allkeys-lru: runbook mục 5 bước 5 tạo lại redis bằng compose mới (noeviction), và sau deploy dòng này phải PASS. Đổi ngay không cần khởi động lại: `docker compose -f docker-compose.vietnix.yml exec -T redis redis-cli config set maxmemory-policy noeviction`.',
+      ),
+    );
   } else {
     out.push(
       fail(

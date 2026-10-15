@@ -87,7 +87,9 @@ sudo crontab -l  # xem đã có dòng certbot renew chưa (aaPanel thường t�
 
 > **Bản phát hành có migration đánh giá nhiều lần (`20261015150000`, kèm `20261014213300` và
 > `20261015070000`): KHÔNG dùng `deploy.sh`.** Script áp migration khi API cũ còn chạy, mà migration
-> này đổi chỉ mục duy nhất của bảng `reviews`. Làm theo
+> này đổi chỉ mục duy nhất của bảng `reviews` (nên `deploy.sh` tự dừng, thoát 2 và chưa build gì, khi
+> migration đó chưa áp mà API cũ còn chạy). Danh sách migration thật phải áp có thể dài hơn ba cái này
+> nhiều (xem mục 1.0 của runbook: phải xác định bản đang chạy trước). Làm theo
 > [docs/launch/deploy-rollback-runbook.md](../docs/launch/deploy-rollback-runbook.md): dừng API cũ,
 > backup, migrate, bật web mới rồi API mới, kiểm khói, rollback từng trường hợp. Sau khi lên bản mới,
 > chạy [docs/launch/pilot-order-playbook.md](../docs/launch/pilot-order-playbook.md) (đơn thử thật)
@@ -103,7 +105,7 @@ Các lần phát hành thường (không có migration kiểu trên):
 ```bash
 cd /opt/tubutree
 # 1. Backup trước (bản pre-deploy, ngoài bản cron hằng ngày)
-COMPOSE_FILE=docker-compose.vietnix.yml ./tools/backup/backup-db.sh
+COMPOSE_FILE=docker-compose.vietnix.yml bash tools/backup/backup-db.sh
 # 2. Đưa mã lên (git bundle / git merge --ff-only)
 # 3. Build -> migrate bằng image MỚI -> thay api -> thay web
 bash tools/deploy/deploy.sh
@@ -132,9 +134,14 @@ hỏng nằm ở [runbook deploy](../docs/launch/deploy-rollback-runbook.md) m�
 
 - Redis chạy `--maxmemory 150mb --maxmemory-policy noeviction` (BullMQ bắt buộc noeviction; trước
   đây là `allkeys-lru`, có thể xoá âm thầm job đang chờ retry). Lần deploy đầu sau thay đổi này phải
-  tạo lại container redis: `docker compose -f docker-compose.vietnix.yml up -d redis`, rồi kiểm
-  `docker compose -f docker-compose.vietnix.yml exec redis redis-cli config get maxmemory-policy`.
-- `pnpm run go-live:check` báo FAIL nếu policy không phải `noeviction`; kiểm bằng tay trước deploy theo
+  tạo lại container redis bằng compose MỚI (`docker compose -f docker-compose.vietnix.yml up -d --no-deps redis`,
+  chạy SAU khi đã lấy compose mới về máy chủ: compose cũ vẫn đặt `allkeys-lru` nên chạy lệnh đó trước thì
+  không đổi gì), rồi kiểm
+  `docker compose -f docker-compose.vietnix.yml exec redis redis-cli config get maxmemory-policy`. Muốn đổi
+  ngay mà không khởi động lại: `... exec -T redis redis-cli config set maxmemory-policy noeviction` (mất khi
+  container khởi động lại, nên vẫn phải tạo lại bằng compose mới; runbook mục 1.1 và mục 5 bước 5).
+- `pnpm run go-live:check` báo FAIL nếu policy không phải `noeviction` (chỉ WARN với `--phase=pre-deploy`, vì
+  compose cũ còn đặt `allkeys-lru` cho tới khi redis được tạo lại); kiểm bằng tay theo
   [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.1.
 - Theo dõi bộ nhớ Redis: `docker compose -f docker-compose.vietnix.yml exec redis redis-cli info memory | grep used_memory_human`.
   Gần 150MB thì lệnh ghi lỗi OOM, enqueue rơi về cron reconcile; tìm queue nào ứ (job failed giữ

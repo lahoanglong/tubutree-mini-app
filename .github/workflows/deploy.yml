@@ -60,11 +60,13 @@ jobs:
             COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" POSTGRES_USER="${POSTGRES_USER:-tubu}" POSTGRES_DB="${POSTGRES_DB:-tubutree}" \
               bash tools/backup/backup-db.sh
 
-      - name: Tag previous git SHA để rollback
-        # Compose build local image (không push registry) → không có image tag `previous`.
-        # Thay vào đó lưu SHA hiện tại trước khi pull để rollback bằng:
-        #   ssh VM → cd $DEPLOY_DIR && git checkout $(cat .last-deployed-sha) \
-        #            && COMPOSE_FILE=$COMPOSE_FILE bash tools/deploy/deploy.sh
+      - name: Ghi image đang chạy để quay lại
+        # Compose build image local (không push registry), nên điểm quay lại là IMAGE đang chạy chứ không phải commit.
+        # Làm đúng như bước 2 của docs/launch/deploy-rollback-runbook.md: ghi `.rollback-images` và gắn thẻ `:rollback`
+        # (giữ cho `docker image prune` không xoá mất image cũ). Quay lại theo mục 7 của runbook: 7.2 chỉ quay image, chỉ
+        # đúng khi schema sau migrate vẫn tương thích với image cũ; không thì 7.3 khôi phục bản backup.
+        # KHÔNG checkout commit cũ (`.last-deployed-sha`) rồi chạy lại deploy.sh: script này không có ở commit cũ, và HEAD
+        # tách rời làm `git pull --ff-only` của ops.yml lỗi. `.last-deployed-sha` chỉ để tham khảo.
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_HOST }}
@@ -73,8 +75,18 @@ jobs:
           script: |
             set -e
             cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
-            # Ghi SHA đang chạy (trước khi pull) làm điểm rollback.
             git rev-parse HEAD > .last-deployed-sha || true
+            DC="docker compose -f ${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}"
+            if [ -z "$($DC ps -q api)" ] || [ -z "$($DC ps -q web)" ]; then
+              echo "api hoặc web chưa chạy: không có image để ghi làm điểm quay lại"
+              exit 0
+            fi
+            API_ID=$(docker inspect -f '{{.Image}}' "$($DC ps -q api)"); API_NAME=$(docker inspect -f '{{.Config.Image}}' "$($DC ps -q api)")
+            WEB_ID=$(docker inspect -f '{{.Image}}' "$($DC ps -q web)"); WEB_NAME=$(docker inspect -f '{{.Config.Image}}' "$($DC ps -q web)")
+            printf 'API_ID=%s\nAPI_NAME=%s\nWEB_ID=%s\nWEB_NAME=%s\n' "$API_ID" "$API_NAME" "$WEB_ID" "$WEB_NAME" > .rollback-images
+            docker tag "$API_ID" "${API_NAME%%:*}:rollback"
+            docker tag "$WEB_ID" "${WEB_NAME%%:*}:rollback"
+            cat .rollback-images
 
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -89,4 +101,5 @@ jobs:
             cd "${{ vars.DEPLOY_DIR || '/opt/tubutree' }}"
             git pull --ff-only
             # build → kiểm .env + migrate bằng image mới → thay api → thay web (xem script vì sao thứ tự này).
+            # deploy.sh thoát 2 (chưa build gì) khi bản có migration 20261015150000 mà API cũ còn chạy: làm tay theo runbook.
             COMPOSE_FILE="${{ vars.COMPOSE_FILE || 'docker-compose.vietnix.yml' }}" bash tools/deploy/deploy.sh
