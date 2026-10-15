@@ -193,7 +193,8 @@ export class PancakeSyncService implements OnModuleInit {
             `Đã cập nhật ${count} sản phẩm; không tắt sản phẩm nào, lượt sau sẽ đọc lại.`,
         );
       }
-      // Số tồn kho của trang này đúng tới lúc bắt đầu đọc: webhook tồn kho mang updated_at cũ hơn mốc này tới sau là số lỗi thời.
+      // Số tồn kho của trang này đúng tới lúc bắt đầu đọc (giờ máy chủ): webhook tồn kho NHẬN trước mốc này mà xử lý sau là số
+      // lỗi thời. So bằng lúc nhận chứ không bằng updated_at Pancake — xem PancakeStockOrigin.
       const stockReadAt = new Date();
       const res = await this.client.fetchProducts(page, updatedSince);
       noteExpected(expected, res);
@@ -434,11 +435,11 @@ export class PancakeSyncService implements OnModuleInit {
       });
       // `remain_quantity` vắng mặt (null/undefined) = Pancake KHÔNG nói gì về tồn kho lần này.
       // Trước đây `?? 0` biến "không biết" thành "hết hàng" và xoá sạch tồn của variation đó.
-      // Kèm mốc lúc đọc: webhook mới hơn đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
+      // Kèm lúc đọc: webhook nhận sau lúc đọc đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
       if (v.remain_quantity != null) {
-        const stockOpts = { eventAt: opts.stockReadAt };
-        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity, stockOpts);
-        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity, stockOpts);
+        const readAt = opts.stockReadAt;
+        if (opts.forceStock) await forcePancakeStock(this.prisma, v.id, v.remain_quantity, { readAt });
+        else await applyPancakeStock(this.prisma, v.id, v.remain_quantity, readAt && { kind: 'sync', readAt });
       }
     }
 
