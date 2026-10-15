@@ -69,6 +69,41 @@ describe('resolveOpsEmailConfig', () => {
     expect(resolveOpsEmailConfig({ ...base, SMTP_PORT: '', SMTP_SECURE: 'TRUE' })).toMatchObject({ state: 'ready', smtp: { port: 465, secure: true } });
   });
 
+  describe('SMTP_SECURE', () => {
+    const base = { OPS_ALERT_EMAIL_TO: 'a@x.com', SMTP_HOST: 'h.test', SMTP_FROM: 'f@x.com', SMTP_PORT: '587' };
+    const ACCEPTED_TRUE = ['true', 'yes', '1', 'on'];
+    const ACCEPTED_FALSE = ['false', 'no', '0', 'off'];
+
+    it.each([...ACCEPTED_TRUE, ...ACCEPTED_TRUE.map((v) => v.toUpperCase()), ' Yes '])('nhận %j là true', (v) => {
+      expect(resolveOpsEmailConfig({ ...base, SMTP_SECURE: v })).toMatchObject({ state: 'ready', smtp: { secure: true } });
+    });
+
+    it.each([...ACCEPTED_FALSE, ...ACCEPTED_FALSE.map((v) => v.toUpperCase()), ' Off '])('nhận %j là false', (v) => {
+      expect(resolveOpsEmailConfig({ ...base, SMTP_SECURE: v })).toMatchObject({ state: 'ready', smtp: { secure: false } });
+    });
+
+    it('giá trị lạ → thông báo liệt kê ĐỦ tám giá trị được nhận (true/false/yes/no/1/0/on/off), nêu khoá, không lộ giá trị đã gõ', () => {
+      const r = resolveOpsEmailConfig({ ...base, SMTP_SECURE: 'tls-secret-value' });
+      expect(r.state).toBe('misconfigured');
+      if (r.state !== 'misconfigured') return;
+      expect(r.issues).toHaveLength(1);
+      const { key, message } = r.issues[0]!;
+      expect(key).toBe('SMTP_SECURE');
+      for (const v of [...ACCEPTED_TRUE, ...ACCEPTED_FALSE]) {
+        expect({ v, listed: new RegExp(`(?<![\\w/])${v}(?![\\w])`).test(message) }).toEqual({ v, listed: true });
+      }
+      expect(message).not.toContain('tls-secret-value');
+    });
+
+    it('mọi giá trị mà thông báo liệt kê đều thật sự được nhận (không lệch giữa lời nhắc và luật)', () => {
+      const r = resolveOpsEmailConfig({ ...base, SMTP_SECURE: 'nope' });
+      if (r.state !== 'misconfigured') throw new Error('expected misconfigured');
+      const listed = /chỉ nhận ([^(]+) \(/.exec(r.issues[0]!.message)?.[1]?.split(', ') ?? [];
+      expect(listed.sort()).toEqual([...ACCEPTED_TRUE, ...ACCEPTED_FALSE].sort());
+      for (const v of listed) expect(resolveOpsEmailConfig({ ...base, SMTP_SECURE: v }).state).toBe('ready');
+    });
+  });
+
   it('SMTP_USER là địa chỉ email thì dùng làm địa chỉ gửi khi không đặt SMTP_FROM', () => {
     const r = resolveOpsEmailConfig({ ...FULL, SMTP_FROM: '', SMTP_USER: 'alerts@tubutree.com' });
     expect(r).toMatchObject({ state: 'ready', from: { address: 'alerts@tubutree.com' } });
@@ -84,7 +119,7 @@ describe('resolveOpsEmailConfig', () => {
     ['cổng không phải số', { ...FULL, SMTP_PORT: 'abc' }, ['SMTP_PORT']],
     ['cổng ngoài khoảng', { ...FULL, SMTP_PORT: '70000' }, ['SMTP_PORT']],
     ['cổng thập phân', { ...FULL, SMTP_PORT: '58.7' }, ['SMTP_PORT']],
-    ['SMTP_SECURE không phải true/false', { ...FULL, SMTP_SECURE: 'maybe' }, ['SMTP_SECURE']],
+    ['SMTP_SECURE không thuộc các giá trị được nhận', { ...FULL, SMTP_SECURE: 'maybe' }, ['SMTP_SECURE']],
     ['máy chủ có scheme', { ...FULL, SMTP_HOST: 'smtp://smtp.example.test' }, ['SMTP_HOST']],
     ['máy chủ có khoảng trắng', { ...FULL, SMTP_HOST: 'smtp.example test' }, ['SMTP_HOST']],
     ['địa chỉ gửi sai', { ...FULL, SMTP_FROM: 'không-phải-email' }, ['SMTP_FROM']],

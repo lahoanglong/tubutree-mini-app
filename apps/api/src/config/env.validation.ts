@@ -59,7 +59,7 @@ export const envSchema = z.object({
   OPS_ALERT_EMAIL_TO: z.string().default(''), // nhiều địa chỉ cách nhau bằng dấu phẩy hoặc chấm phẩy
   SMTP_HOST: z.string().default(''),
   SMTP_PORT: z.string().default(''), // rỗng = 587 (hoặc 465 khi SMTP_SECURE=true)
-  SMTP_SECURE: z.string().default(''), // true = TLS ngay từ đầu (cổng 465); false = STARTTLS
+  SMTP_SECURE: z.string().default(''), // true/yes/1/on = TLS ngay từ đầu (cổng 465); false/no/0/off = STARTTLS
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   SMTP_FROM: z.string().default(''), // alerts@tubutree.com hoặc Tubu Tree <alerts@tubutree.com>

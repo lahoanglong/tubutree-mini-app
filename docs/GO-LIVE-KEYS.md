@@ -285,7 +285,7 @@ sau gửi lại riêng email; kênh đã gửi được không bị gửi lại)
 | `OPS_ALERT_EMAIL_TO` | Người nhận, cách nhau bằng dấu phẩy hoặc chấm phẩy; mỗi địa chỉ được kiểm tra |
 | `SMTP_HOST` | Máy chủ SMTP (chỉ tên máy chủ/IP, không kèm `smtp://` hay cổng) |
 | `SMTP_PORT` | Để trống = 587 (465 khi `SMTP_SECURE=true`) |
-| `SMTP_SECURE` | `true` = TLS ngay từ đầu (thường cổng 465); `false`/trống = STARTTLS (cổng 587). Có tài khoản mà không dùng TLS ngay từ đầu thì bắt buộc STARTTLS, không gửi mật khẩu dạng thô |
+| `SMTP_SECURE` | Nhận `true`/`false`/`yes`/`no`/`1`/`0`/`on`/`off` (không phân biệt hoa thường), giá trị khác thì API không khởi động. `true` = TLS ngay từ đầu (thường cổng 465); `false`/trống = STARTTLS (cổng 587). Có tài khoản mà không dùng TLS ngay từ đầu thì bắt buộc STARTTLS, không gửi mật khẩu dạng thô |
 | `SMTP_USER`, `SMTP_PASS` | Tài khoản đăng nhập SMTP, đi **cặp** (cả hai hoặc không cái nào). Mật khẩu nên là mật khẩu ứng dụng, không chứa `$` hay dấu nháy |
 | `SMTP_FROM` | Địa chỉ gửi: `alerts@tubutree.com` hoặc `Tubu Tree <alerts@tubutree.com>`. Để trống thì dùng `SMTP_USER` nếu nó là địa chỉ email |
 | `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod. Tối đa 24 ký tự, một dòng, không chứa `[` `]`. **Không bí mật**: đặt bằng biến GitHub (`gh variable set`), không dùng `gh secret set` |

@@ -57,8 +57,13 @@ function parseSender(raw: string): OpsEmailSender | null {
   return name ? { name, address } : { address };
 }
 
-const BOOL_TRUE = new Set(['true', '1', 'yes', 'on']);
-const BOOL_FALSE = new Set(['false', '0', 'no', 'off']);
+export const SMTP_SECURE_TRUE = ['true', 'yes', '1', 'on'] as const;
+export const SMTP_SECURE_FALSE = ['false', 'no', '0', 'off'] as const;
+const BOOL_TRUE: ReadonlySet<string> = new Set(SMTP_SECURE_TRUE);
+const BOOL_FALSE: ReadonlySet<string> = new Set(SMTP_SECURE_FALSE);
+const SMTP_SECURE_HELP =
+  `SMTP_SECURE chỉ nhận ${[...SMTP_SECURE_TRUE, ...SMTP_SECURE_FALSE].join(', ')} (không phân biệt hoa thường): ` +
+  `${SMTP_SECURE_TRUE.join('/')} = TLS ngay từ đầu (thường cổng 465), ${SMTP_SECURE_FALSE.join('/')} = STARTTLS (thường cổng 587); để trống thì theo cổng.`;
 const HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^\[[0-9A-Fa-f:.]+\]$/;
 
 /**
@@ -96,7 +101,7 @@ export function resolveOpsEmailConfig(env: Partial<Record<OpsEmailKey, unknown>>
   if (secureRaw) {
     if (BOOL_TRUE.has(secureRaw)) secure = true;
     else if (BOOL_FALSE.has(secureRaw)) secure = false;
-    else bad('SMTP_SECURE', 'SMTP_SECURE chỉ nhận true hoặc false (true = TLS ngay từ đầu, thường cổng 465).');
+    else bad('SMTP_SECURE', SMTP_SECURE_HELP);
   }
 
   const user = v('SMTP_USER');
