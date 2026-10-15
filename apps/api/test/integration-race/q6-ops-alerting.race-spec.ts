@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsWebhookEventsService } from '../../src/modules/ops/ops-webhook-events.service';
@@ -213,6 +214,67 @@ describe('q6 báo động vận hành (real Postgres)', () => {
 
     await expect(health.checkAndAlert(new Date(t0.getTime() + 5 * 60_000 + 1000))).resolves.toMatchObject({ sent: null });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  describe('OPS-8: hook trả 4xx là lỗi vĩnh viễn, không gửi lại mỗi 5 phút', () => {
+    const HOOK_URL = 'https://hooks.slack.com/services/T0/B0/SECRETTOKEN';
+    const webhookWarnings = (warn: jest.SpyInstance) => warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('Webhook báo động'));
+
+    it.each([400, 401, 403, 404, 410])('HTTP %i: cảnh báo đúng một lần (không URL/bí mật), không đặt webhookPending, lượt sau không gửi lại', async (status) => {
+      env.OPS_ALERT_WEBHOOK_URL = HOOK_URL;
+      queueFailures['notifications'] = 9;
+      fetchMock.mockResolvedValue({ ok: false, status });
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      try {
+        const t0 = new Date();
+        await expect(health.checkAndAlert(t0)).resolves.toMatchObject({ sent: 'ALERT' });
+        expect((await prisma.opsHealthState.findUniqueOrThrow({ where: { key: 'alert' } })).detail).not.toHaveProperty('webhookPending');
+        for (const m of [5, 10, 15]) await expect(health.checkAndAlert(new Date(t0.getTime() + m * 60_000))).resolves.toMatchObject({ sent: null });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const lines = webhookWarnings(warn);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain(`HTTP ${status}`);
+        expect(lines[0]).not.toContain('SECRETTOKEN');
+        expect(lines[0]).not.toContain('hooks.slack.com');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([408, 429, 500, 503])('HTTP %i (tạm thời): vẫn nhớ webhookPending và gửi lại ở lượt sau', async (status) => {
+      env.OPS_ALERT_WEBHOOK_URL = HOOK_URL;
+      queueFailures['notifications'] = 9;
+      fetchMock.mockResolvedValue({ ok: false, status });
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      try {
+        const t0 = new Date();
+        await health.checkAndAlert(t0);
+        expect((await prisma.opsHealthState.findUniqueOrThrow({ where: { key: 'alert' } })).detail).toMatchObject({ webhookPending: true });
+        await health.checkAndAlert(new Date(t0.getTime() + 5 * 60_000));
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(webhookWarnings(warn).every((m) => m.includes('gửi lại ở lượt kiểm sau'))).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('hook bị thu hồi rồi có sự cố MỚI: vẫn thử một lần cho quyết định mới (URL có thể đã được sửa), không tích lại', async () => {
+      env.OPS_ALERT_WEBHOOK_URL = HOOK_URL;
+      queueFailures['notifications'] = 9;
+      fetchMock.mockResolvedValue({ ok: false, status: 404 });
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      try {
+        const t0 = new Date();
+        await health.checkAndAlert(t0);
+        queueFailures['pancake-push'] = 9;
+        await expect(health.checkAndAlert(new Date(t0.getTime() + 5 * 60_000))).resolves.toMatchObject({ sent: 'ALERT' });
+        await health.checkAndAlert(new Date(t0.getTime() + 10 * 60_000));
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(webhookWarnings(warn)).toHaveLength(2);
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   it('đơn cần xử lý Pancake là một sự cố, kèm mã đơn', async () => {

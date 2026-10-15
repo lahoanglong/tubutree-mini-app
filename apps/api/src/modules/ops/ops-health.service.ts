@@ -107,6 +107,15 @@ function refs<T>(rows: T[], ref: (r: T) => string | null): string[] {
     .slice(0, REFS_IN_ALERT);
 }
 
+function sameKeys(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((k) => b.includes(k));
+}
+
+/** 4xx là lỗi của chính yêu cầu/hook (hook bị thu hồi 404/410, thân bị từ chối 400, hết quyền 401/403): gửi lại y hệt không bao giờ khá hơn. 408/429 là tạm thời. */
+function isPermanentWebhookStatus(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export type QueueHealth =
   | { ok: true; items: { name: string; waiting: number; active: number; delayed: number; failed: number; failedLastHour: number }[] }
   | { ok: false; error: string };
@@ -411,7 +420,8 @@ export class OpsHealthService {
    *
    * Riêng email có lỗi vĩnh viễn (sai tài khoản/mật khẩu SMTP, máy chủ từ chối hẳn): nhớ `emailBlocked` thay vì
    * `emailPending`, KHÔNG gửi lại mỗi 5 phút (đập vào Gmail/Workspace có thể khoá tài khoản gửi). Chỉ thử lại khi cấu hình đổi,
-   * admin gửi email thử thành công, hoặc có quyết định ALERT/RECOVERED mới.
+   * admin gửi email thử thành công, hoặc bộ sự cố đổi (quyết định ALERT có loại sự cố mới, hay RECOVERED) — đúng một lần mỗi
+   * lần đổi; hàng việc tăng thêm và nhắc lại sau `repeatHours` không thử lại email trong lúc bị chặn.
    */
   async checkAndAlert(now = new Date()): Promise<{ sent: 'ALERT' | 'RECOVERED' | null; problems: OpsProblem[] }> {
     const snap = await this.snapshot(now);
@@ -432,7 +442,13 @@ export class OpsHealthService {
     const since = send ? (prev?.alertSince ?? null) : null;
     const webhookKind = send ?? (detail?.webhookPending ? retryKind : null);
     let emailKind = send ?? (detail?.emailPending ? retryKind : null);
-    if (!emailKind && detail?.emailBlocked && (await this.emailBlockLifted())) emailKind = retryKind;
+    if (detail?.emailBlocked) {
+      if (await this.emailBlockLifted()) emailKind ??= retryKind;
+      // Hàng việc tăng thêm / nhắc lại cũng là quyết định ALERT nhưng không phải tình huống mới: chỉ bộ sự cố đổi (có loại
+      // sự cố mới, hoặc hết sự cố) mới đáng một lần thử lại với thông tin đăng nhập đã biết là sai.
+      else if (!sameKeys(prev?.keys ?? [], next.keys)) emailKind = send;
+      else emailKind = null;
+    }
     const [webhookOk, emailOutcome] = await Promise.all([
       webhookKind ? this.sendWebhook(webhookKind, snap.problems, since, now) : true,
       emailKind ? this.sendEmail(emailKind, snap.problems, since, now) : null,
@@ -470,7 +486,7 @@ export class OpsHealthService {
     ).catch((e: unknown) => this.logger.warn(`Báo admin sức khoẻ vận hành lỗi: ${e instanceof Error ? e.message : e}`));
   }
 
-  /** true = đã gửi được, hoặc không cần gửi (chưa đặt URL). */
+  /** true = đã gửi được, không cần gửi (chưa đặt URL), hoặc bị từ chối vĩnh viễn (4xx trừ 408/429) nên không có gì để gửi lại. */
   private async sendWebhook(kind: 'ALERT' | 'RECOVERED', problems: OpsProblem[], since: Date | null, now: Date): Promise<boolean> {
     const url = String(this.config.get('OPS_ALERT_WEBHOOK_URL', { infer: true }) ?? '').trim();
     const send = this.fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined);
@@ -483,6 +499,10 @@ export class OpsHealthService {
         signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       });
       if (res.ok) return true;
+      if (isPermanentWebhookStatus(res.status)) {
+        this.logger.warn(`Webhook báo động vận hành bị từ chối HTTP ${res.status} (lỗi vĩnh viễn) — không gửi lại; kiểm tra OPS_ALERT_WEBHOOK_URL.`);
+        return true;
+      }
       this.logger.warn(`Webhook báo động vận hành trả HTTP ${res.status} — gửi lại ở lượt kiểm sau.`);
     } catch (e) {
       this.logger.warn(`Webhook báo động vận hành lỗi: ${e instanceof Error ? e.message : e} — gửi lại ở lượt kiểm sau.`);
