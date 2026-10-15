@@ -158,6 +158,16 @@ export function refundNote(refund: RefundOutcome | null, bank: { bankName?: stri
 }
 
 /**
+ * Người duyệt/nhận hàng không được là người đã gửi yêu cầu: duyệt hoàn tiền vào Ví ngay trước khi hàng về nên tự duyệt đơn
+ * của mình là tự rút tiền. Áp cho mọi vai trò (chủ shop thử bằng tài khoản thứ hai).
+ */
+function assertNotOwnReturn(actorId: string, req: { userId: string }): void {
+  if (req.userId === actorId) {
+    throw new ForbiddenException('Bạn không thể tự xử lý yêu cầu đổi/trả của chính mình. Vui lòng nhờ người khác trong đội ngũ duyệt.');
+  }
+}
+
+/**
  * Trả hàng theo dòng và số lượng (D3, BUYERMINI-11/MONEY-7/ADMINOPS-6). Khách chọn dòng + số lượng + lý do + nơi nhận
  * tiền; admin xem số tiền tính sẵn rồi xác nhận; tiền/điểm/hoa hồng đảo theo phần; kho chỉ cộng khi admin bấm
  * "Đã nhận hàng về". Lần trả nốt mọi dòng còn lại chuyển đơn sang RETURNED và đi đường đảo cả đơn (trừ phần đã hoàn).
@@ -331,6 +341,7 @@ export class OrderReturnsService {
   ) {
     const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
+    assertNotOwnReturn(adminId, req);
     const note = input.note?.trim() || undefined;
 
     if (!input.approve) {
@@ -538,6 +549,7 @@ export class OrderReturnsService {
     ) {
       throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
     }
+    assertNotOwnReturn(actor.userId, req);
     const restocked = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.returnRequest.updateMany({
         where: { id, status: 'APPROVED', receivedAt: null },
