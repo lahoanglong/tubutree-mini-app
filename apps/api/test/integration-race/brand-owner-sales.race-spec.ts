@@ -126,4 +126,64 @@ describe('BrandService.getOwnedSales (real Postgres)', () => {
       expect(json).not.toContain(secret);
     }
   });
+
+  describe('trả một phần (APPROVED, fullReturn=false) bị trừ khỏi số đơn vị, doanh thu, SP bán chạy', () => {
+    async function scenario() {
+      const customer = await createUser(prisma);
+      const owner = await createUser(prisma);
+      const brand = await prisma.brand.create({ data: { slug: `it-pr-${tag}-${randCode(4)}`.toLowerCase(), name: `IT PR ${tag}${randCode(4)}`, ownerUserId: owner.id } });
+      const p = await product(brand.id, 'SP tra mot phan', 2);
+      const order = await createOrder(prisma, {
+        userId: customer.id, status: 'DELIVERED', paymentStatus: 'PAID', total: 400_000,
+        items: { create: [line(p.variations[0]!, 'SP tra mot phan', 3, 300_000), line(p.variations[1]!, 'SP tra mot phan', 1, 100_000)] },
+      });
+      const items = await prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { total: 'desc' } });
+      const ret = (lines: { id: string; quantity: number }[], extra: Partial<{ status: 'APPROVED' | 'REQUESTED' | 'REJECTED'; fullReturn: boolean }> = {}) =>
+        prisma.returnRequest.create({
+          data: {
+            orderId: order.id, userId: customer.id, reason: 'IT', status: extra.status ?? 'APPROVED', fullReturn: extra.fullReturn ?? false,
+            items: { create: lines.map((l) => ({ orderItemId: l.id, quantity: l.quantity })) },
+          },
+        });
+      return { owner, p, order, items, ret };
+    }
+
+    it('đơn không trả: như cũ', async () => {
+      const { owner, p } = await scenario();
+      const out = await brands.getOwnedSales(owner.id, '30d');
+      expect(out).toMatchObject({ orderCount: 1, unitsSold: 4, revenue: 400_000, delivered: { orderCount: 1, revenue: 400_000 } });
+      expect(out.topProducts).toEqual([{ productId: p.product.id, name: 'SP tra mot phan', slug: p.product.slug, quantity: 4, revenue: 400_000 }]);
+    });
+
+    it('đơn 3 đơn vị, trả 1: số đơn vị và doanh thu giảm đúng một phần ba dòng', async () => {
+      const { owner, items, ret } = await scenario();
+      await ret([{ id: items[0]!.id, quantity: 1 }]);
+      const out = await brands.getOwnedSales(owner.id, '30d');
+      expect(out.unitsSold).toBe(3);
+      expect(out.revenue).toBe(300_000);
+      expect(out.delivered).toEqual({ orderCount: 1, revenue: 300_000 });
+      expect(out.topProducts[0]).toMatchObject({ quantity: 3, revenue: 300_000 });
+      expect(out.orderCount).toBe(1);
+    });
+
+    it('nhiều lần trả cộng dồn; trả hết các dòng có tiền thì về 0', async () => {
+      const { owner, items, ret } = await scenario();
+      await ret([{ id: items[0]!.id, quantity: 1 }]);
+      await ret([{ id: items[0]!.id, quantity: 1 }]);
+      expect((await brands.getOwnedSales(owner.id, '30d')).revenue).toBe(200_000);
+      await ret([{ id: items[0]!.id, quantity: 1 }, { id: items[1]!.id, quantity: 1 }]);
+      const out = await brands.getOwnedSales(owner.id, '30d');
+      expect(out).toMatchObject({ unitsSold: 0, revenue: 0, delivered: { revenue: 0 } });
+      expect(out.topProducts[0]).toMatchObject({ quantity: 0, revenue: 0 });
+    });
+
+    it('yêu cầu chưa duyệt / bị từ chối / trả nốt (fullReturn) không bị trừ ở đây', async () => {
+      const { owner, items, ret } = await scenario();
+      await ret([{ id: items[0]!.id, quantity: 1 }], { status: 'REQUESTED' });
+      await ret([{ id: items[0]!.id, quantity: 1 }], { status: 'REJECTED' });
+      await ret([{ id: items[0]!.id, quantity: 1 }], { fullReturn: true });
+      const out = await brands.getOwnedSales(owner.id, '30d');
+      expect(out).toMatchObject({ unitsSold: 4, revenue: 400_000 });
+    });
+  });
 });

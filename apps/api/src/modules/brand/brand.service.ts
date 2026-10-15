@@ -545,6 +545,9 @@ export class BrandService {
    * Doanh thu = tổng `OrderItem.total` của các dòng thuộc SP của nhãn (giá bán gốc × số lượng, trước mã giảm
    * giá toàn đơn và chưa gồm phí ship — giảm giá theo đơn không chia được cho từng nhãn một cách công bằng).
    * Một đơn có hàng của nhiều nhãn chỉ tính phần dòng của nhãn này. `now` truyền vào để test tất định.
+   * Đơn vị đã trả MỘT PHẦN (yêu cầu trả APPROVED, fullReturn = false — cùng bộ lọc partialReturnTotals) bị trừ khỏi số đơn vị
+   * và khỏi doanh thu theo CÙNG cơ sở `OrderItem.total`: phần còn lại = total − round(total × đã trả / số lượng), trả hết dòng = 0.
+   * Số đơn (orderCount) không đổi: đơn vẫn là đơn đã bán dù một phần bị trả.
    */
   async getOwnedSales(userId: string, period: BrandSalesPeriod = '30d', now: Date = new Date()) {
     const brand = await this.assertOwnedBrand(userId);
@@ -598,6 +601,20 @@ export class BrandService {
       row.revenue += lineRevenue;
       byProduct.set(product.id, row);
     }
+    const returned = await this.partialReturnAdjustments(orderWhere, hasBrandLine, variationIds, from);
+    let deliveredRevenue = deliveredLines._sum.total ?? 0;
+    for (const r of returned) {
+      const product = productOf.get(r.variationId);
+      if (!product) continue;
+      revenue -= r.revenue;
+      unitsSold -= r.quantity;
+      if (r.delivered) deliveredRevenue -= r.revenue;
+      const row = byProduct.get(product.id);
+      if (row) {
+        row.quantity -= r.quantity;
+        row.revenue -= r.revenue;
+      }
+    }
     const topProducts = [...byProduct.values()]
       .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
       .slice(0, SALES_TOP_PRODUCTS);
@@ -607,9 +624,47 @@ export class BrandService {
       orderCount,
       unitsSold,
       revenue,
-      delivered: { orderCount: deliveredOrderCount, revenue: deliveredLines._sum.total ?? 0 },
+      delivered: { orderCount: deliveredOrderCount, revenue: deliveredRevenue },
       topProducts,
     };
+  }
+
+  /**
+   * Phần đã trả một phần (đơn vị + giá trị theo `OrderItem.total`) của các dòng thuộc biến thể của nhãn, trong các đơn đã lọt
+   * `orderWhere`. Hai truy vấn gộp cho mọi đơn: yêu cầu trả đã duyệt (chỉ lấy từ `from` vì yêu cầu không thể có trước đơn) rồi
+   * các đơn tương ứng kèm dòng hàng.
+   */
+  private async partialReturnAdjustments(
+    orderWhere: Prisma.OrderWhereInput,
+    hasBrandLine: Prisma.OrderItemListRelationFilter,
+    variationIds: string[],
+    from: Date,
+  ): Promise<{ variationId: string; quantity: number; revenue: number; delivered: boolean }[]> {
+    const requests = await this.prisma.returnRequest.findMany({
+      where: { status: 'APPROVED', fullReturn: false, createdAt: { gte: from } },
+      select: { orderId: true, items: { select: { orderItemId: true, quantity: true } } },
+    });
+    if (requests.length === 0) return [];
+    const qtyByItem = new Map<string, number>();
+    for (const r of requests) {
+      for (const it of r.items) qtyByItem.set(it.orderItemId, (qtyByItem.get(it.orderItemId) ?? 0) + it.quantity);
+    }
+    const orders = await this.prisma.order.findMany({
+      where: { ...orderWhere, id: { in: [...new Set(requests.map((r) => r.orderId))] }, items: hasBrandLine },
+      select: { status: true, items: { select: { id: true, variationId: true, quantity: true, total: true } } },
+    });
+    const brandVariations = new Set(variationIds);
+    const out: { variationId: string; quantity: number; revenue: number; delivered: boolean }[] = [];
+    for (const order of orders) {
+      for (const it of order.items) {
+        if (!brandVariations.has(it.variationId)) continue;
+        const q = Math.min(qtyByItem.get(it.id) ?? 0, it.quantity);
+        if (q <= 0 || it.quantity <= 0) continue;
+        const revenue = q >= it.quantity ? it.total : Math.round((it.total * q) / it.quantity);
+        out.push({ variationId: it.variationId, quantity: q, revenue, delivered: order.status === 'DELIVERED' });
+      }
+    }
+    return out;
   }
 
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */
