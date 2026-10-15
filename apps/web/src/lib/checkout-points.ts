@@ -2,6 +2,8 @@ const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as 
 /** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
 export const formatCount = (n: number) => n.toLocaleString('vi-VN');
 const group = formatCount;
+const CONVERTED_FULL_VALUE = ', trả tới 100% giá trị hàng';
+const convertedPointsNote = (converted: number) => `trong đó ${group(converted)} điểm không hết hạn`;
 
 /**
  * Điểm Xanh khách thấy: MỘT con số = lô thường (có hạn) + lô quy đổi từ xu cũ (không hết hạn, tiền trả trước).
@@ -19,8 +21,16 @@ export function pointsSummary(u: { pointsBalance: number; pointsConvertedBalance
     standard,
     converted,
     total: standard + converted,
-    convertedNote: converted > 0 ? `trong đó ${group(converted)} điểm không hết hạn` : null,
+    convertedNote: converted > 0 ? convertedPointsNote(converted) : null,
   };
+}
+
+export interface CheckoutPointsOffer {
+  usable: number;
+  /** Phần lô quy đổi trong `usable`. */
+  converted: number;
+  lockNote: string | null;
+  convertedNote: string | null;
 }
 
 /**
@@ -41,17 +51,30 @@ export function checkoutPointsOffer(
         redeemableConvertedPoints?: number;
       }
     | undefined,
-): { usable: number; lockNote: string | null; convertedNote: string | null } {
-  if (!quote) return { usable: 0, lockNote: null, convertedNote: null };
+): CheckoutPointsOffer {
+  if (!quote) return { usable: 0, converted: 0, lockNote: null, convertedNote: null };
   const balance = clamp(quote.pointsBalance);
   const standardUsable = Math.min(balance, clamp(quote.redeemablePoints ?? balance));
   const held = balance - standardUsable;
   const converted = clamp(quote.redeemableConvertedPoints ?? quote.pointsConvertedBalance);
   return {
     usable: standardUsable + converted,
+    converted,
     lockNote: held > 0 ? `${held} điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được` : null,
-    convertedNote: converted > 0 ? `trong đó ${group(converted)} điểm không hết hạn, trả tới 100% giá trị hàng` : null,
+    convertedNote: converted > 0 ? `${convertedPointsNote(converted)}${CONVERTED_FULL_VALUE}` : null,
   };
+}
+
+/**
+ * Dòng điểm quy đổi dưới ô Điểm Xanh. Lô quy đổi trả tới 100% giá trị hàng, nhưng đơn bị trần (giỏ có hàng của gian hàng đối
+ * tác, hoặc trần theo giá trị hàng thấp hơn số dùng được) thì không hứa câu đó, chỉ nói phần không hết hạn — cùng luật Mini App.
+ */
+export function convertedPointsLine(
+  offer: CheckoutPointsOffer,
+  cap: { capNote: string | null; partnerNote: string | null },
+): string | null {
+  if (offer.converted <= 0) return null;
+  return cap.capNote || cap.partnerNote ? convertedPointsNote(offer.converted) : offer.convertedNote;
 }
 
 /**

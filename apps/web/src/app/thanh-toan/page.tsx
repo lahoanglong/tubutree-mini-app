@@ -23,7 +23,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { recyclingCheckoutFields } from '@/lib/recycling';
-import { checkoutPointsOffer, pointsCapState, zeroTotalNote } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -109,8 +109,9 @@ export default function CheckoutPage() {
   // PHẢI là state: dùng useRef thì lần ghi trong effect không kích hoạt render nào nữa, mà render
   // có quote chính là render cuối của luồng khởi động (refetchOnWindowFocus đang tắt) — ô "Dùng
   // Điểm Xanh" sẽ KHÔNG BAO GIỜ hiện, tức tính năng vừa thêm không dùng được.
-  const [pointsOffer, setPointsOffer] = useState<{ usable: number; lockNote: string | null; convertedNote: string | null }>({
+  const [pointsOffer, setPointsOffer] = useState<CheckoutPointsOffer>({
     usable: 0,
+    converted: 0,
     lockNote: null,
     convertedNote: null,
   });
@@ -142,6 +143,7 @@ export default function CheckoutPage() {
   const quote = quoteQ.isError ? undefined : quoteQ.data;
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
+  const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -547,7 +549,7 @@ export default function CheckoutPage() {
           )}
           {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.capNote}</p>}
           {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
-          {pointsOffer.convertedNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.convertedNote}</p>}
+          {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
             <span>Tổng cộng</span>
