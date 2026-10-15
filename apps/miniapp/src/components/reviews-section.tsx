@@ -476,6 +476,13 @@ function WriteReview({
       />
       <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} max={5} />
       <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} />
+      {(purchaseCount > 1 || isEdit) && orderCode && (
+        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
+          {isEdit
+            ? `Bạn đang sửa đánh giá cho đơn ${orderCode}.`
+            : `Bạn đã mua sản phẩm này ${purchaseCount} lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn ${orderCode}.`}
+        </Text>
+      )}
       {(isEdit || showReward) && (
         <Text
           variant="caption"
@@ -490,13 +497,6 @@ function WriteReview({
               : images.length > 0
                 ? `${FIRST_REVIEW_ONLY}, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.`
                 : `${FIRST_REVIEW_ONLY}: thêm video +15 / ảnh +10 Điểm Xanh (chỉ chữ +5). Chỉ đánh giá SP đã mua & nhận.`}
-        </Text>
-      )}
-      {(purchaseCount > 1 || isEdit) && orderCode && (
-        <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
-          {isEdit
-            ? `Bạn đang sửa đánh giá cho đơn ${orderCode}.`
-            : `Bạn đã mua sản phẩm này ${purchaseCount} lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn ${orderCode}.`}
         </Text>
       )}
       {!isEdit && !showReward && (
