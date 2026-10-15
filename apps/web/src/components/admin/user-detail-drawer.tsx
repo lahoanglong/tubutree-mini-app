@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { formatDateTime } from '@/lib/format-date';
+import { pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_PRIMARY, Notice, ToneBadge } from './ui';
@@ -143,8 +144,8 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
           <ul className="divide-y divide-stone-100">
             {d.wallet.map((w) => (
               <li key={w.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
-                <span className="min-w-0">
-                  {w.reason ?? w.type}
+                <span className="min-w-0 break-words">
+                  {w.reason ?? walletTxLabel(w.type)}
                   <span className="block text-xs text-stone-500">{formatDateTime(w.createdAt)}</span>
                 </span>
                 <span className="text-right">
@@ -167,8 +168,8 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
           <ul className="divide-y divide-stone-100">
             {d.points.map((p) => (
               <li key={p.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
-                <span className="min-w-0">
-                  {p.reason}
+                <span className="min-w-0 break-words">
+                  {pointsReasonDetail(p.reason)}
                   <span className="block text-xs text-stone-500">
                     {formatDateTime(p.createdAt)}
                     {p.expiresAt && ` · hết hạn ${formatDateTime(p.expiresAt)}`}
