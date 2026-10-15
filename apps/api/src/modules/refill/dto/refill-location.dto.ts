@@ -1,4 +1,5 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { PICKUP_LOCATION_PHONE_PATTERN } from '../../../common/phone';
 
@@ -10,6 +11,15 @@ export const REFILL_LOCATION_HOURS_MAX = 120;
 const OPTIONAL_PHONE = new RegExp(`^(${PICKUP_LOCATION_PHONE_PATTERN.source})?$`);
 const PHONE_MESSAGE =
   'SĐT điểm nhận phải để trống hoặc là di động (10 số bắt đầu bằng 0 hoặc +84), số bàn (02…, 10–11 số) hoặc tổng đài 1800/1900 (viết liền, không dấu cách).';
+
+/**
+ * PATCH bỏ trường = giữ nguyên, nhưng `null` khác "bỏ trường": cột name/address/isActive là NOT NULL nên null lọt vào
+ * Prisma sẽ thành lỗi 500. @IsOptional cũng cho qua null, vì vậy các trường này dùng @ValidateIf chỉ bỏ qua khi undefined.
+ */
+const present = (key: keyof UpdateRefillLocationDto) => (o: UpdateRefillLocationDto) => o[key] !== undefined;
+
+/** null ở tên/địa chỉ coi như để trống: chỉ còn đúng một câu "không được để trống" (không kèm "dài quá…" / "phải là chuỗi" khó hiểu). */
+const NullAsEmpty = () => Transform(({ value }: { value: unknown }) => (value === null ? '' : value));
 
 export class CreateRefillLocationDto {
   @Trim() @IsString({ message: 'Tên điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Tên điểm nhận không được để trống.' })
@@ -27,16 +37,16 @@ export class CreateRefillLocationDto {
   @IsOptional() @Trim() @IsString({ message: PHONE_MESSAGE }) @Matches(OPTIONAL_PHONE, { message: PHONE_MESSAGE })
   phone?: string | null;
 
-  @IsOptional() @IsBoolean({ message: 'Trạng thái hoạt động chỉ nhận đúng hoặc sai.' })
+  @ValidateIf((o: CreateRefillLocationDto) => o.isActive !== undefined) @IsBoolean({ message: 'Trạng thái hoạt động chỉ nhận đúng hoặc sai.' })
   isActive?: boolean;
 }
 
 export class UpdateRefillLocationDto {
-  @IsOptional() @Trim() @IsString({ message: 'Tên điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Tên điểm nhận không được để trống.' })
+  @ValidateIf(present('name')) @NullAsEmpty() @Trim() @IsString({ message: 'Tên điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Tên điểm nhận không được để trống.' })
   @MaxLength(REFILL_LOCATION_NAME_MAX, { message: `Tên điểm nhận không được dài quá ${REFILL_LOCATION_NAME_MAX} ký tự.` })
   name?: string;
 
-  @IsOptional() @Trim() @IsString({ message: 'Địa chỉ điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Địa chỉ điểm nhận không được để trống.' })
+  @ValidateIf(present('address')) @NullAsEmpty() @Trim() @IsString({ message: 'Địa chỉ điểm nhận phải là chuỗi ký tự.' }) @IsNotEmpty({ message: 'Địa chỉ điểm nhận không được để trống.' })
   @MaxLength(REFILL_LOCATION_ADDRESS_MAX, { message: `Địa chỉ điểm nhận không được dài quá ${REFILL_LOCATION_ADDRESS_MAX} ký tự.` })
   address?: string;
 
@@ -47,7 +57,7 @@ export class UpdateRefillLocationDto {
   @IsOptional() @Trim() @IsString({ message: PHONE_MESSAGE }) @Matches(OPTIONAL_PHONE, { message: PHONE_MESSAGE })
   phone?: string | null;
 
-  @IsOptional() @IsBoolean({ message: 'Trạng thái hoạt động chỉ nhận đúng hoặc sai.' })
+  @ValidateIf(present('isActive')) @IsBoolean({ message: 'Trạng thái hoạt động chỉ nhận đúng hoặc sai.' })
   isActive?: boolean;
 }
 

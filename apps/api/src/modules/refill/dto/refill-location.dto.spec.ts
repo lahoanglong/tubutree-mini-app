@@ -110,6 +110,13 @@ describe('CreateRefillLocationDto', () => {
     await expect(run(CreateRefillLocationDto, { name: 'x'.repeat(100), address: 'y'.repeat(300), hours: 'z'.repeat(120) })).resolves.toBeDefined();
   });
 
+  it('isActive null khi tạo → 400 (cột NOT NULL), bỏ trống thì mặc định bật ở service', async () => {
+    expect(await messagesOf(CreateRefillLocationDto, { name: 'A', address: 'B', isActive: null })).toEqual([
+      'Trạng thái hoạt động chỉ nhận đúng hoặc sai.',
+    ]);
+    await expect(run(CreateRefillLocationDto, { name: 'A', address: 'B' })).resolves.toBeDefined();
+  });
+
   it('isActive phải là boolean; trường lạ bị từ chối', async () => {
     expect(await messagesOf(CreateRefillLocationDto, { name: 'A', address: 'B', isActive: 'yes' })).toEqual([
       'Trạng thái hoạt động chỉ nhận đúng hoặc sai.',
@@ -127,6 +134,21 @@ describe('UpdateRefillLocationDto', () => {
   it('đã gửi tên/địa chỉ thì không được trống', async () => {
     expect(await messagesOf(UpdateRefillLocationDto, { name: ' ' })).toEqual(['Tên điểm nhận không được để trống.']);
     expect(await messagesOf(UpdateRefillLocationDto, { address: '' })).toEqual(['Địa chỉ điểm nhận không được để trống.']);
+  });
+
+  it('bỏ trường = giữ nguyên, nhưng null ở cột NOT NULL (name/address/isActive) bị 400 thay vì lọt xuống Prisma thành 500', async () => {
+    expect(await messagesOf(UpdateRefillLocationDto, { name: null })).toEqual(['Tên điểm nhận không được để trống.']);
+    expect(await messagesOf(UpdateRefillLocationDto, { address: null })).toEqual(['Địa chỉ điểm nhận không được để trống.']);
+    expect(await messagesOf(UpdateRefillLocationDto, { isActive: null })).toEqual(['Trạng thái hoạt động chỉ nhận đúng hoặc sai.']);
+    expect(await messagesOf(UpdateRefillLocationDto, { name: 'A', address: null, isActive: null })).toEqual([
+      'Địa chỉ điểm nhận không được để trống.',
+      'Trạng thái hoạt động chỉ nhận đúng hoặc sai.',
+    ]);
+  });
+
+  it('trường bỏ hẳn hoặc undefined vẫn qua (PATCH một phần)', async () => {
+    await expect(run(UpdateRefillLocationDto, { isActive: false })).resolves.toMatchObject({ isActive: false });
+    await expect(run(UpdateRefillLocationDto, { name: undefined, address: undefined, isActive: undefined })).resolves.toBeDefined();
   });
 });
 
