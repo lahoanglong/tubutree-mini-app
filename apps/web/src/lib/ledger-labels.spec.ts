@@ -5,7 +5,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
   it.each([
     ['ORDER_DELIVERED:TB1', 'Tích điểm từ đơn hàng'],
     ['ORDER_REDEEM:TB1', 'Dùng điểm khi thanh toán'],
-    ['ORDER_REVERSED:TB1', 'Hoàn ngược điểm (hủy/trả)'],
+    ['ORDER_REVERSED:TB1', 'Thu hồi điểm của đơn trả hàng'],
     ['ORDER_REFUND_POINTS:TB1', 'Hoàn lại điểm đã dùng'],
     ['DAILY_CHECKIN:2026-10-14', 'Điểm danh hằng ngày'],
     ['POINTS_EXPIRED:2026-09', 'Điểm hết hạn'],
@@ -32,7 +32,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
  */
 const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail: string]> = [
   ['ORDER_DELIVERED:TUBU2026101546241', 'Tích điểm từ đơn hàng', 'Tích điểm từ đơn hàng · TUBU2026101546241'],
-  ['ORDER_REVERSED:TUBU2026101546241', 'Hoàn ngược điểm (hủy/trả)', 'Hoàn ngược điểm (hủy/trả) · TUBU2026101546241'],
+  ['ORDER_REVERSED:TUBU2026101546241', 'Thu hồi điểm của đơn trả hàng', 'Thu hồi điểm của đơn trả hàng · TUBU2026101546241'],
   ['ORDER_REFUND_POINTS:TUBU2026101546241', 'Hoàn lại điểm đã dùng', 'Hoàn lại điểm đã dùng · TUBU2026101546241'],
   ['ORDER_REFUND_CONVERTED:TUBU2026101546241', 'Hoàn điểm đơn huỷ/trả', 'Hoàn điểm đơn huỷ/trả · TUBU2026101546241'],
   ['ORDER_REFUND_XU:TUBU2026101546241', 'Hoàn điểm đơn huỷ/trả', 'Hoàn điểm đơn huỷ/trả · TUBU2026101546241'],

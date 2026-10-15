@@ -13,6 +13,8 @@ interface ReasonRule {
 const AFTER_REDEEM_ORDER: ReasonRule = { label: 'Dùng điểm khi thanh toán', ref: 'order' };
 const REFUND_ORDER_POINTS: ReasonRule = { label: 'Hoàn điểm đơn huỷ/trả', ref: 'order' };
 const REFUND_RETURN_POINTS: ReasonRule = { label: 'Hoàn lại điểm đã dùng (trả hàng)', ref: 'order' };
+// Đơn bị hoàn trọn (ORDER_REVERSED) và từng phiếu trả một phần (RETURN_REVERSED) cùng là thu lại điểm đã cộng: một nhãn.
+const RETURN_REVERSED_POINTS: ReasonRule = { label: 'Thu hồi điểm của đơn trả hàng', ref: 'order' };
 const REFERRAL_REWARD: ReasonRule = { label: 'Thưởng giới thiệu bạn bè' };
 const REFERRAL_REVOKED: ReasonRule = { label: 'Thu hồi thưởng giới thiệu' };
 const REFERRAL_DEBT: ReasonRule = { label: 'Ghi nợ thu hồi thưởng giới thiệu' };
@@ -25,13 +27,13 @@ const GARDEN_REWARD: ReasonRule = { label: 'Phần thưởng Vườn Xanh' };
  */
 const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   ORDER_DELIVERED: { label: 'Tích điểm từ đơn hàng', ref: 'order' },
-  ORDER_REVERSED: { label: 'Hoàn ngược điểm (hủy/trả)', ref: 'order' },
+  ORDER_REVERSED: RETURN_REVERSED_POINTS,
   ORDER_REFUND_POINTS: { label: 'Hoàn lại điểm đã dùng', ref: 'order' },
   ORDER_REFUND_CONVERTED: REFUND_ORDER_POINTS,
   ORDER_REFUND_XU: REFUND_ORDER_POINTS,
   ORDER_REDEEM: AFTER_REDEEM_ORDER,
   ORDER_REDEEM_CONVERTED: AFTER_REDEEM_ORDER,
-  RETURN_REVERSED: { label: 'Thu hồi điểm của đơn trả hàng', ref: 'order' },
+  RETURN_REVERSED: RETURN_REVERSED_POINTS,
   RETURN_REFUND_POINTS: REFUND_RETURN_POINTS,
   RETURN_REFUND_CONVERTED: REFUND_RETURN_POINTS,
   LOYALTY_REDEEM_VOUCHER: { label: 'Đổi điểm lấy mã giảm giá' },

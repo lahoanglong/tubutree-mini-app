@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getMe, getPointsTransactions } from '@/lib/shop-client';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
-import { pointsReasonLabel } from '@/lib/ledger-labels';
+import { pointsReasonDetail } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -73,7 +73,7 @@ export default function PointsHistoryPage() {
             {rows.map((t) => (
               <li key={t.id} className="flex items-start justify-between gap-3 p-3">
                 <div className="min-w-0">
-                  <div className="break-words text-sm font-medium text-stone-900">{pointsReasonLabel(t.reason)}</div>
+                  <div className="break-words text-sm font-medium text-stone-900">{pointsReasonDetail(t.reason)}</div>
                   <div className="text-xs text-stone-600">
                     {formatDate(t.createdAt)}
                     {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}

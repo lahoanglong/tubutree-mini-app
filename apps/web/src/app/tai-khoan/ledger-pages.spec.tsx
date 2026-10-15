@@ -73,10 +73,10 @@ describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
     expect(c.textContent).toContain('trong đó 119 điểm không hết hạn');
     const rows = Array.from(c.querySelectorAll('li')).map((li) => li.textContent ?? '');
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain('Dùng điểm khi thanh toán');
+    expect(rows[0]).toContain('Dùng điểm khi thanh toán · TB1');
     expect(rows[0]).toContain('−1.681');
     expect(rows[0]).toContain('14/10/2026');
-    expect(rows[1]).toContain('Tích điểm từ đơn hàng');
+    expect(rows[1]).toContain('Tích điểm từ đơn hàng · TB0');
     expect(rows[1]).toContain('+250');
     expect(rows[1]).toContain('Hết hạn 14/10/2027');
     expect(rows[2]).toContain('Điểm không hết hạn');

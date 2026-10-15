@@ -242,7 +242,7 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';
   if (reason.startsWith('ORDER_DELIVERED')) return 'Tích điểm từ đơn hàng';
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
-  if (reason.startsWith('ORDER_REVERSED')) return 'Hoàn ngược điểm (hủy/trả)';
+  if (reason.startsWith('ORDER_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
   if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
   if (reason.startsWith('RETURN_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
