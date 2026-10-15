@@ -109,14 +109,12 @@ function makeApproveTx(opts: {
 }) {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
-  const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
   const executeRaw = jest.fn().mockResolvedValue(0);
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       $executeRaw: executeRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
-      storefront: { updateMany: storefrontUpdateMany },
       user: {
         update: userUpdate,
         findUnique: jest.fn().mockResolvedValue({ role: opts.applicantRole ?? 'CUSTOMER' }),
@@ -124,7 +122,7 @@ function makeApproveTx(opts: {
       },
     }),
   );
-  return { $transaction, dealerAppUpdateMany, userUpdate, storefrontUpdateMany, executeRaw, userCount };
+  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount };
 }
 
 describe('AdminService.reviewDealerApplication', () => {
@@ -146,21 +144,6 @@ describe('AdminService.reviewDealerApplication', () => {
 
     await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', false, undefined, 'Thiếu ảnh CCCD');
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_REJECTED', expect.objectContaining({ reason: 'Thiếu ảnh CCCD' }));
-  });
-
-  it('duyệt nâng gian hàng CTV sẵn có của người nộp lên MERCHANT trong cùng transaction', async () => {
-    const { $transaction, storefrontUpdateMany } = makeApproveTx({});
-    const prisma = makePrisma({
-      dealerApplication: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
-      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
-      $transaction,
-    });
-    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
-    expect(storefrontUpdateMany).toHaveBeenCalledWith({ where: { ownerUserId: 'u1', type: 'CTV' }, data: { type: 'MERCHANT' } });
   });
 
   it('đơn không tồn tại → NotFound', async () => {

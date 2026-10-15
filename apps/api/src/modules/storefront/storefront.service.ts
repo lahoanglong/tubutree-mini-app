@@ -7,6 +7,7 @@ import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/s
 import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
+import { isPartnerStore } from '../merchant/partner-store';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -229,7 +230,7 @@ export class StorefrontService {
         isPublished: true,
       },
       include: {
-        owner: { select: { referralCode: true } },
+        owner: { select: { referralCode: true, role: true } },
         collections: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -274,7 +275,7 @@ export class StorefrontService {
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
       // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
-      ...(sf.type === 'MERCHANT'
+      ...(isPartnerStore(sf)
         ? {
             warehouseAddress: sf.warehouseAddress,
             warehouseCity: sf.warehouseCity,

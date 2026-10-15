@@ -22,6 +22,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { isPartnerStore, PARTNER_STORE_WHERE } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
 import { ATTENTION_PARTIAL_RETURN_ACK } from '../integrations/pancake/pancake-attention';
@@ -478,7 +479,7 @@ export class OrderReturnsService {
 
   /** Yêu cầu trả hàng của các đơn gian hàng tự giao (đang chờ duyệt / đã duyệt) — mục "Hàng trả về" ở Cổng người bán. */
   async listForMerchant(userId: string): Promise<MerchantReturnView[]> {
-    const store = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, type: 'MERCHANT' }, select: { id: true } });
+    const store = await this.prisma.storefront.findFirst({ where: { ownerUserId: userId, ...PARTNER_STORE_WHERE }, select: { id: true } });
     if (!store) throw new ForbiddenException('Chỉ gian hàng đối tác tự giao hàng mới có hàng trả về.');
     const ids = await this.prisma.$queryRaw<{ id: string }[]>`
       SELECT rr."id" FROM "return_requests" rr
@@ -535,7 +536,7 @@ export class OrderReturnsService {
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
     const owner = await this.prisma.order.findUnique({
       where: { id: req.orderId },
-      select: { fulfiller: true, fulfillerStorefront: { select: { ownerUserId: true, type: true, title: true } } },
+      select: { fulfiller: true, fulfillerStorefront: { select: { ownerUserId: true, type: true, owner: { select: { role: true } }, title: true } } },
     });
     const merchantOrder = owner?.fulfiller === 'MERCHANT';
     if (actor.kind === 'ADMIN' && merchantOrder) {
@@ -545,7 +546,7 @@ export class OrderReturnsService {
     }
     if (
       actor.kind === 'MERCHANT' &&
-      (!merchantOrder || owner?.fulfillerStorefront?.type !== 'MERCHANT' || owner.fulfillerStorefront.ownerUserId !== actor.userId)
+      (!merchantOrder || !owner?.fulfillerStorefront || !isPartnerStore(owner.fulfillerStorefront) || owner.fulfillerStorefront.ownerUserId !== actor.userId)
     ) {
       throw new NotFoundException('Không tìm thấy yêu cầu trả hàng của gian hàng bạn.');
     }

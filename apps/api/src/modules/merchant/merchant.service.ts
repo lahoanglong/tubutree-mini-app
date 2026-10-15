@@ -225,7 +225,7 @@ function linkModeLabel(link: LinkablePancakeVariation | null): string {
  */
 interface MerchantOrderScope {
   storeId: string;
-  storeType: string;
+  isPartner: boolean;
   ownVariationIds: string[];
   links: { variationId: string; linkedAt: Date; unlinkedAt: Date | null }[];
 }
@@ -260,7 +260,7 @@ export class MerchantService {
    */
   private async assertCanSellOwnProducts(userId: string) {
     const store = await this.getOrCreateStore(userId);
-    if (store.type !== 'MERCHANT') throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
+    if (!(await this.isPartner(userId, store))) throw new ForbiddenException(CTV_CANNOT_CREATE_PRODUCT);
     return store;
   }
 
@@ -286,6 +286,11 @@ export class MerchantService {
     return user.role;
   }
 
+  /** Đại lý được duyệt luôn là đối tác, kể cả khi gian hàng còn loại CTV (giữ nguyên để hoa hồng giới thiệu không đổi). */
+  private async isPartner(userId: string, store: { type: string }): Promise<boolean> {
+    return store.type === 'MERCHANT' || (await this.getCallerRole(userId)) === 'DEALER';
+  }
+
   async getOrCreateStore(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== 'AFFILIATE' && user.role !== 'DEALER' && user.role !== 'ADMIN') {
@@ -296,13 +301,7 @@ export class MerchantService {
       where: { ownerUserId: userId },
       include: STORE_INCLUDE,
     });
-    if (store) {
-      if (user.role === 'DEALER' && store.type === 'CTV') {
-        await this.prisma.storefront.updateMany({ where: { id: store.id, type: 'CTV' }, data: { type: 'MERCHANT' } });
-        return { ...store, type: 'MERCHANT' as const };
-      }
-      return store;
-    }
+    if (store) return store;
 
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
@@ -370,12 +369,13 @@ export class MerchantService {
     const cooldownDays =
       (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
       DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
-    if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && store.type !== 'MERCHANT') {
+    const partner = await this.isPartner(userId, store);
+    if ((dto.shippingFee !== undefined || dto.freeShipFrom !== undefined) && !partner) {
       throw new BadRequestException('Phí giao hàng chỉ áp dụng cho gian hàng đối tác tự giao hàng.');
     }
 
     // Kho gửi hàng/SĐT liên hệ chỉ có nghĩa với gian hàng tự giao; gian hàng CTV không lưu (SELLER-8).
-    const selfShips = store.type === 'MERCHANT';
+    const selfShips = partner;
     const updateData: Prisma.StorefrontUpdateInput = {
       title: dto.title,
       headerNote: dto.headerNote,
@@ -873,7 +873,7 @@ export class MerchantService {
     const linked = new Set(links.map((l) => l.variationId));
     return {
       storeId: store.id,
-      storeType: store.type,
+      isPartner: await this.isPartner(userId, store),
       ownVariationIds: variations.map((v) => v.id).filter((id) => !linked.has(id)),
       links,
     };
@@ -890,7 +890,7 @@ export class MerchantService {
    */
   private orderWhereOf(scope: MerchantOrderScope): Prisma.OrderWhereInput {
     const or: Prisma.OrderWhereInput[] = [];
-    if (scope.storeType !== 'MERCHANT') or.push({ storefrontId: scope.storeId });
+    if (!scope.isPartner) or.push({ storefrontId: scope.storeId });
     if (scope.ownVariationIds.length > 0) or.push({ items: { some: { variationId: { in: scope.ownVariationIds } } } });
     for (const l of scope.links) {
       or.push({
@@ -928,7 +928,7 @@ export class MerchantService {
     // (cả đơn là hàng của gian hàng). `selfFulfilled` để màn hình chỉ sang tab Đơn cần giao thay vì ghi "Do kho Tubu xử lý".
     const scoped = data.map(({ fulfiller, fulfillerStorefrontId, ...order }) => {
       const selfFulfilled = fulfiller === 'MERCHANT' && fulfillerStorefrontId === scope.storeId;
-      if (scope.storeType !== 'MERCHANT' || selfFulfilled) {
+      if (!scope.isPartner || selfFulfilled) {
         return { ...order, items: order.items.map(({ variationId: _v, ...it }) => it), selfFulfilled, partial: false };
       }
       const own = order.items.filter((it) => ownsLine(scope, it, order.createdAt));
@@ -954,7 +954,7 @@ export class MerchantService {
         ? scoped
         : scoped.map(({ user, ...order }) => ({
             ...order,
-            ...(scope.storeType === 'MERCHANT'
+            ...(scope.isPartner
               ? {}
               : { user: user ? { ...user, fullName: maskFullName(user.fullName), phone: maskPhoneNumber(user.phone) } : user }),
             shippingAddress: maskShippingAddress(order.shippingAddress),

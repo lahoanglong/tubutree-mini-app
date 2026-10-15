@@ -770,10 +770,10 @@ describe('MerchantService', () => {
   });
 
   describe('setOrdersPaused — "Tạm nghỉ" (R2-MERCHANT-13)', () => {
-    function setup(store: Record<string, unknown>) {
+    function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
       const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...store, ...data }));
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
       });
       return { svc: new MerchantService(prisma, orderStatus), update };
@@ -795,14 +795,20 @@ describe('MerchantService', () => {
       const { svc } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', collections: [] });
       await expect(svc.setOrdersPaused('u1', true)).rejects.toThrow(ForbiddenException);
     });
+
+    it('đại lý còn gian hàng loại CTV vẫn bật được tạm nghỉ, loại gian hàng giữ nguyên', async () => {
+      const { svc, update } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', collections: [] }, 'DEALER');
+      await svc.setOrdersPaused('u1', true);
+      expect(update.mock.calls[0][0].data).not.toHaveProperty('type');
+    });
   });
 
   describe('updateStore — đổi tên gian hàng (R2-MERCHANT-7), kho gửi hàng chỉ cho gian hàng tự giao (SELLER-8)', () => {
-    function setup(store: Record<string, unknown>) {
+    function setup(store: Record<string, unknown>, role = 'AFFILIATE') {
       const storefrontUpdate = jest.fn().mockResolvedValue({ ...store });
       const productUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
       const prisma = makePrisma({
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role }) },
         storefront: { findFirst: jest.fn().mockResolvedValue(store), update: storefrontUpdate },
         product: { updateMany: productUpdateMany },
         $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
@@ -823,6 +829,14 @@ describe('MerchantService', () => {
       expect(data).not.toHaveProperty('warehousePhone');
       expect(data).not.toHaveProperty('warehouseAddress');
       expect(productUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('đại lý còn gian hàng loại CTV: lưu được kho gửi hàng, không đổi loại gian hàng', async () => {
+      const { svc, storefrontUpdate } = setup({ id: 'sf-c', type: 'CTV', ownerUserId: 'u1', title: 'CTV', collections: [] }, 'DEALER');
+      await svc.updateStore('u1', { warehousePhone: '0955555555' } as never);
+      const data = storefrontUpdate.mock.calls[0][0].data;
+      expect(data).toHaveProperty('warehousePhone', '0955555555');
+      expect(data).not.toHaveProperty('type');
     });
   });
 
