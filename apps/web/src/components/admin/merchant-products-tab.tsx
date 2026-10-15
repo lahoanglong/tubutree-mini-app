@@ -97,7 +97,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
           {q.isFetchNextPageError && <p className="mt-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
         </div>
       )}
-      <LinkedMerchantProducts focusConsignment={focusConsignment} />
+      <LinkedMerchantProducts focusConsignment={focusConsignment} listSettled={!q.isLoading} />
     </div>
   );
 }
@@ -155,12 +155,16 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
  * (cùng điều kiện số trên "Việc cần xử lý"). `focusConsignment`: mở từ "Việc cần xử lý" hay từ bảng kê đối soát thì vào thẳng chip
  * này và cuộn tới đây — danh sách nằm dưới hàng sản phẩm chờ duyệt.
  */
-function LinkedMerchantProducts({ focusConsignment }: { focusConsignment: boolean }) {
+function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsignment: boolean; listSettled: boolean }) {
   const [filter, setFilter] = useState<'ALL' | 'PENDING'>(focusConsignment ? 'PENDING' : 'ALL');
   const section = useRef<HTMLElement>(null);
+  // Chỉ cuộn khi danh sách chờ duyệt phía trên đã tải xong: cuộn lúc mount thì khối còn ở vị trí thấp hơn lúc sau và trượt khỏi màn hình điện thoại.
   useEffect(() => {
-    if (focusConsignment) section.current?.scrollIntoView?.({ block: 'start' });
-  }, [focusConsignment]);
+    if (!focusConsignment || !listSettled) return;
+    const el = section.current;
+    el?.focus?.({ preventScroll: true });
+    el?.scrollIntoView?.({ block: 'start' });
+  }, [focusConsignment, listSettled]);
   const q = useQuery({
     queryKey: ['admin-merchant-products-linked', filter],
     queryFn: () => listLinkedMerchantProducts(1, ADMIN_QUEUE_PAGE_SIZE, filter === 'PENDING' ? 'PENDING' : undefined),
@@ -172,7 +176,7 @@ function LinkedMerchantProducts({ focusConsignment }: { focusConsignment: boolea
   const rows = q.data?.data ?? [];
   const pendingCount = pendingQ.data?.meta.total ?? 0;
   return (
-    <section ref={section} className="mt-8 scroll-mt-4" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
+    <section ref={section} tabIndex={-1} className="mt-8 scroll-mt-4 outline-none" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
       <h2 className="text-base font-semibold text-stone-900">
         {filter === 'PENDING' ? 'Liên kết chờ xác nhận hàng ký gửi' : 'Đang liên kết mã Pancake'} ({q.data?.meta.total ?? 0})
       </h2>
