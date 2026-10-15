@@ -457,6 +457,10 @@ export class LoyaltyService {
    * và chưa có dòng ORDER_REVERSED. Lạm dụng mà hàm này chặn: nhận điểm đơn vừa giao → đổi ngay
    * voucher → trả hàng (điểm bị trừ lại, số dư có thể âm) nhưng voucher vẫn giữ.
    *
+   * Khoá của mỗi đơn = delta trừ điểm đã thu hồi theo các lần trả MỘT PHẦN đã duyệt (ReturnRequest.pointsReversed, cùng bộ lọc
+   * partialReturnsByOrder), tối thiểu 0: phần đó đã bị thu hồi nên không còn gì để đảo. Đơn về 0 không góp vào
+   * locked/lockedReturn và không kéo lockedUntil.
+   *
    * `db` = tx của redeemReward / CheckoutService.placeOrder / GameService.spin / GameService.buyTree khi dùng làm guard
    * (đọc SAU khi đã khoá dòng user), mặc định this.prisma cho màn hình tổng quan / báo giá checkout. Câu SQL thật được
    * kiểm ở test/integration-race. Public vì checkout và game tiêu điểm theo CÙNG luật (không tự viết lại SQL).
@@ -477,7 +481,10 @@ export class LoyaltyService {
     windowDays ??= await this.returnWindowDays();
     const cutoff = new Date(now.getTime() - windowDays * DAY_MS);
     const rows = await db.$queryRaw<{ delta: number; deliveredAt: Date; pendingReturn: boolean }[]>`
-      SELECT pt."delta" AS "delta",
+      SELECT GREATEST(pt."delta" - COALESCE((
+               SELECT SUM(rr."pointsReversed") FROM "return_requests" rr
+               WHERE rr."orderId" = o."id" AND rr."status" = 'APPROVED' AND rr."fullReturn" = false
+             ), 0), 0) AS "delta",
              COALESCE(o."deliveredAt", pt."createdAt") AS "deliveredAt",
              (o."status" <> 'DELIVERED' OR EXISTS (
                SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = o."id" AND rr."status" = 'REQUESTED'
@@ -501,6 +508,7 @@ export class LoyaltyService {
     let lockedUntil: Date | null = null;
     for (const r of rows) {
       const delta = Number(r.delta);
+      if (delta <= 0) continue;
       locked += delta;
       if (r.pendingReturn) {
         lockedReturn += delta;
