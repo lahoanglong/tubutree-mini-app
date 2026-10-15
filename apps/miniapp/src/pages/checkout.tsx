@@ -306,11 +306,13 @@ export default function CheckoutPage() {
 
   if (cart.isLoading || addresses.isLoading) return <CheckoutSkeleton />;
 
-  if (cart.isError || addresses.isError) {
-    const err = cart.isError ? cart.error : addresses.error;
+  const cartFailed = cart.isError && !cart.data;
+  const addressesFailed = addresses.isError && !addresses.data;
+  if (cartFailed || addressesFailed) {
+    const err = cartFailed ? cart.error : addresses.error;
     const retry = () => {
-      if (cart.isError) void cart.refetch();
-      if (addresses.isError) void addresses.refetch();
+      if (cartFailed) void cart.refetch();
+      if (addressesFailed) void addresses.refetch();
     };
     return (
       <Shell>

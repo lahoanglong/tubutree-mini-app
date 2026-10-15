@@ -25,7 +25,7 @@ export default function BankPaymentPage() {
   const { openSnackbar } = useSnackbar();
 
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
     enabled: !!code,
@@ -55,7 +55,7 @@ export default function BankPaymentPage() {
     haptic('medium');
     setChecking(true);
     try {
-      const res = await refetch();
+      const res = await refetch({ throwOnError: true });
       const status = res.data?.paymentStatus;
       if (status === 'PAID') {
         openSnackbar({
@@ -116,7 +116,7 @@ export default function BankPaymentPage() {
     );
   }
 
-  if (isError || !data) {
+  if (!data) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>

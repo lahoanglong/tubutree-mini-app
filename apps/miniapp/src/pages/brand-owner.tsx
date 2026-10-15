@@ -49,7 +49,7 @@ export default function BrandOwnerPage() {
       </OwnerShell>
     );
   }
-  if (q.isError || !q.data) {
+  if (!q.data) {
     const status = (q.error as { response?: { status?: number } })?.response?.status;
     return (
       <OwnerShell>

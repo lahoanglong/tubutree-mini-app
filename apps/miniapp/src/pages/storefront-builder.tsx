@@ -88,7 +88,7 @@ export default function StorefrontBuilderPage() {
       </BuilderShell>
     );
   }
-  if (sfQ.isError) {
+  if (sfQ.isError && !sfQ.data) {
     // Chỉ 404 = chưa có gian hàng → mời tạo. Lỗi network/500/401 → ErrorState có retry
     // (không nuốt lỗi thành "Tạo gian hàng" vì bấm Tạo cũng sẽ fail). retry:false để 404 không retry.
     const status = (sfQ.error as { response?: { status?: number } })?.response?.status;

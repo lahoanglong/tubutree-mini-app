@@ -181,7 +181,7 @@ export default function PostDetailPage() {
     return <PostSkeleton />;
   }
 
-  if (post.isError || !post.data) {
+  if (!post.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />

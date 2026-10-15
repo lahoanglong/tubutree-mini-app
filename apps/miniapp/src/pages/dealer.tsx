@@ -91,7 +91,7 @@ export default function DealerPage() {
       </DealerShell>
     );
   }
-  if (meQ.isError) {
+  if (meQ.isError && !meQ.data) {
     return (
       <DealerShell title={TITLE_HUB}>
         <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
@@ -797,7 +797,7 @@ function DealerCredit() {
       </div>
     );
   }
-  if (ledgerQ.isError) {
+  if (ledgerQ.isError && !ledgerQ.data) {
     return (
       <div style={{ margin: '0 16px', paddingBottom: 24 }}>
         <ErrorState message={getErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
@@ -894,7 +894,7 @@ function DealerReport() {
       </div>
     );
   }
-  if (q.isError || !q.data) {
+  if (!q.data) {
     return (
       <div style={{ margin: '0 16px' }}>
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />

@@ -157,7 +157,7 @@ function EventsList({
   if (eventsQ.isLoading) {
     return <CardSkeletons height={140} gap={12} />;
   }
-  if (eventsQ.isError) {
+  if (eventsQ.isError && !eventsQ.data) {
     return <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
   }
   if (!eventsQ.data || eventsQ.data.length === 0) {

@@ -28,7 +28,7 @@ export default function StorefrontViewPage() {
   }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;
-  if (q.isError || !sf) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
+  if (!sf) return <Page className="page"><Box p={6}><ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} /></Box></Page>;
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
