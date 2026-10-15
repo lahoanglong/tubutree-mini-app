@@ -5,35 +5,36 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary),
 // nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
 const IMAGE_MAX = 1_500_000;
 
 class UpdateStorefrontDto {
-  @IsOptional()
+  @OptionalNotNull()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' })
   @MaxLength(120)
   title?: string;
-  @IsOptional() @IsString() @MaxLength(200) headerNote?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @IsOptional() @IsString() theme?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) headerNote?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() theme?: string;
   // Không tìm thấy danh sách theme hợp lệ tường minh trong storefront.service.ts để dùng @IsIn —
   // chỉ ràng buộc themeColor (mã hex #rrggbb, khớp default '#16a34a' ở getPublicBySlug).
-  @IsOptional() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' }) themeColor?: string;
-  @IsOptional() @IsString() subdomain?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankName?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankBin?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankAccountNo?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankAccountName?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseAddress?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseCity?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseDistrict?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseWard?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehousePhone?: string;
+  @OptionalNotNull() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' }) themeColor?: string;
+  @OptionalNotNull() @IsString() subdomain?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankName?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankBin?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountNo?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountName?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseAddress?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseCity?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseDistrict?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseWard?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehousePhone?: string;
 }
 class PublishDto { @IsBoolean() isPublished!: boolean; }
 class ApplyTemplateDto { @IsString() categoryId!: string; }
@@ -44,9 +45,9 @@ class CreateCollectionDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class UpdateCollectionDto {
-  @IsOptional() @IsString() @MaxLength(80) title?: string;
-  @IsOptional() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
-  @IsOptional() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
+  @OptionalNotNull() @IsString() @MaxLength(80) title?: string;
+  @OptionalNotNull() @IsIn(['GRID', 'CAROUSEL', 'STACK']) layout?: 'GRID' | 'CAROUSEL' | 'STACK';
+  @OptionalNotNull() @IsInt() @Min(0) @Max(100) comboDiscountPct?: number;
 }
 class AddItemDto {
   @IsString() productId!: string;
@@ -54,9 +55,9 @@ class AddItemDto {
   @IsOptional() @IsString() @MaxLength(200) note?: string;
 }
 class UpdateItemDto {
-  @IsOptional() @IsString() @MaxLength(200) note?: string;
-  @IsOptional() @IsBoolean() isPinned?: boolean;
-  @IsOptional() @IsBoolean() isHidden?: boolean;
+  @OptionalNotNull() @IsString() @MaxLength(200) note?: string;
+  @OptionalNotNull() @IsBoolean() isPinned?: boolean;
+  @OptionalNotNull() @IsBoolean() isHidden?: boolean;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) orderedIds!: string[]; }
 class PickerQuery {

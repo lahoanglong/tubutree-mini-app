@@ -1,5 +1,6 @@
 import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Trim } from '../../../common/decorators/trim.decorator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class CreateFaqDto {
   @IsOptional() @IsString() @MaxLength(100) category?: string;
@@ -13,9 +14,9 @@ export class CreateFaqDto {
 }
 
 export class UpdateFaqDto {
-  @IsOptional() @IsString() @MaxLength(100) category?: string;
-  @IsOptional() @Trim() @IsString() @IsNotEmpty() @MaxLength(500) question?: string;
-  @IsOptional() @Trim() @IsString() @IsNotEmpty() @MaxLength(4000) answer?: string;
-  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
-  @IsOptional() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsString() @MaxLength(100) category?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(500) question?: string;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(4000) answer?: string;
+  @OptionalNotNull() @IsInt() @Min(0) sortOrder?: number;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
 }

@@ -287,7 +287,8 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
       email: email({ lastOkAt: '2026-10-14T01:00:00.000Z', lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EAUTH: Invalid login: 535 5.7.8 rejected' }),
     });
     expect(section?.textContent).toContain('Lỗi 09:30 14/10/2026');
-    expect(section?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8 rejected');
+    expect(section?.textContent).toContain('sai tài khoản hoặc mật khẩu SMTP');
+    expect(section?.querySelector('details')?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8 rejected');
     expect(section?.querySelector('.text-danger-fg')).not.toBeNull();
   });
 
@@ -368,9 +369,53 @@ describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (
       const card = cardOf(c);
       expect(card.textContent).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
       expect(card.textContent).toContain('Hệ thống không tự gửi lại liên tục');
-      expect(card.textContent).toContain('Lỗi gần nhất: EAUTH: Invalid login: 535 5.7.8');
+      expect(card.querySelector('details')?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8');
       expect(card.textContent).toContain('Lỗi 09:30 14/10/2026');
       expect(card.querySelector('.text-danger-fg')).not.toBeNull();
+    });
+
+    it('R5-ADMIN-3: một lỗi chỉ hiện một lần — lời chỉ tiếng Việt, chi tiết kỹ thuật tiếng Anh nằm trong phần thu gọn', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          mockFetch({
+            '/admin/ops/health': {
+              body: health({
+                ...READY,
+                lastErrorAt: '2026-10-14T02:30:00.000Z',
+                lastError: 'EAUTH: Invalid login: 535 5.7.8 Username and Password not accepted',
+                lastErrorKind: 'AUTH',
+                lastErrorHint: AUTH_HINT,
+              }),
+            },
+          }).fn,
+        ),
+      );
+      const c = await mount(<OpsHealthTab />);
+      const card = cardOf(c);
+      const text = card.textContent ?? '';
+      expect(text.split('Lỗi xác thực SMTP').length - 1).toBe(1);
+      expect(text.split('EAUTH').length - 1).toBe(1);
+      expect(text).not.toContain('Lỗi gần nhất');
+      const details = card.querySelector('details')!;
+      expect(details.open).toBe(false);
+      expect(details.querySelector('summary')?.textContent).toBe('Chi tiết kỹ thuật');
+      expect(details.textContent).toContain('Username and Password not accepted');
+      expect(card.querySelectorAll('details')).toHaveLength(1);
+    });
+
+    it('R5-ADMIN-3: lỗi mạng tiếng Anh được dịch, chuỗi gốc chỉ nằm trong Chi tiết kỹ thuật', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...READY, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'ETIMEDOUT: Greeting never received', lastErrorKind: 'TRANSIENT' }) } }).fn),
+      );
+      const c = await mount(<OpsHealthTab />);
+      const card = cardOf(c);
+      const detail = card.querySelector('details')!;
+      expect(card.textContent).toContain('Hết thời gian chờ máy chủ SMTP');
+      expect(detail.textContent).toContain('ETIMEDOUT: Greeting never received');
+      const outside = (card.textContent ?? '').replace(detail.textContent ?? '', '');
+      expect(outside).not.toContain('Greeting never received');
     });
 
     it('máy chủ từ chối vĩnh viễn: hiện lời chỉ tới người nhận/địa chỉ gửi', async () => {
@@ -389,7 +434,8 @@ describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (
         vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...READY, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'ETIMEDOUT', lastErrorKind: 'TRANSIENT' }) } }).fn),
       );
       const c = await mount(<OpsHealthTab />);
-      expect(cardOf(c).textContent).toContain('Lỗi gần nhất: ETIMEDOUT');
+      expect(cardOf(c).textContent).toContain('Hết thời gian chờ máy chủ SMTP');
+      expect(cardOf(c).querySelector('details')?.textContent).toContain('ETIMEDOUT');
       expect(cardOf(c).textContent).not.toContain('SMTP_USER/SMTP_PASS');
     });
 
@@ -414,12 +460,13 @@ describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (
       const { lastErrorKind: _k, lastErrorHint: _h, ...old } = READY;
       vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health({ ...old, lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'EAUTH: 535' }) } }).fn));
       const c = await mount(<OpsHealthTab />);
-      expect(cardOf(c).textContent).toContain('Lỗi gần nhất: EAUTH: 535');
+      expect(cardOf(c).textContent).toContain('sai tài khoản hoặc mật khẩu SMTP');
+      expect(cardOf(c).querySelector('details')?.textContent).toContain('EAUTH: 535');
     });
   });
 
   describe('nút Gửi email thử', () => {
-    const mountReady = async (extra: Record<string, { status?: number; body: unknown }> = {}, props: { isAdmin?: boolean } = {}, email: Record<string, unknown> = READY) => {
+    const mountReady = async (extra: Parameters<typeof mockFetch>[0] = {}, props: { isAdmin?: boolean } = {}, email: Record<string, unknown> = READY) => {
       const api = mockFetch({ '/admin/ops/health': { body: health(email) }, ...extra });
       vi.stubGlobal('fetch', vi.fn(api.fn));
       const c = await mount(<OpsHealthTab {...props} />);
@@ -463,17 +510,93 @@ describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (
       expect(testButton(c)?.textContent).toBe('Gửi email thử');
     });
 
-    it('API từ chối (sai xác thực): hiện đúng lời API trả, dạng cảnh báo trên thẻ, không lộ gì thêm', async () => {
+    it('API từ chối (sai xác thực): thông báo ngắn trỏ tới dòng lỗi trên thẻ, không lặp lại lời chỉ hay lỗi tiếng Anh', async () => {
       const message = `Gửi email thử lỗi — ${AUTH_HINT} Chi tiết: EAUTH: Invalid login: 535 5.7.8 Username and Password not accepted`;
-      const { c } = await mountReady({ [TEST_URL]: { status: 502, body: { message } } });
+      const failed = { ...READY, lastErrorAt: '2026-10-14T03:05:00.000Z', lastError: 'EAUTH: Invalid login: 535 5.7.8 Username and Password not accepted', lastErrorKind: 'AUTH', lastErrorHint: AUTH_HINT };
+      let tested = false;
+      const { c } = await mountReady({
+        '/admin/ops/health': () => ({ body: health(tested ? failed : READY) }),
+        [TEST_URL]: () => ((tested = true), { status: 502, body: { message } }),
+      });
       click(testButton(c));
       await flush();
       answerConfirm(true);
       await flush();
-      const alert = cardOf(c).querySelector('[role="alert"]');
-      expect(alert?.textContent).toContain('Lỗi xác thực SMTP — kiểm tra SMTP_USER/SMTP_PASS');
-      expect(alert?.textContent).toContain('EAUTH: Invalid login: 535 5.7.8');
+      const alert = cardOf(c).querySelector('[role="alert"]')!;
+      expect(alert.textContent).toContain('Gửi email thử không thành công');
+      expect(alert.textContent).not.toContain('EAUTH');
+      expect(alert.textContent).not.toContain('SMTP_USER');
       expect(cardOf(c).querySelector('[role="status"]')).toBeNull();
+      const text = cardOf(c).textContent ?? '';
+      expect(text.split('Lỗi xác thực SMTP').length - 1).toBe(1);
+      expect(text.split('EAUTH').length - 1).toBe(1);
+    });
+
+    it('R5-ADMIN-3: gửi thử lỗi vì nguyên nhân khác lỗi cron cũ: thẻ tải lại, chỉ còn nguyên nhân mới (không hai lời chỉ trái nhau)', async () => {
+      const before = { ...READY, lastErrorAt: '2026-10-14T02:55:00.000Z', lastError: 'EAUTH: Invalid login: 535 5.7.8 Authentication credentials invalid', lastErrorKind: 'AUTH', lastErrorHint: AUTH_HINT };
+      const after = { ...READY, lastErrorAt: '2026-10-14T03:10:00.000Z', lastError: 'ETIMEDOUT: Greeting never received', lastErrorKind: 'TRANSIENT', lastErrorHint: null };
+      let tested = false;
+      const { api, c } = await mountReady(
+        {
+          '/admin/ops/health': () => ({ body: health(tested ? after : before) }),
+          [TEST_URL]: () => ((tested = true), { status: 502, body: { message: 'Gửi email thử lỗi: ETIMEDOUT: Greeting never received' } }),
+        },
+        {},
+        before,
+      );
+      expect(cardOf(c).textContent).toContain('Lỗi xác thực SMTP');
+      const healthBefore = api.calls.filter((x) => x.url.includes('/admin/ops/health')).length;
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(api.calls.filter((x) => x.url.includes('/admin/ops/health')).length).toBe(healthBefore + 1);
+      const text = cardOf(c).textContent ?? '';
+      expect(text).toContain('Hết thời gian chờ máy chủ SMTP');
+      expect(text).toContain('Lỗi 10:10 14/10/2026');
+      expect(text).not.toContain('Lỗi xác thực SMTP');
+      expect(text).not.toContain('SMTP_USER/SMTP_PASS');
+      expect(text.split('Greeting never received').length - 1).toBe(1);
+      expect(cardOf(c).querySelector('[role="alert"]')?.textContent).toContain('Gửi email thử không thành công');
+    });
+
+    it('R5-ADMIN-3: gửi thử thành công sau lỗi: thẻ tải lại, hết lời chỉ và dòng lỗi cũ', async () => {
+      const before = { ...READY, lastErrorAt: '2026-10-14T02:55:00.000Z', lastError: 'EAUTH: 535', lastErrorKind: 'AUTH', lastErrorHint: AUTH_HINT };
+      const after = { ...READY, lastOkAt: '2026-10-14T03:10:00.000Z', lastErrorAt: '2026-10-14T02:55:00.000Z', lastError: 'EAUTH: 535', lastErrorKind: 'AUTH', lastErrorHint: AUTH_HINT };
+      let tested = false;
+      const { c } = await mountReady(
+        {
+          '/admin/ops/health': () => ({ body: health(tested ? after : before) }),
+          [TEST_URL]: () => ((tested = true), { body: { ok: true, message: 'Đã gửi email thử tới 2 địa chỉ nhận.' } }),
+        },
+        {},
+        before,
+      );
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const text = cardOf(c).textContent ?? '';
+      expect(text).toContain('OK 10:10 14/10/2026');
+      expect(text).not.toContain('Lỗi xác thực SMTP');
+      expect(cardOf(c).querySelector('details')).toBeNull();
+      expect(cardOf(c).querySelector('[role="status"]')?.textContent).toContain('Đã gửi email thử');
+    });
+
+    it('R5-ADMIN-3: không tải lại được thẻ sau khi gửi thử lỗi: thông báo mang nguyên nhân đã dịch, vẫn không có chữ Anh thô', async () => {
+      let tested = false;
+      const { c } = await mountReady({
+        '/admin/ops/health': () => (tested ? { status: 500, body: { message: 'boom' } } : { body: health(READY) }),
+        [TEST_URL]: () => ((tested = true), { status: 502, body: { message: 'Gửi email thử lỗi: ETIMEDOUT: Greeting never received' } }),
+      });
+      click(testButton(c));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const alert = cardOf(c).querySelector('[role="alert"]')!;
+      expect(alert.textContent).toContain('Gửi email thử không thành công');
+      expect(alert.textContent).toContain('Hết thời gian chờ máy chủ SMTP');
+      expect(alert.textContent).not.toContain('Greeting never received');
     });
 
     it('chưa cấu hình/dở dang ở phía API (400): hiện lý do API trả', async () => {

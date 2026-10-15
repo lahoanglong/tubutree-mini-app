@@ -4,6 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FlashSaleService } from './flash-sale.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 export class CreateSaleDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
@@ -11,10 +12,10 @@ export class CreateSaleDto {
   @IsDateString() endAt!: string;
 }
 class UpdateSaleDto {
-  @IsOptional() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
-  @IsOptional() @IsDateString() startAt?: string;
-  @IsOptional() @IsDateString() endAt?: string;
-  @IsOptional() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
+  @OptionalNotNull() @IsDateString() startAt?: string;
+  @OptionalNotNull() @IsDateString() endAt?: string;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
 }
 class AddItemDto {
   @IsString() variationId!: string;

@@ -26,6 +26,7 @@ import { PaginationQuery } from '../../common/pagination';
 import { MerchantService } from './merchant.service';
 import { MERCHANT_FULFIL_STATUSES, MerchantFulfilmentService } from './merchant-fulfilment.service';
 import { OrderReturnsService } from '../orders/order-returns.service';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 // Cùng trần với /storefront/me (storefront.controller.ts): ảnh có thể là data URL base64 khi chưa cấu hình Cloudinary.
 const IMAGE_MAX = 1_500_000;
@@ -47,26 +48,26 @@ export const withHttps = ({ value }: { value: unknown }) => {
 };
 
 export class UpdateMerchantStoreDto {
-  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' }) @MaxLength(120) title?: string;
-  @IsOptional() @IsString() @MaxLength(200) headerNote?: string;
-  @IsOptional() @IsString() @MaxLength(63) subdomain?: string;
-  @IsOptional() @IsString() @MaxLength(253) customDomain?: string;
-  @IsOptional()
+  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên gian hàng không được để trống.' }) @MaxLength(120) title?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) headerNote?: string;
+  @OptionalNotNull() @IsString() @MaxLength(63) subdomain?: string;
+  @OptionalNotNull() @IsString() @MaxLength(253) customDomain?: string;
+  @OptionalNotNull()
   @IsString()
   @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' })
   themeColor?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankName?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankBin?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankAccountNo?: string;
-  @IsOptional() @IsString() @MaxLength(200) bankAccountName?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseAddress?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseCity?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseDistrict?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehouseWard?: string;
-  @IsOptional() @IsString() @MaxLength(200) warehousePhone?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @IsOptional() @IsBoolean() isPublished?: boolean;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankName?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankBin?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountNo?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) bankAccountName?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseAddress?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseCity?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseDistrict?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehouseWard?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) warehousePhone?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsBoolean() isPublished?: boolean;
   /** null = dùng phí mặc định của Tubu (`merchant.default_shipping_fee`). */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(0) @Max(MAX_SHIPPING_FEE) shippingFee?: number | null;
   /** null = không miễn phí giao. */
@@ -92,20 +93,20 @@ export class CreateMerchantProductDto {
 }
 
 export class UpdateMerchantProductDto {
-  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên sản phẩm không được để trống.' }) @MaxLength(200) name?: string;
-  @IsOptional() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Mô tả sản phẩm không được để trống.' }) @MaxLength(10_000) description?: string;
-  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) shortDesc?: string;
-  @IsOptional() @IsInt() @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE }) @Max(MAX_PRICE) basePrice?: number;
+  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Tên sản phẩm không được để trống.' }) @MaxLength(200) name?: string;
+  @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty({ message: 'Mô tả sản phẩm không được để trống.' }) @MaxLength(10_000) description?: string;
+  @OptionalNotNull() @Transform(trim) @IsString() @MaxLength(300) shortDesc?: string;
+  @OptionalNotNull() @IsInt() @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE }) @Max(MAX_PRICE) basePrice?: number;
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsInt()
   @Min(MIN_MERCHANT_PRICE, { message: MIN_PRICE_MESSAGE })
   @Max(MAX_PRICE)
   salePrice?: number | null;
-  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) thumbnail?: string;
-  @IsOptional() @IsInt() @Min(0) @Max(MAX_STOCK) stock?: number;
-  @IsOptional() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) thumbnail?: string;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(MAX_STOCK) stock?: number;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
   /**
    * Chỉ cho sản phẩm đã gỡ liên kết hoặc chưa được liên kết: chuỗi = đổi sang mã Pancake khác (gửi duyệt lại), null hoặc rỗng =
    * bỏ mã, chuyển hẳn sang gian hàng tự giao.

@@ -33,6 +33,7 @@ import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
 import { ADMIN_ORDER_STATUSES, PANCAKE_FILTERS, type InvoiceFilter, type PancakeFilter, type RecyclingFilter } from './admin-order-filter';
+import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 /**
  * value <= max CHỈ khi type=PERCENT (chặn admin nhập % vô lý, vd 500%).
@@ -232,8 +233,8 @@ export class ListCouponsQuery extends PaginationQuery {
   @IsOptional() @IsIn(['active', 'inactive', 'expired']) status?: 'active' | 'inactive' | 'expired';
 }
 export class UpdateCouponDto {
-  @IsOptional() @IsBoolean() isActive?: boolean;
-  @IsOptional() @IsDateString() endAt?: string;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsDateString() endAt?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
 }
 class ImportDealerPricesDto {
@@ -252,7 +253,7 @@ class UpdateOrderStatusDto {
   status!: 'PENDING_PAYMENT' | 'CONFIRMED' | 'PACKED' | 'SHIPPING' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
 
   /** Huỷ/trả: khách đọc nguyên văn trong thông báo (customerReason), nên giới hạn độ dài. */
-  @IsOptional()
+  @OptionalNotNull()
   @IsString()
   @MaxLength(500)
   note?: string;

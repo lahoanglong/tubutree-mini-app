@@ -17,6 +17,7 @@ import {
 } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
+import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion } from './ui';
 
@@ -38,6 +39,8 @@ const QUEUE_LABELS: Record<string, string> = {
   notifications: 'Thông báo (ZNS / in-app)',
   'zalo-oa-events': 'Sự kiện Zalo OA',
 };
+
+const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
 const newer = (a: string | null | undefined, b: string | null | undefined) => !!a && (!b || a > b);
@@ -76,10 +79,10 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
-  const q = useQuery({ queryKey: ['admin-ops-health'], queryFn: getOpsHealth, refetchInterval: 60_000 });
+  const q = useQuery({ queryKey: OPS_HEALTH_KEY, queryFn: getOpsHealth, refetchInterval: 60_000 });
   const done = (text: string) => {
     setMsg({ tone: 'success', text });
-    void qc.invalidateQueries({ queryKey: ['admin-ops-health'] });
+    void qc.invalidateQueries({ queryKey: OPS_HEALTH_KEY });
   };
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: e instanceof Error ? e.message : 'Thao tác lỗi.' });
   const [busy, setBusy] = useState(false);
@@ -201,10 +204,30 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
 const EMAIL_STATE_LABELS = { DISABLED: 'Chưa bật', READY: 'Đang bật', MISCONFIGURED: 'Cấu hình chưa đủ' } as const;
 
 const TEST_EMAIL_THROTTLED = 'Đã bấm gửi thử quá nhiều lần. Chờ khoảng một phút rồi thử lại.';
+const TEST_EMAIL_FAILED = 'Gửi email thử không thành công';
+
+type TestOutcome = { ok: boolean; text: string; smtpCause?: string };
+
+/**
+ * API trả lỗi SMTP của lần gửi thử dạng "Gửi email thử lỗi — <lời chỉ> Chi tiết: <lỗi gốc>" hoặc "Gửi email thử lỗi: <lỗi gốc>".
+ * Cả lời chỉ lẫn lỗi gốc đã nằm trên thẻ (từ trạng thái vừa ghi), nên thông báo không chép lại; chỉ giữ nguyên nhân đã dịch
+ * để dùng khi thẻ không tải lại được.
+ */
+function describeTestFailure(e: unknown): TestOutcome {
+  if (e instanceof ApiError && e.status === 429) return { ok: false, text: TEST_EMAIL_THROTTLED };
+  if (!(e instanceof Error)) return { ok: false, text: 'Gửi email thử lỗi.' };
+  const withHint = /^Gửi email thử lỗi — (.+?) Chi tiết: (.+)$/s.exec(e.message);
+  const plain = /^Gửi email thử lỗi: (.+)$/s.exec(e.message);
+  if (withHint) return { ok: false, text: TEST_EMAIL_FAILED, smtpCause: smtpErrorSummary({ hint: withHint[1], raw: withHint[2] }) };
+  if (plain) return { ok: false, text: TEST_EMAIL_FAILED, smtpCause: smtpErrorSummary({ raw: plain[1] }) };
+  return { ok: false, text: e.message };
+}
 
 /**
  * Email là kênh thứ hai của báo động vận hành; lỗi SMTP không thành "sự cố" mới nên chỉ lộ ra ở thẻ này. Nút "Gửi email thử"
  * (ADMIN, như endpoint) chỉ có khi kênh đang bật: chưa bật hay cấu hình dở dang thì chưa có gì để thử, thẻ đã nêu cần đặt gì.
+ * Lỗi hiện đúng một lần ở thẻ (câu tiếng Việt + chi tiết kỹ thuật thu gọn); sau mỗi lần gửi thử thẻ tải lại trạng thái trước khi
+ * hiện thông báo, nên không còn lời chỉ của lỗi cũ nằm cạnh kết quả mới.
  */
 function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest: boolean }) {
   const qc = useQueryClient();
@@ -213,6 +236,16 @@ function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest:
   const sendingRef = useRef(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const failing = newer(email.lastErrorAt, email.lastOkAt);
+
+  /** Tải lại sức khoẻ; trả kênh email mới, hoặc null nếu không tải được (thẻ còn giữ dữ liệu cũ). */
+  const reload = async (): Promise<OpsEmailChannel | null> => {
+    try {
+      await qc.refetchQueries({ queryKey: OPS_HEALTH_KEY }, { throwOnError: true });
+      return qc.getQueryData<OpsHealth>(OPS_HEALTH_KEY)?.alertChannels?.email ?? null;
+    } catch {
+      return null;
+    }
+  };
 
   const askTest = async () => {
     if (sendingRef.current) return;
@@ -225,15 +258,21 @@ function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest:
     sendingRef.current = true;
     setSending(true);
     setResult(null);
+    let outcome: TestOutcome;
     try {
       const r = await sendOpsTestEmail();
-      setResult({ ok: true, text: r.message || 'Đã gửi email thử.' });
+      outcome = { ok: true, text: r.message || 'Đã gửi email thử.' };
     } catch (e) {
-      setResult({ ok: false, text: e instanceof ApiError && e.status === 429 ? TEST_EMAIL_THROTTLED : e instanceof Error ? e.message : 'Gửi email thử lỗi.' });
-    } finally {
-      sendingRef.current = false;
-      setSending(false);
-      void qc.invalidateQueries({ queryKey: ['admin-ops-health'] });
+      outcome = describeTestFailure(e);
+    }
+    const fresh = await reload();
+    const shownOnCard = !!fresh && newer(fresh.lastErrorAt, fresh.lastOkAt);
+    sendingRef.current = false;
+    setSending(false);
+    if (outcome.smtpCause) {
+      setResult({ ok: false, text: shownOnCard ? `${outcome.text}. Nguyên nhân ở dòng lỗi phía trên.` : `${outcome.text}: ${outcome.smtpCause}` });
+    } else {
+      setResult({ ok: outcome.ok, text: outcome.text });
     }
   };
 
@@ -250,8 +289,19 @@ function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest:
               {issue}
             </p>
           ))}
-          {failing && email.lastErrorHint && <p className="break-words text-xs font-medium text-danger-fg">{email.lastErrorHint}</p>}
-          {failing && email.lastError && <p className="break-words text-xs text-danger-fg">Lỗi gần nhất: {email.lastError}</p>}
+          {failing && (
+            <div className="space-y-0.5">
+              <p className="break-words text-xs font-medium text-danger-fg">
+                {smtpErrorSummary({ kind: email.lastErrorKind, hint: email.lastErrorHint, raw: email.lastError })}
+              </p>
+              {email.lastError && (
+                <details className="text-xs text-stone-600">
+                  <summary className="flex min-h-[44px] cursor-pointer items-center hover:underline sm:min-h-0">Chi tiết kỹ thuật</summary>
+                  <p className="break-words pb-1 font-mono text-stone-600">{email.lastError}</p>
+                </details>
+              )}
+            </div>
+          )}
           {canTest && email.state === 'READY' && (
             <div className="pt-1">
               <button type="button" disabled={sending} aria-busy={sending} onClick={() => void askTest()} className={BTN_XS_SECONDARY}>

@@ -372,13 +372,98 @@ describe('OpsEmailService.blockLifted', () => {
     await expect(other.blockLifted()).resolves.toBe(true);
   });
 
-  it('admin gửi email thử thành công (lastOkAt mới hơn lastErrorAt) → mở chặn', async () => {
+  it('admin gửi email thử thành công (lastOkAt mới hơn lần lỗi vĩnh viễn) → mở chặn', async () => {
     const { rows, svc } = setup(FULL_ENV, failAuth());
-    const row = await blockedRow(svc, rows);
-    rows.set('alert.email', { ...row, lastErrorAt: T(1), lastOkAt: T(2) });
+    await blockedRow(svc, rows);
+    const block = rows.get('alert.email.block')!;
+    rows.set('alert.email', { ...rows.get('alert.email'), lastOkAt: T(2) });
+    rows.set('alert.email.block', { ...block, lastErrorAt: T(1) });
     await expect(svc.blockLifted()).resolves.toBe(true);
-    rows.set('alert.email', { ...row, lastErrorAt: T(3), lastOkAt: T(2) });
+    rows.set('alert.email.block', { ...block, lastErrorAt: T(3) });
     await expect(svc.blockLifted()).resolves.toBe(false);
+  });
+
+  describe('email thử của admin không được ghi đè lý do chặn (R5-ADMIN-5)', () => {
+    const timeout = () => ({ sendMail: jest.fn().mockRejectedValue(Object.assign(new Error('Greeting never received'), { code: 'ETIMEDOUT' })) });
+    const withConfig = (rows: Map<string, Record<string, unknown>>, env: Record<string, string>, transport: Partial<MailTransport>) => {
+      const prisma = {
+        opsHealthState: {
+          findUnique: jest.fn(async ({ where }: { where: { key: string } }) => rows.get(where.key) ?? null),
+          upsert: jest.fn(async ({ where, create, update }: { where: { key: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+            rows.set(where.key, { ...(rows.get(where.key) ?? create), ...update });
+          }),
+        },
+      };
+      const t = { sendMail: jest.fn(async () => ({})), close: jest.fn(), ...transport } as MailTransport;
+      return new OpsEmailService({ get: (k: string) => env[k] ?? '' } as never, prisma as never, (() => t) as never);
+    };
+    const CHANGED = { ...FULL_ENV, SMTP_HOST: 'smtp2.example.test' };
+
+    it('đã chặn (AUTH) → đổi cấu hình → email thử lỗi tạm thời → cron vẫn được thử lại đúng một lần', async () => {
+      const { rows, svc } = setup(FULL_ENV, failAuth());
+      await expect(svc.sendAlert(MESSAGE)).resolves.toBe('BLOCKED');
+      await expect(svc.blockLifted()).resolves.toBe(false);
+
+      const changed = withConfig(rows, CHANGED, timeout());
+      await expect(changed.sendTest()).resolves.toMatchObject({ ok: false, reason: 'SEND_FAILED', kind: 'TRANSIENT' });
+      await expect(changed.blockLifted()).resolves.toBe(true);
+
+      const retry = withConfig(rows, CHANGED, failAuth());
+      await expect(retry.sendAlert(MESSAGE)).resolves.toBe('BLOCKED');
+      await expect(retry.blockLifted()).resolves.toBe(false);
+    });
+
+    it('email thử lỗi tạm thời dưới cùng cấu hình đã chặn → vẫn chặn (không mở nhầm)', async () => {
+      const { rows, svc } = setup(FULL_ENV, failAuth());
+      await svc.sendAlert(MESSAGE);
+      const same = withConfig(rows, FULL_ENV, timeout());
+      await expect(same.sendTest()).resolves.toMatchObject({ ok: false, kind: 'TRANSIENT' });
+      await expect(same.blockLifted()).resolves.toBe(false);
+    });
+
+    it('email thử thành công mở chặn, lần thử sau lỗi tạm thời không đóng chặn lại', async () => {
+      jest.useFakeTimers({ now: T(1) });
+      try {
+        const { rows, svc } = setup(FULL_ENV, failAuth());
+        await svc.sendAlert(MESSAGE);
+        jest.setSystemTime(T(2));
+        await expect(withConfig(rows, FULL_ENV, {}).sendTest()).resolves.toMatchObject({ ok: true });
+        jest.setSystemTime(T(3));
+        const flaky = withConfig(rows, FULL_ENV, timeout());
+        await expect(flaky.sendTest()).resolves.toMatchObject({ ok: false, kind: 'TRANSIENT' });
+        await expect(flaky.blockLifted()).resolves.toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('email thử bị từ chối vĩnh viễn dưới cấu hình mới → ghi nhận, cron không gửi thêm vào cấu hình đã biết là hỏng', async () => {
+      const { rows, svc } = setup(FULL_ENV, failAuth());
+      await svc.sendAlert(MESSAGE);
+      const changed = withConfig(rows, CHANGED, failAuth());
+      await expect(changed.sendTest()).resolves.toMatchObject({ ok: false, kind: 'AUTH' });
+      await expect(changed.blockLifted()).resolves.toBe(false);
+    });
+
+    it('màn hình vẫn thấy lỗi tạm thời gần nhất của lần thử (loại TRANSIENT, không kèm lời chỉ AUTH)', async () => {
+      const { rows, svc } = setup(FULL_ENV, failAuth());
+      await svc.sendAlert(MESSAGE);
+      const changed = withConfig(rows, CHANGED, timeout());
+      await changed.sendTest();
+      await expect(changed.state()).resolves.toMatchObject({ lastErrorKind: 'TRANSIENT', lastErrorHint: null, lastError: expect.stringContaining('ETIMEDOUT') });
+    });
+
+    it('lỗi tạm thời của cron không ghi lý do chặn', async () => {
+      const { svc, rows } = setup(FULL_ENV, timeout());
+      await expect(svc.sendAlert(MESSAGE)).resolves.toBe('RETRY');
+      expect(rows.has('alert.email.block')).toBe(false);
+    });
+
+    it('lý do chặn không chứa bí mật', async () => {
+      const { svc, rows } = setup(FULL_ENV, failAuth());
+      await svc.sendAlert(MESSAGE);
+      expect(JSON.stringify(rows.get('alert.email.block'))).not.toMatch(/hunter2-pass|mailer-user/);
+    });
   });
 
   it('cấu hình không còn sẵn sàng (tắt/dở dang) → true để cron gọi sendAlert và nhả khoá', async () => {

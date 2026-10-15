@@ -18,6 +18,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { OptionalNotNull } from './decorators/optional-not-null.decorator';
 import { IsUploadedImage } from './uploaded-image';
 import { createValidationPipe } from './validation-pipe';
 
@@ -154,5 +155,49 @@ describe('createValidationPipe — thông điệp lỗi tiếng Việt', () => {
       ...(await sampleMessagesOf({ rating: 9, comment: 1, method: 'Z', email: 'x', images: 'a', lạ: 1 })),
     ].join(' ');
     expect(all).not.toMatch(/\b(must|should|each value|property)\b/);
+  });
+});
+
+class PatchLine {
+  @OptionalNotNull() @IsInt() @Min(1) quantity?: number;
+}
+class PatchSample {
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsString() @IsNotEmpty() @MaxLength(5) title?: string;
+  @IsOptional() @IsInt() usageLimit?: number | null;
+  @OptionalNotNull() @ValidateNested() @Type(() => PatchLine) line?: PatchLine;
+}
+
+describe('OptionalNotNull — PATCH/PUT: null không phải "bỏ trường" (R5-ADMIN-1)', () => {
+  const run = (value: Record<string, unknown>) => pipe.transform(value, { type: 'body', metatype: PatchSample, data: undefined });
+  const messages = async (value: Record<string, unknown>): Promise<string[]> => {
+    try {
+      await run(value);
+    } catch (e) {
+      return ((e as BadRequestException).getResponse() as { message: string[] }).message;
+    }
+    throw new Error('không ném lỗi');
+  };
+
+  it('null bị chặn bằng đúng một câu tiếng Việt, không kèm câu về kiểu dữ liệu', async () => {
+    expect(await messages({ isActive: null })).toEqual(['Trường «isActive» không được để null; bỏ trường này nếu không muốn đổi.']);
+    expect(await messages({ title: null })).toEqual(['Tiêu đề không được để null; bỏ trường này nếu không muốn đổi.']);
+  });
+
+  it('bỏ trường thì giữ nguyên, giá trị đúng vẫn qua, null ở trường @IsOptional thường vẫn qua', async () => {
+    await expect(run({})).resolves.toBeInstanceOf(PatchSample);
+    await expect(run({ isActive: false, title: 'abc' })).resolves.toMatchObject({ isActive: false, title: 'abc' });
+    await expect(run({ usageLimit: null })).resolves.toMatchObject({ usageLimit: null });
+  });
+
+  it('luật khác của trường giữ nguyên khi giá trị không phải null', async () => {
+    expect(await messages({ isActive: 'yes' })).toEqual(['Trường «isActive» chỉ nhận đúng hoặc sai.']);
+    expect(await messages({ title: '' })).toEqual(['Tiêu đề không được để trống.']);
+    expect(await messages({ title: 'x'.repeat(6) })).toEqual(['Tiêu đề không được dài quá 5 ký tự.']);
+  });
+
+  it('trường lồng nhau cũng chặn null và nêu đúng trường', async () => {
+    expect(await messages({ line: { quantity: null } })).toEqual(['Số lượng không được để null; bỏ trường này nếu không muốn đổi.']);
+    expect(await messages({ line: null })).toEqual(['Trường «line» không được để null; bỏ trường này nếu không muốn đổi.']);
   });
 });

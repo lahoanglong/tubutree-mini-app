@@ -1,4 +1,5 @@
 import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
 // trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn. Mirror IMAGE_MAX của
@@ -30,17 +31,17 @@ export class CreateBrandDto {
 }
 
 export class UpdateBrandDto {
-  @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsString() slug?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
-  @IsOptional() @IsString() story?: string;
-  @IsOptional() @IsString() @MaxLength(200) origin?: string;
+  @OptionalNotNull() @IsString() name?: string;
+  @OptionalNotNull() @IsString() slug?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
+  @OptionalNotNull() @IsString() story?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
   @IsOptional() @Allow() certifications?: unknown;
-  @IsOptional() @IsBoolean() isPublished?: boolean;
+  @OptionalNotNull() @IsBoolean() isPublished?: boolean;
   // Gán chủ nhãn (lộ trình B): userId của đối tác → cho phép họ tự quản nhãn.
-  @IsOptional() @IsString() ownerUserId?: string;
+  @OptionalNotNull() @IsString() ownerUserId?: string;
 }
 
 export class VerifyBrandDto {
@@ -49,11 +50,11 @@ export class VerifyBrandDto {
 
 /** Brand-owner CHỈ sửa thông tin nhãn (không name/slug/verified/publish/cert). */
 export class UpdateOwnedBrandDto {
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
-  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @IsOptional() @IsString() @MaxLength(200) tagline?: string;
-  @IsOptional() @IsString() story?: string;
-  @IsOptional() @IsString() @MaxLength(200) origin?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
+  @OptionalNotNull() @IsString() story?: string;
+  @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
 }
 
 export class PromotionDto {
@@ -69,14 +70,14 @@ export class PromotionDto {
 }
 
 export class UpdatePromotionDto {
-  @IsOptional() @IsString() title?: string;
-  @IsOptional() @IsString() subtitle?: string;
-  @IsOptional() @IsString() themeColor?: string;
-  @IsOptional() @IsString() @MaxLength(64) couponCode?: string;
-  @IsOptional() @IsDateString() startAt?: string;
-  @IsOptional() @IsDateString() endAt?: string;
-  @IsOptional() @IsBoolean() isActive?: boolean;
-  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @OptionalNotNull() @IsString() title?: string;
+  @OptionalNotNull() @IsString() subtitle?: string;
+  @OptionalNotNull() @IsString() themeColor?: string;
+  @OptionalNotNull() @IsString() @MaxLength(64) couponCode?: string;
+  @OptionalNotNull() @IsDateString() startAt?: string;
+  @OptionalNotNull() @IsDateString() endAt?: string;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsInt() @Min(0) sortOrder?: number;
 }
 
 export class DealerRewardDto {
@@ -94,10 +95,10 @@ export class ProductIdsDto {
 }
 
 export class UpdateDealerRewardDto {
-  @IsOptional() @IsString() title?: string;
-  @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold?: number;
-  @IsOptional() @IsIn(['QUARTER', 'YEAR']) period?: string;
-  @IsOptional() @IsBoolean() isActive?: boolean;
-  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @OptionalNotNull() @IsString() title?: string;
+  @OptionalNotNull() @IsString() description?: string;
+  @OptionalNotNull() @IsInt() @Min(0) @Max(DEALER_REWARD_THRESHOLD_MAX) threshold?: number;
+  @OptionalNotNull() @IsIn(['QUARTER', 'YEAR']) period?: string;
+  @OptionalNotNull() @IsBoolean() isActive?: boolean;
+  @OptionalNotNull() @IsInt() @Min(0) sortOrder?: number;
 }
