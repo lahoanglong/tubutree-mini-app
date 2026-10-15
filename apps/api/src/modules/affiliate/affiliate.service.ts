@@ -9,7 +9,7 @@ import { PancakeOrderService } from '../integrations/pancake/pancake-order.servi
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { FLASH_OVER_LIMIT_MSG, FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
-import { COD_MAX_PER_ORDER } from '../checkout/checkout-split';
+import { COD_MAX_PER_ORDER, PAYMENT_METHOD_NOT_ALLOWED } from '../checkout/checkout-split';
 import { reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, isSellableVariation, productDiscontinuedError } from '../cart/sellable';
 import { RewardPointsService } from '../wallet/reward-points.service';
@@ -42,6 +42,21 @@ export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 type Db = PrismaService | Prisma.TransactionClient;
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+
+/**
+ * Lý do đơn hộ không thu hộ (COD) được, null = được. Cùng trần mỗi đơn với checkout (COD_MAX_PER_ORDER); đơn hộ không trả bằng
+ * Ví nên chỉ còn chuyển khoản. Báo giá trả câu này để form khoá COD trước, tạo đơn từ chối đúng câu đó.
+ */
+function ctvCodBlockReason(total: number): string | null {
+  if (total <= COD_MAX_PER_ORDER) return null;
+  return `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${vnd(COD_MAX_PER_ORDER)}, đơn này là ${vnd(total)}. Vui lòng chọn chuyển khoản.`;
+}
+
+/** Cùng dạng `blockedPaymentMethods` của báo giá checkout: phương thức → lý do, chỉ có các phương thức bị khoá. */
+function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_TRANSFER', string>> {
+  const cod = ctvCodBlockReason(total);
+  return cod ? { COD: cod } : {};
+}
 
 /**
  * CTV nội bộ (Build Spec §6.x, §15 affiliate.*).
@@ -531,6 +546,7 @@ export class AffiliateService {
       goods: priced.goods,
       shippingFee: priced.shippingFee,
       total: priced.total,
+      blockedPaymentMethods: blockedCtvPaymentMethods(priced.total),
     };
   }
 
@@ -602,10 +618,9 @@ export class AffiliateService {
     if (dto.expectedTotal != null && total > dto.expectedTotal) {
       throw totalChangedError(totalChangedMessage(dto.expectedTotal, total));
     }
-    if (dto.paymentMethod === 'COD' && total > COD_MAX_PER_ORDER) {
-      throw new BadRequestException(
-        `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${COD_MAX_PER_ORDER.toLocaleString('vi-VN')}đ, đơn này là ${total.toLocaleString('vi-VN')}đ. Vui lòng chọn chuyển khoản.`,
-      );
+    const codBlocked = dto.paymentMethod === 'COD' ? ctvCodBlockReason(total) : null;
+    if (codBlocked) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PAYMENT_METHOD_NOT_ALLOWED, message: codBlocked });
     }
 
     // Gian hàng của CTV (nếu có) → gắn slug để analytics theo gian hàng.
