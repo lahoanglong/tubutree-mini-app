@@ -8,6 +8,7 @@ import {
 import {
   getNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
   type NotificationDTO,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
@@ -177,6 +178,12 @@ export default function NotificationsPage() {
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
+  const readAllMut = useMutation({
+    mutationFn: () => markAllNotificationsRead(),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
   useEffect(() => {
     if (!selectedNotif) return;
@@ -236,7 +243,23 @@ export default function NotificationsPage() {
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title="Thông báo" />
+      <PageHeader
+        title="Thông báo"
+        actions={
+          unreadCount > 0 ? (
+            <DsButton
+              variant="ghost"
+              loading={readAllMut.isPending}
+              onPress={() => {
+                haptic('light');
+                readAllMut.mutate();
+              }}
+            >
+              Đọc tất cả
+            </DsButton>
+          ) : undefined
+        }
+      />
 
       <AuthGate
         loading={
