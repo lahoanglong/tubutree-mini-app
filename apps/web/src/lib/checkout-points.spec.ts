@@ -8,7 +8,7 @@ describe('checkoutPointsOffer', () => {
     expect(checkoutPointsOffer({ pointsBalance: 500, redeemablePoints: 200, lockedPoints: 300 })).toEqual({
       usable: 200,
       converted: 0,
-      lockNote: '300 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
+      lockNote: '300 điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả',
       convertedNote: null,
     });
   });
@@ -21,7 +21,7 @@ describe('checkoutPointsOffer', () => {
     expect(checkoutPointsOffer({ pointsBalance: 80, redeemablePoints: 0, lockedPoints: 80 })).toEqual({
       usable: 0,
       converted: 0,
-      lockNote: '80 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
+      lockNote: '80 điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả',
       convertedNote: null,
     });
   });
@@ -56,7 +56,7 @@ describe('checkoutPointsOffer với điểm quy đổi (PD-3)', () => {
     ).toEqual({
       usable: 1450,
       converted: 1250,
-      lockNote: '300 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được',
+      lockNote: '300 điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả',
       convertedNote: 'trong đó 1.250 điểm không hết hạn, trả tới 100% giá trị hàng',
     });
   });
