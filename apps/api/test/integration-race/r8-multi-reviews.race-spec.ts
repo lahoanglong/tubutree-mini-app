@@ -6,6 +6,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { ReviewsService } from '../../src/modules/reviews/reviews.service';
+import { orderLineReviews } from '../../src/modules/reviews/review-eligibility';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
@@ -289,6 +290,34 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
     expect(ok).toMatchObject({ canReview: true, purchaseCount: 1 });
     expect(ok.reason === 'NOT_PURCHASED' ? [] : ok.reviewableOrders.map((o) => o.orderId)).toEqual([own.id]);
     expect((await ledger(u.id)).rows).toHaveLength(0);
+  });
+
+  it('chi tiết đơn: từng dòng biết đã có đánh giá của ĐƠN NÀY chưa (đánh giá ở đơn khác không tính)', async () => {
+    const a = await product();
+    const b = await product();
+    const u = await createUser(prisma);
+    const both = { create: [...line(a.v.id).create, ...line(b.v.id).create] };
+    const first = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', items: both });
+    const again = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', items: both });
+    const reviewed = await reviews.create(u.id, a.p.slug, { orderId: first.id, rating: 5 });
+
+    const stateOf = async (orderId: string) => {
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } } } });
+      const reviewOf = await orderLineReviews(prisma, order);
+      return order.items.map((it) => [it.variationId, reviewOf(it.id)]);
+    };
+    expect(await stateOf(first.id)).toEqual(
+      expect.arrayContaining([
+        [a.v.id, { reviewId: reviewed.id, reviewable: false }],
+        [b.v.id, { reviewId: null, reviewable: true }],
+      ]),
+    );
+    expect(await stateOf(again.id)).toEqual(
+      expect.arrayContaining([
+        [a.v.id, { reviewId: null, reviewable: true }],
+        [b.v.id, { reviewId: null, reviewable: true }],
+      ]),
+    );
   });
 
   it('đánh giá của chính mình đọc được nguyên nội dung để sửa; của người khác thì 404', async () => {

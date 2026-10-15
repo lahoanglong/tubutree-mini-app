@@ -19,6 +19,10 @@ export interface OrderItemDTO {
   /** Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ đặt vượt tồn
    * (dealer.service.ts placeOrder cho đặt trước thay vì từ chối). Luôn 0 với đơn khác. */
   backorderedQty: number;
+  /** Chỉ GET /orders/:code: đánh giá khách đã viết cho sản phẩm của dòng này ở chính đơn này (mỗi lần mua một đánh giá). */
+  reviewId?: string | null;
+  /** Chỉ GET /orders/:code: dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
+  reviewable?: boolean;
 }
 
 export interface ShippingAddressSnapshot {
