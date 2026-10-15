@@ -4,6 +4,9 @@ export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 /** Trần ký tự của ảnh base64 mà API nhận cho minh chứng đổi/trả (uploaded-image.ts DEFAULT_MAX_DATA_URL_LENGTH = 1.500.000). */
 export const MAX_UPLOAD_DATA_URL_LENGTH = 1_400_000;
 
+/** Trần ký tự của ảnh base64 trong nội dung công khai như đánh giá (uploaded-image.ts PUBLIC_CONTENT_MAX_DATA_URL_LENGTH = 700.000). */
+export const MAX_PUBLIC_DATA_URL_LENGTH = 690_000;
+
 export const isUsableImageFile = (file: Pick<File, 'type'>): boolean => file.type.startsWith('image/');
 
 /** Kích thước sau khi thu cạnh dài về `maxDim`, giữ tỉ lệ; ảnh đã nhỏ hơn thì giữ nguyên. */
@@ -44,10 +47,10 @@ function encode(img: HTMLImageElement, maxDim: number, quality: number): string 
  * Nén ảnh phía trình duyệt thành data URL JPEG nhẹ (~150-400KB) để gửi kèm yêu cầu đổi/trả — cùng cách của Mini App khi
  * chưa cấu hình Cloudinary. Nếu vẫn vượt trần của API thì nén mạnh hơn một lần; vẫn quá thì báo lỗi thay vì để API từ chối.
  */
-export async function readAndCompressImage(file: File): Promise<string> {
+export async function readAndCompressImage(file: File, maxLength: number = MAX_UPLOAD_DATA_URL_LENGTH): Promise<string> {
   const img = await load(file);
   let dataUrl = encode(img, 1200, 0.82);
-  if (dataUrl.length > MAX_UPLOAD_DATA_URL_LENGTH) dataUrl = encode(img, 900, 0.6);
-  if (dataUrl.length > MAX_UPLOAD_DATA_URL_LENGTH) throw new Error('Ảnh quá nặng sau khi nén');
+  if (dataUrl.length > maxLength) dataUrl = encode(img, 900, 0.6);
+  if (dataUrl.length > maxLength) throw new Error('Ảnh quá nặng sau khi nén');
   return dataUrl;
 }

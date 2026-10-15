@@ -1,0 +1,294 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+
+// R8: mỗi lần mua (đơn) một đánh giá. Web theo đúng luật của Mini App: nút đầu mục viết cho đơn còn viết được, đánh
+// giá đã có sửa ở đúng dòng của nó, chỉ đánh giá đầu tiên của sản phẩm được hứa Điểm Xanh.
+
+const mocks = vi.hoisted(() => ({
+  auth: { status: 'authenticated', initialized: true, sessionUnavailable: false } as Record<string, unknown>,
+  search: '',
+  list: null as unknown,
+  elig: null as unknown,
+  mine: {} as Record<string, unknown>,
+  myCalls: [] as string[],
+  eligCalls: 0,
+  saved: [] as { slug: string; body: Record<string, unknown> }[],
+  saveResult: { id: 'new', updated: false, pointsEarned: 0 } as unknown,
+}));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
+vi.mock('@/components/evidence-upload', () => ({
+  EvidenceUpload: ({ value, onChange, label }: { value: string[]; onChange: (v: string[]) => void; label: string }) => (
+    <button type="button" className="min-h-11" onClick={() => onChange([...value, 'data:image/jpeg;base64,AAAA'])}>
+      {label} ({value.length})
+    </button>
+  ),
+}));
+vi.mock('@/lib/reviews-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
+  fetchProductReviews: async () => mocks.list,
+  fetchCanReview: async () => {
+    mocks.eligCalls += 1;
+    return mocks.elig;
+  },
+  fetchMyReview: async (id: string) => {
+    mocks.myCalls.push(id);
+    const r = mocks.mine[id];
+    if (r instanceof Error) throw r;
+    return r;
+  },
+  saveReview: async (slug: string, body: Record<string, unknown>) => {
+    mocks.saved.push({ slug, body });
+    if (mocks.saveResult instanceof Error) throw mocks.saveResult;
+    return mocks.saveResult;
+  },
+}));
+
+import { ProductReviews } from './product-reviews';
+
+const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
+  id,
+  rating,
+  author: `Khách ${id}`,
+  avatar: null,
+  comment: `Nhận xét ${id}`,
+  images: [],
+  videoUrl: null,
+  verifiedPurchase: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  ...extra,
+});
+const LIST = {
+  count: 3,
+  average: 4.3,
+  videoCount: 0,
+  distribution: { '5': 2, '3': 1 },
+  items: [review('a', 5), review('b', 5), review('c', 3, { images: ['/reviews/c/images/0?v=1'] })],
+};
+const O1 = { orderId: 'o1', code: 'TB0001', deliveredAt: '2026-08-01T00:00:00.000Z' };
+const O2 = { orderId: 'o2', code: 'TB0002', deliveredAt: '2026-09-10T00:00:00.000Z' };
+const REF_A = { id: 'a', orderId: 'o1', orderCode: 'TB0001', rating: 5, createdAt: '2026-08-05T00:00:00.000Z', isVisible: true };
+const REF_B = { id: 'b', orderId: 'o2', orderCode: 'TB0002', rating: 5, createdAt: '2026-09-12T00:00:00.000Z', isVisible: true };
+const MINE_A = { id: 'a', orderId: 'o1', rating: 4, comment: 'Dùng ổn', images: ['data:image/jpeg;base64,OLD'], videoUrl: 'https://res.cloudinary.com/x/v.mp4', isVisible: true };
+const MINE_B = { id: 'b', orderId: 'o2', rating: 3, comment: 'Lần này hơi khô', images: [], videoUrl: null, isVisible: true };
+const ELIG_NEW = { canReview: true, reason: null, rewardAvailable: true, purchaseCount: 1, reviewableOrders: [O1], myReviews: [] };
+const ELIG_REPEAT = { canReview: true, reason: null, rewardAvailable: false, purchaseCount: 2, reviewableOrders: [O2], myReviews: [REF_A] };
+const ELIG_ALL = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 2, reviewableOrders: [], myReviews: [REF_B, REF_A] };
+const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
+
+let mounted: Rendered[] = [];
+const mount = async () => {
+  const r = render(<ProductReviews slug="nuoc-rua-chen" />);
+  mounted.push(r);
+  await flush(8);
+  return r.container;
+};
+const button = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text);
+const buttonNamed = (c: HTMLElement, name: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+const form = (c: HTMLElement) => c.querySelector('form');
+const star = (c: HTMLElement, n: number) => c.querySelector<HTMLButtonElement>(`[role="radiogroup"] button[aria-label="${n} sao"]`);
+
+beforeEach(() => {
+  mocks.auth = { status: 'authenticated', initialized: true, sessionUnavailable: false };
+  mocks.search = '';
+  mocks.list = structuredClone(LIST);
+  mocks.elig = structuredClone(ELIG_REPEAT);
+  mocks.mine = { a: structuredClone(MINE_A), b: structuredClone(MINE_B) };
+  mocks.myCalls = [];
+  mocks.eligCalls = 0;
+  mocks.saved = [];
+  mocks.saveResult = { id: 'new', updated: false, pointsEarned: 0 };
+});
+afterEach(() => {
+  mounted.forEach((m) => m.unmount());
+  mounted = [];
+});
+
+describe('ProductReviews (web) — danh sách công khai', () => {
+  it('tiêu đề kèm số đánh giá, điểm trung bình, phân bổ sao và mọi đánh giá đang hiện; ảnh API ghép gốc API', async () => {
+    const c = await mount();
+    expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
+    expect(c.textContent).toContain('4.3');
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
+    expect(c.querySelector('[aria-label="Phân bổ số sao"]')?.textContent).toContain('5');
+    expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
+  });
+
+  it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm"', async () => {
+    mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
+    const c = await mount();
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
+    click(button(c, 'Xem thêm (2)'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(7);
+  });
+
+  it('chưa có đánh giá → lời mời viết đánh giá đầu tiên', async () => {
+    mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
+    const c = await mount();
+    expect(c.textContent).toContain('Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.');
+  });
+
+  it('khách chưa đăng nhập: không hỏi can-review, mời đăng nhập và quay lại đúng đơn đang mở', async () => {
+    mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
+    mocks.search = 'danh-gia=o2';
+    const c = await mount();
+    expect(mocks.eligCalls).toBe(0);
+    const login = byText(c, 'a', 'Đăng nhập để đánh giá')!;
+    expect(login.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/san-pham/nuoc-rua-chen?danh-gia=o2')}`);
+    expect(form(c)).toBeNull();
+  });
+
+  it('chưa mua và nhận sản phẩm: không có nút viết hay sửa, nói rõ lý do', async () => {
+    mocks.elig = { canReview: false, reason: 'NOT_PURCHASED' };
+    const c = await mount();
+    expect(c.textContent).toContain('Mua và nhận hàng để đánh giá');
+    expect(button(c, /Viết đánh giá|Sửa đánh giá/)).toBeNull();
+  });
+});
+
+describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
+  it('đã đánh giá đơn cũ, còn đơn mới: "Viết đánh giá" ở đầu mục; dòng của mình có nhãn "Của bạn", mã đơn và nút sửa riêng', async () => {
+    const c = await mount();
+    expect(button(c, 'Viết đánh giá')).not.toBeNull();
+    expect(byText(c, 'span', /^Của bạn$/)).not.toBeNull();
+    expect(c.querySelectorAll('li.border-t')[0]!.textContent).toContain('Đơn TB0001');
+    expect(buttonNamed(c, 'Sửa đánh giá đơn TB0001')).not.toBeNull();
+  });
+
+  it('viết cho lần mua mới: gửi kèm đơn còn viết được, nói rõ đơn nào và không hứa điểm khi đã nhận thưởng', async () => {
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    const f = form(c)!;
+    expect(f.textContent).toContain('Bạn đã mua sản phẩm này 2 lần, mỗi lần mua được viết một đánh giá. Đánh giá này cho đơn TB0002.');
+    expect(f.textContent).toContain(REWARD_ALREADY_GIVEN);
+    expect(f.textContent).not.toMatch(/\+\d+ Điểm Xanh|Lần đầu đánh giá/);
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved).toEqual([
+      { slug: 'nuoc-rua-chen', body: { rating: 5, comment: undefined, images: undefined, videoUrl: undefined, orderId: 'o2' } },
+    ]);
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã gửi đánh giá của bạn');
+    expect(form(c)).toBeNull();
+  });
+
+  it('đánh giá đầu tiên: câu gợi ý nêu điều kiện lần đầu rồi mới nêu điểm; được cộng thì báo đúng số điểm', async () => {
+    mocks.elig = structuredClone(ELIG_NEW);
+    mocks.saveResult = { id: 'a', updated: false, pointsEarned: 10 };
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10 Điểm Xanh (chỉ chữ +5).');
+    click(button(c, 'Ảnh đánh giá (0)'));
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này, bạn nhận +10 Điểm Xanh cho đánh giá có ảnh!');
+    click(star(c, 4));
+    typeInto(c.querySelector('textarea'), '  Dùng êm  ');
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved[0]!.body).toEqual({
+      rating: 4,
+      comment: 'Dùng êm',
+      images: ['data:image/jpeg;base64,AAAA'],
+      videoUrl: undefined,
+      orderId: 'o1',
+    });
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Cảm ơn đánh giá của bạn! Đã cộng 10 Điểm Xanh');
+  });
+
+  it('nút "Sửa" của dòng mình: điền theo GET /reviews/:id, giữ ảnh và video cũ, lưu gửi đúng đơn của đánh giá đó', async () => {
+    mocks.saveResult = { id: 'a', updated: true, pointsEarned: 10 };
+    const c = await mount();
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush();
+    expect(mocks.myCalls).toEqual(['a']);
+    const f = form(c)!;
+    expect(f.getAttribute('aria-label')).toBe('Sửa đánh giá');
+    expect(star(c, 4)!.getAttribute('aria-checked')).toBe('true');
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+    expect(button(c, 'Ảnh đánh giá (1)')).not.toBeNull();
+    expect(f.textContent).toContain('Bạn đang sửa đánh giá cho đơn TB0001.');
+    expect(f.textContent).toContain('Video đã gửi kèm đánh giá này được giữ nguyên.');
+    expect(f.textContent).toContain(EDIT_HINT);
+    click(star(c, 2));
+    click(button(c, 'Lưu đánh giá'));
+    await flush();
+    expect(mocks.saved[0]!.body).toEqual({
+      rating: 2,
+      comment: 'Dùng ổn',
+      images: ['data:image/jpeg;base64,OLD'],
+      videoUrl: 'https://res.cloudinary.com/x/v.mp4',
+      orderId: 'o1',
+    });
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã cập nhật đánh giá của bạn');
+  });
+
+  it('mọi lần mua đã có đánh giá: đầu mục là "Sửa đánh giá của bạn" mở đánh giá mới nhất', async () => {
+    mocks.elig = structuredClone(ELIG_ALL);
+    const c = await mount();
+    expect(button(c, 'Viết đánh giá')).toBeNull();
+    click(button(c, 'Sửa đánh giá của bạn'));
+    await flush();
+    expect(mocks.myCalls).toEqual(['b']);
+    expect(c.querySelector('textarea')!.value).toBe('Lần này hơi khô');
+  });
+
+  it('không tải được đánh giá để sửa → báo lỗi và "Thử lại", không mở form trống', async () => {
+    mocks.mine.a = new Error('mất mạng');
+    const c = await mount();
+    click(buttonNamed(c, 'Sửa đánh giá đơn TB0001'));
+    await flush();
+    expect(form(c)).toBeNull();
+    expect(c.textContent).toContain('Không tải được đánh giá để sửa.');
+    mocks.mine.a = structuredClone(MINE_A);
+    click(button(c, 'Thử lại'));
+    await flush();
+    expect(c.querySelector('textarea')!.value).toBe('Dùng ổn');
+  });
+
+  it('gửi lỗi → báo lỗi của máy chủ, form vẫn mở để gửi lại', async () => {
+    mocks.saveResult = new Error('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+    expect(form(c)).not.toBeNull();
+  });
+
+  it('truy cập: nút và ô nhập có tên, vùng chạm 44px (cả khi form đang mở)', async () => {
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+});
+
+describe('ProductReviews (web) — mở từ chi tiết đơn (?danh-gia=<đơn>)', () => {
+  it('đơn chưa đánh giá → mở sẵn form viết cho đúng đơn đó', async () => {
+    mocks.search = 'danh-gia=o2';
+    const c = await mount();
+    expect(form(c)?.getAttribute('aria-label')).toBe('Viết đánh giá');
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved[0]!.body.orderId).toBe('o2');
+  });
+
+  it('đơn đã đánh giá → mở sửa đúng đánh giá của đơn đó', async () => {
+    mocks.search = 'danh-gia=o1';
+    const c = await mount();
+    expect(mocks.myCalls).toEqual(['a']);
+    expect(form(c)?.getAttribute('aria-label')).toBe('Sửa đánh giá');
+  });
+
+  it('đơn không có trong can-review → không mở gì', async () => {
+    mocks.search = 'danh-gia=o9';
+    const c = await mount();
+    expect(form(c)).toBeNull();
+    expect(button(c, 'Viết đánh giá')).not.toBeNull();
+  });
+});

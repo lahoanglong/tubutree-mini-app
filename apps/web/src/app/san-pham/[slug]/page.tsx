@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -9,6 +10,7 @@ import ProductGallery from '@/components/product-gallery';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ui } from '@/lib/guest-ui';
+import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 
 export const revalidate = 300;
 
@@ -114,6 +116,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="mt-2 whitespace-pre-line break-words text-stone-700">{description}</p>
         </section>
       )}
+
+      {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
+      <Suspense fallback={<ProductReviewsFallback />}>
+        <ProductReviews slug={product.slug} />
+      </Suspense>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>

@@ -15,12 +15,21 @@ export function EvidenceUpload({
   onChange,
   max = 3,
   disabled = false,
+  label = 'Ảnh minh chứng',
+  hint = 'khuyến khích',
+  maxDataUrlLength,
 }: {
   value: string[];
   onChange: (images: string[]) => void;
   max?: number;
   disabled?: boolean;
+  /** Tên loại ảnh (đầu khối, nhãn ô chọn, alt). */
+  label?: string;
+  hint?: string;
+  /** Trần ký tự base64 của API nơi ảnh được gửi tới; mặc định trần của minh chứng đổi/trả. */
+  maxDataUrlLength?: number;
 }) {
+  const noun = label.charAt(0).toLowerCase() + label.slice(1);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -51,7 +60,7 @@ export function EvidenceUpload({
           continue;
         }
         try {
-          added.push(await readAndCompressImage(file));
+          added.push(await readAndCompressImage(file, maxDataUrlLength));
         } catch {
           failed += 1;
         }
@@ -73,7 +82,7 @@ export function EvidenceUpload({
   return (
     <div>
       <div className="text-sm font-semibold text-stone-900">
-        Ảnh minh chứng (khuyến khích, tối đa {max}){' '}
+        {label} ({hint}, tối đa {max}){' '}
         <span className="font-normal text-stone-600">
           {value.length}/{max}
         </span>
@@ -84,7 +93,7 @@ export function EvidenceUpload({
         accept="image/*"
         multiple
         hidden
-        aria-label="Chọn ảnh minh chứng"
+        aria-label={`Chọn ${noun}`}
         onChange={(e) => void onFiles(e)}
         className="min-h-11"
       />
@@ -92,12 +101,12 @@ export function EvidenceUpload({
         {value.map((src, i) => (
           <li key={i} className="relative h-[4.5rem] w-[4.5rem] flex-none overflow-hidden rounded-control border border-stone-200 bg-stone-100">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={`Ảnh minh chứng ${i + 1}`} className="h-full w-full object-cover" />
+            <img src={src} alt={`${label} ${i + 1}`} className="h-full w-full object-cover" />
             <button
               type="button"
               onClick={() => onChange(value.filter((_, j) => j !== i))}
               disabled={disabled || busy}
-              aria-label={`Xóa ảnh minh chứng ${i + 1}`}
+              aria-label={`Xóa ${noun} ${i + 1}`}
               className="absolute right-0 top-0 inline-flex h-11 w-11 items-start justify-end p-1 disabled:opacity-50"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900/70 text-stone-0">
