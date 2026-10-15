@@ -140,6 +140,31 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(c.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
+  it('WEB-13: mở hộp xác nhận xóa thì focus vào "Giữ lại"; "Giữ lại" trả focus về nút "Xóa" của đúng dòng đó', async () => {
+    const c = await mount();
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    expect(document.activeElement).toBe(btn(c, 'Giữ lại'));
+    expect(document.getElementById(c.querySelector('[role="alertdialog"]')!.getAttribute('aria-describedby')!)!.textContent).toContain('vẫn giữ nguyên địa chỉ giao');
+    click(btn(c, 'Giữ lại')!);
+    await flush(2);
+    expect(document.activeElement).toBe(btn(c, 'Xóa địa chỉ của Trần Bình'));
+  });
+
+  it('WEB-13: xóa lỗi thì focus về nút "Xóa" của dòng; xóa xong (dòng sắp biến mất) thì về nút "Thêm địa chỉ mới", không rơi về <body>', async () => {
+    mocks.remove.mockRejectedValueOnce(new Error('Không xóa được.'));
+    const c = await mount();
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không xóa được.');
+    expect(document.activeElement).toBe(btn(c, 'Xóa địa chỉ của Trần Bình'));
+    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    await flush(4);
+    expect(mocks.remove).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(btn(c, '+ Thêm địa chỉ mới'));
+  });
+
   it('BE không cho xoá (địa chỉ đang gắn gói giao định kỳ): hiện nguyên văn lời BE', async () => {
     mocks.remove.mockRejectedValue(new Error('Địa chỉ đang dùng cho gói giao định kỳ: Dầu gội. Hãy đổi địa chỉ của gói trước.'));
     const c = await mount();

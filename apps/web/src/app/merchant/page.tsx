@@ -51,7 +51,7 @@ import { formatDate } from '@/lib/format-date';
 import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
-import { CreateProductModal, EditProductModal } from './product-form';
+import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -1111,7 +1111,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
                         <div className="font-semibold text-stone-900">{p.name}</div>
                         {p.shortDesc && <div className="line-clamp-1 text-xs text-stone-500">{p.shortDesc}</div>}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-forest-700">{formatVnd(p.basePrice)}</td>
+                      <td className="px-3 py-2.5 font-semibold text-forest-700"><MerchantProductPrice product={p} /></td>
                       <td className="px-3 py-2.5 text-xs text-stone-600">{p.variations?.[0]?.stock ?? '—'}</td>
                       <td className="px-3 py-2.5 text-xs text-stone-600">
                         {tubuFulfils ? 'Tubu giao hộ' : 'Gian hàng tự giao'}

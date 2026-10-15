@@ -152,6 +152,47 @@ describe('chi tiết đơn — hủy đơn (BUYERWEB-13)', () => {
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
+  it('WEB-13: mở hộp xác nhận thì focus vào "Giữ đơn" (lựa chọn an toàn); mô tả hộp trỏ tới câu hậu quả và nơi nhận tiền hoàn', async () => {
+    mocks.order = { ...BASE, paymentMethod: 'WALLET', paymentStatus: 'PAID' };
+    const { container } = await mount();
+    expect(document.activeElement).toBe(document.body);
+    click(btn(container, 'Hủy đơn')!);
+    expect(document.activeElement).toBe(btn(container, 'Giữ đơn'));
+    const dialog = container.querySelector('[role="alertdialog"]')!;
+    const described = dialog.getAttribute('aria-describedby')!.split(' ').map((id) => document.getElementById(id)?.textContent);
+    expect(described[0]).toContain('không thể khôi phục');
+    expect(described[1]).toContain('được hoàn ngay vào Ví Tubu');
+  });
+
+  it('WEB-13: "Giữ đơn" trả focus về nút "Hủy đơn" đã bấm', async () => {
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(btn(container, 'Giữ đơn')!);
+    await flush();
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(btn(container, 'Hủy đơn'));
+  });
+
+  it('WEB-13: hủy xong (nút Hủy đơn đã ẩn) focus chuyển sang dòng báo kết quả, không rơi về <body>', async () => {
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(8);
+    const status = container.querySelector('[role="status"]')!;
+    expect(status.textContent).toContain('Đã hủy đơn hàng');
+    expect(document.activeElement).toBe(status);
+  });
+
+  it('WEB-13: BE từ chối hủy: focus về nút "Hủy đơn" (lời từ chối đã đọc qua role=alert)', async () => {
+    mocks.cancel.mockRejectedValue(new Error('Đơn đã bàn giao vận chuyển.'));
+    const { container } = await mount();
+    click(btn(container, 'Hủy đơn')!);
+    click(confirmCancelBtn(container));
+    await flush(8);
+    expect(container.querySelector('[role="alert"]')!.textContent).toContain('Đơn đã bàn giao vận chuyển.');
+    expect(document.activeElement).toBe(btn(container, 'Hủy đơn'));
+  });
+
   it('xác nhận hủy: gọi API đúng mã đơn rồi báo đã hủy', async () => {
     const { container } = await mount();
     click(btn(container, 'Hủy đơn')!);

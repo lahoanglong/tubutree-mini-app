@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useModalA11y } from '@/lib/use-modal-a11y';
 
 /**
  * Ngăn kéo phủ màn hình cho web admin: chi tiết đơn/người dùng trên điện thoại (thay vì mở rộng hàng trong bảng cuộn
- * ngang) và menu mục quản trị. Esc / bấm nền / nút Đóng đều đóng; focus vào ngăn khi mở và trả lại chỗ cũ khi đóng.
+ * ngang) và menu mục quản trị. Esc / bấm nền / nút Đóng đều đóng; focus vào ngăn khi mở, Tab quay vòng trong ngăn và trả lại
+ * chỗ cũ khi đóng (xem `useModalA11y`).
  */
 export function SideDrawer({
   title,
@@ -20,28 +22,7 @@ export function SideDrawer({
   children: ReactNode;
 }) {
   const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        closeRef.current();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = overflow;
-      previous?.focus?.();
-    };
-  }, []);
+  const panelRef = useModalA11y<HTMLDivElement>(onClose);
 
   return createPortal(
     <div data-drawer-backdrop onClick={onClose} className="fixed inset-0 z-[90] flex bg-stone-900/40">

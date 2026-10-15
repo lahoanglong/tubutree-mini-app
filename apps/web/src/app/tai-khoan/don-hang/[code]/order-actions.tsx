@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
@@ -56,6 +56,10 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
+  const cancelTriggerRef = useRef<HTMLButtonElement>(null);
+  const keepOrderRef = useRef<HTMLButtonElement>(null);
+  const cancelNoticeRef = useRef<HTMLParagraphElement>(null);
+  const restoreFocus = useRef(false);
 
   const canCancel = canCancelOrder(o, userId);
   const canReorder = isReorderable(o.status);
@@ -106,6 +110,19 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     },
   });
 
+  // Hộp xác nhận hủy thay chính nút "Hủy đơn" nên focus phải được dời theo: vào "Giữ đơn" (lựa chọn an toàn) khi mở, và khi đóng
+  // về nút "Hủy đơn" (hoặc về dòng kết quả khi nút đã ẩn vì hủy xong). Chờ hết `isPending` vì kết quả hủy đến sau lúc hộp đóng.
+  useEffect(() => {
+    if (!confirmCancel) return;
+    restoreFocus.current = true;
+    keepOrderRef.current?.focus();
+  }, [confirmCancel]);
+  useEffect(() => {
+    if (confirmCancel || cancel.isPending || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    (cancelTriggerRef.current ?? cancelNoticeRef.current)?.focus();
+  }, [confirmCancel, cancel.isPending, cancel.isSuccess, cancel.isError]);
+
   // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
   const nothingToDo = !canCancel && !canReorder && !showsReturns && !cancel.isError;
   if (nothingToDo) return null;
@@ -113,22 +130,29 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   return (
     <section aria-label="Thao tác với đơn hàng" className="mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
       {cancel.isSuccess && (
-        <p role="status" className="mb-3 text-sm font-medium text-success-fg">
+        <p ref={cancelNoticeRef} tabIndex={-1} role="status" className="mb-3 text-sm font-medium text-success-fg outline-none">
           Đã hủy đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
         </p>
       )}
       {cancel.isError && (
-        <p role="alert" className={`mb-3 ${ui.error}`}>
+        <p ref={cancelNoticeRef} tabIndex={-1} role="alert" className={`mb-3 outline-none ${ui.error}`}>
           {cancel.error instanceof Error ? cancel.error.message : 'Không hủy được đơn hàng.'}
         </p>
       )}
 
       {confirmCancel ? (
-        <div role="alertdialog" aria-labelledby="cancel-title" className="rounded-control border border-danger-fg bg-danger-bg p-3">
+        <div
+          role="alertdialog"
+          aria-labelledby="cancel-title"
+          aria-describedby={refundMode === 'wallet' || refundMode === 'unpaidTransfer' ? 'cancel-note cancel-refund' : 'cancel-note'}
+          className="rounded-control border border-danger-fg bg-danger-bg p-3"
+        >
           <p id="cancel-title" className="font-semibold text-stone-900">
             Bạn muốn hủy đơn này?
           </p>
-          <p className="mt-1 text-sm text-stone-700">Đơn đã hủy không thể khôi phục lại.</p>
+          <p id="cancel-note" className="mt-1 text-sm text-stone-700">
+            Đơn đã hủy không thể khôi phục lại.
+          </p>
           {refundMode === 'choose' && (
             <div className="mt-3 rounded-control bg-stone-0 p-3">
               <RefundDestinationPicker
@@ -142,16 +166,16 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
             </div>
           )}
           {refundMode === 'wallet' && (
-            <p className="mt-2 text-sm text-stone-700">{`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}</p>
+            <p id="cancel-refund" className="mt-2 text-sm text-stone-700">{`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}</p>
           )}
           {refundMode === 'unpaidTransfer' && (
-            <p role="note" className="mt-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
+            <p id="cancel-refund" role="note" className="mt-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
               Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn được
               hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
             </p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => setConfirmCancel(false)} disabled={cancel.isPending} className={ui.btnPrimary}>
+            <button ref={keepOrderRef} type="button" onClick={() => setConfirmCancel(false)} disabled={cancel.isPending} className={ui.btnPrimary}>
               Giữ đơn
             </button>
             <button
@@ -171,6 +195,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
         <div className="flex flex-wrap gap-2">
           {canCancel && !cancel.isSuccess && (
             <button
+              ref={cancelTriggerRef}
               type="button"
               onClick={() => {
                 cancel.reset();

@@ -812,6 +812,21 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(root.querySelector('td.text-forest-700')!.textContent).toContain('120.000');
   });
 
+  it('WEB-1: cột giá của danh sách hiện giá khách thực trả (khuyến mãi nếu có) kèm giá gốc gạch ngang', async () => {
+    mocks.getProducts = vi.fn(async () => ({
+      ownProducts: [PRODUCT('s', 'APPROVED', { isActive: true, salePrice: 90000 }), PRODUCT('n', 'APPROVED', { isActive: true, salePrice: null })],
+      resellProducts: [],
+      meta: { page: 1, limit: 20, ownTotal: 2, resellTotal: 0 },
+    }));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    const cells = Array.from(root.querySelectorAll('tbody td.text-forest-700'));
+    expect(cells[0]!.firstChild!.textContent).toBe('90.000đ');
+    expect(cells[0]!.querySelector('del')!.textContent).toBe('120.000đ');
+    expect(cells[1]!.textContent).toBe('120.000đ');
+    expect(cells[1]!.querySelector('del')).toBeNull();
+  });
+
   it('Gỡ khỏi shop: hỏi xác nhận, từ chối thì không gọi API, đồng ý gọi đúng sản phẩm; lỗi hiện thông báo danger', async () => {
     const root = await mount();
     await openTab('Sản phẩm');
@@ -1095,16 +1110,16 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
       click(byText(overlay, 'button', 'Lưu thay đổi'));
       await flush();
-      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null, basePrice: 95000, stock: 12 });
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null, basePrice: 95000, salePrice: null, stock: 12 });
     });
 
-    it('chuyển sang tự giao mà chưa sửa giá/tồn vẫn gửi pancakeCode null (không bị coi là không đổi gì)', async () => {
+    it('chuyển sang tự giao mà chưa sửa giá/tồn vẫn gửi pancakeCode null cùng giá đang thấy và salePrice null (không bị coi là không đổi gì)', async () => {
       const { open } = await openEdit(UNLINKED());
       const overlay = open();
       click(radioOf(overlay, 'Chuyển sang gian hàng tự giao'));
       click(byText(overlay, 'button', 'Lưu thay đổi'));
       await flush();
-      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null });
+      expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: null, basePrice: 120000, salePrice: null });
     });
 
     it('chọn lại "Giữ mã hiện tại" sau khi đổi ý thì ẩn lại giá/tồn và không gửi pancakeCode', async () => {
