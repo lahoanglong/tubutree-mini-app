@@ -289,6 +289,67 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
       expect(sendMail).toHaveBeenCalledTimes(2);
     });
 
+    it('OPS-7: hàng việc tăng thêm (quyết định ALERT mới nhưng cùng bộ sự cố) và nhắc lại sau 6 giờ KHÔNG thử SMTP lại khi đang bị chặn; webhook và in-app vẫn báo; loại sự cố mới thì thử đúng một lần', async () => {
+      Object.assign(env, { PANCAKE_API_KEY: 'k', PANCAKE_SHOP_ID: 's' });
+      await prisma.order.updateMany({ where: { pancakeAttentionAt: { not: null } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+      const u = await createUser(prisma, {});
+      const mk = async () => {
+        const o = await createOrder(prisma, { userId: u.id, status: 'CANCELLED', pancakeAttention: 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', pancakeAttentionAt: new Date(0) });
+        created.push(o.id);
+        return o;
+      };
+      // Đơn chưa lên Pancake do spec khác để lại sẽ thành "kẹt" khi đồng hồ nhảy 6 giờ — một loại sự cố mới, không phải nhắc lại.
+      await prisma.order.updateMany({ where: { pancakeOrderId: null, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'] } }, data: { status: 'CANCELLED' } });
+      sendMail.mockRejectedValue(authError());
+      await mk();
+      await expect(check(0)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+
+      for (const m of [5, 10, 15]) {
+        await mk();
+        await expect(check(m)).resolves.toMatchObject({ sent: 'ALERT' });
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      await expect(check(15 + 6 * 60)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+
+      queueFailures['notifications'] = 9;
+      await expect(check(15 + 6 * 60 + 5)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      await mk();
+      await expect(check(15 + 6 * 60 + 10)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(await blocked()).toMatchObject({ emailBlocked: true });
+    });
+
+    it('OPS-7: khi cấu hình đã sửa (nhả chặn) thì quyết định ALERT cùng bộ sự cố gửi được lại bình thường và gỡ chặn', async () => {
+      Object.assign(env, { PANCAKE_API_KEY: 'k', PANCAKE_SHOP_ID: 's' });
+      await prisma.order.updateMany({ where: { pancakeAttentionAt: { not: null } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+      const u = await createUser(prisma, {});
+      const mk = async () => {
+        const o = await createOrder(prisma, { userId: u.id, status: 'CANCELLED', pancakeAttention: 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', pancakeAttentionAt: new Date(0) });
+        created.push(o.id);
+      };
+      sendMail.mockRejectedValue(authError());
+      await mk();
+      await check(0);
+      await mk();
+      await check(5);
+      expect(sendMail).toHaveBeenCalledTimes(1);
+
+      env.SMTP_PASS = 'new-app-password';
+      sendMail.mockReset().mockResolvedValue({});
+      await mk();
+      await expect(check(10)).resolves.toMatchObject({ sent: 'ALERT' });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(await blocked()).not.toHaveProperty('emailBlocked');
+    });
+
     it('báo đã ổn (RECOVERED) cũng là một quyết định mới: thử lại, và gửi được thì gỡ chặn', async () => {
       queueFailures['notifications'] = 9;
       sendMail.mockRejectedValueOnce(authError());

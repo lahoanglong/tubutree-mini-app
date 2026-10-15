@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrderReturnsService, refundNote } from './order-returns.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -249,6 +249,23 @@ describe('OrderReturnsService.review — từ chối', () => {
     await expect(svc.review('a1', 'r1', { approve: false })).rejects.toThrow('lý do từ chối');
     expect((prisma.returnRequest.updateMany as jest.Mock)).not.toHaveBeenCalled();
   });
+
+  it('AUTHZ-1: người gửi yêu cầu không tự duyệt/từ chối yêu cầu của chính mình (mọi vai trò), không ghi gì', async () => {
+    const transaction = jest.fn();
+    const prisma = {
+      returnRequest: { findUnique: jest.fn().mockResolvedValue({ id: 'r1', orderId: 'o1', userId: 'staff1', items: [] }), updateMany: jest.fn() },
+      $transaction: transaction,
+    } as unknown as PrismaService;
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, {} as never, {} as never, notifications);
+    (notifications.notify as jest.Mock).mockClear();
+    const approve = svc.review('staff1', 'r1', { approve: true, shopFault: true });
+    await expect(approve).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(approve).rejects.toThrow('chính mình');
+    await expect(svc.review('staff1', 'r1', { approve: false, note: 'không hợp lệ' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(prisma.returnRequest.updateMany as jest.Mock).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
 });
 
 describe('OrderReturnsService.listForAdmin — kèm đơn, khách, tên dòng trả', () => {
@@ -407,6 +424,13 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
   it('admin bấm "đã nhận hàng" cho đơn gian hàng → 400 chỉ đường về Cổng người bán, không lật, không cộng kho Tubu', async () => {
     const h = receiveHarness(merchantOrder);
     await expect(h.svc.markReceived('admin1', 'r1')).rejects.toThrow('gian hàng Vườn Bà Năm');
+    expect(h.updateMany).not.toHaveBeenCalled();
+    expect(h.restockReturnedItems).not.toHaveBeenCalled();
+  });
+
+  it('AUTHZ-1: người gửi yêu cầu không tự bấm "đã nhận hàng" cho yêu cầu của mình, không lật, không cộng kho', async () => {
+    const h = receiveHarness({ code: 'TUBU1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    await expect(h.svc.markReceived('u1', 'r1')).rejects.toBeInstanceOf(ForbiddenException);
     expect(h.updateMany).not.toHaveBeenCalled();
     expect(h.restockReturnedItems).not.toHaveBeenCalled();
   });

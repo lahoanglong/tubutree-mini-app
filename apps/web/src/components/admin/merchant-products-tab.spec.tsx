@@ -763,3 +763,39 @@ describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5
     expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+describe('MerchantProductsTab — thành phần là cột Json nên dòng cũ có thể mang mọi hình dạng (AUTHZ-3)', () => {
+  const ingredientsLine = async (ingredients: unknown) => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': {
+        body: { data: [product({ ingredients: ingredients as AdminPendingProduct['ingredients'] })], meta: { page: 1, limit: 100, total: 1 } },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    expect(container.textContent).toContain('Tinh dầu sả chanh');
+    return [...container.querySelectorAll('p')].find((el) => el.textContent?.startsWith('Thành phần:'))?.textContent ?? null;
+  };
+
+  it('mảng {name, percentage, benefit} → liệt kê tên kèm tỉ lệ, không vỡ tab', async () => {
+    expect(
+      await ingredientsLine([
+        { name: 'Tinh dầu sả', percentage: '60%', benefit: 'Đuổi muỗi' },
+        { name: 'Dầu dừa', percentage: 40 },
+        { name: 'Hương liệu' },
+      ]),
+    ).toBe('Thành phần: Tinh dầu sả (60%), Dầu dừa (40), Hương liệu');
+  });
+
+  it('chuỗi cũ và mảng chuỗi vẫn hiện như trước', async () => {
+    expect(await ingredientsLine('Sả, chanh, dầu dừa')).toBe('Thành phần: Sả, chanh, dầu dừa');
+    expect(await ingredientsLine(['Sả', 'Chanh'])).toBe('Thành phần: Sả, Chanh');
+  });
+
+  it('object lạ không có name → hiện dạng JSON ngắn để admin thấy mà từ chối; null/mảng rỗng → ẩn dòng thành phần', async () => {
+    expect(await ingredientsLine({ foo: 'bar' })).toBe('Thành phần: {"foo":"bar"}');
+    expect(await ingredientsLine(null)).toBeNull();
+    expect(await ingredientsLine([])).toBeNull();
+  });
+});

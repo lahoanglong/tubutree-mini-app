@@ -14,8 +14,9 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { OrderStatus } from '@tubutree/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { MERCHANT_PORTAL_ROLES } from './merchant-config';
@@ -74,6 +75,17 @@ export class UpdateMerchantStoreDto {
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsInt() @Min(0) @Max(MAX_PRICE) freeShipFrom?: number | null;
 }
 
+const INGREDIENTS_MESSAGE = 'Thành phần phải là danh sách tối đa 30 mục dạng {name, percentage, benefit}.';
+/** Tỉ lệ khách thấy là chữ ("60%"); số do client gửi được đổi sang chuỗi, đúng dạng miniapp đang hiển thị. */
+const percentageText = ({ value }: { value: unknown }) => (typeof value === 'number' && Number.isFinite(value) ? String(value) : trim({ value }));
+
+/** Một dòng ở khung "Thành phần" của trang sản phẩm (miniapp đọc name/percentage/benefit, không trường nào khác). */
+export class MerchantIngredientDto {
+  @Transform(trim) @IsNotEmpty({ message: 'Tên thành phần không được để trống.' }) @IsString() @MaxLength(120) name!: string;
+  @IsOptional() @Transform(percentageText) @IsString() @MaxLength(20) percentage?: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(300) benefit?: string;
+}
+
 export class CreateMerchantProductDto {
   @Transform(trim) @IsNotEmpty({ message: 'Tên sản phẩm không được để trống.' }) @IsString() @MaxLength(200) name!: string;
   @Transform(trim) @IsNotEmpty({ message: 'Mô tả sản phẩm không được để trống.' }) @IsString() @MaxLength(10_000) description!: string;
@@ -85,7 +97,12 @@ export class CreateMerchantProductDto {
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) categoryIds?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(30) @IsString({ each: true }) @MaxLength(50, { each: true }) tags?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) forSegment?: string[];
-  @IsOptional() ingredients?: unknown;
+  @IsOptional()
+  @IsArray({ message: INGREDIENTS_MESSAGE })
+  @ArrayMaxSize(30, { message: INGREDIENTS_MESSAGE })
+  @ValidateNested({ each: true, message: INGREDIENTS_MESSAGE })
+  @Type(() => MerchantIngredientDto)
+  ingredients?: MerchantIngredientDto[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) certifications?: string[];
   @IsOptional() @IsInt() @Min(0) @Max(MAX_STOCK) stock?: number;
   @IsOptional() @IsString() @MaxLength(64) pancakeCode?: string;

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RefillService } from './refill.service';
 import { RefillLocationsService } from './refill-locations.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -242,6 +242,36 @@ describe('RefillService.approveReturn', () => {
         newRefill(makePrisma(), makeConfig(), notifications).approveReturn('br1', 'staff1'),
       ).resolves.toMatchObject({ ok: true, status: 'APPROVED' });
     });
+  });
+});
+
+describe('RefillService — nhân viên không tự xử lý yêu cầu đổi vỏ của chính mình (AUTHZ-2)', () => {
+  it('duyệt yêu cầu của chính mình → 403, không đổi trạng thái, không cộng 💧, không báo khách', async () => {
+    const prisma = makePrisma();
+    const notifications = makeNotifications();
+    const svc = newRefill(prisma, makeConfig(), notifications);
+    const attempt = svc.approveReturn('br1', 'u1');
+    await expect(attempt).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(attempt).rejects.toThrow('chính mình');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.bottleReturn.updateMany).not.toHaveBeenCalled();
+    expect(prisma.gameProfile.upsert).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('từ chối yêu cầu của chính mình → 403, không ghi', async () => {
+    const prisma = makePrisma();
+    const notifications = makeNotifications();
+    await expect(newRefill(prisma, makeConfig(), notifications).rejectReturn('br1', 'u1', 'không cần')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.bottleReturn.updateMany).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên khác duyệt hoặc từ chối yêu cầu đó vẫn chạy', async () => {
+    const prisma = makePrisma();
+    const svc = newRefill(prisma, makeConfig(), makeNotifications());
+    await expect(svc.approveReturn('br1', 'staff1')).resolves.toEqual({ ok: true, status: 'APPROVED' });
+    await expect(svc.rejectReturn('br1', 'staff1', 'vỏ bẩn')).resolves.toEqual({ ok: true, status: 'REJECTED' });
   });
 });
 
