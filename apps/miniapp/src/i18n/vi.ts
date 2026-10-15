@@ -306,6 +306,7 @@ export const vi = {
     /** Đơn chờ tiền mà hàng đã bàn giao vận chuyển (API manualHandling): thay hạn thanh toán, nút trả tiền và nút huỷ. */
     manualHandling: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',
     viewAllOrders: 'Xem tất cả đơn',
+    cancelClosedAfterHandover: 'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.',
     pointsUsed: 'Điểm Xanh đã dùng',
     reviewItem: 'Viết đánh giá',
     editReviewItem: 'Sửa đánh giá',

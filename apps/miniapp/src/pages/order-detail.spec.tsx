@@ -102,6 +102,35 @@ describe('OrderDetailPage — vùng chạm >= 44px (C-021)', () => {
   });
 });
 
+describe('OrderDetailPage — giải thích vì sao không còn nút huỷ (R6-BUYER-10)', () => {
+  const NOTE = 'Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('đơn đang giao: có câu giải thích và không có nút huỷ', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
+    renderPage();
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+  });
+
+  it('đơn đã xác nhận còn huỷ được: không có câu giải thích', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CONFIRMED' });
+    renderPage();
+    await screen.findByText(/Chi tiết đơn hàng/);
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+
+  it('đơn đã giao xong: không có câu giải thích', async () => {
+    mocks.fetchOrder.mockResolvedValue(ORDER);
+    renderPage();
+    await screen.findByText(/Chi tiết đơn hàng/);
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+});
+
 describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

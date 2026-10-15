@@ -116,6 +116,11 @@ export function isCarrierBooked(o: CarrierFacts): boolean {
   return !!o.shippingCode && o.shippingCode !== o.gomdonOrderId && o.shippingCode !== o.gomdonPartnerCode;
 }
 
+/** Hàng đã rời kho cho hãng vận chuyển (đang giao, hoặc kho đã đặt hãng): từ đây không huỷ được nữa. */
+export function isHandedToCarrier(o: CarrierFacts): boolean {
+  return o.status === 'SHIPPING' || isCarrierBooked(o);
+}
+
 /** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi để chip "Đang đóng gói" mâu thuẫn lời "đã bàn giao". */
 export function buyerStatusLabel(o: CarrierFacts): string {
   return isCarrierBooked(o) ? vi.orders.carrierBooked : (vi.orderStatus[o.status] ?? o.status);

@@ -23,6 +23,7 @@ import {
   buyerStatusLabel,
   canCustomerCancel,
   isReorderable,
+  isHandedToCarrier,
   orderPointsNote,
   orderStamp,
   returnWindowState,
@@ -750,6 +751,14 @@ export default function OrderDetailPage() {
           >
             {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
           </Button>
+        </Box>
+      )}
+
+      {!canCancel && isHandedToCarrier(o) && (
+        <Box px={4} pt={4}>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+            {vi.orders.cancelClosedAfterHandover}
+          </Text>
         </Box>
       )}
 
