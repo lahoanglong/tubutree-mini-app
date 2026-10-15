@@ -1,9 +1,14 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService } from '../orders/order-status.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { CONSIGNMENT_PENDING_LINK_WHERE, PANCAKE_CODE_CHANGED } from '../merchant/merchant-pancake-link';
+import {
+  CONSIGNMENT_PENDING_LINK_WHERE,
+  PANCAKE_CODE_CHANGED,
+  PANCAKE_TAKEOVER_CHANGED,
+  PANCAKE_TAKEOVER_UNCONFIRMED,
+} from '../merchant/merchant-pancake-link';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
@@ -1357,21 +1362,48 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_APPROVED', expect.objectContaining({ product_name: 'Mật ong' }));
   });
 
-  describe('mã Pancake admin đã xem trên màn duyệt', () => {
-    function setup(read: { approvalStatus?: string; pancakeLinkCode: string | null }, casCount = 1, now = read) {
+  describe('mã Pancake admin đã xem trên màn duyệt (gửi thì phải khớp, bỏ trống thì duyệt theo mã đang có và ghi cảnh báo)', () => {
+    const shellRow = (onSale: boolean) => ({
+      id: 'var-pk',
+      pancakeId: 'PK-B',
+      name: 'V',
+      retailPrice: 100_000,
+      salePrice: null,
+      stock: 5,
+      product: { id: 'tubu-x', name: 'Mật ong Tubu', storefrontId: null, isActive: onSale, approvalStatus: 'APPROVED' },
+    });
+
+    function setup(read: { approvalStatus?: string; pancakeLinkCode: string | null }, casCount = 1, now = read, variation: unknown = null) {
       const product = { id: 'p1', name: 'Mật ong', storefrontId: 'sf-a', storefront: { ownerUserId: 'owner-1' }, approvalStatus: 'PENDING_REVIEW', ...read };
       const updateMany = jest.fn().mockResolvedValue({ count: casCount });
       const findUnique = jest.fn().mockResolvedValueOnce(product).mockResolvedValueOnce({ approvalStatus: 'PENDING_REVIEW', ...now });
       const prisma = makePrisma({
         product: { findUnique, findUniqueOrThrow: jest.fn().mockResolvedValue(product), updateMany, update: jest.fn() },
-        variation: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn() },
-        merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
+        variation: {
+          findFirst: jest.fn().mockResolvedValue(variation),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+          count: jest.fn().mockResolvedValue(1),
+        },
+        merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'link-1' }) },
       });
       (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
-      return { prisma, updateMany, variationUpdateMany: prisma.variation.updateMany as jest.Mock };
+      return {
+        prisma,
+        updateMany,
+        variationUpdateMany: prisma.variation.updateMany as jest.Mock,
+        linkCreate: prisma.merchantPancakeLink.create as jest.Mock,
+      };
     }
 
-    it('đối tác đã đổi sang mã khác trước khi admin bấm Duyệt → 409 PANCAKE_CODE_CHANGED, không lật trạng thái, không chuyển biến thể', async () => {
+    let warn: jest.SpyInstance;
+    const unsentWarnings = () => warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('không gửi'));
+    beforeEach(() => {
+      warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+    afterEach(() => warn.mockRestore());
+
+    it('gửi mã đã xem khác mã hiện tại (đối tác vừa đổi) → 409 PANCAKE_CODE_CHANGED, không lật trạng thái, không chuyển biến thể', async () => {
       const { prisma, updateMany, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' });
       const res = mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-A', takeoverProductId: 'tubu-x' });
       await expect(res).rejects.toBeInstanceOf(ConflictException);
@@ -1382,12 +1414,54 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(variationUpdateMany).not.toHaveBeenCalled();
     });
 
-    it('client không gửi mã đã xem mà sản phẩm có mã → 409, không duyệt mã nào', async () => {
+    it('gửi chuỗi rỗng ("dòng không có mã") mà đối tác đã thêm mã sau đó → 409, không duyệt mã admin chưa xem', async () => {
       const { prisma, updateMany } = setup({ pancakeLinkCode: 'PK-B' });
-      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại trang') }),
-      });
+      await expect(
+        mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: '  ' }),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED }) });
       expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('gửi đúng mã đang có → duyệt, liên kết đúng mã đó, không ghi cảnh báo thiếu mã', async () => {
+      const { prisma, updateMany, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(false));
+      const res = await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, { pancakeCode: ' PK-B ' });
+      expect(res).toMatchObject({ id: 'p1' });
+      expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(unsentWarnings()).toEqual([]);
+    });
+
+    it.each([
+      ['không gửi trường mã', {}],
+      ['gửi mã null', { pancakeCode: null }],
+    ])('%s mà sản phẩm có mã → duyệt theo mã đang có, ghi cảnh báo nêu admin, liên kết và mã', async (_label, seen) => {
+      const { prisma, updateMany, variationUpdateMany, linkCreate } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(false));
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, undefined, seen)).resolves.toMatchObject({ id: 'p1' });
+      expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-B' });
+      expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+      expect(linkCreate).toHaveBeenCalledTimes(1);
+      const msgs = unsentWarnings();
+      expect(msgs).toHaveLength(1);
+      expect(msgs[0]).toContain('admin-1');
+      expect(msgs[0]).toContain('link-1');
+      expect(msgs[0]).toContain('PK-B');
+    });
+
+    it('bỏ trống mã mà sản phẩm không có mã → duyệt như trước, không cảnh báo', async () => {
+      const { prisma, updateMany } = setup({ pancakeLinkCode: null });
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true)).resolves.toMatchObject({ id: 'p1' });
+      expect(updateMany).toHaveBeenCalledTimes(1);
+      expect(unsentWarnings()).toEqual([]);
+    });
+
+    it('bỏ trống mã vẫn bị chặn nếu đối tác đổi mã giữa lúc đọc và lúc lật trạng thái (CAS trượt) → 409', async () => {
+      const { prisma, updateMany, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-A' }, 0, { pancakeLinkCode: 'PK-B' });
+      await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED }),
+      });
+      expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-A' });
+      expect(variationUpdateMany).not.toHaveBeenCalled();
+      expect(unsentWarnings()).toEqual([]);
     });
 
     it('đối tác đổi mã giữa lúc đọc và lúc lật trạng thái (CAS trượt, sản phẩm vẫn chờ duyệt) → 409 PANCAKE_CODE_CHANGED', async () => {
@@ -1398,7 +1472,53 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'p1', approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: 'PK-A' });
     });
 
-    it('từ chối kèm mã đã xem khác mã hiện tại → 409; từ chối không kèm mã vẫn được', async () => {
+    describe('chuyển sản phẩm Tubu đang bán (cần tích xác nhận)', () => {
+      it('xác nhận mà không gửi sản phẩm đã xem → chuyển sản phẩm hiện đang giữ mã, cảnh báo nêu sản phẩm bị chuyển', async () => {
+        const { prisma, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
+        await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B' });
+        expect(variationUpdateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-x' }, data: { productId: 'p1' } });
+        const msgs = unsentWarnings();
+        expect(msgs).toHaveLength(1);
+        expect(msgs[0]).toContain('admin-1');
+        expect(msgs[0]).toContain('link-1');
+        expect(msgs[0]).toContain('PK-B');
+        expect(msgs[0]).toContain('tubu-x');
+      });
+
+      it('bỏ trống cả mã lẫn sản phẩm đã xem (vẫn tích xác nhận) → duyệt và chỉ ghi một cảnh báo', async () => {
+        const { prisma, variationUpdateMany, linkCreate } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
+        await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true);
+        expect(variationUpdateMany).toHaveBeenCalledTimes(1);
+        expect(linkCreate.mock.calls[0][0].data).toMatchObject({ takeover: true, originProductId: 'tubu-x', linkedBy: 'admin-1' });
+        expect(unsentWarnings()).toHaveLength(1);
+      });
+
+      it('gửi đúng sản phẩm đã xem → chuyển, không cảnh báo thiếu', async () => {
+        const { prisma, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
+        await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B', takeoverProductId: 'tubu-x' });
+        expect(variationUpdateMany).toHaveBeenCalledTimes(1);
+        expect(unsentWarnings()).toEqual([]);
+      });
+
+      it('gửi sản phẩm đã xem khác sản phẩm đang giữ mã → 409 PANCAKE_TAKEOVER_CHANGED, không chuyển gì', async () => {
+        const { prisma, variationUpdateMany, linkCreate } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
+        await expect(
+          mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, true, undefined, { pancakeCode: 'PK-B', takeoverProductId: 'tubu-other' }),
+        ).rejects.toMatchObject({ response: expect.objectContaining({ code: PANCAKE_TAKEOVER_CHANGED }) });
+        expect(variationUpdateMany).not.toHaveBeenCalled();
+        expect(linkCreate).not.toHaveBeenCalled();
+      });
+
+      it('chưa tích xác nhận chuyển thì bỏ trống trường nào cũng không chuyển được → 409 PANCAKE_TAKEOVER_UNCONFIRMED', async () => {
+        const { prisma, variationUpdateMany } = setup({ pancakeLinkCode: 'PK-B' }, 1, { pancakeLinkCode: 'PK-B' }, shellRow(true));
+        await expect(mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true)).rejects.toMatchObject({
+          response: expect.objectContaining({ code: PANCAKE_TAKEOVER_UNCONFIRMED }),
+        });
+        expect(variationUpdateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    it('từ chối kèm mã đã xem khác mã hiện tại → 409; từ chối không kèm mã vẫn được, không cảnh báo', async () => {
       const stale = setup({ pancakeLinkCode: 'PK-B' });
       await expect(
         mkAdmin(stale.prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x', false, undefined, { pancakeCode: 'PK-A' }),
@@ -1406,6 +1526,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       const plain = setup({ pancakeLinkCode: 'PK-B' });
       await mkAdmin(plain.prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x');
       expect(plain.updateMany).toHaveBeenCalledTimes(1);
+      expect(unsentWarnings()).toEqual([]);
     });
   });
 

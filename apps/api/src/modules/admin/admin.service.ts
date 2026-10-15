@@ -53,15 +53,6 @@ import { maskPhone } from '../../common/mask-pii';
 const STALE_EDIT_REVIEW_MESSAGE = 'Bản sửa vừa được xử lý hoặc đối tác vừa sửa tiếp — tải lại danh sách để xem bản mới.';
 const COUPON_PERCENT_NEEDS_CAP = 50;
 
-function pancakeCodeNotSent() {
-  return new ConflictException({
-    statusCode: 409,
-    error: 'Conflict',
-    code: PANCAKE_CODE_CHANGED,
-    message: 'Màn duyệt này đã cũ nên không gửi kèm mã Pancake bạn đang xem. Tải lại trang rồi duyệt lại.',
-  });
-}
-
 function pancakeCodeChanged(current: string | null) {
   return new ConflictException({
     statusCode: 409,
@@ -1532,20 +1523,20 @@ export class AdminService {
       return this.reviewProductEdit(adminId, product, product.editDraft, approve, reason);
     }
 
-    // Duyệt đúng mã admin đã thấy trên màn duyệt, không phải mã đọc lúc request tới: đối tác đổi mã sau khi admin mở danh sách
-    // thì có thể là mã của một sản phẩm Tubu đang bán khác mà admin chưa hề xem. Thiếu mã đã xem (client cũ) cũng không duyệt.
-    const seenCode = seen.pancakeCode === undefined ? undefined : seen.pancakeCode?.trim() || null;
+    // Admin đã gửi mã thấy trên màn duyệt thì chỉ duyệt đúng mã đó: đối tác đổi mã sau khi admin mở danh sách có thể là mã của một
+    // sản phẩm Tubu đang bán khác mà admin chưa hề xem. Không gửi (client khác màn duyệt) thì duyệt theo mã đang có, ghi cảnh báo.
+    const sentCode = seen.pancakeCode ?? undefined;
+    const codeSent = sentCode !== undefined;
+    const seenCode = sentCode?.trim() || null;
     const readCode = product.pancakeLinkCode ?? null;
-    if (product.approvalStatus === 'PENDING_REVIEW' && (approve || seenCode !== undefined) && (seenCode ?? null) !== readCode) {
-      throw seenCode === undefined ? pancakeCodeNotSent() : pancakeCodeChanged(readCode);
-    }
+    if (product.approvalStatus === 'PENDING_REVIEW' && codeSent && seenCode !== readCode) throw pancakeCodeChanged(readCode);
 
     // CAS cố định theo PENDING_REVIEW (không theo trạng thái vừa đọc): hai admin cùng mở danh sách chờ duyệt, A bấm Duyệt còn
     // B bấm Từ chối hai giây sau thì trước đây B ghi đè kết quả của A mà A không hề biết. Nay người thứ hai nhận lỗi rõ ràng
     // thay vì lặng lẽ lật ngược quyết định, kể cả khi sản phẩm đã APPROVED và đang bán.
     // "Tubu giao hộ" (D4): chuyển biến thể Pancake sang sản phẩm (hoặc trả về sản phẩm gốc khi từ chối) trong CÙNG
     // transaction — mã vừa bị sản phẩm khác lấy thì rollback cả lần duyệt.
-    await this.prisma.$transaction(async (tx) => {
+    const linked = await this.prisma.$transaction(async (tx) => {
       // Cả mã Pancake đang xin liên kết: đối tác đổi mã giữa lúc admin xem và bấm thì không duyệt nhầm mã admin chưa xem.
       const moved = await tx.product.updateMany({
         where: { id: productId, approvalStatus: 'PENDING_REVIEW', pancakeLinkCode: product.pancakeLinkCode },
@@ -1558,11 +1549,24 @@ export class AdminService {
         }
         throw new BadRequestException('Sản phẩm vừa được xử lý hoặc đối tác vừa đổi mã Pancake — tải lại danh sách để xem trạng thái mới.');
       }
-      if (approve) await linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seen.takeoverProductId });
+      if (approve) return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seen.takeoverProductId });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
-      else await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
+      await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
+      return undefined;
     });
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
+
+    if (approve && readCode) {
+      const notSent = [
+        codeSent ? null : 'mã Pancake đã xem',
+        linked?.takeover && seen.takeoverProductId == null ? `sản phẩm đang bán bị chuyển (${linked.originProductId})` : null,
+      ].filter((x): x is string => !!x);
+      if (notSent.length > 0) {
+        this.logger.warn(
+          `Admin ${adminId} duyệt mã Pancake ${readCode} (liên kết ${linked?.linkId ?? 'không tạo mới'}, sản phẩm đối tác ${productId}) mà không gửi ${notSent.join(' và ')}.`,
+        );
+      }
+    }
 
     this.logger.warn(
       `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} sản phẩm đối tác ${productId} (${product.name})`,

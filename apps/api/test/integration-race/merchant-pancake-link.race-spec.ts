@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
@@ -74,10 +74,10 @@ describe('Merchant Pancake link (real Postgres)', () => {
     return (await admin.listPendingMerchantProducts(1, 500)).data.find((r) => r.id === productId)!;
   }
 
-  /** Những gì màn duyệt gửi kèm khi bấm Duyệt: mã đang hiện và sản phẩm đang bán admin đã tích xác nhận chuyển. */
+  /** Những gì màn duyệt gửi kèm khi bấm Duyệt: mã đang hiện ('' khi dòng không có mã) và sản phẩm đang bán admin đã tích xác nhận chuyển. */
   function seenOn(row: Awaited<ReturnType<typeof pendingRow>>) {
     const origin = row.pancakeLink?.state === 'TAKEOVER' ? row.pancakeLink.origin?.id : undefined;
-    return { pancakeCode: row.pancakeLinkCode ?? null, takeoverProductId: origin };
+    return { pancakeCode: row.pancakeLinkCode ?? '', takeoverProductId: origin };
   }
 
   /** Admin mở màn duyệt, tích xác nhận (nếu cần) rồi bấm Duyệt. */
@@ -396,10 +396,11 @@ describe('Merchant Pancake link (real Postgres)', () => {
       response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED, message: expect.stringContaining('Tải lại') }),
     });
     await nothingMoved();
-    // Client không gửi mã đã xem cũng không duyệt được mã nào.
-    await expect(admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true)).rejects.toMatchObject({
+    // Màn duyệt mở lúc dòng chưa có mã ('' = không có mã) mà đối tác đã thêm mã sau đó: vẫn 409, không duyệt mã admin chưa xem.
+    await expect(admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, { pancakeCode: '' })).rejects.toMatchObject({
       response: expect.objectContaining({ code: PANCAKE_CODE_CHANGED }),
     });
+    await nothingMoved();
     // Xác nhận chuyển gắn với sản phẩm admin đã xem: đúng mã mới nhưng xác nhận cho sản phẩm X → 409.
     await expect(
       admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, { pancakeCode: y.code, takeoverProductId: x.product.id }),
@@ -434,5 +435,75 @@ describe('Merchant Pancake link (real Postgres)', () => {
     expect(v.productId).toBe(z.product.id);
     expect(mine.approvalStatus).toBe('PENDING_REVIEW');
     expect(pz.isActive).toBe(true);
+  });
+
+  it('(j) client bỏ trống mã và sản phẩm đã xem: duyệt theo mã đang có lúc bấm (vẫn phải tích xác nhận chuyển), ghi cảnh báo nêu admin, liên kết và mã', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const x = await tubuProduct();
+      const y = await tubuProduct();
+      const { owner } = await merchantStore();
+      const p = await requestLink(owner, x.code);
+      await merchant.updateProduct(owner.id, p.id, { pancakeCode: y.code });
+
+      await expect(admin.reviewMerchantProduct('admin-it', p.id, true)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: PANCAKE_TAKEOVER_UNCONFIRMED }),
+      });
+      expect((await prisma.variation.findUniqueOrThrow({ where: { id: y.variation.id } })).productId).toBe(y.product.id);
+
+      await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+      const [vx, vy, mine, link] = await Promise.all([
+        prisma.variation.findUniqueOrThrow({ where: { id: x.variation.id } }),
+        prisma.variation.findUniqueOrThrow({ where: { id: y.variation.id } }),
+        prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+        prisma.merchantPancakeLink.findFirstOrThrow({ where: { productId: p.id, unlinkedAt: null } }),
+      ]);
+      expect(vx.productId).toBe(x.product.id);
+      expect(vy.productId).toBe(p.id);
+      expect(mine).toMatchObject({ approvalStatus: 'APPROVED', fulfilment: 'TUBU', pancakeLinkCode: y.code });
+      expect(link).toMatchObject({ variationId: y.variation.id, originProductId: y.product.id, takeover: true, linkedBy: 'admin-it' });
+      const msgs = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('không gửi'));
+      expect(msgs).toHaveLength(1);
+      expect(msgs[0]).toEqual(expect.stringContaining('admin-it'));
+      expect(msgs[0]).toEqual(expect.stringContaining(link.id));
+      expect(msgs[0]).toEqual(expect.stringContaining(y.code));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('(k) client bỏ trống mã đã xem, duyệt chồng với đối tác đổi/bỏ mã → chỉ liên kết đúng mã đang nằm trên sản phẩm lúc duyệt thành công, không bao giờ lệch mã hay chuyển hai biến thể', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      for (let round = 0; round < 6; round++) {
+        const a = await tubuProduct();
+        const b = await tubuProduct();
+        const { owner } = await merchantStore();
+        const p = await requestLink(owner, a.code);
+        const approve = () => admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true);
+        const change = round % 2 === 0 ? { pancakeCode: b.code } : { pancakeCode: null };
+        const results = await Promise.allSettled(
+          round % 3 === 0 ? [merchant.updateProduct(owner.id, p.id, change), approve()] : [approve(), merchant.updateProduct(owner.id, p.id, change)],
+        );
+        const s = summarize(results);
+        console.log('[k] round=%d errors=%j', round, s.errors);
+        const [mine, open, va, vb] = await Promise.all([
+          prisma.product.findUniqueOrThrow({ where: { id: p.id } }),
+          prisma.merchantPancakeLink.findMany({ where: { productId: p.id, unlinkedAt: null } }),
+          prisma.variation.findUniqueOrThrow({ where: { id: a.variation.id } }),
+          prisma.variation.findUniqueOrThrow({ where: { id: b.variation.id } }),
+        ]);
+        const moved = [va, vb].filter((v) => v.productId === p.id);
+        expect(moved.length).toBeLessThanOrEqual(1);
+        expect(open).toHaveLength(moved.length);
+        if (moved.length === 1) {
+          expect(mine).toMatchObject({ fulfilment: 'TUBU', approvalStatus: 'APPROVED', pancakeLinkCode: moved[0]!.pancakeId });
+          expect(open[0]).toMatchObject({ variationId: moved[0]!.id });
+        }
+        for (const r of s.rejected) expect([BadRequestException, ConflictException].some((E) => r.reason instanceof E)).toBe(true);
+      }
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

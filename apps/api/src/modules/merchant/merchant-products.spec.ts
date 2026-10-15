@@ -194,16 +194,25 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
     expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originDeactivated: true });
   });
 
-  it.each([
-    ['không kèm sản phẩm đã xem', undefined],
-    ['xác nhận cho sản phẩm đang bán khác', 'tubu-other'],
-  ])('xác nhận chuyển %s → 409 PANCAKE_TAKEOVER_CHANGED, không chuyển gì', async (_label, takeoverProductId) => {
+  it('R2-MERCHANT-1: xác nhận chuyển cho sản phẩm đang bán khác sản phẩm đang giữ mã → 409 PANCAKE_TAKEOVER_CHANGED, không chuyển gì', async () => {
     const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
     await expect(
-      linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId }),
+      linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId: 'tubu-other' }),
     ).rejects.toMatchObject({ status: 409, response: expect.objectContaining({ code: PANCAKE_TAKEOVER_CHANGED }) });
     expect(t.variation.updateMany).not.toHaveBeenCalled();
     expect(t.merchantPancakeLink.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['không kèm sản phẩm đã xem', undefined],
+    ['kèm sản phẩm đã xem null', null],
+  ])('xác nhận chuyển %s → chuyển sản phẩm đang giữ mã và báo lại liên kết vừa tạo để ghi cảnh báo', async (_label, takeoverProductId) => {
+    const t = tx({ row: { ...PANCAKE_ROW, product: { ...PANCAKE_ROW.product, isActive: true } } });
+    t.merchantPancakeLink.create.mockResolvedValue({ id: 'link-9' });
+    const linked = await linkTubuFulfilledVariation(t as never, product, { adminId: 'admin-1', confirmTakeover: true, takeoverProductId });
+    expect(t.variation.updateMany).toHaveBeenCalledWith({ where: { id: 'var-pk', productId: 'tubu-shell' }, data: { productId: 'prod-a' } });
+    expect(t.merchantPancakeLink.create.mock.calls[0][0].data).toMatchObject({ takeover: true, originProductId: 'tubu-shell' });
+    expect(linked).toEqual({ linkId: 'link-9', originProductId: 'tubu-shell', takeover: true });
   });
 
   it('sản phẩm vỏ còn biến thể khác → giữ nguyên đang bán, gỡ liên kết không tự bật/tắt nó', async () => {

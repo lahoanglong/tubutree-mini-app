@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import {
   AdminController,
   ConfirmOrderPaymentDto,
@@ -431,14 +432,27 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
     await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, editVersion: 'hôm qua' })).rejects.toBeDefined();
   });
 
-  it('mang mã Pancake và sản phẩm đang bán admin đã xem (null: dòng không có mã)', async () => {
+  it('mã Pancake và sản phẩm đang bán admin đã xem là tuỳ chọn: gửi (chuỗi rỗng: dòng không có mã), bỏ trống hoặc null đều hợp lệ', async () => {
     await expect(
       asBodyDto(ReviewMerchantProductDto, { approve: true, confirmTakeover: true, expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' }),
     ).resolves.toMatchObject({ expectedPancakeCode: 'PK-1', expectedTakeoverProductId: 'p-x' });
-    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: null })).resolves.toMatchObject({
-      expectedPancakeCode: null,
-    });
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: '' })).resolves.toMatchObject({ expectedPancakeCode: '' });
+    const bare = await asBodyDto(ReviewMerchantProductDto, { approve: true, confirmTakeover: true });
+    expect(bare.expectedPancakeCode).toBeUndefined();
+    expect(bare.expectedTakeoverProductId).toBeUndefined();
+    await expect(
+      asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: null, expectedTakeoverProductId: null }),
+    ).resolves.toMatchObject({ expectedPancakeCode: null, expectedTakeoverProductId: null });
     await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedPancakeCode: 123 })).rejects.toBeDefined();
+    await expect(asBodyDto(ReviewMerchantProductDto, { approve: true, expectedTakeoverProductId: 'x'.repeat(101) })).rejects.toBeDefined();
+  });
+
+  it('swagger khai báo hai trường đã xem là tuỳ chọn, có thể null, kèm mô tả cách xử lý khi bỏ trống', () => {
+    const field = (name: string) => Reflect.getMetadata(DECORATORS.API_MODEL_PROPERTIES, ReviewMerchantProductDto.prototype, name);
+    expect(field('approve')).not.toMatchObject({ required: false });
+    for (const name of ['expectedPancakeCode', 'expectedTakeoverProductId']) {
+      expect(field(name)).toMatchObject({ required: false, nullable: true, maxLength: 100, description: expect.stringContaining('Bỏ trống') });
+    }
   });
 
   it('controller chuyển mã và sản phẩm đã xem xuống service', async () => {
@@ -453,6 +467,16 @@ describe('ReviewMerchantProductDto (R3-MERCHANT-4)', () => {
     expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
       pancakeCode: 'PK-1',
       takeoverProductId: 'p-x',
+    });
+  });
+
+  it('controller không bịa mã đã xem khi client không gửi: service nhận undefined', async () => {
+    const admin = { reviewMerchantProduct: jest.fn().mockResolvedValue({}) };
+    const dto = Object.assign(new ReviewMerchantProductDto(), { approve: true, confirmTakeover: true });
+    await new AdminController(admin as never, {} as never).reviewMerchantProduct('admin-1', 'p1', dto);
+    expect(admin.reviewMerchantProduct).toHaveBeenCalledWith('admin-1', 'p1', true, undefined, true, undefined, {
+      pancakeCode: undefined,
+      takeoverProductId: undefined,
     });
   });
 });
