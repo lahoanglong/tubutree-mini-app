@@ -57,6 +57,23 @@ export async function partialReturnTotals(db: Db, orderId: string, excludeReques
   return totals;
 }
 
+/**
+ * Điểm Xanh tích của đơn THỰC SỰ đã thu lại qua các lần trả một phần: tổng (trị tuyệt đối) các dòng RETURN_REVERSED:<mã đơn>.
+ * Khác ReturnRequest.pointsReversed (phần chia chưa kẹp): dòng sổ bị kẹp bởi số dư và phần lô còn thu được, nên khách đã tiêu
+ * hết điểm thì số này nhỏ hơn, có khi 0.
+ */
+export async function returnPointsTaken(
+  db: Pick<Prisma.TransactionClient, 'pointsTransaction'>,
+  order: { userId: string; code: string },
+): Promise<number> {
+  const reason = `RETURN_REVERSED:${order.code}`;
+  const sum = await db.pointsTransaction.aggregate({
+    where: { userId: order.userId, refType: 'RETURN_REQUEST', OR: [{ reason }, { reason: { startsWith: `${reason}:` } }] },
+    _sum: { delta: true },
+  });
+  return Math.abs(sum._sum.delta ?? 0);
+}
+
 export const NO_PARTIAL_RETURNS: PartialReturnTotals = {
   money: 0,
   shipping: 0,

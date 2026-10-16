@@ -1,6 +1,7 @@
 import type { PointsLot, Prisma } from '@prisma/client';
 import { returnedGoods } from '../orders/refund-allocation';
 import { partialReturnTotals } from '../orders/return-ledger';
+import type { ReferralNotice } from './referral-notify';
 
 /**
  * Chương trình giới thiệu duy nhất (Q-05): người mời (users.referredById của người được mời) nhận
@@ -58,6 +59,13 @@ export const MILESTONE_PREFIX = 'REFERRAL_MILESTONE:';
 export const MILESTONE_REVOKE_PREFIX = 'REFERRAL_MILESTONE_REVOKE:';
 
 type Db = Prisma.TransactionClient;
+
+/** Kết quả một lần thu hồi (Điểm Xanh), kèm tin báo người mời để caller gửi SAU khi tx commit. */
+export interface ReferralRevokeResult {
+  revoked: number;
+  shortfall: number;
+  notices: ReferralNotice[];
+}
 
 /** Sổ chứa một dòng thưởng: COIN = xu cấp trước PD-3, POINTS = Điểm Xanh cấp sau. */
 export type RewardLedger = 'COIN' | 'POINTS';
@@ -428,10 +436,10 @@ export async function revokeReferralRewardPartially(
   tx: Db,
   order: { id: string; userId: string },
   input: { requestId: string; returnedGoods: number; orderGoods: number },
-): Promise<{ revoked: number; shortfall: number } | null> {
+): Promise<ReferralRevokeResult | null> {
   await lockReferee(tx, order.userId);
   const grants = await findOrderGrants(tx, order);
-  const total = { revoked: 0, shortfall: 0 };
+  const total: ReferralRevokeResult = { revoked: 0, shortfall: 0, notices: [] };
   let anyRevoked = false;
   for (const { referrerId, refereeId, grant } of grants) {
     await lockReferrer(tx, referrerId);
@@ -447,6 +455,7 @@ export async function revokeReferralRewardPartially(
       revokedForOrder: prior.byOrder.get(order.id) ?? 0,
       revokedTotal: prior.total,
     });
+    const notice = { taken: 0, debt: 0, key: null as string | null };
     if (due > 0) {
       const res = await debitReferralReward(
         tx,
@@ -461,6 +470,9 @@ export async function revokeReferralRewardPartially(
       anyRevoked = true;
       total.revoked += res.revoked;
       total.shortfall += res.shortfall;
+      notice.taken += res.revoked;
+      notice.debt += res.shortfall;
+      notice.key = reason;
     }
     // Các lần trả một phần đã thu đủ cả khoản (điểm đã trừ + nợ): đó là thu hồi HOÀN TOÀN. Ghi dòng REVOKE delta 0 (cùng
     // reason với đường trả cả đơn nên lần trả cả đơn sau đó thấy và không ghi/thu thêm) để số lượt giới thiệu giảm, rồi thu
@@ -480,7 +492,13 @@ export async function revokeReferralRewardPartially(
         anyRevoked = true;
         total.revoked += milestones.revoked;
         total.shortfall += milestones.shortfall;
+        notice.taken += milestones.revoked;
+        notice.debt += milestones.shortfall;
+        notice.key ??= `${REFERRAL_ORDER2_REVOKE_PREFIX}${refereeId}`;
       }
+    }
+    if (notice.key) {
+      total.notices.push({ kind: 'REVOKED', referrerId, refereeId, taken: notice.taken, debt: notice.debt, cause: 'PARTIAL_RETURN', key: notice.key });
     }
   }
   return anyRevoked ? total : null;
@@ -521,8 +539,8 @@ export async function fullyReturnedOrderIds(tx: Db, orderIds: string[]): Promise
  * đơn; chạy lại không trừ lần hai). Lần duyệt trả song song: tx duyệt lấy lockReferee trước khi đọc dòng thưởng, tx cấp lấy
  * nó trước khi đọc yêu cầu đã duyệt, nên bên commit sau luôn thấy bên kia và đúng một bên thu.
  */
-export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: string[]): Promise<{ revoked: number; shortfall: number } | null> {
-  const total = { revoked: 0, shortfall: 0 };
+export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: string[]): Promise<ReferralRevokeResult | null> {
+  const total: ReferralRevokeResult = { revoked: 0, shortfall: 0, notices: [] };
   let anyRevoked = false;
   for (const orderId of orderIds) {
     const prior = await partialReturnTotals(tx, orderId);
@@ -538,6 +556,7 @@ export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: stri
     anyRevoked = true;
     total.revoked += res.revoked;
     total.shortfall += res.shortfall;
+    total.notices.push(...res.notices);
   }
   return anyRevoked ? total : null;
 }
@@ -551,18 +570,19 @@ export async function revokeReferralRewardForPriorReturns(tx: Db, orderIds: stri
 export async function revokeReferralRewardForOrder(
   tx: Db,
   order: { id: string; userId: string },
-): Promise<{ revoked: number; shortfall: number } | null> {
+): Promise<ReferralRevokeResult | null> {
   await lockReferee(tx, order.userId);
   const grants = await findOrderGrants(tx, order);
 
-  const total = { revoked: 0, shortfall: 0 };
+  const total: ReferralRevokeResult = { revoked: 0, shortfall: 0, notices: [] };
   let anyRevoked = false;
   for (const g of grants) {
-    const res = await revokeGrantFully(tx, g, order.id);
+    const res = await revokeGrantFully(tx, g, order.id, 'RETURN');
     if (!res) continue;
     anyRevoked = true;
     total.revoked += res.revoked;
     total.shortfall += res.shortfall;
+    total.notices.push(...res.notices);
   }
   return anyRevoked ? total : null;
 }
@@ -576,21 +596,29 @@ async function revokeGrantFully(
   tx: Db,
   g: { referrerId: string; refereeId: string; grant: ReferralGrant },
   refId: string,
-): Promise<{ revoked: number; shortfall: number } | null> {
+  cause: 'RETURN' | 'MERGE',
+): Promise<ReferralRevokeResult | null> {
   await lockReferrer(tx, g.referrerId);
   const partial = await readPartialRevocations(tx, g.referrerId, g.refereeId);
+  const reason = `${REFERRAL_ORDER2_REVOKE_PREFIX}${g.refereeId}`;
   const main = await debitReferralReward(
     tx,
     g.referrerId,
     g.grant,
-    `${REFERRAL_ORDER2_REVOKE_PREFIX}${g.refereeId}`,
+    reason,
     refId,
     `REFERRAL_ORDER2_DEBT:${g.refereeId}`,
     Math.max(0, referralGrantDue(g.grant) - partial.total),
   );
   if (!main) return null;
   const milestones = await revokeLostMilestones(tx, g.referrerId, refId);
-  return { revoked: main.revoked + milestones.revoked, shortfall: main.shortfall + milestones.shortfall };
+  const revoked = main.revoked + milestones.revoked;
+  const shortfall = main.shortfall + milestones.shortfall;
+  return {
+    revoked,
+    shortfall,
+    notices: [{ kind: 'REVOKED', referrerId: g.referrerId, refereeId: g.refereeId, taken: revoked, debt: shortfall, cause, key: reason }],
+  };
 }
 
 /**
@@ -602,7 +630,7 @@ export async function revokeReferralRewardForReferee(
   tx: Db,
   refereeId: string,
   refId: string,
-): Promise<{ revoked: number; shortfall: number } | null> {
+): Promise<ReferralRevokeResult | null> {
   await lockReferee(tx, refereeId);
   const where = { refType: 'REFERRAL', reason: `${REFERRAL_ORDER2_PREFIX}${refereeId}`, delta: { gt: 0 } };
   const select = { userId: true, delta: true } as const;
@@ -612,7 +640,7 @@ export async function revokeReferralRewardForReferee(
   ]);
   const row = points ? { ...points, ledger: 'POINTS' as const } : coin ? { ...coin, ledger: 'COIN' as const } : null;
   if (!row) return null;
-  return revokeGrantFully(tx, { referrerId: row.userId, refereeId, grant: { amount: row.delta, ledger: row.ledger } }, refId);
+  return revokeGrantFully(tx, { referrerId: row.userId, refereeId, grant: { amount: row.delta, ledger: row.ledger } }, refId, 'MERGE');
 }
 
 /**

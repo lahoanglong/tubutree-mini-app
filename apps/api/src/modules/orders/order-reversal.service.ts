@@ -6,6 +6,7 @@ import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
 import { releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
+import type { ReferralNotice } from '../wallet/referral-notify';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loyalty-expiry.service';
@@ -40,6 +41,8 @@ export interface ReversalResult {
   moneyRefunded: boolean;
   pointsRefunded: number;
   refund: RefundOutcome | null;
+  /** Tin báo người mời bị thu hồi thưởng giới thiệu: caller gửi SAU khi tx commit (sendReferralNotices). */
+  referralNotices?: ReferralNotice[];
 }
 
 export interface PartialReversalResult {
@@ -48,6 +51,8 @@ export interface PartialReversalResult {
   pointsBack: number;
   pointsTaken: number;
   commissionCut: number;
+  /** Như ReversalResult.referralNotices. */
+  referralNotices?: ReferralNotice[];
 }
 
 /** Q-03a: 1.000 xu = 1 Điểm Xanh, làm tròn lên (cùng tỉ lệ migration B quy đổi số dư). */
@@ -281,6 +286,7 @@ export class OrderReversalService {
     // Thưởng giới thiệu chỉ cấp từ đơn đã giao (đơn lẻ, không phải lên hộ), nên chỉ đơn trả hàng
     // (ảnh chụp trước lần lật = DELIVERED) mới có thể là đơn đã dùng để thưởng. Thu hồi trong cùng tx
     // để lần trả hàng và việc trừ điểm người mời commit/rollback cùng nhau.
+    let referralNotices: ReferralNotice[] = [];
     if (order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer) {
       const revoked = await revokeReferralRewardForOrder(tx, order);
       if (revoked?.shortfall) {
@@ -288,8 +294,9 @@ export class OrderReversalService {
           `Thu hồi thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
+      referralNotices = revoked?.notices ?? [];
     }
-    return { moneyRefunded, pointsRefunded, refund };
+    return { moneyRefunded, pointsRefunded, refund, referralNotices };
   }
 
   /**
@@ -469,6 +476,7 @@ export class OrderReversalService {
           `Thu hồi một phần thưởng giới thiệu đơn ${order.code}: người mời chỉ còn ${revoked.revoked} điểm, thiếu ${revoked.shortfall} điểm (đã ghi REFERRAL_DEBT).`,
         );
       }
+      result.referralNotices = revoked?.notices ?? [];
     }
     return result;
   }

@@ -51,10 +51,16 @@ export class NotificationsService {
     @InjectQueue(QUEUE_NOTIFICATIONS) private readonly notificationsQueue?: Queue,
   ) {}
 
+  /**
+   * `dedupeKey`: tin gắn với một sự kiện chỉ xảy ra một lần (vd một dòng sổ điểm) — gọi lại với cùng khoá cho cùng khách thì
+   * không ghi/gửi lần hai. Khoá nằm trong payload, kiểm và ghi dưới khoá advisory theo (khách, khoá) nên hai lần gọi song song
+   * cũng chỉ một lần thắng.
+   */
   async notify(
     userId: string,
     templateCode: string,
     data: Record<string, string>,
+    opts: { dedupeKey?: string } = {},
   ): Promise<void> {
     const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: templateCode } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -71,9 +77,26 @@ export class NotificationsService {
       this.logger.warn(`Thiếu NotificationTemplate "${templateCode}" — đã gửi nội dung mặc định.`);
     }
     const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
-    const inAppLog = await this.prisma.notificationLog.create({
-      data: { userId, templateCode, channel: 'INAPP', payload: { body, data }, status: 'SENT' },
-    });
+    const dedupeKey = opts.dedupeKey;
+    const inAppLog = dedupeKey
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notify:${userId}:${dedupeKey}`}))`;
+          const seen = await tx.notificationLog.findFirst({
+            where: { userId, channel: 'INAPP', payload: { path: ['dedupeKey'], equals: dedupeKey } },
+            select: { id: true },
+          });
+          if (seen) return null;
+          return tx.notificationLog.create({
+            data: { userId, templateCode, channel: 'INAPP', payload: { body, data, dedupeKey }, status: 'SENT' },
+          });
+        })
+      : await this.prisma.notificationLog.create({
+          data: { userId, templateCode, channel: 'INAPP', payload: { body, data }, status: 'SENT' },
+        });
+    if (!inAppLog) {
+      this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: đã gửi tin cho sự kiện này.`);
+      return;
+    }
     await this.analytics.recordBestEffort({
       eventName: 'notification_sent',
       userId,

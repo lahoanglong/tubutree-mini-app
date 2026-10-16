@@ -8,6 +8,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMoneyBackable, OrderReversalService, type RefundOutcome } from './order-reversal.service';
+import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
 import {
   canRefundToBank,
@@ -388,6 +389,7 @@ export class OrderReturnsService {
       let money: RefundOutcome | null;
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
+      let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
         if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
@@ -396,6 +398,7 @@ export class OrderReturnsService {
         });
         const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id });
         money = reversed.refund;
+        referralNotices = reversed.referralNotices ?? [];
       } else {
         const partial = await this.reversal.reversePartialReturn(tx, order, {
           requestId: id,
@@ -407,6 +410,7 @@ export class OrderReturnsService {
         money = partial.refund;
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
+        referralNotices = partial.referralNotices ?? [];
       }
 
       await tx.returnRequestItem.deleteMany({ where: { returnRequestId: id } });
@@ -427,10 +431,11 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack };
+      return { order, shares, money, pointsBack, referralNotices };
     });
 
     const { order, shares, money } = outcome;
+    await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
     if (shares.isFull) {
       // Điểm thường/điểm tích và hoa hồng của phần còn lại — idempotent, chạy sau commit như mọi lần đảo cả đơn.
       await this.loyalty.reverseOrderPoints(order.id);

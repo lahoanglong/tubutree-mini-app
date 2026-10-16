@@ -314,6 +314,7 @@ export const vi = {
     pointsCredited: (n: string) => `Đã cộng +${n} Điểm Xanh vào tài khoản`,
     pointsReversed: 'Điểm Xanh của đơn này đã được thu hồi',
     pointsCreditedPartlyReversed: (earned: string, reversed: string) => `Đã cộng +${earned}, đã thu lại tối đa ${reversed} do trả hàng`,
+    pointsCreditedReturnTaken: (earned: string, taken: string) => `Đã cộng +${earned}, đã thu lại ${taken} điểm do trả hàng`,
   },
 
   nav: {

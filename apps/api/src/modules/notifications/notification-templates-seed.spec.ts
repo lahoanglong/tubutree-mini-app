@@ -169,6 +169,10 @@ describe('seed mẫu thông báo', () => {
       'REFUND_LATE_PAYMENT',
       'REFUND_WALLET_CREDITED',
       'OPS_REFUND_ALERT',
+      // R12: báo người mời khi thưởng giới thiệu được cấp/thu lại.
+      'REFERRAL_REWARD_PAID',
+      'REFERRAL_MILESTONE_PAID',
+      'REFERRAL_REWARD_REVOKED',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

@@ -753,6 +753,10 @@ const NOTIFICATION_TEMPLATES = [
   { id: 'nt-second-order', code: 'SECOND_ORDER_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng cho lần mua tiếp theo trước {{expires}} 🌿', createOnly: true },
   { id: 'nt-review-request', code: 'REVIEW_REQUEST', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã đến tay bạn. Bạn thấy {{product}} thế nào? Viết đánh giá để giúp người mua sau, lần đầu đánh giá mỗi sản phẩm được cộng Điểm Xanh 🌿', createOnly: true },
   { id: 'nt-milestone', code: 'MILESTONE_VOUCHER', channel: 'INAPP', bodyTemplate: 'Cảm ơn bạn đã tin dùng Tubu! Tặng voucher tri ân {{code}} giảm {{value}}đ, dùng trước {{expires}} 🌿' },
+  // Báo người mời khi thưởng giới thiệu được cấp/thu lại (gửi sau khi sổ điểm commit, mỗi dòng sổ một tin).
+  { id: 'nt-referral-reward-paid', code: 'REFERRAL_REWARD_PAID', channel: 'INAPP', bodyTemplate: 'Bạn nhận {{points}} Điểm Xanh vì {{friend}} đã mua đơn thứ hai. Cảm ơn bạn đã giới thiệu Tubu Tree 🌿', createOnly: true },
+  { id: 'nt-referral-milestone-paid', code: 'REFERRAL_MILESTONE_PAID', channel: 'INAPP', bodyTemplate: 'Bạn đã giới thiệu thành công {{count}} người bạn và nhận thêm {{points}} Điểm Xanh thưởng mốc 🌿', createOnly: true },
+  { id: 'nt-referral-reward-revoked', code: 'REFERRAL_REWARD_REVOKED', channel: 'INAPP', bodyTemplate: 'Thưởng giới thiệu từ {{friend}} được thu lại vì {{cause}}: {{detail}}.', createOnly: true },
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
