@@ -361,8 +361,8 @@ export class AuthService {
       await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "userId" IN (${guest.id}, ${target.id}) ORDER BY "id" FOR UPDATE`;
       // Suất giờ vàng đã mua (bước 6 cộng dồn vào dòng của target): huỷ/trả đơn của target hoàn suất rồi mới ghi users của target,
       // nên gộp khoá users trước rồi mới ghi dòng suất là chờ ngược chiều ⇒ 40P01 (merge-reversal-flash-lock.race-spec). Chỉ khoá
-      // đúng các dòng bước 6 ghi (của khách, và của target trùng suất với khách): đơn của target hoàn suất theo thứ tự dòng đơn,
-      // khoá mọi dòng của target theo một thứ tự khác lại thành vòng với chính lần hoàn đó.
+      // đúng các dòng bước 6 ghi (của khách, và của target trùng suất với khách), theo suất rồi khách: cùng chiều với lần
+      // hoàn suất của huỷ/trả đơn (khoá theo id suất) và với checkout.
       await tx.$queryRaw`
         SELECT "id" FROM "flash_sale_purchases"
          WHERE "userId" = ${guest.id}
