@@ -125,8 +125,11 @@ describe('Đặt đơn nhiều dòng giờ vàng ‖ duyệt trả một phần 
     });
     created.flashSaleIds.push(sale.id);
     const a = await flashLine(sale.id);
-    const b = await flashLine(sale.id);
     const c = await flashLine(sale.id);
+    const b = await flashLine(sale.id);
+    // id(C) < id(B): trừ suất theo id thì C khoá xong trước khi kẹt ở B, nên một lần khoá users sớm (trước khi khoá đủ mọi
+    // suất) giữa C và B cũng thành vòng chờ với lần duyệt đang giữ B.
+    expect(c.flash.id < b.flash.id).toBe(true);
     const referrer = await createUser(prisma, { role: 'CUSTOMER' });
     const referee = await createUser(prisma, { role: 'CUSTOMER', referredById: referrer.id });
     created.userIds.push(referrer.id, referee.id);
