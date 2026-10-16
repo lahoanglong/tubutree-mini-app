@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,7 +23,8 @@ import {
   type MerchantPancakeCheck,
 } from './merchant-pancake-link';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from './merchant-config';
-import { isPartnerStore } from './partner-store';
+import { isPartnerStore, lockStoreOwner } from './partner-store';
+import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -312,7 +313,7 @@ export class MerchantService {
           if (owner?.role !== 'DEALER') return false;
           await tx.storefront.update({ where: { id: store.id }, data: { isPartner: true } });
           return true;
-        });
+        }).catch(throwIfLockBusy);
         return { ...store, isPartner };
       }
       return store;
@@ -337,27 +338,37 @@ export class MerchantService {
     // thử tạo lại thay vì để lỗi 409 chung chung.
     for (let attempt = 0; attempt <= MAX_CREATE_STORE_RETRY; attempt++) {
       try {
-        return await this.prisma.storefront.create({
-          data: {
-            type: user.role === 'DEALER' ? 'MERCHANT' : 'CTV',
-            isPartner: user.role === 'DEALER',
-            slug: baseSlug,
-            subdomain,
-            ownerUserId: userId,
-            title: `Gian hàng của ${user.fullName ?? 'Đối tác'}`,
-            themeColor: '#16a34a',
-            isPublished: true,
-            publishedAt: new Date(),
-            collections: {
-              create: {
-                title: 'Sản phẩm nổi bật',
-                sortOrder: 0,
+        // Mỗi lần thử một transaction (P2002 làm hỏng transaction của nó). Khoá tư vấn theo chủ rồi đọc lại vai trò: thu hồi đại lý
+        // chạy song song giữ cùng khoá nên loại/cờ đối tác của gian hàng mới luôn khớp vai trò chủ lúc ghi.
+        return await this.prisma.$transaction(async (tx) => {
+          await lockStoreOwner(tx, userId);
+          const fresh = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+          if (fresh?.role !== 'AFFILIATE' && fresh?.role !== 'DEALER' && fresh?.role !== 'ADMIN') {
+            throw new ForbiddenException('Chỉ tài khoản đối tác hoặc đại lý mới có quyền mở gian hàng.');
+          }
+          return tx.storefront.create({
+            data: {
+              type: fresh.role === 'DEALER' ? 'MERCHANT' : 'CTV',
+              isPartner: fresh.role === 'DEALER',
+              slug: baseSlug,
+              subdomain,
+              ownerUserId: userId,
+              title: `Gian hàng của ${user.fullName ?? 'Đối tác'}`,
+              themeColor: '#16a34a',
+              isPublished: true,
+              publishedAt: new Date(),
+              collections: {
+                create: {
+                  title: 'Sản phẩm nổi bật',
+                  sortOrder: 0,
+                },
               },
             },
-          },
-          include: STORE_INCLUDE,
-        });
+            include: STORE_INCLUDE,
+          });
+        }, { maxWait: 15_000, timeout: 60_000 });
       } catch (err) {
+        if (isLockBusy(err)) throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           const existing = await this.prisma.storefront.findFirst({
             where: { ownerUserId: userId },

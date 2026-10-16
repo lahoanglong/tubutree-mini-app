@@ -118,11 +118,13 @@ function makeApproveTx(opts: {
   const dealerAppUpdateMany = opts.dealerAppUpdateMany ?? jest.fn().mockResolvedValue({ count: 1 });
   const userUpdate = opts.userUpdate ?? jest.fn().mockResolvedValue({});
   const executeRaw = jest.fn().mockResolvedValue(0);
+  const queryRaw = jest.fn().mockResolvedValue([]);
   const storefrontUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const userCount = jest.fn().mockResolvedValue(opts.otherActiveAdmins ?? 1);
   const $transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
     cb({
       $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
       storefront: { updateMany: storefrontUpdateMany },
       user: {
@@ -132,7 +134,7 @@ function makeApproveTx(opts: {
       },
     }),
   );
-  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, userCount, storefrontUpdateMany };
+  return { $transaction, dealerAppUpdateMany, userUpdate, executeRaw, queryRaw, userCount, storefrontUpdateMany };
 }
 
 describe('AdminService.reviewDealerApplication', () => {

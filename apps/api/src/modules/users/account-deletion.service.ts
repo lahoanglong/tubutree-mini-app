@@ -95,7 +95,7 @@ export class AccountDeletionService {
 
   /**
    * Idempotent: yêu cầu đã RESOLVED thì trả `alreadyProcessed: true`, không chạy lại. Khoá dòng yêu
-   * cầu, các đơn của khách rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
+   * cầu, các đơn của khách, gian hàng của khách (thu hồi/duyệt đại lý cũng khoá gian hàng trước users) rồi dòng user (FOR UPDATE) để 2 admin cùng bấm thì người sau chờ và thấy RESOLVED, còn các ghi
    * tiền vào users (vd cộng Ví) phải chờ lần kiểm số dư này xong.
    * Chạy lại một lần khi gặp deadlock: gộp phiên khách vào chính khách này commit xen giữa (chuyển thêm đơn sang khách sau
    * lúc tx này đã khoá đơn) cùng một lần cộng điểm đang giữ đơn mới đó thì lần ẩn danh đơn có thể chờ vòng (40P01). Lần

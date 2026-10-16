@@ -333,7 +333,7 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
     const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
     const f = fulfilment();
     await new RbacService(prisma, f).revokeGrant('admin1', '0900000001');
-    expect(f.clearPartnerOnRoleLoss).toHaveBeenCalledWith(tx, 'u1', 'admin1', {});
+    expect(f.clearPartnerOnRoleLoss).toHaveBeenCalledWith(tx, 'u1', 'admin1', {}, 'STAFF');
     expect(f.clearPartnerOnRoleLoss.mock.invocationCallOrder[0]!).toBeLessThan(tx.user.update.mock.invocationCallOrder[0]!);
   });
 
@@ -344,12 +344,34 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
     expect(f.clearPartnerOnRoleLoss).not.toHaveBeenCalled();
   });
 
-  it('gian hàng còn vướng (409) → không hạ role', async () => {
+  it('gian hàng còn vướng (409) → vẫn gỡ quyền nhân viên, vai trò về DEALER', async () => {
     const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
     const f = fulfilment();
     f.clearPartnerOnRoleLoss.mockRejectedValueOnce(new ConflictException('vướng'));
-    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).rejects.toBeInstanceOf(ConflictException);
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({ downgraded: true, role: 'DEALER' });
+    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'DEALER' } }));
+  });
+
+  it('lỗi khác 409 từ xử lý gian hàng → ném lên, không hạ role', async () => {
+    const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
+    const f = fulfilment();
+    f.clearPartnerOnRoleLoss.mockRejectedValueOnce(new Error('db'));
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).rejects.toThrow('db');
     expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('bậc đại lý trong metadata (đại lý cấp qua setUserRole, không có hồ sơ) → về DEALER, không đụng gian hàng', async () => {
+    const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
+    tx.user.findUnique.mockResolvedValue(mkUser({ role: 'STAFF', metadata: { dealerTierId: 't1' } } as Partial<User>));
+    const f = fulfilment();
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({ role: 'DEALER' });
+    expect(f.clearPartnerOnRoleLoss).not.toHaveBeenCalled();
+  });
+
+  it('giao dịch có maxWait/timeout rộng như setUserRole (kiểm vướng mắc nặng khi đang giữ khoá danh sách admin)', async () => {
+    const { prisma } = txFor('STAFF', 'CUSTOMER');
+    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
+    expect((prisma.$transaction as jest.Mock).mock.calls[0][1]).toEqual({ maxWait: 15_000, timeout: 60_000 });
   });
 
   it('deadlock / hết hạn chờ khoá → 503', async () => {

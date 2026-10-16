@@ -39,7 +39,7 @@ import {
   type ConsignmentTermsRow,
 } from './merchant-consignment';
 import { merchantLineBase } from './merchant-line-base';
-import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
+import { isPartnerStore, lockStoreOwner, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
@@ -1403,10 +1403,12 @@ export class MerchantFulfilmentService {
    * đối tác của chủ thôi là đối tác cùng luật với `setStorePartner` (khoá phiếu → dòng gian hàng, kiểm vướng mắc dưới khoá, ghi
    * STOREFRONT_PARTNER) trừ vướng mắc "chủ còn là đại lý" (chính lần đổi này gỡ nó). Gian hàng MERCHANT được chuyển luôn về loại
    * CTV (hàng, tài khoản nhận tiền, điều khoản, lịch sử phiếu giữ nguyên; duyệt lại đại lý rồi vào Cổng người bán thì cờ bật lại như
-   * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Mọi gian hàng của chủ đều khoá trước rồi mới đọc cờ dưới
-   * khoá, để lần bật lại cờ ở Cổng người bán chạy song song không lọt qua.
+   * mọi gian hàng CTV). Còn vướng mắc thì ném 409 để cả lần đổi vai trò huỷ. Khoá tư vấn theo chủ lấy trước (chặn lần tạo gian hàng
+   * đầu tiên ở Cổng người bán chen vào khi chưa có dòng nào để khoá), rồi mọi gian hàng của chủ đều khoá trước khi đọc cờ dưới khoá,
+   * để lần bật lại cờ chạy song song không lọt qua.
    */
-  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig) {
+  async clearPartnerOnRoleLoss(tx: Db, ownerUserId: string, actorId: string, cfg: SettlementConfig, fromRole: string) {
+    await lockStoreOwner(tx, ownerUserId);
     const stores = await tx.storefront.findMany({ where: { ownerUserId }, select: { id: true }, orderBy: { id: 'asc' } });
     let cleared = 0;
     for (const { id } of stores) {
@@ -1416,9 +1418,13 @@ export class MerchantFulfilmentService {
       if (!store || !isPartnerStore(store)) continue;
       const blockers = await this.partnerBlockers(tx, id, ownerUserId, cfg, true);
       if (blockers.length) {
-        throw new ConflictException(`Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`);
+        throw new ConflictException(
+          fromRole === 'DEALER'
+            ? `Chưa thể thu hồi vai trò đại lý vì gian hàng đối tác còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`
+            : `Chưa thể hạ vai trò vì gian hàng đối tác của người này còn vướng: ${blockers.join('; ')}. Xử lý xong rồi thử lại, hoặc đặt vai trò DEALER để giữ nguyên gian hàng.`,
+        );
       }
-      await tx.storefront.update({ where: { id }, data: { isPartner: false, ...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
+      await tx.storefront.update({ where: { id }, data: { isPartner: false,...(store.type === 'MERCHANT' ? { type: 'CTV' } : {}) } });
       await recordUserAdminEvent(tx, { userId: ownerUserId, kind: 'STOREFRONT_PARTNER', from: 'true', to: 'false', reason: id, actorId });
       cleared++;
     }

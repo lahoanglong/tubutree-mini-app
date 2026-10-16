@@ -1,10 +1,16 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { DEFAULT_MERCHANT_COMMISSION_PCT } from './merchant-config';
 
 export const MERCHANT_COMMISSION_KEY = 'merchant.commission_pct';
 
 /** Khoá tư vấn theo gian hàng khi đổi mức phí — updateStoreTerms và lúc đổi phí sàn mặc định giữ cùng khoá. */
 export const termsLockKey = (storefrontId: string) => `merchant-terms:${storefrontId}`;
+
+/**
+ * Gian hàng cần đóng băng phí sàn mặc định: đối tác hiện tại, và cả gian hàng đã thôi là đối tác nhưng còn lịch sử phí (đơn giao hộ
+ * đặt trước đó còn chốt theo lịch sử; mở lại đối tác sau này thì đơn mới phải thấy mức mặc định đúng lúc, không phải mức cũ nhất).
+ */
+const FREEZE_SCOPE_SQL = Prisma.sql`type = 'MERCHANT' OR "isPartner" = true OR EXISTS (SELECT 1 FROM "storefront_terms_history" h WHERE h."storefrontId" = "storefronts"."id")`;
 
 /** Phí sàn mặc định từ giá trị lưu ở SystemConfig; thiếu hoặc sai kiểu thì theo mặc định trong mã. */
 export function commissionPctOf(value: unknown): number {
@@ -33,10 +39,10 @@ export async function freezeDefaultCommissionChange(
   if (oldPct === newPct) return 0;
   await tx.$executeRaw`
     SELECT pg_advisory_xact_lock(hashtext('merchant-terms:' || s.id))
-      FROM (SELECT id FROM storefronts WHERE (type = 'MERCHANT' OR "isPartner" = true) AND "commissionPct" IS NULL ORDER BY id) s`;
+      FROM (SELECT id FROM storefronts WHERE (${FREEZE_SCOPE_SQL}) AND "commissionPct" IS NULL ORDER BY id) s`;
   const stores = await tx.$queryRaw<{ id: string; consignmentFeePct: Prisma.Decimal | number; consignmentFeeFixed: number }[]>`
     SELECT id, "consignmentFeePct", "consignmentFeeFixed" FROM storefronts
-     WHERE (type = 'MERCHANT' OR "isPartner" = true) AND "commissionPct" IS NULL ORDER BY id FOR UPDATE`;
+     WHERE (${FREEZE_SCOPE_SQL}) AND "commissionPct" IS NULL ORDER BY id FOR UPDATE`;
   if (stores.length === 0) return 0;
   const ids = stores.map((s) => s.id);
   const withHistory = new Set(

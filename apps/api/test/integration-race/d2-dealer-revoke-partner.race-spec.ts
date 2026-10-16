@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -27,6 +27,8 @@ import { AdminService } from '../../src/modules/admin/admin.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import { AccountDeletionService } from '../../src/modules/users/account-deletion.service';
+import { freezeDefaultCommissionChange } from '../../src/modules/merchant/merchant-terms-history';
+import { termsAt } from '../../src/modules/merchant/merchant-consignment';
 import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 import type { OrderStatus, Prisma } from '@prisma/client';
 
@@ -317,15 +319,58 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
   }
   const activeGrants = (c: Ctx) => prisma.roleGrant.count({ where: { phone: c.owner.phone!, revokedAt: null } });
 
-  it('revokeGrant: STAFF không có hồ sơ đại lý (→ CUSTOMER) có gian hàng vướng → 409, grant và vai trò giữ nguyên', async () => {
+  it('revokeGrant: STAFF (→ CUSTOMER) có gian hàng vướng → vẫn gỡ quyền nhân viên, vai trò về DEALER, gian hàng giữ nguyên', async () => {
     const c = await dealerStore({ ownerRole: 'STAFF' });
     await grant(c);
     await selfShip(c, 'SHIPPING');
-    await conflictMessage(rbac.revokeGrant(c.adminUser.id, c.owner.phone!));
-    expect(await c.role()).toBe('STAFF');
-    expect(await activeGrants(c)).toBe(1);
+    await expect(rbac.revokeGrant(c.adminUser.id, c.owner.phone!)).resolves.toMatchObject({ revoked: 1, downgraded: true, role: 'DEALER' });
+    expect(await c.role()).toBe('DEALER');
+    expect(await activeGrants(c)).toBe(0);
     expect(await c.flag()).toBe(true);
-    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE' } })).toBe(0);
+    expect(await c.partnerEvents()).toHaveLength(0);
+    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE', fromValue: 'STAFF', toValue: 'DEALER' } })).toBe(1);
+  });
+
+  it('setUserRole STAFF → CUSTOMER vướng: 409 không nhắc "vai trò đại lý", nêu cách xử lý', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF' });
+    await selfShip(c, 'SHIPPING');
+    const msg = await conflictMessage(admin.setUserRole(c.adminUser.id, c.owner.phone!, 'CUSTOMER'));
+    expect(msg).not.toContain('thu hồi vai trò đại lý');
+    expect(msg).toContain('1 đơn tự giao chưa xong');
+    expect(msg).toContain('DEALER');
+  });
+
+  it('đại lý cấp qua setUserRole (không có hồ sơ): mở cổng → MERCHANT; cấp STAFF rồi thu hồi → về DEALER, gian hàng nguyên vẹn', async () => {
+    const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+    created.tierIds.push(tier.id);
+    const adminUser = await user('ADMIN');
+    const owner = await user('AFFILIATE');
+    await admin.setUserRole(adminUser.id, owner.phone!, 'DEALER', tier.id);
+    const sf = await portal.getOrCreateStore(owner.id);
+    created.storefrontIds.push(sf.id);
+    expect(sf).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    await rbac.addGrant(adminUser.id, owner.phone!, 'STAFF');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('STAFF');
+    await expect(rbac.revokeGrant(adminUser.id, owner.phone!)).resolves.toMatchObject({ downgraded: true, role: 'DEALER' });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role).toBe('DEALER');
+    expect(await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    expect(await prisma.userAdminEvent.count({ where: { userId: owner.id, kind: 'STOREFRONT_PARTNER' } })).toBe(0);
+  });
+
+  it('freeze phí sàn mặc định áp cho cả gian hàng đã thôi là đối tác nhưng còn lịch sử; mở lại thì đơn mới tính mức mới', async () => {
+    const m = await dealerStore({ type: 'MERCHANT' });
+    await prisma.storefrontTermsHistory.create({ data: { storefrontId: m.sf.id, commissionPct: 0.1, consignmentFeePct: 0, consignmentFeeFixed: 0, effectiveFrom: new Date(0) } });
+    await m.revoke();
+    expect(await m.flag()).toBe(false);
+    const at = new Date();
+    await prisma.$transaction((tx) => freezeDefaultCommissionChange(tx, 0.1, 0.12, at, m.adminUser.id));
+    const rows = (await prisma.storefrontTermsHistory.findMany({ where: { storefrontId: m.sf.id } })).map((r) => ({
+      effectiveFrom: r.effectiveFrom, commissionPct: Number(r.commissionPct), feePct: Number(r.consignmentFeePct), feeFixed: r.consignmentFeeFixed,
+    }));
+    expect(rows).toHaveLength(2);
+    const current = { commissionPct: 0.12, feePct: 0, feeFixed: 0 };
+    expect(termsAt(rows, current, new Date(at.getTime() - 1000)).commissionPct).toBeCloseTo(0.1);
+    expect(termsAt(rows, current, new Date(at.getTime() + 1000)).commissionPct).toBeCloseTo(0.12);
   });
 
   it('revokeGrant: STAFF → CUSTOMER sạch vướng mắc → tắt cờ, ghi STOREFRONT_PARTNER', async () => {
@@ -572,6 +617,43 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       }
     });
 
+    it(`duyệt hồ sơ đại lý đua với ẩn danh của cùng người nộp (khoá gian hàng trước users ở cả hai): không 40P01, cả hai xong (${ROUNDS} vòng)`, async () => {
+      const none = {} as never;
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
+      created.tierIds.push(tier.id);
+      const warn = jest.spyOn(Logger.prototype, 'warn');
+      for (let round = 0; round < ROUNDS; round++) {
+        warn.mockClear();
+        const d = await deletable();
+        await prisma.user.update({ where: { id: d.owner.id }, data: { role: 'AFFILIATE' } });
+        await prisma.storefront.update({ where: { id: d.sf.id }, data: { isPartner: false } });
+        const app = await prisma.dealerApplication.create({
+          data: { userId: d.owner.id, businessName: 'IT', ownerName: 'IT', phone: d.owner.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+        });
+        const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${d.owner.id} FOR UPDATE`);
+        const running: Promise<unknown>[] = [];
+        try {
+          let apSettled = false;
+          running.push(approver.reviewDealerApplication(d.adminUser.id, app.id, true, tier.id).finally(() => (apSettled = true)));
+          await waitUntil(async () => apSettled || (await lockWaiters(holder.pid)) >= 1, 'duyệt hồ sơ');
+          let delSettled = false;
+          running.push(deletion.process(d.request.id, d.adminUser.id).finally(() => (delSettled = true)));
+          await waitUntil(async () => delSettled || (await lockWaiters(holder.pid)) >= 2, 'xoá tài khoản');
+        } finally {
+          holder.release();
+          await holder.done;
+        }
+        const settled = await Promise.allSettled(running);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
+        expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+        // Ẩn danh tự chạy lại một lần khi gặp deadlock nên che mất nó: không được rơi vào nhánh đó.
+        expect(warn.mock.calls.filter(([m]) => String(m).includes('chạy lại một lần'))).toHaveLength(0);
+        expect(await d.flag()).toBe(true);
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: d.owner.id } })).isBlocked).toBe(true);
+      }
+    });
+
     it(`hai bên chạy tự do (${ROUNDS * 2} vòng): không 40P01, trạng thái cuối nhất quán`, async () => {
       for (let round = 0; round < ROUNDS * 2; round++) {
         const d = await deletable();
@@ -588,6 +670,43 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
           expect(rev.reason).toBeInstanceOf(NotFoundException);
           expect(await d.role()).toBe('DEALER');
         }
+      }
+    });
+  });
+
+  /** Đại lý chưa có gian hàng: Cổng người bán tạo gian hàng đua với thu hồi (không có dòng nào để khoá). Giữ khoá dòng users để ép thứ tự tới. */
+  describe.each([
+    ['cổng trước, thu hồi sau', true],
+    ['thu hồi trước, cổng sau', false],
+  ] as const)('Tạo gian hàng đầu tiên đua với thu hồi: %s', (_label, portalFirst) => {
+    it(`không bao giờ để lại chủ không còn là DEALER mà gian hàng là đối tác (${ROUNDS} vòng)`, async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const adminUser = await user('ADMIN');
+        const owner = await user('DEALER');
+        const holder = await hold((tx) => tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${owner.id} FOR UPDATE`);
+        const running: Promise<unknown>[] = [];
+        try {
+          const start = (kind: 'portal' | 'revoke') => {
+            let settled = false;
+            running.push((kind === 'portal' ? portal.getOrCreateStore(owner.id) : admin.setUserRole(adminUser.id, owner.phone!, 'CUSTOMER')).finally(() => (settled = true)));
+            return () => settled;
+          };
+          const first = start(portalFirst ? 'portal' : 'revoke');
+          await waitUntil(async () => first() || (await lockWaiters(holder.pid)) >= 1, 'bên đến trước');
+          const second = start(portalFirst ? 'revoke' : 'portal');
+          await waitUntil(async () => second() || (await lockWaiters(holder.pid)) >= 2, 'bên đến sau');
+        } finally {
+          holder.release();
+          await holder.done;
+        }
+        const settled = await Promise.allSettled(running);
+        expect(summarize(settled).errors.join(' ')).not.toMatch(/40P01|deadlock/i);
+        const store = await prisma.storefront.findFirst({ where: { ownerUserId: owner.id } });
+        if (store) created.storefrontIds.push(store.id);
+        const role = (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).role;
+        expect(role).toBe('CUSTOMER');
+        expect(store?.isPartner ?? false).toBe(false);
+        expect(store?.type ?? 'CTV').not.toBe('MERCHANT');
       }
     });
   });

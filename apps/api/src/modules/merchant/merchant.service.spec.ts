@@ -37,16 +37,45 @@ describe('MerchantService', () => {
       const prisma = makePrisma({
         user: {
           findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u2', role: 'DEALER', referralCode: 'DEALER01', fullName: 'Đại lý 1' }),
+          findUnique: jest.fn().mockResolvedValue({ role: 'DEALER' }),
         },
         storefront: {
           findFirst: jest.fn().mockResolvedValue(null),
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn().mockResolvedValue(createdStore),
         },
+        $executeRaw: jest.fn().mockResolvedValue(0),
       });
+      (prisma as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
       const svc = new MerchantService(prisma, orderStatus);
       const res = await svc.getOrCreateStore('u2');
       expect(res.id).toBe('s-new');
+      expect((prisma.storefront.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ type: 'MERCHANT', isPartner: true });
+    });
+
+    it('vai trò đọc lại dưới khoá chủ đã hết là đại lý → chọn loại theo vai trò mới, hoặc từ chối nếu không được mở gian hàng', async () => {
+      const mk = (role: string) => {
+        const prisma = makePrisma({
+          user: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u2', role: 'DEALER', referralCode: 'D1', fullName: 'A' }),
+            findUnique: jest.fn().mockResolvedValue({ role }),
+          },
+          storefront: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            findUnique: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue({ id: 's' }),
+          },
+          $executeRaw: jest.fn().mockResolvedValue(0),
+        });
+        (prisma as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+        return { prisma, svc: new MerchantService(prisma, orderStatus) };
+      };
+      const a = mk('AFFILIATE');
+      await a.svc.getOrCreateStore('u2');
+      expect((a.prisma.storefront.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ type: 'CTV', isPartner: false });
+      const b = mk('CUSTOMER');
+      await expect(b.svc.getOrCreateStore('u2')).rejects.toThrow(ForbiddenException);
+      expect(b.prisma.storefront.create as jest.Mock).not.toHaveBeenCalled();
     });
   });
 

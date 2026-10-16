@@ -257,6 +257,9 @@ export class AdminService {
       await this.prisma.$transaction(async (tx) => {
         // Duyệt đổi vai trò người nộp sang DEALER: người nộp là admin thì đây cũng là một lần hạ quyền admin.
         await lockAdminRoster(tx);
+        // Gian hàng của người nộp khoá trước dòng users (cùng thứ tự với thu hồi đại lý và ẩn danh tài khoản), nếu không bên ghi
+        // users trước rồi đợi gian hàng sẽ deadlock với bên giữ gian hàng rồi đợi users.
+        await tx.$queryRaw`SELECT "id" FROM "storefronts" WHERE "ownerUserId" = ${app.userId} ORDER BY "id" FOR UPDATE`;
         const applicant = await tx.user.findUnique({ where: { id: app.userId }, select: { role: true } });
         if (applicant?.role === 'ADMIN') {
           if (app.userId === adminId) {
@@ -274,7 +277,7 @@ export class AdminService {
           data: { role: 'DEALER', metadata: mergedMeta },
         });
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
-      });
+      }).catch(throwIfLockBusy);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
         where: { id, status: 'PENDING' },
@@ -501,7 +504,7 @@ export class AdminService {
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
       if (losesPartnerStore(previousRole, role)) {
         if (!this.fulfilment || !partnerCfg) throw new Error('AdminService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
-        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg);
+        await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, previousRole);
       }
       const updated = await tx.user.update({
         where: { id: user.id },
