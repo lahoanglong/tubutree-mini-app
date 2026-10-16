@@ -499,6 +499,8 @@ export const vi = {
   },
 
   storefront: {
+    statsOtherProducts: (n: number) => `${n} sản phẩm khác`,
+    statsOrderLevel: 'Phí ship, giảm giá, chênh lệch hoàn tiền',
     renameCollection: 'Đổi tên bộ sưu tập',
     deleteCollection: 'Xoá bộ sưu tập',
     deleteCollectionConfirm: 'Xoá bộ sưu tập này?',

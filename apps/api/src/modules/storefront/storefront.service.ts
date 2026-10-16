@@ -390,8 +390,8 @@ export class StorefrontService {
       commission30d: commission30dAgg._sum.amount ?? 0,
       byProduct: lines,
       // Doanh thu tính trên Order.total (gồm phí ship, trừ giảm giá cấp đơn và tiền hoàn thực tế) còn dòng sản phẩm tính trên
-      // OrderItem.total: phần chênh hiện thành một dòng riêng để các dòng cộng đúng ô Doanh thu. Có thể âm khi giảm giá cấp đơn
-      // lớn hơn phí ship.
+      // OrderItem.total trừ theo tỷ lệ số món trả: phần chênh (ship, giảm giá cấp đơn, chênh lệch tiền hoàn so với phần trừ theo
+      // tỷ lệ) hiện thành một dòng riêng để các dòng cộng đúng ô Doanh thu. Có thể âm.
       shippingAndOrderDiscount30d: revenue30d - lines.reduce((t, p) => t + p.revenue, 0),
     };
   }

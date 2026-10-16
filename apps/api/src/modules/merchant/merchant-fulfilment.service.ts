@@ -1337,6 +1337,8 @@ export class MerchantFulfilmentService {
    * lần kiểm để không lập phiếu chen giữa; bấm lại cùng giá trị không ghi thêm sổ.
    */
   async setStorePartner(adminId: string, storefrontId: string, isPartner: boolean) {
+    // Đọc cấu hình đối soát trước khi mở tx (như createPayout): SystemConfigService đọc qua pool, không đọc trong lúc giữ tx.
+    const cfg = isPartner ? null : await this.settlementConfig();
     const result = await this.prisma.$transaction(
       async (tx) => {
         await this.lockStorePayouts(tx, storefrontId);
@@ -1350,8 +1352,8 @@ export class MerchantFulfilmentService {
           throw new BadRequestException('Gian hàng loại MERCHANT luôn là gian hàng đối tác, cờ này không áp dụng.');
         }
         if (store.isPartner === isPartner) return { changed: false, ownerUserId: store.ownerUserId };
-        if (!isPartner) {
-          const blockers = await this.partnerBlockers(tx, store.id, store.ownerUserId);
+        if (!isPartner && cfg) {
+          const blockers = await this.partnerBlockers(tx, store.id, store.ownerUserId, cfg);
           if (blockers.length) {
             throw new ConflictException(`Chưa thể tắt gian hàng đối tác: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`);
           }
@@ -1372,33 +1374,56 @@ export class MerchantFulfilmentService {
       { maxWait: 15_000, timeout: 60_000 },
     );
     if (result.changed) {
-      this.logger.warn(`Admin ${adminId} ${isPartner ? 'bật' : 'tắt'} cờ đối tác của gian hàng ${storefrontId} (chủ ${result.ownerUserId ?? '—'}).`);
+      // Gian hàng không có chủ (ownerUserId null) không có dòng user_admin_events để gắn: dòng log này là dấu vết duy nhất.
+      this.logger.warn(
+        `Admin ${adminId} ${isPartner ? 'bật' : 'tắt'} cờ đối tác của gian hàng ${storefrontId} (chủ ${result.ownerUserId ?? 'không có — chỉ ghi log'}).`,
+      );
     }
     return { id: storefrontId, isPartner };
   }
 
-  private async partnerBlockers(tx: Db, storefrontId: string, ownerUserId: string | null): Promise<string[]> {
-    const [owner, openOrders, statement, pendingPayouts, activeLinks, pendingReturns, ownProducts] = await Promise.all([
-      ownerUserId ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
-      tx.order.count({
-        where: { fulfillerStorefrontId: storefrontId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
-      }),
-      this.statementFor(storefrontId, new Date(), tx),
-      tx.merchantPayout.count({ where: { storefrontId, status: 'PENDING' } }),
-      tx.merchantPancakeLink.count({ where: { storefrontId, unlinkedAt: null } }),
-      tx.$queryRaw<{ n: bigint }[]>`
-        SELECT COUNT(*) AS n FROM "return_requests" rr JOIN "orders" o ON o."id" = rr."orderId"
-         WHERE rr."status" = 'REQUESTED' AND o."fulfillerStorefrontId" = ${storefrontId}`.then((r) => Number(r[0]?.n ?? 0)),
-      tx.product.count({ where: { storefrontId, fulfilment: 'MERCHANT', isActive: true } }),
-    ]);
+  private async partnerBlockers(tx: Db, storefrontId: string, ownerUserId: string | null, cfg: SettlementConfig): Promise<string[]> {
+    const store = Prisma.sql`${storefrontId}`;
+    const settleFrom = await this.consignmentSettleFrom(tx);
+    const count = (q: Promise<{ n: bigint }[]>) => q.then((r) => Number(r[0]?.n ?? 0));
+    const [owner, openOrders, consignmentOpen, statement, pendingPayouts, activeLinks, pendingReturns, unreceivedReturns, ownProducts] =
+      await Promise.all([
+        ownerUserId ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
+        tx.order.count({
+          where: { fulfillerStorefrontId: storefrontId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
+        }),
+        // Đơn kho Tubu có dòng hàng ký gửi của gian hàng (cùng định nghĩa bảng kê: liên kết lúc đặt, takeover tính từ lúc xác nhận,
+        // từ mốc bắt đầu đối soát, chưa có SALE) mà chưa thành khoản bán được (chưa giao, hoặc giao mà Tubu chưa thu tiền): khi
+        // thành khoản thì gian hàng đã thôi là đối tác, không ai lập phiếu được. Khoản đã bán nằm ở statementFor bên dưới.
+        count(tx.$queryRaw<{ n: bigint }[]>`
+          SELECT COUNT(DISTINCT o."id") AS n FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
+           WHERE o."fulfiller" = 'TUBU' AND o."status" NOT IN ('CANCELLED', 'RETURNED')
+             AND NOT (${CONSIGNMENT_SOLD_SQL})
+             ${settleFrom ? Prisma.sql`AND o."createdAt" >= ${settleFrom}` : Prisma.empty}
+             AND ${consignmentLinkedSql(store, true)}
+             AND ${CONSIGNMENT_NO_SALE_SQL}`),
+        this.statementFor(storefrontId, new Date(), tx, cfg),
+        tx.merchantPayout.count({ where: { storefrontId, status: 'PENDING' } }),
+        tx.merchantPancakeLink.count({ where: { storefrontId, unlinkedAt: null } }),
+        count(tx.$queryRaw<{ n: bigint }[]>`
+          SELECT COUNT(*) AS n FROM "return_requests" rr JOIN "orders" o ON o."id" = rr."orderId"
+           WHERE rr."status" = 'REQUESTED' AND o."fulfillerStorefrontId" = ${storefrontId}`),
+        // Đã duyệt trả mà chưa xác nhận nhận hàng về: chỉ chủ gian hàng đối tác xác nhận được (order-returns), tắt cờ thì kẹt.
+        count(tx.$queryRaw<{ n: bigint }[]>`
+          SELECT COUNT(*) AS n FROM "return_requests" rr JOIN "orders" o ON o."id" = rr."orderId"
+           WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL AND o."fulfillerStorefrontId" = ${storefrontId}`),
+        tx.product.count({ where: { storefrontId, fulfilment: 'MERCHANT', isActive: true } }),
+      ]);
     const settleLines = statement.lines.length + statement.upcoming.length;
     return [
       owner?.role === 'DEALER' ? 'chủ gian hàng vẫn là đại lý (đổi vai trò trước, nếu không cờ tự bật lại)' : null,
       openOrders ? `${openOrders} đơn tự giao chưa xong` : null,
+      consignmentOpen ? `${consignmentOpen} đơn có hàng Tubu giao hộ của gian hàng chưa bán xong` : null,
       settleLines ? `${settleLines} khoản chờ đối soát` : null,
       pendingPayouts ? `${pendingPayouts} phiếu đối soát chưa chuyển` : null,
       activeLinks ? `${activeLinks} liên kết hàng Tubu giao hộ đang hiệu lực` : null,
       pendingReturns ? `${pendingReturns} yêu cầu trả hàng chờ xử lý` : null,
+      unreceivedReturns ? `${unreceivedReturns} yêu cầu trả đã duyệt chưa xác nhận nhận hàng` : null,
       ownProducts ? `${ownProducts} sản phẩm tự giao đang bán` : null,
     ].filter((b): b is string => b !== null);
   }

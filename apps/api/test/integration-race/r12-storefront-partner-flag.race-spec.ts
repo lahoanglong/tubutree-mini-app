@@ -1,36 +1,82 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { OrderStatus, StorefrontType, UserRole } from '@prisma/client';
+import type { OrderStatus, Prisma, StorefrontType, UserRole } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { linkTubuFulfilledVariation } from '../../src/modules/merchant/merchant-pancake-link';
+import { createOrder as createOrderRow, createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 86_400_000;
 
 /**
  * POST /admin/storefronts/:id/partner: admin gỡ cờ isPartner bị kẹt (cấp DEALER bằng setUserRole rồi đổi lại) hoặc bật lại. Không
- * cho tắt khi gian hàng còn dữ liệu đối tác sẽ mồ côi; không bật cho gian hàng BRAND; bấm lại không ghi thêm sổ.
+ * cho tắt khi gian hàng còn dữ liệu đối tác sẽ mồ côi (kể cả tiền ký gửi "Tubu giao hộ" đang chạy và hàng trả chưa nhận về); không
+ * bật cho gian hàng BRAND; bấm lại không ghi thêm sổ; không tạo liên kết giao hộ cho gian hàng vừa thôi là đối tác.
  */
 describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let svc: MerchantFulfilmentService;
+  const CONFIG_KEYS = ['merchant.settlement_hold_days', 'merchant.consignment_settle_from'];
+  let savedConfig: { key: string; value: unknown }[] = [];
+  const created = { userIds: [] as string[], storefrontIds: [] as string[], productIds: [] as string[] };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [SystemConfigService] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
+    savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
     await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
     svc = new MerchantFulfilmentService(prisma, {} as never, undefined, moduleRef.get(SystemConfigService));
   });
 
   afterAll(async () => {
+    if (prisma) {
+      const { userIds, storefrontIds, productIds } = created;
+      const orderIds = (await prisma.order.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map((o) => o.id);
+      await prisma.$transaction([
+        prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.merchantPayout.deleteMany({ where: { storefrontId: { in: storefrontIds } } }),
+        prisma.merchantPancakeLink.deleteMany({ where: { storefrontId: { in: storefrontIds } } }),
+        prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
+        prisma.variation.deleteMany({ where: { productId: { in: productIds } } }),
+        prisma.product.deleteMany({ where: { id: { in: productIds } } }),
+        prisma.userAdminEvent.deleteMany({ where: { userId: { in: userIds } } }),
+        prisma.storefront.deleteMany({ where: { id: { in: storefrontIds } } }),
+        prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+        prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } }),
+      ]);
+      for (const c of savedConfig) await setConfig(prisma, c.key, c.value as never);
+    }
     await moduleRef?.close();
   });
+
+  const createUser = async (...args: Parameters<typeof createUserRow>) => {
+    const u = await createUserRow(...args);
+    created.userIds.push(u.id);
+    return u;
+  };
+  const createOrder = (data: Parameters<typeof createOrderRow>[1]) => createOrderRow(prisma, data);
+
+  async function product(storefrontId: string | null, fulfilment: 'MERCHANT' | 'TUBU', isActive = true, extra: Partial<Prisma.ProductUncheckedCreateInput> = {}) {
+    const p = await prisma.product.create({
+      data: {
+        storefrontId, fulfilment, isActive, brand: 'IT', slug: `it-pf-p-${randCode(8).toLowerCase()}`, name: 'SP IT', description: 'IT',
+        basePrice: 1000,
+        ...extra,
+        variations: { create: [{ sku: `ITPF-${randCode(8)}`, pancakeId: `itpf-${randCode(8)}`, name: 'v', attributes: {}, retailPrice: 1000, stock: 5 }] },
+      },
+      include: { variations: true },
+    });
+    created.productIds.push(p.id);
+    return p;
+  }
 
   async function store(o: { role?: UserRole; type?: StorefrontType; isPartner?: boolean } = {}) {
     const admin = await createUser(prisma, { role: 'ADMIN' });
@@ -44,11 +90,13 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
         title: 'Gian hàng IT',
       },
     });
+    created.storefrontIds.push(sf.id);
     const buyer = await createUser(prisma);
-    const selfShip = (status: OrderStatus, extra: { deliveredAt?: Date; paymentStatus?: 'PAID' | 'UNPAID' } = {}) =>
-      createOrder(prisma, {
+    const selfShip = (status: OrderStatus, extra: { deliveredAt?: Date; paymentStatus?: 'PAID' | 'UNPAID'; paymentMethod?: 'COD' | 'BANK_TRANSFER' } = {}) =>
+      createOrder({
         userId: buyer.id, status, fulfiller: 'MERCHANT', fulfillerStorefrontId: sf.id, storefrontSlug: sf.slug,
-        paymentStatus: extra.paymentStatus ?? 'UNPAID', ...(extra.deliveredAt ? { deliveredAt: extra.deliveredAt } : {}),
+        paymentStatus: extra.paymentStatus ?? 'UNPAID', paymentMethod: extra.paymentMethod ?? 'COD',
+        ...(extra.deliveredAt ? { deliveredAt: extra.deliveredAt } : {}),
       });
     const events = () => prisma.userAdminEvent.findMany({ where: { userId: owner.id, kind: 'STOREFRONT_PARTNER' } });
     const flag = async () => (await prisma.storefront.findUniqueOrThrow({ where: { id: sf.id } })).isPartner;
@@ -104,18 +152,9 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     const delivered = await selfShip('DELIVERED', { deliveredAt: new Date(Date.now() - 20 * DAY), paymentStatus: 'PAID' });
     await prisma.returnRequest.create({ data: { orderId: delivered.id, userId: buyer.id, reason: 'IT', status: 'REQUESTED' } });
     await prisma.merchantPayout.create({ data: { storefrontId: sf.id, amount: 1000, createdBy: admin.id } });
-    const product = (fulfilment: 'MERCHANT' | 'TUBU', isActive = true) =>
-      prisma.product.create({
-        data: {
-          storefrontId: sf.id, fulfilment, isActive, brand: 'IT', slug: `it-pf-p-${randCode(8).toLowerCase()}`, name: 'SP IT', description: 'IT',
-          basePrice: 1000,
-          variations: { create: [{ sku: `ITPF-${randCode(8)}`, pancakeId: `itpf-${randCode(8)}`, name: 'v', attributes: {}, retailPrice: 1000, stock: 5 }] },
-        },
-        include: { variations: true },
-      });
-    await product('MERCHANT');
-    await product('MERCHANT', false);
-    const consigned = await product('TUBU');
+    await product(sf.id, 'MERCHANT');
+    await product(sf.id, 'MERCHANT', false);
+    const consigned = await product(sf.id, 'TUBU');
     await prisma.merchantPancakeLink.create({ data: { productId: consigned.id, storefrontId: sf.id, variationId: consigned.variations[0]!.id } });
     await prisma.merchantPancakeLink.create({
       data: { productId: consigned.id, storefrontId: sf.id, variationId: consigned.variations[0]!.id, unlinkedAt: new Date() },
@@ -144,6 +183,71 @@ describe('Admin bật/tắt cờ gian hàng đối tác (real Postgres)', () => 
     const msg = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
     expect(msg).toContain('khoản chờ đối soát');
     expect(await flag()).toBe(true);
+  });
+
+  it('hàng Tubu giao hộ đang chạy: liên kết đã gỡ nhưng đơn đặt trong thời gian liên kết chưa giao xong → 409; đơn huỷ/đặt ngoài cửa sổ không chặn', async () => {
+    const { admin, sf, buyer, flag } = await store();
+    const consigned = await product(sf.id, 'TUBU');
+    const variationId = consigned.variations[0]!.id;
+    const linkedAt = new Date(Date.now() - 10 * DAY);
+    const unlinkedAt = new Date(Date.now() - 2 * DAY);
+    await prisma.merchantPancakeLink.create({ data: { productId: consigned.id, storefrontId: sf.id, variationId, linkedAt, unlinkedAt } });
+    const tubuOrder = (status: OrderStatus, daysAgo: number) =>
+      createOrder({
+        userId: buyer.id, status, fulfiller: 'TUBU', createdAt: new Date(Date.now() - daysAgo * DAY),
+        items: { create: [{ variationId, productName: 'SP IT', variationName: 'v', unitPrice: 1000, quantity: 1, total: 1000 }] },
+      });
+    await tubuOrder('CANCELLED', 5);
+    await tubuOrder('SHIPPING', 1);
+    await tubuOrder('CONFIRMED', 20);
+    await tubuOrder('SHIPPING', 5);
+
+    const msg = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
+    expect(msg).toBe('Chưa thể tắt gian hàng đối tác: 1 đơn có hàng Tubu giao hộ của gian hàng chưa bán xong. Xử lý xong rồi thử lại.');
+    expect(await flag()).toBe(true);
+  });
+
+  it('yêu cầu trả đã duyệt mà chưa xác nhận nhận hàng về → 409; đã nhận về thì không chặn', async () => {
+    const { admin, sf, buyer, selfShip, flag } = await store();
+    const order = await selfShip('DELIVERED', { deliveredAt: new Date(Date.now() - 20 * DAY), paymentMethod: 'BANK_TRANSFER' });
+    const rr = await prisma.returnRequest.create({ data: { orderId: order.id, userId: buyer.id, reason: 'IT', status: 'APPROVED', refundAmount: 0 } });
+    const msg = await conflictMessage(svc.setStorePartner(admin.id, sf.id, false));
+    expect(msg).toBe('Chưa thể tắt gian hàng đối tác: 1 yêu cầu trả đã duyệt chưa xác nhận nhận hàng. Xử lý xong rồi thử lại.');
+    expect(await flag()).toBe(true);
+    await prisma.returnRequest.update({ where: { id: rr.id }, data: { receivedAt: new Date() } });
+    await expect(svc.setStorePartner(admin.id, sf.id, false)).resolves.toEqual({ id: sf.id, isPartner: false });
+  });
+
+  async function pendingConsignment(sf: { id: string }) {
+    const tubu = await product(null, 'TUBU', false);
+    const partner = await product(sf.id, 'TUBU', true, { pancakeLinkCode: tubu.variations[0]!.pancakeId });
+    return { tubu, partner };
+  }
+
+  it('không tạo liên kết Tubu giao hộ cho gian hàng không còn là đối tác', async () => {
+    const { admin, sf } = await store({ isPartner: false });
+    const { partner } = await pendingConsignment(sf);
+    const err = await prisma
+      .$transaction((tx) => linkTubuFulfilledVariation(tx, partner, { adminId: admin.id }))
+      .then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as Error).message).toContain('không còn là gian hàng đối tác');
+    expect(await prisma.merchantPancakeLink.count({ where: { storefrontId: sf.id } })).toBe(0);
+  });
+
+  it('admin tắt cờ ‖ admin duyệt liên kết giao hộ cùng lúc (5 vòng): đúng một bên thành công, không có liên kết sống trên gian hàng đã tắt', async () => {
+    for (let round = 0; round < 5; round++) {
+      const { admin, sf, flag } = await store();
+      const { partner } = await pendingConsignment(sf);
+      const link = prisma.$transaction((tx) => linkTubuFulfilledVariation(tx, partner, { adminId: admin.id }));
+      const off = svc.setStorePartner(admin.id, sf.id, false);
+      const [l, o] = await Promise.allSettled([link, off]);
+      const ok = [l, o].filter((r) => r.status === 'fulfilled');
+      expect(ok).toHaveLength(1);
+      for (const r of [l, o]) if (r.status === 'rejected') expect(r.reason).toBeInstanceOf(ConflictException);
+      const live = await prisma.merchantPancakeLink.count({ where: { storefrontId: sf.id, unlinkedAt: null } });
+      expect(live).toBe((await flag()) ? 1 : 0);
+    }
   });
 
   it('hai admin bấm tắt cùng lúc: một dòng sổ, cờ tắt', async () => {

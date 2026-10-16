@@ -510,7 +510,7 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(screen.queryByText('SP 6')).not.toBeInTheDocument();
     expect(screen.getByText('2 sản phẩm khác')).toBeInTheDocument();
     expect(screen.getByText('3 món · 120.000đ')).toBeInTheDocument();
-    expect(screen.getByText('Phí ship / giảm giá cấp đơn')).toBeInTheDocument();
+    expect(screen.getByText('Phí ship, giảm giá, chênh lệch hoàn tiền')).toBeInTheDocument();
     expect(screen.getByText('50.000đ')).toBeInTheDocument();
     expect(screen.queryByText('SP 8')).not.toBeInTheDocument();
     expect(screen.queryByText(/0 món · 0đ/)).not.toBeInTheDocument();
@@ -519,7 +519,7 @@ describe('Thống kê và Hành trình gian hàng', () => {
   it('phần cấp đơn bằng 0 hoặc API cũ không trả: không hiện dòng đó', async () => {
     renderPage();
     expect(await screen.findByText('4 món · 320.000đ')).toBeInTheDocument();
-    expect(screen.queryByText('Phí ship / giảm giá cấp đơn')).not.toBeInTheDocument();
+    expect(screen.queryByText('Phí ship, giảm giá, chênh lệch hoàn tiền')).not.toBeInTheDocument();
   });
 
   it('chưa có đơn: hiện lời nhắn chia sẻ link', async () => {

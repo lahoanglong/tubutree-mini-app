@@ -9,7 +9,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const REWARD = 100;
 const UNIT = 50_000;
@@ -51,8 +51,28 @@ describe('Gộp đồng thời 4 khách vào một tài khoản (real Postgres)'
     auth = new AuthService(prisma, new JwtService(), config, zalo, rbac);
   });
 
+  const created = { userIds: [] as string[], productIds: [] as string[] };
+  const createUser = async (...args: Parameters<typeof createUserRow>) => {
+    const u = await createUserRow(...args);
+    created.userIds.push(u.id);
+    return u;
+  };
+
   afterAll(async () => {
     if (prisma) {
+      const { userIds, productIds } = created;
+      const orderIds = (await prisma.order.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map((o) => o.id);
+      await prisma.$transaction([
+        prisma.pointsTransaction.deleteMany({ where: { userId: { in: userIds } } }),
+        prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
+        prisma.variation.deleteMany({ where: { productId: { in: productIds } } }),
+        prisma.product.deleteMany({ where: { id: { in: productIds } } }),
+        // Người mời có thể là một dòng khác cũng sắp bị xoá: gỡ liên kết trước để thứ tự xoá không vướng khoá ngoại.
+        prisma.user.updateMany({ where: { id: { in: userIds } }, data: { referredById: null, mergedIntoId: null } }),
+        prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+      ]);
       await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });
       for (const c of savedConfig) await setConfig(prisma, c.key, c.value as never);
     }
@@ -64,6 +84,7 @@ describe('Gộp đồng thời 4 khách vào một tài khoản (real Postgres)'
     const product = await prisma.product.create({
       data: { pancakeId: `it4g-p-${tag}`, brand: 'IT', slug: `it4g-${tag.toLowerCase()}`, name: `SP ${tag}`, description: 'IT', basePrice: UNIT },
     });
+    created.productIds.push(product.id);
     const v = await prisma.variation.create({
       data: { pancakeId: `it4g-v-${tag}`, productId: product.id, sku: `IT4G-${tag}`, name: 'Chai', attributes: {}, retailPrice: UNIT, stock: 100 },
     });

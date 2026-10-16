@@ -608,7 +608,12 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      this.prisma.userAdminEvent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      // Chỉ các loại màn này hiện (STOREFRONT_PARTNER thuộc gian hàng, không vào lịch sử vai trò/khoá) để chúng không chiếm 100 dòng.
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
       user.phone
         ? this.prisma.roleGrant.findMany({
             where: { phone: user.phone },

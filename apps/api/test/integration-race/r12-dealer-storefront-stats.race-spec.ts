@@ -9,7 +9,7 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
-import { createOrder, createUser, randCode, warmPool } from './helpers';
+import { createOrder, createUser as createUserRow, randCode, warmPool } from './helpers';
 
 /**
  * Thống kê gian hàng CTV của đại lý (cờ isPartner): đơn khách mua qua slug của chính đại lý mà đại lý tự giao có referrerUserId
@@ -40,7 +40,28 @@ describe('Thống kê gian hàng của đại lý: đơn tự giao qua slug riê
     storefront = new StorefrontService(prisma, moduleRef.get(SystemConfigService), {} as never);
   });
 
+  // Đơn CONFIRMED/PENDING_PAYMENT, hoa hồng và gian hàng của spec để lại DB dùng chung thì lọt vào số liệu của spec khác (hàng
+  // đợi việc tồn, Sức khoẻ hệ thống): xoá theo id người dùng spec này tạo (mọi đơn và gian hàng đều thuộc họ).
+  const userIds: string[] = [];
+  const createUser = async (...args: Parameters<typeof createUserRow>) => {
+    const u = await createUserRow(...args);
+    userIds.push(u.id);
+    return u;
+  };
+
   afterAll(async () => {
+    if (prisma) {
+      const orderIds = (await prisma.order.findMany({ where: { userId: { in: userIds } }, select: { id: true } })).map((o) => o.id);
+      await prisma.$transaction([
+        prisma.commission.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.returnRequestItem.deleteMany({ where: { returnRequest: { orderId: { in: orderIds } } } }),
+        prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
+        prisma.storefront.deleteMany({ where: { ownerUserId: { in: userIds } } }),
+        prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+      ]);
+    }
     await moduleRef?.close();
   });
 
@@ -140,8 +161,10 @@ describe('Thống kê gian hàng của đại lý: đơn tự giao qua slug riê
     await partialReturn(x6.order.id, x6.items[0].id, 1, 50_000);
     // Chính đại lý tự mua hàng mình qua slug mình: không phải doanh số gian hàng.
     await mk('DELIVERED', 'PAID', [pepper(9)], { selfShip: true, userId: dealer.id });
-    // Gian hàng đại lý giao nhưng khách vào từ slug CTV khác: thuộc gian hàng kia.
-    await mk('DELIVERED', 'PAID', [pepper(4)], { selfShip: true, slug: otherSlug });
+    // Đại lý lên đơn hộ khách (ctv_assisted: luôn hàng Tubu, referrer = chính đại lý, placedForCustomer) qua slug riêng: có tính, 100k.
+    await mk('DELIVERED', 'PAID', [pepper(1)], { referrer: dealer.id, userId: dealer.id, placedForCustomer: true, ageDays: 10 });
+    // Gian hàng đại lý giao nhưng khách vào từ slug CTV khác (checkout ghi referrer = CTV kia): thuộc gian hàng kia, 400k.
+    await mk('DELIVERED', 'PAID', [pepper(4)], { selfShip: true, slug: otherSlug, referrer: otherCtv.id });
     // CTV khác giới thiệu, Tubu giao, qua slug đại lý: như cũ, không phải đơn của đại lý.
     await mk('DELIVERED', 'PAID', [pepper(5)], { referrer: otherCtv.id });
     // Tự giao qua slug riêng, 40 ngày trước: ngoài cửa sổ 30 ngày, vẫn vào thống kê toàn thời gian (70k).
@@ -150,32 +173,43 @@ describe('Thống kê gian hàng của đại lý: đơn tự giao qua slug riê
   }
 
   it('getStats: đếm đơn tự giao qua slug riêng, không đếm đôi, dòng sản phẩm + phần cấp đơn cộng đúng ô Doanh thu', async () => {
-    const { dealer, store } = await seedMixed();
-    const commissionsBefore = await prisma.commission.count({ where: { order: { fulfillerStorefrontId: store.id } } });
+    const { dealer, slug, otherSlug } = await seedMixed();
 
     const s = await storefront.getStats(dealer.id);
+    await affiliate.storefrontAnalytics(dealer.id);
 
-    // 30 ngày: r1, x1, mixed, x4, x6. 7 ngày: x1, mixed, x6.
-    expect(s.orders30d).toBe(5);
+    // 30 ngày: r1, x1, mixed, x4, x6, đơn lên hộ. 7 ngày: x1, mixed, x6.
+    expect(s.orders30d).toBe(6);
     expect(s.orders7d).toBe(3);
-    // 800k + 225k + 260k + 380k + 0
-    expect(s.revenue30d).toBe(1_665_000);
+    // 800k + 225k + 260k + 380k + 0 + 100k
+    expect(s.revenue30d).toBe(1_765_000);
     expect(s.commission30d).toBe(78_000);
     expect(s.byProduct).toEqual([
       { productSlug: 'honey', productName: 'Mật ong', qty: 5, revenue: 1_300_000 },
-      { productSlug: 'pepper', productName: 'Tiêu', qty: 3, revenue: 300_000 },
+      { productSlug: 'pepper', productName: 'Tiêu', qty: 4, revenue: 400_000 },
     ]);
     // r1 (30k − 10k) + x1 25k + x4 20k
     expect(s.shippingAndOrderDiscount30d).toBe(65_000);
     expect(s.byProduct.reduce((t, p) => t + p.revenue, 0) + s.shippingAndOrderDiscount30d).toBe(s.revenue30d);
-    expect(await prisma.commission.count({ where: { order: { fulfillerStorefrontId: store.id } } })).toBe(commissionsBefore);
+    // Hoa hồng trên mọi đơn qua hai slug đúng bằng số đã seed (78k của r1): đơn tự giao không sinh hoa hồng nào.
+    const commissions = await prisma.commission.findMany({
+      where: { order: { storefrontSlug: { in: [slug, otherSlug] } } },
+      select: { affiliateUserId: true, amount: true },
+    });
+    expect(commissions).toEqual([{ affiliateUserId: dealer.id, amount: 78_000 }]);
+  });
+
+  it('đơn tự giao của đại lý qua slug CTV khác (referrer = CTV đó) vào thống kê của CTV đó, không vào của đại lý', async () => {
+    const { otherCtv, otherSlug } = await seedMixed();
+    const row = (await affiliate.storefrontAnalytics(otherCtv.id)).storefronts.find((x) => x.slug === otherSlug)!;
+    expect(row).toMatchObject({ orders: 1, revenue: 400_000, commission: 0 });
   });
 
   it('storefrontAnalytics: số đơn cùng bộ lọc trạng thái với doanh thu, gồm đơn tự giao qua slug riêng', async () => {
     const { dealer, slug } = await seedMixed();
     const row = (await affiliate.storefrontAnalytics(dealer.id)).storefronts.find((x) => x.slug === slug)!;
-    // r1, x1, mixed, x4, x6, cũ 40 ngày
-    expect(row).toEqual({ slug, title: 'Đại lý IT', orders: 6, revenue: 1_735_000, commission: 78_000 });
+    // r1, x1, mixed, x4, x6, đơn lên hộ, cũ 40 ngày
+    expect(row).toEqual({ slug, title: 'Đại lý IT', orders: 7, revenue: 1_835_000, commission: 78_000 });
   });
 
   it('CTV thường: đơn huỷ/trả/hoàn tiền không vào số đơn của storefrontAnalytics', async () => {

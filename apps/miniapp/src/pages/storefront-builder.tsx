@@ -583,7 +583,8 @@ function StatsSection() {
   const statsQ = useQuery({ queryKey: ['storefront-stats'], queryFn: getStorefrontStats });
   const data = statsQ.data;
   if (!data) return null;
-  // Các dòng dưới cộng đúng ô Doanh thu: top 5 sản phẩm, phần còn lại gộp một dòng, phần cấp đơn (ship, giảm giá) một dòng.
+  // Các dòng dưới cộng đúng ô Doanh thu: top 5 sản phẩm, phần còn lại gộp một dòng, phần cấp đơn (ship, giảm giá, chênh lệch
+  // giữa tiền hoàn thực tế và phần trừ theo tỷ lệ dòng) một dòng.
   const lines = data.byProduct.filter((p) => p.qty > 0);
   const rest = lines.slice(5);
   const orderLevel = data.shippingAndOrderDiscount30d ?? 0;
@@ -608,11 +609,11 @@ function StatsSection() {
           ))}
           {rest.length > 0 && (
             <StatLine
-              name={`${rest.length} sản phẩm khác`}
+              name={vi.storefront.statsOtherProducts(rest.length)}
               value={`${rest.reduce((t, p) => t + p.qty, 0)} món · ${formatVnd(rest.reduce((t, p) => t + p.revenue, 0))}`}
             />
           )}
-          {orderLevel !== 0 && <StatLine name="Phí ship / giảm giá cấp đơn" value={formatVnd(orderLevel)} />}
+          {orderLevel !== 0 && <StatLine name={vi.storefront.statsOrderLevel} value={formatVnd(orderLevel)} />}
         </>
       )}
     </Card>
