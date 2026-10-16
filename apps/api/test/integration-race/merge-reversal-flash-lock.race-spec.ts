@@ -201,8 +201,9 @@ describe('Gộp phiên khách ‖ đảo tiền đơn có suất giờ vàng c�
     return summarize(await Promise.allSettled([reversing, merging]));
   }
 
+  /** Gộp là nạn nhân deadlock thì AuthService đổi 40P01 thành 503 "đang bận" (isMergeBusy): cũng là vòng khoá. */
   function expectNoErrors(s: { errors: string[] }) {
-    expect(s.errors.filter((e) => e.includes('40P01'))).toEqual([]);
+    expect(s.errors.filter((e) => e.includes('40P01') || e.includes('đang bận'))).toEqual([]);
     expect(s.errors).toEqual([]);
   }
 
@@ -227,6 +228,106 @@ describe('Gộp phiên khách ‖ đảo tiền đơn có suất giờ vàng c�
       expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).status).toBe('CANCELLED');
       const u = await afterMerge(s, 1);
       expect(u.walletBalance).toBe(2 * PRICE);
+    }
+  });
+
+  /**
+   * Khách G không có suất nào; T có 2 dòng suất (A id nhỏ, B id lớn) và một đơn trả Ví mà dòng B đứng trước dòng A. Huỷ đơn hoàn
+   * suất theo thứ tự dòng đơn (B rồi A); gộp mà khoá MỌI dòng suất của T theo id (A rồi B) là chờ ngược chiều. Tx thứ ba giữ FOR
+   * UPDATE biến thể A: lần huỷ đã hoàn xong dòng B và kẹt ở kho A; gộp tới sau.
+   */
+  it(`(c) khách không có suất ‖ huỷ đơn của đích có 2 dòng giờ vàng ngược thứ tự id → không 40P01 (${ROUNDS} vòng)`, async () => {
+    for (let round = 0; round < ROUNDS; round++) {
+      const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}` });
+      const target = await createUser(prisma, { role: 'CUSTOMER', zaloId: `zalo_${randCode(10)}` });
+      created.userIds.push(guest.id, target.id);
+      const tag = randCode(8).toLowerCase();
+      const now = Date.now();
+      const sale = await prisma.flashSale.create({
+        data: { title: `Giờ vàng ${tag}`, startAt: new Date(now - 3_600_000), endAt: new Date(now + 3_600_000), createdBy: 'it' },
+      });
+      created.flashSaleIds.push(sale.id);
+      const lines: { key: 'a' | 'b'; variationId: string; flashId: string; purchaseId: string }[] = [];
+      for (const key of ['a', 'b'] as const) {
+        const product = await prisma.product.create({
+          data: { pancakeId: `itmf-p-${tag}${key}`, brand: 'IT', slug: `itmf-sp-${tag}${key}`, name: `SP ${tag}${key}`, description: 'IT', basePrice: PRICE },
+        });
+        created.productIds.push(product.id);
+        const v = await prisma.variation.create({
+          data: { pancakeId: `itmf-v-${tag}${key}`, productId: product.id, sku: `ITMF-${tag}${key}`, name: 'Chai', attributes: {}, retailPrice: PRICE, stock: 100 },
+        });
+        const flash = await prisma.flashSaleItem.create({
+          data: { flashSaleId: sale.id, variationId: v.id, flashPrice: PRICE, quota: 100, soldCount: TARGET_QTY, perUserLimit: 10 },
+        });
+        const p = await prisma.flashSalePurchase.create({
+          data: { id: `itfsp-${tag}-${key}`, flashSaleItemId: flash.id, userId: target.id, quantity: TARGET_QTY },
+        });
+        lines.push({ key, variationId: v.id, flashId: flash.id, purchaseId: p.id });
+      }
+      const [a, b] = lines as [(typeof lines)[0], (typeof lines)[0]];
+      const order = await createOrder(prisma, {
+        userId: target.id,
+        status: 'CONFIRMED',
+        paymentMethod: 'WALLET',
+        paymentStatus: 'PAID',
+        subtotal: 2 * PRICE,
+        shippingFee: 0,
+        total: 2 * PRICE,
+        items: {
+          create: [b, a].map((l, i) => ({
+            id: `itoi-${tag}-${i}`,
+            variationId: l.variationId,
+            productName: 'Nước giặt',
+            variationName: 'Chai',
+            unitPrice: PRICE,
+            quantity: 1,
+            total: PRICE,
+            paidTotal: PRICE,
+            flashSaleItemId: l.flashId,
+          })),
+        },
+      });
+      await prisma.walletTransaction.create({ data: { userId: target.id, delta: 2 * PRICE, balanceAfter: 2 * PRICE, type: 'OPENING', refType: 'IT', refId: order.id } });
+      await prisma.user.update({ where: { id: target.id }, data: { walletBalance: 2 * PRICE } });
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let locked!: () => void;
+      const held = new Promise<void>((resolve) => (locked = resolve));
+      let pid = 0;
+      const hold = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "variations" WHERE "id" = ${a.variationId} FOR UPDATE`;
+          [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS "pid"`;
+          locked();
+          await gate;
+        },
+        { timeout: 30_000 },
+      );
+      await held;
+      let cancelSettled = false;
+      const cancelling = orders.cancel(target.id, order.code).finally(() => (cancelSettled = true));
+      await waitUntil(async () => cancelSettled || (await lockWaiters(pid)) >= 1, 'huỷ đơn');
+      let mergeSettled = false;
+      zaloIdForNextCall = target.zaloId!;
+      const merging = auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access').finally(() => (mergeSettled = true));
+      await waitUntil(async () => mergeSettled || (await lockWaiters(pid)) >= (cancelSettled ? 1 : 2), 'lần gộp');
+      release();
+      await hold;
+      const r = summarize(await Promise.allSettled([cancelling, merging]));
+      expectNoErrors(r);
+
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('CANCELLED');
+      const purchases = await prisma.flashSalePurchase.findMany({ where: { userId: target.id }, orderBy: { id: 'asc' } });
+      expect(purchases.map((p) => [p.id, p.quantity])).toEqual([
+        [a.purchaseId, TARGET_QTY - 1],
+        [b.purchaseId, TARGET_QTY - 1],
+      ]);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: guest.id } })).zaloId).toContain('_merged_');
+      const u = await prisma.user.findUniqueOrThrow({ where: { id: target.id }, select: { walletBalance: true } });
+      const wallet = await prisma.walletTransaction.aggregate({ where: { userId: target.id }, _sum: { delta: true } });
+      expect(u.walletBalance).toBe(wallet._sum.delta ?? 0);
+      expect(u.walletBalance).toBe(4 * PRICE);
     }
   });
 

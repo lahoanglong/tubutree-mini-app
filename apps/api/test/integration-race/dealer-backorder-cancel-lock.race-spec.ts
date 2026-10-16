@@ -93,6 +93,8 @@ describe('Cron lấp hàng đặt trước ‖ huỷ đơn đại lý cùng dòn
       userId: dealer.id,
       type: 'DEALER',
       status: 'CONFIRMED',
+      // Cron lấy 200 dòng đặt trước cũ nhất của cả DB dùng chung: đơn của ca này phải đứng đầu lô.
+      createdAt: new Date('2000-01-01T00:00:00Z'),
       paymentMethod: 'BANK_TRANSFER',
       paymentStatus: 'UNPAID',
       subtotal: 3 * PRICE,
@@ -151,12 +153,16 @@ describe('Cron lấp hàng đặt trước ‖ huỷ đơn đại lý cùng dòn
         let cronSettled = false;
         const cron = backorder.reconcile().finally(() => (cronSettled = true));
         await waitUntil(async () => cronSettled || (await lockWaiters(hold.pid)) >= 1, 'cron lấp hàng');
+        // Không xanh giả: cron phải thật sự xếp hàng ở biến thể của ca này (không phải chạy xong mà không chọn dòng của ca).
+        expect(cronSettled).toBe(false);
         let cancelSettled = false;
         const cancel = orderStatus.setStatus(s.order.id, 'CANCELLED').finally(() => (cancelSettled = true));
         await waitUntil(async () => cancelSettled || (await lockWaiters(hold.pid)) >= (cronSettled ? 1 : 2), 'huỷ đơn');
         hold.release();
         await hold.done;
         const r = summarize(await Promise.allSettled([cron, cancel]));
+        // Cron giữ được biến thể trước lần huỷ (đứng đầu hàng) nên lấp đủ 2 đơn vị đặt trước của ca này.
+        expect(r.fulfilled[0]?.value).toBeGreaterThanOrEqual(2);
         const loggedErrors = cronErrors.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('Đối soát đặt trước lỗi'));
         expect(r.errors.filter((e) => e.includes('40P01'))).toEqual([]);
         expect(loggedErrors).toEqual([]);
