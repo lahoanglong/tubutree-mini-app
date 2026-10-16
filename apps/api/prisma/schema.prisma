@@ -793,6 +793,7 @@ model FlashSalePurchase {
   updatedAt       DateTime      @updatedAt
 
   @@unique([flashSaleItemId, userId])
+  @@index([userId])
   @@map("flash_sale_purchases")
 }
 
@@ -1134,6 +1135,7 @@ model PointsTransaction {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([userId, refId])
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
