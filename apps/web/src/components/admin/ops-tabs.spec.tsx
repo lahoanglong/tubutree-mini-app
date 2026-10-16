@@ -198,6 +198,27 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
   });
 
+  it('đơn đã giao chưa xong việc sau giao: hiện mã đơn, ngày giao và mở đơn theo mã; API cũ không có orders thì không hiện', async () => {
+    const withOrders = {
+      ...HEALTH,
+      orders: { deliveredEffectsPending: 3, deliveredEffectsStale: 1, deliveredEffectsOrders: [{ id: 'o9', code: 'TUBU2026101399999', deliveredAt: '2026-10-13T02:00:00.000Z' }] },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: withOrders } }).fn));
+    const onOpenOrder = vi.fn();
+    const c = await mount(<OpsHealthTab onOpenOrder={onOpenOrder} />);
+    const sec = c.querySelector('section[aria-label="Đơn đã giao chưa xong việc sau giao (3)"]')!;
+    expect(sec.textContent).toContain('TUBU2026101399999');
+    expect(sec.textContent).toContain('Chạy lại việc sau giao');
+    click(byText(sec, 'button', 'Mở đơn →'));
+    expect(onOpenOrder).toHaveBeenCalledWith('TUBU2026101399999');
+
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
+    const old = await mount(<OpsHealthTab onOpenOrder={onOpenOrder} />);
+    expect(old.textContent).not.toContain('chưa xong việc sau giao');
+  });
+
   it('Chạy lại / Đã xử lý (qua xác nhận) / Đóng báo động gọi đúng API', async () => {
     const api = mockFetch({
       '/admin/ops/health': { body: ISSUES },

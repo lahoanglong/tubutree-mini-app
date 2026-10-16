@@ -1127,6 +1127,16 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     expect(admin.N!.allowedTransitions).toEqual(['PACKED', 'CANCELLED']);
   });
 
+  it('trả deliveredEffectsAt để màn admin biết đơn DELIVERED nào chưa xong việc sau giao (nút chạy lại)', async () => {
+    const done = new Date('2026-10-02T00:00:00.000Z');
+    const by = (await list([
+      { code: 'D1', status: 'DELIVERED', paymentMethod: 'COD', deliveredEffectsAt: null },
+      { code: 'D2', status: 'DELIVERED', paymentMethod: 'COD', deliveredEffectsAt: done },
+    ])) as unknown as Record<string, { deliveredEffectsAt: Date | null }>;
+    expect(by.D1).toHaveProperty('deliveredEffectsAt', null);
+    expect(by.D2!.deliveredEffectsAt).toEqual(done);
+  });
+
   it('chuyển khoản lẻ chưa trả: không có SHIPPING/DELIVERED, có nút Đã nhận tiền', async () => {
     const by = await list([{ code: 'A', status: 'PENDING_PAYMENT' }, { code: 'B', status: 'PACKED' }]);
     expect(by.A).toMatchObject({ allowedTransitions: ['CANCELLED'], canConfirmPayment: true });

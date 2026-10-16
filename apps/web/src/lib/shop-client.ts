@@ -206,6 +206,16 @@ export interface MyBalances {
 }
 export const getMe = () => apiFetch<MyBalances>('/me');
 
+/** GET /me/loyalty (cùng endpoint Mini App) — web chỉ đọc phần Điểm Xanh đang khoá. API cũ chưa trả → vắng. */
+export interface MyPointsLock {
+  lockedPoints?: number;
+  /** Phần của lockedPoints thuộc đơn đang chờ xử lý đổi/trả (mở khi yêu cầu xử lý xong, không theo ngày). */
+  lockedReturnPoints?: number;
+  /** ISO — mốc muộn nhất phần khoá theo hạn đổi/trả được mở; null nếu không có. */
+  lockedUntil?: string | null;
+}
+export const getMyPointsLock = () => apiFetch<MyPointsLock>('/me/loyalty');
+
 // Ví Tubu và Điểm Xanh — số dư thật + sổ cái, cùng contract với Mini App (services/account-api.ts).
 export interface WalletSummary {
   walletBalance: number;
