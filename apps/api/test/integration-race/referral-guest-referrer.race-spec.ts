@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -478,5 +479,116 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     expect(await prisma.orderStatusHistory.count({ where: { orderId: o1.id, toStatus: 'RETURNED' } })).toBe(1);
     expect(await prisma.pointsTransaction.count({ where: { userId: g.id } })).toBe(0);
     expect(await prisma.walletTransaction.count({ where: { userId: g.id } })).toBe(0);
+  });
+
+  /** Trạng thái cuối khi khách A mời khách B (B đã đủ 2 đơn) và cả hai gộp vào T, thứ tự nào cũng vậy. */
+  async function expectSelfReferralCut(t: { id: string }, b: { id: string }) {
+    expect(await referrerOf(b.id)).toBeNull();
+    expect((await referralRows(t.id)).map((r) => [r.reason, r.delta])).toEqual([
+      [`REFERRAL_ORDER2:${b.id}`, REWARD],
+      [`REFERRAL_ORDER2_REVOKE:${b.id}`, -REWARD],
+    ]);
+    expect(await successes(t.id)).toBe(0);
+    expect(await balanceOf(t.id)).toBe(0);
+  }
+
+  it('(6a) REV-1: khách B (được khách A mời) gộp vào T TRƯỚC, rồi A gộp vào T → cắt B, thu thưởng T tự mời', async () => {
+    const t = await zaloUser();
+    const a = await guestUser();
+    const b = await guestWithCode(a.referralCode);
+    await qualify(b.id);
+    await merge(b.id, t);
+    await merge(a.id, t);
+    await expectSelfReferralCut(t, b);
+  });
+
+  it('(6b) REV-1b: A gộp trước rồi B → cùng trạng thái cuối như (6a)', async () => {
+    const t = await zaloUser();
+    const a = await guestUser();
+    const b = await guestWithCode(a.referralCode);
+    await qualify(b.id);
+    await merge(a.id, t);
+    await merge(b.id, t);
+    await expectSelfReferralCut(t, b);
+  });
+
+  it('(6c) REV-3: A và B gộp vào T cùng lúc (ép xen kẽ) → không lỗi, cùng trạng thái cuối', async () => {
+    const t = await zaloUser();
+    const a = await guestUser();
+    const b = await guestWithCode(a.referralCode);
+    await qualify(b.id);
+    const hold = await holdRows('users', [t.id], 'FOR SHARE');
+    const pA = merge(a.id, t);
+    await waitForWaiters(hold.pid, 1);
+    const pB = merge(b.id, t);
+    await waitForWaiters(hold.pid, 2);
+    hold.release();
+    await hold.done;
+    expect(summarize(await Promise.allSettled([pA, pB])).errors).toEqual([]);
+    await expectSelfReferralCut(t, b);
+  });
+
+  it('(6d) REV-2: vòng qua dòng đã gộp (G mời X, X gộp vào T2, T2 mời T; G gộp vào T) → cắt X, thu thưởng của X', async () => {
+    const g = await guestUser();
+    const x = await guestUser({ referredById: g.id });
+    const t2 = await zaloUser();
+    await qualify(x.id);
+    await merge(x.id, t2);
+    const t = await zaloUser({ referredById: t2.id });
+    await qualify(t.id);
+    await merge(g.id, t);
+    expect(await referrerOf(x.id)).toBeNull();
+    expect(await referrerOf(t.id)).toBe(t2.id);
+    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
+    expect(await balanceOf(t.id)).toBe(0);
+    expect(await balanceOf(t2.id)).toBe(REWARD);
+  });
+
+  it('(6e) vòng dài hơn 64 bước (G mời X, X là tổ tiên đời 70 của T) vẫn bị cắt', async () => {
+    const g = await guestUser();
+    const x = await createUser(prisma, { referredById: g.id });
+    await qualify(x.id);
+    let parent = x.id;
+    for (let i = 0; i < 70; i++) parent = (await createUser(prisma, { referredById: parent })).id;
+    const t = await zaloUser({ referredById: parent });
+    await merge(g.id, t);
+    expect(await referrerOf(x.id)).toBeNull();
+    expect((await referralRows(t.id)).map((r) => r.reason)).toEqual([`REFERRAL_ORDER2:${x.id}`, `REFERRAL_ORDER2_REVOKE:${x.id}`]);
+    expect(await balanceOf(t.id)).toBe(0);
+  });
+
+  it('(7) REV-4: hai khách gộp cùng lúc vào T với tập dòng chồng nhau (G2 mời G1, G1 mời C) → không deadlock (10 vòng)', async () => {
+    for (let round = 0; round < 10; round++) {
+      const g2 = await guestUser();
+      const g1 = await guestUser({ referredById: g2.id });
+      await sleep(5);
+      const t = await zaloUser();
+      await sleep(5);
+      const c = await createUser(prisma, { referredById: g1.id });
+      const hold = await holdRows('users', [c.id], 'FOR SHARE');
+      let settled1 = false;
+      const p1 = merge(g1.id, t).finally(() => (settled1 = true));
+      await waitForWaiters(hold.pid, 1, () => settled1);
+      const p2 = merge(g2.id, t);
+      for (let i = 0; i < 40 && (await lockWaiters(hold.pid)) < 2; i++) await sleep(25);
+      hold.release();
+      await hold.done;
+      expect(summarize(await Promise.allSettled([p1, p2])).errors).toEqual([]);
+      expect(await referrerOf(c.id)).toBe(t.id);
+      expect(await referrerOf(g1.id)).toBeNull();
+    }
+  });
+
+  it('(8) REV-5: dòng khách đã gộp không được nâng cấp tại chỗ bằng token cũ, mã của nó vẫn quy về T', async () => {
+    const g = await guestUser();
+    const t = await zaloUser();
+    await merge(g.id, t);
+    const merged = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
+    zaloIdForNextCall = `zalo_new_${randCode(8)}`;
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: g.id } });
+    expect(row.zaloId).toBe(merged.zaloId);
+    expect(row.mergedIntoId).toBe(t.id);
+    expect((await guestWithCode(row.referralCode)).referredById).toBe(t.id);
   });
 });

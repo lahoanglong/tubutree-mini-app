@@ -12,6 +12,9 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { renameMergedMilestones, resolveMergedUserId, revokeReferralRewardForReferee } from '../wallet/referral-reward';
 import { roleClaims } from './session-state.service';
 
+/** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
+export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
+
 /**
  * Thứ tự khoá dòng users khi gộp: người được mời trước người mời (cạnh a → b khi a.referredById = b, cả hai trong tập),
  * cùng chiều mọi đường thưởng/thu hồi giới thiệu (lockReferee rồi lockReferrer). Tập này trước gộp không có vòng (người
@@ -210,7 +213,10 @@ export class AuthService {
       return this.issueTokens(await this.attachPhoneIfMissing(currentUser, phone));
     }
 
-    const isGuest = currentUser.zaloId?.startsWith('guest_') ?? false;
+    // Dòng khách đã gộp (access token cũ còn hạn) không phải khách: nâng cấp tại chỗ sẽ hồi sinh nó với mergedIntoId còn trỏ
+    // tài khoản đích, mã giới thiệu của nó vẫn quy về đích.
+    const isGuest =
+      (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_') && !currentUser.mergedIntoId;
     if (!isGuest) {
       this.logger.warn(
         `ensurePhone: user ${currentUser.id} (đã là Zalo thật, zaloId=${currentUser.zaloId}) ` +
@@ -294,6 +300,11 @@ export class AuthService {
   ): Promise<User> {
     const targetPhone = phone && !target.phone ? await this.phoneIfFree(phone, target.id) : undefined;
     return this.prisma.$transaction(async (tx) => {
+      // Mọi lần gộp chạy nối tiếp nhau. Tập dòng users của hai lần gộp có thể chồng nhau (khách G2 mời khách G1, cả hai gộp
+      // vào cùng T) và thứ tự người-được-mời-trước của mỗi lần chỉ nhất quán trong tập của chính nó ⇒ hai lần gộp xen kẽ có
+      // thể khoá ngược chiều (40P01). Khoá chung chấp nhận được: gộp chỉ xảy ra một lần mỗi khách lúc đăng nhập Zalo, tx
+      // ngắn. Lấy trước mọi khoá dòng nên không tạo vòng chờ với đường trả hàng hay thưởng (chúng không lấy khoá này).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_MERGE_LOCK_KEY}))`;
       // Thứ tự khoá như đường duyệt trả hàng (yêu cầu trả → đơn → users): khoá dòng khách trước rồi mới chuyển đơn/yêu cầu
       // trả thì đảo chiều với lần duyệt đang giữ yêu cầu + đơn và chờ ví/điểm của khách ⇒ 40P01 (UAT R6-SYNC-2).
       await tx.$queryRaw`SELECT "id" FROM "return_requests" WHERE "userId" = ${guest.id} ORDER BY "id" FOR NO KEY UPDATE`;
@@ -521,27 +532,27 @@ export class AuthService {
       //     vòng (khách mời X, ..., X là tổ tiên giới thiệu của target) bị cắt và thưởng đã cấp cho nó bị thu ngay: vòng
       //     người được mời ↔ người mời làm hai lần trả hàng khoá ngược chiều nhau (40P01), tự mời thì người mời tự nhận
       //     thưởng. Khách được chính target mời (target tạo khách bằng mã của mình) cũng vậy. Khách được người khác mời: giữ
-      //     nguyên (G6).
-      const referees = await tx.$queryRaw<{ id: string }[]>`
-        SELECT "id" FROM "users" WHERE "referredById" = ${gid} ORDER BY "id" FOR NO KEY UPDATE`;
-      const refereeIds = new Set(referees.map((r) => r.id));
-      let cyclic: string | null = null;
-      const seen = new Set<string>([gid]);
-      for (let cur: string | null = tid; cur && !seen.has(cur) && seen.size < 64; ) {
-        if (refereeIds.has(cur)) {
-          cyclic = cur;
-          break;
-        }
-        seen.add(cur);
-        const row: { referredById: string | null } | null = await tx.user.findUnique({ where: { id: cur }, select: { referredById: true } });
-        cur = row?.referredById ?? null;
+      //     nguyên (G6). So theo danh tính: dòng khách đã gộp trước đó là chính tài khoản đích của nó (mergedIntoId), nên khách
+      //     G mời khách B rồi B gộp vào T trước G thì B cũng là T. Đọc lại sau khi đã khoá (người được mời, người mời của G).
+      const identity = (row: { id: string; mergedIntoId: string | null }) => row.mergedIntoId ?? row.id;
+      const ancestors = new Set<string>();
+      for (let cur: string | null = tid; cur && !ancestors.has(cur); ) {
+        ancestors.add(cur);
+        const parents: { id: string; mergedIntoId: string | null }[] = await tx.$queryRaw`
+          SELECT p."id", p."mergedIntoId" FROM "users" u JOIN "users" p ON p."id" = u."referredById" WHERE u."id" = ${cur}`;
+        cur = parents[0] ? identity(parents[0]) : null;
       }
+      const referees = await tx.$queryRaw<{ id: string; mergedIntoId: string | null }[]>`
+        SELECT "id", "mergedIntoId" FROM "users" WHERE "referredById" = ${gid} ORDER BY "id" FOR NO KEY UPDATE`;
+      const cyclic = referees.filter((r) => ancestors.has(identity(r))).map((r) => r.id);
       await tx.user.updateMany({
-        where: { referredById: gid, ...(cyclic ? { id: { not: cyclic } } : {}) },
+        where: { referredById: gid, ...(cyclic.length > 0 ? { id: { notIn: cyclic } } : {}) },
         data: { referredById: tid },
       });
-      const selfReferred = circle.find((r) => r.id === gid)?.referredById === tid;
-      const cut = [cyclic, selfReferred ? gid : null].filter((id): id is string => id !== null);
+      const [guestReferrer] = await tx.$queryRaw<{ id: string; mergedIntoId: string | null }[]>`
+        SELECT p."id", p."mergedIntoId" FROM "users" u JOIN "users" p ON p."id" = u."referredById" WHERE u."id" = ${gid}`;
+      const selfReferred = guestReferrer !== undefined && identity(guestReferrer) === tid;
+      const cut = [...cyclic, ...(selfReferred ? [gid] : [])];
       if (cut.length > 0) {
         await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
         for (const refereeId of cut) await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);

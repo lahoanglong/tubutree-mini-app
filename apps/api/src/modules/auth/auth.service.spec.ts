@@ -401,6 +401,8 @@ function makeGuestMergeFixture(opts: {
     const sql = strings.join('?');
     // Truy vấn "user nào có referredById = khách" (bước 10): mô phỏng không ai được khách giới thiệu.
     if (sql.includes('"referredById" =')) return [];
+    // Người mời của target/khách (bước 10): mô phỏng không ai có người mời.
+    if (sql.includes('JOIN "users" p')) return [];
     const row = users.get(values[0] as string);
     return row ? [{ ...row }] : [];
   });
