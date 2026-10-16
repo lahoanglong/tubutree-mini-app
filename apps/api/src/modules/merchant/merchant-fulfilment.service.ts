@@ -42,6 +42,7 @@ import { merchantLineBase } from './merchant-line-base';
 import { isPartnerStore, PARTNER_STORE_WHERE } from './partner-store';
 import { defaultCommissionPctIn, termsLockKey } from './merchant-terms-history';
 import { distributeByWeight } from '../orders/refund-allocation';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 
 type Db = Prisma.TransactionClient;
 
@@ -1327,6 +1328,79 @@ export class MerchantFulfilmentService {
       });
       return updated;
     });
+  }
+
+  /**
+   * Admin bật/tắt cờ đối tác của gian hàng CTV (isPartner) — cờ không tự tắt khi chủ thôi làm đại lý, trước đây chỉ gỡ được bằng
+   * SQL. Tắt bị từ chối khi gian hàng còn việc đối tác dở dang sẽ mồ côi (chỉ chủ gian hàng đối tác thấy và xử lý chúng ở Cổng
+   * người bán), hoặc khi chủ còn là đại lý (lần vào Cổng người bán kế tiếp sẽ tự bật lại). Khoá đối soát của gian hàng giữ suốt
+   * lần kiểm để không lập phiếu chen giữa; bấm lại cùng giá trị không ghi thêm sổ.
+   */
+  async setStorePartner(adminId: string, storefrontId: string, isPartner: boolean) {
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        await this.lockStorePayouts(tx, storefrontId);
+        const [store] = await tx.$queryRaw<{ id: string; type: string; isPartner: boolean; ownerUserId: string | null }[]>`
+          SELECT "id", "type"::text AS "type", "isPartner", "ownerUserId" FROM "storefronts" WHERE "id" = ${storefrontId} FOR UPDATE`;
+        if (!store) throw new NotFoundException('Không tìm thấy gian hàng.');
+        if (isPartner && store.type === 'BRAND') {
+          throw new BadRequestException('Gian hàng nhãn hàng không thể là gian hàng đối tác.');
+        }
+        if (!isPartner && store.type === 'MERCHANT') {
+          throw new BadRequestException('Gian hàng loại MERCHANT luôn là gian hàng đối tác, cờ này không áp dụng.');
+        }
+        if (store.isPartner === isPartner) return { changed: false, ownerUserId: store.ownerUserId };
+        if (!isPartner) {
+          const blockers = await this.partnerBlockers(tx, store.id, store.ownerUserId);
+          if (blockers.length) {
+            throw new ConflictException(`Chưa thể tắt gian hàng đối tác: ${blockers.join('; ')}. Xử lý xong rồi thử lại.`);
+          }
+        }
+        await tx.storefront.update({ where: { id: store.id }, data: { isPartner } });
+        if (store.ownerUserId) {
+          await recordUserAdminEvent(tx, {
+            userId: store.ownerUserId,
+            kind: 'STOREFRONT_PARTNER',
+            from: String(!isPartner),
+            to: String(isPartner),
+            reason: store.id,
+            actorId: adminId,
+          });
+        }
+        return { changed: true, ownerUserId: store.ownerUserId };
+      },
+      { maxWait: 15_000, timeout: 60_000 },
+    );
+    if (result.changed) {
+      this.logger.warn(`Admin ${adminId} ${isPartner ? 'bật' : 'tắt'} cờ đối tác của gian hàng ${storefrontId} (chủ ${result.ownerUserId ?? '—'}).`);
+    }
+    return { id: storefrontId, isPartner };
+  }
+
+  private async partnerBlockers(tx: Db, storefrontId: string, ownerUserId: string | null): Promise<string[]> {
+    const [owner, openOrders, statement, pendingPayouts, activeLinks, pendingReturns, ownProducts] = await Promise.all([
+      ownerUserId ? tx.user.findUnique({ where: { id: ownerUserId }, select: { role: true } }) : null,
+      tx.order.count({
+        where: { fulfillerStorefrontId: storefrontId, status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] } },
+      }),
+      this.statementFor(storefrontId, new Date(), tx),
+      tx.merchantPayout.count({ where: { storefrontId, status: 'PENDING' } }),
+      tx.merchantPancakeLink.count({ where: { storefrontId, unlinkedAt: null } }),
+      tx.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(*) AS n FROM "return_requests" rr JOIN "orders" o ON o."id" = rr."orderId"
+         WHERE rr."status" = 'REQUESTED' AND o."fulfillerStorefrontId" = ${storefrontId}`.then((r) => Number(r[0]?.n ?? 0)),
+      tx.product.count({ where: { storefrontId, fulfilment: 'MERCHANT', isActive: true } }),
+    ]);
+    const settleLines = statement.lines.length + statement.upcoming.length;
+    return [
+      owner?.role === 'DEALER' ? 'chủ gian hàng vẫn là đại lý (đổi vai trò trước, nếu không cờ tự bật lại)' : null,
+      openOrders ? `${openOrders} đơn tự giao chưa xong` : null,
+      settleLines ? `${settleLines} khoản chờ đối soát` : null,
+      pendingPayouts ? `${pendingPayouts} phiếu đối soát chưa chuyển` : null,
+      activeLinks ? `${activeLinks} liên kết hàng Tubu giao hộ đang hiệu lực` : null,
+      pendingReturns ? `${pendingReturns} yêu cầu trả hàng chờ xử lý` : null,
+      ownProducts ? `${ownProducts} sản phẩm tự giao đang bán` : null,
+    ].filter((b): b is string => b !== null);
   }
 
   /**

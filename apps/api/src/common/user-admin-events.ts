@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK';
+/** STOREFRONT_PARTNER: admin bật/tắt cờ đối tác của gian hàng do người này làm chủ (reason = id gian hàng). */
+export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER';
 
 type Db = Pick<PrismaClient, 'userAdminEvent'> | Prisma.TransactionClient;
 
