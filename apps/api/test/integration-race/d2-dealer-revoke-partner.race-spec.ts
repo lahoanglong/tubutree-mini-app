@@ -319,16 +319,25 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
   }
   const activeGrants = (c: Ctx) => prisma.roleGrant.count({ where: { phone: c.owner.phone!, revokedAt: null } });
 
-  it('revokeGrant: STAFF (→ CUSTOMER) có gian hàng vướng → vẫn gỡ quyền nhân viên, vai trò về DEALER, gian hàng giữ nguyên', async () => {
-    const c = await dealerStore({ ownerRole: 'STAFF' });
+  it('revokeGrant: STAFF (→ CUSTOMER) có gian hàng vướng → vẫn gỡ quyền nhân viên về CUSTOMER, gian hàng giữ nguyên, storeBlocked=true', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF', type: 'MERCHANT' });
     await grant(c);
     await selfShip(c, 'SHIPPING');
-    await expect(rbac.revokeGrant(c.adminUser.id, c.owner.phone!)).resolves.toMatchObject({ revoked: 1, downgraded: true, role: 'DEALER' });
-    expect(await c.role()).toBe('DEALER');
+    await expect(rbac.revokeGrant(c.adminUser.id, c.owner.phone!)).resolves.toMatchObject({ revoked: 1, downgraded: true, role: 'CUSTOMER', storeBlocked: true });
+    expect(await c.role()).toBe('CUSTOMER');
     expect(await activeGrants(c)).toBe(0);
     expect(await c.flag()).toBe(true);
+    expect(await c.type()).toBe('MERCHANT');
     expect(await c.partnerEvents()).toHaveLength(0);
-    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE', fromValue: 'STAFF', toValue: 'DEALER' } })).toBe(1);
+    expect(await prisma.userAdminEvent.count({ where: { userId: c.owner.id, kind: 'ROLE', fromValue: 'STAFF', toValue: 'CUSTOMER' } })).toBe(1);
+  });
+
+  it('revokeGrant: không vướng → storeBlocked không bật', async () => {
+    const c = await dealerStore({ ownerRole: 'STAFF' });
+    await grant(c);
+    const res = await rbac.revokeGrant(c.adminUser.id, c.owner.phone!);
+    expect(res).toMatchObject({ role: 'CUSTOMER' });
+    expect(res).not.toHaveProperty('storeBlocked', true);
   });
 
   it('setUserRole STAFF → CUSTOMER vướng: 409 không nhắc "vai trò đại lý", nêu cách xử lý', async () => {

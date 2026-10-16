@@ -344,12 +344,16 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
     expect(f.clearPartnerOnRoleLoss).not.toHaveBeenCalled();
   });
 
-  it('gian hàng còn vướng (409) → vẫn gỡ quyền nhân viên, vai trò về DEALER', async () => {
+  it('gian hàng còn vướng (409) → vẫn gỡ quyền nhân viên về CUSTOMER, không nâng DEALER, storeBlocked=true', async () => {
     const { prisma, tx } = txFor('STAFF', 'CUSTOMER');
     const f = fulfilment();
     f.clearPartnerOnRoleLoss.mockRejectedValueOnce(new ConflictException('vướng'));
-    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({ downgraded: true, role: 'DEALER' });
-    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'DEALER' } }));
+    await expect(new RbacService(prisma, f).revokeGrant('admin1', '0900000001')).resolves.toMatchObject({
+      downgraded: true,
+      role: 'CUSTOMER',
+      storeBlocked: true,
+    });
+    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'CUSTOMER' } }));
   });
 
   it('lỗi khác 409 từ xử lý gian hàng → ném lên, không hạ role', async () => {

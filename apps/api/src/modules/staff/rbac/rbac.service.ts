@@ -104,7 +104,7 @@ export class RbacService {
    * Thu hồi mọi grant STAFF/ADMIN theo SĐT. Nếu user đang STAFF/ADMIN thì hạ về role GỐC
    * (DEALER nếu có đơn đại lý đã duyệt hoặc bậc đại lý, ngược lại CUSTOMER) — tránh xoá nhầm quyền đại lý khi
    * một đại lý từng được nâng tạm lên nhân viên. Nếu vai trò gốc là CUSTOMER mà người này còn gian hàng đối tác vướng
-   * mắc thì về DEALER (kết quả trả `role`), không để gian hàng chặn việc gỡ quyền nhân viên.
+   * mắc thì vẫn gỡ quyền và về CUSTOMER, gian hàng giữ nguyên và kết quả có `storeBlocked: true` (không bao giờ nâng quyền ở đây).
    * Bọc trong $transaction: revoke grant + hạ role là 1 thao tác atomic — tránh trạng thái nửa
    * vời (grant đã revoke nhưng role chưa hạ) nếu lỗi giữa chừng.
    */
@@ -127,18 +127,20 @@ export class RbacService {
       if (user?.role === 'ADMIN') await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.revoke);
       let downgraded = false;
       let role: UserRole | null = null;
+      let storeBlocked = false;
       if (user && (user.role === 'STAFF' || user.role === 'ADMIN')) {
-        let base = await this.resolveBaseRole(user.id, tx);
-        // Gian hàng khoá trước dòng users (cùng thứ tự với checkout). Việc gỡ quyền nhân viên không bao giờ bị gian hàng chặn: còn
-        // vướng mắc đối tác thì người này về DEALER (gian hàng giữ nguyên), hết vướng thì cờ tắt như bình thường.
+        const base = await this.resolveBaseRole(user.id, tx);
+        // Gian hàng khoá trước dòng users (cùng thứ tự với checkout). Việc gỡ quyền nhân viên không bao giờ bị gian hàng chặn và không
+        // bao giờ nâng quyền: còn vướng mắc đối tác thì vai trò vẫn về đúng vai trò gốc, gian hàng giữ nguyên (storeBlocked), hết vướng
+        // thì cờ tắt như bình thường.
         if (losesPartnerStore(user.role, base)) {
           if (!this.fulfilment || !partnerCfg) throw new Error('RbacService thiếu MerchantFulfilmentService để thu hồi cờ đối tác.');
           try {
             await this.fulfilment.clearPartnerOnRoleLoss(tx, user.id, adminId, partnerCfg, user.role);
           } catch (err) {
             if (!(err instanceof ConflictException)) throw err;
-            base = 'DEALER';
-            this.logger.warn(`Thu hồi quyền SĐT ${maskPhone(normalized)}: gian hàng đối tác còn vướng nên về DEALER thay vì CUSTOMER.`);
+            storeBlocked = true;
+            this.logger.warn(`Thu hồi quyền người dùng ${user.id} (${maskPhone(normalized)}): gian hàng đối tác còn vướng nên giữ nguyên gian hàng, vai trò về ${base}.`);
           }
         }
         role = base;
@@ -159,7 +161,7 @@ export class RbacService {
         downgraded = true;
         this.logger.warn(`Admin ${adminId} thu hồi quyền SĐT ${maskPhone(normalized)}: ${user.role} → ${base}`);
       }
-      return { revoked: count, downgraded, role };
+      return { revoked: count, downgraded, role, ...(storeBlocked ? { storeBlocked } : {}) };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
   }
 
