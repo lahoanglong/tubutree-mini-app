@@ -6,6 +6,7 @@ import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { ComboService } from '../storefront/combo.service';
 
 const coupons = {} as unknown as CouponsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -14,6 +15,8 @@ const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as un
 // trong nhóm này đi tới nhánh addItem() thành công (đều throw sớm), nên record()/recordBestEffort()
 // không bao giờ được gọi ở đây.
 const analytics = { record: jest.fn(), recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
+// Không gửi gian hàng thì giỏ không gọi combo; ca có gian hàng ở race spec cart-combo-equals-quote.
+const combo = { computeForStorefront: jest.fn() } as unknown as ComboService;
 
 describe('CartService guard tồn kho', () => {
   it('addItem: chặn sản phẩm không khả dụng (inactive/không tồn tại)', async () => {
@@ -21,7 +24,7 @@ describe('CartService guard tồn kho', () => {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
       variation: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
   });
 
@@ -36,7 +39,7 @@ describe('CartService guard tồn kho', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'PENDING_REVIEW' } }),
       },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
     const rejected = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
@@ -44,7 +47,7 @@ describe('CartService guard tồn kho', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'REJECTED' } }),
       },
     } as unknown as PrismaService;
-    await expect(new CartService(rejected, coupons, config, flash, analytics).addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow(
+    await expect(new CartService(rejected, coupons, config, flash, analytics, combo).addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow(
       'không khả dụng',
     );
   });
@@ -56,7 +59,7 @@ describe('CartService guard tồn kho', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, stock: 3, product: { isActive: false, approvalStatus: 'APPROVED' } }),
       },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 1 })).rejects.toThrow('không khả dụng');
   });
 
@@ -82,7 +85,7 @@ describe('CartService guard tồn kho', () => {
         cartItem: { findUnique: jest.fn().mockResolvedValue(null), upsert },
         $transaction: jest.fn(),
       } as unknown as PrismaService;
-      return { svc: new CartService(prisma, coupons, config, flash, analytics), upsert, prisma };
+      return { svc: new CartService(prisma, coupons, config, flash, analytics, combo), upsert, prisma };
     };
 
     it('gian hàng tạm nghỉ → 400 nói tạm nghỉ, giỏ không thêm gì', async () => {
@@ -140,7 +143,7 @@ describe('CartService guard tồn kho', () => {
       },
     } as unknown as PrismaService;
     const resolveEffective = jest.fn().mockResolvedValue(new Map());
-    const svc = new CartService(prisma, coupons, config, { resolveEffective } as unknown as FlashSaleService, analytics);
+    const svc = new CartService(prisma, coupons, config, { resolveEffective } as unknown as FlashSaleService, analytics, combo);
     const c = await svc.getCart('u1');
     expect(c.items.map((l) => l.variationId)).toEqual(['ok']);
     expect(c.subtotal).toBe(10000);
@@ -162,7 +165,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, tierConfig, flash, analytics);
+    const svc = new CartService(prisma, coupons, tierConfig, flash, analytics, combo);
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
     (prisma.cart.findUniqueOrThrow as jest.Mock).mockResolvedValue(cartRow(null));
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
@@ -176,7 +179,7 @@ describe('CartService guard tồn kho', () => {
       },
       cartItem: { findUnique: jest.fn().mockResolvedValue({ quantity: 2 }), upsert: jest.fn() },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     // đã có 2, thêm 2 = 4 > 3
     await expect(svc.addItem('u1', { variationId: 'v1', quantity: 2 })).rejects.toThrow('Chỉ còn 3');
     expect((prisma.cartItem!.upsert as jest.Mock)).not.toHaveBeenCalled();
@@ -208,7 +211,7 @@ describe('CartService guard tồn kho', () => {
       cartItem: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
       $transaction: transactionSpy,
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy);
+    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy, combo);
 
     const result = await svc.addItem('u1', { variationId: 'v1', quantity: 2, addSource: 'buy_now' });
 
@@ -237,6 +240,7 @@ describe('CartService guard tồn kho', () => {
       couponNotice: null,
       couponRemoved: null,
       subtotal: 0,
+      comboDiscount: 0,
       discount: 0,
       freeship: false,
       freeshipThreshold: 200000,
@@ -264,7 +268,7 @@ describe('CartService guard tồn kho', () => {
       cartItem: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn().mockImplementation((fn: (tx: unknown) => unknown) => fn(tx)),
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy);
+    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy, combo);
 
     await svc.addItem('u1', { variationId: 'v1', quantity: 1 });
 
@@ -282,7 +286,7 @@ describe('CartService guard tồn kho', () => {
         update: jest.fn(),
       },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await expect(svc.updateItem('u1', 'it1', 10)).rejects.toThrow('Chỉ còn 5');
     expect((prisma.cartItem!.update as jest.Mock)).not.toHaveBeenCalled();
   });
@@ -292,7 +296,7 @@ describe('CartService guard tồn kho', () => {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }) },
       cartItem: { findUnique: jest.fn().mockResolvedValue({ id: 'it1', cartId: 'OTHER', variation: { stock: 5 } }) },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await expect(svc.updateItem('u1', 'it1', 1)).rejects.toThrow('Không tìm thấy');
   });
 
@@ -312,7 +316,7 @@ describe('CartService guard tồn kho', () => {
         update: upd,
       },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics);
+    const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     await svc.updateItem('u1', 'it1', 0);
     expect(del).toHaveBeenCalledWith({ where: { id: 'it1' } });
     expect(upd).not.toHaveBeenCalled();
@@ -364,7 +368,7 @@ describe('CartService guard tồn kho', () => {
         .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 3, quota: 10 }]])),
     } as any;
     const couponsSvc = { validateAndCompute } as any;
-    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics).getCart('u1');
+    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
     const l1 = cart.items.find((l: any) => l.variationId === 'v1')!;
     const l2 = cart.items.find((l: any) => l.variationId === 'v2')!;
     expect(l1.unitPrice).toBe(80000);
@@ -406,7 +410,7 @@ describe('CartService guard tồn kho', () => {
         .fn()
         .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 0, quota: 0 }]])),
     } as any;
-    const cart = await new CartService(prisma, coupons, config, flashSvc, analytics).getCart('u1');
+    const cart = await new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
     const l1 = cart.items[0]!;
     expect(l1.unitPrice).toBe(60000); // min(80000, 60000) → không charge cao hơn standing
     expect(l1.total).toBe(60000);
@@ -439,7 +443,7 @@ describe('CartService guard tồn kho', () => {
           new Map([['v1', { flashPrice: 200000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 2, ...flash }]]),
         ),
       } as any;
-      return new CartService(prisma, coupons, config, flashSvc, analytics).getCart('u1');
+      return new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
     };
 
     it('trong suất (qty 1, còn 1) → giá giờ vàng, không có lý do', async () => {
@@ -504,7 +508,7 @@ describe('CartService guard tồn kho', () => {
         .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
     } as any;
     const couponsSvc = { validateAndCompute } as any;
-    await new CartService(prisma, couponsSvc, config, flashSvc, analytics).applyCoupon('u1', ' save ');
+    await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).applyCoupon('u1', ' save ');
     // subtotal đầy đủ = v1(80000)+v2(100000)=180000; base KHÔNG flash = v2 = 100000
     expect(validateAndCompute).toHaveBeenCalledWith('SAVE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
     expect(validateAndCompute).not.toHaveBeenCalledWith('SAVE', 'u1', 180000, expect.anything());
@@ -537,7 +541,7 @@ describe('CartService guard tồn kho', () => {
         .mockRejectedValueOnce(new CouponMinOrderError(250000, 165000))
         .mockResolvedValueOnce({ discount: 25000, freeship: false });
       const prisma = flashCart(null);
-      await expect(new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
+      await expect(new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics, combo).applyCoupon('u1', 'XANH10')).rejects.toThrow(
         'Đơn tối thiểu 250.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 165.000đ.',
       );
       expect(validateAndCompute).toHaveBeenLastCalledWith('XANH10', 'u1', 303000, [
@@ -550,7 +554,7 @@ describe('CartService guard tồn kho', () => {
     it('applyCoupon: mã không tồn tại / hết hạn / hết lượt khi giỏ có hàng giờ vàng → giữ nguyên lỗi, không nhắc giờ vàng', async () => {
       for (const reason of ['Mã giảm giá không tồn tại.', 'Mã giảm giá đã hết hạn hoặc chưa hiệu lực.', 'Bạn đã dùng hết lượt cho mã này.']) {
         const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException(reason)) } as any;
-        const err = await new CartService(flashCart(null), couponsSvc, config, flashSvc, analytics).applyCoupon('u1', 'XANH10').catch((e: Error) => e);
+        const err = await new CartService(flashCart(null), couponsSvc, config, flashSvc, analytics, combo).applyCoupon('u1', 'XANH10').catch((e: Error) => e);
         expect(err).toBeInstanceOf(BadRequestException);
         expect((err as Error).message).toBe(reason);
       }
@@ -558,7 +562,7 @@ describe('CartService guard tồn kho', () => {
 
     it('applyCoupon: chưa đủ đơn tối thiểu cả khi tính hàng giờ vàng → giữ nguyên lỗi, không nhắc giờ vàng', async () => {
       const validateAndCompute = jest.fn().mockRejectedValue(new CouponMinOrderError(400000, 165000));
-      const err = await new CartService(flashCart(null), { validateAndCompute } as any, config, flashSvc, analytics)
+      const err = await new CartService(flashCart(null), { validateAndCompute } as any, config, flashSvc, analytics, combo)
         .applyCoupon('u1', 'XANH10')
         .catch((e: Error) => e);
       expect((err as Error).message).toBe('Đơn tối thiểu 400.000đ để dùng mã này.');
@@ -595,7 +599,7 @@ describe('CartService guard tồn kho', () => {
       it('sản phẩm của mã không có giá giờ vàng, hàng khác đang giờ vàng → lỗi đơn tối thiểu nguyên văn, không nêu số tiền mâu thuẫn', async () => {
         const prisma = cartOf([line('vF', 'pF', 2, 90000), line('vG', 'pG', 1, 165000), line('vX', 'pX', 1, 100000)]);
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vF', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
-        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics, combo).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
         expect((err as Error).message).toBe('Đơn tối thiểu 200.000đ để dùng mã này.');
         expect(prisma.cart.update).not.toHaveBeenCalled();
       });
@@ -603,7 +607,7 @@ describe('CartService guard tồn kho', () => {
       it('R4-CHECKOUT-3: sản phẩm của mã chỉ có trong giỏ ở giá giờ vàng → nói sản phẩm đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
         const prisma = cartOf([line('vG', 'pG', 1, 140000), line('vX', 'pX', 1, 300000)]);
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
-        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics, combo).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
         expect(err).toBeInstanceOf(BadRequestException);
         expect((err as Error).message).toBe(COUPON_PRODUCT_FLASH_REASON);
         expect((err as Error).message).not.toContain('chưa có sản phẩm đó');
@@ -613,14 +617,14 @@ describe('CartService guard tồn kho', () => {
       it('R4-CHECKOUT-3: sản phẩm của mã không có trong giỏ (dù giỏ có hàng giờ vàng khác) → giữ câu "Giỏ hàng chưa có sản phẩm đó"', async () => {
         const prisma = cartOf([line('vF', 'pF', 1, 140000), line('vX', 'pX', 1, 300000)]);
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vF', { flashPrice: 120000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
-        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics, combo).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
         expect((err as Error).message).toBe('Mã này chỉ áp dụng khi mua đúng sản phẩm của chương trình. Giỏ hàng chưa có sản phẩm đó.');
       });
 
       it('chính sản phẩm của mã có dòng giờ vàng → nhắc giờ vàng, phần được tính là dòng sản phẩm đó giá thường', async () => {
         const prisma = cartOf([line('vG1', 'pG', 2, 90000), line('vG2', 'pG', 1, 100000), line('vX', 'pX', 1, 300000)]);
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
-        const err = await new CartService(prisma, realCoupons(), config, fs, analytics).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
+        const err = await new CartService(prisma, realCoupons(), config, fs, analytics, combo).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
         expect((err as Error).message).toBe(
           'Đơn tối thiểu 200.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 100.000đ.',
         );
@@ -630,14 +634,14 @@ describe('CartService guard tồn kho', () => {
     it('applyCoupon bị từ chối khi giỏ không có hàng giờ vàng: giữ nguyên lỗi', async () => {
       const couponsSvc = { validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 250.000đ để dùng mã này.')) } as any;
       const noFlash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
-      await expect(new CartService(flashCart(null), couponsSvc, config, noFlash, analytics).applyCoupon('u1', 'XANH10')).rejects.toThrow(
+      await expect(new CartService(flashCart(null), couponsSvc, config, noFlash, analytics, combo).applyCoupon('u1', 'XANH10')).rejects.toThrow(
         /^Đơn tối thiểu 250.000đ để dùng mã này.$/,
       );
     });
 
     it('getCart: mã đã áp nhưng có hàng giờ vàng → couponNotice nói mã chỉ giảm trên phần hàng còn lại', async () => {
       const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 16500, freeship: false }) } as any;
-      const c = await new CartService(flashCart('XANH10'), couponsSvc, config, flashSvc, analytics).getCart('u1');
+      const c = await new CartService(flashCart('XANH10'), couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
       expect(c.discount).toBe(16500);
       expect(c.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 165.000đ hàng còn lại.');
     });
@@ -682,7 +686,7 @@ describe('CartService guard tồn kho', () => {
         .mockResolvedValue(new Map([['v1', { flashPrice: 80000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
     } as any;
     const couponsSvc = { validateAndCompute } as any;
-    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics).getCart('u1');
+    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
     expect(cart.couponCode).toBe('SALE'); // GIỮ mã (flash chỉ tạm thời kéo base xuống)
     expect(cart.discount).toBe(0);
     expect(update).not.toHaveBeenCalled(); // KHÔNG null hoá coupon
@@ -724,7 +728,7 @@ describe('CartService guard tồn kho', () => {
 
     it('mã gắn sản phẩm đang giờ vàng: giữ mã, lời báo nói sản phẩm đang giờ vàng, không nói giỏ chưa có sản phẩm đó', async () => {
       const prisma = cartWith('PSGRAN');
-      const c = await new CartService(prisma, couponsWith({ code: 'PSGRAN', applyTo: { productIds: ['pG'] } }), config, flashG, analytics).getCart('u1');
+      const c = await new CartService(prisma, couponsWith({ code: 'PSGRAN', applyTo: { productIds: ['pG'] } }), config, flashG, analytics, combo).getCart('u1');
       expect(c.couponCode).toBe('PSGRAN');
       expect(c.discount).toBe(0);
       expect(c.couponNotice).toContain(COUPON_PRODUCT_FLASH_REASON);
@@ -734,7 +738,7 @@ describe('CartService guard tồn kho', () => {
 
     it('mã bị admin tắt: gỡ khỏi giỏ và cho biết mã nào bị gỡ, vì sao (checkout dùng để giải thích tổng tăng)', async () => {
       const prisma = cartWith('TAT50');
-      const c = await new CartService(prisma, couponsWith({ code: 'TAT50', isActive: false }), config, flashG, analytics).getCart('u1');
+      const c = await new CartService(prisma, couponsWith({ code: 'TAT50', isActive: false }), config, flashG, analytics, combo).getCart('u1');
       expect(c.couponCode).toBeNull();
       expect(c.couponRemoved).toEqual({ code: 'TAT50', reason: 'Mã giảm giá đã ngừng áp dụng.' });
       expect(prisma.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
@@ -766,7 +770,7 @@ describe('CartService guard tồn kho', () => {
           .fn()
           .mockResolvedValue(new Map([['v1', { flashPrice: 200000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])),
       } as any;
-      return new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics).getCart('u1');
+      return new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics, combo).getCart('u1');
     };
 
     it('giữ mã, giảm 0đ, kèm couponNotice nói mã chưa được áp', async () => {
@@ -807,7 +811,7 @@ describe('CartService guard tồn kho', () => {
     } as any;
     const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
     const couponsSvc = { validateAndCompute } as any;
-    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics).getCart('u1');
+    const cart = await new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
     expect(cart.couponCode).toBeNull();
     expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
   });
@@ -838,7 +842,7 @@ describe('CartService guard tồn kho', () => {
     } as any;
     const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
     const couponsSvc = { validateAndCompute } as any;
-    await expect(new CartService(prisma, couponsSvc, config, flashSvc, analytics).getCart('u1')).rejects.toBe(infraError);
+    await expect(new CartService(prisma, couponsSvc, config, flashSvc, analytics, combo).getCart('u1')).rejects.toBe(infraError);
     expect(update).not.toHaveBeenCalled();
   });
 });
@@ -849,7 +853,7 @@ describe('CartService.clearOrdered (dọn giỏ sau khi đặt cả giỏ)', () 
       cart: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }), update: jest.fn() },
       cartItem: { deleteMany: jest.fn() },
     };
-    await new CartService({} as PrismaService, coupons, config, flash, analytics).clearOrdered('u1', ['i1', 'i2'], tx as never);
+    await new CartService({} as PrismaService, coupons, config, flash, analytics, combo).clearOrdered('u1', ['i1', 'i2'], tx as never);
     expect(tx.cartItem.deleteMany).toHaveBeenCalledWith({ where: { cartId: 'c1', id: { in: ['i1', 'i2'] } } });
     expect(tx.cart.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { couponCode: null } });
   });

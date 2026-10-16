@@ -640,6 +640,8 @@ function StickySummary({
   const remaining = Math.max(0, threshold - base);
   // Coupon giảm chỉ hiển thị khi chọn TOÀN giỏ (subset re-tính ở checkout — tránh số sai).
   const discount = allSelected ? summary.discount : 0;
+  // Combo cũng chỉ hiện khi chọn TOÀN giỏ (combo cần đủ bộ sản phẩm; tập con checkout tính lại).
+  const comboDiscount = allSelected ? (summary.comboDiscount ?? 0) : 0;
 
   return (
     <StickyActionBar
@@ -679,6 +681,9 @@ function StickySummary({
             </Box>
           )}
 
+          {comboDiscount > 0 && (
+            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboDiscount)}`} tone="success" />
+          )}
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
           )}
@@ -687,7 +692,7 @@ function StickySummary({
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
           <KeyValueRow
             label={vi.cart.subtotalAfterDiscount}
-            value={formatVnd(Math.max(0, selectedSubtotal - discount))}
+            value={formatVnd(Math.max(0, selectedSubtotal - comboDiscount - discount))}
             emphasis
           />
           {overStock && (

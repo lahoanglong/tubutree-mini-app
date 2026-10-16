@@ -88,6 +88,7 @@ export default function CartPage() {
     cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
   // Mã giảm giá chỉ cộng vào số hiển thị khi chọn cả giỏ; chọn một phần thì báo giá ở bước thanh toán tính lại.
   const shownDiscount = cart && allSelected ? cart.discount : 0;
+  const shownCombo = cart && allSelected ? (cart.comboDiscount ?? 0) : 0;
 
   return (
     <Shell>
@@ -287,6 +288,12 @@ export default function CartPage() {
               <span className="text-stone-600">Tạm tính</span>
               <span className="text-stone-900">{formatVnd(selectedSubtotal)}</span>
             </div>
+            {shownCombo > 0 && (
+              <div className="mt-1 flex justify-between text-sm text-success-fg">
+                <span>Giảm giá combo</span>
+                <span>-{formatVnd(shownCombo)}</span>
+              </div>
+            )}
             {shownDiscount > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá{cart.couponCode ? ` (${cart.couponCode})` : ''}</span>
@@ -310,7 +317,7 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
               <span>Tổng</span>
-              <span>{formatVnd(Math.max(0, selectedSubtotal - shownDiscount))}</span>
+              <span>{formatVnd(Math.max(0, selectedSubtotal - shownCombo - shownDiscount))}</span>
             </div>
             {selectedItems.length === 0 ? (
               <>

@@ -19,7 +19,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
-import { ComboService } from '../storefront/combo.service';
+import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
+import { resolvePublishedStorefront, type ResolvedStorefront } from '../storefront/resolve-storefront';
 import {
   FlashQuotaLineError,
   FlashSaleService,
@@ -150,14 +151,6 @@ function couponNothingReason(discount: number, freeship: boolean, freeshipSaved:
   return freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
 }
 
-/** Gian hàng ghi công resolve phía server (SELLER-4/5). */
-interface ResolvedStorefront {
-  id: string;
-  slug: string;
-  type: string;
-  ownerUserId: string | null;
-}
-
 /**
  * `JSON.stringify` sắp khoá theo thứ tự chèn — Postgres `jsonb` thì KHÔNG (tự sắp lại theo độ
  * dài + alphabet nội bộ khi lưu). So sánh 2 giá trị JSON "có đổi gì không" mà một bên đọc từ cột
@@ -201,13 +194,8 @@ export class CheckoutService {
    * Gian hàng đang được ghi công: slug, subdomain hoặc tên miền riêng → gian hàng (đang xuất bản). Đơn lưu slug CHUẨN và id
    * gian hàng, không lưu chuỗi khách gửi (SELLER-5) — subdomain đổi chủ được, slug thì không.
    */
-  private async resolveStorefront(identifier: string | null | undefined): Promise<ResolvedStorefront | null> {
-    const value = identifier?.trim().toLowerCase();
-    if (!value) return null;
-    return this.prisma.storefront.findFirst({
-      where: { isPublished: true, OR: [{ slug: value }, { subdomain: value }, { customDomain: value }] },
-      select: { id: true, slug: true, type: true, ownerUserId: true },
-    });
+  private resolveStorefront(identifier: string | null | undefined): Promise<ResolvedStorefront | null> {
+    return resolvePublishedStorefront(this.prisma, identifier);
   }
 
   /** Map mã giới thiệu → userId CTV (khác người mua). */
@@ -1032,12 +1020,7 @@ export class CheckoutService {
       nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
       userId,
     );
-    const nonFlashSubtotal = nonFlash.reduce((s, l) => s + l.total, 0);
-    const goodsAfterCombo = Math.max(0, nonFlashSubtotal - combo.total); // = coupon base (loại flash)
-    const couponLines = nonFlash.map((l) => ({
-      productId: l.productId,
-      total: Math.max(0, l.total - (combo.perLine[l.variationId] ?? 0)),
-    }));
+    const { goodsAfterCombo, couponLines } = goodsAfterComboOf(nonFlash, combo); // goodsAfterCombo = coupon base (loại flash)
     return { flashSubtotal, combo, goodsAfterCombo, couponLines };
   }
 

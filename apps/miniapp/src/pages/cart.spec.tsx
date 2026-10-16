@@ -243,3 +243,40 @@ describe('CartPage: tham số xem trước mức giảm mã cho VoucherSheet', (
     await waitFor(() => expect(last().previewParams).toBeUndefined());
   });
 });
+
+describe('CartPage: giảm giá combo trong tóm tắt', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('có combo: dòng "Giảm giá combo" riêng, tạm tính (đã giảm) = tiền hàng − combo − mã', async () => {
+    mocks.getCart.mockResolvedValue(summary({ couponCode: 'XANH10', comboDiscount: 5_000, discount: 2_000 }));
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    expect(screen.getByText('-5.000đ')).toBeInTheDocument();
+    expect(screen.getAllByText('-2.000đ').length).toBeGreaterThan(0);
+    expect(screen.getByText('43.000đ')).toBeInTheDocument();
+  });
+
+  it('combo 0 hoặc API cũ chưa trả: không có dòng combo, tạm tính như cũ', async () => {
+    mocks.getCart.mockResolvedValue(summary({ comboDiscount: 0, discount: 2_000 }));
+    const first = renderPage();
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getByText('48.000đ')).toBeInTheDocument();
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({ discount: 2_000 }));
+    renderPage();
+    await screen.findByText('Giảm giá');
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+    expect(screen.getByText('48.000đ')).toBeInTheDocument();
+  });
+
+  it('bỏ chọn một phần giỏ: không hiện combo (checkout tính lại phần chọn)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ comboDiscount: 5_000 }));
+    renderPage();
+    expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn tất cả' }));
+    await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+  });
+});

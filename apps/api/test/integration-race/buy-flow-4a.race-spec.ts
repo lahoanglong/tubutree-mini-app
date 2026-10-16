@@ -10,6 +10,7 @@ import { PurchasedItemsService } from '../../src/modules/orders/purchased-items.
 import { CartService } from '../../src/modules/cart/cart.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
+import { ComboService } from '../../src/modules/storefront/combo.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -37,6 +38,7 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
         OrderReversalService,
         OrdersService,
         CartService,
+        ComboService,
         AnalyticsEventsService,
         PurchasedItemsService,
         { provide: CouponsService, useValue: { validateAndCompute: jest.fn(), release: jest.fn() } },

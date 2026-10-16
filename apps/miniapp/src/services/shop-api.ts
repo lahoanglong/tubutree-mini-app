@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios';
 import { api } from './api';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import { useStorefrontContext } from '../store/storefront-context';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
@@ -138,6 +139,9 @@ export interface CartSummary {
   /** Mã đang giữ nhưng chưa áp cho giỏ hiện tại (vd hàng giờ vàng không tính vào điều kiện). */
   couponNotice?: string | null;
   subtotal: number;
+  /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
+  comboDiscount?: number;
+  /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
   freeship: boolean;
   /** Ngưỡng freeship từ SystemConfig — cho progress bar khích lệ. */
@@ -413,19 +417,27 @@ export const cancelFlashReminder = (itemId: string) =>
   api.delete(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
 
 // Cart
-export const getCart = () => api.get<CartSummary>('/cart').then((r) => r.data);
+/**
+ * Gian hàng CTV đang ghi công (cùng slug màn thanh toán gửi cho báo giá): máy chủ trừ combo của gian hàng đó trong giỏ, để số giảm
+ * và tiền hàng ở trang giỏ đúng số thanh toán sẽ trừ. Mọi đường trả giỏ đều gửi để giỏ trong cache không đổi số giữa các thao tác.
+ */
+function cartParams(): { params?: { storefrontSlug: string } } {
+  const ctx = useStorefrontContext.getState();
+  return ctx.kind === 'ctv' && ctx.slug ? { params: { storefrontSlug: ctx.slug } } : {};
+}
+export const getCart = () => api.get<CartSummary>('/cart', cartParams()).then((r) => r.data);
 export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';
 export const addToCart = (variationId: string, quantity: number, addSource?: AddToCartSource) =>
   api
-    .post<CartSummary>('/cart/items', { variationId, quantity, ...(addSource ? { addSource } : {}) })
+    .post<CartSummary>('/cart/items', { variationId, quantity, ...(addSource ? { addSource } : {}) }, cartParams())
     .then((r) => r.data);
 export const updateCartItem = (id: string, quantity: number) =>
-  api.patch<CartSummary>(`/cart/items/${id}`, { quantity }).then((r) => r.data);
+  api.patch<CartSummary>(`/cart/items/${id}`, { quantity }, cartParams()).then((r) => r.data);
 export const removeCartItem = (id: string) =>
-  api.delete<CartSummary>(`/cart/items/${id}`).then((r) => r.data);
+  api.delete<CartSummary>(`/cart/items/${id}`, cartParams()).then((r) => r.data);
 export const applyCoupon = (code: string) =>
-  api.post<CartSummary>('/cart/coupon', { code }).then((r) => r.data);
-export const removeCoupon = () => api.delete<CartSummary>('/cart/coupon').then((r) => r.data);
+  api.post<CartSummary>('/cart/coupon', { code }, cartParams()).then((r) => r.data);
+export const removeCoupon = () => api.delete<CartSummary>('/cart/coupon', cartParams()).then((r) => r.data);
 
 // Addresses
 export const getAddresses = () => api.get<AddressDTO[]>('/me/addresses').then((r) => r.data);
